@@ -429,6 +429,67 @@ async def get_workflow(
     return _wf_to_dict(wf)
 
 
+@router.get("/workflows/{wf_id}/runs", response_model=PaginatedResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="workflows.runs.sensitive.list",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="workflows.runs.list",
+)
+async def list_workflow_runs(
+    wf_id: UUID,
+    page: int = 1,
+    per_page: int = 5,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """List recent runs for a workflow definition."""
+
+    if page < 1:
+        raise HTTPException(422, "page must be >= 1")
+    per_page = min(max(per_page, 1), 50)
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        workflow_exists = (
+            await session.execute(
+                select(WorkflowDefinition.id).where(
+                    WorkflowDefinition.id == wf_id,
+                    WorkflowDefinition.tenant_id == tid,
+                )
+            )
+        ).scalar_one_or_none()
+        if workflow_exists is None:
+            raise HTTPException(404, "Workflow not found")
+
+        filters = (
+            WorkflowRun.workflow_def_id == wf_id,
+            WorkflowRun.tenant_id == tid,
+        )
+        total = (
+            await session.execute(
+                select(func.count()).select_from(WorkflowRun).where(*filters)
+            )
+        ).scalar() or 0
+        result = await session.execute(
+            select(WorkflowRun)
+            .where(*filters)
+            .order_by(WorkflowRun.created_at.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+        runs = result.scalars().all()
+
+    pages = max(1, (total + per_page - 1) // per_page)
+    return PaginatedResponse(
+        items=[_run_to_dict(run, include_steps=False) for run in runs],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=pages,
+    )
+
+
 # ── POST /workflows ─────────────────────────────────────────────────────────
 @router.post("/workflows", status_code=201)
 @route_meta(

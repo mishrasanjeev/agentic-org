@@ -183,6 +183,7 @@ async def _resume_workflow_bg(
     tenant_id: _uuid.UUID,
     workflow_run_id: _uuid.UUID,
     decision: dict,
+    engine_run_id_hint: str | None = None,
 ) -> None:
     """Resume a workflow after HITL decision and sync remaining results to DB."""
     from api.v1.workflows import (
@@ -204,7 +205,7 @@ async def _resume_workflow_bg(
         ).scalar_one_or_none()
         if not db_run:
             return
-        engine_run_id = (db_run.context or {}).get("_engine_run_id")
+        engine_run_id = engine_run_id_hint or (db_run.context or {}).get("_engine_run_id")
         wf_def = (
             await session.execute(
                 select(WorkflowDefinition).where(
@@ -215,6 +216,25 @@ async def _resume_workflow_bg(
         definition = wf_def.definition if wf_def else None
 
     if not engine_run_id or not definition:
+        _log.error(
+            "workflow_resume_missing_engine_context",
+            run_id=str(workflow_run_id),
+            has_engine_run_id=bool(engine_run_id),
+            has_definition=bool(definition),
+        )
+        async with get_tenant_session(tenant_id) as session:
+            db_run = (
+                await session.execute(
+                    select(WorkflowRun).where(WorkflowRun.id == workflow_run_id)
+                )
+            ).scalar_one_or_none()
+            if db_run is not None:
+                db_run.status = "failed"
+                db_run.error = {
+                    "message": "Resume failed: workflow engine context is missing.",
+                    "code": "workflow_resume_context_missing",
+                }
+                db_run.completed_at = datetime.now(UTC)
         return
 
     state_store = WorkflowStateStore()
@@ -229,6 +249,19 @@ async def _resume_workflow_bg(
 
         state = await state_store.load(engine_run_id)
         if not state:
+            async with get_tenant_session(tenant_id) as session:
+                db_run = (
+                    await session.execute(
+                        select(WorkflowRun).where(WorkflowRun.id == workflow_run_id)
+                    )
+                ).scalar_one_or_none()
+                if db_run is not None:
+                    db_run.status = "failed"
+                    db_run.error = {
+                        "message": "Resume failed: workflow engine state is missing.",
+                        "code": "workflow_resume_state_missing",
+                    }
+                    db_run.completed_at = datetime.now(UTC)
             return
 
         steps_def = {s["id"]: s for s in definition.get("steps", [])}
@@ -453,6 +486,15 @@ async def decide(
         )
 
         ctx = dict(item.context or {})
+        if item.workflow_run_id is None and ctx.get("workflow_run_id"):
+            try:
+                item.workflow_run_id = _uuid.UUID(str(ctx["workflow_run_id"]))
+            except (TypeError, ValueError):
+                _log.warning(
+                    "hitl_context_workflow_run_id_invalid",
+                    hitl_id=str(hitl_id),
+                    workflow_run_id=ctx.get("workflow_run_id"),
+                )
         policy_state = dict(ctx.get("policy_state") or {})
         policy_action = "advance"  # default — the legacy single-step path
 
@@ -572,11 +614,17 @@ async def decide(
 
     # Resume workflow execution in background
     if workflow_run_id:
+        engine_run_id_hint = (
+            ctx.get("_engine_run_id")
+            or ctx.get("engine_run_id")
+            or ctx.get("workflow_engine_run_id")
+        )
         background_tasks.add_task(
             _resume_workflow_bg,
             tid,
             workflow_run_id,
             {"decision": body.decision, "notes": body.notes},
+            str(engine_run_id_hint or "") or None,
         )
 
     return {

@@ -29,6 +29,25 @@ HUBSPOT_PRIVATE_APP_SCOPE_GAPS = {
     "crm.objects.deals.read",
     "automation",
 }
+SCOPE_PAYLOAD_KEYS = (
+    "granted_scopes",
+    "validated_scopes",
+    "configured_scopes",
+    "available_scopes",
+    "oauth_scopes",
+    "scope_list",
+    "scopes",
+    "scope",
+)
+NESTED_SCOPE_PAYLOAD_KEYS = (
+    "auth",
+    "oauth",
+    "health",
+    "health_check",
+    "health_result",
+    "connection_test",
+    "metadata",
+)
 
 
 @dataclass(frozen=True)
@@ -487,17 +506,32 @@ def _account_id_from_config(config: dict[str, Any]) -> str | None:
 
 
 def _scopes_from_config(config: dict[str, Any]) -> list[str]:
-    raw = (
-        config.get("granted_scopes")
-        or config.get("validated_scopes")
-        or config.get("scopes")
-        or config.get("scope")
-    )
-    if isinstance(raw, str):
-        return [part for part in raw.replace(",", " ").split() if part]
-    if isinstance(raw, (list, tuple, set)):
-        return [str(part) for part in raw if str(part).strip()]
-    return []
+    scopes: list[str] = []
+    seen: set[str] = set()
+    for source in _scope_payload_sources(config):
+        for key in SCOPE_PAYLOAD_KEYS:
+            raw = source.get(key)
+            values = raw.replace(",", " ").split() if isinstance(raw, str) else raw
+            if isinstance(values, (list, tuple, set)):
+                for part in values:
+                    text = str(part).strip()
+                    if text and text not in seen:
+                        scopes.append(text)
+                        seen.add(text)
+    return scopes
+
+
+def _scope_payload_sources(config: dict[str, Any]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    stack = [config] if isinstance(config, dict) else []
+    while stack:
+        payload = stack.pop(0)
+        sources.append(payload)
+        for key in NESTED_SCOPE_PAYLOAD_KEYS:
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                stack.append(nested)
+    return sources
 
 
 def _missing_scopes(required: tuple[str, ...], granted: list[str]) -> list[str]:

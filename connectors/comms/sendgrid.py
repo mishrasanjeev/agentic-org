@@ -17,28 +17,48 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _DATE_ASSIGNMENT_RE = re.compile(
     r"(?i)\b(?P<key>start[_\s-]?date|end[_\s-]?date|aggregated[_\s-]?by)\s*[:=]\s*(?P<value>[A-Za-z0-9_-]+)"
 )
+PARAM_WRAPPER_KEYS = (
+    "kwargs",
+    "params",
+    "parameters",
+    "arguments",
+    "args",
+    "input",
+    "tool_input",
+    "toolInput",
+    "payload",
+    "data",
+)
+TEXT_PARAM_KEYS = ("query", "prompt", "text", "message", "instruction", "instructions")
 
 
 def _flatten_stats_params(params: dict[str, Any]) -> dict[str, Any]:
-    flattened = dict(params or {})
-    for wrapper_key in ("kwargs", "params", "arguments", "input"):
-        nested = flattened.get(wrapper_key)
-        if isinstance(nested, dict):
-            flattened.update(nested)
-        elif isinstance(nested, str) and nested.strip():
-            text = nested.strip()
-            try:
-                parsed = json.loads(text)
-            except ValueError:
-                parsed = None
-            if isinstance(parsed, dict):
-                flattened.update(parsed)
-            else:
-                flattened.update(_parse_stats_text(text))
-    for text_key in ("query", "prompt", "text"):
-        text_value = flattened.get(text_key)
-        if isinstance(text_value, str):
-            flattened.update(_parse_stats_text(text_value))
+    flattened: dict[str, Any] = {}
+
+    def merge_payload(payload: dict[str, Any]) -> None:
+        for key, value in payload.items():
+            if key not in flattened or flattened[key] in (None, ""):
+                flattened[key] = value
+        for wrapper_key in PARAM_WRAPPER_KEYS:
+            nested = payload.get(wrapper_key)
+            if isinstance(nested, dict):
+                merge_payload(nested)
+            elif isinstance(nested, str) and nested.strip():
+                text = nested.strip()
+                try:
+                    parsed = json.loads(text)
+                except ValueError:
+                    parsed = None
+                if isinstance(parsed, dict):
+                    merge_payload(parsed)
+                else:
+                    flattened.update(_parse_stats_text(text))
+        for text_key in TEXT_PARAM_KEYS:
+            text_value = payload.get(text_key)
+            if isinstance(text_value, str):
+                flattened.update(_parse_stats_text(text_value))
+
+    merge_payload(dict(params or {}))
     return flattened
 
 
