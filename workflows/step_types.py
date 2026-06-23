@@ -62,9 +62,13 @@ CONNECTOR_TOOL_ALIASES: dict[str, tuple[str, str]] = {
     "fetch_hubspot_contacts": ("hubspot", "list_contacts"),
     "get_hubspot_contacts": ("hubspot", "list_contacts"),
     "list_hubspot_contacts": ("hubspot", "list_contacts"),
+    "retrieve_hubspot_contacts": ("hubspot", "list_contacts"),
+    "hubspot_contact_retrieval": ("hubspot", "list_contacts"),
     "fetch_hubspot_deals": ("hubspot", "list_deals"),
     "get_hubspot_deals": ("hubspot", "list_deals"),
     "list_hubspot_deals": ("hubspot", "list_deals"),
+    "retrieve_hubspot_deals": ("hubspot", "list_deals"),
+    "hubspot_deal_retrieval": ("hubspot", "list_deals"),
 }
 
 

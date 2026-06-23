@@ -72,6 +72,25 @@ HUBSPOT_CRM_READ_SCOPES = (
 )
 HUBSPOT_OPTIONAL_SCOPES = ("automation",)
 HUBSPOT_CRM_READ_TOOLS = ("list_contacts", "search_contacts", "list_deals")
+SCOPE_PAYLOAD_KEYS = (
+    "granted_scopes",
+    "validated_scopes",
+    "configured_scopes",
+    "available_scopes",
+    "oauth_scopes",
+    "scope_list",
+    "scopes",
+    "scope",
+)
+NESTED_SCOPE_PAYLOAD_KEYS = (
+    "auth",
+    "oauth",
+    "health",
+    "health_check",
+    "health_result",
+    "connection_test",
+    "metadata",
+)
 
 
 @dataclass(frozen=True)
@@ -1064,15 +1083,29 @@ def _tuple_from_payload(
 
 
 def _scopes_from_contract_or_config(contract: dict[str, Any], config: dict[str, Any]) -> list[str]:
-    value = (
-        contract.get("granted_scopes")
-        or contract.get("validated_scopes")
-        or config.get("granted_scopes")
-        or config.get("validated_scopes")
-        or config.get("scopes")
-        or config.get("scope")
-    )
-    return [str(item) for item in _list_from_value(value) if str(item).strip()]
+    scopes: list[str] = []
+    seen: set[str] = set()
+    for source in _scope_payload_sources(contract, config):
+        for key in SCOPE_PAYLOAD_KEYS:
+            for item in _list_from_value(source.get(key)):
+                text = str(item).strip()
+                if text and text not in seen:
+                    scopes.append(text)
+                    seen.add(text)
+    return scopes
+
+
+def _scope_payload_sources(*payloads: dict[str, Any]) -> list[dict[str, Any]]:
+    sources: list[dict[str, Any]] = []
+    stack = [payload for payload in payloads if isinstance(payload, dict)]
+    while stack:
+        payload = stack.pop(0)
+        sources.append(payload)
+        for key in NESTED_SCOPE_PAYLOAD_KEYS:
+            nested = payload.get(key)
+            if isinstance(nested, dict):
+                stack.append(nested)
+    return sources
 
 
 def _missing_scopes(required: tuple[str, ...], granted: list[str]) -> list[str]:
@@ -1109,14 +1142,8 @@ def evaluate_hubspot_crm_read_contract(
     tools = {_tool_name_from_value(tool) for tool in (tool_functions or [])}
     tools.discard("")
     missing_tools = tuple(tool for tool in HUBSPOT_CRM_READ_TOOLS if tool not in tools)
-    scopes = _normalise_scopes(
-        (credentials or {}).get("scope"),
-        (credentials or {}).get("scopes"),
-        (config or {}).get("scope"),
-        (config or {}).get("scopes"),
-        (config or {}).get("granted_scopes"),
-        (config or {}).get("validated_scopes"),
-    )
+    scope_payload = {**(credentials or {}), **(config or {})}
+    scopes = _scopes_from_contract_or_config({}, scope_payload)
     missing_required_scopes = tuple(scope for scope in HUBSPOT_CRM_READ_SCOPES if scope not in scopes)
     missing_optional = tuple(scope for scope in HUBSPOT_OPTIONAL_SCOPES if scope not in scopes)
     active = _normalize_key(connector_status) == "active"
@@ -1248,7 +1275,6 @@ def _hubspot_private_app_read_scope_gap_is_non_blocking(
             contract.get("blocking_reason"),
             contract.get("last_error"),
             config.get("last_error"),
-            setup_row.get("detail"),
         )
     ).lower()
     if _contains_any(explicit_blocker_text, AUTH_EXPIRED_MARKERS) or _contains_any(
@@ -1266,8 +1292,7 @@ def _hubspot_private_app_read_scope_gap_is_non_blocking(
     if health_values.isdisjoint({"healthy", "ok", "ready", "valid"}):
         return False
 
-    read_scope_evidence = set(granted_scopes).intersection(set(HUBSPOT_CRM_READ_SCOPES))
-    if read_scope_evidence:
+    if _hubspot_crm_read_tool_payload_present(contract, config):
         return _hubspot_crm_read_tools_registered(contract, config)
     return True
 
@@ -1290,12 +1315,35 @@ def _hubspot_crm_read_tools_registered(
     return all(tool in tools for tool in HUBSPOT_CRM_READ_TOOLS)
 
 
+def _hubspot_crm_read_tool_payload_present(
+    contract: dict[str, Any],
+    config: dict[str, Any],
+) -> bool:
+    for key in (
+        "tool_functions",
+        "registered_tools",
+        "available_tools",
+        "tools",
+        "crm_read_tools",
+    ):
+        if _list_from_value(contract.get(key)) or _list_from_value(config.get(key)):
+            return True
+    return False
+
+
 def _tool_name_from_value(tool: Any) -> str:
     if isinstance(tool, dict):
         nested = tool.get("function")
         nested_name = nested.get("name") if isinstance(nested, dict) else None
-        return str(tool.get("name") or nested_name or "").strip()
-    return str(getattr(tool, "name", tool) or "").strip()
+        raw = tool.get("name") or nested_name or ""
+    else:
+        raw = getattr(tool, "name", tool)
+    text = str(raw or "").strip()
+    if ":" in text:
+        text = text.rsplit(":", 1)[1]
+    if "." in text:
+        text = text.rsplit(".", 1)[1]
+    return _normalize_key(text)
 
 
 def _list_from_value(value: Any) -> list[Any]:
