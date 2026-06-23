@@ -47,4 +47,5 @@ flowchart TD
 2. Create an Offline POS handoff packet.
 3. Confirm simulator `accepted`; verify buyer wording says staff/payment confirmation is still required.
 4. Submit fake or missing packet ids to the POS routes; they must return safe `404` or auth errors, not `500`.
-5. Submit `payment_confirmed` without verified callback evidence; it must downgrade to staff review.
+5. Submit `payment_confirmed` without `X-AgenticOrg-POS-Signature` when `OFFLINE_POS_WEBHOOK_SECRET` is configured; it must return a safe authorization failure.
+6. Submit `payment_confirmed` with `X-AgenticOrg-POS-Timestamp` and `X-AgenticOrg-POS-Signature: sha256=<hmac>` over `<timestamp>.<raw body>` plus a non-sensitive evidence ref; it may reconcile as confirmed, but must still report `allowed_to_execute=false`.

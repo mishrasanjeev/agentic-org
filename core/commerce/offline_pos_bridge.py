@@ -8,6 +8,7 @@ payloads, or turns a simulator result into a production paid state.
 from __future__ import annotations
 
 import hashlib
+import hmac
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -48,6 +49,7 @@ _EXECUTION_MARKERS = (
     "checkout_success",
     "payment_success_without_callback",
 )
+_DEFAULT_CALLBACK_REPLAY_WINDOW_SECONDS = 5 * 60
 
 
 class OfflinePosBridgeError(ValueError):
@@ -180,6 +182,42 @@ def build_offline_pos_handoff_packet(
     if _contains_private_or_executable_value(packet):
         raise OfflinePosBridgeError("POS handoff packet contains private or executable values")
     return packet
+
+
+def verify_offline_pos_callback_signature(
+    raw_body: bytes,
+    signature_header: str,
+    secret: str,
+    *,
+    timestamp_header: str | None = None,
+    now: datetime | None = None,
+    replay_window_seconds: int = _DEFAULT_CALLBACK_REPLAY_WINDOW_SECONDS,
+) -> bool:
+    """Verify a provider-neutral POS callback HMAC.
+
+    The signature base is ``<unix_timestamp>.<raw_body>``. The signature header
+    may be either a bare hex digest or ``sha256=<hex>``.
+    """
+
+    if not raw_body or not signature_header or not secret or not timestamp_header:
+        return False
+    signature = signature_header.strip()
+    if signature.lower().startswith("sha256="):
+        signature = signature.split("=", 1)[1].strip()
+    if len(signature) != 64:
+        return False
+
+    timestamp = _parse_callback_timestamp(timestamp_header)
+    if timestamp is None:
+        return False
+    current = now or datetime.now(UTC)
+    skew = abs((current - timestamp).total_seconds())
+    if skew > replay_window_seconds:
+        return False
+    signed_payload = timestamp_header.strip().encode("utf-8") + b"." + raw_body
+
+    digest = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(digest, signature)
 
 
 def build_offline_pos_confirmation_intake(
@@ -379,6 +417,23 @@ def _safe_text(value: Any) -> str:
     if _contains_private_or_executable_value(text):
         raise OfflinePosBridgeError("POS value contains unsafe content")
     return text
+
+
+def _parse_callback_timestamp(value: str) -> datetime | None:
+    text = value.strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromtimestamp(int(text), UTC)
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _public_action_labels(values: Sequence[str]) -> tuple[str, ...]:

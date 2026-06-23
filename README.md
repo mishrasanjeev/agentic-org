@@ -21,7 +21,7 @@
 
 - **OACP Shopify runtime vertical**: Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Shopify Admin GraphQL product/variant/price/inventory sync, Shopify webhook HMAC verification, Grantex C6Z authority request, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, and bridge readiness endpoints are implemented.
 - **Buyer and channel bridges**: Web/API answers, MCP seller tools, OpenAPI/A2A metadata, and WhatsApp/Telegram webhook routes share the same artifact-backed answer path and source/freshness labels. WhatsApp and Telegram require configured webhook secrets before accepting inbound messages.
-- **Mandate/payment/POS boundary**: AgenticOrg verifies Pine Labs Plural/P3P mandate capability metadata, prepares non-executing purchase/mandate handoffs, and now builds Offline POS Bridge packets with confirmation reconciliation. It does not fake paid states, create orders, create checkout sessions, reserve stock, or execute provider/POS rails.
+- **Mandate/payment/POS boundary**: AgenticOrg verifies Pine Labs Plural/P3P mandate capability metadata, prepares non-executing purchase/mandate handoffs, and builds Offline POS Bridge packets with confirmation reconciliation. POS payment/receipt confirmations require server-side signed callback verification when `OFFLINE_POS_WEBHOOK_SECRET` is configured. It does not fake paid states, create orders, create checkout sessions, reserve stock, or execute provider/POS rails.
 - **Security hardening**: production dependencies were trimmed, JWT runtime moved to `PyJWT[crypto]`, `python-jose`/`ecdsa` are blocked by regression gates, Docker runtime no longer needs `curl`, and security CI fails closed on high-risk findings.
 - **Deployment hardening**: production rollout uses the manual Cloud Run helper with split Cloud Run and Artifact Registry regions, image digest and commit metadata checks, migration-first rollout support, and explicit traffic modes.
 - **SDK launch coverage**: Python SDK, TypeScript SDK, and MCP server now cover A2A/MCP discovery, `commerce_sales_agent` launch, connector listing, knowledge search, agent generation, workflow generation, workflow creation, workflow runs, and run-status polling in regression tests.
@@ -53,7 +53,7 @@ flowchart LR
 | Buyer channels | Web, MCP/OpenAPI/A2A metadata, WhatsApp, and Telegram routes use the same cache-backed answer/refusal path. |
 | Protocol adapters | Schema.org, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads are compatibility mappings derived from cached OACP artifacts. |
 | Plural/Pine capability | Implemented as provider-owned capability verification with redacted evidence refs. |
-| Offline POS Bridge | Implemented for non-sensitive handoff packets, simulator confirmation, POS confirmation intake, and reconciliation status. |
+| Offline POS Bridge | Implemented for non-sensitive handoff packets, simulator confirmation, signed POS callback verification, confirmation intake, and reconciliation status. |
 | Payment/order execution | Not performed by OACP artifacts. Current runtime prepares a handoff or returns a safe blocker; success must come from merchant/provider systems. |
 
 Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/end-user-flow.md`, `docs/oacp/truth-inventory.md`, and `docs/oacp/offline-pos-bridge.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.

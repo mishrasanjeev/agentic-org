@@ -2211,7 +2211,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.simulator.write",
-    "source_line": 1150,
+    "source_line": 1156,
     "tenant_required": true
   },
   {
@@ -2229,7 +2229,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.products.read",
-    "source_line": 1192,
+    "source_line": 1198,
     "tenant_required": true
   },
   {
