@@ -7,6 +7,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   Strategy: "bg-blue-100 text-blue-800",
   Governance: "bg-amber-100 text-amber-800",
   Product: "bg-purple-100 text-purple-800",
+  Commerce: "bg-cyan-100 text-cyan-800",
 };
 
 export default function Blog() {
