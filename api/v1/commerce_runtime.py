@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from collections.abc import Mapping
@@ -73,6 +74,8 @@ from core.security.egress import (
     validate_public_url,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/commerce/runtime",
     tags=["Commerce Runtime"],
@@ -86,6 +89,9 @@ WHATSAPP_BRIDGE_ENV_VARS: tuple[str, ...] = (
     "WHATSAPP_APP_SECRET",
 )
 TELEGRAM_BRIDGE_ENV_VARS: tuple[str, ...] = ("TELEGRAM_BOT_TOKEN", "TELEGRAM_WEBHOOK_SECRET_TOKEN")
+OFFLINE_POS_HANDOFF_BLOCKED_ACTION = (
+    "Offline POS handoff packet could not be created. Refresh OACP source artifacts and retry."
+)
 
 
 class SellerOnboardingPacketCreate(BaseModel):
@@ -1053,14 +1059,12 @@ async def create_offline_pos_handoff(
             expiry_minutes=body.expiry_minutes,
             idempotency_key=body.idempotency_key,
         )
-    except OfflinePosBridgeError as exc:
+    except OfflinePosBridgeError:
+        logger.warning("Offline POS handoff packet blocked by runtime boundary", exc_info=True)
         return {
             "status": "blocked",
             "pos_handoff_created": False,
-            "blocker": {
-                "code": "offline_pos_handoff_packet_blocked",
-                "action": str(exc),
-            },
+            "blocker": _offline_pos_handoff_blocker(),
             "purchase_preparation": purchase_payload,
             "allowed_to_execute": False,
             "no_payment_execution": True,
@@ -1779,6 +1783,13 @@ def _validate_shopify_api_version(value: str) -> str:
     if not re.fullmatch(r"\d{4}-\d{2}", text):
         raise HTTPException(status_code=400, detail="Shopify api_version must look like YYYY-MM")
     return text
+
+
+def _offline_pos_handoff_blocker() -> dict[str, str]:
+    return {
+        "code": "offline_pos_handoff_packet_blocked",
+        "action": OFFLINE_POS_HANDOFF_BLOCKED_ACTION,
+    }
 
 
 def _scope_list(value: Any) -> list[str]:
