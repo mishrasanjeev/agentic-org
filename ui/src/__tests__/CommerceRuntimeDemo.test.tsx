@@ -13,6 +13,9 @@ const apiMock = vi.hoisted(() => ({
   getBridgeSurfaces: vi.fn(),
   getProtocolAdapters: vi.fn(),
   preparePurchase: vi.fn(),
+  getOfflinePosReadiness: vi.fn(),
+  createOfflinePosHandoff: vi.fn(),
+  simulateOfflinePosConfirmation: vi.fn(),
   listProducts: vi.fn(),
   verifyPluralPineCapability: vi.fn(),
 }));
@@ -191,6 +194,66 @@ describe("CommerceRuntimeDemo", () => {
       product_ref_or_query: "shopify:product:1",
     })));
     expect(await screen.findByText(/plural_pine_capability_missing_or_stale/i)).toBeInTheDocument();
-    expect(screen.queryByText(/capture payment|payment successful|order created/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/capture payment|paid successfully|order created/i)).not.toBeInTheDocument();
+  });
+
+  it("creates an Offline POS handoff and simulator confirmation without fake paid-state claims", async () => {
+    apiMock.getOfflinePosReadiness.mockResolvedValueOnce({
+      data: {
+        status: "offline_pos_bridge_foundation_ready",
+        simulator: { status: "ready" },
+        real_pos_provider: { status: "blocked_missing_credential" },
+      },
+    });
+    apiMock.listProducts.mockResolvedValueOnce({
+      data: {
+        products: [
+          {
+            product_ref: "shopify:product:1",
+            title: "Canvas Tote",
+          },
+        ],
+      },
+    });
+    apiMock.createOfflinePosHandoff.mockResolvedValueOnce({
+      data: {
+        status: "pos_handoff_packet_ready",
+        pos_handoff_created: true,
+        packet: {
+          packet_id: "offline_pos_handoff_1",
+        },
+      },
+    });
+    apiMock.simulateOfflinePosConfirmation.mockResolvedValueOnce({
+      data: {
+        status: "pos_simulator_reconciled",
+        reconciliation: {
+          buyer_safe_status: "POS accepted the handoff. Staff must confirm final price and payment at the store.",
+          seller_operator_status: "handoff_accepted_waiting_for_pos_staff_payment_step",
+        },
+      },
+    });
+
+    render(<CommerceRuntimeDemo />);
+    fireEvent.click(screen.getByRole("button", { name: /^pos$/i }));
+    expect(await screen.findByText("ready")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^products$/i }));
+    expect(await screen.findByText("Canvas Tote")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /pos handoff/i }));
+    await waitFor(() => expect(apiMock.createOfflinePosHandoff).toHaveBeenCalledWith(expect.objectContaining({
+      buyer_session_ref: "buyer_session_demo",
+      store_id: "store_demo",
+      product_ref_or_query: "shopify:product:1",
+    })));
+    expect(await screen.findByText("offline_pos_handoff_1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /pos confirm/i }));
+    await waitFor(() => expect(apiMock.simulateOfflinePosConfirmation).toHaveBeenCalledWith({
+      packet_id: "offline_pos_handoff_1",
+      confirmation_status: "accepted",
+    }));
+    expect(await screen.findByText(/Staff must confirm final price and payment/i)).toBeInTheDocument();
+    expect(screen.queryByText(/paid successfully|order created|capture payment/i)).not.toBeInTheDocument();
   });
 });

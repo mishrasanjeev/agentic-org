@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bot, Box, KeyRound, RefreshCw, Send, ShieldCheck } from "lucide-react";
+import { Bot, Box, KeyRound, MapPin, RefreshCw, Send, ShieldCheck } from "lucide-react";
 import { commerceRuntimeApi, extractApiError } from "../lib/api";
 
 type RuntimeLog = {
@@ -30,6 +30,8 @@ export default function CommerceRuntimeDemo() {
   const [adapterPayloads, setAdapterPayloads] = useState<any>(null);
   const [capabilityStatus, setCapabilityStatus] = useState<any>(null);
   const [purchaseStatus, setPurchaseStatus] = useState<any>(null);
+  const [posReadiness, setPosReadiness] = useState<any>(null);
+  const [posStatus, setPosStatus] = useState<any>(null);
   const [logs, setLogs] = useState<RuntimeLog[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -46,8 +48,9 @@ export default function CommerceRuntimeDemo() {
       { label: "Grantex artifacts", value: adapterPayloads?.status || (evidenceId ? "evidence ready" : "not issued"), tone: adapterPayloads?.status === "adapter_payloads_ready" ? "ok" : "warn" },
       { label: "Buyer channels", value: bridgeTotal ? `${bridgeReady}/${bridgeTotal} ready` : "not checked", tone: bridgeReady === bridgeTotal && bridgeTotal > 0 ? "ok" : "warn" },
       { label: "Plural/Pine", value: capabilityStatus?.evidence?.result_status || "not verified", tone: capabilityStatus?.evidence?.result_status === "available" ? "ok" : "warn" },
+      { label: "Offline POS", value: posReadiness?.simulator?.status || "not checked", tone: posReadiness?.simulator?.status === "ready" ? "ok" : "warn" },
     ];
-  }, [adapterPayloads, bridgeMatrix, capabilityStatus, evidenceId, packetId, shopifyStatus]);
+  }, [adapterPayloads, bridgeMatrix, capabilityStatus, evidenceId, packetId, posReadiness, shopifyStatus]);
 
   function pushLog(label: string, detail: string, tone: RuntimeLog["tone"] = "neutral") {
     setLogs((items) => [{ label, detail, tone }, ...items].slice(0, 8));
@@ -301,6 +304,67 @@ export default function CommerceRuntimeDemo() {
     }
   }
 
+  async function loadPosReadiness() {
+    setBusy("pos-readiness");
+    try {
+      const { data } = await commerceRuntimeApi.getOfflinePosReadiness();
+      setPosReadiness(data);
+      pushLog("Offline POS", data.real_pos_provider?.status || data.status, data.simulator?.status === "ready" ? "ok" : "warn");
+    } catch (error) {
+      pushLog("POS readiness blocked", extractApiError(error), "warn");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createPosHandoff() {
+    const firstProduct = products[0];
+    const query = firstProduct?.product_ref || firstProduct?.title || "Canvas Tote";
+    setBusy("pos-handoff");
+    try {
+      const { data } = await commerceRuntimeApi.createOfflinePosHandoff({
+        merchant_id: merchantId,
+        seller_agent_id: sellerAgentId,
+        buyer_agent_id: buyerAgentId || undefined,
+        buyer_session_ref: "buyer_session_demo",
+        product_ref_or_query: query,
+        quantity: 1,
+        store_id: "store_demo",
+        pos_location: {
+          display_name: "Demo Store POS",
+          city: "Bengaluru",
+          country_code: "IN",
+          pos_provider: "local_simulator",
+        },
+        grantex_available: true,
+      });
+      setPosStatus(data);
+      pushLog("POS handoff", data.status, data.pos_handoff_created ? "ok" : "warn");
+    } catch (error) {
+      pushLog("POS handoff blocked", extractApiError(error), "warn");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function simulatePosConfirmation() {
+    const packetIdForConfirmation = posStatus?.packet?.packet_id;
+    if (!packetIdForConfirmation) return;
+    setBusy("pos-confirm");
+    try {
+      const { data } = await commerceRuntimeApi.simulateOfflinePosConfirmation({
+        packet_id: packetIdForConfirmation,
+        confirmation_status: "accepted",
+      });
+      setPosStatus(data);
+      pushLog("POS simulator", data.reconciliation?.seller_operator_status || data.status, "ok");
+    } catch (error) {
+      pushLog("POS simulator blocked", extractApiError(error), "warn");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-8">
@@ -373,6 +437,10 @@ export default function CommerceRuntimeDemo() {
                 <Box className="h-4 w-4" />
                 Adapters
               </button>
+              <button className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={loadPosReadiness} disabled={busy !== null}>
+                <MapPin className="h-4 w-4" />
+                POS
+              </button>
             </div>
           </div>
 
@@ -393,6 +461,12 @@ export default function CommerceRuntimeDemo() {
               <button className="rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={preparePurchase} disabled={busy !== null}>
                 Prepare
               </button>
+              <button className="rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={createPosHandoff} disabled={busy !== null}>
+                POS handoff
+              </button>
+              <button className="rounded-md border border-slate-700 px-3 py-2 text-sm font-semibold disabled:opacity-50" onClick={simulatePosConfirmation} disabled={busy !== null || !posStatus?.packet?.packet_id}>
+                POS confirm
+              </button>
             </div>
             {buyerAnswer && (
               <div className="mt-4 rounded-md border border-slate-700 bg-slate-950 p-3 text-sm">
@@ -409,7 +483,7 @@ export default function CommerceRuntimeDemo() {
 
         <section className="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
           <div className="mb-3 text-sm font-semibold">Setup State</div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
             {setupStates.map((item) => (
               <div key={item.label} className="rounded-md border border-slate-800 bg-slate-950 p-3">
                 <div className="text-xs text-slate-400">{item.label}</div>
@@ -423,6 +497,14 @@ export default function CommerceRuntimeDemo() {
               <div>{purchaseStatus.source_label}</div>
               <div>{purchaseStatus.freshness_label}</div>
               {purchaseStatus.blocker && <div className="mt-1 text-amber-300">{purchaseStatus.blocker.code}: {purchaseStatus.blocker.action}</div>}
+            </div>
+          )}
+          {posStatus && (
+            <div className="mt-3 rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
+              <div className="font-semibold text-slate-100">{posStatus.status}</div>
+              {posStatus.packet && <div>{posStatus.packet.packet_id}</div>}
+              {posStatus.reconciliation && <div>{posStatus.reconciliation.buyer_safe_status}</div>}
+              {posStatus.blocker && <div className="mt-1 text-amber-300">{posStatus.blocker.code}: {posStatus.blocker.action}</div>}
             </div>
           )}
         </section>

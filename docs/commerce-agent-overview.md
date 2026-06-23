@@ -43,9 +43,10 @@ support buyer answers, and where purchase handoff remains provider-owned.
 | C6X1-C6X3 OACP cache foundation | Verifier/runtime planning, fail-closed cache evaluator, repository port, and in-memory adapter for non-binding preview/prepare behavior. |
 | C6X4 durable OACP cache | SQL-backed durable cache records scoped by buyer agent, seller agent, tenant, and merchant with TTL, freshness, revocation snapshot, risk tier, non-enablement flags, RLS, and tenant-safe indexes. |
 | C6X5 cache maintenance planner | Deterministic local planner that classifies durable cache records into keep, refresh, evict, purge, quarantine, source refresh, or human-review outcomes. No scheduler and no side effects. |
-| OACP runtime vertical | Implemented: onboarding, encrypted Shopify connector setup, read-only Admin GraphQL sync, Shopify webhook verification, Grantex authority handoff, 11-family artifact cache, buyer answer, protocol adapters, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge contracts, and Plural/Pine capability metadata. |
+| OACP runtime vertical | Implemented: onboarding, encrypted Shopify connector setup, read-only Admin GraphQL sync, Shopify webhook verification, Grantex authority handoff, 11-family artifact cache, buyer answer, protocol adapters, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge contracts, Plural/Pine capability metadata, and Offline POS Bridge packet/reconciliation foundation. |
 | Protocol adapters | Runtime endpoints generate Schema.org Product/Offer JSON-LD, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI compatibility payloads from cached OACP artifacts. No external certification or publication claim. |
 | Purchase preparation | Implemented as a non-executing handoff boundary. It checks OACP freshness, price/inventory snapshots, policy, buyer/session scope, and Plural/Pine capability evidence, then returns a prepared handoff or exact blocker. |
+| Offline POS Bridge | Implemented as non-sensitive handoff packet creation, simulator confirmation, confirmation intake, and reconciliation status. Live POS execution remains provider/POS-owned and externally gated. |
 | Payment execution | Blocked unless separate merchant/provider/legal/security/ops approvals and production flags exist. AgenticOrg does not create checkout, order, payment, mandate, inventory hold, refund, return, or shipment records. |
 | Live checkout/payments/Plural | Provider-owned and approval-gated; no success is faked when provider credentials or approvals are missing. |
 | C6H buyer discovery consumer | Read-only sandbox consumer foundation; not public discovery or checkout/payment. |
@@ -64,7 +65,7 @@ flowchart LR
   buyer -. approved capability verification .-> provider[Provider/fintech rail]
 ```
 
-AgenticOrg does not own catalog truth, provider payment execution, settlement,
+AgenticOrg does not own catalog truth, provider payment execution, POS payment execution, settlement,
 or merchant operational state. Grantex owns artifact authority, policy and
 refusal semantics, and evidence requirements. Merchant systems own operational
 facts. Provider and fintech rails own mandates and payments.
@@ -193,7 +194,7 @@ unsupported certification:
 
 | Surface | How AgenticOrg should use it |
 | --- | --- |
-| OACP artifacts | Primary internal trust input for source/freshness, refusal, prepared handoff, and future controller checks. |
+| OACP artifacts | Primary internal trust input for source/freshness, refusal, prepared handoff, Offline POS packet evidence refs, and future controller checks. |
 | Native Grantex tools | Authority refresh path for merchant profile, catalog, inventory, policy, and artifact verification. |
 | MCP | Agent tool surface for safe commerce actions backed by OACP artifacts and Grantex authority. |
 | UCP | Future capability discovery and shopping capability mapping. AgenticOrg should consume Grantex-published UCP-style profiles only after Grantex approves them. |

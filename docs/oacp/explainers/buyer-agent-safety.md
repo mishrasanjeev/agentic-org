@@ -20,4 +20,4 @@ Ask, compare, reason, explain source/freshness, and prepare a non-executing hand
 
 ## Cannot Do
 
-Invent payment success, create order, create checkout, reserve stock, set up mandate, or call private merchant systems outside approved runtime.
+Invent paid states, create order, create checkout, reserve stock, set up mandate, or call private merchant systems outside approved runtime.

@@ -2,7 +2,7 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
-AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts, artifact verification, and protocol adapter authority. Shopify and merchant systems remain source of record. Pine Labs Plural/P3P owns mandate and payment rail execution.
+AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, including purchase preparation and Offline POS handoff orchestration. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts, artifact verification, and protocol adapter authority. Shopify, POS, and merchant systems remain source of record. Pine Labs Plural/P3P, POS, and payment providers own mandate/payment/POS execution.
 
 ## Runtime Docs
 
@@ -17,6 +17,7 @@ AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce. 
 - [Protocol adapter consumption guide](protocol-adapter-consumption-guide.md)
 - [Plural/Pine P3P capability verifier](plural-pine-p3p-capability-verifier.md)
 - [Purchase/mandate handoff](purchase-mandate-handoff.md)
+- [Offline POS bridge](offline-pos-bridge.md)
 - [Runtime operations runbook](runtime-operations-runbook.md)
 - [Troubleshooting](troubleshooting.md)
 

@@ -135,3 +135,80 @@ class C6ZProviderCapabilityEvidenceRow(BaseModel):
         nullable=True,
         onupdate=func.now(),
     )
+
+
+class C6ZOfflinePosHandoffPacketRow(BaseModel):
+    __tablename__ = "commerce_c6z_offline_pos_handoff_packets"
+    __table_args__ = (
+        Index("ix_c6z_pos_handoff_tenant_id", "tenant_id"),
+        Index("ix_c6z_pos_handoff_merchant_id", "merchant_id"),
+        Index("ix_c6z_pos_handoff_seller_agent_id", "seller_agent_id"),
+        Index("ix_c6z_pos_handoff_buyer_session_ref", "buyer_session_ref"),
+        Index("ix_c6z_pos_handoff_store_id", "store_id"),
+        Index("ix_c6z_pos_handoff_status", "status"),
+        Index("ix_c6z_pos_handoff_expires_at", "expires_at"),
+    )
+
+    packet_id: Mapped[str] = mapped_column(String(180), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    merchant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    seller_agent_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    buyer_agent_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    buyer_session_ref: Mapped[str] = mapped_column(String(180), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    pos_location: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    packet: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="pos_handoff_packet_ready")
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(180), nullable=False)
+    raw_payload_stored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    raw_payment_payload_stored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    no_payment_execution: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    no_order_creation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_to_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    non_authoritative_for_transaction: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        onupdate=func.now(),
+    )
+
+
+class C6ZOfflinePosConfirmationRow(BaseModel):
+    __tablename__ = "commerce_c6z_offline_pos_confirmations"
+    __table_args__ = (
+        Index("ix_c6z_pos_confirmation_tenant_id", "tenant_id"),
+        Index("ix_c6z_pos_confirmation_packet_id", "packet_id"),
+        Index("ix_c6z_pos_confirmation_merchant_id", "merchant_id"),
+        Index("ix_c6z_pos_confirmation_status", "confirmation_status"),
+        Index("ix_c6z_pos_confirmation_confirmed_at", "confirmed_at"),
+    )
+
+    confirmation_id: Mapped[str] = mapped_column(String(180), primary_key=True)
+    packet_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    merchant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    seller_agent_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    store_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    confirmation_status: Mapped[str] = mapped_column(String(64), nullable=False)
+    callback_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    simulator_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confirmation: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    reconciliation: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    provider_pos_evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    receipt_evidence_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inventory_refresh_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    artifact_refresh_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    confirmed_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False)
+    raw_payload_stored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    raw_payment_payload_stored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    no_payment_execution: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_to_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    non_authoritative_for_transaction: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        onupdate=func.now(),
+    )

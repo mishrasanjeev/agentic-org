@@ -14,7 +14,7 @@ Sales Agent without weakening the OACP runtime boundary.
   adapters, and provider-owned mandate capability verification.
 - Use Grantex for trust, policy, and canonical OACP artifact authority. Do not
   make Grantex a toll booth for valid cached non-binding buyer/seller answers.
-- Do not call Stripe, Plural, Pine, or provider payment execution paths for
+- Do not call Stripe, Plural, Pine, POS, or provider payment execution paths for
   commerce. Provider-owned capability verification is allowed only through the
   non-executing verifier and must store redacted evidence refs only.
 - Treat `grantex_commerce:buyer_discovery_preview` as read-only sandbox preview
@@ -221,6 +221,10 @@ The C6Z runtime closure adds these AgenticOrg-owned paths:
 | Bridge adapters | `/bridges/web`, `/bridges/openapi`, `/bridges/a2a`, `/bridges/whatsapp`, `/bridges/telegram` | One common non-executing bridge contract. |
 | Bridge surface matrix | `GET /api/v1/commerce/runtime/bridges/surfaces` | Lists web, ChatGPT-style, Claude, Gemini-style, Perplexity-style, WhatsApp, and Telegram bridge readiness plus required channel config. |
 | Plural/Pine capability | `POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify` | Capability metadata only; no mandate or payment execution. |
+| Offline POS readiness | `GET /api/v1/commerce/runtime/pos/offline/readiness` | Shows simulator and real POS-provider configuration posture. |
+| Offline POS handoff | `POST /api/v1/commerce/runtime/pos/offline/handoffs` | Builds a non-executing POS handoff packet from prepared purchase output. |
+| Offline POS confirmation | `POST /api/v1/commerce/runtime/pos/offline/confirmations` | Accepts verified POS/provider callback evidence refs only; no raw payload storage. |
+| Offline POS simulator | `POST /api/v1/commerce/runtime/pos/offline/simulator/confirm` | Deterministic local confirmation for tests; cannot create live paid states. |
 
 ## Historical Commerce Alias Requirements
 
