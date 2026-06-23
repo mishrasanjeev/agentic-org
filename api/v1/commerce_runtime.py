@@ -54,6 +54,7 @@ from core.commerce.offline_pos_bridge import (
     build_offline_pos_handoff_packet,
     reconcile_offline_pos_confirmation,
     simulate_offline_pos_confirmation,
+    verify_offline_pos_callback_signature,
 )
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
@@ -192,7 +193,6 @@ class OfflinePosConfirmationRequest(BaseModel):
     currency: str | None = None
     provider_pos_evidence_ref: str | None = None
     receipt_evidence_ref: str | None = None
-    callback_verified: bool = False
     inventory_refresh_required: bool | None = None
     artifact_refresh_required: bool | None = None
 
@@ -1097,9 +1097,15 @@ async def create_offline_pos_handoff(
     audit_event="commerce.runtime.pos.offline.confirmation",
 )
 async def receive_offline_pos_confirmation(
+    request: Request,
     body: OfflinePosConfirmationRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
+    raw_body = await request.body()
+    callback_verified = _verify_offline_pos_callback_from_request(request, raw_body)
+    requested_payment_success = body.confirmation_status in {"payment_confirmed", "receipt_available"}
+    if requested_payment_success and os.environ.get("OFFLINE_POS_WEBHOOK_SECRET") and not callback_verified:
+        raise HTTPException(status_code=401, detail="Offline POS callback signature verification failed")
     async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
         packet_row = await session.get(C6ZOfflinePosHandoffPacketRow, body.packet_id)
         if packet_row is None or packet_row.tenant_id != tenant_id:
@@ -1114,7 +1120,7 @@ async def receive_offline_pos_confirmation(
                 currency=body.currency,
                 provider_pos_evidence_ref=body.provider_pos_evidence_ref,
                 receipt_evidence_ref=body.receipt_evidence_ref,
-                callback_verified=body.callback_verified,
+                callback_verified=callback_verified,
                 simulator_mode=False,
                 inventory_refresh_required=body.inventory_refresh_required,
                 artifact_refresh_required=body.artifact_refresh_required,
@@ -1370,6 +1376,27 @@ def _blocked_bridge(channel: str, missing_env_vars: tuple[str, ...]) -> dict[str
         "allowed_to_execute": False,
         "non_authoritative_for_transaction": True,
     }
+
+
+def _verify_offline_pos_callback_from_request(request: Request, raw_body: bytes) -> bool:
+    secret = os.environ.get("OFFLINE_POS_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        return False
+    signature = (
+        request.headers.get("x-agenticorg-pos-signature")
+        or request.headers.get("x-pos-signature")
+        or ""
+    )
+    timestamp = (
+        request.headers.get("x-agenticorg-pos-timestamp")
+        or request.headers.get("x-pos-timestamp")
+    )
+    return verify_offline_pos_callback_signature(
+        raw_body,
+        signature,
+        secret,
+        timestamp_header=timestamp,
+    )
 
 
 def _bridge_body_from_webhook_payload(payload: Mapping[str, Any], *, channel: str) -> BridgeAskRequest:

@@ -41,6 +41,7 @@ from core.commerce.offline_pos_bridge import (
     build_offline_pos_handoff_packet,
     reconcile_offline_pos_confirmation,
     simulate_offline_pos_confirmation,
+    verify_offline_pos_callback_signature,
 )
 
 
@@ -862,6 +863,59 @@ def test_offline_pos_confirmation_reconciles_without_fake_payment_success() -> N
     verified_reconciliation = reconcile_offline_pos_confirmation(packet=packet, confirmation=verified_payment)
     assert verified_payment["confirmation_status"] == "payment_confirmed"
     assert "evidence" in verified_reconciliation.buyer_safe_status
+
+
+def test_offline_pos_callback_signature_uses_server_verified_hmac() -> None:
+    raw_body = b'{"packet_id":"offline_pos_handoff_1","confirmation_status":"payment_confirmed"}'
+    secret = "pos-webhook-secret"
+    timestamp = str(int(_now().timestamp()))
+    signed_payload = timestamp.encode() + b"." + raw_body
+    digest = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+
+    assert (
+        verify_offline_pos_callback_signature(
+            raw_body,
+            f"sha256={digest}",
+            secret,
+            timestamp_header=timestamp,
+            now=_now(),
+        )
+        is True
+    )
+    assert (
+        verify_offline_pos_callback_signature(
+            raw_body,
+            "sha256=bad",
+            secret,
+            timestamp_header=timestamp,
+            now=_now(),
+        )
+        is False
+    )
+    assert verify_offline_pos_callback_signature(raw_body, f"sha256={digest}", secret) is False
+
+    stale_timestamp = str(int((_now() - timedelta(minutes=10)).timestamp()))
+    stale_payload = stale_timestamp.encode() + b"." + raw_body
+    stale_digest = hmac.new(secret.encode(), stale_payload, hashlib.sha256).hexdigest()
+    assert (
+        verify_offline_pos_callback_signature(
+            raw_body,
+            f"sha256={stale_digest}",
+            secret,
+            timestamp_header=stale_timestamp,
+            now=_now(),
+        )
+        is False
+    )
+
+
+def test_offline_pos_confirmation_route_does_not_accept_client_verified_flag() -> None:
+    source = Path("api/v1/commerce_runtime.py").read_text()
+    assert "callback_verified: bool = False" not in source
+    assert "_verify_offline_pos_callback_from_request" in source
+    assert "OFFLINE_POS_WEBHOOK_SECRET" in source
+    assert "x-agenticorg-pos-signature" in source
+    assert "x-agenticorg-pos-timestamp" in source
 
 
 def test_whatsapp_and_telegram_webhook_signature_helpers() -> None:
