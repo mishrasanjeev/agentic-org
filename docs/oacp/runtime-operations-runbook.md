@@ -14,6 +14,9 @@ flowchart TD
   ask --> bridge[Check bridge matrix]
   bridge --> provider[Verify Plural/Pine capability]
   provider --> purchase[Prepare purchase handoff]
+  purchase --> pos[Create Offline POS handoff packet]
+  pos --> confirm[Run POS simulator or verified callback]
+  confirm --> reconcile[Check buyer-safe reconciliation]
 ```
 
 ## Monitor
@@ -25,6 +28,9 @@ flowchart TD
 - Bridge route errors.
 - Provider capability status.
 - Purchase-preparation blockers.
+- Offline POS handoff packet creation rate.
+- POS confirmation status mix.
+- Reconciliation outcomes that require inventory or artifact refresh.
 
 ## Rollback
 
@@ -32,4 +38,13 @@ flowchart TD
 2. Mark affected cache records stale.
 3. Stop Shopify sync jobs.
 4. Ask Grantex to remove tenant allowlist or rotate token if needed.
-5. Re-run smoke before re-enabling.
+5. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.
+6. Re-run smoke before re-enabling.
+
+## Offline POS Smoke
+
+1. Prepare a purchase from fresh OACP cache records.
+2. Create an Offline POS handoff packet.
+3. Confirm simulator `accepted`; verify buyer wording says staff/payment confirmation is still required.
+4. Submit fake or missing packet ids to the POS routes; they must return safe `404` or auth errors, not `500`.
+5. Submit `payment_confirmed` without verified callback evidence; it must downgrade to staff review.

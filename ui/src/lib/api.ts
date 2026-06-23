@@ -215,6 +215,10 @@ export const commerceRuntimeApi = {
   getProtocolAdapterSurface: (surface: string, params: any) =>
     api.get(`/commerce/runtime/protocol-adapters/${surface}`, { params }),
   preparePurchase: (data: any) => api.post("/commerce/runtime/purchase/prepare", data),
+  getOfflinePosReadiness: () => api.get("/commerce/runtime/pos/offline/readiness"),
+  createOfflinePosHandoff: (data: any) => api.post("/commerce/runtime/pos/offline/handoffs", data),
+  simulateOfflinePosConfirmation: (data: any) =>
+    api.post("/commerce/runtime/pos/offline/simulator/confirm", data),
   listProducts: (params: any) => api.get("/commerce/runtime/products", { params }),
   verifyPluralPineCapability: (data: any) =>
     api.post("/commerce/runtime/providers/plural-pine/mandate-capability/verify", data),

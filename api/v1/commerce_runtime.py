@@ -48,11 +48,20 @@ from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
 )
+from core.commerce.offline_pos_bridge import (
+    OfflinePosBridgeError,
+    build_offline_pos_confirmation_intake,
+    build_offline_pos_handoff_packet,
+    reconcile_offline_pos_confirmation,
+    simulate_offline_pos_confirmation,
+)
 from core.crypto import encrypt_for_tenant
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.commerce_c6z_runtime import (
     C6ZConnectorEvidenceRow,
+    C6ZOfflinePosConfirmationRow,
+    C6ZOfflinePosHandoffPacketRow,
     C6ZProviderCapabilityEvidenceRow,
     C6ZSellerOnboardingPacketRow,
 )
@@ -159,6 +168,39 @@ class PurchasePreparationRequest(BaseModel):
     idempotency_key: str | None = None
     grantex_available: bool = True
     live_execution_approved: bool = False
+
+
+class OfflinePosHandoffRequest(BaseModel):
+    merchant_id: str = Field(min_length=1)
+    seller_agent_id: str = Field(min_length=1)
+    buyer_agent_id: str | None = None
+    buyer_session_ref: str = Field(min_length=1)
+    product_ref_or_query: str = Field(min_length=1)
+    variant_id: str | None = None
+    quantity: int = Field(default=1, ge=1, le=100)
+    store_id: str = Field(min_length=1)
+    pos_location: dict[str, Any] = Field(default_factory=dict)
+    idempotency_key: str | None = None
+    grantex_available: bool = True
+    expiry_minutes: int = Field(default=15, ge=1, le=60)
+
+
+class OfflinePosConfirmationRequest(BaseModel):
+    packet_id: str = Field(min_length=1)
+    confirmation_status: str = Field(min_length=1)
+    final_price: str | None = None
+    currency: str | None = None
+    provider_pos_evidence_ref: str | None = None
+    receipt_evidence_ref: str | None = None
+    callback_verified: bool = False
+    inventory_refresh_required: bool | None = None
+    artifact_refresh_required: bool | None = None
+
+
+class OfflinePosSimulatorRequest(BaseModel):
+    packet_id: str = Field(min_length=1)
+    confirmation_status: str = "accepted"
+    final_price: str | None = None
 
 
 @router.post("/seller-agents/onboarding-packets")
@@ -907,6 +949,237 @@ async def prepare_purchase_handoff(
     }
 
 
+@router.get("/pos/offline/readiness")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.pos.offline.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.pos.offline.readiness",
+)
+async def get_offline_pos_readiness() -> dict[str, Any]:
+    real_provider_env = resolve_env(("OFFLINE_POS_PROVIDER_ID", "OFFLINE_POS_WEBHOOK_SECRET"))
+    return {
+        "status": "offline_pos_bridge_foundation_ready",
+        "simulator": {
+            "configured": True,
+            "approved": True,
+            "testable": True,
+            "status": "ready",
+        },
+        "real_pos_provider": {
+            "configured": real_provider_env.ready,
+            "approved": False,
+            "testable": real_provider_env.ready,
+            "status": "configured_pending_approval" if real_provider_env.ready else "blocked_missing_credential",
+            "missing_env_vars": list(real_provider_env.missing),
+        },
+        "supported_runtime_actions": [
+            "build_offline_pos_handoff_packet",
+            "intake_pos_confirmation_status",
+            "reconcile_non_sensitive_pos_evidence_refs",
+            "mark_inventory_or_artifact_refresh_required",
+        ],
+        "unsupported_runtime_actions": [
+            "agent_order_creation",
+            "agent_payment_capture",
+            "raw_pos_payload_storage",
+            "raw_payment_payload_storage",
+            "universal_pos_vendor_support_claim",
+        ],
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@router.post("/pos/offline/handoffs")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.pos.offline.handoffs.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="buyer-session-store-product-pos",
+    audit_event="commerce.runtime.pos.offline.handoff.create",
+)
+async def create_offline_pos_handoff(
+    body: OfflinePosHandoffRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    cache_records, products, capabilities = await _load_runtime_scope(
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+    )
+    purchase = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=products,
+        capability_evidence=capabilities,
+        tenant_id=tenant_id,
+        merchant_id=body.merchant_id,
+        seller_agent_id=body.seller_agent_id,
+        buyer_agent_id=body.buyer_agent_id,
+        product_ref_or_query=body.product_ref_or_query,
+        variant_id=body.variant_id,
+        quantity=body.quantity,
+        now_iso=_now_iso(),
+        idempotency_key=body.idempotency_key,
+        grantex_available=body.grantex_available,
+        live_execution_enabled=False,
+    )
+    purchase_payload = {**purchase.__dict__}
+    if purchase.prepared_handoff is None:
+        return {
+            "status": "blocked",
+            "pos_handoff_created": False,
+            "purchase_preparation": purchase_payload,
+            "blocker": purchase.blocker,
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "non_authoritative_for_transaction": True,
+        }
+    try:
+        packet = build_offline_pos_handoff_packet(
+            purchase_preparation=purchase_payload,
+            tenant_id=tenant_id,
+            merchant_id=body.merchant_id,
+            seller_agent_id=body.seller_agent_id,
+            store_id=body.store_id,
+            pos_location=body.pos_location,
+            buyer_session_ref=body.buyer_session_ref,
+            now_iso=_now_iso(),
+            expiry_minutes=body.expiry_minutes,
+            idempotency_key=body.idempotency_key,
+        )
+    except OfflinePosBridgeError as exc:
+        return {
+            "status": "blocked",
+            "pos_handoff_created": False,
+            "blocker": {
+                "code": "offline_pos_handoff_packet_blocked",
+                "action": str(exc),
+            },
+            "purchase_preparation": purchase_payload,
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "non_authoritative_for_transaction": True,
+        }
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        row = await session.get(C6ZOfflinePosHandoffPacketRow, packet["packet_id"])
+        if row is None:
+            row = C6ZOfflinePosHandoffPacketRow(packet_id=packet["packet_id"])
+            session.add(row)
+        _apply_pos_handoff(row, packet, body.buyer_agent_id)
+    return {
+        "status": "pos_handoff_packet_ready",
+        "pos_handoff_created": True,
+        "packet": packet,
+        "purchase_preparation_status": purchase.status,
+        "safe_buyer_wording": (
+            "I can prepare this for in-store checkout. Store staff or the POS/provider must confirm final "
+            "price, inventory, and payment."
+        ),
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@router.post("/pos/offline/confirmations")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.pos.offline.confirmations.write",
+    rate_limit="commerce-webhook",
+    idempotency="pos-confirmation-id",
+    audit_event="commerce.runtime.pos.offline.confirmation",
+)
+async def receive_offline_pos_confirmation(
+    body: OfflinePosConfirmationRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        packet_row = await session.get(C6ZOfflinePosHandoffPacketRow, body.packet_id)
+        if packet_row is None or packet_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Offline POS handoff packet not found")
+        packet = dict(packet_row.packet or {})
+        try:
+            confirmation = build_offline_pos_confirmation_intake(
+                packet=packet,
+                confirmation_status=body.confirmation_status,
+                now_iso=_now_iso(),
+                final_price=body.final_price,
+                currency=body.currency,
+                provider_pos_evidence_ref=body.provider_pos_evidence_ref,
+                receipt_evidence_ref=body.receipt_evidence_ref,
+                callback_verified=body.callback_verified,
+                simulator_mode=False,
+                inventory_refresh_required=body.inventory_refresh_required,
+                artifact_refresh_required=body.artifact_refresh_required,
+            )
+        except OfflinePosBridgeError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        reconciliation = reconcile_offline_pos_confirmation(packet=packet, confirmation=confirmation)
+        confirmation_row = await session.get(C6ZOfflinePosConfirmationRow, confirmation["confirmation_id"])
+        if confirmation_row is None:
+            confirmation_row = C6ZOfflinePosConfirmationRow(confirmation_id=confirmation["confirmation_id"])
+            session.add(confirmation_row)
+        _apply_pos_confirmation(confirmation_row, confirmation, reconciliation.__dict__)
+        packet_row.status = "reconciled"
+    return {
+        "status": "pos_confirmation_reconciled",
+        "confirmation": confirmation,
+        "reconciliation": reconciliation.__dict__,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@router.post("/pos/offline/simulator/confirm")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.pos.offline.simulator.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="pos-simulator-confirmation",
+    audit_event="commerce.runtime.pos.offline.simulator.confirm",
+)
+async def simulate_offline_pos_handoff_confirmation(
+    body: OfflinePosSimulatorRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        packet_row = await session.get(C6ZOfflinePosHandoffPacketRow, body.packet_id)
+        if packet_row is None or packet_row.tenant_id != tenant_id:
+            raise HTTPException(404, "Offline POS handoff packet not found")
+        packet = dict(packet_row.packet or {})
+        confirmation = simulate_offline_pos_confirmation(
+            packet=packet,
+            now_iso=_now_iso(),
+            confirmation_status=cast(Any, body.confirmation_status),
+            final_price=body.final_price,
+        )
+        reconciliation = reconcile_offline_pos_confirmation(packet=packet, confirmation=confirmation)
+        confirmation_row = await session.get(C6ZOfflinePosConfirmationRow, confirmation["confirmation_id"])
+        if confirmation_row is None:
+            confirmation_row = C6ZOfflinePosConfirmationRow(confirmation_id=confirmation["confirmation_id"])
+            session.add(confirmation_row)
+        _apply_pos_confirmation(confirmation_row, confirmation, reconciliation.__dict__)
+        packet_row.status = "reconciled"
+    return {
+        "status": "pos_simulator_reconciled",
+        "confirmation": confirmation,
+        "reconciliation": reconciliation.__dict__,
+        "simulator_mode": True,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
 @router.get("/products")
 @route_meta(
     auth_required=True,
@@ -1571,6 +1844,63 @@ def _apply_capability(
     row.raw_payload_stored = False
     row.no_payment_execution = True
     row.no_live_provider_enablement = True
+    row.allowed_to_execute = False
+    row.non_authoritative_for_transaction = True
+
+
+def _apply_pos_handoff(
+    row: C6ZOfflinePosHandoffPacketRow,
+    packet: Mapping[str, Any],
+    buyer_agent_id: str | None,
+) -> None:
+    row.tenant_id = str(packet["tenant_id"])
+    row.merchant_id = str(packet["merchant_id"])
+    row.seller_agent_id = str(packet["seller_agent_id"])
+    row.buyer_agent_id = buyer_agent_id
+    row.buyer_session_ref = str(packet["buyer_session_ref"])
+    row.store_id = str(packet["store_id"])
+    row.pos_location = dict(packet.get("pos_location") or {})
+    row.packet = dict(packet)
+    row.status = str(packet["status"])
+    row.expires_at = _parse_dt(str((packet.get("freshness_timestamps") or {})["expires_at"]))
+    row.idempotency_key = str(packet["idempotency_key"])
+    row.raw_payload_stored = False
+    row.raw_payment_payload_stored = False
+    row.no_payment_execution = True
+    row.no_order_creation = True
+    row.allowed_to_execute = False
+    row.non_authoritative_for_transaction = True
+
+
+def _apply_pos_confirmation(
+    row: C6ZOfflinePosConfirmationRow,
+    confirmation: Mapping[str, Any],
+    reconciliation: Mapping[str, Any],
+) -> None:
+    row.packet_id = str(confirmation["packet_id"])
+    row.tenant_id = str(confirmation["tenant_id"])
+    row.merchant_id = str(confirmation["merchant_id"])
+    row.seller_agent_id = str(confirmation["seller_agent_id"])
+    row.store_id = str(confirmation["store_id"])
+    row.confirmation_status = str(confirmation["confirmation_status"])
+    row.callback_verified = bool(confirmation["callback_verified"])
+    row.simulator_mode = bool(confirmation["simulator_mode"])
+    row.confirmation = dict(confirmation)
+    row.reconciliation = dict(reconciliation)
+    row.provider_pos_evidence_ref = (
+        None
+        if confirmation.get("provider_pos_evidence_ref") is None
+        else str(confirmation["provider_pos_evidence_ref"])
+    )
+    row.receipt_evidence_ref = (
+        None if confirmation.get("receipt_evidence_ref") is None else str(confirmation["receipt_evidence_ref"])
+    )
+    row.inventory_refresh_required = bool(confirmation["inventory_refresh_required"])
+    row.artifact_refresh_required = bool(confirmation["artifact_refresh_required"])
+    row.confirmed_at = _parse_dt(str(confirmation["confirmed_at"]))
+    row.raw_payload_stored = False
+    row.raw_payment_payload_stored = False
+    row.no_payment_execution = True
     row.allowed_to_execute = False
     row.non_authoritative_for_transaction = True
 

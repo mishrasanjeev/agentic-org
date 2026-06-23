@@ -32,6 +32,11 @@ from core.commerce.c6z_runtime_vertical import (  # noqa: E402
     send_grantex_authority_request,
     verify_plural_pine_mandate_capability,
 )  # noqa: E402
+from core.commerce.offline_pos_bridge import (  # noqa: E402
+    build_offline_pos_handoff_packet,
+    reconcile_offline_pos_confirmation,
+    simulate_offline_pos_confirmation,
+)
 
 
 TENANT_ID = "11111111-1111-1111-1111-111111111111"
@@ -220,6 +225,27 @@ async def main() -> None:
         seller_agent_id=SELLER_AGENT_ID,
         buyer_agent_id=BUYER_AGENT_ID,
     )
+    local_capability_fixture_used = capability.result_status != "available"
+    local_capability_for_handoff: dict[str, Any] = capability.__dict__
+    if local_capability_fixture_used:
+        local_capability_for_handoff = {
+            "tenant_id": TENANT_ID,
+            "merchant_id": MERCHANT_ID,
+            "seller_agent_id": SELLER_AGENT_ID,
+            "buyer_agent_id": BUYER_AGENT_ID,
+            "result_status": "available",
+            "provider": "plural_pine_p3p",
+            "provider_environment": "local_fixture_non_live",
+            "checked_at": now_iso,
+            "expires_at": (datetime.fromisoformat(now_iso.replace("Z", "+00:00")) + timedelta(minutes=5))
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "redacted_evidence_ref": "provider:plural_pine:capability:local-fixture:redacted",
+            "metadata": {"local_fixture": True, "live_execution_approved": False},
+            "raw_payload_stored": False,
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+        }
     adapter_payloads = generate_protocol_adapter_payloads(
         cache_records=cache_records,
         products=evidence["products"],
@@ -231,7 +257,7 @@ async def main() -> None:
     purchase = prepare_purchase_or_mandate_handoff(
         cache_records=cache_records,
         products=evidence["products"],
-        capability_evidence=[capability.__dict__],
+        capability_evidence=[local_capability_for_handoff],
         tenant_id=TENANT_ID,
         merchant_id=MERCHANT_ID,
         seller_agent_id=SELLER_AGENT_ID,
@@ -242,6 +268,34 @@ async def main() -> None:
         now_iso=now_iso,
         grantex_available=False,
     )
+    pos_packet = None
+    pos_confirmation = None
+    pos_reconciliation = None
+    if purchase.prepared_handoff is not None:
+        pos_packet = build_offline_pos_handoff_packet(
+            purchase_preparation=purchase.__dict__,
+            tenant_id=TENANT_ID,
+            merchant_id=MERCHANT_ID,
+            seller_agent_id=SELLER_AGENT_ID,
+            store_id="local_pos_store_1",
+            pos_location={
+                "display_name": "Local POS Simulator",
+                "city": "Bengaluru",
+                "country_code": "IN",
+                "pos_provider": "local_simulator",
+            },
+            buyer_session_ref="buyer_session_oacp_launch",
+            now_iso=now_iso,
+        )
+        pos_confirmation = simulate_offline_pos_confirmation(
+            packet=pos_packet,
+            now_iso=now_iso,
+            confirmation_status="accepted",
+        )
+        pos_reconciliation = reconcile_offline_pos_confirmation(
+            packet=pos_packet,
+            confirmation=pos_confirmation,
+        )
 
     summary = {
         "generated_at": now_iso,
@@ -275,9 +329,19 @@ async def main() -> None:
         "protocol_adapter_surfaces": adapter_payloads["surface_names"],
         "plural_pine_capability_status": capability.result_status,
         "plural_pine_redacted_evidence_ref": capability.redacted_evidence_ref,
+        "plural_pine_local_fixture_used_for_pos_demo": local_capability_fixture_used,
+        "plural_pine_local_fixture_evidence_ref": (
+            local_capability_for_handoff["redacted_evidence_ref"] if local_capability_fixture_used else None
+        ),
         "purchase_prepare_status": purchase.status,
         "purchase_prepare_blocker": purchase.blocker,
         "purchase_idempotency_key": purchase.idempotency_key,
+        "offline_pos_packet_status": None if pos_packet is None else pos_packet["status"],
+        "offline_pos_packet_id": None if pos_packet is None else pos_packet["packet_id"],
+        "offline_pos_confirmation_status": None if pos_confirmation is None else pos_confirmation["confirmation_status"],
+        "offline_pos_buyer_safe_status": None if pos_reconciliation is None else pos_reconciliation.buyer_safe_status,
+        "offline_pos_raw_payment_payload_stored": False,
+        "offline_pos_payment_success_claimed": False,
         "shopify_external_check": await _maybe_shopify_check(),
         "grantex_external_check": await _maybe_grantex_check(authority_payload),
         "public_discovery_flag": False,

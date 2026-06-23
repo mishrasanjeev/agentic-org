@@ -10,7 +10,7 @@ Canonical end-to-end flow: [OACP end-user flow](../end-user-flow.md).
 4. Request Grantex OACP artifacts.
 5. Cache artifacts in AgenticOrg.
 6. Enable buyer surfaces after source labels and blockers pass smoke tests.
-7. Route purchase intent to prepared handoff or blocker.
+7. Route purchase intent to prepared handoff, Offline POS handoff packet, or blocker.
 
 ```mermaid
 flowchart LR
@@ -19,12 +19,13 @@ flowchart LR
   sync --> grantex[Grantex authority]
   grantex --> cache[OACP cache]
   cache --> buyers[Buyer surfaces]
+  buyers --> pos[Offline POS handoff when selected]
 ```
 
 ## Requirements
 
-Shopify domain, read-only credential/OAuth install, AgenticOrg tenant, Grantex allowlist, provider capability config when payment/mandate handoff is offered, and channel approvals.
+Shopify domain, read-only credential/OAuth install, AgenticOrg tenant, Grantex allowlist, provider capability config when payment/mandate handoff is offered, POS/store location metadata when in-store handoff is offered, and channel approvals.
 
 ## Timeline
 
-Demo can run after credentials and allowlisting. Public launch requires channel secrets, provider evidence, support owner, rollback owner, and smoke evidence.
+Demo can run after credentials and allowlisting. Public launch requires channel secrets, provider evidence, POS callback approval where applicable, support owner, rollback owner, and smoke evidence.

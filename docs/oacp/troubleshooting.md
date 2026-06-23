@@ -11,7 +11,10 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 | Source label missing | UI or bridge dropped cache metadata. | Fix bridge response mapping before public use. |
 | WhatsApp/Telegram blocked | Webhook secret missing or invalid. | Configure secrets and rerun webhook smoke. |
 | Purchase prepare blocked | Fresh artifact or provider capability evidence missing. | Refresh source artifacts and run Plural/Pine verifier. |
-| User asks for payment success | Unsupported from OACP cache. | Return safe wording: no payment/order was created. |
+| POS handoff blocked | Purchase preparation did not produce a prepared handoff, artifact refs are missing, or POS location metadata is incomplete. | Refresh artifacts, verify buyer/session scope, and check POS readiness endpoint. |
+| POS simulator reports accepted | Local test handoff only. | Tell buyer staff must confirm final price and payment at the store. Do not claim purchase completion. |
+| POS callback says payment confirmed but is unverified | Missing verified callback or provider evidence ref. | Downgrade to staff review and investigate callback verification. |
+| User asks for paid-state proof | Unsupported from OACP cache. | Return safe wording: no payment/order was created. |
 
 ## Failure/Refusal Flow
 

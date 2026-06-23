@@ -25,4 +25,4 @@ flowchart TD
 
 ## What Must Be Blocked
 
-Payment success, order creation, checkout creation, stock holds, mandate setup, refunds, returns, shipment, and private merchant-system mutation must be blocked unless an approved execution path confirms the result.
+Paid-state claims, order creation, checkout creation, stock holds, mandate setup, refunds, returns, shipment, and private merchant-system mutation must be blocked unless an approved execution path confirms the result.

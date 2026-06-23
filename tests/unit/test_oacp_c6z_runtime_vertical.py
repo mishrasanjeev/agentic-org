@@ -35,6 +35,13 @@ from core.commerce.c6z_runtime_vertical import (
     verify_whatsapp_webhook_signature,
 )
 from core.commerce.oacp_artifacts import OacpPersistentArtifactCacheRecord
+from core.commerce.offline_pos_bridge import (
+    OfflinePosBridgeError,
+    build_offline_pos_confirmation_intake,
+    build_offline_pos_handoff_packet,
+    reconcile_offline_pos_confirmation,
+    simulate_offline_pos_confirmation,
+)
 
 
 def _now() -> datetime:
@@ -731,6 +738,132 @@ def test_purchase_preparation_requires_fresh_oacp_and_plural_pine_evidence() -> 
     assert "provider:plural_pine:capability:abc:redacted" in str(prepared)
 
 
+def test_offline_pos_handoff_packet_uses_purchase_prep_without_payment_execution() -> None:
+    evidence = build_shopify_connector_evidence(
+        packet=_packet(),
+        products=[_shopify_product()],
+        synced_at=_iso(_now() - timedelta(seconds=10)),
+        source_observed_at=_iso(_now() - timedelta(seconds=10)),
+        currency="INR",
+    )
+    cache_records = [
+        _cache_record(
+            expires_delta=timedelta(seconds=50),
+            generated_delta=timedelta(seconds=5),
+            artifact_type=artifact_type,
+        )
+        for artifact_type in (
+            "catalog_snapshot",
+            "price",
+            "inventory",
+            "policy",
+            "mandate_capability",
+            "protocol_adapter",
+        )
+    ]
+    purchase = prepare_purchase_or_mandate_handoff(
+        cache_records=cache_records,
+        products=evidence["products"],
+        capability_evidence=[
+            {
+                "result_status": "available",
+                "checked_at": _iso(_now() - timedelta(seconds=30)),
+                "expires_at": _iso(_now() + timedelta(minutes=5)),
+                "redacted_evidence_ref": "provider:plural_pine:capability:abc:redacted",
+                "provider_environment": "sandbox",
+                "raw_payload_stored": False,
+            }
+        ],
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        seller_agent_id="seller_agent_1",
+        buyer_agent_id="buyer_agent_1",
+        product_ref_or_query="Canvas Tote",
+        variant_id=None,
+        quantity=1,
+        now_iso=_iso(_now()),
+    )
+
+    packet = build_offline_pos_handoff_packet(
+        purchase_preparation=purchase.__dict__,
+        tenant_id="11111111-1111-1111-1111-111111111111",
+        merchant_id="merchant_1",
+        seller_agent_id="seller_agent_1",
+        store_id="store_1",
+        pos_location={"display_name": "Koramangala Store", "pos_provider": "local_simulator"},
+        buyer_session_ref="buyer_session_1",
+        now_iso=_iso(_now()),
+    )
+
+    assert packet["packet_kind"] == "offline_pos_bridge_handoff"
+    assert packet["store_id"] == "store_1"
+    assert str(packet["product_id"]).startswith("shopify_product:")
+    assert str(packet["product_id"]).endswith(":redacted")
+    assert packet["quantity"] == 1
+    assert packet["displayed_price"] == "1299.00"
+    assert packet["currency"] == "INR"
+    assert packet["risk_tier"] == "low"
+    assert packet["raw_payload_stored"] is False
+    assert packet["raw_payment_payload_stored"] is False
+    assert packet["allowed_to_execute"] is False
+    assert packet["no_payment_execution"] is True
+    assert "provider:plural_pine:capability:abc:redacted" in packet["non_sensitive_evidence_refs"]
+
+    with pytest.raises(OfflinePosBridgeError):
+        build_offline_pos_handoff_packet(
+            purchase_preparation={**purchase.__dict__, "allowed_to_execute": True},
+            tenant_id="11111111-1111-1111-1111-111111111111",
+            merchant_id="merchant_1",
+            seller_agent_id="seller_agent_1",
+            store_id="store_1",
+            pos_location={},
+            buyer_session_ref="buyer_session_1",
+            now_iso=_iso(_now()),
+        )
+
+
+def test_offline_pos_confirmation_reconciles_without_fake_payment_success() -> None:
+    packet = {
+        "packet_id": "offline_pos_handoff_1",
+        "tenant_id": "11111111-1111-1111-1111-111111111111",
+        "merchant_id": "merchant_1",
+        "seller_agent_id": "seller_agent_1",
+        "store_id": "store_1",
+        "displayed_price": "1299.00",
+        "currency": "INR",
+    }
+
+    simulated_success = build_offline_pos_confirmation_intake(
+        packet=packet,
+        confirmation_status="payment_confirmed",
+        now_iso=_iso(_now()),
+        provider_pos_evidence_ref="pos:simulator:paid:redacted",
+        callback_verified=False,
+        simulator_mode=True,
+    )
+    assert simulated_success["confirmation_status"] == "needs_staff_review"
+
+    accepted = simulate_offline_pos_confirmation(packet=packet, now_iso=_iso(_now()))
+    reconciliation = reconcile_offline_pos_confirmation(packet=packet, confirmation=accepted)
+    assert accepted["confirmation_status"] == "accepted"
+    assert reconciliation.status == "accepted"
+    assert "Staff must confirm" in reconciliation.buyer_safe_status
+    assert reconciliation.allowed_to_execute is False
+    assert reconciliation.raw_payment_payload_stored is False
+
+    verified_payment = build_offline_pos_confirmation_intake(
+        packet=packet,
+        confirmation_status="payment_confirmed",
+        now_iso=_iso(_now()),
+        provider_pos_evidence_ref="pos:provider:callback:abc:redacted",
+        callback_verified=True,
+        simulator_mode=False,
+    )
+    verified_reconciliation = reconcile_offline_pos_confirmation(packet=packet, confirmation=verified_payment)
+    assert verified_payment["confirmation_status"] == "payment_confirmed"
+    assert "evidence" in verified_reconciliation.buyer_safe_status
+
+
 def test_whatsapp_and_telegram_webhook_signature_helpers() -> None:
     raw_body = b'{"message":{"text":"Show Canvas Tote"}}'
     app_secret = "wa-app-secret"
@@ -865,6 +998,7 @@ async def test_plural_pine_capability_verifier_blocks_live_environment_without_n
 def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
     migration = Path("migrations/versions/v6_z_runtime_vertical_demo.py").read_text()
     launch_migration = Path("migrations/versions/v6_z1_oacp_runtime_launch_closure.py").read_text()
+    pos_migration = Path("migrations/versions/v6_z2_offline_pos_bridge.py").read_text()
     assert 'down_revision = "v6y5_retention_decisions"' in migration
     assert 'down_revision = "v6z_runtime_vertical_demo"' in launch_migration
     assert "ENABLE ROW LEVEL SECURITY" in migration
@@ -874,6 +1008,12 @@ def test_c6z_migration_is_tenant_safe_and_non_executing() -> None:
     assert "CREATE TABLE IF NOT EXISTS commerce_c6z_seller_onboarding_packets" in migration
     assert "blocked_grantex_unavailable" in launch_migration
     assert "artifacts_cached" in launch_migration
+    assert 'down_revision = "v6z1_oacp_runtime_launch_closure"' in pos_migration
+    assert "CREATE TABLE IF NOT EXISTS commerce_c6z_offline_pos_handoff_packets" in pos_migration
+    assert "CREATE TABLE IF NOT EXISTS commerce_c6z_offline_pos_confirmations" in pos_migration
+    assert "raw_payment_payload_stored IS FALSE" in pos_migration
+    assert "confirmation_status NOT IN ('payment_confirmed', 'receipt_available')" in pos_migration
+    assert "ENABLE ROW LEVEL SECURITY" in pos_migration
 
 
 def test_c6z_mcp_bridge_exposes_seller_tools_without_execution_tools() -> None:
@@ -917,6 +1057,10 @@ def test_c6z_buyer_surface_bridge_routes_are_non_executing() -> None:
         "/protocol-adapters",
         "/protocol-adapters/{surface}",
         "/purchase/prepare",
+        "/pos/offline/readiness",
+        "/pos/offline/handoffs",
+        "/pos/offline/confirmations",
+        "/pos/offline/simulator/confirm",
     ):
         assert route in source
     assert '"allowed_to_execute": True' not in source
