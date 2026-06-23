@@ -9,7 +9,6 @@ from uuid import uuid4
 
 import pytest
 
-
 NOW = datetime(2026, 6, 23, 12, 0, tzinfo=UTC)
 
 
