@@ -28,6 +28,7 @@ from api.v1 import (
     cdc_webhooks,
     chat,
     client_portal,
+    commerce_public,
     commerce_runtime,
     companies,
     compliance,
@@ -200,6 +201,7 @@ app.include_router(approval_policies.router, prefix="/api/v1", tags=["Approvals"
 app.include_router(audit.router, prefix="/api/v1", tags=["Audit"])
 app.include_router(schemas.router, prefix="/api/v1", tags=["Schemas"])
 app.include_router(connectors.router, prefix="/api/v1", tags=["Connectors"])
+app.include_router(commerce_public.public_router, prefix="/api/v1", tags=["Public Commerce"])
 app.include_router(commerce_runtime.router, prefix="/api/v1", tags=["Commerce Runtime"])
 app.include_router(oauth_connector.router, prefix="/api/v1", tags=["Connectors"])
 app.include_router(compliance.router, prefix="/api/v1", tags=["Compliance"])

@@ -18,6 +18,27 @@ OACP and provider evidence exists.
 | WhatsApp | `POST /api/v1/commerce/runtime/bridges/whatsapp/webhook` with `X-Hub-Signature-256` |
 | Telegram | `POST /api/v1/commerce/runtime/bridges/telegram/webhook` with `X-Telegram-Bot-Api-Secret-Token` |
 
+## Public Catalog Publishing
+
+Public catalog publishing is a separate read-only surface from the authenticated
+runtime bridge. It is fail-closed unless `OACP_PUBLIC_CATALOG_ENABLED=true` is
+set by the operator.
+
+| Surface | Path |
+| --- | --- |
+| Seller profile page | `GET /api/v1/public/commerce/sellers/{merchant_id}?tenant_id=...&seller_agent_id=...` |
+| Buyer-safe catalog JSON | `GET /api/v1/public/commerce/sellers/{merchant_id}/catalog.json?tenant_id=...&seller_agent_id=...` |
+| Product detail page | `GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}?tenant_id=...&seller_agent_id=...` |
+| Product detail JSON | `GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json?tenant_id=...&seller_agent_id=...` |
+| Schema.org JSON-LD | `GET /api/v1/public/commerce/sellers/{merchant_id}/schema-org.jsonld?tenant_id=...&seller_agent_id=...` |
+| Merchant sitemap | `GET /api/v1/public/commerce/sellers/{merchant_id}/sitemap.xml?tenant_id=...&seller_agent_id=...` |
+| Merchant llms.txt | `GET /api/v1/public/commerce/sellers/{merchant_id}/llms.txt?tenant_id=...&seller_agent_id=...` |
+
+These endpoints render only public-safe product, SKU, price, image, inventory
+snapshot, source, and freshness fields from stored Shopify/OACP evidence. They
+do not publish raw Shopify payloads, credentials, provider payloads, checkout
+links, mandate tokens, order state, or payment state.
+
 ## Adapter Payloads
 
 Use `GET /api/v1/commerce/runtime/protocol-adapters` for all surfaces or

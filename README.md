@@ -51,6 +51,7 @@ flowchart LR
 | Grantex authority request | Implemented for C6Z OACP authority payloads and allowlisted Grantex artifact issuance. |
 | OACP cache | Implemented for public-safe refs, TTL, freshness, revocation posture, risk tier, and non-enablement flags. |
 | Buyer channels | Web, MCP/OpenAPI/A2A metadata, WhatsApp, and Telegram routes use the same cache-backed answer/refusal path. |
+| Public catalog publishing | Public-safe seller profile, catalog JSON, product pages, Schema.org JSON-LD, sitemap, and `llms.txt` endpoints are implemented under `/api/v1/public/commerce/sellers/{merchant_id}` and require `OACP_PUBLIC_CATALOG_ENABLED=true`. |
 | Protocol adapters | Schema.org, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads are compatibility mappings derived from cached OACP artifacts. |
 | Plural/Pine capability | Implemented as provider-owned capability verification with redacted evidence refs. |
 | Offline POS Bridge | Implemented for non-sensitive handoff packets, simulator confirmation, signed POS callback verification, confirmation intake, and reconciliation status. |
