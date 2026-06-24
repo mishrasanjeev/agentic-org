@@ -37,6 +37,7 @@ const ALL_NAV = [
   { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: ["admin"] },
+  { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
   { path: "/dashboard/agents/from-sop", labelKey: "nav.createFromSop", label: "Create from SOP", roles: ["admin"] },
   { path: "/dashboard/integrations", labelKey: "nav.integrations", label: "A2A / MCP", roles: ["admin"] },
@@ -63,6 +64,7 @@ const ROLE_LABELS: Record<string, { titleKey: string; domainKey: string }> = {
   chro: { titleKey: "roles.chro", domainKey: "roles.domainHr" },
   cmo: { titleKey: "roles.cmo", domainKey: "roles.domainMarketing" },
   coo: { titleKey: "roles.coo", domainKey: "roles.domainOperations" },
+  merchant: { titleKey: "roles.merchant", domainKey: "roles.domainCommerce" },
   admin: { titleKey: "roles.admin", domainKey: "roles.domainAll" },
   auditor: { titleKey: "roles.auditor", domainKey: "roles.domainReadOnly" },
 };
@@ -205,9 +207,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Suspense>
           </div>
           <div className="flex items-center gap-3">
-            <Suspense fallback={null}>
-              <NLQueryBar onOpenChat={() => setChatOpen(true)} />
-            </Suspense>
+            <div className="hidden sm:block">
+              <Suspense fallback={null}>
+                <NLQueryBar onOpenChat={() => setChatOpen(true)} />
+              </Suspense>
+            </div>
             {/* Language picker */}
             <select
               value={currentLang}

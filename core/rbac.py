@@ -7,6 +7,7 @@ ROLE_DOMAIN_MAP: dict[str, list[str] | None] = {
     "chro": ["hr"],
     "cmo": ["marketing"],
     "coo": ["ops"],
+    "merchant": ["commerce"],
     "admin": None,
     "auditor": None,
 }
@@ -36,6 +37,7 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "connectors.cmo_vendor_sandbox.write",
     ],
     "coo": _DOMAIN_ROLE_SCOPES,
+    "merchant": ["commerce.merchant_config.write"],
     "admin": ["agenticorg:admin"],
     "auditor": ["audit:read"],
 }
@@ -45,6 +47,7 @@ ROLE_LABELS: dict[str, dict[str, str]] = {
     "chro": {"title": "CHRO", "domain_label": "HR"},
     "cmo": {"title": "CMO", "domain_label": "Marketing"},
     "coo": {"title": "COO", "domain_label": "Operations"},
+    "merchant": {"title": "Merchant Operator", "domain_label": "Commerce"},
     "admin": {"title": "CEO / Admin", "domain_label": "All Domains"},
     "auditor": {"title": "Auditor", "domain_label": "Read-only"},
 }

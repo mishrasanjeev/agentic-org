@@ -198,6 +198,12 @@ export const companiesApi = {
 };
 
 export const commerceRuntimeApi = {
+  getMerchantConfig: (merchantId: string, params?: any) =>
+    api.get(`/commerce/runtime/merchant-configs/${merchantId}`, { params }),
+  upsertMerchantConfig: (merchantId: string, data: any) =>
+    api.put(`/commerce/runtime/merchant-configs/${merchantId}`, data),
+  getMerchantConfigReadiness: (merchantId: string, params?: any) =>
+    api.get(`/commerce/runtime/merchant-configs/${merchantId}/readiness`, { params }),
   createOnboardingPacket: (data: any) =>
     api.post("/commerce/runtime/seller-agents/onboarding-packets", data),
   getOnboardingPacket: (packetId: string) =>

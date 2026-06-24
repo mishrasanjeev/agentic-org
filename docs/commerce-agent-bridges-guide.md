@@ -21,8 +21,9 @@ OACP and provider evidence exists.
 ## Public Catalog Publishing
 
 Public catalog publishing is a separate read-only surface from the authenticated
-runtime bridge. It is fail-closed unless `OACP_PUBLIC_CATALOG_ENABLED=true` is
-set by the operator.
+runtime bridge. It is fail-closed unless the merchant has enabled public
+publishing in merchant commerce config. Operators can still disable every
+merchant with `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true`.
 
 | Surface | Path |
 | --- | --- |

@@ -11,7 +11,7 @@ const FLOW_NODES = [
   {
     title: "Seller commerce agent",
     eyebrow: "Merchant setup",
-    copy: "AgenticOrg creates the Seller Commerce Agent, stores Shopify connector custody, and prepares Grantex authority requests.",
+    copy: "AgenticOrg stores merchant-scoped commerce config, creates the Seller Commerce Agent, stores Shopify connector custody, and prepares Grantex authority requests.",
     tone: "border-emerald-300/40 bg-emerald-300/10 text-emerald-50",
   },
   {
@@ -97,7 +97,7 @@ const DECISIONS = [
 ];
 
 const SURFACES = [
-  ["Seller Commerce Agent", "Merchant onboarding, Shopify connector custody, preview, gap review, and Grantex authority request"],
+  ["Seller Commerce Agent", "Merchant config, Shopify connector custody, preview, gap review, and Grantex authority request"],
   ["Buyer agent", "Read-only discovery, grounded comparison, prepared-only handoff, and refusal copy"],
   ["Public catalog", "Seller profile, product pages, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt from public-safe cached evidence"],
   ["MCP", "ChatGPT/Claude-style tool surface backed by the same artifact cache"],
@@ -176,7 +176,7 @@ export default function OpenAgenticCommerceProtocol() {
                 Buyer and seller AI agents need commerce facts they can trust.
               </h1>
               <p className="mt-6 text-lg text-slate-300 leading-relaxed max-w-2xl">
-                AgenticOrg runs Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
+                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="#flow" className="inline-flex justify-center rounded-lg bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors">

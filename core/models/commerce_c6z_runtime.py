@@ -137,6 +137,44 @@ class C6ZProviderCapabilityEvidenceRow(BaseModel):
     )
 
 
+class C6ZMerchantCommerceConfigRow(BaseModel):
+    __tablename__ = "commerce_c6z_merchant_configs"
+    __table_args__ = (
+        Index("ix_c6z_merchant_config_tenant_id", "tenant_id"),
+        Index("ix_c6z_merchant_config_merchant_id", "merchant_id"),
+        Index("ix_c6z_merchant_config_seller_agent_id", "seller_agent_id"),
+        Index("ix_c6z_merchant_config_status", "status"),
+        Index("uq_c6z_merchant_config_scope", "tenant_id", "merchant_id", "seller_agent_id", unique=True),
+    )
+
+    config_id: Mapped[str] = mapped_column(String(180), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    merchant_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    seller_agent_id: Mapped[str] = mapped_column(String(160), nullable=False, default="default")
+    merchant_display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    public_brand_profile: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    commerce_categories: Mapped[list[str]] = mapped_column(C6Z_JSON, nullable=False, default=list)
+    source_connectors: Mapped[list[dict[str, Any]]] = mapped_column(C6Z_JSON, nullable=False, default=list)
+    buyer_channels: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    payment_providers: Mapped[list[dict[str, Any]]] = mapped_column(C6Z_JSON, nullable=False, default=list)
+    offline_pos_stores: Mapped[list[dict[str, Any]]] = mapped_column(C6Z_JSON, nullable=False, default=list)
+    public_publishing: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    source_freshness_policy: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    provider_policy: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    readiness: Mapped[dict[str, Any]] = mapped_column(C6Z_JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(64), nullable=False, default="configured")
+    raw_payload_stored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    no_payment_execution: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    allowed_to_execute: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    non_authoritative_for_transaction: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+        nullable=True,
+        onupdate=func.now(),
+    )
+
+
 class C6ZOfflinePosHandoffPacketRow(BaseModel):
     __tablename__ = "commerce_c6z_offline_pos_handoff_packets"
     __table_args__ = (

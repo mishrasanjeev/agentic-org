@@ -141,8 +141,8 @@ const INDIA_CONNECTORS = [
 const OACP_SECTION_POINTS = [
   {
     label: "Seller",
-    title: "Shopify Seller Commerce Agent Onboarding",
-    desc: "Merchants create a Seller Commerce Agent, connect Shopify read-only, and request Grantex authority artifacts through AgenticOrg runtime APIs.",
+    title: "Merchant-Scoped Seller Commerce Config",
+    desc: "Merchants configure source systems, buyer channels, provider-owned payment rails, public publishing, and POS refs before Shopify sync or Grantex authority.",
   },
   {
     label: "Cache",
@@ -559,7 +559,7 @@ export default function Landing() {
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Buyer and seller AI-agent runtime for OACP commerce.</h2>
               <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-                AgenticOrg runs Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, channel bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the OACP trust, policy, and artifact authority.
+                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, channel bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the OACP trust, policy, and artifact authority.
               </p>
             </div>
           </FadeIn>
@@ -619,7 +619,7 @@ export default function Landing() {
                 <div className="grid sm:grid-cols-3 gap-3">
                   {[
                     ["Merchant systems", "Catalog, inventory, policy, order truth"],
-                    ["Seller Commerce Agent", "Shopify onboarding and merchant preview"],
+                    ["Seller Commerce Agent", "Merchant config, Shopify onboarding, and preview"],
                     ["Grantex authority", "Signed OACP artifacts and policy"],
                     ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
                     ["Buyer agent", "Answers, compares, prepares, or refuses"],

@@ -110,7 +110,7 @@ def test_public_catalog_fails_closed_when_operator_flag_is_disabled() -> None:
     assert snapshot == {
         "status": "blocked",
         "reason": "public_catalog_disabled",
-        "message": "Public OACP catalog publishing is disabled until an operator enables OACP_PUBLIC_CATALOG_ENABLED.",
+        "message": "Public OACP catalog publishing is disabled until the merchant enables public publishing.",
         "tenant_id": TENANT_ID,
         "merchant_id": "merchant_demo",
         "seller_agent_id": "seller_demo",

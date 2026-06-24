@@ -16,11 +16,16 @@ Shopify remains the source of record. AgenticOrg syncs public-safe product, vari
 
 ## Onboarding Timeline
 
-1. Merchant authorizes read-only Shopify access.
-2. AgenticOrg validates credentials.
-3. AgenticOrg creates a redacted source evidence packet.
-4. Grantex issues or refuses OACP artifacts.
-5. Buyer surfaces are enabled only after source labels and blockers are verified.
+1. Merchant opens `/dashboard/commerce-runtime`.
+2. Merchant saves tenant/merchant/seller scoped commerce config with source connector `Shopify`, buyer channels, payment provider, public publishing, and Offline POS preferences.
+3. Merchant authorizes read-only Shopify access.
+4. AgenticOrg validates credentials and updates the merchant config source ref.
+5. AgenticOrg syncs Shopify config into a Seller Commerce Agent onboarding packet.
+6. AgenticOrg creates a redacted source evidence packet.
+7. Grantex issues or refuses OACP artifacts.
+8. Buyer surfaces are enabled only after source labels and blockers are verified.
+
+The same config UI accepts WooCommerce, ERP, PIM, OMS, WMS, and custom API metadata for future adapters, but only Shopify has a runtime sync path today.
 
 ## User Promise
 
