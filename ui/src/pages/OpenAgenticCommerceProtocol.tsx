@@ -99,6 +99,7 @@ const DECISIONS = [
 const SURFACES = [
   ["Seller Commerce Agent", "Merchant onboarding, Shopify connector custody, preview, gap review, and Grantex authority request"],
   ["Buyer agent", "Read-only discovery, grounded comparison, prepared-only handoff, and refusal copy"],
+  ["Public catalog", "Seller profile, product pages, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt from public-safe cached evidence"],
   ["MCP", "ChatGPT/Claude-style tool surface backed by the same artifact cache"],
   ["OpenAPI", "Gemini/Perplexity-style schema and ask route with source/freshness labels"],
   ["A2A", "Agent card and task metadata for agent-to-agent discovery"],

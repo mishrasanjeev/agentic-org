@@ -4717,6 +4717,132 @@
     "tenant_required": true
   },
   {
+    "audit_event": "commerce.public.seller_profile",
+    "auth_required": false,
+    "function": "public_seller_profile_page",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id} api/v1/commerce_public.py:public_seller_profile_page",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.seller_profile.read",
+    "source_line": 40,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.catalog_json",
+    "auth_required": false,
+    "function": "public_seller_catalog_json",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/catalog.json api/v1/commerce_public.py:public_seller_catalog_json",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/catalog.json",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.catalog.read",
+    "source_line": 63,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.llms",
+    "auth_required": false,
+    "function": "public_seller_llms_txt",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/llms.txt api/v1/commerce_public.py:public_seller_llms_txt",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/llms.txt",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.llms.read",
+    "source_line": 196,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.product_page",
+    "auth_required": false,
+    "function": "public_product_detail_page",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug} api/v1/commerce_public.py:public_product_detail_page",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.product.read",
+    "source_line": 86,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.product_json",
+    "auth_required": false,
+    "function": "public_product_detail_json",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json api/v1/commerce_public.py:public_product_detail_json",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/products/{product_slug}.json",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.product.read",
+    "source_line": 112,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.schema_org",
+    "auth_required": false,
+    "function": "public_schema_org_jsonld",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/schema-org.jsonld api/v1/commerce_public.py:public_schema_org_jsonld",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/schema-org.jsonld",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.schema_org.read",
+    "source_line": 150,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.public.sitemap",
+    "auth_required": false,
+    "function": "public_seller_sitemap_xml",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/public/commerce/sellers/{merchant_id}/sitemap.xml api/v1/commerce_public.py:public_seller_sitemap_xml",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_public.py",
+    "path": "/api/v1/public/commerce/sellers/{merchant_id}/sitemap.xml",
+    "public_exempt_reason": "public-read-or-doc-route",
+    "rate_limit": "public-read",
+    "scope": "public.commerce.sitemap.read",
+    "source_line": 173,
+    "tenant_required": true
+  },
+  {
     "audit_event": "push.subscribe",
     "auth_required": true,
     "function": "subscribe",

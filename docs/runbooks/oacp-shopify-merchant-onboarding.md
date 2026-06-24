@@ -52,6 +52,7 @@ and should follow the current OACP owner split.
 | ChatGPT/Claude/Gemini/Perplexity bridges | `AGENTICORG_API_KEY` and platform approval/config. |
 | WhatsApp | `WHATSAPP_BUSINESS_ACCESS_TOKEN`, `WHATSAPP_BUSINESS_PHONE_NUMBER_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`. |
+| Public catalog publishing | `OACP_PUBLIC_CATALOG_ENABLED=true` after merchant/operator approval; optional `AGENTICORG_PUBLIC_BASE_URL`. |
 | Plural/Pine P3P setup | `PLURAL_PINE_CLIENT_ID`, `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, optional `PLURAL_PINE_CAPABILITY_URL`. |
 | Offline POS handoff | Store/POS location metadata. Simulator is available locally; real provider needs `OFFLINE_POS_PROVIDER_ID` and `OFFLINE_POS_WEBHOOK_SECRET`. |
 | Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. |
