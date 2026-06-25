@@ -1977,7 +1977,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.artifacts.cache",
-    "source_line": 614,
+    "source_line": 803,
     "tenant_required": true
   },
   {
@@ -1995,7 +1995,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.grantex.authority_request",
-    "source_line": 572,
+    "source_line": 761,
     "tenant_required": true
   },
   {
@@ -2013,7 +2013,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.a2a.read",
-    "source_line": 748,
+    "source_line": 937,
     "tenant_required": true
   },
   {
@@ -2031,7 +2031,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.openapi.ask",
-    "source_line": 719,
+    "source_line": 908,
     "tenant_required": true
   },
   {
@@ -2049,7 +2049,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.openapi.read",
-    "source_line": 735,
+    "source_line": 924,
     "tenant_required": true
   },
   {
@@ -2067,7 +2067,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.bridges.surfaces.read",
-    "source_line": 761,
+    "source_line": 950,
     "tenant_required": true
   },
   {
@@ -2085,7 +2085,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.telegram.webhook",
-    "source_line": 802,
+    "source_line": 991,
     "tenant_required": true
   },
   {
@@ -2103,7 +2103,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.bridges.web.ask",
-    "source_line": 703,
+    "source_line": 892,
     "tenant_required": true
   },
   {
@@ -2121,7 +2121,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.bridges.whatsapp.webhook",
-    "source_line": 774,
+    "source_line": 963,
     "tenant_required": true
   },
   {
@@ -2139,7 +2139,61 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-buyer-session",
     "scope": "commerce.runtime.buyer_sessions.ask",
-    "source_line": 678,
+    "source_line": 867,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_config.read",
+    "auth_required": true,
+    "function": "get_merchant_commerce_config",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs/{merchant_id} api/v1/commerce_runtime.py:get_merchant_commerce_config",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 381,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_config.upsert",
+    "auth_required": true,
+    "function": "upsert_merchant_commerce_config",
+    "idempotency": "tenant-merchant-seller-config-upsert",
+    "key": "PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id} api/v1/commerce_runtime.py:upsert_merchant_commerce_config",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "commerce.runtime.merchant_config.write",
+    "source_line": 322,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "commerce.runtime.merchant_config.readiness",
+    "auth_required": true,
+    "function": "get_merchant_commerce_config_readiness",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/commerce/runtime/merchant-configs/{merchant_id}/readiness api/v1/commerce_runtime.py:get_merchant_commerce_config_readiness",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/commerce_runtime.py",
+    "path": "/api/v1/commerce/runtime/merchant-configs/{merchant_id}/readiness",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "commerce.runtime.merchant_config.read",
+    "source_line": 422,
     "tenant_required": true
   },
   {
@@ -2157,7 +2211,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.pos.offline.confirmations.write",
-    "source_line": 1103,
+    "source_line": 1292,
     "tenant_required": true
   },
   {
@@ -2175,7 +2229,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.handoffs.write",
-    "source_line": 1012,
+    "source_line": 1201,
     "tenant_required": true
   },
   {
@@ -2193,7 +2247,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.pos.offline.read",
-    "source_line": 967,
+    "source_line": 1156,
     "tenant_required": true
   },
   {
@@ -2211,7 +2265,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.pos.offline.simulator.write",
-    "source_line": 1160,
+    "source_line": 1349,
     "tenant_required": true
   },
   {
@@ -2229,7 +2283,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.products.read",
-    "source_line": 1202,
+    "source_line": 1391,
     "tenant_required": true
   },
   {
@@ -2247,7 +2301,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 862,
+    "source_line": 1051,
     "tenant_required": true
   },
   {
@@ -2265,7 +2319,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.protocol_adapters.read",
-    "source_line": 893,
+    "source_line": 1082,
     "tenant_required": true
   },
   {
@@ -2283,7 +2337,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-external",
     "scope": "commerce.runtime.providers.plural_pine.verify",
-    "source_line": 828,
+    "source_line": 1017,
     "tenant_required": true
   },
   {
@@ -2301,7 +2355,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.purchase.prepare",
-    "source_line": 921,
+    "source_line": 1110,
     "tenant_required": true
   },
   {
@@ -2319,7 +2373,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.shopify.credentials.write",
-    "source_line": 275,
+    "source_line": 456,
     "tenant_required": true
   },
   {
@@ -2337,7 +2391,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.shopify.credentials.read",
-    "source_line": 382,
+    "source_line": 571,
     "tenant_required": true
   },
   {
@@ -2355,7 +2409,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-runtime-write",
     "scope": "commerce.runtime.seller_agents.write",
-    "source_line": 221,
+    "source_line": 261,
     "tenant_required": true
   },
   {
@@ -2373,7 +2427,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "commerce.runtime.seller_agents.read",
-    "source_line": 255,
+    "source_line": 302,
     "tenant_required": true
   },
   {
@@ -2391,7 +2445,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-bulk",
     "scope": "commerce.runtime.shopify.sync",
-    "source_line": 424,
+    "source_line": 613,
     "tenant_required": true
   },
   {
@@ -2409,7 +2463,7 @@
     "public_exempt_reason": null,
     "rate_limit": "commerce-webhook",
     "scope": "commerce.runtime.shopify.webhook",
-    "source_line": 492,
+    "source_line": 681,
     "tenant_required": true
   },
   {
@@ -4731,7 +4785,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.seller_profile.read",
-    "source_line": 40,
+    "source_line": 43,
     "tenant_required": true
   },
   {
@@ -4749,7 +4803,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.catalog.read",
-    "source_line": 63,
+    "source_line": 66,
     "tenant_required": true
   },
   {
@@ -4767,7 +4821,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.llms.read",
-    "source_line": 196,
+    "source_line": 199,
     "tenant_required": true
   },
   {
@@ -4785,7 +4839,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.product.read",
-    "source_line": 86,
+    "source_line": 89,
     "tenant_required": true
   },
   {
@@ -4803,7 +4857,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.product.read",
-    "source_line": 112,
+    "source_line": 115,
     "tenant_required": true
   },
   {
@@ -4821,7 +4875,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.schema_org.read",
-    "source_line": 150,
+    "source_line": 153,
     "tenant_required": true
   },
   {
@@ -4839,7 +4893,7 @@
     "public_exempt_reason": "public-read-or-doc-route",
     "rate_limit": "public-read",
     "scope": "public.commerce.sitemap.read",
-    "source_line": 173,
+    "source_line": 176,
     "tenant_required": true
   },
   {

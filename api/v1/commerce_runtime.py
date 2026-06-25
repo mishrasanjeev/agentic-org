@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
@@ -19,6 +19,7 @@ from sqlalchemy import select
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.commerce.c6z_runtime_vertical import (
+    C6Z_ARTIFACT_FAMILIES,
     GRANTEX_AUTHORITY_ENV_VARS,
     PLURAL_PINE_ENV_VARS,
     SHOPIFY_ENV_VARS,
@@ -49,6 +50,12 @@ from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
 )
+from core.commerce.oacp_merchant_config import (
+    MerchantCommerceConfigError,
+    merchant_config_id,
+    merchant_config_readiness,
+    normalize_merchant_commerce_config,
+)
 from core.commerce.offline_pos_bridge import (
     OfflinePosBridgeError,
     build_offline_pos_confirmation_intake,
@@ -62,6 +69,7 @@ from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.commerce_c6z_runtime import (
     C6ZConnectorEvidenceRow,
+    C6ZMerchantCommerceConfigRow,
     C6ZOfflinePosConfirmationRow,
     C6ZOfflinePosHandoffPacketRow,
     C6ZProviderCapabilityEvidenceRow,
@@ -80,6 +88,22 @@ router = APIRouter(
     prefix="/commerce/runtime",
     tags=["Commerce Runtime"],
     dependencies=[require_tenant_admin],
+)
+
+MERCHANT_COMMERCE_CONFIG_SCOPE = "commerce.merchant_config.write"
+
+
+def require_merchant_commerce_config_write(request: Request) -> None:
+    scopes = set(getattr(request.state, "scopes", []) or [])
+    if MERCHANT_COMMERCE_CONFIG_SCOPE in scopes or any(scope.startswith("agenticorg:admin") for scope in scopes):
+        return
+    raise HTTPException(403, f"Missing scope: {MERCHANT_COMMERCE_CONFIG_SCOPE}")
+
+
+merchant_config_router = APIRouter(
+    prefix="/commerce/runtime",
+    tags=["Commerce Runtime"],
+    dependencies=[Depends(require_merchant_commerce_config_write)],
 )
 
 WHATSAPP_BRIDGE_ENV_VARS: tuple[str, ...] = (
@@ -108,6 +132,22 @@ class SellerOnboardingPacketCreate(BaseModel):
     channel_capability_preferences: dict[str, bool] = Field(default_factory=dict)
     payment_mandate_rail_preference: str = "plural_pine_p3p"
     connector_metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MerchantCommerceConfigUpsert(BaseModel):
+    seller_agent_id: str | None = None
+    merchant_display_name: str = Field(min_length=1)
+    public_brand_profile: dict[str, Any] = Field(default_factory=dict)
+    commerce_categories: list[str] = Field(min_length=1)
+    source_connectors: list[dict[str, Any]] = Field(min_length=1)
+    buyer_channels: dict[str, Any] = Field(default_factory=dict)
+    payment_providers: list[dict[str, Any]] = Field(default_factory=list)
+    offline_pos_stores: list[dict[str, Any]] = Field(default_factory=list)
+    public_publishing: dict[str, Any] = Field(default_factory=dict)
+    source_freshness_policy: dict[str, Any] = Field(default_factory=dict)
+    provider_policy: dict[str, Any] = Field(default_factory=dict)
+    status: str = "configured"
+    sync_onboarding_packet: bool = True
 
 
 class ShopifySyncRequest(BaseModel):
@@ -230,6 +270,13 @@ async def create_seller_onboarding_packet(
             row = C6ZSellerOnboardingPacketRow(packet_id=packet["packet_id"])
             session.add(row)
         _apply_packet(row, packet)
+        config = _merchant_config_from_packet(packet)
+        readiness = merchant_config_readiness(config)
+        config_row = await session.get(C6ZMerchantCommerceConfigRow, config["config_id"])
+        if config_row is None:
+            config_row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
+            session.add(config_row)
+        _apply_merchant_config(config_row, config, readiness)
         if previous_status in {
             "sync_ready",
             "synced",
@@ -261,6 +308,140 @@ async def get_seller_onboarding_packet(
         if row is None or row.tenant_id != tenant_id:
             raise HTTPException(404, "Seller Commerce Agent onboarding packet not found")
         return {"packet": _row_to_packet(row)}
+
+
+@merchant_config_router.put("/merchant-configs/{merchant_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.write",
+    rate_limit="commerce-runtime-write",
+    idempotency="tenant-merchant-seller-config-upsert",
+    audit_event="commerce.runtime.merchant_config.upsert",
+)
+async def upsert_merchant_commerce_config(
+    merchant_id: str,
+    body: MerchantCommerceConfigUpsert,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    config = _normalize_merchant_config_from_body(tenant_id=tenant_id, merchant_id=merchant_id, body=body)
+    readiness = merchant_config_readiness(config)
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        row = await session.get(C6ZMerchantCommerceConfigRow, config["config_id"])
+        if row is None:
+            row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
+            session.add(row)
+        _apply_merchant_config(row, config, readiness)
+        packet: dict[str, Any] | None = None
+        primary_source = _primary_source_connector(config)
+        if body.sync_onboarding_packet and primary_source.get("connector_type") == "shopify":
+            packet = _build_packet_from_merchant_config(config)
+            packet_row = await session.get(C6ZSellerOnboardingPacketRow, packet["packet_id"])
+            previous_status = None if packet_row is None else packet_row.status
+            if packet_row is None:
+                packet_row = C6ZSellerOnboardingPacketRow(packet_id=packet["packet_id"])
+                session.add(packet_row)
+            _apply_packet(packet_row, packet)
+            if previous_status in {
+                "sync_ready",
+                "synced",
+                "authority_requested",
+                "artifacts_cached",
+                "cache_refresh_needed",
+                "blocked_missing_credentials",
+                "blocked_grantex_unavailable",
+            }:
+                packet_row.status = previous_status
+    return {
+        "status": "merchant_config_saved",
+        "config": config,
+        "readiness": readiness,
+        "synced_onboarding_packet": packet is not None,
+        "packet_id": packet["packet_id"] if packet is not None else None,
+        "onboarding_packet_sync_blocker": (
+            None
+            if packet is not None
+            else "runtime onboarding packet sync currently supports Shopify source connectors only"
+        ),
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@merchant_config_router.get("/merchant-configs/{merchant_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.merchant_config.read",
+)
+async def get_merchant_commerce_config(
+    merchant_id: str,
+    seller_agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    row = await _load_merchant_config_row(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+    )
+    if row is None:
+        return {
+            "status": "not_configured",
+            "tenant_id": tenant_id,
+            "merchant_id": merchant_id,
+            "seller_agent_id": seller_agent_id or _default_seller_agent_id(merchant_id),
+            "template": _merchant_config_template(tenant_id, merchant_id, seller_agent_id),
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "non_authoritative_for_transaction": True,
+        }
+    config = _row_to_merchant_config(row)
+    return {
+        "status": "configured",
+        "config": config,
+        "readiness": row.readiness or merchant_config_readiness(config),
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "non_authoritative_for_transaction": True,
+    }
+
+
+@merchant_config_router.get("/merchant-configs/{merchant_id}/readiness")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="commerce.runtime.merchant_config.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="commerce.runtime.merchant_config.readiness",
+)
+async def get_merchant_commerce_config_readiness(
+    merchant_id: str,
+    seller_agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    row = await _load_merchant_config_row(
+        tenant_id=tenant_id,
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+    )
+    if row is None:
+        return {
+            "status": "not_configured",
+            "tenant_id": tenant_id,
+            "merchant_id": merchant_id,
+            "seller_agent_id": seller_agent_id or _default_seller_agent_id(merchant_id),
+            "next_action": "Save merchant commerce config before publishing or syncing.",
+            "allowed_to_execute": False,
+            "no_payment_execution": True,
+            "non_authoritative_for_transaction": True,
+        }
+    config = _row_to_merchant_config(row)
+    return row.readiness or merchant_config_readiness(config)
 
 
 @router.post("/seller-agents/connectors/shopify/credentials")
@@ -353,6 +534,14 @@ async def upsert_shopify_connector_credentials(
         ).all()
         for packet in packets:
             packet.status = "sync_ready"
+        await _upsert_shopify_source_in_merchant_config(
+            session=session,
+            tenant_id=tenant_id,
+            merchant_id=body.merchant_id,
+            shop_domain=credentials.shop_domain,
+            api_version=credentials.api_version,
+            credential_ref=connector_name,
+        )
     return {
         "status": "shopify_connector_configured",
         "merchant_id": body.merchant_id,
@@ -1489,6 +1678,377 @@ def _commerce_a2a_agent_card() -> dict[str, Any]:
         "non_authoritative_for_transaction": True,
         "public_discovery_enabled": False,
     }
+
+
+def _normalize_merchant_config_from_body(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    body: MerchantCommerceConfigUpsert,
+) -> dict[str, Any]:
+    seller_agent_id = body.seller_agent_id or _default_seller_agent_id(merchant_id)
+    try:
+        config = normalize_merchant_commerce_config(
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=seller_agent_id,
+            merchant_display_name=body.merchant_display_name,
+            public_brand_profile=body.public_brand_profile,
+            commerce_categories=body.commerce_categories,
+            source_connectors=body.source_connectors,
+            buyer_channels=body.buyer_channels,
+            payment_providers=body.payment_providers,
+            offline_pos_stores=body.offline_pos_stores,
+            public_publishing=body.public_publishing,
+            source_freshness_policy=body.source_freshness_policy,
+            provider_policy=body.provider_policy,
+            status=body.status,
+        )
+    except MerchantCommerceConfigError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    config["config_id"] = merchant_config_id(tenant_id, merchant_id, seller_agent_id)
+    return config
+
+
+def _merchant_config_from_packet(packet: Mapping[str, Any]) -> dict[str, Any]:
+    metadata = packet.get("connector_metadata_redacted") or {}
+    merchant_id = str(packet["merchant_id"])
+    seller_agent_id = str(packet["seller_agent_id"])
+    source_connector = {
+        "connector_key": f"shopify:{metadata.get('shop_domain') or merchant_id}",
+        "connector_type": "shopify",
+        "store_id": metadata.get("shop_domain") or merchant_id,
+        "shop_domain": metadata.get("shop_domain"),
+        "mode": "read_only",
+        "enabled": True,
+        "credential_custody": "agenticorg_vault",
+        "credential_ref": metadata.get("credential_ref") or "tenant_connector_config",
+        "source_of_record": "merchant Shopify Admin API",
+        "sync_enabled": True,
+    }
+    config = normalize_merchant_commerce_config(
+        tenant_id=str(packet["tenant_id"]),
+        merchant_id=merchant_id,
+        seller_agent_id=seller_agent_id,
+        merchant_display_name=str(packet["merchant_display_name"]),
+        public_brand_profile=cast(Mapping[str, Any], packet.get("public_brand_profile") or {}),
+        commerce_categories=cast(Sequence[str], packet.get("commerce_categories") or []),
+        source_connectors=[source_connector],
+        buyer_channels=cast(Mapping[str, Any], metadata.get("channel_capability_preferences") or {"web": True}),
+        payment_providers=[
+            {
+                "provider_key": metadata.get("payment_mandate_rail_preference") or "plural_pine",
+                "provider_type": (
+                    "plural_pine"
+                    if metadata.get("payment_mandate_rail_preference") != "none"
+                    else "none"
+                ),
+                "provider_display_name": "Pine Labs Plural/P3P",
+                "credential_custody": "provider_owned",
+                "credential_ref": metadata.get("payment_provider_ref"),
+                "capability_types": ["mandate_capability"],
+            }
+        ],
+        offline_pos_stores=[],
+        public_publishing={"enabled": False},
+        source_freshness_policy=cast(Mapping[str, Any], packet.get("source_freshness_policy") or {}),
+        provider_policy={},
+        status="configured",
+    )
+    config["config_id"] = merchant_config_id(str(packet["tenant_id"]), merchant_id, seller_agent_id)
+    return config
+
+
+def _build_packet_from_merchant_config(config: Mapping[str, Any]) -> dict[str, Any]:
+    source_connector = _primary_source_connector(config)
+    if source_connector.get("connector_type") != "shopify":
+        raise HTTPException(
+            status_code=422,
+            detail="Seller Commerce Agent runtime packet sync currently supports Shopify source connectors only",
+        )
+    channels = cast(Mapping[str, Any], config.get("buyer_channels") or {})
+    payment_providers = [
+        item
+        for item in cast(Sequence[Mapping[str, Any]], config.get("payment_providers") or [])
+        if item.get("enabled") is True
+    ]
+    payment_preference = "none"
+    if payment_providers:
+        first_provider = payment_providers[0]
+        payment_preference = (
+            "plural_pine_p3p"
+            if first_provider.get("provider_type") == "plural_pine"
+            else str(first_provider.get("provider_type") or "none")
+        )
+    connector_metadata = {
+        "credential_ref": source_connector.get("credential_ref") or "tenant_connector_config",
+        "connector_type": source_connector.get("connector_type"),
+        "mode": source_connector.get("mode") or "read_only",
+        "shop_domain": source_connector.get("shop_domain"),
+        "store_id": source_connector.get("store_id"),
+        "public_publishing": config.get("public_publishing") or {},
+        "payment_mandate_rail_preference": payment_preference,
+        "payment_provider_ref": payment_providers[0].get("credential_ref") if payment_providers else None,
+    }
+    channel_preferences = {
+        channel: bool(value.get("enabled"))
+        for channel, value in channels.items()
+        if isinstance(value, Mapping)
+    }
+    return build_seller_onboarding_packet(
+        tenant_id=str(config["tenant_id"]),
+        merchant_id=str(config["merchant_id"]),
+        seller_agent_id=str(config["seller_agent_id"]),
+        merchant_display_name=str(config["merchant_display_name"]),
+        public_brand_profile=cast(Mapping[str, Any], config.get("public_brand_profile") or {}),
+        commerce_categories=cast(Sequence[str], config.get("commerce_categories") or []),
+        requested_grantex_authority_scope={
+            "artifact_families": list(C6Z_ARTIFACT_FAMILIES),
+            "merchant_config_ref": config.get("config_id"),
+        },
+        artifact_cache_scope={
+            "tenant_id": config["tenant_id"],
+            "merchant_id": config["merchant_id"],
+            "seller_agent_id": config["seller_agent_id"],
+        },
+        source_freshness_policy=cast(Mapping[str, Any], config.get("source_freshness_policy") or {}),
+        connector_metadata={
+            **connector_metadata,
+            "permitted_sync_actions": [
+                "read_products",
+                "read_variants",
+                "read_product_images",
+                "read_prices",
+                "read_inventory_snapshot",
+                "receive_product_webhooks",
+                "receive_inventory_webhooks",
+            ],
+            "channel_capability_preferences": channel_preferences,
+        },
+    )
+
+
+async def _load_merchant_config_row(
+    *,
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+) -> C6ZMerchantCommerceConfigRow | None:
+    seller_scope = seller_agent_id or _default_seller_agent_id(merchant_id)
+    async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
+        row = await session.get(
+            C6ZMerchantCommerceConfigRow,
+            merchant_config_id(tenant_id, merchant_id, seller_scope),
+        )
+        if row is not None:
+            return row
+        if seller_agent_id:
+            return None
+        result = await session.scalars(
+            select(C6ZMerchantCommerceConfigRow)
+            .where(
+                C6ZMerchantCommerceConfigRow.tenant_id == tenant_id,
+                C6ZMerchantCommerceConfigRow.merchant_id == merchant_id,
+            )
+            .order_by(C6ZMerchantCommerceConfigRow.created_at.desc())
+        )
+        return result.first()
+
+
+async def _upsert_shopify_source_in_merchant_config(
+    *,
+    session: Any,
+    tenant_id: str,
+    merchant_id: str,
+    shop_domain: str,
+    api_version: str,
+    credential_ref: str,
+) -> None:
+    result = await session.scalars(
+        select(C6ZMerchantCommerceConfigRow)
+        .where(
+            C6ZMerchantCommerceConfigRow.tenant_id == tenant_id,
+            C6ZMerchantCommerceConfigRow.merchant_id == merchant_id,
+        )
+        .order_by(C6ZMerchantCommerceConfigRow.created_at.desc())
+    )
+    row = result.first()
+    if row is None:
+        config = normalize_merchant_commerce_config(
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=_default_seller_agent_id(merchant_id),
+            merchant_display_name=f"Shopify Store {merchant_id}",
+            public_brand_profile={"display_name": f"Shopify Store {merchant_id}"},
+            commerce_categories=["general"],
+            source_connectors=[
+                {
+                    "connector_key": f"shopify:{shop_domain}",
+                    "connector_type": "shopify",
+                    "store_id": shop_domain,
+                    "shop_domain": shop_domain,
+                    "api_version": api_version,
+                    "mode": "read_only",
+                    "enabled": True,
+                    "credential_custody": "agenticorg_vault",
+                    "credential_ref": credential_ref,
+                    "source_of_record": "merchant Shopify Admin API",
+                }
+            ],
+            buyer_channels={"web": True},
+            payment_providers=[],
+            offline_pos_stores=[],
+            public_publishing={"enabled": False},
+            source_freshness_policy={"max_age_seconds": 900},
+            provider_policy={},
+            status="configured",
+        )
+        config["config_id"] = merchant_config_id(tenant_id, merchant_id, str(config["seller_agent_id"]))
+        row = C6ZMerchantCommerceConfigRow(config_id=config["config_id"])
+        session.add(row)
+    else:
+        config = _row_to_merchant_config(row)
+        sources = [
+            dict(item)
+            for item in config.get("source_connectors", [])
+            if not (isinstance(item, Mapping) and item.get("connector_type") == "shopify")
+        ]
+        sources.insert(
+            0,
+            {
+                "connector_key": f"shopify:{shop_domain}",
+                "connector_type": "shopify",
+                "store_id": shop_domain,
+                "shop_domain": shop_domain,
+                "api_version": api_version,
+                "mode": "read_only",
+                "enabled": True,
+                "credential_custody": "agenticorg_vault",
+                "credential_ref": credential_ref,
+                "source_of_record": "merchant Shopify Admin API",
+                "sync_enabled": True,
+            },
+        )
+        config = normalize_merchant_commerce_config(
+            tenant_id=tenant_id,
+            merchant_id=merchant_id,
+            seller_agent_id=str(config.get("seller_agent_id") or _default_seller_agent_id(merchant_id)),
+            merchant_display_name=str(config.get("merchant_display_name") or f"Shopify Store {merchant_id}"),
+            public_brand_profile=cast(Mapping[str, Any], config.get("public_brand_profile") or {}),
+            commerce_categories=cast(Sequence[str], config.get("commerce_categories") or ["general"]),
+            source_connectors=sources,
+            buyer_channels=cast(Mapping[str, Any], config.get("buyer_channels") or {"web": True}),
+            payment_providers=cast(Sequence[Mapping[str, Any]], config.get("payment_providers") or []),
+            offline_pos_stores=cast(Sequence[Mapping[str, Any]], config.get("offline_pos_stores") or []),
+            public_publishing=cast(Mapping[str, Any], config.get("public_publishing") or {"enabled": False}),
+            source_freshness_policy=cast(Mapping[str, Any], config.get("source_freshness_policy") or {}),
+            provider_policy=cast(Mapping[str, Any], config.get("provider_policy") or {}),
+            status=str(config.get("status") or "configured"),
+        )
+        config["config_id"] = row.config_id
+    _apply_merchant_config(row, config, merchant_config_readiness(config))
+
+
+def _merchant_config_template(
+    tenant_id: str,
+    merchant_id: str,
+    seller_agent_id: str | None,
+) -> dict[str, Any]:
+    seller = seller_agent_id or _default_seller_agent_id(merchant_id)
+    return {
+        "tenant_id": tenant_id,
+        "merchant_id": merchant_id,
+        "seller_agent_id": seller,
+        "merchant_display_name": "New Seller Commerce Agent",
+        "commerce_categories": ["general"],
+        "source_connectors": [
+            {
+                "connector_type": "shopify",
+                "mode": "read_only",
+                "enabled": True,
+                "credential_custody": "agenticorg_vault",
+                "credential_ref": "tenant_connector_config",
+                "source_of_record": "Shopify",
+            }
+        ],
+        "buyer_channels": {"web": {"enabled": True, "external_approval_status": "not_required"}},
+        "payment_providers": [
+            {
+                "provider_type": "plural_pine",
+                "provider_display_name": "Pine Labs Plural/P3P",
+                "credential_custody": "provider_owned",
+                "capability_types": ["mandate_capability"],
+            }
+        ],
+        "offline_pos_stores": [],
+        "public_publishing": {"enabled": False},
+        "allowed_to_execute": False,
+    }
+
+
+def _apply_merchant_config(
+    row: C6ZMerchantCommerceConfigRow,
+    config: Mapping[str, Any],
+    readiness: Mapping[str, Any],
+) -> None:
+    row.tenant_id = str(config["tenant_id"])
+    row.merchant_id = str(config["merchant_id"])
+    row.seller_agent_id = str(config["seller_agent_id"])
+    row.merchant_display_name = str(config["merchant_display_name"])
+    row.public_brand_profile = dict(config.get("public_brand_profile") or {})
+    row.commerce_categories = list(config.get("commerce_categories") or [])
+    row.source_connectors = [dict(item) for item in config.get("source_connectors") or []]
+    row.buyer_channels = dict(config.get("buyer_channels") or {})
+    row.payment_providers = [dict(item) for item in config.get("payment_providers") or []]
+    row.offline_pos_stores = [dict(item) for item in config.get("offline_pos_stores") or []]
+    row.public_publishing = dict(config.get("public_publishing") or {})
+    row.source_freshness_policy = dict(config.get("source_freshness_policy") or {})
+    row.provider_policy = dict(config.get("provider_policy") or {})
+    row.readiness = dict(readiness)
+    row.status = str(config.get("status") or "configured")
+    row.raw_payload_stored = False
+    row.no_payment_execution = True
+    row.allowed_to_execute = False
+    row.non_authoritative_for_transaction = True
+
+
+def _row_to_merchant_config(row: C6ZMerchantCommerceConfigRow) -> dict[str, Any]:
+    return {
+        "config_id": row.config_id,
+        "tenant_id": row.tenant_id,
+        "merchant_id": row.merchant_id,
+        "seller_agent_id": row.seller_agent_id,
+        "merchant_display_name": row.merchant_display_name,
+        "public_brand_profile": row.public_brand_profile or {},
+        "commerce_categories": row.commerce_categories or [],
+        "source_connectors": row.source_connectors or [],
+        "buyer_channels": row.buyer_channels or {},
+        "payment_providers": row.payment_providers or [],
+        "offline_pos_stores": row.offline_pos_stores or [],
+        "public_publishing": row.public_publishing or {},
+        "source_freshness_policy": row.source_freshness_policy or {},
+        "provider_policy": row.provider_policy or {},
+        "status": row.status,
+        "raw_payload_stored": row.raw_payload_stored,
+        "allowed_to_execute": row.allowed_to_execute,
+        "no_payment_execution": row.no_payment_execution,
+        "non_authoritative_for_transaction": row.non_authoritative_for_transaction,
+    }
+
+
+def _primary_source_connector(config: Mapping[str, Any]) -> Mapping[str, Any]:
+    for item in config.get("source_connectors") or []:
+        if isinstance(item, Mapping) and item.get("enabled") is True:
+            return item
+    sources = config.get("source_connectors") or []
+    if sources and isinstance(sources[0], Mapping):
+        return sources[0]
+    raise HTTPException(status_code=422, detail="Merchant commerce config has no source connector")
+
+
+def _default_seller_agent_id(merchant_id: str) -> str:
+    suffix = re.sub(r"[^a-zA-Z0-9_]+", "_", merchant_id.strip()).strip("_").lower()
+    return f"seller_agent_{suffix[:96] or 'merchant'}"
 
 
 def _build_packet_from_body(body: SellerOnboardingPacketCreate, tenant_id: str) -> dict[str, Any]:

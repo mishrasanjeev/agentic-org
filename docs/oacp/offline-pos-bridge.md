@@ -4,6 +4,8 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
 AgenticOrg now has an internal Offline POS Bridge foundation. It creates a non-executing POS handoff packet from a prepared purchase, accepts POS/provider confirmation statuses, and reconciles buyer-safe and operator-safe outcomes. It does not run POS transactions, capture payment, create orders, or store raw POS/payment payloads.
 
+Merchants configure POS store metadata in `/dashboard/commerce-runtime`: store id, display name, POS provider, city, country code, and webhook secret ref. The config row stores only refs and redacted metadata. Real callback verification still depends on `OFFLINE_POS_WEBHOOK_SECRET` or the approved provider secret path.
+
 ```mermaid
 sequenceDiagram
   participant Buyer
@@ -87,6 +89,7 @@ The verification window is five minutes. Missing, stale, malformed, or mismatche
 | Owner | Action |
 | --- | --- |
 | Merchant/POS provider | Approve real POS callback contract, sign callbacks, and provide verified evidence refs. |
+| Merchant operator | Save POS store metadata and webhook secret ref in merchant commerce config. |
 | AgenticOrg operator | Configure `OFFLINE_POS_PROVIDER_ID` and `OFFLINE_POS_WEBHOOK_SECRET` for a real provider; rotate the secret if callback verification fails unexpectedly. |
 | Grantex | Verify OACP artifact and policy/evidence references when authority refresh is needed. |
 | Payment/POS provider | Confirm payment or receipt status. AgenticOrg does not invent it. |

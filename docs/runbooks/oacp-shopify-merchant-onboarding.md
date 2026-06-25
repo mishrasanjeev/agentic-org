@@ -17,42 +17,45 @@ and should follow the current OACP owner split.
 
 ## Operator Steps
 
-1. Create the Seller Commerce Agent onboarding packet:
+1. Save merchant commerce configuration in `/dashboard/commerce-runtime`:
+   `PUT /api/v1/commerce/runtime/merchant-configs/{merchant_id}`.
+2. Create or sync the Seller Commerce Agent onboarding packet:
    `POST /api/v1/commerce/runtime/seller-agents/onboarding-packets`.
-2. Store Shopify credentials through encrypted connector storage:
+3. Store Shopify credentials through encrypted connector storage:
    `POST /api/v1/commerce/runtime/seller-agents/connectors/shopify/credentials`.
-3. Run read-only sync:
+4. Run read-only sync:
    `POST /api/v1/commerce/runtime/seller-agents/shopify/sync`.
-4. Request Grantex authority:
+5. Request Grantex authority:
    `POST /api/v1/commerce/runtime/authority/grantex/request`.
-5. Cache returned artifacts:
+6. Cache returned artifacts:
    `POST /api/v1/commerce/runtime/artifacts/cache`.
-6. Generate adapter payloads:
+7. Generate adapter payloads:
    `GET /api/v1/commerce/runtime/protocol-adapters`.
-7. Ask buyer questions:
+8. Ask buyer questions:
    `POST /api/v1/commerce/runtime/buyer-sessions/ask`.
-8. Verify Pine/Plural capability:
+9. Verify Pine/Plural capability:
    `POST /api/v1/commerce/runtime/providers/plural-pine/mandate-capability/verify`.
-9. Attempt purchase preparation:
+10. Attempt purchase preparation:
    `POST /api/v1/commerce/runtime/purchase/prepare`.
-10. Check Offline POS readiness when in-store handoff is offered:
+11. Check Offline POS readiness when in-store handoff is offered:
    `GET /api/v1/commerce/runtime/pos/offline/readiness`.
-11. Create a non-executing POS handoff packet:
+12. Create a non-executing POS handoff packet:
    `POST /api/v1/commerce/runtime/pos/offline/handoffs`.
-12. Run simulator confirmation for local smoke only:
+13. Run simulator confirmation for local smoke only:
    `POST /api/v1/commerce/runtime/pos/offline/simulator/confirm`.
 
 ## Required Config
 
 | Capability | Required config |
 | --- | --- |
+| Merchant self-service config | `commerce.merchant_config.write` scope or `agenticorg:admin`; save source, channels, payment provider, public publishing, and POS metadata per tenant/merchant/seller. |
 | Shopify read-only sync | Merchant Shopify Admin token or OAuth code exchange material with product read scopes. |
 | Shopify webhooks | `SHOPIFY_WEBHOOK_SECRET`. |
 | Grantex authority | `GRANTEX_COMMERCE_BASE_URL`, `GRANTEX_COMMERCE_INTERNAL_TOKEN`, tenant allowlist in Grantex. |
 | ChatGPT/Claude/Gemini/Perplexity bridges | `AGENTICORG_API_KEY` and platform approval/config. |
 | WhatsApp | `WHATSAPP_BUSINESS_ACCESS_TOKEN`, `WHATSAPP_BUSINESS_PHONE_NUMBER_ID`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`. |
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET_TOKEN`. |
-| Public catalog publishing | `OACP_PUBLIC_CATALOG_ENABLED=true` after merchant/operator approval; optional `AGENTICORG_PUBLIC_BASE_URL`. |
+| Public catalog publishing | Merchant commerce config `public_publishing.enabled=true`; optional public base URL; `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` disables all merchants. |
 | Plural/Pine P3P setup | `PLURAL_PINE_CLIENT_ID`, `PLURAL_PINE_CLIENT_SECRET`, `PLURAL_PINE_ENVIRONMENT=sandbox`, optional `PLURAL_PINE_CAPABILITY_URL`. |
 | Offline POS handoff | Store/POS location metadata. Simulator is available locally; real provider needs `OFFLINE_POS_PROVIDER_ID` and `OFFLINE_POS_WEBHOOK_SECRET`. |
 | Live provider flow | External merchant/provider/legal/security/ops approval plus `PLURAL_PINE_LIVE_EXECUTION_ENABLED=true`. |

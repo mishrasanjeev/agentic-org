@@ -86,7 +86,7 @@ def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
     user_guide = _read("docs/AgenticOrg_Complete_User_Guide_v5.0.html")
     ddl_roadmap = _read("docs/roadmap/startup_ddl_removal.md")
 
-    assert "Latest Mainline Status (2026-06-19)" in readme
+    assert "Latest Mainline Status (2026-06-25)" in readme
     assert "OACP Shopify runtime vertical" in readme
     assert "OACP Seller And Buyer Commerce Runtime" in readme
     assert "durable public-safe refs" in readme

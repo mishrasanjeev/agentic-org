@@ -141,8 +141,13 @@ const INDIA_CONNECTORS = [
 const OACP_SECTION_POINTS = [
   {
     label: "Seller",
-    title: "Shopify Seller Commerce Agent Onboarding",
-    desc: "Merchants create a Seller Commerce Agent, connect Shopify read-only, and request Grantex authority artifacts through AgenticOrg runtime APIs.",
+    title: "Merchant-Scoped Seller Commerce Config",
+    desc: "Merchants configure and later edit source systems, buyer channels, provider-owned payment rails, public publishing, and POS refs before Shopify sync or Grantex authority.",
+  },
+  {
+    label: "Sources",
+    title: "Shopify Now, Adapter-Ready Sources Next",
+    desc: "Shopify is the supported runtime sync path. WooCommerce, ERP, PIM, OMS, WMS, and custom API configs are stored tenant-wise as pending-adapter setup, not fake-live connectors.",
   },
   {
     label: "Cache",
@@ -156,8 +161,8 @@ const OACP_SECTION_POINTS = [
   },
   {
     label: "Provider",
-    title: "Plural/Pine Capability Verification",
-    desc: "AgenticOrg verifies provider-owned mandate capability metadata without storing raw payment secrets or claiming payment/order success.",
+    title: "Provider-Owned Payment Rails",
+    desc: "AgenticOrg verifies Plural/Pine capability metadata today and records bank/fintech/custom provider refs as provider-owned, non-executing config until approved adapters exist.",
   },
 ];
 
@@ -559,7 +564,7 @@ export default function Landing() {
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Buyer and seller AI-agent runtime for OACP commerce.</h2>
               <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-                AgenticOrg runs Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, channel bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the OACP trust, policy, and artifact authority.
+                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, channel bridges, OACP cache, and provider-owned capability verification. Grantex remains the OACP trust, policy, and artifact authority.
               </p>
             </div>
           </FadeIn>
@@ -582,7 +587,7 @@ export default function Landing() {
                 <div className="rounded-xl border border-slate-200 bg-slate-900 px-6 py-6 text-white">
                   <p className="text-sm uppercase tracking-[0.18em] text-cyan-300 font-semibold mb-3">Protocol posture</p>
                   <p className="text-slate-300 leading-relaxed">
-                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. Final payment and order execution require approved merchant, provider, and channel paths; this landing-page section does not claim universal purchase support.
+                    AgenticOrg uses OACP artifacts for grounded discovery and prepared handoff behavior. Final payment and order execution require approved merchant, provider, bank/POS, and channel paths; this landing-page section does not claim universal purchase support.
                   </p>
                   <div className="mt-5 flex flex-wrap gap-3">
                     <Link
@@ -619,7 +624,7 @@ export default function Landing() {
                 <div className="grid sm:grid-cols-3 gap-3">
                   {[
                     ["Merchant systems", "Catalog, inventory, policy, order truth"],
-                    ["Seller Commerce Agent", "Shopify onboarding and merchant preview"],
+                    ["Seller Commerce Agent", "Merchant config, Shopify onboarding, and preview"],
                     ["Grantex authority", "Signed OACP artifacts and policy"],
                     ["OACP cache", "Scoped refs, TTL, freshness, revocation"],
                     ["Buyer agent", "Answers, compares, prepares, or refuses"],

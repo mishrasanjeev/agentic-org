@@ -66,7 +66,7 @@ def build_public_catalog_snapshot(
             merchant_id=merchant_id,
             seller_agent_id=seller_agent_id,
             reason="public_catalog_disabled",
-            message="Public OACP catalog publishing is disabled until an operator enables OACP_PUBLIC_CATALOG_ENABLED.",
+            message="Public OACP catalog publishing is disabled until the merchant enables public publishing.",
         )
     if not evidence_records:
         return _blocked_snapshot(

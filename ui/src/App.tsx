@@ -252,7 +252,7 @@ export default function App() {
       <Route
         path="/dashboard/commerce-runtime"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={["admin", "merchant"]}>
             <Layout>
               <CommerceRuntimeDemo />
             </Layout>

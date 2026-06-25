@@ -6,7 +6,8 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
 ```mermaid
 flowchart TD
-  packet[Create onboarding packet] --> creds[Store Shopify credentials]
+  config[Save merchant commerce config] --> packet[Create or sync onboarding packet]
+  packet --> creds[Store Shopify credentials]
   creds --> sync[Run read-only sync]
   sync --> authority[Request Grantex authority]
   authority --> cache[Cache artifacts]
@@ -21,6 +22,7 @@ flowchart TD
 
 ## Monitor
 
+- Merchant config readiness by tenant, merchant, and seller agent.
 - Shopify sync failures.
 - Grantex authority status and refusal codes.
 - Cache freshness distribution.
@@ -35,11 +37,20 @@ flowchart TD
 ## Rollback
 
 1. Disable buyer surfaces for affected merchant.
-2. Mark affected cache records stale.
-3. Stop Shopify sync jobs.
-4. Ask Grantex to remove tenant allowlist or rotate token if needed.
-5. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.
-6. Re-run smoke before re-enabling.
+2. Disable merchant public publishing in merchant commerce config, or set `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` for a platform-wide stop.
+3. Mark affected cache records stale.
+4. Stop Shopify sync jobs.
+5. Ask Grantex to remove tenant allowlist or rotate token if needed.
+6. Disable Offline POS handoff creation for affected merchant if POS evidence is stale or callback verification fails.
+7. Re-run smoke before re-enabling.
+
+## Merchant Config Smoke
+
+1. Open `/dashboard/commerce-runtime` as an `admin` or `merchant` role user.
+2. Save config for the merchant with source connector `Shopify`, buyer channels, provider-owned payment config, and optional Offline POS store.
+3. Load config and verify the same tenant, merchant, seller agent, source connector, channel, provider, and POS refs return without secret values.
+4. Check readiness. Shopify should be `runtime_ready`. WooCommerce, ERP, PIM, OMS, WMS, and custom API should stay `configured_pending_adapter` until real adapters exist.
+5. Enable public publishing only for merchants that have source evidence and approved public surfaces.
 
 ## Offline POS Smoke
 

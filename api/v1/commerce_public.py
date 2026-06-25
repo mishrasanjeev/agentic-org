@@ -20,10 +20,13 @@ from core.commerce.oacp_public_publishing import (
     build_public_sitemap_xml,
     build_schema_org_jsonld,
     find_public_product,
-    public_catalog_enabled,
 )
 from core.database import get_tenant_session
-from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow, C6ZSellerOnboardingPacketRow
+from core.models.commerce_c6z_runtime import (
+    C6ZConnectorEvidenceRow,
+    C6ZMerchantCommerceConfigRow,
+    C6ZSellerOnboardingPacketRow,
+)
 
 public_router = APIRouter(prefix="/public/commerce", tags=["Public Commerce"])
 
@@ -226,12 +229,21 @@ async def _load_public_catalog_snapshot(
         if seller_agent_id:
             packet_query = packet_query.where(C6ZSellerOnboardingPacketRow.seller_agent_id == seller_agent_id)
             evidence_query = evidence_query.where(C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id)
+        config_query = select(C6ZMerchantCommerceConfigRow).where(
+            C6ZMerchantCommerceConfigRow.tenant_id == tenant_id,
+            C6ZMerchantCommerceConfigRow.merchant_id == merchant_id,
+        )
+        if seller_agent_id:
+            config_query = config_query.where(C6ZMerchantCommerceConfigRow.seller_agent_id == seller_agent_id)
         packet_row = (
             await session.scalars(packet_query.order_by(C6ZSellerOnboardingPacketRow.created_at.desc()))
         ).first()
         evidence_rows = (
             await session.scalars(evidence_query.order_by(C6ZConnectorEvidenceRow.synced_at.desc()))
         ).all()
+        config_row = (
+            await session.scalars(config_query.order_by(C6ZMerchantCommerceConfigRow.created_at.desc()))
+        ).first()
     if packet_row is None:
         raise HTTPException(status_code=404, detail="Seller Commerce Agent public profile not found")
     evidence_records = [_evidence_mapping(row) for row in evidence_rows[:8]]
@@ -246,7 +258,7 @@ async def _load_public_catalog_snapshot(
             connector_metadata_redacted=packet_row.connector_metadata_redacted or {},
             evidence_records=evidence_records,
             base_url=os.getenv("AGENTICORG_PUBLIC_BASE_URL", "https://agenticorg.ai"),
-            public_enabled=public_catalog_enabled(),
+            public_enabled=_merchant_public_catalog_enabled(config_row),
         )
     except OacpPublicPublishingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -278,6 +290,18 @@ def _raise_if_blocked(snapshot: Mapping[str, Any]) -> None:
                 "no_payment_execution": True,
             },
         )
+
+
+def _merchant_public_catalog_enabled(row: C6ZMerchantCommerceConfigRow | None) -> bool:
+    if row is None:
+        return False
+    public_publishing = row.public_publishing or {}
+    if public_publishing.get("enabled") is not True:
+        return False
+    # Platform-level kill switch still lets operators shut the whole surface off.
+    if os.getenv("OACP_PUBLIC_CATALOG_PLATFORM_DISABLED", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return False
+    return True
 
 
 def _tenant_uuid(tenant_id: str) -> UUID:

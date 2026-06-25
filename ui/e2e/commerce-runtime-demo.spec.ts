@@ -57,6 +57,37 @@ async function installCommerceRuntimeRoutes(page: Page) {
       return;
     }
 
+    if (path.endsWith("/api/v1/commerce/runtime/merchant-configs/merchant_demo")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "merchant_config_saved",
+          synced_onboarding_packet: true,
+          packet_id: "packet_demo_config",
+          config: {
+            config_id: "commerce_config_demo",
+            merchant_id: body?.merchant_id || "merchant_demo",
+            seller_agent_id: body?.seller_agent_id || "seller_agent_demo",
+            source_connectors: [
+              {
+                connector_type: "shopify",
+                adapter_status: "runtime_supported",
+              },
+            ],
+          },
+          readiness: {
+            status: "merchant_config_ready",
+            source_connectors: [{ status: "runtime_ready" }],
+            payment_providers: [{ status: "configured_provider_owned" }],
+            public_publishing: { status: "disabled" },
+            offline_pos_stores: [],
+          },
+        }),
+      });
+      return;
+    }
+
     if (path.endsWith("/api/v1/commerce/runtime/seller-agents/shopify/sync")) {
       await route.fulfill({
         status: 200,
@@ -223,8 +254,11 @@ test.describe("C6Z commerce runtime demo", () => {
     const calls = await installCommerceRuntimeRoutes(page);
 
     await page.goto(`${baseURL}/dashboard/commerce-runtime`, { waitUntil: "domcontentloaded" });
-    await expect(page.getByText("Seller Commerce Agent")).toBeVisible();
+    await expect(page.getByText("Merchant Commerce Configuration")).toBeVisible();
     await expect(page.getByText("Buyer Session")).toBeVisible();
+
+    await page.getByRole("button", { name: "Save config" }).click();
+    await expect(page.getByText("commerce_config_demo")).toBeVisible();
 
     await page.getByRole("button", { name: "Create" }).click();
     await expect(page.getByText("packet_demo")).toBeVisible();
@@ -263,8 +297,15 @@ test.describe("C6Z commerce runtime demo", () => {
     expect(createCall?.body.connector_metadata.credential_ref).toBe("tenant_connector_config");
     expect(createCall?.body.shopify_shop_domain).toBe("mgx0n6-22.myshopify.com");
     expect(createCall?.body.permitted_sync_actions).toContain("read_inventory_snapshot");
-    expect(createCall?.body.channel_capability_preferences.telegram).toBe(true);
+    expect(createCall?.body.channel_capability_preferences.telegram).toBe(false);
     expect(createCall?.body.payment_mandate_rail_preference).toBe("plural_pine_p3p");
+
+    const configCall = calls.find((call) =>
+      call.path.endsWith("/api/v1/commerce/runtime/merchant-configs/merchant_demo"),
+    );
+    expect(configCall?.body.source_connectors[0].connector_type).toBe("shopify");
+    expect(configCall?.body.payment_providers[0].provider_type).toBe("plural_pine");
+    expect(configCall?.body.public_publishing.enabled).toBe(false);
 
     const cacheCall = calls.find((call) =>
       call.path.endsWith("/api/v1/commerce/runtime/artifacts/cache"),

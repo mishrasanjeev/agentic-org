@@ -40,6 +40,9 @@ from core.models.client_portal import ClientPortalDocument as ClientPortalDocume
 from core.models.client_portal import ClientPortalInvite as ClientPortalInvite
 from core.models.commerce_c6z_runtime import C6ZConnectorEvidenceRow as C6ZConnectorEvidenceRow
 from core.models.commerce_c6z_runtime import (
+    C6ZMerchantCommerceConfigRow as C6ZMerchantCommerceConfigRow,
+)
+from core.models.commerce_c6z_runtime import (
     C6ZProviderCapabilityEvidenceRow as C6ZProviderCapabilityEvidenceRow,
 )
 from core.models.commerce_c6z_runtime import (

@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import CommerceRuntimeDemo from "../pages/CommerceRuntimeDemo";
 
 const apiMock = vi.hoisted(() => ({
+  getMerchantConfig: vi.fn(),
+  upsertMerchantConfig: vi.fn(),
+  getMerchantConfigReadiness: vi.fn(),
   createOnboardingPacket: vi.fn(),
   upsertShopifyCredentials: vi.fn(),
   getShopifyStatus: vi.fn(),
@@ -26,6 +29,65 @@ vi.mock("../lib/api", () => ({
 }));
 
 describe("CommerceRuntimeDemo", () => {
+  it("saves tenant merchant store config for future connectors and bank-owned providers", async () => {
+    apiMock.upsertMerchantConfig.mockResolvedValueOnce({
+      data: {
+        status: "merchant_config_saved",
+        synced_onboarding_packet: false,
+        onboarding_packet_sync_blocker: "runtime onboarding packet sync currently supports Shopify source connectors only",
+        config: {
+          config_id: "commerce_config_1",
+          merchant_id: "merchant_demo",
+          seller_agent_id: "seller_agent_demo",
+          source_connectors: [{ connector_type: "woocommerce", adapter_status: "pending_adapter" }],
+        },
+        readiness: {
+          status: "merchant_config_ready",
+          source_connectors: [{ status: "configured_pending_adapter" }],
+          payment_providers: [{ status: "configured_provider_owned", bank_owned_provider: true }],
+          public_publishing: { status: "disabled" },
+          offline_pos_stores: [{ status: "configured" }],
+        },
+      },
+    });
+
+    render(<CommerceRuntimeDemo />);
+    fireEvent.change(screen.getByLabelText("Source connector type"), {
+      target: { value: "woocommerce" },
+    });
+    fireEvent.change(screen.getByLabelText("Source store ID"), {
+      target: { value: "woo_store_1" },
+    });
+    fireEvent.change(screen.getByLabelText("Payment provider type"), {
+      target: { value: "bank" },
+    });
+    fireEvent.change(screen.getByLabelText("Payment provider display name"), {
+      target: { value: "Merchant Bank" },
+    });
+    fireEvent.click(screen.getByLabelText("Offline POS enabled"));
+    fireEvent.click(screen.getByRole("button", { name: /save config/i }));
+
+    await waitFor(() => expect(apiMock.upsertMerchantConfig).toHaveBeenCalledWith(
+      "merchant_demo",
+      expect.objectContaining({
+        seller_agent_id: "seller_agent_demo",
+        source_connectors: [expect.objectContaining({
+          connector_type: "woocommerce",
+          store_id: "woo_store_1",
+          sync_enabled: false,
+        })],
+        payment_providers: [expect.objectContaining({
+          provider_type: "bank",
+          provider_display_name: "Merchant Bank",
+        })],
+        offline_pos_stores: [expect.objectContaining({ store_id: "store_demo" })],
+        sync_onboarding_packet: false,
+      }),
+    ));
+    expect(await screen.findByText("commerce_config_1")).toBeInTheDocument();
+    expect(screen.queryByText(/client_secret|fixture-admin-token/i)).not.toBeInTheDocument();
+  });
+
   it("stores Shopify connector credentials through the runtime API without rendering secrets", async () => {
     apiMock.upsertShopifyCredentials.mockResolvedValueOnce({
       data: {

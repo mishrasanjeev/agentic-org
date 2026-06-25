@@ -17,8 +17,9 @@
 
 ---
 
-## Latest Mainline Status (2026-06-19)
+## Latest Mainline Status (2026-06-25)
 
+- **Merchant self-service commerce config**: `/dashboard/commerce-runtime` now lets tenant admins and merchant operators configure and edit merchant/store scoped source connectors, buyer channels, payment providers, public publishing, and Offline POS metadata. Runtime records are scoped by tenant, merchant, and seller agent; secret values stay in approved custody systems and config rows store only refs/redacted metadata.
 - **OACP Shopify runtime vertical**: Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Shopify Admin GraphQL product/variant/price/inventory sync, Shopify webhook HMAC verification, Grantex C6Z authority request, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, and bridge readiness endpoints are implemented.
 - **Buyer and channel bridges**: Web/API answers, MCP seller tools, OpenAPI/A2A metadata, and WhatsApp/Telegram webhook routes share the same artifact-backed answer path and source/freshness labels. WhatsApp and Telegram require configured webhook secrets before accepting inbound messages.
 - **Mandate/payment/POS boundary**: AgenticOrg verifies Pine Labs Plural/P3P mandate capability metadata, prepares non-executing purchase/mandate handoffs, and builds Offline POS Bridge packets with confirmation reconciliation. POS payment/receipt confirmations require server-side signed callback verification when `OFFLINE_POS_WEBHOOK_SECRET` is configured. It does not fake paid states, create orders, create checkout sessions, reserve stock, or execute provider/POS rails.
@@ -30,13 +31,14 @@
 
 ## OACP Seller And Buyer Commerce Runtime
 
-AgenticOrg owns the Seller Commerce Agent and buyer-agent runtime for OACP-backed commerce. It runs merchant onboarding, Shopify connector custody, read-only Shopify sync, buyer sessions, channel bridges, artifact cache, protocol adapter consumption, and Pine Labs Plural/P3P capability verification.
+AgenticOrg owns the Seller Commerce Agent and buyer-agent runtime for OACP-backed commerce. It runs merchant self-service configuration, Shopify connector custody, read-only Shopify sync, buyer sessions, channel bridges, artifact cache, protocol adapter consumption, and provider-owned capability verification. Pine Labs Plural/P3P is the current verifier path; bank-owned and other rails remain adapter-gated.
 
 Grantex owns OACP trust authority, protocol/policy governance, canonical signed/internal artifacts, artifact verification, and protocol adapter authority. Shopify and merchant systems remain the source of record. Pine Labs Plural/P3P owns mandate and payment rail execution.
 
 ```mermaid
 flowchart LR
-  merchant[Shopify merchant] --> agentic[AgenticOrg Seller Commerce Agent]
+  merchant[Merchant operator] --> config[Merchant commerce config]
+  config --> agentic[AgenticOrg Seller Commerce Agent]
   agentic --> shopify[Read-only Shopify sync]
   shopify --> grantex[Grantex OACP authority]
   grantex --> cache[AgenticOrg OACP cache]
@@ -46,18 +48,19 @@ flowchart LR
 
 | Area | Current posture |
 | --- | --- |
+| Merchant/store config | Implemented as tenant + merchant + seller-agent scoped rows and UI/API self-service. Shopify can sync into Seller Commerce Agent packets; WooCommerce, ERP, PIM, OMS, WMS, and custom APIs are stored as configured-pending-adapter until runtime adapters are implemented. |
 | Seller onboarding | Implemented through OACP onboarding packets and runtime APIs. |
 | Shopify connector | Implemented for credential custody, status, read-only sync, and product webhook verification. |
 | Grantex authority request | Implemented for C6Z OACP authority payloads and allowlisted Grantex artifact issuance. |
 | OACP cache | Implemented for public-safe refs, TTL, freshness, revocation posture, risk tier, and non-enablement flags. |
 | Buyer channels | Web, MCP/OpenAPI/A2A metadata, WhatsApp, and Telegram routes use the same cache-backed answer/refusal path. |
-| Public catalog publishing | Public-safe seller profile, catalog JSON, product pages, Schema.org JSON-LD, sitemap, and `llms.txt` endpoints are implemented under `/api/v1/public/commerce/sellers/{merchant_id}` and require `OACP_PUBLIC_CATALOG_ENABLED=true`. |
+| Public catalog publishing | Public-safe seller profile, catalog JSON, product pages, Schema.org JSON-LD, sitemap, and `llms.txt` endpoints are implemented under `/api/v1/public/commerce/sellers/{merchant_id}` and require the merchant to enable public publishing in commerce config. `OACP_PUBLIC_CATALOG_PLATFORM_DISABLED=true` is a platform kill switch. |
 | Protocol adapters | Schema.org, UCP-style, ACP-style, AP2-style, A2A, MCP, and OpenAPI payloads are compatibility mappings derived from cached OACP artifacts. |
-| Plural/Pine capability | Implemented as provider-owned capability verification with redacted evidence refs. |
+| Plural/Pine capability | Implemented as provider-owned capability verification with redacted evidence refs. Bank-owned and other provider-owned rails can be configured as metadata, but runtime execution remains provider-owned and adapter-gated. |
 | Offline POS Bridge | Implemented for non-sensitive handoff packets, simulator confirmation, signed POS callback verification, confirmation intake, and reconciliation status. |
 | Payment/order execution | Not performed by OACP artifacts. Current runtime prepares a handoff or returns a safe blocker; success must come from merchant/provider systems. |
 
-Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/end-user-flow.md`, `docs/oacp/truth-inventory.md`, and `docs/oacp/offline-pos-bridge.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.
+Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/merchant-commerce-configuration.md`, `docs/oacp/end-user-flow.md`, `docs/oacp/truth-inventory.md`, and `docs/oacp/offline-pos-bridge.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.
 
 ## What Is AgenticOrg?
 
@@ -148,7 +151,7 @@ FastAPI Backend
     ├── Workflow Engine (20+ templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
-    ├── Commerce Sales Agent → Grantex-only tools → fail-closed discovery and handoff
+    ├── Commerce Runtime → OACP-governed seller/buyer tools → fail-closed discovery and handoff
     ├── OACP Artifact Cache → durable public-safe refs → TTL/revocation/risk evaluation
     ├── OACP Cache Maintenance → keep/refresh/evict/purge/quarantine planner
     ├── RAGFlow Engine → Document ingestion → Semantic search → Agent retrieval
