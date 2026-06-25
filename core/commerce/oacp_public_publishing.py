@@ -8,7 +8,6 @@ tokens, private merchant API references, or execution targets.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -95,7 +94,7 @@ def build_public_catalog_snapshot(
     source_observed_at = _safe_text(latest.get("source_observed_at") or synced_at, fallback=synced_at)
     clean_base = _clean_base_url(base_url)
     seller_query = _seller_query(tenant_id=tenant_id, seller_agent_id=seller_agent_id)
-    profile_path = f"/api/v1/public/commerce/sellers/{quote(merchant_id)}"
+    profile_path = f"/api/v1/public/commerce/sellers/{quote(merchant_id, safe='')}"
     profile_url = f"{clean_base}{profile_path}?{seller_query}"
 
     snapshot: dict[str, Any] = {
@@ -191,8 +190,7 @@ def build_schema_org_jsonld(snapshot: Mapping[str, Any], product_slug: str | Non
 def build_public_catalog_html(snapshot: Mapping[str, Any], product_slug: str | None = None) -> str:
     product = find_public_product(snapshot, product_slug) if product_slug else None
     title = product.get("title") if product else snapshot.get("merchant_display_name")
-    jsonld = build_schema_org_jsonld(snapshot, product_slug=product_slug)
-    jsonld_text = json.dumps(jsonld, separators=(",", ":")).replace("</", "<\\/")
+    schema_url = snapshot.get("links", {}).get("schema_org_jsonld")
     meta_description = (
         "Public-safe OACP catalog output with source and freshness labels. No checkout, payment, mandate, "
         "order, or inventory hold execution."
@@ -205,7 +203,7 @@ def build_public_catalog_html(snapshot: Mapping[str, Any], product_slug: str | N
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{escape(str(title))} | OACP public-safe catalog</title>
   <meta name="description" content="{escape(meta_description)}" />
-  <script type="application/ld+json">{jsonld_text}</script>
+  <link rel="alternate" type="application/ld+json" href="{escape(str(schema_url or ''))}" />
   <style>
     :root {{
       color-scheme: light;
@@ -332,7 +330,10 @@ def _public_product(product: Mapping[str, Any], *, base_url: str, merchant_id: s
     title = _safe_text(product.get("title"), fallback="Untitled product")
     product_ref = _safe_text(product.get("product_ref"), fallback=_public_ref("product", title))
     slug = _slug(title, product_ref)
-    public_url = f"{base_url}/api/v1/public/commerce/sellers/{quote(merchant_id)}/products/{quote(slug)}?{query}"
+    public_url = (
+        f"{base_url}/api/v1/public/commerce/sellers/{quote(merchant_id, safe='')}"
+        f"/products/{quote(slug, safe='')}?{query}"
+    )
     variants = []
     for raw_variant in product.get("variants") or []:
         if not isinstance(raw_variant, Mapping):
@@ -354,11 +355,16 @@ def _public_product(product: Mapping[str, Any], *, base_url: str, merchant_id: s
                 ],
             }
         )
-    images = [
-        {"url": _safe_text(image.get("url")), "alt_text": _safe_optional(image.get("alt_text"))}
-        for image in product.get("images") or []
-        if isinstance(image, Mapping) and _safe_text(image.get("url"))
-    ][:8]
+    images = []
+    for image in product.get("images") or []:
+        if not isinstance(image, Mapping):
+            continue
+        image_url = _safe_public_media_url(image.get("url"))
+        if image_url is None:
+            continue
+        images.append({"url": image_url, "alt_text": _safe_optional(image.get("alt_text"))})
+        if len(images) >= 8:
+            break
     public_product = {
         "product_ref": product_ref,
         "slug": slug,
@@ -495,6 +501,21 @@ def _clean_base_url(value: str) -> str:
     text = value.strip().rstrip("/") or "https://agenticorg.ai"
     if not text.startswith(("https://", "http://")):
         text = f"https://{text}"
+    parsed = urlsplit(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        return "https://agenticorg.ai"
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path.rstrip('/')}"
+
+
+def _safe_public_media_url(value: Any) -> str | None:
+    text = _safe_optional(value)
+    if text is None:
+        return None
+    parsed = urlsplit(text)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or parsed.username or parsed.password:
+        return None
+    if contains_private_or_executable_value(text):
+        return None
     return text
 
 

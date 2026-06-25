@@ -94,6 +94,7 @@ def test_public_catalog_snapshot_generates_pages_jsonld_sitemap_and_llms() -> No
     assert "Canvas Tote" in html
     assert "No checkout or payment execution" in html
     assert "application/ld+json" in html
+    assert 'type="application/ld+json">' not in html
 
     sitemap = build_public_sitemap_xml(snapshot)
     assert "<urlset" in sitemap
@@ -124,6 +125,46 @@ def test_public_catalog_fails_closed_when_operator_flag_is_disabled() -> None:
 def test_public_catalog_rejects_private_metadata() -> None:
     with pytest.raises(OacpPublicPublishingError):
         _snapshot(connector_metadata_redacted={"client_secret": "do-not-publish"})
+
+
+def test_public_catalog_html_escapes_untrusted_fields_and_drops_unsafe_media_urls() -> None:
+    evidence = _evidence_record()
+    product = evidence["products"][0]
+    product.update(
+        {
+            "title": 'Canvas <script>alert("title")</script>',
+            "description": '<img src=x onerror=alert("description")>Heavy canvas tote',
+            "vendor": '<svg onload=alert("vendor")>',
+            "product_type": 'Bags"><script>alert("type")</script>',
+            "images": [
+                {"url": "javascript:alert(1)", "alt_text": "unsafe image"},
+                {"url": "https://cdn.example.test/tote.png", "alt_text": '"><script>alert("alt")</script>'},
+            ],
+            "variants": [
+                {
+                    "variant_id": "gid://shopify/ProductVariant/1",
+                    "sku": 'SKU"><script>alert("sku")</script>',
+                    "title": '<script>alert("variant")</script>',
+                    "price": '1299.00"><script>alert("price")</script>',
+                    "currency": "INR",
+                    "inventory_quantity_snapshot": 4,
+                }
+            ],
+        }
+    )
+
+    snapshot = _snapshot(
+        merchant_display_name='Demo <script>alert("merchant")</script>',
+        evidence_records=[evidence],
+    )
+    html = build_public_catalog_html(snapshot)
+
+    assert "<script" not in html.lower()
+    assert "javascript:alert" not in html.lower()
+    assert "onerror=" not in html.lower()
+    assert "&lt;script&gt;alert(&quot;title&quot;)&lt;/script&gt;" in html
+    assert "&lt;svg onload=alert(&quot;vendor&quot;)&gt;" in html
+    assert 'type="application/ld+json">' not in html
 
 
 def test_public_catalog_enabled_env_flag() -> None:
