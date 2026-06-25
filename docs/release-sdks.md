@@ -6,7 +6,13 @@ credentials, should not live in CI without a release-gating flow).
 
 ## Current release targets
 
-- Python SDK + CLI: `agenticorg==0.3.0` on PyPI.
+- Python SDK + CLI: `agenticorg==0.3.0` on PyPI. The root
+  AgenticOrg package also includes `sdk/agenticorg` and exposes the
+  direct `agenticorg` CLI so `pip install agenticorg` works for shell
+  users, Claude Code, Codex, Gemini CLI, VS Code tasks, CI, and runbooks.
+  PyPI `agenticorg` remains the lightweight SDK+CLI artifact built from
+  `sdk/`; do not upload the root/full-platform wheel to PyPI under the same
+  package name.
 - TypeScript SDK: `agenticorg-sdk@0.3.0` on npm. The scoped package
   `@agenticorg/sdk` is not currently published.
 - MCP server npm package: `agenticorg-mcp-server@4.0.5`.
@@ -15,6 +21,10 @@ credentials, should not live in CI without a release-gating flow).
 ## Python SDK (PyPI)
 
 **Prereqs:** `pip install build twine`. PyPI token in `~/.pypirc`.
+
+The SDK source lives under `sdk/agenticorg`. It is also included in
+the root wheel so local/full-platform installs expose the same direct
+CLI entrypoint as the SDK package.
 
 ```bash
 cd sdk
@@ -30,11 +40,42 @@ twine upload dist/*
 pip install --upgrade agenticorg
 python -c "import agenticorg; print(agenticorg.__version__)"
 # expect the version from sdk/agenticorg/__init__.py
+agenticorg --help
 ```
 
 The `__version__` in `sdk/agenticorg/__init__.py` must match
 `version` in `sdk/pyproject.toml`. CHANGELOG.md under `sdk/` is the
 release-notes source; keep the top entry dated.
+
+## Root package CLI check (local/container/internal only)
+
+The root/full-platform wheel is allowed for local, container, and internal
+installs so full-platform checkouts expose the same `agenticorg` CLI as the
+published SDK. It is **not** the PyPI release artifact while the SDK package
+also owns the `agenticorg` distribution name.
+
+Before cutting a root/full-platform wheel for internal use, verify both console
+scripts land from the root package metadata:
+
+```bash
+python -m build
+python -m pip install --force-reinstall --no-deps dist/agenticorg-*.whl
+agenticorg --help
+agenticorg-bridge --help
+```
+
+Do not run `twine upload` from the repository root. Public PyPI publishes for
+the `agenticorg` package must come from `sdk/` unless a release owner first
+changes the package-name and version policy.
+
+`pyproject.toml` must include `sdk/agenticorg` in
+`tool.hatch.build.targets.wheel.packages` and expose:
+
+```toml
+[project.scripts]
+agenticorg = "agenticorg.cli:main"
+agenticorg-bridge = "bridge.cli:main"
+```
 
 ## TypeScript SDK (npm)
 

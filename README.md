@@ -159,7 +159,7 @@ FastAPI Backend
     ├── RouteLLM → Smart model routing → 3-tier cost optimization
     ├── Presidio → Pre-LLM PII redaction → Aadhaar/PAN/GSTIN scrubbing
     ├── Composio → 1000+ tool marketplace → OAuth bridge
-    ├── MCP Server → native tools exposed to Claude/Cursor/ChatGPT (see /api/v1/product-facts.tool_count)
+    ├── MCP Server → governed agent + seller tools for Claude/Cursor/ChatGPT/VS Code
     ├── API Key Manager → ao_sk_ keys → SDK/CLI/MCP auth
     ├── SOP Parser → Upload SOPs → Deploy as agents
     └── Sales Agent → Gmail API → Email Sequences
@@ -481,6 +481,12 @@ Base URL: `https://app.agenticorg.ai/api/v1`
 
 ## SDKs, CLI & MCP Server
 
+`pip install agenticorg` is the canonical Python install path for both the
+SDK and the direct `agenticorg` CLI. Use the CLI from shell-capable assistants
+and developer environments such as Claude Code, Codex, Gemini CLI, VS Code
+tasks/terminals, CI jobs, and customer runbooks. Use the MCP server when the
+client supports Model Context Protocol and should call AgenticOrg as tools.
+
 ### Python SDK
 
 ```bash
@@ -530,7 +536,7 @@ const agents = await client.agents.list();
 
 ### MCP Server
 
-Any MCP-compatible client (Claude Desktop, Cursor, ChatGPT) can use AgenticOrg agents and tools:
+Any MCP-compatible client (Claude Desktop, Cursor, ChatGPT, VS Code MCP clients) can use AgenticOrg agents and tools:
 
 ```bash
 AGENTICORG_API_KEY=ao_sk_... npx agenticorg-mcp-server
@@ -560,9 +566,14 @@ agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --in
 agenticorg agents generate "Create a contract intelligence agent using Confluence and Jira"
 agenticorg knowledge search "vendor renewal policy" --top-k 3
 agenticorg workflows generate "Review vendor renewal risk using KB and Jira"
-agenticorg sop parse "When invoice > 5L, require CFO approval"
+agenticorg workflows run wf-123 --input '{"vendor_id":"V-100"}'
+agenticorg sop parse --text "When invoice > 5L, require CFO approval"
+agenticorg a2a card
 agenticorg mcp tools
 ```
+
+The same root package also installs `agenticorg-bridge` for the on-prem Tally
+bridge used by CA-firm deployments.
 
 See `sdk/README.md` and `mcp-server/README.md` for full documentation.
 
@@ -588,9 +599,14 @@ AgenticOrg implements Google's A2A protocol for cross-platform agent discovery a
 - `POST /a2a/tasks` — execute tasks via A2A protocol (JWT or Grantex auth)
 
 ### MCP (Model Context Protocol)
-Full MCP server exposing the live connector tools to any MCP-compatible client (see /api/v1/product-facts.tool_count):
+MCP server exposing governed AgenticOrg agent tools, platform discovery, and
+read-only seller OACP artifact tools to compatible clients:
 - `GET /mcp/tools` — list all available MCP tools (no auth required)
-- `POST /mcp/call` — call any MCP tool (JWT or Grantex auth)
+- `POST /mcp/call` — call an AgenticOrg MCP tool (JWT or Grantex auth)
+
+Direct connector tools are not exposed as MCP tools. Use `run_agent` or
+`agenticorg_<agent_type>` tools so connector access remains inside the
+AgenticOrg runtime, scope checks, approval gates, and audit trail.
 
 ### Grantex Authorization & Scope Enforcement
 OAuth2-based authorization with manifest-based scope enforcement (Grantex SDK v0.3.3+):

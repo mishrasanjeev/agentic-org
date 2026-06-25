@@ -93,6 +93,11 @@ print(matches[0]["document_name"], run["run_id"])
 
 ## Quickstart (CLI)
 
+The same `pip install agenticorg` package installs the Python SDK and the
+direct `agenticorg` CLI. The CLI is intended for shell-capable assistants and
+developer environments such as Claude Code, Codex, Gemini CLI, VS Code
+terminals/tasks, CI jobs, and runbooks.
+
 ```bash
 # Set your API key
 export AGENTICORG_API_KEY=your-key

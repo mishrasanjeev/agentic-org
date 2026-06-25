@@ -2228,10 +2228,10 @@ GET  /api/v1/workflows/runs/{run_id}
 Starts a workflow run and then polls the run record, including step status,
 inputs, outputs, confidence, and errors.
 
-### SDK launch contract
+### SDK, CLI, and MCP launch contract
 
-The Python SDK, TypeScript SDK, and MCP server are expected to cover this
-end-to-end path:
+The Python SDK, TypeScript SDK, direct `agenticorg` CLI, and MCP server are
+expected to cover this end-to-end path:
 
 1. Discover launchable agents through `GET /api/v1/a2a/agent-card`,
    `GET /api/v1/a2a/agents`, and `GET /api/v1/mcp/tools`.
@@ -2239,6 +2239,19 @@ end-to-end path:
    buyer/seller discovery.
 3. List connectors, search knowledge, generate an agent, generate a workflow,
    create the workflow, run it, and poll the run status.
+
+The direct CLI is installed by `pip install agenticorg`:
+
+```bash
+agenticorg agents run commerce_sales_agent \
+  --action buyer_discovery_preview \
+  --input '{"merchant_id":"merchant_demo"}'
+```
+
+Use it from shell-capable assistants and environments such as Claude Code,
+Codex, Gemini CLI, VS Code terminals/tasks, CI jobs, and runbooks. Use
+`npx agenticorg-mcp-server` when the client should discover AgenticOrg through
+MCP tools.
 
 ### Knowledge search — native pgvector fallback
 

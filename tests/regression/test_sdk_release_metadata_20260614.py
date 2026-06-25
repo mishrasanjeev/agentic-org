@@ -24,6 +24,18 @@ def test_python_sdk_release_version_matches_cli_package_metadata() -> None:
     assert pyproject["project"]["scripts"]["agenticorg"] == "agenticorg.cli:main"
 
 
+def test_root_package_exposes_direct_cli_and_sdk_package() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    release_docs = (ROOT / "docs" / "release-sdks.md").read_text(encoding="utf-8")
+
+    assert pyproject["project"]["name"] == "agenticorg"
+    assert pyproject["project"]["scripts"]["agenticorg"] == "agenticorg.cli:main"
+    assert pyproject["project"]["scripts"]["agenticorg-bridge"] == "bridge.cli:main"
+    assert "sdk/agenticorg" in pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
+    assert "do not upload the root/full-platform wheel to PyPI" in release_docs
+    assert "Do not run `twine upload` from the repository root" in release_docs
+
+
 def test_typescript_sdk_release_metadata_uses_published_package_name() -> None:
     package_json = _read_json("sdk-ts/package.json")
     package_lock = _read_json("sdk-ts/package-lock.json")

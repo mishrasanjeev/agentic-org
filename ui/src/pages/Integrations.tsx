@@ -130,10 +130,12 @@ const run = await client.workflows.run(workflow.id, {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`export AGENTICORG_API_KEY=your-key
+              <pre className="bg-muted rounded p-3 text-sm font-mono whitespace-pre-wrap">{`pip install agenticorg
+export AGENTICORG_API_KEY=your-key
 
 agenticorg agents list --domain finance
 agenticorg agents run ap_processor --input '{"invoice_id": "INV-001"}'
+agenticorg workflows run wf-123 --input '{"vendor_id":"V-100"}'
 agenticorg sop parse --file invoice_sop.pdf --domain finance
 agenticorg a2a card
 agenticorg mcp tools`}</pre>

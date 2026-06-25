@@ -67,8 +67,9 @@ Both endpoints MUST produce the canonical shape:
 
 Tests: `tests/regression/test_agent_run_contract.py` asserts every field is present (with correct null-ness) on both endpoints.
 
-## SDKs
+## SDKs And CLI
 
 - **Python** (`sdk/agenticorg/client.py`): `run()` returns `AgentRunResult` dataclass. Raw response is normalized in `_to_agent_run_result()`; both endpoint shapes (canonical + legacy-shaped) produce identical `AgentRunResult`.
 - **TypeScript** (`sdk-ts/src/index.ts`): `AgentRunResult` interface matches this doc. Runtime helper `toAgentRunResult()` normalizes.
+- **CLI** (`sdk/agenticorg/cli.py`): `agenticorg agents run ...` uses the same Python SDK client and returns the same normalized JSON. The root package and SDK package both expose the `agenticorg` console script.
 - **In-product snippet** (`ui/src/pages/Integrations.tsx`): the example on the Integrations page mirrors the SDK signature. Drift is caught by `ui/e2e/sdk-examples.spec.ts`.
