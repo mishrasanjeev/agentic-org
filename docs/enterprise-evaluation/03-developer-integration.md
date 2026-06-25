@@ -2,8 +2,8 @@
 
 **Persona:** platform engineer integrating AgenticOrg into an existing
 product or an MCP-capable client (Claude Desktop, Cursor, ChatGPT)
-**Goal:** run an agent from Python/TS code and from an MCP client,
-and rely on the same canonical contract across both paths
+**Goal:** run an agent from Python/TS code, the direct CLI, and an MCP
+client, and rely on the same canonical contract across all paths
 **Playwright:** `ui/e2e/sdk-examples.spec.ts`
 **Regression:** `tests/regression/test_agent_run_contract.py`
 
@@ -43,6 +43,26 @@ const result = await client.agents.run({
 // Same canonical shape — see sdk-ts/src/index.ts::AgentRunResult
 ```
 
+### Direct CLI
+
+Install the Python package once and use the direct CLI from any
+shell-capable assistant or developer environment, including Claude
+Code, Codex, Gemini CLI, VS Code terminals/tasks, CI jobs, and
+runbooks.
+
+```bash
+pip install agenticorg
+export AGENTICORG_API_KEY=ao_sk_...
+
+agenticorg agents list
+agenticorg agents run cfo_kpi_monitor --input '{"company_id":"demo-corp"}'
+agenticorg a2a card
+agenticorg mcp tools
+```
+
+The root/full-platform package and the SDK package must both expose the
+same `agenticorg` console script.
+
 ### MCP client (Claude Desktop / Cursor / ChatGPT)
 
 Register AgenticOrg as an MCP server (`npx agenticorg-mcp-server` with
@@ -58,7 +78,7 @@ MCP client surfaces a useful error.
 
 - SDK examples compile and execute against the live API with no
   schema mismatch.
-- Python + TS + MCP all return the same canonical field set.
+- Python + TS + CLI + MCP all return the same canonical field set.
 - Legacy aliases (`task_id`, `result.output`, `result.confidence`) are
   accepted as inputs but deprecated in returns — through v5.0.
 

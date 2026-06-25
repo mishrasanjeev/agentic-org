@@ -1,17 +1,17 @@
 # AgenticOrg — AI Virtual Employees for Enterprise
 
-> AgenticOrg lets you create AI virtual employees or deploy 26 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
+> AgenticOrg lets you create AI virtual employees or deploy 29 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
 
 ## What is AgenticOrg?
 
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 26 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 54 enterprise systems (339 tools) and executes domain-specific tasks with human approval on every critical decision.
+AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 29 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 56 enterprise systems (430 tools) and executes domain-specific tasks with human approval on every critical decision.
 
 ## Key Features
 
 - **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
 - **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
-- **26 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Brand Monitor, Campaign Pilot, Content Factory, Crm Intelligence, Seo Strategist, Compliance Guard, Contract Intelligence, It Operations, Support Deflector, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
-- **54 Enterprise Connectors (339 tools)**: Banking Aa (5 tools), Gstn (8 tools), Gstn Sandbox (0 tools), Income Tax India (7 tools), Netsuite (8 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (8 tools), Tally (6 tools), Zoho Books (7 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Bombora (4 tools), Brandwatch (5 tools), Buffer (5 tools), G2 (4 tools), Ga4 (6 tools), Google Ads (5 tools), Hubspot (13 tools), Linkedin Ads (4 tools), Mailchimp (10 tools), Meta Ads (5 tools), Mixpanel (5 tools), Moengage (6 tools), Salesforce (6 tools), Trustradius (4 tools), Wordpress (7 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (9 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), S3 (6 tools), Sendgrid (7 tools), Slack (7 tools), Twilio (5 tools), Twitter (6 tools), Whatsapp (5 tools), Youtube (6 tools)
+- **29 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Abm, Brand Monitor, Campaign Pilot, Competitive Intel, Content Factory, Crm Intelligence, Seo Strategist, Social Media, Compliance Guard, Contract Intelligence, It Operations, Support Deflector, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
+- **56 Enterprise Connectors (430 tools)**: Banking Aa (5 tools), Gstn (9 tools), Gstn Sandbox (0 tools), Income Tax India (13 tools), Netsuite (8 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Professional Tax (5 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (8 tools), Tally (6 tools), Traces (4 tools), Zoho Books (35 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Bombora (4 tools), Brandwatch (5 tools), Buffer (5 tools), G2 (4 tools), Ga4 (6 tools), Google Ads (5 tools), Hubspot (32 tools), Linkedin Ads (4 tools), Mailchimp (10 tools), Meta Ads (5 tools), Mixpanel (5 tools), Moengage (6 tools), Salesforce (24 tools), Trustradius (4 tools), Wordpress (7 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (19 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), S3 (6 tools), Sendgrid (7 tools), Slack (7 tools), Twilio (5 tools), Twitter (6 tools), Whatsapp (5 tools), Youtube (6 tools)
 - **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
 - **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
 - **Shadow Mode**: Test agents against real data before promoting to production
@@ -19,7 +19,7 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
 - **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
-- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf)
+- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients)
 
 ## Agents by Department
 
@@ -39,12 +39,15 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - Performance Coach (confidence: 0.8)
 - Talent Acquisition (confidence: 0.88)
 
-### Marketing (5 agents, CMO oversight)
-- Brand Monitor (confidence: 0.85)
+### Marketing (8 agents, CMO oversight)
+- Abm (confidence: 0.8)
+- Brand Monitor (confidence: 0.8)
 - Campaign Pilot (confidence: 0.85)
+- Competitive Intel (confidence: 0.8)
 - Content Factory (confidence: 0.88)
-- Crm Intelligence (confidence: 0.88)
-- Seo Strategist (confidence: 0.9)
+- Crm Intelligence (confidence: 0.8)
+- Seo Strategist (confidence: 0.8)
+- Social Media (confidence: 0.8)
 
 ### Operations (6 agents, COO oversight)
 - Compliance Guard (confidence: 0.95)
@@ -71,13 +74,13 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 
 ## Developer SDKs & Integration
 
-- **Python SDK**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
+- **Python SDK + CLI**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access, and install the direct `agenticorg` CLI ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: `npm i agenticorg-sdk` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: `npx agenticorg-mcp-server` — expose every AgenticOrg agent and native tool to ChatGPT, Claude Desktop, Cursor (live counts: `/api/v1/product-facts`) ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
-- **CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg sop deploy`
+- **MCP Server**: `npx agenticorg-mcp-server` — expose AgenticOrg agents and read-only seller tools to ChatGPT, Claude Desktop, Cursor, VS Code MCP clients, and other MCP clients ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **Direct CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg workflows run`, `agenticorg a2a card`, `agenticorg mcp tools`. Works from Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI, and shell scripts.
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use `ao_sk_` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at `/api/v1/a2a/agent-card`
-- **MCP Protocol**: Anthropic Model Context Protocol — 10 tools for agent management and connector access
+- **MCP Protocol**: Anthropic Model Context Protocol — agent management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools. Direct connector tools are not exposed.
 - **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
 
 ## Links
@@ -86,8 +89,16 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
 - Playground (try live): https://agenticorg.ai/playground
 - Pricing: https://agenticorg.ai/pricing
 - Evaluation Matrix: https://agenticorg.ai/evals
+- Open Agentic Commerce Protocol: https://agenticorg.ai/open-agentic-commerce-protocol
 - Integration Workflow: https://agenticorg.ai/integration-workflow
 - Blog: https://agenticorg.ai/blog
+  - Merchant Self-Service Config for OACP Commerce: https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config
+  - How a Shopify Merchant Goes Live with a Seller Commerce Agent: https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp
+  - How ChatGPT, Claude, Gemini, Perplexity, WhatsApp, and Telegram Reach a Seller Agent: https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent
+  - How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts: https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts
+  - How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP: https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp
+  - How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth: https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth
+  - Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents: https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce
   - How AI Agents Are Transforming CA Firms: GST, TDS, and Bank Reconciliation on Autopilot: https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation
   - Why Your Month-End Close Takes 5 Days (And How AI Cuts It to 1.5): https://agenticorg.ai/blog/why-month-end-close-takes-5-days
   - Measuring Real ROI from AI Agents: Our Honest Framework: https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents
@@ -101,6 +112,13 @@ AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa
   - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/blog/no-code-ai-agent-builder
   - Email-Triggered Workflows: Automate Finance Operations from Your Inbox: https://agenticorg.ai/blog/email-triggered-workflows
 - Resources: https://agenticorg.ai/resources
+  - Move Your Shopify Store to Agentic Commerce: https://agenticorg.ai/resources/move-shopify-store-to-agentic-commerce
+  - How Buyer Agents Shop Safely with OACP: https://agenticorg.ai/resources/buyer-agents-shop-safely-oacp
+  - Build Against OACP Artifacts and Bridges: https://agenticorg.ai/resources/build-against-oacp-artifacts-bridges
+  - How OACP Maps to Schema.org, UCP, ACP, AP2, A2A, and MCP: https://agenticorg.ai/resources/oacp-protocol-partner-mappings
+  - Provider-Owned Mandate and Payment Evidence in OACP: https://agenticorg.ai/resources/provider-owned-mandate-payment-evidence-oacp
+  - Launch and Rollback Runbook for OACP Commerce: https://agenticorg.ai/resources/oacp-launch-rollback-runbook
+  - Commerce Sales Agent with Grantex Controls: https://agenticorg.ai/resources/commerce-sales-agent-grantex
   - What Are AI Agents for Enterprise?: https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise
   - AI Agents vs RPA: Why Enterprises Are Moving Beyond Robotic Process Automation: https://agenticorg.ai/resources/ai-agents-vs-rpa
   - AI Agents vs Chatbots: What's the Difference?: https://agenticorg.ai/resources/ai-agents-vs-chatbots

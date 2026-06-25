@@ -15,6 +15,21 @@ Or run directly with npx:
 AGENTICORG_API_KEY=your-key npx agenticorg-mcp-server
 ```
 
+For shell-capable tools such as Claude Code, Codex, Gemini CLI, VS Code
+terminals/tasks, CI jobs, and runbooks, the direct Python CLI is also
+available:
+
+```bash
+pip install agenticorg
+AGENTICORG_API_KEY=your-key agenticorg agents run commerce_sales_agent \
+  --action buyer_discovery_preview \
+  --input '{"merchant_id":"merchant_demo"}'
+```
+
+Use this MCP server when the client should discover and call AgenticOrg
+through MCP tools. Use the direct CLI when the client can run shell
+commands.
+
 ## Configure in ChatGPT / Claude Desktop / Cursor
 
 Add to your MCP client configuration:

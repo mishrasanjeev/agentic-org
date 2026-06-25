@@ -8,7 +8,28 @@ build-backend = "hatchling.build"
 # `pip install agenticorg` gave CA-firm sites the server code with no
 # way to install the bridge client. `bridge` now ships in the wheel
 # and the `agenticorg-bridge` console script works after pip install.
-packages = ["core", "api", "auth", "bridge", "connectors", "workflows", "scaling", "observability", "audit", "schemas"]
+#
+# CLI-2026-06-25: include the Python SDK package in the root wheel too.
+# This makes `pip install agenticorg` land the direct `agenticorg` CLI
+# for Claude Code, Codex, Gemini CLI, VS Code tasks, CI, and shell users,
+# without requiring callers to know about the monorepo's sdk/ subpackage.
+# Publishing policy: PyPI `agenticorg` remains the lightweight SDK+CLI
+# artifact built from sdk/. This root/full-platform wheel is for local,
+# container, and internal installs unless a release owner explicitly changes
+# the package-name/version policy.
+packages = [
+    "core",
+    "api",
+    "auth",
+    "bridge",
+    "connectors",
+    "workflows",
+    "scaling",
+    "observability",
+    "audit",
+    "schemas",
+    "sdk/agenticorg",
+]
 
 [project]
 name = "agenticorg"
@@ -138,6 +159,9 @@ dev = [
 ]
 
 [project.scripts]
+# Direct CLI for launching agents, workflows, A2A discovery, MCP discovery,
+# SOP parsing, and knowledge search from any shell-capable assistant/client.
+agenticorg = "agenticorg.cli:main"
 # UR-Bug-5: CA-firm sites run `agenticorg-bridge` on the client machine
 # to tunnel Tally XML calls to the cloud. Exposing the console script
 # here so `pip install agenticorg` lands a working entrypoint.

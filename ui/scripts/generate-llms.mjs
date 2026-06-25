@@ -236,7 +236,7 @@ AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agent
 - **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
 - **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
 - **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
-- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf)
+- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients)
 
 ## Agents by Department
 
@@ -257,13 +257,13 @@ ${pricingLines}
 
 ## Developer SDKs & Integration
 
-- **Python SDK**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access ([PyPI](https://pypi.org/project/agenticorg/))
+- **Python SDK + CLI**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access, and install the direct \`agenticorg\` CLI ([PyPI](https://pypi.org/project/agenticorg/))
 - **TypeScript SDK**: \`npm i agenticorg-sdk\` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: \`npx agenticorg-mcp-server\` — expose every AgenticOrg agent and native tool to ChatGPT, Claude Desktop, Cursor (live counts: \`/api/v1/product-facts\`) ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
-- **CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg sop deploy\`
+- **MCP Server**: \`npx agenticorg-mcp-server\` — expose AgenticOrg agents and read-only seller tools to ChatGPT, Claude Desktop, Cursor, VS Code MCP clients, and other MCP clients ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
+- **Direct CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg workflows run\`, \`agenticorg a2a card\`, \`agenticorg mcp tools\`. Works from Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI, and shell scripts.
 - **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use \`ao_sk_\` prefix, bcrypt-hashed, scoped, revocable
 - **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at \`/api/v1/a2a/agent-card\`
-- **MCP Protocol**: Anthropic Model Context Protocol — 10 tools for agent management and connector access
+- **MCP Protocol**: Anthropic Model Context Protocol — agent management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools. Direct connector tools are not exposed.
 - **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
 
 ## Links
@@ -433,7 +433,7 @@ Shadow agents have configurable limits: minimum sample count (default 100), accu
 
 ## MCP Registry
 
-AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name \`agenticorg-mcp-server\`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and tools automatically. The MCP server exposes 10 tools and ${totalTools} connector tools via stdio transport.
+AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name \`agenticorg-mcp-server\`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and governed tools. The MCP server exposes agent-management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools via stdio transport. Direct connector tools are not exposed; agents invoke approved connector workflows through the AgenticOrg runtime.
 
 ---
 
@@ -501,7 +501,7 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 ### Python SDK (PyPI)
 - Install: \`pip install agenticorg\`
 - Usage: \`from agenticorg import AgenticOrg; client = AgenticOrg(api_key="ao_sk_...")\`
-- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, CLI
+- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, and the direct \`agenticorg\` CLI from the same install
 - Package: https://pypi.org/project/agenticorg/
 
 ### TypeScript SDK (npm)
@@ -512,9 +512,16 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 ### MCP Server (npm)
 - Install: \`npx agenticorg-mcp-server\`
-- Exposes 10 tools: list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, call_connector_tool, list_mcp_tools, discover_agents_a2a, get_agent_card
-- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client
+- Exposes tools such as list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, list_mcp_tools, discover_agents_a2a, get_agent_card, and seller.* read-only OACP artifact tools
+- Direct connector tools are not exposed; use run_agent for governed agent workflows
+- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients, or any MCP client
 - Package: https://www.npmjs.com/package/agenticorg-mcp-server
+
+### Direct CLI
+- Install: \`pip install agenticorg\`
+- Launch agents: \`agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --input '{"merchant_id":"merchant_demo"}'\`
+- Discover surfaces: \`agenticorg agents list\`, \`agenticorg a2a card\`, \`agenticorg mcp tools\`
+- Fits shell-capable assistants and developer environments: Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI jobs, and scripts
 
 ### API Keys
 - Generate from dashboard: Settings > API Keys
@@ -525,7 +532,7 @@ ${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")
 
 ### Integration Protocols
 - **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at \`/api/v1/a2a/agent-card\`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. ${totalTools} tools exposed via stdio transport. Listed in official MCP Registry
+- **MCP (Model Context Protocol)**: Anthropic's protocol. Agent-management, discovery, and read-only seller OACP artifact tools exposed via stdio transport. Listed in official MCP Registry
 - **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
 
 ---

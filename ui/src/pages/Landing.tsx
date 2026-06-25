@@ -1569,7 +1569,7 @@ $ agenticorg sop deploy \\
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
                 </div>
                 <h3 className="font-bold text-white mb-2">MCP (Model Context Protocol)</h3>
-                <p className="text-sm text-slate-400">Anthropic's MCP. Expose {toolsText} tools to ChatGPT, Claude Desktop, Cursor, Windsurf, or any MCP client.</p>
+                <p className="text-sm text-slate-400">Anthropic's MCP. Expose governed AgenticOrg agents and read-only seller tools to ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients, or any MCP client.</p>
               </div>
               <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 text-center">
                 <div className="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4">
