@@ -63,7 +63,7 @@ dependencies = [
     # Billing checkout is a production request path. Keep the Stripe SDK in
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
-    "stripe>=15.2.1",
+    "stripe>=15.3.0",
     "google-genai>=1.75.0",
     "anthropic>=0.111.0",
     "openai>=2.43.0",
