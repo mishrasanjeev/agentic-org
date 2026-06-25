@@ -178,7 +178,7 @@ class HubspotConnector(BaseConnector):
     ) -> str | None:
         """Exchange refresh_token for a fresh access_token."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
                 resp = await client.post(
                     "https://api.hubapi.com/oauth/v1/token",
                     data={

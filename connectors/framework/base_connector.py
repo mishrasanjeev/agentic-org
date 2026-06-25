@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import abc
 import re
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -41,17 +42,29 @@ _GCP_SECRET_RE = re.compile(
 class _GuardedAsyncClient(httpx.AsyncClient):
     """httpx client that validates the final request URL before network egress."""
 
-    def __init__(self, *args: Any, connector_name: str, require_dns: bool, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        *args: Any,
+        connector_name: str,
+        require_dns: bool,
+        egress_validator: Callable[[str], None] | None = None,
+        **kwargs: Any,
+    ) -> None:
         self._connector_name = connector_name
         self._require_dns = require_dns
+        self._egress_validator = egress_validator
         super().__init__(*args, **kwargs)
 
     async def send(self, request: httpx.Request, *args: Any, **kwargs: Any) -> httpx.Response:
-        _validate_connector_egress_url(
-            str(request.url),
-            connector_name=self._connector_name,
-            require_dns=self._require_dns,
-        )
+        url = str(request.url)
+        if self._egress_validator is not None:
+            self._egress_validator(url)
+        else:
+            _validate_connector_egress_url(
+                url,
+                connector_name=self._connector_name,
+                require_dns=self._require_dns,
+            )
         return await super().send(request, *args, **kwargs)
 
 
@@ -293,6 +306,10 @@ class BaseConnector(abc.ABC):
             transport=transport,
             connector_name=self.name,
             require_dns=require_dns,
+            egress_validator=lambda url: self._validate_connector_egress_url(
+                url,
+                require_dns=require_dns,
+            ),
         )
 
     async def _rebuild_http_client(self) -> None:

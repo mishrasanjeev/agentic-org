@@ -39,7 +39,7 @@ class BrandwatchConnector(BaseConnector):
         username = self._get_secret("username")
         password = self._get_secret("password")
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
             resp = await client.post(
                 f"{BRANDWATCH_API_BASE_URL}/oauth/token",
                 data={

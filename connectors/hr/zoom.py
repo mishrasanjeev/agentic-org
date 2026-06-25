@@ -33,7 +33,7 @@ class ZoomConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         account_id = self._get_secret("account_id")
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
             resp = await client.post(
                 "https://zoom.us/oauth/token",
                 params={"grant_type": "account_credentials", "account_id": account_id},

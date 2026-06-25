@@ -60,7 +60,7 @@ class BankingAaConnector(BaseConnector):
     async def _authenticate(self):
         client_id = self._get_secret("client_id")
         client_secret = self._get_secret("client_secret")
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
             resp = await client.post(
                 FINVU_TOKEN_URL,
                 data={

@@ -9,7 +9,11 @@ from pathlib import Path
 import httpx
 import structlog
 
+from core.http_retry import DEFAULT_HTTP_TIMEOUT_SECONDS, retry_http_async
+from core.security.egress import EgressValidationError, validate_public_url
+
 logger = structlog.get_logger()
+_OAUTH_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 
 
 class OAuth2Adapter:
@@ -27,10 +31,21 @@ class OAuth2Adapter:
             await self.refresh()
         return {"Authorization": f"Bearer {self._token}"}
 
-    async def refresh(self) -> None:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
+    def _validated_token_url(self) -> str:
+        try:
+            return validate_public_url(
                 self.token_url,
+                allowed_schemes=("https",),
+                require_dns=False,
+            ).url
+        except EgressValidationError as exc:
+            raise ValueError("OAuth token_url must be a public HTTPS URL") from exc
+
+    @retry_http_async(max_attempts=3, base_delay=0.25, cap=2.0)
+    async def refresh(self) -> None:
+        async with httpx.AsyncClient(timeout=_OAUTH_TIMEOUT) as client:
+            resp = await client.post(
+                self._validated_token_url(),
                 data={
                     "grant_type": "client_credentials",
                     "client_id": self.client_id,

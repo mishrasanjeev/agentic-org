@@ -192,7 +192,7 @@ async def test_gstn_auth_uses_api_key_alias_with_api_secret(monkeypatch) -> None
     from connectors.finance.gstn import GstnConnector
 
     recording = _GSTNAuthClient()
-    monkeypatch.setattr(gstn_module.httpx, "AsyncClient", lambda: recording)
+    monkeypatch.setattr(gstn_module.httpx, "AsyncClient", lambda **_kwargs: recording)
     connector = GstnConnector(
         {
             "api_key": "asp-id",
@@ -220,7 +220,7 @@ async def test_gstn_auth_uses_client_credentials_as_gsp_headers(monkeypatch) -> 
     from connectors.finance.gstn import GstnConnector
 
     recording = _GSTNAuthClient()
-    monkeypatch.setattr(gstn_module.httpx, "AsyncClient", lambda: recording)
+    monkeypatch.setattr(gstn_module.httpx, "AsyncClient", lambda **_kwargs: recording)
     connector = GstnConnector(
         {
             "client_id": "gstn-client",

@@ -24,9 +24,11 @@ from connectors.finance.aa_consent_types import (
     ConsentStatus,
     FIDataSession,
 )
+from core.http_retry import DEFAULT_HTTP_TIMEOUT_SECONDS, retry_http_async
 from core.security.egress import EgressValidationError, validate_public_url
 
 logger = structlog.get_logger()
+_AA_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 
 
 class AAConsentManager:
@@ -61,12 +63,13 @@ class AAConsentManager:
         self._sessions: dict[str, dict[str, Any]] = {}
         self._token: str = ""
 
+    @retry_http_async(max_attempts=3, base_delay=0.25, cap=2.0)
     async def _get_token(self) -> str:
         """Obtain AA API access token via client credentials."""
         if self._token:
             return self._token
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/oauth2/token",
                 data={
@@ -133,7 +136,7 @@ class AAConsentManager:
             },
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/Consent",
                 json=payload,
@@ -206,7 +209,7 @@ class AAConsentManager:
         """Fetch the signed consent artifact from Finvu."""
         await self._get_token()
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.get(
                 f"{self.base_url}/Consent/{consent_id}",
                 headers=self._auth_headers(),
@@ -252,7 +255,7 @@ class AAConsentManager:
             "Consent": {"id": consent_id},
         }
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/FI/request",
                 json=payload,
@@ -278,7 +281,7 @@ class AAConsentManager:
         """Fetch financial data using an active FI session."""
         await self._get_token()
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.get(
                 f"{self.base_url}/FI/fetch/{session_id}",
                 headers=self._auth_headers(),
@@ -293,7 +296,7 @@ class AAConsentManager:
         """Revoke a previously granted consent."""
         await self._get_token()
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_AA_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/Consent/revoke/{consent_id}",
                 headers=self._auth_headers(),

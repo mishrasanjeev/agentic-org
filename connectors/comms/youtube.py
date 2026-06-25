@@ -47,7 +47,7 @@ class YouTubeConnector(BaseConnector):
 
         if refresh_token and client_id and client_secret:
             # Exchange refresh token for a fresh access token
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
                 resp = await client.post(
                     GOOGLE_OAUTH_TOKEN_URL,
                     data={

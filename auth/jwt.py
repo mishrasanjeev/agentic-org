@@ -13,12 +13,15 @@ import redis.asyncio as aioredis
 from jwt import PyJWK, PyJWTError
 
 from core.config import is_strict_runtime_env, settings
+from core.http_retry import DEFAULT_HTTP_TIMEOUT_SECONDS, retry_http_async
+from core.security.egress import EgressValidationError, validate_public_url
 
 logger = logging.getLogger(__name__)
 
 _jwks_cache: dict[str, Any] = {}  # enterprise-gate: process-local-ok reason=ttl-cache-of-remote-public-jwks
 _jwks_cache_time: float = 0
 JWKS_CACHE_TTL = 3600
+JWKS_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 
 # ---------------------------------------------------------------------------
 # Token blacklist — Redis-backed
@@ -249,14 +252,23 @@ def validate_local_token(token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@retry_http_async(max_attempts=3, base_delay=0.25, cap=2.0)
 async def _fetch_jwks() -> dict[str, Any]:
     global _jwks_cache, _jwks_cache_time
     if _jwks_cache and (time.time() - _jwks_cache_time) < JWKS_CACHE_TTL:
         return _jwks_cache
     if not settings.jwt_public_key_url:
         raise ValueError("JWKS URL not configured (AGENTICORG_JWT_PUBLIC_KEY_URL is empty)")
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(settings.jwt_public_key_url)
+    try:
+        jwks_url = validate_public_url(
+            settings.jwt_public_key_url,
+            allowed_schemes=("https",),
+            require_dns=False,
+        ).url
+    except EgressValidationError as exc:
+        raise ValueError("JWKS URL must be a public HTTPS URL") from exc
+    async with httpx.AsyncClient(timeout=JWKS_TIMEOUT) as client:
+        resp = await client.get(jwks_url)
         resp.raise_for_status()
         _jwks_cache = resp.json()
         _jwks_cache_time = time.time()

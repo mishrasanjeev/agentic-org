@@ -72,7 +72,7 @@ class QuickbooksConnector(BaseConnector):
         when the token response also lacks it (rare).
         """
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
                 resp = await client.post(
                     _QBO_TOKEN_URL,
                     data={

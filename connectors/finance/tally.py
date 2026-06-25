@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 from typing import Any
+from urllib.parse import urlparse
 
 # stdlib ElementTree is used only to construct outbound XML envelopes.
 # All untrusted Tally responses are parsed through defusedxml below.
@@ -31,6 +32,28 @@ from core.security.egress import (
 )
 
 logger = structlog.get_logger()
+
+_DIRECT_TALLY_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_direct_local_tally_url(url: str) -> bool:
+    """Allow only Tally's native local XML endpoint in direct mode."""
+    parsed = urlparse(str(url or "").strip())
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme.lower() == "http"
+        and (parsed.hostname or "").lower() in _DIRECT_TALLY_HOSTS
+        and (port or 80) == 9000
+        and parsed.path in ("", "/")
+        and not parsed.params
+        and not parsed.query
+        and not parsed.fragment
+        and not parsed.username
+        and not parsed.password
+    )
 
 
 # UR-Bug-6 (Uday/Ramesh 2026-04-21): Tally errors used to surface as a
@@ -266,6 +289,14 @@ class TallyConnector(BaseConnector):
             await self._authenticate()
             return
         await super().connect()
+
+    def _validate_connector_egress_url(self, url: str, *, require_dns: bool = True) -> None:
+        # Tally's native desktop endpoint is intentionally local-only. Keep this
+        # exception exact so tenant-controlled base_url values cannot retarget
+        # the connector to arbitrary private services or alternate paths.
+        if not self._use_bridge and _is_direct_local_tally_url(url):
+            return
+        super()._validate_connector_egress_url(url, require_dns=require_dns)
 
     def _register_tools(self):
         self._tool_registry["post_voucher"] = self.post_voucher

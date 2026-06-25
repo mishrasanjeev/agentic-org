@@ -231,7 +231,7 @@ class ZohoBooksConnector(BaseConnector):
         """Exchange refresh_token for a fresh access_token via Zoho OAuth2."""
         token_url = _ZOHO_TOKEN_URLS.get(str(self.config.get("region") or "us"), _ZOHO_TOKEN_URL)
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
                 resp = await client.post(
                     token_url,
                     data={

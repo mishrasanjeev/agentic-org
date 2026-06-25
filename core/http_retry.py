@@ -32,6 +32,8 @@ logger = structlog.get_logger()
 
 T = TypeVar("T")
 
+DEFAULT_HTTP_TIMEOUT_SECONDS = 10.0
+
 # Retry on network errors, timeouts, and these HTTP status codes
 RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 

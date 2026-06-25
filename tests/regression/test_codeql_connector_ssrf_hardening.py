@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -39,6 +41,46 @@ def _client_factory(client: _RecordingAsyncClient):
         return client
 
     return _factory
+
+
+def test_direct_external_async_clients_have_explicit_timeouts() -> None:
+    repo = Path(__file__).resolve().parents[2]
+    offenders: list[str] = []
+    for root in ("auth", "connectors", "api"):
+        for path in (repo / root).rglob("*.py"):
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if "httpx.AsyncClient() as client" in text or "AsyncClient() as client" in text:
+                offenders.append(str(path.relative_to(repo)))
+
+    assert offenders == []
+
+
+def test_grantex_token_server_rejects_unsafe_urls() -> None:
+    from auth.grantex import GrantexClient
+
+    client = GrantexClient()
+    client.token_server = "http://auth.example"
+    with pytest.raises(ValueError, match="public HTTPS"):
+        client._validated_token_server()
+
+    client.token_server = "https://169.254.169.254"
+    with pytest.raises(ValueError, match="public HTTPS"):
+        client._validated_token_server()
+
+    client.token_server = "https://auth.example/"
+    assert client._validated_token_server() == "https://auth.example"
+
+
+@pytest.mark.asyncio
+async def test_jwks_fetch_rejects_unsafe_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    import auth.jwt as jwt_module
+
+    monkeypatch.setattr(jwt_module.settings, "jwt_public_key_url", "http://example.com/jwks")
+    jwt_module._jwks_cache = {}
+    jwt_module._jwks_cache_time = 0
+
+    with pytest.raises(ValueError, match="public HTTPS"):
+        await jwt_module._fetch_jwks()
 
 
 @pytest.mark.asyncio

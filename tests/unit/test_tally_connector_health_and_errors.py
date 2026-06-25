@@ -193,6 +193,31 @@ class TestTallyHealthCheckBridge:
 class TestTallyHealthCheckDirect:
     """Health check without a bridge — hits Tally directly over XML."""
 
+    def test_direct_mode_allows_only_exact_local_tally_endpoint(self) -> None:
+        connector = TallyConnector({})
+
+        connector._validate_connector_egress_url("http://localhost:9000")
+        connector._validate_connector_egress_url("http://127.0.0.1:9000/")
+        connector._validate_connector_egress_url("http://[::1]:9000/")
+
+        for unsafe_url in (
+            "http://localhost:9001",
+            "http://localhost:9000/admin",
+            "http://127.0.0.1:9000/?next=http://169.254.169.254",
+            "https://localhost:9000",
+        ):
+            with pytest.raises(ValueError, match="Connector egress URL"):
+                connector._validate_connector_egress_url(unsafe_url)
+
+    @pytest.mark.asyncio
+    async def test_direct_connect_can_build_local_tally_client(self) -> None:
+        connector = TallyConnector({"api_key": "test-key"})
+        await connector.connect()
+        try:
+            assert connector._client is not None
+        finally:
+            await connector.disconnect()
+
     @pytest.mark.asyncio
     async def test_direct_healthy_when_xml_parses(self) -> None:
         connector = TallyConnector({})
