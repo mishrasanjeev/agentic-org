@@ -4,6 +4,8 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
 Merchant commerce configuration is tenant, merchant, and seller-agent scoped. It records how a merchant wants AgenticOrg to connect to source systems, buyer channels, provider-owned payment rails, public publishing, and Offline POS handoff without storing raw secrets or making Grantex a transaction toll booth.
 
+Merchants can create this configuration during Seller Commerce Agent onboarding and can update it later from the same Commerce Runtime settings page. Updates are idempotent at the tenant, merchant, and seller-agent scope, so a merchant store can revise channel readiness, switch provider refs, disable public publishing, or add POS metadata without affecting another tenant or merchant.
+
 ## Gap Closure
 
 | Area | Previous gap | Current implementation |
@@ -39,6 +41,8 @@ The page includes these editable groups:
 | Runtime actions | onboarding packet create, Shopify sync, Grantex authority request, buyer Q&A, adapters, provider capability, POS handoff |
 
 The UI clears submitted Shopify secret values after save and never renders them back.
+
+Merchant edits are intentionally separated from runtime execution. Saving a WooCommerce, ERP, bank, fintech, or custom-provider config records the merchant's intended setup and readiness blockers; it does not mark that adapter live or execute payment/order/POS rails.
 
 ## API
 

@@ -17,7 +17,7 @@
 
 ---
 
-## Latest Mainline Status (2026-06-24)
+## Latest Mainline Status (2026-06-25)
 
 - **Merchant self-service commerce config**: `/dashboard/commerce-runtime` now lets tenant admins and merchant operators configure and edit merchant/store scoped source connectors, buyer channels, payment providers, public publishing, and Offline POS metadata. Runtime records are scoped by tenant, merchant, and seller agent; secret values stay in approved custody systems and config rows store only refs/redacted metadata.
 - **OACP Shopify runtime vertical**: Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Shopify Admin GraphQL product/variant/price/inventory sync, Shopify webhook HMAC verification, Grantex C6Z authority request, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, and bridge readiness endpoints are implemented.
@@ -31,13 +31,14 @@
 
 ## OACP Seller And Buyer Commerce Runtime
 
-AgenticOrg owns the Seller Commerce Agent and buyer-agent runtime for OACP-backed commerce. It runs merchant self-service configuration, Shopify connector custody, read-only Shopify sync, buyer sessions, channel bridges, artifact cache, protocol adapter consumption, and Pine Labs Plural/P3P capability verification.
+AgenticOrg owns the Seller Commerce Agent and buyer-agent runtime for OACP-backed commerce. It runs merchant self-service configuration, Shopify connector custody, read-only Shopify sync, buyer sessions, channel bridges, artifact cache, protocol adapter consumption, and provider-owned capability verification. Pine Labs Plural/P3P is the current verifier path; bank-owned and other rails remain adapter-gated.
 
 Grantex owns OACP trust authority, protocol/policy governance, canonical signed/internal artifacts, artifact verification, and protocol adapter authority. Shopify and merchant systems remain the source of record. Pine Labs Plural/P3P owns mandate and payment rail execution.
 
 ```mermaid
 flowchart LR
-  merchant[Shopify merchant] --> agentic[AgenticOrg Seller Commerce Agent]
+  merchant[Merchant operator] --> config[Merchant commerce config]
+  config --> agentic[AgenticOrg Seller Commerce Agent]
   agentic --> shopify[Read-only Shopify sync]
   shopify --> grantex[Grantex OACP authority]
   grantex --> cache[AgenticOrg OACP cache]
@@ -150,7 +151,7 @@ FastAPI Backend
     ├── Workflow Engine (20+ templates) → real agent execution → HITL Queue
     ├── NEXUS Orchestrator → Audit Logger
     ├── A2A Protocol → Agent Discovery → Cross-platform Tasks
-    ├── Commerce Sales Agent → Grantex-only tools → fail-closed discovery and handoff
+    ├── Commerce Runtime → OACP-governed seller/buyer tools → fail-closed discovery and handoff
     ├── OACP Artifact Cache → durable public-safe refs → TTL/revocation/risk evaluation
     ├── OACP Cache Maintenance → keep/refresh/evict/purge/quarantine planner
     ├── RAGFlow Engine → Document ingestion → Semantic search → Agent retrieval

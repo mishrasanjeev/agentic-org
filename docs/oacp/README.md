@@ -4,6 +4,8 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
 
 AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, including purchase preparation and Offline POS handoff orchestration. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts, artifact verification, and protocol adapter authority. Shopify, POS, and merchant systems remain source of record. Pine Labs Plural/P3P, POS, and payment providers own mandate/payment/POS execution.
 
+Merchants configure the runtime in `/dashboard/commerce-runtime` during onboarding or later. The configuration is scoped by tenant, merchant, and seller agent, and covers source connectors, buyer channels, provider-owned payment rails, public publishing, and Offline POS metadata. Shopify is the runtime-supported source connector today. WooCommerce, ERP, PIM, OMS, WMS, custom API, bank-owned rails, fintech rails, and custom payment providers can be saved as non-executing adapter-ready config until approved adapters exist.
+
 ## Runtime Docs
 
 - [Truth inventory](truth-inventory.md)

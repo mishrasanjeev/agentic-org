@@ -5,13 +5,13 @@ const FLOW_NODES = [
   {
     title: "Merchant systems",
     eyebrow: "Source of record",
-    copy: "Storefront, catalog, inventory, policy, OMS, support, and payment status systems keep operational truth.",
+    copy: "Shopify, future WooCommerce/ERP sources, catalog, inventory, policy, OMS, support, POS, and payment status systems keep operational truth.",
     tone: "border-cyan-300/40 bg-cyan-300/10 text-cyan-50",
   },
   {
     title: "Seller commerce agent",
     eyebrow: "Merchant setup",
-    copy: "AgenticOrg stores merchant-scoped commerce config, creates the Seller Commerce Agent, stores Shopify connector custody, and prepares Grantex authority requests.",
+    copy: "AgenticOrg stores tenant/merchant/store-scoped config, creates the Seller Commerce Agent, stores Shopify connector custody, and prepares Grantex authority requests.",
     tone: "border-emerald-300/40 bg-emerald-300/10 text-emerald-50",
   },
   {
@@ -35,7 +35,7 @@ const FLOW_NODES = [
   {
     title: "Buyer channels",
     eyebrow: "User surface",
-    copy: "Web, MCP, OpenAPI, A2A, WhatsApp, and Telegram receive grounded answers or refusals from the same cache path.",
+    copy: "Web, MCP, OpenAPI, A2A, Perplexity/search, WhatsApp, and Telegram receive grounded answers or refusals from the same cache path.",
     tone: "border-rose-300/40 bg-rose-300/10 text-rose-50",
   },
 ];
@@ -43,8 +43,8 @@ const FLOW_NODES = [
 const LIFECYCLE = [
   {
     step: "01",
-    title: "Seller connects existing systems",
-    copy: "The merchant does not move the source of truth into AgenticOrg. Existing commerce, ERP, inventory, policy, order, support, and provider systems remain authoritative.",
+    title: "Seller configures existing systems",
+    copy: "The merchant can configure and later edit source systems, buyer channels, provider-owned payment rails, public publishing, and POS metadata. Shopify is runtime-supported now; WooCommerce, ERP, PIM, OMS, WMS, and custom APIs are saved as adapter-ready config until approved adapters exist.",
   },
   {
     step: "02",
@@ -69,7 +69,7 @@ const LIFECYCLE = [
   {
     step: "06",
     title: "Commitment requests become prepared or refused",
-    copy: "A commitment-bound request can be prepared for review only when policy, freshness, eligibility, and dry-run checks support it. Checkout and payment execution remain separately gated.",
+    copy: "A commitment-bound request can be prepared for review only when policy, freshness, eligibility, provider/POS capability, and dry-run checks support it. Checkout and payment execution remain separately gated.",
   },
 ];
 
@@ -97,14 +97,16 @@ const DECISIONS = [
 ];
 
 const SURFACES = [
+  ["Merchant settings", "Tenant/merchant/seller scoped source connectors, buyer channels, provider rails, public publishing, and POS refs that merchants can update during or after onboarding"],
   ["Seller Commerce Agent", "Merchant config, Shopify connector custody, preview, gap review, and Grantex authority request"],
   ["Buyer agent", "Read-only discovery, grounded comparison, prepared-only handoff, and refusal copy"],
   ["Public catalog", "Seller profile, product pages, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt from public-safe cached evidence"],
   ["MCP", "ChatGPT/Claude-style tool surface backed by the same artifact cache"],
-  ["OpenAPI", "Gemini/Perplexity-style schema and ask route with source/freshness labels"],
+  ["OpenAPI", "Gemini-style schema and ask route with source/freshness labels"],
+  ["Search and Perplexity", "Crawlable public catalog pages, Schema.org JSON-LD, sitemap, llms.txt, and clean public summaries when the merchant enables publishing"],
   ["A2A", "Agent card and task metadata for agent-to-agent discovery"],
   ["WhatsApp and Telegram", "Webhook bridges that require configured secrets before accepting messages"],
-  ["Plural/Pine verifier", "Provider-owned mandate capability evidence without raw payment secret storage"],
+  ["Payment providers", "Plural/Pine capability evidence now; bank-owned, fintech, and custom provider refs saved as non-executing provider-owned config until adapter approval"],
   ["Audit", "Source refs, freshness, policy blockers, risk tier, and non-execution posture stay reviewable"],
 ];
 
@@ -129,17 +131,17 @@ function NodeCard({
   tone: string;
 }) {
   return (
-    <div className={`rounded-xl border p-4 ${tone}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{eyebrow}</p>
-      <h3 className="mt-2 text-lg font-bold text-white">{title}</h3>
-      <p className="mt-3 text-sm leading-relaxed opacity-80">{copy}</p>
+    <div className={`min-w-0 rounded-xl border p-4 ${tone}`}>
+      <p className="break-words text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{eyebrow}</p>
+      <h3 className="mt-2 break-words text-lg font-bold text-white">{title}</h3>
+      <p className="mt-3 break-words text-sm leading-relaxed opacity-80">{copy}</p>
     </div>
   );
 }
 
 export default function OpenAgenticCommerceProtocol() {
   return (
-    <div className="min-h-screen bg-white text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-white text-slate-900">
       <Helmet>
         <title>Open Agentic Commerce Protocol | AgenticOrg</title>
         <meta
@@ -168,15 +170,15 @@ export default function OpenAgenticCommerceProtocol() {
         <section className="relative overflow-hidden bg-slate-950">
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.12) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.12) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-24 grid lg:grid-cols-[0.9fr_1.1fr] gap-12 items-center">
-            <div>
+            <div className="min-w-0">
               <div className="inline-flex rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-1.5 text-sm font-medium text-cyan-100">
                 Open Agentic Commerce Protocol
               </div>
-              <h1 className="mt-6 text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
+              <h1 className="mt-6 break-words whitespace-normal text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
                 Buyer and seller AI agents need commerce facts they can trust.
               </h1>
-              <p className="mt-6 text-lg text-slate-300 leading-relaxed max-w-2xl">
-                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridges, OACP cache, and Plural/Pine capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
+              <p className="mt-6 max-w-2xl break-words text-lg text-slate-300 leading-relaxed">
+                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/search/WhatsApp/Telegram bridges, OACP cache, and provider-owned capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="#flow" className="inline-flex justify-center rounded-lg bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors">
@@ -191,7 +193,7 @@ export default function OpenAgenticCommerceProtocol() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6 shadow-2xl">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-5 sm:p-6 shadow-2xl">
               <div className="grid sm:grid-cols-2 gap-3">
                 {FLOW_NODES.map((node) => (
                   <NodeCard key={node.title} {...node} />
@@ -199,7 +201,7 @@ export default function OpenAgenticCommerceProtocol() {
               </div>
               <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/10 p-4">
                 <p className="text-sm font-semibold text-amber-100">Provider-owned execution boundary</p>
-                <p className="mt-2 text-sm text-amber-50/85">
+                <p className="mt-2 break-words text-sm text-amber-50/85">
                   Mandates, payment capture, checkout execution, holds, refunds, and provider rails remain outside this page unless a separate approved implementation and verification path exists.
                 </p>
               </div>
@@ -263,8 +265,8 @@ export default function OpenAgenticCommerceProtocol() {
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-300">Commitment boundary</p>
                 <h2 className="mt-3 text-3xl sm:text-4xl font-bold">OACP explains where the agent stops.</h2>
-                <p className="mt-4 text-lg text-slate-300 leading-relaxed">
-                  AgenticOrg can use OACP artifacts for discovery, comparison, source/freshness explanation, and prepared-only handoff behavior. It must not turn those artifacts into live commerce execution without a separately approved rollout.
+                <p className="mt-4 break-words text-lg text-slate-300 leading-relaxed">
+                  AgenticOrg can use OACP artifacts for discovery, comparison, source/freshness explanation, and prepared-only handoff behavior. It must not turn those artifacts into live commerce execution without merchant, provider or bank, POS, channel, and rollout approval.
                 </p>
               </div>
 
@@ -305,7 +307,7 @@ export default function OpenAgenticCommerceProtocol() {
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Next step</p>
               <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-slate-950">Read the runtime docs and MCP-backed preview.</h2>
             <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-              The runtime docs explain Shopify onboarding, artifact cache behavior, buyer surfaces, Plural/Pine capability checks, and purchase handoff blockers. The workflow example shows how an MCP client reaches the same guarded path.
+              The runtime docs explain merchant self-service config, Shopify onboarding, artifact cache behavior, buyer surfaces, provider-owned capability checks, POS bridge status, and purchase handoff blockers. The workflow example shows how an MCP client reaches the same guarded path.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row justify-center gap-3">
               <Link to="/integration-workflow" className="inline-flex justify-center rounded-lg bg-slate-950 px-6 py-3 text-sm font-semibold text-white hover:bg-slate-800 transition-colors">

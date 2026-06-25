@@ -2,7 +2,7 @@
 
 ## Summary
 
-Grantex is the OACP authority, not a relay for every buyer message. AgenticOrg can answer non-binding questions from valid cached artifacts.
+Grantex is the OACP authority, not a relay for every buyer message. AgenticOrg can answer non-binding questions from valid cached artifacts, while merchant/provider/POS systems remain responsible for execution.
 
 ## Target Audience
 
@@ -20,7 +20,7 @@ flowchart LR
 
 ## End-To-End Flow
 
-AgenticOrg asks Grantex for authority artifacts after source sync. Buyer Q&A then uses valid cache. A request that commits the buyer requires fresh artifacts, provider capability evidence, and merchant/provider approval.
+AgenticOrg asks Grantex for authority artifacts after source sync. Buyer Q&A then uses valid cache. A request that commits the buyer requires fresh artifacts, provider or bank capability evidence, POS or merchant confirmation where applicable, and merchant/provider approval.
 
 ## What Is Implemented Now
 
@@ -28,7 +28,7 @@ AgenticOrg has authority request, cache, Q&A, bridge, adapter, and purchase prep
 
 ## What Requires External Approval Or Config
 
-Tenant allowlists, channel approvals, provider configuration, and any execution path.
+Tenant allowlists, channel approvals, provider or bank configuration, POS callback verification, and any execution path.
 
 ## Failure Modes
 
