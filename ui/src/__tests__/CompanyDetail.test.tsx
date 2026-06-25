@@ -7,6 +7,7 @@ const mockPost = vi.fn();
 const mockPatch = vi.fn();
 const mockPut = vi.fn();
 const mockDelete = vi.fn();
+const mockAgentsListAll = vi.fn();
 
 vi.mock("../lib/api", () => ({
   default: {
@@ -19,6 +20,9 @@ vi.mock("../lib/api", () => ({
       request: { use: vi.fn() },
       response: { use: vi.fn() },
     },
+  },
+  agentsApi: {
+    listAll: (...args: unknown[]) => mockAgentsListAll(...args),
   },
   extractApiError: () => "request failed",
 }));
@@ -154,11 +158,11 @@ describe("CompanyDetail", () => {
       if (url === `/companies/${COMPANY_ID}/gstn-uploads`) return Promise.resolve({ data: uploadsResponse });
       if (url === `/companies/${COMPANY_ID}/roles`) return Promise.resolve({ data: rolesResponse });
       if (url === `/companies/${COMPANY_ID}/credentials`) return Promise.resolve({ data: credentialsResponse });
-      if (url === "/agents") return Promise.resolve({ data: agentsResponse });
       if (url === "/workflows") return Promise.resolve({ data: workflowsResponse });
       if (url === "/audit") return Promise.resolve({ data: auditResponse });
       throw new Error(`Unexpected GET ${url} ${JSON.stringify(config?.params || {})}`);
     });
+    mockAgentsListAll.mockResolvedValue(agentsResponse.items);
   });
 
   it("renders the audit log tab and shows real audit events", async () => {
@@ -192,9 +196,8 @@ describe("CompanyDetail", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(mockGet).toHaveBeenCalledWith(
-        "/agents",
-        expect.objectContaining({ params: expect.objectContaining({ company_id: COMPANY_ID }) }),
+      expect(mockAgentsListAll).toHaveBeenCalledWith(
+        expect.objectContaining({ domain: "finance", company_id: COMPANY_ID }),
       );
     });
 

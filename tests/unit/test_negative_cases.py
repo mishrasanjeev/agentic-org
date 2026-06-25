@@ -80,7 +80,7 @@ class TestAuthLogin:
             assert exc.value.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_login_rate_limit(self):
+    async def test_login_rate_limit(self, monkeypatch):
         from api.v1 import auth as auth_mod
         from api.v1.auth import LoginRequest, login
 
@@ -88,6 +88,7 @@ class TestAuthLogin:
         request = MagicMock()
         request.client.host = ip
         response = MagicMock()
+        monkeypatch.setattr(auth_mod, "_get_throttle_redis", AsyncMock(return_value=None))
 
         # Fill rate limit bucket
         auth_mod._login_attempts[ip] = [time.time()] * 5

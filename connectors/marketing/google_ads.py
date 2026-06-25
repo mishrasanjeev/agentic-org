@@ -179,7 +179,7 @@ class GoogleAdsConnector(BaseConnector):
         client_secret = self._get_secret("client_secret")
         refresh_token = self._get_secret("refresh_token")
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
             resp = await client.post(
                 "https://oauth2.googleapis.com/token",
                 data={

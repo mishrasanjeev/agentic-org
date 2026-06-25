@@ -28,6 +28,7 @@ def app():
     import asyncio
 
     from sqlalchemy import text as _sql_text
+    from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
 
@@ -72,7 +73,15 @@ def app():
                 },
             )
 
-    asyncio.run(_setup())
+    try:
+        asyncio.run(_setup())
+    except (OSError, SQLAlchemyError) as exc:
+        try:
+            asyncio.run(test_engine.dispose())
+        finally:
+            _db.engine = original_engine
+            _db.async_session_factory = original_factory
+        pytest.skip(f"CXO e2e tests require a reachable database: {exc}")
     asyncio.run(test_engine.dispose())
 
     @asynccontextmanager

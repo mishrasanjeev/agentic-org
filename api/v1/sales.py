@@ -458,7 +458,7 @@ async def _run_sales_agent_on_lead(
             import httpx
 
             from core.config import external_keys
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
                     "https://slack.com/api/chat.postMessage",
                     headers={"Authorization": f"Bearer {external_keys.slack_bot_token}"},

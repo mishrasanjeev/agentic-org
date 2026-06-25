@@ -185,7 +185,7 @@ class GstnConnector(BaseConnector):
                 "gspappsecret/client_secret credentials."
             )
 
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=self.timeout_ms / 1000) as client:
             resp = await client.post(
                 f"{self._provider_base_url}/authenticate?grant_type=token",
                 json={},

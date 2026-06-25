@@ -16,7 +16,7 @@ class OPAClient:
     async def evaluate(self, policy_path: str, input_data: dict[str, Any]) -> bool:
         """Evaluate a policy and return allow/deny."""
         try:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=5.0) as client:
                 resp = await client.post(
                     f"{self.opa_url}/v1/data/{policy_path}",
                     json={"input": input_data},

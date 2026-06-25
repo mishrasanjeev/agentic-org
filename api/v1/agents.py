@@ -1062,8 +1062,8 @@ async def _assert_connectors_ready_for_dispatch(
     try:
         await _assert_connectors_ready_for_activation(session, tenant_id, connector_ids)
     except HTTPException as exc:
-        detail = exc.detail if isinstance(exc.detail, dict) else {}
-        connectors = detail.get("connectors") if isinstance(detail, dict) else None
+        detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
+        connectors = detail.get("connectors")
         raise HTTPException(
             status_code=409,
             detail={

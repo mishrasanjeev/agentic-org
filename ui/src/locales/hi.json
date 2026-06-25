@@ -251,6 +251,8 @@
     "action": "Action",
     "noWrites": "No write capability",
     "missingScopes": "Missing",
+    "missingReadScopes": "Missing read scopes",
+    "missingWriteScopes": "Missing write scopes",
     "mockProof": "Mock/test proof production proof नहीं है।",
     "idempotencyReady": "Idempotency ready",
     "idempotencyMissing": "No idempotency proof",
