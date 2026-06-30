@@ -573,12 +573,29 @@ async def get_shopify_connector_status(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     tid = _tenant_uuid(tenant_id)
+    latest_evidence: C6ZConnectorEvidenceRow | None = None
     async with get_tenant_session(tid) as session:
         row = await _load_shopify_connector_config_row(session, tid, merchant_id)
+        if row is not None:
+            latest_evidence = (
+                await session.execute(
+                    select(C6ZConnectorEvidenceRow)
+                    .where(
+                        C6ZConnectorEvidenceRow.tenant_id == tenant_id,
+                        C6ZConnectorEvidenceRow.merchant_id == merchant_id,
+                    )
+                    .order_by(C6ZConnectorEvidenceRow.synced_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+    webhook_resolution = resolve_env(SHOPIFY_WEBHOOK_ENV_VARS)
     if row is None:
         return {
             "status": "not_configured",
             "merchant_id": merchant_id,
+            "connected": False,
+            "webhook_status": "configured" if webhook_resolution.ready else "blocked_missing_webhook_secret",
+            "webhook_missing_env_vars": list(webhook_resolution.missing),
             "credential_values_redacted": True,
             "allowed_to_execute": False,
             "non_authoritative_for_transaction": True,
@@ -587,11 +604,23 @@ async def get_shopify_connector_status(
     return {
         "status": row.status,
         "health_status": row.health_status or "unknown",
+        "connected": row.status == "configured",
         "merchant_id": merchant_id,
         "connector_name": row.connector_name,
         "shop_domain": config.get("shop_domain"),
         "api_version": config.get("api_version"),
         "connector_mode": config.get("connector_mode", "read_only"),
+        "granted_scopes": config.get("granted_scopes") or [],
+        "last_sync_at": None
+        if latest_evidence is None
+        else latest_evidence.synced_at.isoformat().replace("+00:00", "Z"),
+        "last_sync_evidence_id": None if latest_evidence is None else latest_evidence.evidence_id,
+        "last_sync_product_count": None if latest_evidence is None else latest_evidence.product_count,
+        "last_sync_variant_count": None if latest_evidence is None else latest_evidence.variant_count,
+        "last_error": row.sync_error,
+        "webhook_status": "configured" if webhook_resolution.ready else "blocked_missing_webhook_secret",
+        "webhook_missing_env_vars": list(webhook_resolution.missing),
+        "redacted_credential_ref": row.connector_name,
         "credential_values_redacted": True,
         "raw_payload_stored": False,
         "allowed_to_execute": False,

@@ -87,6 +87,22 @@ const api = http.createServer((req, res) => {
         non_authoritative_for_transaction: true,
       });
     }
+    if (
+      req.method === "GET" &&
+      req.url?.startsWith(
+        "/api/v1/commerce/runtime/protocol-adapters/ap2_style_mandate_payment_evidence_profile",
+      )
+    ) {
+      return json({
+        surface: "ap2_style_mandate_payment_evidence_profile",
+        status: "capability_cached",
+        provider_owner: "plural_pine",
+        allowed_to_execute: false,
+        no_payment_execution: true,
+        source_label: "Source: Shopify via Grantex artifact",
+        freshness_label: "Freshness: synced 1m ago",
+      });
+    }
     if (req.method === "POST" && req.url === "/api/v1/commerce/runtime/buyer-sessions/ask") {
       return json({
         status: body.question?.toLowerCase().includes("buy") ? "refused" : "answered",
@@ -135,6 +151,7 @@ try {
     "seller.get_product_facts",
     "seller.get_offer_snapshot",
     "seller.get_inventory_snapshot",
+    "seller.get_mandate_capability",
     "seller.ask_product_question",
   ]) {
     assert.ok(names.has(expected), `missing MCP tool ${expected}`);
@@ -170,14 +187,61 @@ try {
     },
   });
   assert.match(sellerAsk.content[0].text, /Source: Shopify via Grantex artifact/);
+
+  const capability = await client.callTool({
+    name: "seller.get_mandate_capability",
+    arguments: {
+      merchant_id: "merchant_demo",
+      seller_agent_id: "seller_agent_demo",
+      buyer_agent_id: "buyer_agent_demo",
+    },
+  });
+  assert.match(capability.content[0].text, /capability_cached/);
+  assert.match(capability.content[0].text, /no_payment_execution/);
 } finally {
   await client.close();
+}
+
+const commerceOnlyTransport = new StdioClientTransport({
+  command: process.execPath,
+  args: ["dist/index.js"],
+  env: {
+    ...process.env,
+    AGENTICORG_API_KEY: "mcp-test-key",
+    AGENTICORG_BASE_URL: baseUrl,
+    AGENTICORG_MCP_COMMERCE_ONLY: "true",
+  },
+});
+const commerceOnlyClient = new Client({ name: "agenticorg-mcp-commerce-only-smoke", version: "1.0.0" });
+
+try {
+  await commerceOnlyClient.connect(commerceOnlyTransport);
+  const restrictedTools = await commerceOnlyClient.listTools();
+  const restrictedNames = restrictedTools.tools.map((tool) => tool.name).sort();
+  assert.deepEqual(restrictedNames, [
+    "seller.ask_product_question",
+    "seller.get_inventory_snapshot",
+    "seller.get_mandate_capability",
+    "seller.get_offer_snapshot",
+    "seller.get_product_facts",
+    "seller.list_products",
+    "seller.search_products",
+  ]);
+} finally {
+  await commerceOnlyClient.close();
   await new Promise((resolve) => api.close(resolve));
 }
 
 assert.ok(calls.some((call) => call.path === "/api/v1/a2a/tasks"));
 assert.ok(calls.some((call) => call.path === "/api/v1/mcp/tools"));
 assert.ok(calls.some((call) => call.path === "/api/v1/commerce/runtime/products"));
+assert.ok(
+  calls.some(
+    (call) =>
+      call.path ===
+      "/api/v1/commerce/runtime/protocol-adapters/ap2_style_mandate_payment_evidence_profile",
+  ),
+);
 assert.ok(calls.some((call) => call.path === "/api/v1/commerce/runtime/buyer-sessions/ask"));
 assert.equal(new Set(calls.map((call) => call.authorization)).size, 1);
 assert.equal(calls[0].authorization, "Bearer mcp-test-key");

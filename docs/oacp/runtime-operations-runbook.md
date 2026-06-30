@@ -1,6 +1,6 @@
 # Runtime Operations Runbook
 
-Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
+Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closure source of truth: [OACP Runtime Launch Closure PRD](runtime-launch-closure-prd.md).
 
 ## Smoke Test
 
@@ -19,6 +19,36 @@ flowchart TD
   pos --> confirm[Run POS simulator or verified callback]
   confirm --> reconcile[Check buyer-safe reconciliation]
 ```
+
+## Redacted Evidence Run
+
+Local non-live closure evidence:
+
+```bash
+OACP_LAUNCH_WRITE_EVIDENCE=true python scripts/oacp_runtime_launch_check.py
+```
+
+Outputs:
+
+- `docs/reports/oacp-runtime-launch-evidence.local.json`
+- `docs/reports/oacp-runtime-launch-evidence.local.md`
+
+Set `OACP_LAUNCH_EXTERNAL_CHECKS=true` only when Shopify, Grantex, and Plural/Pine credentials are configured for sandbox/live smoke. Missing credentials must be recorded as exact blockers, not converted into success.
+
+## Production/Sandbox Smoke After Deploy Approval
+
+1. Health and auth login.
+2. Merchant config saved and read back without secret values.
+3. Shopify connector status and read-only sync.
+4. Shopify webhook signed test marks source stale/refresh-required.
+5. Grantex authority request returns 11 artifacts or an exact refusal.
+6. Artifact cache count and buyer answer with source/freshness labels.
+7. Public catalog page, product page, catalog JSON, Schema.org JSON-LD, sitemap, and llms.txt when merchant publishing is enabled.
+8. Protocol adapter endpoints and MCP seller fact read.
+9. A2A agent card and OpenAPI bridge schema.
+10. WhatsApp and Telegram signed webhook smokes when credentials are present.
+11. Pine/Plural capability verifier and purchase prepare handoff/blocker.
+12. Offline POS fake packet 404, unsigned callback rejected/downgraded, signed safe-mode callback accepted.
 
 ## Monitor
 

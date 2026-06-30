@@ -17,10 +17,11 @@
 
 ---
 
-## Latest Mainline Status (2026-06-25)
+## Latest Mainline Status (2026-06-30)
 
 - **Merchant self-service commerce config**: `/dashboard/commerce-runtime` now lets tenant admins and merchant operators configure and edit merchant/store scoped source connectors, buyer channels, payment providers, public publishing, and Offline POS metadata. Runtime records are scoped by tenant, merchant, and seller agent; secret values stay in approved custody systems and config rows store only refs/redacted metadata.
 - **OACP Shopify runtime vertical**: Seller Commerce Agent onboarding, encrypted merchant-scoped Shopify credential setup, read-only Shopify Admin GraphQL product/variant/price/inventory sync, Shopify webhook HMAC verification, Grantex C6Z authority request, 11-family OACP artifact cache intake, buyer Q&A from cache, protocol adapter payload generation, and bridge readiness endpoints are implemented.
+- **OACP runtime launch closure**: `docs/oacp/runtime-launch-closure-prd.md` is the canonical launch checklist. `OACP_LAUNCH_WRITE_EVIDENCE=true python scripts/oacp_runtime_launch_check.py` emits redacted JSON/Markdown evidence with IDs, counts, statuses, public-catalog URLs, and exact external credential blockers.
 - **Buyer and channel bridges**: Web/API answers, MCP seller tools, OpenAPI/A2A metadata, and WhatsApp/Telegram webhook routes share the same artifact-backed answer path and source/freshness labels. WhatsApp and Telegram require configured webhook secrets before accepting inbound messages.
 - **Mandate/payment/POS boundary**: AgenticOrg verifies Pine Labs Plural/P3P mandate capability metadata, prepares non-executing purchase/mandate handoffs, and builds Offline POS Bridge packets with confirmation reconciliation. POS payment/receipt confirmations require server-side signed callback verification when `OFFLINE_POS_WEBHOOK_SECRET` is configured. It does not fake paid states, create orders, create checkout sessions, reserve stock, or execute provider/POS rails.
 - **Security hardening**: production dependencies were trimmed, JWT runtime moved to `PyJWT[crypto]`, `python-jose`/`ecdsa` are blocked by regression gates, Docker runtime no longer needs `curl`, and security CI fails closed on high-risk findings.
@@ -60,7 +61,7 @@ flowchart LR
 | Offline POS Bridge | Implemented for non-sensitive handoff packets, simulator confirmation, signed POS callback verification, confirmation intake, and reconciliation status. |
 | Payment/order execution | Not performed by OACP artifacts. Current runtime prepares a handoff or returns a safe blocker; success must come from merchant/provider systems. |
 
-Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/merchant-commerce-configuration.md`, `docs/oacp/end-user-flow.md`, `docs/oacp/truth-inventory.md`, and `docs/oacp/offline-pos-bridge.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.
+Read the canonical docs in `docs/oacp/README.md`, starting with `docs/oacp/runtime-launch-closure-prd.md`, `docs/oacp/merchant-commerce-configuration.md`, `docs/oacp/end-user-flow.md`, `docs/oacp/truth-inventory.md`, and `docs/oacp/offline-pos-bridge.md`. Older Commerce Sales Agent docs and reports remain historical/contextual where they describe earlier Grantex Commerce V1 tool paths.
 
 ## What Is AgenticOrg?
 

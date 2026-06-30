@@ -75,6 +75,10 @@
       "description": "Return cached inventory snapshot labels; inventory is a snapshot, not a reservation."
     },
     {
+      "name": "seller.get_mandate_capability",
+      "description": "Read cached mandate/payment capability posture from OACP adapter metadata without creating mandates, checkout sessions, orders, or payments."
+    },
+    {
       "name": "seller.ask_product_question",
       "description": "Ask buyer-safe product questions from cached artifacts; final commitments are refused."
     }
@@ -88,6 +92,11 @@
     {
       "name": "AGENTICORG_BASE_URL",
       "description": "Custom API base URL (default: https://app.agenticorg.ai).",
+      "required": false
+    },
+    {
+      "name": "AGENTICORG_MCP_COMMERCE_ONLY",
+      "description": "Set true for buyer-commerce clients so only seller commerce read-only tools are exposed.",
       "required": false
     }
   ]

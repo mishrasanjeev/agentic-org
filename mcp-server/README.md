@@ -30,6 +30,9 @@ Use this MCP server when the client should discover and call AgenticOrg
 through MCP tools. Use the direct CLI when the client can run shell
 commands.
 
+For buyer-commerce clients, set `AGENTICORG_MCP_COMMERCE_ONLY=true`. That mode
+exposes only read-only seller commerce tools backed by cached OACP artifacts.
+
 ## Configure in ChatGPT / Claude Desktop / Cursor
 
 Add to your MCP client configuration:
@@ -42,6 +45,23 @@ Add to your MCP client configuration:
       "args": ["agenticorg-mcp-server"],
       "env": {
         "AGENTICORG_API_KEY": "your-api-key"
+      }
+    }
+  }
+}
+```
+
+For ChatGPT/Claude-style buyer commerce clients, use the restricted tool mode:
+
+```json
+{
+  "mcpServers": {
+    "agenticorg-commerce": {
+      "command": "npx",
+      "args": ["agenticorg-mcp-server"],
+      "env": {
+        "AGENTICORG_API_KEY": "your-api-key",
+        "AGENTICORG_MCP_COMMERCE_ONLY": "true"
       }
     }
   }
@@ -74,17 +94,18 @@ Add to your MCP client configuration:
 | `seller.get_product_facts` | Answer product fact questions from cached OACP artifacts |
 | `seller.get_offer_snapshot` | Return cached price/offer snapshot labels without creating checkout sessions |
 | `seller.get_inventory_snapshot` | Return cached inventory snapshot labels without reservations |
+| `seller.get_mandate_capability` | Read cached mandate/payment capability posture without creating mandates, checkout sessions, orders, or payments |
 | `seller.ask_product_question` | Ask buyer-safe product questions from cached artifacts |
 
 Connector tools are not exposed as direct MCP tools. The `seller.*` tools read AgenticOrg cached OACP artifact evidence only and do not create checkout, payment, order, hold, refund, return, shipping, mandate, or live-provider actions. Use `run_agent` for agent workflows, or run `list_mcp_tools` to see platform agent tools such as `agenticorg_commerce_sales_agent`.
 
-Current production C6Z note, June 18, 2026: the MCP seller tools are implemented
-and the local MCP build/smoke passes, but production seller facts for the
-approved Shopify pilot are blocked until AgenticOrg's Shopify token returns
-read-only GraphQL data and the AgenticOrg-to-Grantex internal token is mapped in
-Grantex. Do not treat MCP tool presence as public discovery, checkout/payment
-approval, mandate execution, certification, conformance, or production launch
-readiness.
+Current runtime note, June 30, 2026: the MCP seller tools and the
+`AGENTICORG_MCP_COMMERCE_ONLY=true` restricted buyer mode build and pass the
+local MCP smoke. Live merchant facts still require valid AgenticOrg credentials,
+fresh cached OACP artifacts, merchant publishing/channel approval where
+applicable, and provider-owned capability evidence for handoff preparation. Do
+not treat MCP tool presence as checkout/payment approval, mandate execution,
+certification, conformance, or production launch readiness.
 
 ## Authentication
 
@@ -96,6 +117,8 @@ Set one of these environment variables:
 Optional:
 
 - `AGENTICORG_BASE_URL`: custom API base URL (default: `https://app.agenticorg.ai`)
+- `AGENTICORG_MCP_COMMERCE_ONLY`: set `true` for buyer-channel deployments that
+  should expose only seller commerce read tools.
 
 ## Example: Run a Commerce Agent from ChatGPT
 

@@ -32,6 +32,12 @@ from core.commerce.c6z_runtime_vertical import (  # noqa: E402
     send_grantex_authority_request,
     verify_plural_pine_mandate_capability,
 )  # noqa: E402
+from core.commerce.oacp_public_publishing import (  # noqa: E402
+    build_public_catalog_html,
+    build_public_catalog_snapshot,
+    build_public_llms_txt,
+    build_public_sitemap_xml,
+)
 from core.commerce.offline_pos_bridge import (  # noqa: E402
     build_offline_pos_handoff_packet,
     reconcile_offline_pos_confirmation,
@@ -44,6 +50,8 @@ MERCHANT_ID = os.getenv("OACP_LAUNCH_MERCHANT_ID", "merchant_oacp_launch_evidenc
 SELLER_AGENT_ID = os.getenv("OACP_LAUNCH_SELLER_AGENT_ID", "seller_agent_oacp_launch")
 BUYER_AGENT_ID = os.getenv("OACP_LAUNCH_BUYER_AGENT_ID", "buyer_agent_oacp_launch")
 EXTERNAL_CHECKS_ENABLED = os.getenv("OACP_LAUNCH_EXTERNAL_CHECKS", "").strip().lower() == "true"
+WRITE_EVIDENCE = os.getenv("OACP_LAUNCH_WRITE_EVIDENCE", "").strip().lower() == "true"
+EVIDENCE_DIR = Path(os.getenv("OACP_LAUNCH_EVIDENCE_DIR", str(REPO_ROOT / "docs" / "reports")))
 
 
 def _iso_now() -> str:
@@ -146,6 +154,123 @@ def _secret_value_present(value: Any) -> bool:
     return any(marker in lowered for marker in ("shpat_", "bearer ", "-----begin", "client_secret=", "password="))
 
 
+def _public_catalog_evidence(
+    *,
+    packet: dict[str, Any],
+    evidence: dict[str, Any],
+) -> dict[str, Any]:
+    base_url = os.getenv("OACP_PUBLIC_BASE_URL", "https://agenticorg.ai")
+    snapshot = build_public_catalog_snapshot(
+        tenant_id=TENANT_ID,
+        merchant_id=MERCHANT_ID,
+        seller_agent_id=SELLER_AGENT_ID,
+        merchant_display_name=str(packet["merchant_display_name"]),
+        public_brand_profile=packet.get("public_brand_profile") or {},
+        commerce_categories=packet.get("commerce_categories") or [],
+        connector_metadata_redacted=packet.get("connector_metadata_redacted") or {},
+        evidence_records=[{**evidence, "base_url": base_url}],
+        base_url=base_url,
+        public_enabled=True,
+    )
+    html = build_public_catalog_html(snapshot)
+    sitemap = build_public_sitemap_xml(snapshot)
+    llms = build_public_llms_txt(snapshot)
+    links = snapshot.get("links") or {}
+    products = list(snapshot.get("products") or [])
+    schema_graph = list((snapshot.get("schema_org_jsonld") or {}).get("@graph") or [])
+    return {
+        "status": snapshot.get("status"),
+        "operator_enabled_for_smoke": True,
+        "seller_profile_url": links.get("seller_profile"),
+        "catalog_json_url": links.get("catalog_json"),
+        "schema_org_jsonld_url": links.get("schema_org_jsonld"),
+        "sitemap_xml_url": links.get("sitemap_xml"),
+        "llms_txt_url": links.get("llms_txt"),
+        "sample_product_url": products[0].get("public_url") if products else None,
+        "product_count": len(products),
+        "schema_org_product_nodes": sum(1 for item in schema_graph if item.get("@type") == "Product"),
+        "schema_org_offer_nodes": sum(len(item.get("offers") or []) for item in schema_graph),
+        "html_bytes": len(html.encode("utf-8")),
+        "sitemap_bytes": len(sitemap.encode("utf-8")),
+        "llms_txt_bytes": len(llms.encode("utf-8")),
+        "source_label": snapshot.get("source_label"),
+        "freshness_label": snapshot.get("freshness_label"),
+        "raw_payload_stored": False,
+        "allowed_to_execute": False,
+        "no_payment_execution": True,
+        "external_publication_claimed": False,
+    }
+
+
+def _render_markdown(summary: dict[str, Any]) -> str:
+    public_catalog = summary.get("public_catalog_generation") or {}
+    shopify = summary.get("shopify_external_check") or {}
+    grantex = summary.get("grantex_external_check") or {}
+    blocker_lines = [
+        f"- Shopify external check: `{shopify.get('status')}`"
+        + (f" missing `{', '.join(shopify.get('missing_env_vars') or [])}`" if shopify.get("missing_env_vars") else ""),
+        f"- Grantex external check: `{grantex.get('status')}`"
+        + (f" missing `{', '.join(grantex.get('missing_env_vars') or [])}`" if grantex.get("missing_env_vars") else ""),
+        f"- Plural/Pine capability: `{summary.get('plural_pine_capability_status')}`",
+        f"- Purchase prepare: `{summary.get('purchase_prepare_status')}`",
+    ]
+    return "\n".join(
+        [
+            "# OACP Runtime Launch Evidence",
+            "",
+            f"- Generated at: `{summary['generated_at']}`",
+            f"- External checks enabled: `{summary['external_checks_enabled']}`",
+            f"- Tenant: `{summary['tenant_id']}`",
+            f"- Merchant: `{summary['merchant_id']}`",
+            f"- Seller agent: `{summary['seller_agent_id']}`",
+            f"- Buyer agent: `{BUYER_AGENT_ID}`",
+            f"- Packet id: `{summary['packet_id']}`",
+            f"- Evidence id: `{summary['evidence_id']}`",
+            "",
+            "## Runtime Proof",
+            "",
+            f"- Shopify product/variant counts: `{summary['shopify_product_count']}` / `{summary['shopify_variant_count']}`",
+            f"- Artifact families: `{summary['local_artifact_family_count']}`",
+            f"- Cache records: `{summary['cache_records_count']}`",
+            f"- Buyer answer status: `{summary['buyer_answer_status']}`",
+            f"- Adapter status: `{summary['protocol_adapter_status']}`",
+            f"- Bridge artifact refs: `{summary['bridge_artifact_ref_count']}`",
+            "",
+            "## Public Catalog Smoke",
+            "",
+            f"- Status: `{public_catalog.get('status')}`",
+            f"- Seller profile: `{public_catalog.get('seller_profile_url')}`",
+            f"- Catalog JSON: `{public_catalog.get('catalog_json_url')}`",
+            f"- Schema.org JSON-LD: `{public_catalog.get('schema_org_jsonld_url')}`",
+            f"- Sitemap: `{public_catalog.get('sitemap_xml_url')}`",
+            f"- llms.txt: `{public_catalog.get('llms_txt_url')}`",
+            f"- Sample product page: `{public_catalog.get('sample_product_url')}`",
+            f"- Schema.org Product nodes: `{public_catalog.get('schema_org_product_nodes')}`",
+            "",
+            "## External Checks And Blockers",
+            "",
+            *blocker_lines,
+            "",
+            "## Safety",
+            "",
+            f"- Raw payload stored: `{summary['raw_payload_stored']}`",
+            f"- Payment execution: `{not summary['no_payment_execution']}`",
+            f"- Allowed to execute: `{summary['allowed_to_execute']}`",
+            f"- Transaction authority: `{not summary['non_authoritative_for_transaction']}`",
+            "",
+        ]
+    )
+
+
+def _write_evidence(summary: dict[str, Any]) -> dict[str, str]:
+    EVIDENCE_DIR.mkdir(parents=True, exist_ok=True)
+    json_path = EVIDENCE_DIR / "oacp-runtime-launch-evidence.local.json"
+    md_path = EVIDENCE_DIR / "oacp-runtime-launch-evidence.local.md"
+    json_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    md_path.write_text(_render_markdown(summary), encoding="utf-8")
+    return {"json": str(json_path), "markdown": str(md_path)}
+
+
 async def _maybe_shopify_check() -> dict[str, Any]:
     resolution = resolve_env(SHOPIFY_ENV_VARS)
     if not resolution.ready:
@@ -202,6 +327,7 @@ async def main() -> None:
         source_observed_at=now_iso,
         currency="INR",
     )
+    public_catalog = _public_catalog_evidence(packet=packet, evidence=evidence)
     authority_payload = build_grantex_authority_request_payload(
         onboarding_packet=packet,
         connector_evidence=evidence,
@@ -327,6 +453,7 @@ async def main() -> None:
         "bridge_artifact_ref_count": len(bridge.artifact_refs),
         "protocol_adapter_status": adapter_payloads["status"],
         "protocol_adapter_surfaces": adapter_payloads["surface_names"],
+        "public_catalog_generation": public_catalog,
         "plural_pine_capability_status": capability.result_status,
         "plural_pine_redacted_evidence_ref": capability.redacted_evidence_ref,
         "plural_pine_local_fixture_used_for_pos_demo": local_capability_fixture_used,
@@ -345,6 +472,7 @@ async def main() -> None:
         "shopify_external_check": await _maybe_shopify_check(),
         "grantex_external_check": await _maybe_grantex_check(authority_payload),
         "public_discovery_flag": False,
+        "public_catalog_smoke_operator_enabled": True,
         "allowed_to_execute": False,
         "raw_payload_stored": False,
         "no_payment_execution": True,
@@ -352,6 +480,10 @@ async def main() -> None:
     }
     if _secret_value_present(summary):
         raise SystemExit("Unsafe launch summary contained a secret-like value")
+    if WRITE_EVIDENCE:
+        summary["evidence_files"] = _write_evidence(summary)
+        if _secret_value_present(summary):
+            raise SystemExit("Unsafe launch summary contained a secret-like value after writing evidence paths")
     print(json.dumps(summary, indent=2, sort_keys=True))
 
 
