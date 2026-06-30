@@ -65,6 +65,14 @@ def test_requirements_v4_stays_installable_without_unsafe_optional_sdks() -> Non
     for package in ("composio-core", "routellm", "litellm", "torch", "flagembedding"):
         assert f"\n{package}" not in content
     assert 'presidio-analyzer==2.2.359; python_version >= "3.14"' in content
+    assert "presidio-anonymizer==2.2.362" in content
+    assert "presidio-anonymizer==2.2.363" not in content
+
+
+def test_presidio_anonymizer_excludes_cryptography_upper_bound_release() -> None:
+    extras = _pyproject()["project"]["optional-dependencies"]
+    assert "presidio-anonymizer>=2.2.362,<2.2.363" in extras["v4"]
+    assert "presidio-anonymizer>=2.2.0,<2.2.363" in extras["dev"]
 
 
 def test_security_workflows_do_not_continue_on_error() -> None:
