@@ -264,15 +264,40 @@ export default function CommerceRuntimeDemo() {
     const bridgeTotal = bridgeMatrix?.surfaces?.length || 0;
     const sourceState = configReadiness?.source_connectors?.[0]?.status || merchantConfig?.status || "not saved";
     const publicState = configReadiness?.public_publishing?.status || "not saved";
+    const authorityState = adapterPayloads?.status === "adapter_payloads_ready"
+      ? "issued and usable"
+      : evidenceId
+        ? "evidence ready"
+        : "not requested";
+    const cacheState = adapterPayloads?.status === "adapter_payloads_ready"
+      ? "cache usable"
+      : evidenceId
+        ? "not cached"
+        : "empty";
+    const shopifySyncState = evidenceId
+      ? "sync evidence ready"
+      : shopifyStatus?.last_sync_at
+        ? "synced"
+        : "not synced";
+    const bridgeState = bridgeTotal ? `${bridgeReady}/${bridgeTotal} ready` : "not checked";
+    const paymentState = configReadiness?.payment_providers?.[0]?.status
+      || capabilityStatus?.evidence?.result_status
+      || "not verified";
+    const posState = configReadiness?.offline_pos_stores?.[0]?.status
+      || posReadiness?.simulator?.status
+      || "not checked";
     return [
-      { label: "Config", value: sourceState, tone: statusTone(sourceState) },
-      { label: "Onboarding", value: packetId ? "packet ready" : "not created", tone: packetId ? "ok" : "warn" },
-      { label: "Shopify", value: shopifyStatus?.status || "not checked", tone: statusTone(shopifyStatus?.status) },
-      { label: "Publishing", value: publicState, tone: publicState === "enabled" ? "ok" : "warn" },
-      { label: "Buyer channels", value: bridgeTotal ? `${bridgeReady}/${bridgeTotal} ready` : "not checked", tone: bridgeReady === bridgeTotal && bridgeTotal > 0 ? "ok" : "warn" },
-      { label: "Payment", value: configReadiness?.payment_providers?.[0]?.status || capabilityStatus?.evidence?.result_status || "not verified", tone: statusTone(configReadiness?.payment_providers?.[0]?.status || capabilityStatus?.evidence?.result_status) },
-      { label: "Offline POS", value: configReadiness?.offline_pos_stores?.[0]?.status || posReadiness?.simulator?.status || "not checked", tone: statusTone(configReadiness?.offline_pos_stores?.[0]?.status || posReadiness?.simulator?.status) },
-      { label: "Grantex", value: adapterPayloads?.status || (evidenceId ? "evidence ready" : "not issued"), tone: adapterPayloads?.status === "adapter_payloads_ready" ? "ok" : "warn" },
+      { label: "Merchant Config", value: sourceState, tone: statusTone(sourceState) },
+      { label: "Onboarding Packet", value: packetId ? "packet ready" : "not created", tone: packetId ? "ok" : "warn" },
+      { label: "Shopify Connection", value: shopifyStatus?.status || "not checked", tone: statusTone(shopifyStatus?.status) },
+      { label: "Shopify Webhook", value: shopifyStatus?.webhook_status || "not checked", tone: statusTone(shopifyStatus?.webhook_status) },
+      { label: "Shopify Sync", value: shopifySyncState, tone: evidenceId || shopifyStatus?.last_sync_at ? "ok" : "warn" },
+      { label: "Grantex Authority", value: authorityState, tone: adapterPayloads?.status === "adapter_payloads_ready" ? "ok" : "warn" },
+      { label: "Artifact Cache", value: cacheState, tone: adapterPayloads?.status === "adapter_payloads_ready" ? "ok" : "warn" },
+      { label: "Public Catalog", value: publicState, tone: publicState === "enabled" ? "ok" : "warn" },
+      { label: "Bridge Readiness", value: bridgeState, tone: bridgeReady === bridgeTotal && bridgeTotal > 0 ? "ok" : "warn" },
+      { label: "Pine/Plural", value: paymentState, tone: statusTone(paymentState) },
+      { label: "POS Bridge", value: posState, tone: statusTone(posState) },
     ];
   }, [
     adapterPayloads,
@@ -879,6 +904,13 @@ export default function CommerceRuntimeDemo() {
               <div className="mt-3 rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-300">
                 <div>{shopifyStatus.status}</div>
                 <div>{shopifyStatus.shop_domain}</div>
+                <div>Webhook: {shopifyStatus.webhook_status || "not checked"}</div>
+                {shopifyStatus.last_sync_at && <div>Last sync: {shopifyStatus.last_sync_at}</div>}
+                {shopifyStatus.last_error && <div className="text-amber-300">Last error: {shopifyStatus.last_error}</div>}
+                {shopifyStatus.redacted_credential_ref && <div>Credential ref: {shopifyStatus.redacted_credential_ref}</div>}
+                {Array.isArray(shopifyStatus.granted_scopes) && shopifyStatus.granted_scopes.length > 0 && (
+                  <div>Scopes: {shopifyStatus.granted_scopes.join(", ")}</div>
+                )}
                 <div>{shopifyStatus.credential_values_redacted ? "credentials redacted" : ""}</div>
               </div>
             )}

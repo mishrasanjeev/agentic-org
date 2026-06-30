@@ -1,6 +1,6 @@
 # OACP Runtime Truth Inventory
 
-Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md).
+Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closure source of truth: [OACP Runtime Launch Closure PRD](runtime-launch-closure-prd.md).
 
 This inventory is based on `api/v1/commerce_runtime.py`, `core/commerce/c6z_runtime_vertical.py`, `core/commerce/oacp_artifacts.py`, `core/commerce/oacp_merchant_config.py`, the AgenticOrg Commerce Runtime UI, and OACP unit tests.
 

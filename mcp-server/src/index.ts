@@ -36,6 +36,7 @@ import { z } from "zod";
 const BASE_URL = (process.env.AGENTICORG_BASE_URL ?? "https://app.agenticorg.ai").replace(/\/$/, "");
 const API_KEY = process.env.AGENTICORG_API_KEY ?? "";
 const GRANTEX_TOKEN = process.env.AGENTICORG_GRANTEX_TOKEN ?? "";
+const COMMERCE_ONLY = /^(1|true|yes)$/i.test(process.env.AGENTICORG_MCP_COMMERCE_ONLY ?? "");
 
 function authHeaders(): Record<string, string> {
   const token = GRANTEX_TOKEN || API_KEY;
@@ -87,6 +88,7 @@ const server = new McpServer({
 
 // Tool: list_agents
 
+if (!COMMERCE_ONLY) {
 server.tool(
   "list_agents",
   "List all available AI agents. Optionally filter by domain (finance, hr, marketing, ops).",
@@ -223,6 +225,7 @@ server.tool(
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   },
 );
+}
 
 // Start
 
@@ -316,6 +319,24 @@ server.tool(
       action_intent: "non_binding_preview",
       grantex_available: false,
     });
+    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+  },
+);
+
+server.tool(
+  "seller.get_mandate_capability",
+  "Read cached mandate/payment capability posture from OACP protocol adapter metadata. It does not create mandates, checkout sessions, orders, or payments.",
+  {
+    ...sellerScopeSchema,
+    buyer_agent_id: z.string().optional().describe("Buyer agent scope id"),
+  },
+  async ({ merchant_id, seller_agent_id, buyer_agent_id }) => {
+    const params = new URLSearchParams({ merchant_id });
+    if (seller_agent_id) params.set("seller_agent_id", seller_agent_id);
+    if (buyer_agent_id) params.set("buyer_agent_id", buyer_agent_id);
+    const data = await apiGet(
+      `/api/v1/commerce/runtime/protocol-adapters/ap2_style_mandate_payment_evidence_profile?${params.toString()}`,
+    );
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   },
 );

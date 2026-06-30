@@ -261,7 +261,7 @@ test.describe("C6Z commerce runtime demo", () => {
     await expect(page.getByText("commerce_config_demo")).toBeVisible();
 
     await page.getByRole("button", { name: "Create" }).click();
-    await expect(page.getByText("packet_demo")).toBeVisible();
+    await expect(page.getByText("packet_demo", { exact: true })).toBeVisible();
 
     await page.getByRole("button", { name: "Sync" }).click();
     await expect(page.getByText("1 products, 1 variants")).toBeVisible();
