@@ -234,6 +234,10 @@ check_untyped_defs = true
 allow_redefinition = true
 warn_return_any = false
 disable_error_code = ["union-attr", "attr-defined", "assignment", "arg-type", "return-value", "type-var", "import-untyped", "misc"]
+exclude = [
+    '(^|[\\/])(codex-pytest-basetemp|codex-pytest-cache|codex-pytest-temp|codex-pytest-artifacts)([\\/]|$)',
+    '(^|[\\/])(\.mypy_cache|\.ruff_cache)([\\/]|$)',
+]
 
 [[tool.mypy.overrides]]
 module = ["scripts.*", "tests.*"]
