@@ -20,6 +20,16 @@ from urllib.parse import urlparse
 
 import httpx
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from core.security.artifact_paths import (  # noqa: E402
+    ArtifactPathError,
+    atomic_write_text_artifact,
+    resolve_repo_artifact_path,
+)
+
 EXPECTED_CONSENT_EXCHANGE_BLOCKER = "preexported_checkout_passport_without_granted_consent_fixture"
 
 AUTH_SOURCE_ENV_NAMES = (
@@ -92,6 +102,11 @@ DEFAULT_PUBLIC_ENV_NAMES = (
     "COMMERCE_LIVE_MODE_ENABLED",
     "PLURAL_LIVE_ENABLED",
     "PLURAL_ENV",
+)
+TMP_ROOT = REPO_ROOT / ".tmp"
+REPORT_ROOTS = (
+    TMP_ROOT,
+    REPO_ROOT / "docs" / "reports",
 )
 
 
@@ -215,16 +230,32 @@ def _decode_env_value(raw_value: str) -> str:
 
 
 def _resolve_tmp_fixture_path(path: str) -> Path:
-    repo_root = Path(__file__).resolve().parents[1]
-    candidate = (repo_root / path).resolve()
-    tmp_root = (repo_root / ".tmp").resolve()
     try:
-        candidate.relative_to(tmp_root)
-    except ValueError as exc:
-        raise HostedSmokeConfigError("fixture_env_outside_tmp", "Fixture env files must stay under .tmp/.") from exc
-    if candidate == tmp_root:
-        raise HostedSmokeConfigError("fixture_env_outside_tmp", "Fixture env must be a file under .tmp/.")
-    return candidate
+        return resolve_repo_artifact_path(
+            path,
+            repo_root=REPO_ROOT,
+            allowed_roots=(TMP_ROOT,),
+            field_name="fixture_env",
+            outside_reason="outside_tmp",
+            direct_child=False,
+        )
+    except ArtifactPathError as exc:
+        raise HostedSmokeConfigError(exc.code, exc.message) from exc
+
+
+def _resolve_report_path(path: str | Path, *, field_name: str) -> Path:
+    try:
+        return resolve_repo_artifact_path(
+            path,
+            repo_root=REPO_ROOT,
+            allowed_roots=REPORT_ROOTS,
+            field_name=field_name,
+            outside_reason="outside_report_roots",
+            allowed_suffixes=(".md",),
+            direct_child=True,
+        )
+    except ArtifactPathError as exc:
+        raise HostedSmokeConfigError(exc.code, exc.message) from exc
 
 
 def _summarize_fixture_env(path: str, *, auth_source_env_name: str) -> FixtureSummary:
@@ -266,7 +297,7 @@ def _summarize_fixture_env(path: str, *, auth_source_env_name: str) -> FixtureSu
             hashes.append({"name": name, "sha256_12": sha256(value.encode("utf-8")).hexdigest()[:12]})
 
     synthetic_ids = {name: values[name] for name in sorted(SYNTHETIC_ID_ENV_NAMES) if values.get(name)}
-    relative_path = fixture_path.relative_to(Path(__file__).resolve().parents[1]).as_posix()
+    relative_path = fixture_path.relative_to(REPO_ROOT).as_posix()
     return FixtureSummary(
         env_path=relative_path,
         variable_names=tuple(sorted(values)),
@@ -322,6 +353,17 @@ def validate_config(args: argparse.Namespace, *, environ: dict[str, str] | None 
     smoke_binding_names = tuple(
         _validate_smoke_name(name, field_name="protected binding") for name in args.smoke_binding_name
     )
+    evidence_report = (
+        str(_resolve_report_path(args.evidence_report, field_name="evidence_report"))
+        if args.evidence_report
+        else None
+    )
+    real_staging_evidence_report = (
+        str(_resolve_report_path(args.real_staging_evidence_report, field_name="real_staging_evidence_report"))
+        if args.real_staging_evidence_report
+        else None
+    )
+
     return HostedSmokeConfig(
         agenticorg_base_url=agenticorg_origin,
         grantex_base_url=grantex_origin,
@@ -337,8 +379,8 @@ def validate_config(args: argparse.Namespace, *, environ: dict[str, str] | None 
         commit_sha=args.commit_sha,
         image_tag=args.image_tag,
         cleanup_by=args.cleanup_by,
-        evidence_report=args.evidence_report,
-        real_staging_evidence_report=args.real_staging_evidence_report,
+        evidence_report=evidence_report,
+        real_staging_evidence_report=real_staging_evidence_report,
         fixture=fixture,
     )
 
@@ -543,8 +585,7 @@ def evidence_as_dict(config: HostedSmokeConfig, cases: list[SmokeCase], *, dry_r
 
 
 def write_evidence_report(config: HostedSmokeConfig, cases: list[SmokeCase], *, dry_run: bool, path: str | Path) -> None:
-    report_path = Path(path)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path = _resolve_report_path(path, field_name="evidence_report")
     rows = [
         "| Case | Status | HTTP | Latency ms | Error | Blocker |",
         "| --- | --- | --- | --- | --- | --- |",
@@ -565,38 +606,39 @@ def write_evidence_report(config: HostedSmokeConfig, cases: list[SmokeCase], *, 
             + " |"
         )
     data = evidence_as_dict(config, cases, dry_run=dry_run)
-    report_path.write_text(
-        "\n".join(
-            [
-                "# AgenticOrg C3 Hosted Commerce Smoke Evidence",
-                "",
-                f"- Run mode: `{data['run_mode']}`",
-                f"- AgenticOrg host: `{data['agenticorg_host']}`",
-                f"- Grantex host: `{data['grantex_host']}`",
-                f"- Auth source env name: `{config.auth_source_env_name}`",
-                f"- Fixture source: `{data['fixture']['source'] or ''}`",
-                f"- Fixture binding name: `{config.fixture.fixture_binding_name or ''}`",
-                "- Secret values recorded: false",
-                "- Raw passports/JWTs recorded: false",
-                "- Idempotency values recorded: false",
-                "- Provider material recorded: false",
-                "- Raw request/response bodies recorded: false",
-                "- DB/Redis URLs recorded: false",
-                "",
-                "## Case Results",
-                "",
-                *rows,
-                "",
-                "## Redacted Summary",
-                "",
-                "```json",
-                json.dumps(data, indent=2, sort_keys=True),
-                "```",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    content = "\n".join(
+        [
+            "# AgenticOrg C3 Hosted Commerce Smoke Evidence",
+            "",
+            f"- Run mode: `{data['run_mode']}`",
+            f"- AgenticOrg host: `{data['agenticorg_host']}`",
+            f"- Grantex host: `{data['grantex_host']}`",
+            f"- Auth source env name: `{config.auth_source_env_name}`",
+            f"- Fixture source: `{data['fixture']['source'] or ''}`",
+            f"- Fixture binding name: `{config.fixture.fixture_binding_name or ''}`",
+            "- Secret values recorded: false",
+            "- Raw passports/JWTs recorded: false",
+            "- Idempotency values recorded: false",
+            "- Provider material recorded: false",
+            "- Raw request/response bodies recorded: false",
+            "- DB/Redis URLs recorded: false",
+            "",
+            "## Case Results",
+            "",
+            *rows,
+            "",
+            "## Redacted Summary",
+            "",
+            "```json",
+            json.dumps(data, indent=2, sort_keys=True),
+            "```",
+            "",
+        ]
     )
+    try:
+        atomic_write_text_artifact(report_path, content, encoding="utf-8", repo_root=REPO_ROOT)
+    except ArtifactPathError as exc:
+        raise HostedSmokeConfigError(exc.code, exc.message) from exc
 
 
 def build_parser() -> argparse.ArgumentParser:

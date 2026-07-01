@@ -6,8 +6,9 @@ from typing import Any
 
 import pytest
 
-from core.commerce.staging_evidence import redact_value
+from core.commerce.staging_evidence import StagingEvidence, redact_value
 from core.commerce.staging_runtime import RealStagingConfigError, validate_real_staging_config
+from core.security.artifact_paths import ArtifactPathError
 from demos import commerce_sales_agent_demo
 
 
@@ -287,6 +288,63 @@ def test_real_staging_refuses_fixture_env_outside_tmp() -> None:
     assert excinfo.value.code == "fixture_env_outside_tmp"
 
 
+def test_real_staging_evidence_report_path_is_anchored_to_repo_when_cwd_differs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    config = validate_real_staging_config(
+        grantex_base_url="https://api-staging.grantex.dev",
+        evidence_report="docs/reports/commerce-agent-real-staging-evidence.md",
+        environ=_env(GRANTEX_AGENT_ASSERTION="present-but-not-printed"),
+    )
+
+    expected = (
+        Path(commerce_sales_agent_demo.__file__).resolve().parents[1]
+        / "docs"
+        / "reports"
+        / "commerce-agent-real-staging-evidence.md"
+    ).resolve()
+    assert config.evidence_report == str(expected)
+
+
+@pytest.mark.parametrize(
+    ("value", "code"),
+    [
+        ("../evidence.md", "evidence_report_outside_report_roots"),
+        ("docs/reports/nested/evidence.md", "evidence_report_outside_report_roots"),
+        ("docs/reports/evidence.json", "evidence_report_path_extension_refused"),
+    ],
+)
+def test_real_staging_evidence_report_rejects_escapes_subdirs_and_non_markdown(
+    value: str,
+    code: str,
+) -> None:
+    with pytest.raises(RealStagingConfigError) as excinfo:
+        validate_real_staging_config(
+            grantex_base_url="https://api-staging.grantex.dev",
+            evidence_report=value,
+            environ=_env(GRANTEX_AGENT_ASSERTION="present-but-not-printed"),
+        )
+
+    assert excinfo.value.code == code
+
+
+def test_real_staging_evidence_writer_rechecks_output_path(tmp_path: Path) -> None:
+    evidence = StagingEvidence(
+        run_mode="real_staging",
+        grantex_host="api-staging.grantex.dev",
+        auth_source_env_name="GRANTEX_AGENT_ASSERTION",
+    )
+
+    with pytest.raises(ArtifactPathError) as excinfo:
+        evidence.write_markdown(tmp_path / "outside.md")
+
+    assert excinfo.value.code == "evidence_report_outside_report_roots"
+
+
 def test_real_staging_fixture_preserves_exactly_one_auth_source_rule() -> None:
     smoke_url = "https://grantex-auth-smoke-example-uc.a.run.app"
     fixture = _write_tmp_fixture(
@@ -375,6 +433,7 @@ async def test_real_staging_skips_inventory_when_browse_passport_fixture_missing
 
     assert not any(name == "inventory_check" for name, _params in connector.calls)
     assert "grantex_commerce:inventory_check" not in result["audit_summary"]["tool_sequence"]
+    assert result["audit_summary"]["evidence_report"] == str(report.resolve())
     assert "| inventory_check | skipped |  |  |  |  | requires browse passport fixture |" in report_text
 
 

@@ -182,6 +182,103 @@ def test_fixture_sources_are_not_ambiguous() -> None:
     assert excinfo.value.code == "fixture_source_ambiguous"
 
 
+def test_evidence_report_path_is_anchored_to_repo_when_cwd_differs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+
+    config = _validate("--evidence-report", "docs/reports/commerce-agent-hosted-smoke-evidence.md")
+
+    expected = (
+        Path(runner.__file__).resolve().parents[1]
+        / "docs"
+        / "reports"
+        / "commerce-agent-hosted-smoke-evidence.md"
+    ).resolve()
+    assert config.evidence_report == str(expected)
+
+
+@pytest.mark.parametrize(
+    ("flag", "value", "code"),
+    [
+        ("--evidence-report", "../evidence.md", "evidence_report_outside_report_roots"),
+        ("--evidence-report", "docs/reports/nested/evidence.md", "evidence_report_outside_report_roots"),
+        ("--evidence-report", "docs/reports/evidence.json", "evidence_report_path_extension_refused"),
+        (
+            "--real-staging-evidence-report",
+            "../real-staging.md",
+            "real_staging_evidence_report_outside_report_roots",
+        ),
+    ],
+)
+def test_report_paths_reject_escapes_subdirs_and_non_markdown(flag: str, value: str, code: str) -> None:
+    with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+        _validate(flag, value)
+
+    assert excinfo.value.code == code
+
+
+def test_absolute_report_path_outside_repo_is_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "evidence.md"
+
+    with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+        _validate("--evidence-report", str(outside))
+
+    assert excinfo.value.code == "evidence_report_outside_report_roots"
+
+
+def test_report_allowed_root_must_stay_inside_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    outside_repo = Path(runner.__file__).resolve().parents[2]
+    monkeypatch.setattr(runner, "REPORT_ROOTS", (outside_repo,))
+
+    with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+        _validate("--evidence-report", "docs/reports/commerce-agent-hosted-smoke-evidence.md")
+
+    assert excinfo.value.code == "evidence_report_root_outside_repo"
+
+
+def test_fixture_allowed_root_must_stay_inside_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    outside_repo = Path(runner.__file__).resolve().parents[2]
+    monkeypatch.setattr(runner, "TMP_ROOT", outside_repo)
+
+    with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+        _validate("--fixture-env", ".tmp/commerce-agent-c3-hosted-smoke.env")
+
+    assert excinfo.value.code == "fixture_env_root_outside_repo"
+
+
+def test_write_evidence_report_rechecks_output_path(tmp_path: Path) -> None:
+    config = _validate()
+
+    with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+        runner.write_evidence_report(config, [], dry_run=False, path=tmp_path / "outside.md")
+
+    assert excinfo.value.code == "evidence_report_outside_report_roots"
+
+
+def test_write_evidence_report_rejects_existing_symlink_target(tmp_path: Path) -> None:
+    config = _validate()
+    target = Path(".tmp/commerce-agent-c3-hosted-smoke-symlink.md")
+    outside = tmp_path / "outside.md"
+    outside.write_text("outside", encoding="utf-8")
+    target.parent.mkdir(exist_ok=True)
+    target.unlink(missing_ok=True)
+    try:
+        target.symlink_to(outside)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation unavailable: {exc}")
+
+    try:
+        with pytest.raises(runner.HostedSmokeConfigError) as excinfo:
+            runner.write_evidence_report(config, [], dry_run=False, path=target)
+    finally:
+        target.unlink(missing_ok=True)
+
+    assert excinfo.value.code in {"evidence_report_path_reparse_point", "artifact_target_reparse_point"}
+
+
 def test_hosted_checks_validate_health_mcp_and_a2a_discovery() -> None:
     config = _validate()
 

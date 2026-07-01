@@ -749,8 +749,8 @@ async def run_real_staging_demo(
         )
 
         evidence.no_provider_call_confirmation = _no_provider_calls(tool_sequence)
-        if evidence_report:
-            evidence.write_markdown(evidence_report)
+        if config.evidence_report:
+            evidence.write_markdown(config.evidence_report)
 
         return {
             "title": "AgenticOrg Commerce Sales Agent Real-Staging Demo",
@@ -769,7 +769,7 @@ async def run_real_staging_demo(
                 "fixture_env_path": fixture.env_path,
                 "fixture_env_var_names": fixture.variable_names,
                 "fixture_synthetic_ids": fixture.synthetic_ids,
-                "evidence_report": evidence_report,
+                "evidence_report": config.evidence_report,
             },
         }
     finally:
