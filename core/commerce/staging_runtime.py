@@ -8,8 +8,15 @@ from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlparse
 
+from core.security.artifact_paths import ArtifactPathError, resolve_repo_artifact_path
+
 APPROVED_STAGING_ORIGIN = "https://api-staging.grantex.dev"
 REPO_ROOT = Path(__file__).resolve().parents[2]
+TMP_ROOT = REPO_ROOT / ".tmp"
+REPORT_ROOTS = (
+    TMP_ROOT,
+    REPO_ROOT / "docs" / "reports",
+)
 REFUSED_PRODUCTION_ORIGINS = frozenset(
     {
         "https://api.grantex.dev",
@@ -219,21 +226,32 @@ def _decode_fixture_value(value: str) -> str:
 
 
 def _resolve_fixture_path(path: str) -> Path:
-    candidate = (REPO_ROOT / path).resolve()
-    tmp_root = (REPO_ROOT / ".tmp").resolve()
     try:
-        candidate.relative_to(tmp_root)
-    except ValueError as exc:
-        raise RealStagingConfigError(
-            "fixture_env_outside_tmp",
-            "Commerce real-staging fixture env files must be read from .tmp/ only.",
-        ) from exc
-    if candidate == tmp_root:
-        raise RealStagingConfigError(
-            "fixture_env_outside_tmp",
-            "Commerce real-staging fixture env must be a file under .tmp/.",
+        return resolve_repo_artifact_path(
+            path,
+            repo_root=REPO_ROOT,
+            allowed_roots=(TMP_ROOT,),
+            field_name="fixture_env",
+            outside_reason="outside_tmp",
+            direct_child=False,
         )
-    return candidate
+    except ArtifactPathError as exc:
+        raise RealStagingConfigError(exc.code, exc.message) from exc
+
+
+def _resolve_evidence_report_path(path: str | Path) -> Path:
+    try:
+        return resolve_repo_artifact_path(
+            path,
+            repo_root=REPO_ROOT,
+            allowed_roots=REPORT_ROOTS,
+            field_name="evidence_report",
+            outside_reason="outside_report_roots",
+            allowed_suffixes=(".md",),
+            direct_child=True,
+        )
+    except ArtifactPathError as exc:
+        raise RealStagingConfigError(exc.code, exc.message) from exc
 
 
 def _load_fixture_env(path: str | None) -> CommerceFixtureConfig:
@@ -359,6 +377,6 @@ def validate_real_staging_config(
         auth_env_name=auth_env_name,
         auth_value=_resolve_auth_value(merged_env, auth_env_name),
         auth_config_key=AUTH_CONFIG_KEYS[auth_env_name],
-        evidence_report=evidence_report,
+        evidence_report=str(_resolve_evidence_report_path(evidence_report)) if evidence_report else None,
         fixture=fixture,
     )

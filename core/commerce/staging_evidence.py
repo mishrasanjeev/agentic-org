@@ -7,6 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.security.artifact_paths import atomic_write_text_artifact, resolve_repo_artifact_path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+REPORT_ROOTS = (
+    REPO_ROOT / ".tmp",
+    REPO_ROOT / "docs" / "reports",
+)
 SENSITIVE_KEY_PARTS = (
     "authorization",
     "token",
@@ -37,6 +44,18 @@ def redact_value(value: Any) -> Any:
 def safe_error_code(result: dict[str, Any]) -> str | None:
     code = result.get("error") or result.get("code")
     return str(code) if code else None
+
+
+def _resolve_evidence_report_path(path: str | Path) -> Path:
+    return resolve_repo_artifact_path(
+        path,
+        repo_root=REPO_ROOT,
+        allowed_roots=REPORT_ROOTS,
+        field_name="evidence_report",
+        outside_reason="outside_report_roots",
+        allowed_suffixes=(".md",),
+        direct_child=True,
+    )
 
 
 @dataclass
@@ -106,8 +125,7 @@ class StagingEvidence:
         }
 
     def write_markdown(self, path: str | Path) -> None:
-        report_path = Path(path)
-        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path = _resolve_evidence_report_path(path)
         data = redact_value(self.as_dict())
         rows = [
             "| Case | Status | Tool | HTTP | Latency ms | Error | Blocker |",
@@ -130,35 +148,33 @@ class StagingEvidence:
                 + " |"
             )
 
-        report_path.write_text(
-            "\n".join(
-                [
-                    "# Commerce Sales Agent Real-Staging Evidence",
-                    "",
-                    f"- Run mode: `{self.run_mode}`",
-                    f"- Grantex host: `{self.grantex_host}`",
-                    f"- Auth source env name: `{self.auth_source_env_name}`",
-                    f"- Fixture env path: `{self.fixture_env_path or ''}`",
-                    f"- Fixture env variable names recorded: {len(self.fixture_env_var_names)}",
-                    f"- Fixture synthetic IDs recorded: {bool(self.fixture_synthetic_ids)}",
-                    f"- Fixture sensitive value hashes recorded: {bool(self.fixture_value_hashes)}",
-                    "- Secret values recorded: false",
-                    "- Raw passports/JWTs recorded: false",
-                    "- Request correlation values recorded: false",
-                    "- Provider material recorded: false",
-                    "- Raw request/response bodies recorded: false",
-                    "",
-                    "## Case Results",
-                    "",
-                    *rows,
-                    "",
-                    "## Redacted Summary",
-                    "",
-                    "```json",
-                    json.dumps(data, indent=2, sort_keys=True),
-                    "```",
-                    "",
-                ]
-            ),
-            encoding="utf-8",
+        content = "\n".join(
+            [
+                "# Commerce Sales Agent Real-Staging Evidence",
+                "",
+                f"- Run mode: `{self.run_mode}`",
+                f"- Grantex host: `{self.grantex_host}`",
+                f"- Auth source env name: `{self.auth_source_env_name}`",
+                f"- Fixture env path: `{self.fixture_env_path or ''}`",
+                f"- Fixture env variable names recorded: {len(self.fixture_env_var_names)}",
+                f"- Fixture synthetic IDs recorded: {bool(self.fixture_synthetic_ids)}",
+                f"- Fixture sensitive value hashes recorded: {bool(self.fixture_value_hashes)}",
+                "- Secret values recorded: false",
+                "- Raw passports/JWTs recorded: false",
+                "- Request correlation values recorded: false",
+                "- Provider material recorded: false",
+                "- Raw request/response bodies recorded: false",
+                "",
+                "## Case Results",
+                "",
+                *rows,
+                "",
+                "## Redacted Summary",
+                "",
+                "```json",
+                json.dumps(data, indent=2, sort_keys=True),
+                "```",
+                "",
+            ]
         )
+        atomic_write_text_artifact(report_path, content, encoding="utf-8", repo_root=REPO_ROOT)
