@@ -65,7 +65,7 @@ dependencies = [
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
     "stripe>=15.3.0",
     "google-genai>=1.75.0",
-    "anthropic>=0.115.0",
+    "anthropic>=0.115.1",
     "openai>=2.44.0",
     "google-cloud-storage>=2.18.0",
     "google-cloud-secret-manager>=2.29.0",
