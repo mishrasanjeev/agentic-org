@@ -266,10 +266,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    from core.database import get_async_session
+    from core.database import async_session_factory
 
     async def _run() -> int:
-        async with get_async_session() as session:
+        async with async_session_factory() as session:
             refs = await scan_encrypted_columns(session)
         _print_report(refs)
         if args.check:

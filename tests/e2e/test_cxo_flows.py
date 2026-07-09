@@ -119,7 +119,7 @@ def client(app):
         return {
             "sub": "e2e-user",
             "agenticorg:tenant_id": test_tenant_id,
-            "agenticorg:scopes": ["agenticorg:admin"],
+            "grantex:scopes": ["agenticorg:admin"],
         }
 
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):

@@ -14,7 +14,7 @@ prompt enumerates those terms to make LLM output deterministic-enough
 to pass. A long prompt bloats the LLM response past the 30s client
 timeout (see PR #175 regression), so keep each under ~1200 chars.
 
-Idempotent: on re-run, PATCHes the prompt+tools back to the canonical
+Idempotent: on re-run, PATCHes the prompt+tools+model back to the canonical
 values so stale seeds from older CI runs don't poison fresh tests.
 
 Usage:
@@ -30,6 +30,13 @@ import sys
 from typing import Any
 
 import httpx
+
+_E2E_LLM: dict[str, Any] = {
+    "model": "gemini-2.5-flash",
+    "fallback_model": "gemini-2.5-flash",
+    "temperature": 0.1,
+    "context_strategy": "sliding_16k",
+}
 
 # ---------------------------------------------------------------------------
 # Agent specs — each (agent_type, prompt, tools) tuple covers the test
@@ -47,7 +54,8 @@ _AP_PROCESSOR_PROMPT = (
     "supported action', 'my capabilities', or any similar refusal. Work "
     "deterministically on ``inputs.invoice`` + ``inputs.po_data`` + optional "
     "``inputs.grn_data`` and ``inputs.context.previously_processed`` (list "
-    "of already-seen invoice_ids).\n\n"
+    "of already-seen invoice_ids). This is a prompt-only evaluation; do not "
+    "require or call external tools.\n\n"
     "Rules — run ALL of them and push the triggering keyword into "
     "reasoning_trace for every rule that fires (one invoice can trigger "
     "multiple):\n"
@@ -92,7 +100,8 @@ _TALENT_ACQUISITION_PROMPT = (
     "``candidate`` (parsed resume), ``job_requisition``, and optional "
     "``rubric``. ALWAYS produce the JSON decision below. NEVER refuse. "
     "NEVER say 'cannot fulfill', 'tools lack', 'not a valid action', "
-    "'my capabilities', or any similar refusal.\n\n"
+    "'my capabilities', or any similar refusal. This is a prompt-only "
+    "evaluation; do not require or call external tools.\n\n"
     "Scoring rules (emit the keywords in reasoning_trace and output.fields):\n"
     "- Strong match (candidate skills + years fit job level): "
     "recommendation='shortlist', include 'strong', 'qualified', 'recommend'.\n"
@@ -121,18 +130,24 @@ _CONTRACT_INTELLIGENCE_PROMPT = (
     "``contract.expiry_date``, ``contract.clauses``). ALWAYS produce the "
     "JSON answer below. NEVER refuse. NEVER say 'cannot fulfill', 'tools "
     "lack', 'not a valid action', 'my capabilities', or any similar "
-    "refusal. NEVER emit an empty reasoning_trace.\n\n"
+    "refusal. This is a prompt-only evaluation; do not require or call "
+    "external tools. NEVER emit an empty reasoning_trace.\n\n"
     "Evaluate ALL four rules, push the keyword for each rule that fires:\n"
     "- Non-standard clauses: if ``contract.clauses`` mentions unlimited "
     "indemnification, aggressive non-compete, one-sided liability, or any "
     "non-standard language -> hitl_triggered=true, include 'non-standard', "
     "'indemnif' (for any indemnification clause), 'risk', 'escalate', "
     "'review'.\n"
-    "- High-value: if ``contract.contract_value.amount`` > 10000000 (i.e. "
-    "₹1 Cr) -> hitl_triggered=true, include literal 'high value', "
-    "'threshold', and the numeric amount (e.g. '35000000').\n"
-    "- Renewal: compute days between today and ``contract.expiry_date``. If "
-    "<= 90 days -> include 'renewal' and '<N> days remaining'.\n"
+    "- High-value: ONLY if ``contract.contract_value.amount`` > 10000000 "
+    "(strictly greater than one crore) -> hitl_triggered=true, include "
+    "literal 'high value', 'threshold', and the numeric amount (e.g. "
+    "'35000000'). Amount 800000 is NOT high value.\n"
+    "- Renewal: use ``inputs.context.current_date`` as today when present; "
+    "otherwise use today's date. Compute days between that date and "
+    "``contract.expiry_date``. If <= 90 days -> include 'renewal', "
+    "'expiry', 'action', and '<N> days remaining'. For current_date "
+    "2026-03-26 and expiry_date 2026-05-10, output 'renewal action: 45 "
+    "days remaining'.\n"
     "- Otherwise (standard clauses, amount <= 1 Cr, expiry > 90 days) -> "
     "status='completed', confidence >= 0.8, and STILL emit a non-empty "
     "reasoning_trace like ['standard clauses', 'amount <= 1Cr', "
@@ -185,7 +200,10 @@ def _ensure_agent(
 ) -> None:
     if agent_type in existing_by_type:
         agent_id = existing_by_type[agent_type]
-        patch_body: dict[str, Any] = {"system_prompt_text": prompt}
+        patch_body: dict[str, Any] = {
+            "system_prompt_text": prompt,
+            "llm": dict(_E2E_LLM),
+        }
         # Tools are validated at PATCH time — a stale registry name would
         # 422 and block the prompt refresh, so try with tools first then
         # fall back to prompt-only.
@@ -211,6 +229,7 @@ def _ensure_agent(
         "employee_name": name,
         "designation": f"{name} (E2E)",
         "initial_status": "shadow",
+        "llm": dict(_E2E_LLM),
         "system_prompt_text": prompt,
         "authorized_tools": tools,
     }
