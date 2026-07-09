@@ -232,11 +232,11 @@ def test_pillow_cve_floor_is_enforced_in_production_dependencies() -> None:
 
     The previous residual accepted composio-core's Pillow<11 pin. The
     June 2026 audit found additional active Pillow CVEs, so production
-    now de-scopes composio-core and directly pins Pillow>=12.2.0.
+    now de-scopes composio-core and directly pins Pillow>=12.3.0.
     """
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     v4_block = pyproject.split("v4 = [", 1)[1].split("]", 1)[0]
-    assert '"pillow>=12.2.0"' in pyproject
+    assert '"pillow>=12.3.0"' in pyproject
     assert '"composio-core' not in v4_block
 
 

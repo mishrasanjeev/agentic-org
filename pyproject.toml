@@ -116,7 +116,7 @@ dependencies = [
     # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
     # Keep the patched floor direct so dependency resolution cannot drift
     # back to the vulnerable 10.x/11.x lines.
-    "pillow>=12.2.0",
+    "pillow>=12.3.0",
 ]
 
 [project.optional-dependencies]
