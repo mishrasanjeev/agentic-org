@@ -28,7 +28,7 @@ def _dependency_names(values: list[str]) -> set[str]:
 
 def test_production_dependencies_keep_patched_pillow_floor() -> None:
     deps = _pyproject()["project"]["dependencies"]
-    assert "pillow>=12.2.0" in deps
+    assert "pillow>=12.3.0" in deps
 
 
 def test_pytorch_owners_are_not_in_base_or_v4_dependencies() -> None:
