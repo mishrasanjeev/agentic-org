@@ -424,11 +424,19 @@ jobs:
       # tests/synthetic_data/ to skip.
       - name: Get fresh E2E auth token
         id: auth
+        env:
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
         run: |
+          if [ -z "$E2E_EMAIL" ] || [ -z "$E2E_PASSWORD" ]; then
+            echo "::error::E2E_EMAIL and E2E_PASSWORD secrets are required"
+            exit 1
+          fi
+          AUTH_PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["E2E_EMAIL"],"password":os.environ["E2E_PASSWORD"]}))')
           for attempt in 1 2 3 4 5; do
             RESP=$(curl -s -w "\n%{http_code}" -X POST "https://app.agenticorg.ai/api/v1/auth/login" \
               -H "Content-Type: application/json" \
-              -d '{"email":"ceo@agenticorg.local","password":"ceo123!"}')
+              -d "$AUTH_PAYLOAD")
             HTTP_CODE=$(echo "$RESP" | tail -1)
             BODY=$(echo "$RESP" | sed '$d')
             if [ "$HTTP_CODE" = "200" ]; then

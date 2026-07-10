@@ -135,7 +135,8 @@ def test_redis_socket_timeouts_are_configurable(monkeypatch: pytest.MonkeyPatch)
     }
 
 
-def test_reset_password_blacklists_the_resolved_token_value() -> None:
+def test_reset_password_only_accepts_one_time_code_and_binds_tenant() -> None:
     src = (REPO / "api" / "v1" / "auth.py").read_text(encoding="utf-8")
-    assert "blacklist_token(token_value)" in src
-    assert "blacklist_token(body.token)" not in src
+    assert "token: str | None" not in src
+    assert 'consume_code("reset", body.code)' in src
+    assert "get_tenant_session(tenant_id)" in src

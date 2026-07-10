@@ -12,6 +12,65 @@ from urllib.parse import urlparse
 
 import pytest
 
+
+class TestBillingMutationAdminGate:
+    """Tenant billing mutations must reject non-admins before side effects."""
+
+    @staticmethod
+    def _non_admin_app():
+        from fastapi import FastAPI, Request
+
+        from api.v1.billing import router
+
+        app = FastAPI()
+
+        @app.middleware("http")
+        async def set_non_admin_identity(request: Request, call_next):
+            request.state.tenant_id = "11111111-1111-1111-1111-111111111111"
+            request.state.scopes = ["agenticorg:billing:read"]
+            return await call_next(request)
+
+        app.include_router(router, prefix="/api/v1")
+        return app
+
+    @pytest.mark.parametrize(
+        ("path", "payload", "side_effect_target"),
+        [
+            (
+                "/api/v1/billing/subscribe",
+                {"plan": "pro"},
+                "core.billing.stripe_client.create_checkout_session",
+            ),
+            (
+                "/api/v1/billing/subscribe/india",
+                {"plan": "pro"},
+                "core.billing.pinelabs_client.create_payment_order",
+            ),
+            (
+                "/api/v1/billing/portal",
+                {},
+                "core.billing.stripe_client.create_portal_session",
+            ),
+            (
+                "/api/v1/billing/cancel",
+                {"subscription_id": "sub_must_not_cancel"},
+                "core.async_redis.get_async_redis",
+            ),
+        ],
+    )
+    def test_non_admin_rejected_before_billing_side_effect(
+        self, path, payload, side_effect_target
+    ):
+        from fastapi.testclient import TestClient
+
+        with patch(side_effect_target) as side_effect:
+            with TestClient(self._non_admin_app()) as client:
+                response = client.post(path, json=payload)
+
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Missing scope: agenticorg:admin"}
+        side_effect.assert_not_called()
+
 # ── Tier & Limit Tests ──────────────────────────────────────────────
 
 

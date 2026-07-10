@@ -27,6 +27,7 @@ from http.client import HTTPConnection
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -126,6 +127,41 @@ def test_run_worker_honors_celery_queues_env_override(
 
     run_worker_module._run_celery_worker()
     assert captured == ["reports,workflows"]
+
+
+@pytest.mark.parametrize(
+    "task_name",
+    ["resume_workflow_wait", "timeout_workflow_event"],
+)
+def test_workflow_wait_tasks_route_to_workflows_queue(task_name: str) -> None:
+    from core.tasks.celery_app import app
+
+    route = app.amqp.router.route({}, task_name, args=(), kwargs={})
+    queue = route["queue"]
+    assert getattr(queue, "name", queue) == "workflows"
+
+
+def test_local_compose_runs_beat_and_consumes_every_declared_queue() -> None:
+    compose = yaml.safe_load((REPO / "docker-compose.yml").read_text(encoding="utf-8"))
+    services = compose["services"]
+
+    worker_command = services["worker"]["command"]
+    assert "-Q" in worker_command
+    queue_arg = worker_command.split("-Q", maxsplit=1)[1].strip().split()[0]
+    assert set(queue_arg.split(",")) == {
+        "celery",
+        "reports",
+        "maintenance",
+        "workflows",
+        "delivery",
+        "rpa",
+    }
+
+    beat = services["beat"]
+    assert beat["command"] == "python scripts/run_beat.py"
+    assert beat["environment"]["PORT"] == "8000"
+    assert beat["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert beat["depends_on"]["redis"]["condition"] == "service_healthy"
 
 
 def test_run_beat_uses_correct_celery_argv(run_beat_module, monkeypatch) -> None:

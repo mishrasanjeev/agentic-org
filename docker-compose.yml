@@ -95,7 +95,25 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: celery -A core.tasks.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A core.tasks.celery_app worker --loglevel=info --concurrency=4 -Q celery,reports,maintenance,workflows,delivery,rpa
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      PORT: "8000"
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      # Local-dev only. Real environments must inject via secret manager.
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python scripts/run_beat.py
 
   # ── Air-gapped: Ollama (CPU) ──────────────────────────────────────
   ollama:

@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
+import { buildCsv } from "@/lib/csv";
 import type { AuditEntry } from "@/types";
 
 export default function Audit() {
@@ -53,13 +54,10 @@ export default function Audit() {
 
   function downloadCSV(data: AuditEntry[], filename: string) {
     const headers = ["id", "event_type", "actor_type", "action", "outcome", "created_at"];
-    const rows = data.map((entry) =>
-      headers.map((h) => {
-        const val = String(entry[h as keyof AuditEntry] ?? "");
-        return `"${val.replace(/"/g, '""')}"`;
-      }).join(",")
+    const csv = buildCsv(
+      headers,
+      data.map((entry) => headers.map((header) => entry[header as keyof AuditEntry] ?? "")),
     );
-    const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

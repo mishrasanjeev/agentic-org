@@ -26,7 +26,7 @@ from core.config import (
     redis_url_from_env,
     settings,
 )
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.email import send_password_reset_email, send_welcome_email
 from core.models.tenant import Tenant
 from core.models.user import User
@@ -365,7 +365,13 @@ async def login(body: LoginRequest, request: Request, response: Response):
         result = await session.execute(
             select(User).where(User.email == body.email, User.status == "active")
         )
-        user = result.scalar_one_or_none()
+        users = result.scalars().all()
+        # Email is not a safe tenant identity: the same address may exist in
+        # multiple organizations. Refuse ambiguous credentials instead of
+        # selecting an arbitrary tenant or raising MultipleResultsFound.
+        if len(users) > 1:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        user = users[0] if users else None
         if not user or not user.password_hash:
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
@@ -455,7 +461,13 @@ async def google_login(body: GoogleLoginRequest, response: Response):
     # Find or create user
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(User.email == email))
-        user = result.scalar_one_or_none()
+        users = result.scalars().all()
+        if len(users) > 1:
+            raise HTTPException(
+                status_code=409,
+                detail="This email is associated with multiple organizations; use organization SSO.",
+            )
+        user = users[0] if users else None
 
         if not user:
             # Create a NEW tenant for this Google user (no cross-tenant leakage)
@@ -528,10 +540,10 @@ class ForgotPasswordRequest(BaseModel):
 
 
 class ResetPasswordRequest(BaseModel):
-    # One of ``token`` (legacy raw JWT) or ``code`` (opaque one-time
-    # code, preferred per MEDIUM-10) must be present.
-    token: str | None = None
-    code: str | None = None
+    # Reset links have used opaque one-time codes since MEDIUM-10. Legacy
+    # raw JWT links expired within one hour, so retaining that input path now
+    # only creates a replayable credential surface.
+    code: str
     password: str
 
 
@@ -567,7 +579,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         result = await session.execute(
             select(User).where(User.email == email, User.status == "active")
         )
-        user = result.scalar_one_or_none()
+        users = result.scalars().all()
+        # Preserve enumeration-safe behavior while avoiding an ambiguous
+        # tenant selection for duplicate addresses.
+        user = users[0] if len(users) == 1 else None
 
     # Always return the same response to prevent email enumeration
     if user:
@@ -603,14 +618,10 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
     public_reason="one-time-reset-code-validated",
 )
 async def reset_password(body: ResetPasswordRequest):
-    """Validate reset (code or legacy JWT) and set a new password."""
-    token_value = body.token
-    if body.code and not token_value:
-        token_value = await consume_code("reset", body.code)
-        if not token_value:
-            raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
+    """Consume a one-time reset code and set a new password."""
+    token_value = await consume_code("reset", body.code)
     if not token_value:
-        raise HTTPException(status_code=400, detail="Missing reset code or token")
+        raise HTTPException(status_code=400, detail="Reset link is invalid or expired")
     try:
         claims = validate_local_token(token_value)
     except ValueError as e:
@@ -625,9 +636,18 @@ async def reset_password(body: ResetPasswordRequest):
     if not email:
         raise HTTPException(status_code=400, detail="Invalid reset token — missing user")
 
-    async with async_session_factory() as session:
+    try:
+        tenant_id = uuid.UUID(str(claims.get("agenticorg:tenant_id", "")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid reset token - missing tenant") from None
+
+    async with get_tenant_session(tenant_id) as session:
         result = await session.execute(
-            select(User).where(User.email == email, User.status == "active")
+            select(User).where(
+                User.tenant_id == tenant_id,
+                User.email == email,
+                User.status == "active",
+            )
         )
         user = result.scalar_one_or_none()
         if not user:
@@ -637,9 +657,6 @@ async def reset_password(body: ResetPasswordRequest):
         user.password_hash = pw_hash
         session.add(user)
         await session.commit()
-
-    # Blacklist the reset token so it can't be reused
-    blacklist_token(token_value)
 
     return {"status": "ok", "message": "Password has been reset. You can now sign in."}
 
@@ -655,16 +672,17 @@ async def reset_password(body: ResetPasswordRequest):
 )
 async def logout(request: Request, response: Response):
     """Blacklist the current token and clear the session cookie."""
-    # Accept either cookie or Authorization header for logout
-    # (CRITICAL-01: cookie is the new primary session carrier).
-    token = request.cookies.get("agenticorg_session") or ""
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    if not token:
+    # Use the exact credential accepted by middleware. Explicit bearer auth
+    # intentionally wins over an ambient cookie across the rest of the app.
+    token = getattr(request.state, "auth_token", "")
+    if not isinstance(token, str) or not token:
         raise HTTPException(status_code=401, detail="Missing session cookie or Authorization header")
-    blacklist_token(token)
+    try:
+        await blacklist_token(token)
+    # enterprise-gate: broad-except-ok reason=logout-must-map-any-revocation-store-failure-to-retryable-503
+    except Exception as exc:
+        logger.error("Session revocation failed; refusing to report logout success")
+        raise HTTPException(status_code=503, detail="Unable to revoke session; please retry") from exc
     _clear_session_cookie(response)
     return {"status": "logged_out"}
 
@@ -685,47 +703,45 @@ async def get_current_user_profile(request: Request):
     claims are already verified by the auth middleware — we just decode
     and return them in the shape the UI expects.
     """
-    # CRITICAL-01: accept the session cookie first, fall back to the
-    # Authorization header for API-client compatibility.
-    token = request.cookies.get("agenticorg_session") or ""
-    if not token:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            token = auth_header[7:]
-    if not token:
-        raise HTTPException(401, "Missing session cookie or Authorization header")
+    # The middleware has already validated one credential (explicit bearer
+    # wins over an ambient cookie) and established its tenant boundary.
+    claims = getattr(request.state, "claims", None)
+    tenant_value = getattr(request.state, "tenant_id", "")
+    if not isinstance(claims, dict) or not tenant_value:
+        raise HTTPException(401, "Missing authenticated session context")
     try:
-        claims = validate_local_token(token)
-    # enterprise-gate: broad-except-ok reason=session-token-validation-fails-closed-401
-    except Exception as exc:
-        raise HTTPException(401, "Invalid or expired token") from exc
+        tenant_id = uuid.UUID(str(tenant_value))
+    except (TypeError, ValueError):
+        raise HTTPException(401, "Invalid authenticated tenant context") from None
 
     # Hydrate from the DB so we get the latest role/domain/name
     email = claims.get("sub", "")
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(User).where(User.email == email, User.status == "active")
-        )
+    user_id_value = claims.get("agenticorg:user_id")
+    user_id = None
+    if user_id_value:
+        try:
+            user_id = uuid.UUID(str(user_id_value))
+        except (TypeError, ValueError):
+            raise HTTPException(401, "Invalid authenticated user context") from None
+
+    async with get_tenant_session(tenant_id) as session:
+        user_filters = [User.tenant_id == tenant_id, User.status == "active"]
+        user_filters.append(User.id == user_id if user_id else User.email == email)
+        result = await session.execute(select(User).where(*user_filters))
         user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(404, "User not found")
+        if not user:
+            raise HTTPException(404, "User not found")
+
+        tenant_result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+        tenant = tenant_result.scalar_one_or_none()
 
     # Read onboarding_complete from tenant settings — must match /login and
     # /signup so routing is identical across all session hydration paths.
     # Fail closed: default to False on missing tenant or lookup failure so
     # the UI guides the user through onboarding rather than silently skipping.
-    onboarding_complete = False
-    try:
-        async with async_session_factory() as session:
-            tenant_result = await session.execute(
-                select(Tenant).where(Tenant.id == user.tenant_id)
-            )
-            tenant = tenant_result.scalar_one_or_none()
-            if tenant:
-                onboarding_complete = tenant.settings.get("onboarding_complete", False)
-    # enterprise-gate: broad-except-ok reason=onboarding-flag-read-fallback-defaults-safe-false
-    except Exception:
-        logger.debug("Tenant lookup for onboarding_complete failed, defaulting to False")
+    onboarding_complete = bool(
+        tenant and (tenant.settings or {}).get("onboarding_complete", False)
+    )
 
     return {
         "user_id": str(user.id),

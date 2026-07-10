@@ -148,6 +148,15 @@ function renderPage() {
   );
 }
 
+function readBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
+}
+
 describe("CompanyDetail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -209,5 +218,38 @@ describe("CompanyDetail", () => {
       "/audit",
       expect.objectContaining({ params: expect.objectContaining({ company_id: COMPANY_ID }) }),
     );
+  });
+
+  it("neutralizes formula-prefixed company activity in the CSV export", async () => {
+    const defaultGet = mockGet.getMockImplementation();
+    mockGet.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
+      if (url === "/audit") {
+        return Promise.resolve({
+          data: { items: [{ ...auditResponse.items[0], action: "=2+2" }] },
+        });
+      }
+      return defaultGet?.(url, config);
+    });
+
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:test");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+
+    renderPage();
+    await screen.findByText("Acme Manufacturing Pvt Ltd");
+    fireEvent.click(screen.getByText("Audit Log"));
+    await screen.findByText("=2+2");
+    fireEvent.click(screen.getByRole("button", { name: "Export CSV" }));
+
+    const csv = await readBlob(createObjectURL.mock.calls[0][0]);
+    expect(csv).toContain('"\'=2+2"');
+    clickSpy.mockRestore();
   });
 });

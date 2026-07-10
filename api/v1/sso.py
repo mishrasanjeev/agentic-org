@@ -23,6 +23,7 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
+from api.v1.auth import _set_session_cookie
 from auth.jwt import create_access_token
 from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair, new_state
 from auth.sso.provisioning import jit_provision_user
@@ -50,14 +51,13 @@ def _state_key(provider_key: str, state: str) -> str:
     return f"sso:state:{provider_key}:{state}"
 
 
-async def _load_provider(provider_key: str, tenant_id: uuid.UUID | None = None) -> tuple[OIDCProvider, SSOConfig]:
-    async with async_session_factory() as session:
+async def _load_provider(provider_key: str, tenant_id: uuid.UUID) -> tuple[OIDCProvider, SSOConfig]:
+    async with get_tenant_session(tenant_id) as session:
         stmt = select(SSOConfig).where(
             SSOConfig.provider_key == provider_key,
             SSOConfig.enabled.is_(True),
+            SSOConfig.tenant_id == tenant_id,
         )
-        if tenant_id is not None:
-            stmt = stmt.where(SSOConfig.tenant_id == tenant_id)
         result = await session.execute(stmt)
         config = result.scalar_one_or_none()
         if config is None:
@@ -135,7 +135,7 @@ async def list_providers(email: str = Query(..., description="User email — use
 async def sso_login(
     provider_key: str,
     tenant_id: uuid.UUID,
-    return_to: str = "/",
+    return_to: str = "/dashboard",
 ) -> RedirectResponse:
     """Kick off the OIDC authorization-code flow with PKCE."""
     provider, _config = await _load_provider(provider_key, tenant_id)
@@ -217,7 +217,7 @@ async def sso_callback(
         raise HTTPException(403, str(exc)) from exc
 
     # Look up tenant name for the JWT
-    async with async_session_factory() as session:
+    async with get_tenant_session(tenant_id) as session:
         result = await session.execute(
             select(Tenant).where(Tenant.id == tenant_id)
         )
@@ -245,15 +245,19 @@ async def sso_callback(
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
 
-    # Redirect to UI with token in fragment (so it never hits server logs)
+    # Establish the same cookie-first browser session used by password and
+    # Google login. Never expose bearer material to browser JavaScript.
     ui_base = settings.ui_base_url if hasattr(settings, "ui_base_url") else ""
-    target = return_to or "/"
+    target = return_to or "/dashboard"
     if not target.startswith("/") or target.startswith("//"):
-        target = "/"
-    return RedirectResponse(
-        f"{ui_base}{target}#token={token}",
-        status_code=303,
+        target = "/dashboard"
+    response = RedirectResponse(f"{ui_base}{target}", status_code=303)
+    _set_session_cookie(
+        response,
+        token,
+        getattr(settings, "token_ttl_minutes", 60) * 60,
     )
+    return response
 
 
 # ── Admin CRUD ────────────────────────────────────────────────────

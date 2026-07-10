@@ -330,7 +330,10 @@ def check(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    # Windows consoles commonly default to cp1252, which cannot render the
+    # Unicode arrows in the module docstring. Keep --help portable.
+    description = (__doc__ or "").encode("ascii", "replace").decode("ascii")
+    parser = argparse.ArgumentParser(description=description)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     g = sub.add_parser("generate", help="Refresh the matrix YAML in place.")

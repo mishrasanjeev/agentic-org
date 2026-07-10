@@ -140,7 +140,7 @@ def test_k_e_jwt_blacklist_raises_in_strict_mode(monkeypatch) -> None:
     # In strict mode, blacklist_token must raise when Redis is down
     write_token = "strict-write-probe-token"
     try:
-        jwt_mod.blacklist_token(write_token)
+        asyncio.run(jwt_mod.blacklist_token(write_token))
     except RuntimeError as exc:
         assert "strict" in str(exc).lower() or "redis" in str(exc).lower()
     else:

@@ -416,7 +416,10 @@ def _apply_proposals(matrix_path: Path, records: list[TCRecord]) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    # Windows consoles commonly default to cp1252, which cannot render the
+    # Unicode arrows in the module docstring. Keep --help portable.
+    description = (__doc__ or "").encode("ascii", "replace").decode("ascii")
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--plan", type=Path, default=DEFAULT_PLAN)
     parser.add_argument("--matrix", type=Path, default=DEFAULT_MATRIX)
     parser.add_argument("--audit", type=Path, default=DEFAULT_AUDIT)

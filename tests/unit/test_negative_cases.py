@@ -189,22 +189,23 @@ class TestForgotPassword:
     async def test_reset_password_invalid_token(self):
         from api.v1.auth import ResetPasswordRequest, reset_password
 
-        with pytest.raises(HTTPException) as exc:
-            await reset_password(
-                ResetPasswordRequest(token="invalid.jwt.token", password="NewPass1"),
-            )
+        with (
+            patch("api.v1.auth.consume_code", new=AsyncMock(return_value=None)),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await reset_password(ResetPasswordRequest(code="invalid", password="NewPass1"))
         assert exc.value.status_code == 400
 
     @pytest.mark.asyncio
     async def test_reset_password_weak_password(self):
         from api.v1.auth import ResetPasswordRequest, reset_password
 
-        # Use a structurally valid token that will fail validation
-        with pytest.raises(HTTPException) as exc:
-            await reset_password(
-                ResetPasswordRequest(token="bad", password="weak"),
-            )
-        # Should fail on token validation first (400), not password
+        with (
+            patch("api.v1.auth.consume_code", new=AsyncMock(return_value=None)),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await reset_password(ResetPasswordRequest(code="bad", password="weak"))
+        # Invalid one-time codes fail before password processing.
         assert exc.value.status_code == 400
 
 

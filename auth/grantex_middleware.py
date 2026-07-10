@@ -136,6 +136,12 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Missing session cookie or Authorization header"},
             )
 
+        # Downstream handlers must operate on the exact credential this
+        # middleware authenticated. Re-reading cookies or headers in a route
+        # can reverse the precedence above and create a cross-tenant split.
+        request.state.auth_token = token
+        request.state.auth_source = "authorization" if auth_header else "cookie"
+
         # Triple-mode: detect token type
         if token.startswith("ao_sk_"):
             return await self._handle_api_key(request, call_next, token, client_ip)
