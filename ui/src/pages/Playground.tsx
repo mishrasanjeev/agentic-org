@@ -383,6 +383,7 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
       let pages: number;
       do {
         const response = await api.get("/agents", {
+          // Keep Playground aligned with the backend page cap (per_page=100).
           params: { page, per_page: 100 },
           validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
         });
