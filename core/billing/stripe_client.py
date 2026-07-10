@@ -319,28 +319,11 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
       - customer.subscription.updated → sync status
       - customer.subscription.deleted → deactivate
     """
-    import time as _time
-
     s = _get_stripe()
     event = s.Webhook.construct_event(payload, sig_header, _STRIPE_WEBHOOK_SECRET)
 
-    # Replay prevention — reject events older than 5 minutes
-    event_created = event.get("created", 0)
-    age_seconds = _time.time() - event_created
-    if age_seconds > 300:
-        logger.warning(
-            "stripe_webhook_stale_event",
-            event_id=event.get("id"),
-            event_type=event.get("type"),
-            age_seconds=int(age_seconds),
-        )
-        return {
-            "event_type": event.get("type", "unknown"),
-            "processed": False,
-            "rejected": True,
-            "reason": "stale_event",
-        }
-
+    # Signature delivery freshness is enforced by Stripe construct_event.
+    # Do not reject by event.created: retries retain the original event time.
     event_type: str = event["type"]
     data_obj = event["data"]["object"]
 

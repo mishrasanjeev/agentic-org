@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-
-const API = import.meta.env.VITE_API_URL ?? "";
+import api, { extractApiError } from "@/lib/api";
 
 export default function BillingCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isAuthenticated } = useAuth();
-  const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending">("loading");
+  const [status, setStatus] = useState<"loading" | "success" | "failed" | "pending" | "error">("loading");
+  const [verificationError, setVerificationError] = useState<string | null>(null);
   const [orderDetails, setOrderDetails] = useState<Record<string, string>>({});
   const [countdown, setCountdown] = useState(5);
   // SEC-002 (PR-F): cookie-first. ``isAuthenticated`` reflects the
@@ -28,34 +28,58 @@ export default function BillingCallback() {
     : `/login?next=${encodeURIComponent("/dashboard/billing")}`;
 
   useEffect(() => {
+    let active = true;
     setOrderDetails({ orderId: orderId || sessionId, plan, provider });
-
-    if (orderId && provider === "plural") {
-      fetch(`${API}/api/v1/billing/order-status`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ order_id: orderId }),
-      })
-        .then((r) => r.json())
-        .then((data) => {
-          const s = (data.status || "").toUpperCase();
-          if (s === "PROCESSED" || s === "AUTHORIZED") setStatus("success");
-          else if (s === "FAILED" || s === "CANCELLED") setStatus("failed");
-          else setStatus("pending");
-        })
-        .catch(() => fallbackToParam());
-    } else {
-      fallbackToParam();
-    }
+    setVerificationError(null);
+    setStatus("loading");
 
     function fallbackToParam() {
+      if (!active) return;
       if (paymentStatus === "success") setStatus("success");
       else if (paymentStatus === "failed") setStatus("failed");
       else setStatus("pending");
     }
+
+    if (orderId && provider === "plural") {
+      const verifyOrder = async () => {
+        try {
+          const response = await api.post(
+            "/billing/order-status",
+            { order_id: orderId },
+            {
+              // Let this callback present a recoverable sign-in message instead
+              // of triggering the shared client's global 401 redirect.
+              validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
+            },
+          );
+          if (!active) return;
+          if (response.status === 401) {
+            setVerificationError("Sign in again to verify this payment order.");
+            setStatus("error");
+            return;
+          }
+
+          const data = response.data;
+          const s = (data.status || "").toUpperCase();
+          if (s === "PROCESSED" || s === "AUTHORIZED") setStatus("success");
+          else if (s === "FAILED" || s === "CANCELLED") setStatus("failed");
+          else setStatus("pending");
+        } catch (error) {
+          if (!active) return;
+          setVerificationError(
+            extractApiError(error, "Payment verification is temporarily unavailable. Please try again."),
+          );
+          setStatus("error");
+        }
+      };
+      void verifyOrder();
+    } else {
+      fallbackToParam();
+    }
+
+    return () => {
+      active = false;
+    };
   }, [paymentStatus, orderId, sessionId, provider, plan]);
 
   // Auto-redirect to billing page on success after countdown
@@ -93,6 +117,12 @@ export default function BillingCallback() {
       title: "Payment Pending",
       description: "Your payment is being processed. This may take a few moments for UPI and net banking payments.",
       color: "text-yellow-500",
+    },
+    error: {
+      icon: "\u26A0\uFE0F",
+      title: "Payment Verification Unavailable",
+      description: verificationError || "We could not verify this payment order. No payment status has been assumed.",
+      color: "text-amber-500",
     },
   };
 

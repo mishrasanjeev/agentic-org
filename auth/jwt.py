@@ -120,7 +120,7 @@ def _token_redis_key(jwt_value: str) -> str:
     return f"token_blacklist:{digest}"
 
 
-def blacklist_token(token: str) -> None:
+async def blacklist_token(token: str) -> None:
     """Add a token to the blacklist so it is rejected on future validation.
 
     Strict mode (AGENTICORG_AUTH_STATE_STRICT=1): if Redis is unavailable
@@ -140,17 +140,11 @@ def blacklist_token(token: str) -> None:
         return
 
     try:
-        import asyncio
-
         key = _token_redis_key(token)
-        try:
-            running = asyncio.get_running_loop()
-        except RuntimeError:
-            running = None
-        if running is not None:
-            running.create_task(r.setex(key, _BLACKLIST_TTL, "1"))
-        else:
-            asyncio.run(r.setex(key, _BLACKLIST_TTL, "1"))
+        # Revocation is a security boundary: do not report success until
+        # Redis acknowledges the write. The old fire-and-forget task could
+        # claim logout succeeded even when SETEX later failed.
+        await r.setex(key, _BLACKLIST_TTL, "1")
         if not strict:
             _remember_blacklisted_token(token)
     # enterprise-gate: broad-except-ok reason=token-blacklist-write-fails-closed-in-strict-runtime

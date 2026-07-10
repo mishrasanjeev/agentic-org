@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -15,6 +15,10 @@ function Probe() {
       <span data-testid="hydrating">{String(auth.isHydrating)}</span>
       <span data-testid="authenticated">{String(auth.isAuthenticated)}</span>
       <span data-testid="email">{auth.user?.email ?? ""}</span>
+      <span data-testid="onboarding">{String(auth.user?.onboardingComplete ?? false)}</span>
+      <button type="button" onClick={() => void auth.logout().catch(() => undefined)}>
+        Log out
+      </button>
     </div>
   );
 }
@@ -83,5 +87,53 @@ describe("AuthProvider route-aware session hydration", () => {
     expect(shouldHydrateSessionForPath("/dashboard")).toBe(true);
     expect(shouldHydrateSessionForPath("/dashboard/billing/callback")).toBe(true);
     expect(shouldHydrateSessionForPath("/onboarding")).toBe(true);
+  });
+
+  it("fails closed when the session omits onboarding state", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        email: "admin@example.com",
+        name: "Admin",
+        role: "admin",
+        domain: "ops",
+        tenant_id: "tenant-1",
+      }),
+    } as Response);
+
+    renderAt("/dashboard");
+
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
+      expect(screen.getByTestId("onboarding")).toHaveTextContent("false");
+    });
+  });
+
+  it("keeps the local session when server-side revocation fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          email: "admin@example.com",
+          name: "Admin",
+          role: "admin",
+          domain: "ops",
+          tenant_id: "tenant-1",
+          onboarding_complete: true,
+        }),
+      } as Response)
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response);
+
+    renderAt("/dashboard");
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
+    });
   });
 });

@@ -60,6 +60,10 @@ app.conf.update(
         "core.tasks.report_tasks.deliver_report": {"queue": "delivery"},
         "core.tasks.report_tasks.cleanup_old_reports": {"queue": "maintenance"},
         "core.tasks.workflow_tasks.*": {"queue": "workflows"},
+        # Retain the historical short task names so messages already in
+        # Redis remain executable during rolling deploys.
+        "resume_workflow_wait": {"queue": "workflows"},
+        "timeout_workflow_event": {"queue": "workflows"},
         # RPA scheduler (feat/rpa-framework-rbi): runs go to a
         # dedicated queue so long scrapes don't starve the short
         # report jobs.

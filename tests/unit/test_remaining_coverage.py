@@ -1280,6 +1280,69 @@ class TestToolGateway:
         assert result["error"]["code"] == "E1007"
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("grant_token", [None, ""])
+    async def test_execute_without_grant_or_scopes_fails_closed(
+        self, grant_token, gateway
+    ):
+        connector = AsyncMock()
+        connector.execute_tool.return_value = {"result": "must-not-run"}
+        gateway.register_connector("oracle", connector)
+
+        result = await gateway.execute(
+            "t1",
+            "a1",
+            [],
+            "oracle",
+            "create_payment",
+            {"amount": 100},
+            grant_token=grant_token,
+        )
+
+        assert result == {
+            "error": {
+                "code": "E1007",
+                "message": "scope_denied: missing_grant_and_legacy_scopes",
+            }
+        }
+        connector.execute_tool.assert_not_awaited()
+        gateway.rate_limiter.check.assert_not_awaited()
+        gateway.idempotency.get.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_execute_with_verified_grant_preserves_grantex_path(self, gateway):
+        connector = AsyncMock()
+        connector.execute_tool.return_value = {"result": "ok"}
+        gateway.register_connector("oracle", connector)
+        enforcement = MagicMock(allowed=True, reason="scope_match")
+        grantex = MagicMock()
+        grantex.enforce.return_value = enforcement
+
+        with patch(
+            "core.langgraph.grantex_auth.get_grantex_client",
+            return_value=grantex,
+        ):
+            result = await gateway.execute(
+                "t1",
+                "a1",
+                [],
+                "oracle",
+                "create_payment",
+                {"amount": 100},
+                grant_token="verified-grant",
+            )
+
+        assert result == {"result": "ok"}
+        grantex.enforce.assert_called_once_with(
+            grant_token="verified-grant",
+            connector="oracle",
+            tool="create_payment",
+            amount=None,
+        )
+        connector.execute_tool.assert_awaited_once_with(
+            "create_payment", {"amount": 100}
+        )
+
+    @pytest.mark.asyncio
     @patch("core.tool_gateway.gateway.check_scope", return_value=(False, "cap_exceeded:1000"))
     async def test_execute_cap_exceeded(self, mock_scope, gateway):
         result = await gateway.execute(

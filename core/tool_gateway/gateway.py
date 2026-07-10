@@ -114,6 +114,26 @@ class ToolGateway:
                         details={"reason": reason},
                     )
                 return {"error": {"code": code, "message": f"{action_type}: {reason}"}}
+        else:
+            # A missing grant must never turn into an authorization bypass.
+            # Legacy callers remain supported only when they provide an
+            # explicit, non-empty scope set that can be evaluated above.
+            reason = "missing_grant_and_legacy_scopes"
+            if self.audit:
+                await self.audit.log(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    action="scope_denied",
+                    outcome="blocked",
+                    details={"reason": reason},
+                )
+            return {
+                "error": {
+                    "code": "E1007",
+                    "message": f"scope_denied: {reason}",
+                }
+            }
 
         # 2. Check rate limit
         if self.rate_limiter:

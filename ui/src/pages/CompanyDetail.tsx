@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import api, { agentsApi, extractApiError } from "@/lib/api";
+import { buildCsv } from "@/lib/csv";
 import { stateNameFromCode } from "@/lib/indianStates";
 
 interface CompanyInfo {
@@ -1105,24 +1106,15 @@ export default function CompanyDetail() {
           });
           const exportCsv = () => {
             const header = ["Timestamp", "Action", "Actor", "Outcome"];
-            // Neutralize CSV formula injection: any cell whose first
-            // character can be interpreted as a spreadsheet formula
-            // (=, +, -, @, CR, LF, TAB) is prefixed with a single quote
-            // so Excel/Sheets render it as text. Action and Actor fields
-            // carry user-controlled strings (filing types, emails), so
-            // without this an exported audit log could execute formulas
-            // on the reviewer's machine.
-            const csvEscape = (v: string) => {
-              const guarded = /^[=+\-@\r\n\t]/.test(v) ? `'${v}` : v;
-              return `"${guarded.replace(/"/g, '""')}"`;
-            };
-            const rows = filteredActivities.map((a) => [
-              a.timestamp,
-              a.action,
-              a.actor,
-              a.outcome,
-            ].map(csvEscape).join(","));
-            const csv = [header.join(","), ...rows].join("\n");
+            const csv = buildCsv(
+              header,
+              filteredActivities.map((activity) => [
+                activity.timestamp,
+                activity.action,
+                activity.actor,
+                activity.outcome,
+              ]),
+            );
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");

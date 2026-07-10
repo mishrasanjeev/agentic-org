@@ -90,8 +90,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [i18n]);
 
   const handleLogout = async () => {
-    await auth.logout();
-    navigate("/login");
+    try {
+      await auth.logout();
+      navigate("/login");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not sign out. Please try again.");
+    }
   };
 
   const userRole = auth.user?.role || "";

@@ -33,6 +33,46 @@ def _load_repo_sdk_client_module() -> Any:
     return module
 
 
+def test_python_sdk_sop_upload_uses_multipart_and_preserves_auth(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+) -> None:
+    sdk_mod = _load_repo_sdk_client_module()
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["authorization"] = request.headers.get("authorization")
+        captured["content_type"] = request.headers.get("content-type")
+        captured["body"] = request.content
+        return httpx.Response(200, json={"status": "parsed"})
+
+    transport = httpx.MockTransport(handler)
+    original_client = sdk_mod.httpx.Client
+
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.Client:
+        kwargs["transport"] = transport
+        return original_client(*args, **kwargs)
+
+    monkeypatch.setattr(sdk_mod.httpx, "Client", client_factory)
+    sop_path = tmp_path / "invoice-sop.md"
+    sop_path.write_text("# Invoice SOP\n\nValidate the invoice.", encoding="utf-8")
+
+    client = sdk_mod.AgenticOrg(
+        api_key="sdk-upload-key",
+        base_url="https://agenticorg.test",
+    )
+    try:
+        result = client.sop.upload(str(sop_path), domain_hint="finance")
+    finally:
+        client.close()
+
+    assert result == {"status": "parsed"}
+    assert captured["authorization"] == "Bearer sdk-upload-key"
+    assert captured["content_type"].startswith("multipart/form-data; boundary=")
+    assert b'name="domain_hint"' in captured["body"]
+    assert b'name="file"; filename="invoice-sop.md"' in captured["body"]
+
+
 def test_python_sdk_can_launch_agents_discover_mcp_use_kb_and_workflows(monkeypatch: pytest.MonkeyPatch) -> None:
     sdk_mod = _load_repo_sdk_client_module()
     calls: list[dict[str, Any]] = []

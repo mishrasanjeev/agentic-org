@@ -123,7 +123,10 @@ class AgenticOrg:
         self.knowledge = _KnowledgeResource(self._http)
 
     def _build_headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        # Let httpx select the content type for each request. A client-level
+        # application/json header is also inherited by multipart uploads and
+        # prevents httpx from adding the required multipart boundary.
+        headers: dict[str, str] = {}
         if self._grantex_token:
             headers["Authorization"] = f"Bearer {self._grantex_token}"
         elif self._api_key:
@@ -279,7 +282,6 @@ class _SOPResource:
                 "/api/v1/sop/upload",
                 files={"file": f},
                 data={"domain_hint": domain_hint},
-                headers={},  # Let httpx set multipart headers
             )
         resp.raise_for_status()
         return resp.json()

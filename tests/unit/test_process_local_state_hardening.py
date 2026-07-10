@@ -15,7 +15,7 @@ def test_jwt_blacklist_fails_closed_in_strict_runtime(monkeypatch) -> None:
     monkeypatch.setattr(jwt_mod, "_get_redis", lambda: None)
 
     with pytest.raises(RuntimeError, match="Redis"):
-        jwt_mod.blacklist_token(token)
+        asyncio.run(jwt_mod.blacklist_token(token))
     assert token not in jwt_mod._blacklisted_tokens
 
     with pytest.raises(RuntimeError, match="Redis"):
@@ -31,7 +31,7 @@ def test_jwt_blacklist_relaxed_runtime_uses_memory_fallback(monkeypatch) -> None
     monkeypatch.setattr(jwt_mod.settings, "env", "development")
     monkeypatch.setattr(jwt_mod, "_get_redis", lambda: None)
 
-    jwt_mod.blacklist_token(token)
+    asyncio.run(jwt_mod.blacklist_token(token))
 
     assert token in jwt_mod._blacklisted_tokens
     assert asyncio.run(jwt_mod._is_blacklisted(token)) is True

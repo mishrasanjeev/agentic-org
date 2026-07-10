@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import api, { extractApiError } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
 
 /* ------------------------------------------------------------------ */
@@ -237,35 +238,6 @@ const DOMAIN_COLORS: Record<string, { border: string; bg: string; text: string }
 };
 
 /* ------------------------------------------------------------------ */
-/*  Auth helper                                                        */
-/* ------------------------------------------------------------------ */
-
-async function getAuthToken(): Promise<string> {
-  // SEC-002 (PR-F): authenticated users now ride on the HttpOnly
-  // session cookie — no localStorage token to grab. The demo path
-  // below still uses a sessionStorage cache (different key, short-
-  // lived, intentionally separate from the user session) so the
-  // public Playground works for anonymous visitors without
-  // requiring login.
-  const cached = sessionStorage.getItem("playground_token");
-  if (cached) return cached;
-  const resp = await fetch("/api/v1/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "ceo@agenticorg.local", password: "ceo123!" }),
-  });
-  if (!resp.ok) {
-    throw new Error("Demo login failed — make sure the backend is running and the demo user is seeded.");
-  }
-  const data: { access_token?: string } = await resp.json();
-  if (!data.access_token) {
-    throw new Error("Login succeeded but no access token returned.");
-  }
-  sessionStorage.setItem("playground_token", data.access_token);
-  return data.access_token;
-}
-
-/* ------------------------------------------------------------------ */
 /*  Trace color mapping                                                */
 /* ------------------------------------------------------------------ */
 
@@ -403,20 +375,20 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
   const [inputErrors, setInputErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    // SEC-002 (PR-F): cookie-first. The browser ships the HttpOnly
-    // session cookie automatically because of credentials: "include".
-    // Server returns 401 when there is no session — we treat that as
-    // "no custom agents to show" (anonymous Playground visitor).
+    // Cookie-first: use the shared client so session and request policy stay
+    // aligned with every other authenticated UI surface.
     async function fetchAgents() {
       const all: any[] = [];
       let page = 1;
       let pages: number;
       do {
-        const r = await fetch(`/api/v1/agents?page=${page}&per_page=100`, {
-          credentials: "include",
+        const response = await api.get("/agents", {
+          // Keep Playground aligned with the backend page cap (per_page=100).
+          params: { page, per_page: 100 },
+          validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
         });
-        if (!r.ok) return [];
-        const data = await r.json();
+        if (response.status === 401) return [];
+        const data = response.data;
         const items = Array.isArray(data?.items) ? data.items : [];
         all.push(...items);
         pages = Number(data?.pages || page);
@@ -528,6 +500,7 @@ export default function Playground() {
   const [animIdx, setAnimIdx] = useState(0);
   const [summary, setSummary] = useState<RunSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signInRequired, setSignInRequired] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -562,56 +535,31 @@ export default function Playground() {
     setAnimIdx(0);
     setSummary(null);
     setError(null);
+    setSignInRequired(false);
     setRunning(true);
     import("@/components/Analytics").then(m => m.trackEvent("agent_run", { agent_name: uc.agentName, source: "playground" })).catch(() => {});
 
     const startTime = performance.now();
 
     try {
-      const token = await getAuthToken();
-      const resp = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(uc.input),
+      const response = await api.post(`/agents/${uc.agentId}/run`, uc.input, {
+        // A public page needs to render a clear sign-in CTA instead of the
+        // shared client's normal full-page redirect on 401.
+        validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
       });
-
-      if (!resp.ok) {
-        // If 401, clear cached demo token and retry once. We don't
-        // touch the real user session cookie here — that path goes
-        // through the global API client redirector in lib/api.ts.
-        if (resp.status === 401) {
-          sessionStorage.removeItem("playground_token");
-          const newToken = await getAuthToken();
-          const retry = await fetch(`/api/v1/agents/${uc.agentId}/run`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${newToken}`,
-            },
-            body: JSON.stringify(uc.input),
-          });
-          if (!retry.ok) {
-            throw new Error(`Agent returned ${retry.status}: ${await retry.text()}`);
-          }
-          const retryData = await retry.json();
-          const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-          const lines = parseTraceLines(uc.agentName, retryData);
-          setAllLines(lines);
-          setSummary({
-            status: (retryData.status as string) ?? "completed",
-            confidence: (retryData.confidence as number) ?? null,
-            latency: `${elapsed}s`,
-            hitlTriggered: !!(retryData.hitl_triggered ?? retryData.requires_approval),
-          });
-          return;
-        }
-        throw new Error(`Agent returned ${resp.status}: ${await resp.text()}`);
+      if (response.status === 401) {
+        const message = "Sign in to run agents in the playground.";
+        setSignInRequired(true);
+        setError(message);
+        setAllLines([
+          { text: `> Agent "${uc.agentName}" starting...`, color: "gray" },
+          { text: `Error: ${message}`, color: "red" },
+        ]);
+        setRunning(false);
+        return;
       }
 
-      const data = await resp.json();
+      const data = response.data as Record<string, unknown>;
       const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
       const lines = parseTraceLines(uc.agentName, data);
       setAllLines(lines);
@@ -622,7 +570,11 @@ export default function Playground() {
         hitlTriggered: !!(data.hitl_triggered ?? data.requires_approval),
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
+      const unauthorized = (err as { response?: { status?: number } })?.response?.status === 401;
+      const msg = unauthorized
+        ? "Sign in to run agents in the playground."
+        : extractApiError(err, "Agent run failed. Please try again.");
+      setSignInRequired(unauthorized);
       setError(msg);
       setAllLines([
         { text: `> Agent "${uc.agentName}" starting...`, color: "gray" },
@@ -645,7 +597,7 @@ export default function Playground() {
     <div className="min-h-screen bg-slate-950 text-white">
       <Helmet>
         <title>Agent Playground — Try AgenticOrg Live</title>
-        <meta name="description" content="Try AgenticOrg AI agents live. No signup required. Pick a use case, click Run, and watch an AI agent work in real-time." />
+        <meta name="description" content="Sign in to run your AgenticOrg AI agents and inspect their results in the playground." />
         <link rel="canonical" href="https://agenticorg.ai/playground" />
       </Helmet>
 
@@ -663,7 +615,7 @@ export default function Playground() {
             <div className="h-6 w-px bg-slate-700" />
             <div>
               <h1 className="text-white font-semibold text-lg leading-tight">Agent Playground</h1>
-              <p className="text-slate-400 text-xs">Try it live — no signup required</p>
+              <p className="text-slate-400 text-xs">Sign in to run your agents</p>
             </div>
           </div>
           <a
@@ -841,9 +793,18 @@ export default function Playground() {
             {error && !running && (
               <div className="bg-red-950/30 border border-red-900/50 rounded-xl p-4">
                 <p className="text-sm text-red-400">{error}</p>
-                <p className="text-xs text-slate-500 mt-2">
-                  Make sure the backend is running and the demo user is seeded.
-                </p>
+                {signInRequired ? (
+                  <Link
+                    to="/login?next=%2Fplayground"
+                    className="mt-3 inline-flex text-sm font-medium text-blue-300 hover:text-blue-200"
+                  >
+                    Sign in to continue
+                  </Link>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-2">
+                    Please try again. If the problem continues, contact your administrator.
+                  </p>
+                )}
               </div>
             )}
           </section>

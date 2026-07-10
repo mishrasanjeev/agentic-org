@@ -1004,7 +1004,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 752,
+    "source_line": 768,
     "tenant_required": false
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 554,
+    "source_line": 566,
     "tenant_required": false
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 436,
+    "source_line": 442,
     "tenant_required": false
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 656,
+    "source_line": 673,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 681,
+    "source_line": 699,
     "tenant_required": true
   },
   {
@@ -1112,7 +1112,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 605,
+    "source_line": 620,
     "tenant_required": false
   },
   {
@@ -5595,7 +5595,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-read",
     "scope": "sso.config.sensitive.list",
-    "source_line": 293,
+    "source_line": 297,
     "tenant_required": true
   },
   {
@@ -5613,7 +5613,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "sso.config.write",
-    "source_line": 326,
+    "source_line": 330,
     "tenant_required": true
   },
   {
@@ -5631,7 +5631,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "sso.config.write",
-    "source_line": 398,
+    "source_line": 402,
     "tenant_required": true
   },
   {

@@ -179,14 +179,11 @@ class TestLogout:
     async def test_logout_success(self):
         from api.v1.auth import logout
         mock_request = MagicMock()
-        mock_request.headers = _FakeHeaders({"Authorization": "Bearer some-token-value"})
-        # CRITICAL-01: logout reads cookie first. Return empty so the
-        # header path still flows.
-        mock_request.cookies.get.return_value = ""
+        mock_request.state.auth_token = "some-token-value"
         mock_response = MagicMock()
         with patch("api.v1.auth.blacklist_token") as mock_blacklist:
             result = await logout(mock_request, mock_response)
-            mock_blacklist.assert_called_once_with("some-token-value")
+            mock_blacklist.assert_awaited_once_with("some-token-value")
             assert result == {"status": "logged_out"}
             # SEC-2026-05-P1-003 (PR-B): logout now clears BOTH the
             # HttpOnly session cookie AND the paired CSRF cookie. An
@@ -206,8 +203,7 @@ class TestLogout:
 
         from api.v1.auth import logout
         mock_request = MagicMock()
-        mock_request.headers = _FakeHeaders({})
-        mock_request.cookies.get.return_value = ""
+        mock_request.state.auth_token = ""
         mock_response = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
             await logout(mock_request, mock_response)
@@ -219,8 +215,7 @@ class TestLogout:
 
         from api.v1.auth import logout
         mock_request = MagicMock()
-        mock_request.headers = _FakeHeaders({"Authorization": "Basic abc123"})
-        mock_request.cookies.get.return_value = ""
+        mock_request.state.auth_token = ""
         mock_response = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
             await logout(mock_request, mock_response)
@@ -585,8 +580,13 @@ class TestValidateLocalToken:
 class TestBlacklistToken:
     """Tests for auth.jwt.blacklist_token."""
 
-    def test_blacklisted_token_rejected(self):
-        with patch("auth.jwt.settings") as mock_settings:
+    @pytest.mark.asyncio
+    async def test_blacklisted_token_rejected(self):
+        with (
+            patch("auth.jwt.settings") as mock_settings,
+            patch("auth.jwt._get_redis", return_value=None),
+            patch("auth.jwt._auth_state_strict", return_value=False),
+        ):
             mock_settings.secret_key = TEST_SECRET
             from auth.jwt import (
                 _blacklisted_tokens,
@@ -602,12 +602,17 @@ class TestBlacklistToken:
             assert claims["sub"] == "u@t.io"
 
             # Blacklist it
-            blacklist_token(token)
+            await blacklist_token(token)
             with pytest.raises(ValueError, match="Token has been revoked"):
                 validate_local_token(token)
 
-    def test_blacklist_multiple_tokens(self):
-        with patch("auth.jwt.settings") as mock_settings:
+    @pytest.mark.asyncio
+    async def test_blacklist_multiple_tokens(self):
+        with (
+            patch("auth.jwt.settings") as mock_settings,
+            patch("auth.jwt._get_redis", return_value=None),
+            patch("auth.jwt._auth_state_strict", return_value=False),
+        ):
             mock_settings.secret_key = TEST_SECRET
             from auth.jwt import (
                 _blacklisted_tokens,
@@ -618,8 +623,8 @@ class TestBlacklistToken:
 
             t1 = create_access_token(data={"sub": "a"})
             t2 = create_access_token(data={"sub": "b"})
-            blacklist_token(t1)
-            blacklist_token(t2)
+            await blacklist_token(t1)
+            await blacklist_token(t2)
             assert t1 in _blacklisted_tokens
             assert t2 in _blacklisted_tokens
 

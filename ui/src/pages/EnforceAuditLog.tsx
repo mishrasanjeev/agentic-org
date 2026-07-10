@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api from "@/lib/api";
+import { buildCsv } from "@/lib/csv";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -98,13 +99,10 @@ export default function EnforceAuditLog() {
 
   function exportCSV() {
     const headers = ["timestamp", "agent_name", "connector", "tool", "permission", "result", "reason"];
-    const rows = filtered.map((entry) =>
-      headers.map((h) => {
-        const val = String(entry[h as keyof EnforceEntry] ?? "");
-        return `"${val.replace(/"/g, '""')}"`;
-      }).join(",")
+    const csv = buildCsv(
+      headers,
+      filtered.map((entry) => headers.map((header) => entry[header as keyof EnforceEntry] ?? "")),
     );
-    const csv = [headers.join(","), ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

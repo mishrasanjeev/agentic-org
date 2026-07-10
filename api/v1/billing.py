@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 
 logger = structlog.get_logger()
@@ -298,7 +298,7 @@ async def billing_health() -> dict[str, Any]:
 # ── Stripe Subscribe ─────────────────────────────────────────────────
 
 
-@router.post("/subscribe")
+@router.post("/subscribe", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -392,7 +392,7 @@ async def subscribe_stripe(
 # ── Plural Subscribe (India — Redirect Mode) ────────────────────────
 
 
-@router.post("/subscribe/india")
+@router.post("/subscribe/india", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -629,7 +629,7 @@ async def stripe_callback(
 # ── Customer Portal ──────────────────────────────────────────────────
 
 
-@router.post("/portal")
+@router.post("/portal", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -718,7 +718,7 @@ async def check_order_status(
 # ── Cancel ───────────────────────────────────────────────────────────
 
 
-@router.post("/cancel")
+@router.post("/cancel", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,

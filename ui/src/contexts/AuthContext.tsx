@@ -44,7 +44,7 @@ interface AuthContextType {
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
-  loginWithToken: (token: string) => Promise<void>;
+  loginWithToken: (token?: string) => Promise<void>;
   signup: (orgName: string, name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
@@ -103,17 +103,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         const sessionUser: AuthUser = {
           ...data,
-          onboardingComplete: data.onboarding_complete ?? true,
+          onboardingComplete: data.onboarding_complete ?? false,
         };
         setUser(sessionUser);
         setIsAuthenticated(true);
-        return;
+        return sessionUser;
       }
     } catch {
       // best effort — fall through to logged-out state
     }
     setUser(null);
     setIsAuthenticated(false);
+    return null;
   }, []);
 
   useEffect(() => {
@@ -141,7 +142,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cookie was set by the backend response. Hydrate from /auth/me
     // (single source of truth) so we never rely on the response body's
     // user shape, which has drifted across endpoints in the past.
-    await _hydrateFromCookie();
+    const sessionUser = await _hydrateFromCookie();
+    if (!sessionUser) throw new Error("Login succeeded but the session could not be verified");
     const loginUser = data.user;
     if (loginUser) {
       import("@/components/Analytics").then(m => {
@@ -166,7 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const err = await res.json().catch(() => ({ detail: "Signup failed" }));
       throw new Error(err.detail || "Signup failed");
     }
-    await _hydrateFromCookie();
+    const sessionUser = await _hydrateFromCookie();
+    if (!sessionUser) throw new Error("Signup succeeded but the session could not be verified");
   }, [_hydrateFromCookie]);
 
   const loginWithGoogle = useCallback(async (credential: string) => {
@@ -180,28 +183,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const err = await res.json().catch(() => ({ detail: "Google login failed" }));
       throw new Error(err.detail || "Google login failed");
     }
-    await _hydrateFromCookie();
+    const sessionUser = await _hydrateFromCookie();
+    if (!sessionUser) throw new Error("Google login succeeded but the session could not be verified");
   }, [_hydrateFromCookie]);
 
-  const loginWithToken = useCallback(async (_newToken: string) => {
-    // SSO redirect lands a JWT in the URL fragment AND the backend
-    // already set the agenticorg_session cookie before the redirect.
-    // We just need to hydrate the user object from /auth/me. The raw
-    // JWT is intentionally NOT persisted in any browser storage.
-    await _hydrateFromCookie();
+  const loginWithToken = useCallback(async (_legacyToken?: string) => {
+    // The OIDC callback establishes an HttpOnly cookie before redirecting.
+    // A token argument is accepted only for compatibility with old callback
+    // URLs and is never persisted or used as browser authentication.
+    const sessionUser = await _hydrateFromCookie();
+    if (!sessionUser) throw new Error("Could not verify the SSO session");
   }, [_hydrateFromCookie]);
 
   const logout = useCallback(async () => {
+    let res: Response;
     try {
       // Backend clears the HttpOnly cookie + the paired CSRF cookie.
       const csrf = readCookie("agenticorg_csrf");
-      await fetch(`${API_BASE}/auth/logout`, {
+      res = await fetch(`${API_BASE}/auth/logout`, {
         method: "POST",
         headers: csrf ? { "X-CSRF-Token": csrf } : undefined,
         ...SESSION_FETCH_OPTS,
       });
     } catch {
-      // ignore — local state is the source of truth for the SPA after this
+      throw new Error("Could not reach the server to revoke this session");
+    }
+    if (!res.ok) {
+      throw new Error("The server could not revoke this session. Please try again.");
     }
     setUser(null);
     setIsAuthenticated(false);
