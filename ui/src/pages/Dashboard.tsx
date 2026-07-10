@@ -53,6 +53,8 @@ export default function Dashboard() {
     const warnings: string[] = [];
     try {
       const [agentsResp, approvalsResp, auditResp] = await Promise.allSettled([
+        // listAll paginates with per_page=100 so the dashboard never silently
+        // truncates organizations with more than the first API page.
         agentsApi.listAll(),
         api.get("/approvals"),
         api.get("/audit", { params: { limit: 10 } }),

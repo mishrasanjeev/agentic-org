@@ -20,6 +20,8 @@ TENANT_UUID = uuid.UUID(TENANT_STR)
 def _make_result(scalar_one=None, scalars_list=None, scalar_value=None):
     result = MagicMock()
     result.scalar_one_or_none.return_value = scalar_one
+    if scalars_list is None:
+        scalars_list = [scalar_one] if scalar_one is not None else []
     if scalars_list is not None:
         result.scalars.return_value.all.return_value = scalars_list
     if scalar_value is not None:
