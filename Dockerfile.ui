@@ -4,7 +4,7 @@
 FROM node:26-slim@sha256:a1d9d671994fc2d26e297ac56b4b1522a8bc7fa71c43b14cd1b1fe6c5116f7dc AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json* ./
-RUN npm install --legacy-peer-deps
+RUN npm ci --no-audit --no-fund
 ARG CACHE_BUST=1
 COPY ui/ .
 # Copy backend source for llms.txt/sitemap generators (they parse agents + connectors)
