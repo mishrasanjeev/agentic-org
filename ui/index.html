@@ -1,48 +1,45 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en-IN" dir="ltr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
   <!-- Primary Meta -->
-  <title>AgenticOrg — Governed Enterprise AI Agents | Automate with Human Control</title>
-  <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
-  <meta name="keywords" content="AI agents, AI virtual employees, virtual employee, AI workforce, no-code agent builder, custom AI agent, enterprise automation, agentic AI, agent orchestration, prompt template, agent creator, HITL, human in the loop, AgenticOrg, Open Agentic Commerce Protocol, OACP artifacts, OACP artifact cache, Grantex scope enforcement, India enterprise, GSTN, EPFO, Darwinbox, SAP integration, Oracle Fusion, invoice processing, payroll automation, accounts payable, reconciliation, tax compliance, HR automation, marketing automation, IT operations, CFO tools, CHRO tools, CMO tools, COO tools" />
+  <title data-rh="true">Governed Enterprise AI Agents | AgenticOrg</title>
+  <meta name="description" content="Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A." data-rh="true" />
   <meta name="author" content="AgenticOrg" />
   <meta name="theme-color" content="#0f172a" />
-  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-  <meta name="googlebot" content="index, follow" />
-  <meta name="bingbot" content="index, follow" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" data-rh="true" />
+  <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" data-rh="true" />
+  <meta name="bingbot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" data-rh="true" />
   <meta name="format-detection" content="telephone=no" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="AgenticOrg" />
 
-  <!-- Canonical is set dynamically by React Helmet per page -->
-  <!-- Do NOT set a static canonical here — it causes all pages to point to homepage -->
+  <link rel="canonical" href="https://agenticorg.ai/" data-rh="true" />
 
   <!-- Open Graph -->
-  <meta property="og:type" content="website" />
-  <meta property="og:site_name" content="AgenticOrg" />
-  <meta property="og:title" content="Governed Enterprise AI Agents — AgenticOrg" />
-  <meta property="og:description" content="Create governed AI agents with human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
-  <meta property="og:url" content="https://agenticorg.ai/" />
-  <meta property="og:image" content="https://agenticorg.ai/og-image.png" />
-  <meta property="og:image:width" content="1200" />
-  <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="AgenticOrg governed enterprise AI agent platform" />
-  <meta property="og:locale" content="en_IN" />
+  <meta property="og:type" content="website" data-rh="true" />
+  <meta property="og:site_name" content="AgenticOrg" data-rh="true" />
+  <meta property="og:title" content="Governed Enterprise AI Agents | AgenticOrg" data-rh="true" />
+  <meta property="og:description" content="Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A." data-rh="true" />
+  <meta property="og:url" content="https://agenticorg.ai/" data-rh="true" />
+  <meta property="og:image" content="https://agenticorg.ai/og-image.png" data-rh="true" />
+  <meta property="og:image:width" content="1200" data-rh="true" />
+  <meta property="og:image:height" content="630" data-rh="true" />
+  <meta property="og:image:alt" content="AgenticOrg governed enterprise AI agent platform" data-rh="true" />
+  <meta property="og:locale" content="en_IN" data-rh="true" />
 
   <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:site" content="@agenticorg" />
-  <meta name="twitter:creator" content="@agenticorg" />
-  <meta name="twitter:title" content="Governed Enterprise AI Agents — AgenticOrg" />
-  <meta name="twitter:description" content="Governed AI agents with human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
-  <meta name="twitter:image" content="https://agenticorg.ai/og-image.png" />
-  <meta name="twitter:image:alt" content="AgenticOrg Platform Dashboard" />
+  <meta name="twitter:card" content="summary_large_image" data-rh="true" />
+  <meta name="twitter:title" content="Governed Enterprise AI Agents | AgenticOrg" data-rh="true" />
+  <meta name="twitter:description" content="Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A." data-rh="true" />
+  <meta name="twitter:url" content="https://agenticorg.ai/" data-rh="true" />
+  <meta name="twitter:image" content="https://agenticorg.ai/og-image.png" data-rh="true" />
+  <meta name="twitter:image:alt" content="AgenticOrg governed enterprise AI agent platform" data-rh="true" />
 
   <!-- Favicons -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -54,257 +51,60 @@
   <!-- Web Manifest -->
   <link rel="manifest" href="/manifest.json" />
 
-  <!-- JSON-LD: Organization -->
+  <!-- Structured data: organization and application facts only. Route-specific
+       page, breadcrumb, article, and FAQ schemas are added where the matching
+       content is visible. -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "Organization",
+    "@id": "https://agenticorg.ai/#organization",
     "name": "AgenticOrg",
-    "url": "https://agenticorg.ai",
-    "logo": "https://agenticorg.ai/favicon-512x512.png",
-    "description": "Enterprise AI agent platform with governed automation, human approvals, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries",
-    "foundingDate": "2026",
-    "contactPoint": {
-      "@type": "ContactPoint",
-      "contactType": "sales",
-      "email": "sanjeev@agenticorg.ai",
-      "availableLanguage": ["English", "Hindi"]
-    },
-    "sameAs": [
-      "https://github.com/mishrasanjeev/agentic-org"
-    ]
+    "url": "https://agenticorg.ai/",
+    "logo": {"@type": "ImageObject", "url": "https://agenticorg.ai/favicon-512x512.png", "width": 512, "height": 512},
+    "email": "sanjeev@agenticorg.ai",
+    "description": "Open-source enterprise AI agent platform for scoped tools, human approvals, evaluation, audit evidence, and protocol-based integration.",
+    "sameAs": ["https://github.com/mishrasanjeev/agentic-org"]
   }
   </script>
 
-  <!-- JSON-LD: SoftwareApplication -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "AgenticOrg",
-    "description": "Create governed enterprise AI agents across Finance, HR, Marketing, Ops, Back Office, and Comms. Includes human approvals, audit trails, Grantex scope enforcement, Open Agentic Commerce Protocol artifact boundaries, Python/TypeScript SDK, MCP Server, and API keys.",
-    "url": "https://agenticorg.ai",
-    "applicationCategory": "BusinessApplication",
-    "applicationSubCategory": "Enterprise Automation",
-    "operatingSystem": "Cloud",
-    "license": "https://opensource.org/licenses/Apache-2.0",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD",
-      "description": "Free to start. Enterprise plans available."
-    },
-    "author": {
-      "@type": "Organization",
-      "name": "AgenticOrg",
-      "url": "https://agenticorg.ai"
-    },
-    "softwareVersion": "4.8.0",
-    "featureList": [
-      "No-Code Agent Creator — Build Custom AI Virtual Employees",
-      "Pre-Built AI Agents across 6 Domains (Finance, HR, Marketing, Operations, Back Office, Comms)",
-      "1000+ Integrations via Composio + Native connectors (1000+ tools)",
-      "Prompt Template Library — 26 Production-Tested Templates",
-      "Smart Routing — Multiple Agents Per Role with Specialization",
-      "Python SDK (pip install agenticorg) — PyPI Published",
-      "TypeScript SDK (npm i agenticorg-sdk) — npm Published",
-      "MCP Server (npx agenticorg-mcp-server) — Listed in MCP Registry",
-      "API Keys with ao_sk_ Prefix — Admin-Only, Scoped, Revocable",
-      "A2A Protocol — Google Agent-to-Agent Discovery",
-      "Grantex Authorization — Delegated Cross-Tenant Access",
-      "Human-in-the-Loop Governance with Prompt Lock on Active Agents",
-      "Shadow Mode Testing with 6 Quality Gates and Limit Enforcement",
-      "Role-Based Access Control (CFO, CHRO, CMO, COO)",
-      "Real-time Agent Observatory",
-      "Complete Audit Trail (7-year retention)",
-      "India-First Connectors (GSTN, EPFO, Income Tax, Tally)",
-      "PII Masking & Data Residency",
-      "SOC-2 Ready Security",
-      "Per-Agent LLM Selection — Gemini, Claude, GPT-4o with Safe Fallback",
-      "Org Chart Hierarchy — Agents Report to Managers with Escalation",
-      "Organization Chart — Visual Agent Hierarchy per Department",
-      "CSV Bulk Import — Upload Org Charts to Create Agent Teams",
-      "Smart Escalation Chain — Parent Agent → Domain Head → Human Approval",
-      "Per-Agent Budget Enforcement — Monthly Cost Caps with Auto-Block",
-      "Open Agentic Commerce Protocol explainer — seller agents, buyer agents, Grantex authority, and OACP artifact boundaries",
-      "OACP-Grounded Commerce Runtime - MCP/OpenAPI buyer flow with prepared handoff, Offline POS packet, or refusal",
-      "Durable OACP Artifact Cache — scoped public-safe refs with TTL, freshness, revocation, and risk checks",
-      "Cloud Run Deploy Safety — digest verification, commit metadata checks, migration-first rollout"
-    ],
-    "screenshot": "https://agenticorg.ai/screenshots/dashboard.png",
-    "aggregateRating": {
-      "@type": "AggregateRating",
-      "ratingValue": "4.8",
-      "ratingCount": "22",
-      "bestRating": "5",
-      "worstRating": "1"
-    }
-  }
-  </script>
-
-  <!-- JSON-LD: WebSite with SearchAction -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebSite",
+    "@id": "https://agenticorg.ai/#website",
     "name": "AgenticOrg",
-    "url": "https://agenticorg.ai",
-    "description": "Enterprise AI Agent Platform",
-    "potentialAction": {
-      "@type": "SearchAction",
-      "target": "https://agenticorg.ai/?q={search_term_string}",
-      "query-input": "required name=search_term_string"
-    }
+    "url": "https://agenticorg.ai/",
+    "inLanguage": "en-IN",
+    "publisher": {"@id": "https://agenticorg.ai/#organization"},
+    "description": "Documentation, product information, and resources for the AgenticOrg governed enterprise AI agent platform."
   }
   </script>
 
-  <!-- JSON-LD: FAQPage -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "What is AgenticOrg?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "AgenticOrg is an enterprise AI agent platform. Deploy governed agents across Finance, HR, Marketing, Ops, Back Office, and Comms or create custom agents with no code. It includes scoped tool access, Python/TypeScript SDKs, MCP Server, API keys, audit trails, and human-in-the-loop governance on critical decisions."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How does Human-in-the-Loop (HITL) work?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "HITL governance ensures that critical decisions require human approval. For example, invoices above ₹5 lakhs, all tax filings, month-end close packages, and high-value HR offers are automatically escalated to the relevant department head (CFO, CHRO, CMO, or COO) for approval before the agent proceeds."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What enterprise systems does AgenticOrg connect to?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "AgenticOrg has native connectors + 1000+ via Composio including Oracle Fusion, SAP S/4HANA, Salesforce, Tally Prime, GSTN, Income Tax India, EPFO, Darwinbox, Stripe, Slack, Jira, HubSpot, and more. India-first connectors for GSTN, EPFO, and Income Tax are built-in."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is AgenticOrg free?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "AgenticOrg is open-source under Apache 2.0 license. You can start free with the self-hosted version. Enterprise plans with managed hosting, SLA guarantees, and dedicated support are also available."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How long does it take to deploy AgenticOrg?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "For the managed production path, AgenticOrg uses a Cloud Run deployment helper with image digest checks, commit metadata checks, optional migration-first rollout, and explicit traffic modes. Self-hosted and legacy Kubernetes deployment shapes remain available for approved environments."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I create my own AI agents?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. The Agent Creator wizard lets admins build custom AI virtual employees in minutes — give them a name, a role, specialization, and tailored instructions from 26 production-tested prompt templates. No coding required. You can create multiple agents of the same type with different specializations (e.g., 3 AP Processors for different regions)."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I have multiple agents doing the same job?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. You can create multiple instances of the same agent type, each with a unique name, specialization, and routing rules. For example, you might have Priya (AP Processor - Mumbai, domestic invoices) and Arjun (AP Processor - Delhi, import invoices). Smart routing automatically sends tasks to the right agent based on routing filters and specialization."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I import my company's org chart?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Upload a CSV with your department hierarchy and AgenticOrg creates the full agent tree — VPs, Directors, Managers, Analysts — with parent-child escalation chains. Each agent starts in shadow mode for safe testing before promotion."
-        }
-      }
-    ]
-  }
-  </script>
-
-  <!-- JSON-LD: BreadcrumbList -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://agenticorg.ai/"},
-      {"@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://agenticorg.ai/pricing"},
-      {"@type": "ListItem", "position": 3, "name": "Playground", "item": "https://agenticorg.ai/playground"},
-      {"@type": "ListItem", "position": 4, "name": "Evaluations", "item": "https://agenticorg.ai/evals"},
-      {"@type": "ListItem", "position": 5, "name": "Open Agentic Commerce Protocol", "item": "https://agenticorg.ai/open-agentic-commerce-protocol"}
-    ]
-  }
-  </script>
-
-  <!-- JSON-LD: Product Pricing -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    "name": "AgenticOrg Platform",
-    "description": "Governed enterprise AI agent platform with human approvals, audit trails, Grantex scope enforcement, Open Agentic Commerce Protocol artifact boundaries, and SDK/MCP/API access",
-    "brand": {"@type": "Brand", "name": "AgenticOrg"},
-    "url": "https://agenticorg.ai/pricing",
-    "offers": [
-      {
-        "@type": "Offer",
-        "name": "Free Plan",
-        "price": "0",
-        "priceCurrency": "USD",
-        "description": "pre-built agents, 20 connectors, 500 tasks/day",
-        "availability": "https://schema.org/InStock",
-        "url": "https://agenticorg.ai/signup"
-      },
-      {
-        "@type": "Offer",
-        "name": "Pro Plan",
-        "price": "2",
-        "priceCurrency": "USD",
-        "priceValidUntil": "2027-12-31",
-        "description": "Unlimited agents, 1000+ integrations, unlimited tasks, priority support, voice agents, RAG, SDK/MCP/API access",
-        "availability": "https://schema.org/InStock",
-        "url": "https://agenticorg.ai/pricing"
-      },
-      {
-        "@type": "Offer",
-        "name": "Enterprise Plan",
-        "price": "0",
-        "priceCurrency": "USD",
-        "description": "All pre-built agents, 1000+ integrations, native connectors with 1000+ tools, 6 domains, SDK/MCP/API, custom SLA, dedicated support, on-premise option",
-        "availability": "https://schema.org/InStock",
-        "url": "https://agenticorg.ai/pricing"
-      }
-    ]
-  }
-  </script>
-
-  <!-- JSON-LD: LocalBusiness -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareCompany",
+    "@type": "WebApplication",
+    "@id": "https://agenticorg.ai/#application",
     "name": "AgenticOrg",
-    "alternateName": "AgenticOrg",
-    "url": "https://agenticorg.ai",
-    "email": "sanjeev@agenticorg.ai",
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "Bengaluru",
-      "addressRegion": "Karnataka",
-      "addressCountry": "IN"
-    },
-    "knowsAbout": ["Artificial Intelligence", "Enterprise Automation", "AI Agents", "Virtual Employees"]
+    "url": "https://agenticorg.ai/",
+    "applicationCategory": "BusinessApplication",
+    "applicationSubCategory": "Enterprise AI agent orchestration and governance",
+    "operatingSystem": "Web",
+    "softwareVersion": "4.8.0",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "isAccessibleForFree": true,
+    "description": "Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A.",
+    "featureList": [
+      "Scoped tool authorization and tenant boundaries",
+      "Human approval queues and escalation controls",
+      "Agent workflow orchestration and shadow-mode evaluation",
+      "Audit records and evidence export",
+      "Native connectors with runtime-published product facts",
+      "Python and TypeScript SDKs, REST API, MCP, and A2A",
+      "Bounded OACP artifact caching and prepared commerce handoffs"
+    ],
+    "publisher": {"@id": "https://agenticorg.ai/#organization"}
   }
   </script>
 
@@ -331,11 +131,20 @@
 <body class="antialiased">
   <!-- Noscript fallback for SEO crawlers -->
   <noscript>
-    <h1>AgenticOrg — Governed Enterprise AI Agent Platform</h1>
-    <p>Deploy governed AI agents across Finance, HR, Marketing, Operations, Back Office, and Communications. Human-in-the-loop governance, audit trails, Grantex scope enforcement, Open Agentic Commerce Protocol artifact boundaries, Python/TypeScript SDKs, MCP Server, and API access. Built for Indian enterprise with GSTN, EPFO, and Darwinbox connectors.</p>
-    <p>Open Agentic Commerce Protocol explains how seller agents, buyer agents, Grantex authority, scoped OACP artifacts, freshness checks, prepared handoffs, Offline POS handoff packets, and fail-closed refusals fit together without claiming live checkout, payment execution, POS transaction execution, live provider rails, merchant private API execution, or production commerce readiness.</p>
-    <p>Key capabilities: Accounts Payable automation (11 sec/invoice), Bank Reconciliation (99.7% match rate), Payroll (zero errors), Support Triage (88% auto-classify), Campaign Management (3.2x ROI).</p>
-    <p><a href="https://agenticorg.ai/signup">Start free</a> | <a href="https://agenticorg.ai/playground">Try the Playground</a> | <a href="https://agenticorg.ai/blog">Read the Blog</a></p>
+    <main>
+      <h1>AgenticOrg: governed enterprise AI agents</h1>
+      <p>Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A.</p>
+      <p>AgenticOrg supports workflows across finance, HR, marketing, operations, back office, communications, multi-company accounting, and bounded buyer-seller commerce integrations.</p>
+      <p>OACP surfaces use scoped, freshness-checked artifacts for buyer-safe answers and prepared handoffs. Cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.</p>
+      <nav aria-label="Public site">
+        <a href="/pricing">Pricing</a> |
+        <a href="/evals">Evaluations</a> |
+        <a href="/open-agentic-commerce-protocol">OACP</a> |
+        <a href="/resources">Resources</a> |
+        <a href="/blog">Blog</a> |
+        <a href="/support">Support</a>
+      </nav>
+    </main>
   </noscript>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>

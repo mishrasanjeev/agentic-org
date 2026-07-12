@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -53,55 +52,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "30 days", label: "Average contract review cycle slowing down deals", color: "text-red-500" },
-  { value: "5 gaps", label: "Compliance gaps found per audit on average", color: "text-orange-500" },
-  { value: "\u20B92L", label: "Cost per missed regulatory filing or deadline", color: "text-red-500" },
+  { value: "Backlogged", label: "Contract review and obligation queues", color: "text-red-500" },
+  { value: "Distributed", label: "Control evidence and remediation ownership", color: "text-orange-500" },
+  { value: "Time-sensitive", label: "Corporate and regulatory filing work", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Legal Ops & Contract Review",
-    description: "AI reads contracts in minutes, not weeks. Extract key terms, flag risky clauses, compare against templates, and generate redlines — cutting review from 30 days to 2 days.",
+    description: "Extract contract terms, compare clauses against configured playbooks, and draft redlines for qualified legal review. Counsel retains interpretation, negotiation, and approval authority.",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Risk & Compliance",
-    description: "Continuous monitoring against MCA, SEBI, RBI, and internal policies. Auto-identify gaps, generate remediation plans, and track closure. Always audit-ready.",
+    description: "Map configured evidence against internal policies and selected regulatory reference sets, surface potential gaps, and track remediation review. This supports governance work; it does not guarantee compliance.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-red-500 to-rose-600",
   },
   {
     title: "Corporate Secretary",
-    description: "Auto-generate board minutes, maintain statutory registers, track director appointments, and file annual returns with MCA. Complete company secretarial automation.",
+    description: "Draft board minutes, register updates, appointment checklists, and filing packets. Authorized officers and professionals review, approve, and submit through configured portals or providers.",
     icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
     gradient: "from-blue-500 to-cyan-600",
   },
   {
     title: "Internal Communications",
-    description: "AI-powered internal newsletters, policy updates, and town hall summaries. Ensure consistent messaging across departments with sentiment analysis on employee feedback.",
+    description: "Draft internal newsletters, policy updates, and town-hall summaries, and summarize feedback signals. Communications remain subject to owner review and publication approval.",
     icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "Data Governance",
-    description: "Classify sensitive data, enforce access controls, and monitor data flows. Auto-detect PII leaks, ensure DPDPA compliance, and maintain data lineage for audit trails.",
+    description: "Classify sensitive data, surface potential PII exposure, and track configured access and lineage evidence. These workflows can support DPDPA programs but do not establish compliance.",
     icon: "M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4",
     gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Fraud Detection",
-    description: "AI monitors transactions, expense reports, and vendor payments for anomalies. Flag suspicious patterns, generate investigation reports, and escalate with full evidence.",
+    description: "Surface anomalies in configured transaction, expense, and vendor-payment data, then assemble evidence for investigator review. Fraud determinations and actions remain human-owned.",
     icon: "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect Systems", description: "Link DocuSign, Confluence, ServiceNow, and MCA Portal. AI agents ingest existing contracts, policies, and compliance records." },
-  { step: "2", title: "Define Policies", description: "Upload your compliance frameworks, contract templates, and governance policies. AI learns your standards and thresholds." },
-  { step: "3", title: "Shadow & Validate", description: "Agents review contracts, monitor compliance, and flag risks — all reviewed by your team for 1 week before going active." },
-  { step: "4", title: "Scale Governance", description: "Promote to active. Agents handle contract review, compliance monitoring, and fraud detection autonomously across the organization." },
+  { step: "1", title: "Connect Systems", description: "Configure supported document, workflow, and portal sources. Availability depends on credentials, scopes, tenant plan, provider APIs, and portal access." },
+  { step: "2", title: "Define Policies", description: "Provide approved frameworks, contract playbooks, governance policies, thresholds, action scopes, and review responsibilities." },
+  { step: "3", title: "Shadow & Validate", description: "Run selected workflows in parallel, evaluate contract and risk outputs, and review exceptions before enabling any action." },
+  { step: "4", title: "Enable Selected Actions", description: "Enable only validated actions within configured scopes. Legal, filing, compliance, fraud, and governance decisions retain accountable human owners." },
 ];
 
 const TRUST_LOGOS = [
@@ -114,10 +113,10 @@ const TRUST_LOGOS = [
 ];
 
 const KPI_CARDS = [
-  { label: "Active Contracts", value: "342", change: "+28 this quarter", positive: true },
-  { label: "Compliance Score", value: "96.4%", change: "+11.2%", positive: true },
-  { label: "Audit Findings", value: "2", change: "-8 vs last audit", positive: true },
-  { label: "Avg Review Time", value: "2 days", change: "-28 days", positive: true },
+  { label: "Contract Queue", value: "In review", change: "Counsel-owned", positive: true },
+  { label: "Control Evidence", value: "Mapped", change: "Review required", positive: true },
+  { label: "Remediation", value: "Tracked", change: "Owner assigned", positive: true },
+  { label: "Filing Packet", value: "Draft", change: "Approval required", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +176,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your business operations trial.</p>
+            <p className="text-slate-600">Your request was saved. Our team will follow up using the contact details you provided.</p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-amber-500 to-orange-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-amber-600 hover:to-orange-700 transition-all">
               Close
             </button>
@@ -230,11 +229,6 @@ export default function CBOSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual Business Operations Team for CBOs | AgenticOrg</title>
-        <meta name="description" content="Cut contract review from 30 days to 2 days. Automate legal ops, compliance, corporate secretary, data governance, and fraud detection with AI agents." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/cbo" />
-      </Helmet>
 
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
@@ -251,7 +245,7 @@ export default function CBOSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-amber-500 to-orange-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-amber-600 hover:to-orange-700 transition-all shadow-lg shadow-amber-500/25">
-              Start Free Trial
+              Request a Demo
             </button>
           </div>
         </div>
@@ -281,7 +275,7 @@ export default function CBOSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Review contracts in 2 days, not 30. Automate compliance, corporate governance, data governance, and fraud detection with AI agents that protect your business.
+              Coordinate contract review, control evidence, corporate-secretary work, data governance, communications, and anomaly review through governed AI workflows.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -289,7 +283,7 @@ export default function CBOSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-amber-500 to-orange-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-amber-600 hover:to-orange-700 transition-all shadow-lg shadow-amber-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"
@@ -299,7 +293,7 @@ export default function CBOSolution() {
               </a>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">Deployment scope, connector availability, provider access, legal review, and approval requirements are confirmed during discovery.</p>
           </div>
         </div>
       </section>
@@ -310,10 +304,10 @@ export default function CBOSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your business is exposed to hidden risks
+                Common governance and legal-operations friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for Indian mid-market companies with 500+ employees.
+                Illustrative workflow states; actual priorities depend on legal context, control framework, source systems, and accountable owners.
               </p>
             </div>
           </FadeIn>
@@ -336,9 +330,9 @@ export default function CBOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Your Complete Virtual Business Ops Team</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed AI Workflows for Business Operations</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered agents that cover legal, compliance, governance, and risk management end to end.
+                Configure scoped workflows for contracts, control evidence, corporate-secretary tasks, communications, data governance, and anomaly review.
               </p>
             </div>
           </FadeIn>
@@ -366,9 +360,9 @@ export default function CBOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Real-Time CBO Dashboard</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Operational CBO Dashboard</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Every governance and compliance metric at a glance, updated in real time.
+                Illustrative operational states. Actual metrics and freshness depend on connected source data, review status, and configured evidence.
               </p>
             </div>
           </FadeIn>
@@ -399,11 +393,11 @@ export default function CBOSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full business operations automation.
+                Connect sources, define policy, validate in shadow mode, and enable selected actions with legal and accountable-owner approval.
               </p>
             </div>
           </FadeIn>
@@ -435,24 +429,24 @@ export default function CBOSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-amber-50 via-white to-orange-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                CBO Suite &mdash; Enterprise Ready
+                Configurable CBO Workflow Suite
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
                 Transform Your Business Operations
               </h2>
               <p className="text-lg text-slate-600 mb-6 max-w-xl mx-auto">
-                Get your virtual business ops team running in under a week. Full legal, compliance, and governance automation.
+                Select the governance workflows that fit your controls. Availability depends on plan, connectors, provider or portal access, and approval policy.
               </p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "30d to 2d contract review",
-                  "Continuous compliance",
-                  "MCA/SEBI auto-filing",
-                  "Fraud detection AI",
-                  "Data governance (DPDPA)",
-                  "Board minutes automation",
-                  "SOC2 audit trail",
-                  "14-day free trial",
+                  "Contract extraction and draft redlines",
+                  "Control-evidence mapping",
+                  "Regulatory filing workpapers",
+                  "Anomaly review support",
+                  "DPDPA program support",
+                  "Draft board minutes and registers",
+                  "Approval and audit evidence",
+                  "Human-owned legal and filing decisions",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -465,7 +459,7 @@ export default function CBOSolution() {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex items-center justify-center bg-gradient-to-r from-amber-500 to-orange-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-amber-600 hover:to-orange-700 transition-all shadow-lg shadow-amber-500/25"
                 >
-                  Start Free Trial
+                  Request a Demo
                 </button>
                 <a
                   href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"
@@ -474,7 +468,7 @@ export default function CBOSolution() {
                   Book a Demo
                 </a>
               </div>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">Commercial terms and enabled capabilities are confirmed for the selected plan and deployment scope.</p>
             </div>
           </FadeIn>
         </div>
@@ -490,9 +484,9 @@ export default function CBOSolution() {
                   <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
                     Built for Governance-First Organizations
                   </div>
-                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Trusted Integrations</h2>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Connector Availability</h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with leading legal, compliance, and governance platforms.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, portal access, and provider approval.
                   </p>
                 </div>
 
@@ -521,17 +515,17 @@ export default function CBOSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop letting compliance gaps and slow contracts hold you back
+              Bring governance work into accountable workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join CBOs who have cut contract review from 30 to 2 days and achieved 96.4% compliance scores.
+              Review source-linked drafts and evidence while counsel and accountable officers retain ownership of legal, filing, compliance, and fraud decisions.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-amber-500 to-orange-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-amber-600 hover:to-orange-700 transition-all shadow-lg shadow-amber-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"

@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { BLOG_POSTS } from "./blogData";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -13,11 +12,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function Blog() {
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Blog — AgenticOrg | AI Virtual Employees for Enterprise</title>
-        <meta name="description" content="Insights on AI agents, enterprise automation, virtual employees, bank reconciliation, invoice processing, HITL governance, and no-code agent building." />
-        <link rel="canonical" href="https://agenticorg.ai/blog" />
-      </Helmet>
 
       {/* Header */}
       <header className="bg-slate-900 py-20">
@@ -30,7 +24,7 @@ export default function Blog() {
           </Link>
           <h1 className="text-4xl sm:text-5xl font-extrabold text-white">AgenticOrg Blog</h1>
           <p className="mt-4 text-lg text-slate-400">
-            Insights on AI virtual employees, enterprise automation, and the future of work.
+            Evidence-conscious guides to agent workflows, governance, operating boundaries, and implementation.
           </p>
         </div>
       </header>
@@ -76,10 +70,10 @@ export default function Blog() {
       {/* Footer CTA */}
       <section className="bg-slate-50 py-16 border-t">
         <div className="max-w-4xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold text-slate-900 mb-4">Ready to deploy AI virtual employees?</h2>
+          <h2 className="text-2xl font-bold text-slate-900 mb-4">Ready to evaluate a governed agent workflow?</h2>
           <div className="flex justify-center gap-4">
             <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
-              Start Free
+              Create an Account
             </Link>
             <Link to="/playground" className="border border-slate-300 text-slate-700 px-6 py-3 rounded-xl text-sm font-semibold hover:bg-slate-100 transition-all">
               Try Playground

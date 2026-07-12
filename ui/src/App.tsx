@@ -1,10 +1,11 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
+import RouteSeo from "./components/RouteSeo";
 
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
@@ -169,14 +170,14 @@ export default function App() {
 
       {/* Legal / policy pages - required for Stripe activation */}
       <Route path="/support" element={<Support />} />
-      <Route path="/contact" element={<Support />} />
+      <Route path="/contact" element={<Navigate to="/support" replace />} />
       <Route path="/privacy" element={<Privacy />} />
-      <Route path="/privacy-policy" element={<Privacy />} />
+      <Route path="/privacy-policy" element={<Navigate to="/privacy" replace />} />
       <Route path="/terms" element={<Terms />} />
-      <Route path="/terms-of-service" element={<Terms />} />
+      <Route path="/terms-of-service" element={<Navigate to="/terms" replace />} />
       <Route path="/refund" element={<Refund />} />
-      <Route path="/refund-policy" element={<Refund />} />
-      <Route path="/cancellation" element={<Refund />} />
+      <Route path="/refund-policy" element={<Navigate to="/refund" replace />} />
+      <Route path="/cancellation" element={<Navigate to="/refund" replace />} />
 
       {/* Blog / Content pages */}
       <Route path="/blog" element={<Blog />} />
@@ -745,6 +746,7 @@ export default function App() {
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    <RouteSeo />
     </Suspense>
     </I18nextProvider>
   );

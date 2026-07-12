@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
-import { useProductFacts } from "@/lib/productFacts";
+import publicSite from "../content/publicSite.json";
 
 /* ------------------------------------------------------------------ */
 /*  CheckIcon                                                          */
@@ -75,7 +74,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours.</p>
+            <p className="text-slate-600">We'll follow up using the contact details you provided.</p>
             <button
               onClick={onClose}
               className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
@@ -120,70 +119,23 @@ function DemoModal({ onClose }: { onClose: () => void }) {
 /* ------------------------------------------------------------------ */
 /*  Tier data                                                          */
 /* ------------------------------------------------------------------ */
-// Tier content parametrized on runtime connector/agent counts so it never
-// drifts from the backend registry.
-function buildTiers(agentsText: string, connectorsText: string) {
-  return [
-    {
-      name: "Free",
-      price: "$0",
-      period: "/month",
-      description: "Get started with core AI agents and see results immediately.",
-      highlight: false,
-      cta: "Start Free",
-      ctaLink: "/login",
-      features: [
-        `${agentsText} AI agents`,
-        "20 connectors",
-        "500 tasks/day",
-        "Community support",
-        "Shadow mode testing",
-        "Basic audit log",
-        "Single workspace",
-      ],
-    },
-    {
-      name: "Pro",
-      price: "$2",
-      period: "/month",
-      description: "Scale your operations with advanced agents and priority support.",
-      highlight: true,
-      cta: "Start Pro",
-      ctaLink: "demo",
-      features: [
-        "Unlimited AI agents",
-        `${connectorsText} connectors`,
-        "Unlimited tasks",
-        "Email support",
-        "Custom workflows",
-        "Priority HITL queue",
-        "Advanced analytics",
-        "API access",
-        "Team workspaces",
-      ],
-    },
-    {
-      name: "Enterprise",
-      price: "Custom",
-      period: "",
-      description: "Full platform with dedicated support, SLA, and custom deployments.",
-      highlight: false,
-      cta: "Contact Sales",
-      ctaLink: "demo",
-      features: [
-        "Unlimited AI agents",
-        `${connectorsText} connectors`,
-        "Unlimited everything",
-        "Dedicated support",
-        "99.9% SLA guarantee",
-        "Custom connectors",
-        "On-premise option",
-        "SSO / SAML",
-        "Custom integrations",
-        "Dedicated CSM",
-      ],
-    },
-  ];
+function buildTiers() {
+  const descriptions: Record<string, string> = {
+    free: "Evaluate core governed workflows with published usage limits.",
+    pro: "Increase agent, run, and storage limits with priority support and custom connectors.",
+    enterprise: "Operate without published usage caps and add enterprise identity, support, and service options.",
+  };
+
+  return publicSite.plans.map((plan) => ({
+    name: plan.name,
+    price: `$${plan.priceUsd}`,
+    period: "/month",
+    description: descriptions[plan.id],
+    highlight: plan.id === "pro",
+    cta: plan.id === "free" ? "Start Free" : plan.id === "pro" ? "Discuss Pro" : "Contact Sales",
+    ctaLink: plan.id === "free" ? "/signup" : "demo",
+    features: plan.features,
+  }));
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,23 +148,16 @@ interface ComparisonRow {
   enterprise: string | boolean;
 }
 
-function buildComparison(agentsText: string, connectorsText: string): ComparisonRow[] {
+function buildComparison(): ComparisonRow[] {
   return [
-  { feature: "AI Agents", free: agentsText, pro: "Unlimited", enterprise: "Unlimited" },
-  { feature: "Connectors", free: "20", pro: connectorsText, enterprise: connectorsText },
-  { feature: "Tasks per day", free: "500", pro: "Unlimited", enterprise: "Unlimited" },
-  { feature: "Shadow mode", free: true, pro: true, enterprise: true },
-  { feature: "Custom workflows", free: false, pro: true, enterprise: true },
-  { feature: "Human-in-the-Loop (HITL)", free: "Basic", pro: "Priority", enterprise: "Dedicated" },
-  { feature: "Audit log", free: "7 days", pro: "90 days", enterprise: "Unlimited" },
-  { feature: "API access", free: false, pro: true, enterprise: true },
-  { feature: "Analytics & Observatory", free: "Basic", pro: "Advanced", enterprise: "Full" },
-  { feature: "SSO / SAML", free: false, pro: false, enterprise: true },
-  { feature: "Custom connectors", free: false, pro: false, enterprise: true },
-  { feature: "On-premise deployment", free: false, pro: false, enterprise: true },
-  { feature: "SLA guarantee", free: false, pro: false, enterprise: "99.9%" },
-  { feature: "Support", free: "Community", pro: "Email", enterprise: "Dedicated" },
-  { feature: "Dedicated CSM", free: false, pro: false, enterprise: true },
+    { feature: "Governed agents", free: "3", pro: "15", enterprise: "Unlimited" },
+    { feature: "Agent runs per month", free: "1,000", pro: "10,000", enterprise: "Unlimited" },
+    { feature: "Storage", free: "1 GB", pro: "50 GB", enterprise: "Unlimited" },
+    { feature: "Support", free: "Community", pro: "Priority", enterprise: "24/7" },
+    { feature: "Custom connectors", free: false, pro: true, enterprise: true },
+    { feature: "SSO and SCIM", free: false, pro: false, enterprise: true },
+    { feature: "Custom service-level agreement", free: false, pro: false, enterprise: true },
+    { feature: "Dedicated customer success", free: false, pro: false, enterprise: true },
   ];
 }
 
@@ -221,28 +166,28 @@ function buildComparison(agentsText: string, connectorsText: string): Comparison
 /* ------------------------------------------------------------------ */
 const FAQS = [
   {
-    q: "Can I switch plans at any time?",
-    a: "Yes. You can upgrade or downgrade your plan at any time. When upgrading, you get immediate access to the new features. When downgrading, the change takes effect at the next billing cycle.",
+    q: "Is there a free AgenticOrg plan?",
+    a: "Yes. The Free plan is $0 per month and includes up to 3 governed agents, 1,000 agent runs per month, 1 GB of storage, and community support.",
   },
   {
-    q: "What happens when I hit the task limit on Free?",
-    a: "Tasks beyond the daily limit are queued and processed the next day. You will receive a notification suggesting an upgrade. No data is lost.",
+    q: "What is included in Pro?",
+    a: "Pro is $2 per month in the published USD plan. It includes up to 15 governed agents, 10,000 runs per month, 50 GB of storage, priority support, and custom connectors.",
   },
   {
-    q: "Do you offer annual billing?",
-    a: "Yes. Annual plans receive a 20% discount. Contact our sales team for details on annual Enterprise agreements.",
+    q: "What is included in Enterprise?",
+    a: "Enterprise is $499 per month in the published USD plan. It removes the published agent, run, and storage caps and adds 24/7 support, custom service-level agreements, dedicated customer success, SSO, and SCIM.",
   },
   {
-    q: "What connectors are included?",
-    a: "Free includes 20 core connectors (Oracle, SAP, Salesforce, Slack, GSTN, and more). Pro and Enterprise include every native connector (Darwinbox, Stripe, HubSpot, EPFO, Jira, and more). Enterprise adds custom integrations.",
+    q: "Does a listed connector work automatically for every customer?",
+    a: "No. The product catalog reports registered connector definitions. Actual availability depends on the plan, provider support, tenant configuration, approved credentials, scopes, consent, and any required human authorization.",
   },
   {
-    q: "Is my data secure?",
-    a: "All plans include encryption at rest and in transit, tenant isolation, and HMAC-signed audit logs. Enterprise adds on-premise deployment, SSO/SAML, and a dedicated security review.",
+    q: "Can AgenticOrg be self-hosted?",
+    a: "Yes. The repository is Apache-2.0 licensed and includes Docker and deployment assets. Managed-service pricing is separate from the right to operate the open-source software in your own approved environment.",
   },
   {
-    q: "Can I try Pro features before committing?",
-    a: "Yes. We offer a 14-day free trial of Pro. Book a demo and we will set it up for your team.",
+    q: "Are taxes, currency conversion, and provider charges included?",
+    a: "Displayed plan prices describe the application subscription. Applicable taxes, currency conversion, cloud infrastructure, model usage, and third-party provider charges may be separate. Confirm the final amount in the billing flow or with support.",
   },
 ];
 
@@ -255,6 +200,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
     <div className="border-b border-slate-200 last:border-0">
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
         className="w-full flex items-center justify-between py-5 text-left"
       >
         <span className="text-base font-medium text-slate-900">{q}</span>
@@ -288,19 +234,11 @@ function CellValue({ value }: { value: string | boolean }) {
 /* ================================================================== */
 export default function Pricing() {
   const [showDemo, setShowDemo] = useState(false);
-  const { facts } = useProductFacts();
-  const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "50+";
-  const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "25+";
-  const TIERS = buildTiers(agentsText, connectorsText);
-  const COMPARISON = buildComparison(agentsText, connectorsText);
+  const TIERS = buildTiers();
+  const COMPARISON = buildComparison();
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Pricing | AgenticOrg</title>
-        <meta name="description" content="Simple, transparent pricing for AgenticOrg. Start free with 50+ agents, scale with Pro, go all-in with Enterprise." />
-        <link rel="canonical" href="https://agenticorg.ai/pricing" />
-      </Helmet>
 
       {/* Demo modal */}
       {showDemo && <DemoModal onClose={() => setShowDemo(false)} />}
@@ -349,8 +287,7 @@ export default function Pricing() {
             Simple, transparent pricing
           </h1>
           <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Start free with 50+ agents. Scale to unlimited agents and 1000+ integrations as your team grows.
-            No hidden fees. Cancel anytime.
+            Compare the published Free, Pro, and Enterprise limits for agents, monthly runs, storage, support, connectors, identity, and service options.
           </p>
         </div>
       </section>
@@ -488,14 +425,14 @@ export default function Pricing() {
       <section className="py-20 px-4 bg-gradient-to-r from-slate-900 to-slate-800">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to automate your enterprise?
+            Choose a plan for a measurable, governed workflow
           </h2>
           <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start free with 50+ agents and 20 connectors. Upgrade to Pro for 1000+ integrations and unlimited tasks.
+            Start with 3 governed agents and 1,000 monthly runs. Move to Pro or Enterprise when your usage, support, connector, identity, or service requirements grow.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
-              to="/login"
+              to="/signup"
               className="bg-white text-slate-900 px-8 py-3 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-all"
             >
               Start Free

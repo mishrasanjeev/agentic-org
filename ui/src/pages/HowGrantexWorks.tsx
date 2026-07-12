@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -193,13 +192,6 @@ function LockIcon({ className = "w-6 h-6" }: { className?: string }) {
 export default function HowGrantexWorks() {
   return (
     <>
-      <Helmet>
-        <title>How Grantex Works | AgenticOrg</title>
-        <meta
-          name="description"
-          content="Learn how AgenticOrg uses Grantex to enforce fine-grained permissions on every AI agent tool call. Manifest-based, offline JWT, sub-millisecond checks."
-        />
-      </Helmet>
 
       <div className="min-h-screen bg-white text-slate-900">
         {/* ─── Nav ─── */}
@@ -251,7 +243,7 @@ export default function HowGrantexWorks() {
             <FadeIn>
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 mb-8">
                 <ShieldIcon className="w-4 h-4 text-blue-400" />
-                <span className="text-sm font-medium text-blue-300">Enterprise-Grade Agent Security</span>
+                <span className="text-sm font-medium text-blue-300">Scoped Agent Authorization</span>
               </div>
             </FadeIn>
 
@@ -259,15 +251,15 @@ export default function HowGrantexWorks() {
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
                 How AgenticOrg Agents{" "}
                 <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 bg-clip-text text-transparent">
-                  Access Your Data Safely
+                  Access Data with Scoped Controls
                 </span>
               </h1>
             </FadeIn>
 
             <FadeIn delay={200}>
               <p className="mt-6 text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed">
-                Every tool call is verified. Every permission is checked.{" "}
-                <span className="text-white font-semibold">Every action is audited.</span>
+                Configured tool requests can be checked against declared scopes.{" "}
+                <span className="text-white font-semibold">Audit coverage depends on the enabled integration and retention settings.</span>
               </p>
             </FadeIn>
 
@@ -362,13 +354,13 @@ export default function HowGrantexWorks() {
                     {
                       icon: <XCircle className="w-6 h-6 text-red-500" />,
                       title: "Agents can exceed their mandate",
-                      desc: 'An agent told to READ your contacts could DELETE them instead. There\'s nothing stopping it.',
+                      desc: "Without a correctly configured enforcement boundary, a READ-scoped agent could still reach a destructive tool.",
                       color: "border-red-200 bg-red-50",
                     },
                     {
                       icon: <XCircle className="w-6 h-6 text-orange-500" />,
                       title: "Revoked access doesn't stop a running agent",
-                      desc: "You revoke a token, but the agent already cached its permissions. It keeps going.",
+                      desc: "A runtime that does not re-check expiry or revocation can continue with stale authorization.",
                       color: "border-orange-200 bg-orange-50",
                     },
                     {
@@ -405,10 +397,10 @@ export default function HowGrantexWorks() {
                   The Solution
                 </span>
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">
-                  How Grantex Protects You
+                  How Grantex Supports Scoped Enforcement
                 </h2>
                 <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                  Five layers of enforcement between every agent and your data.
+                  Five control stages in this illustrative authorization flow.
                 </p>
               </div>
             </FadeIn>
@@ -544,7 +536,7 @@ export default function HowGrantexWorks() {
                       Permission Hierarchy
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      Higher permissions include lower ones. A <strong>WRITE</strong> token can also <strong>READ</strong>. But a <strong>READ</strong> token can never WRITE, DELETE, or do ADMIN tasks.
+                      In this simplified hierarchy, a <strong>WRITE</strong> grant includes <strong>READ</strong>, while a READ-only grant does not authorize WRITE, DELETE, or ADMIN operations.
                     </p>
                   </div>
                   <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-indigo-500 border-4 border-white shadow-lg z-10" />
@@ -552,7 +544,7 @@ export default function HowGrantexWorks() {
                     {/* Pyramid */}
                     <div className="flex flex-col items-center gap-2">
                       {[
-                        { label: "ADMIN", color: "bg-purple-600", width: "w-32", textColor: "text-white", desc: "Full control" },
+                        { label: "ADMIN", color: "bg-purple-600", width: "w-32", textColor: "text-white", desc: "Administrative scope" },
                         { label: "DELETE", color: "bg-red-500", width: "w-44", textColor: "text-white", desc: "Remove records" },
                         { label: "WRITE", color: "bg-blue-500", width: "w-56", textColor: "text-white", desc: "Create & update" },
                         { label: "READ", color: "bg-emerald-500", width: "w-68", textColor: "text-white", desc: "View only" },
@@ -579,10 +571,10 @@ export default function HowGrantexWorks() {
                   <div className="md:w-1/2 md:text-right md:pr-12">
                     <div className="inline-flex items-center gap-2 text-sm font-bold text-teal-600 mb-3">
                       <span className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center text-sm font-black">5</span>
-                      All Decisions Are Logged
+                      Authorization Decisions Can Be Logged
                     </div>
                     <p className="text-slate-600 leading-relaxed">
-                      Every allow and deny is recorded with <strong>timestamp, agent, tool, connector, and reason</strong>. Compliance-ready, always auditable.
+                      When audit integration is enabled, allow and deny events can record timestamp, agent, tool, connector, and reason. Completeness, retention, immutability, and audit suitability must be verified for the deployment.
                     </p>
                   </div>
                   <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-teal-500 border-4 border-white shadow-lg z-10" />
@@ -644,7 +636,7 @@ export default function HowGrantexWorks() {
                       { text: "Permission guessed from tool name keywords", detail: '"process_refund" classified as a harmless READ' },
                       { text: "No enforcement layer in LangGraph pipeline", detail: "Agents call tools directly with no middleware" },
                       { text: "Keyword matching is brittle and incomplete", detail: '"generate_invoice" might mean READ or WRITE' },
-                      { text: "No audit trail of permission decisions", detail: "Impossible to prove compliance after the fact" },
+                      { text: "No audit trail of permission decisions", detail: "Missing authorization evidence makes later review incomplete" },
                     ].map((item, i) => (
                       <div key={i} className="flex gap-3">
                         <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
@@ -670,8 +662,8 @@ export default function HowGrantexWorks() {
                     {[
                       { text: "Manifest-based: each tool declares its required permission", detail: "No guessing. delete_contact = DELETE. Period." },
                       { text: "Offline JWT verification at the LangGraph boundary", detail: "No network call needed. Tokens are self-contained." },
-                      { text: "Sub-millisecond enforcement on every tool call", detail: "<1ms overhead. Your agents stay fast." },
-                      { text: "Connector manifests for every native integration", detail: "Every tool in every connector is mapped and enforced." },
+                      { text: "Local token checks can avoid a provider round trip", detail: "Measure latency and failure behavior in your deployment." },
+                      { text: "Manifests describe supported native connector tools", detail: "Verify manifest coverage against the current runtime registry." },
                     ].map((item, i) => (
                       <div key={i} className="flex gap-3">
                         <CheckCircle className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -698,13 +690,13 @@ export default function HowGrantexWorks() {
               <div className="text-center mb-16">
                 <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-50 border border-purple-200 text-purple-600 text-sm font-medium mb-6">
                   <RobotIcon className="w-4 h-4" />
-                  Real Example
+                  Illustrative Example
                 </span>
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">
                   See It In Action
                 </h2>
                 <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                  A real agent flow showing exactly how Grantex makes decisions.
+                  A fictional authorization example, not a live tenant trace or production-readiness result.
                 </p>
               </div>
             </FadeIn>
@@ -799,7 +791,7 @@ export default function HowGrantexWorks() {
             <FadeIn>
               <div className="text-center mb-16">
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
-                  By the Numbers
+                  Control Model
                 </h2>
               </div>
             </FadeIn>
@@ -807,15 +799,15 @@ export default function HowGrantexWorks() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 {
-                  value: "53",
+                  value: "Declared",
                   label: "Connector Manifests",
-                  sublabel: "Every tool mapped",
+                  sublabel: "Verify current tool coverage",
                   gradient: "from-blue-500 to-blue-600",
                 },
                 {
-                  value: "<1ms",
-                  label: "Per Check",
-                  sublabel: "Offline JWT verification",
+                  value: "Local",
+                  label: "Token Verification",
+                  sublabel: "Measure latency and revocation behavior",
                   gradient: "from-blue-500 to-blue-600",
                 },
                 {
@@ -825,9 +817,9 @@ export default function HowGrantexWorks() {
                   gradient: "from-emerald-500 to-emerald-600",
                 },
                 {
-                  value: "100%",
-                  label: "Accuracy",
-                  sublabel: "Zero false positives",
+                  value: "Tested",
+                  label: "Enforcement Quality",
+                  sublabel: "Exercise allowed, denied, expired, and revoked cases",
                   gradient: "from-amber-500 to-orange-500",
                 },
               ].map((stat, i) => (
@@ -860,13 +852,13 @@ export default function HowGrantexWorks() {
             <FadeIn>
               <ShieldIcon className="w-12 h-12 text-blue-400 mx-auto mb-6" />
               <h2 className="text-3xl sm:text-4xl font-extrabold text-white">
-                Ready to deploy AI agents with{" "}
+                Ready to evaluate AI agents with{" "}
                 <span className="bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-                  enterprise-grade security?
+                  scoped authorization controls?
                 </span>
               </h2>
               <p className="mt-6 text-lg text-slate-300 max-w-xl mx-auto leading-relaxed">
-                Every tool call verified. Every permission enforced. Every action audited. Start building with confidence.
+                Test manifest coverage, token handling, denied cases, audit records, latency, and rollback in your own deployment before relying on these controls.
               </p>
             </FadeIn>
 

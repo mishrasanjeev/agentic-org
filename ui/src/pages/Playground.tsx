@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
 
@@ -39,7 +38,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "process-invoice",
     emoji: "\uD83E\uDDFE",
-    title: "Process Invoice",
+    title: "Review Sample Invoice",
     domain: "finance",
     domainLabel: "Finance (CFO)",
     agentId: "a0000001-0000-0000-0001-000000000001",
@@ -48,7 +47,7 @@ const USE_CASES: UseCase[] = [
       action: "process_invoice",
       inputs: {
         invoice_id: "INV-2024-DEMO",
-        vendor: "Tata Steel Ltd",
+        vendor: "Demo Metals Pvt Ltd",
         amount: 782000,
         gstin: "29ABCDE1234F1Z5",
         po_number: "PO-7842",
@@ -62,14 +61,14 @@ const USE_CASES: UseCase[] = [
           { description: "Hot Rolled Steel Coil 3mm", qty: 50, unit_price: 12640, amount: 632000 },
           { description: "Freight and Handling", qty: 1, unit_price: 150000, amount: 150000 },
         ],
-        bank_details: { ifsc: "SBIN0001234", account: "38429876543" },
+        bank_details: { ifsc: "DEMO0000000", account: "SYNTHETIC-NOT-A-BANK-ACCOUNT" },
       },
     },
   },
   {
     id: "reconcile-bank",
     emoji: "\uD83C\uDFE6",
-    title: "Reconcile Bank Transactions",
+    title: "Propose Sample Bank Matches",
     domain: "finance",
     domainLabel: "Finance (CFO)",
     agentId: "a0000001-0000-0000-0001-000000000003",
@@ -94,7 +93,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "screen-resume",
     emoji: "\uD83D\uDCC4",
-    title: "Screen Resume",
+    title: "Summarize Sample Resume Against a Rubric",
     domain: "hr",
     domainLabel: "HR (CHRO)",
     agentId: "a0000001-0000-0000-0002-000000000003",
@@ -102,11 +101,11 @@ const USE_CASES: UseCase[] = [
     input: {
       action: "screen_resume",
       inputs: {
-        candidate: "Priya Mehta",
+        candidate: "Sample Candidate",
         role: "Senior Backend Engineer",
         experience_years: 7,
         skills: ["Python", "Go", "Kubernetes", "PostgreSQL", "AWS"],
-        education: "IIT Bombay B.Tech CS",
+        education: "Example University - Computer Science",
         current_ctc: 2800000,
         expected_ctc: 3500000,
         notice_period_days: 60,
@@ -116,7 +115,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "compute-payroll",
     emoji: "\uD83D\uDCB0",
-    title: "Compute Payroll",
+    title: "Draft Sample Payroll Calculation",
     domain: "hr",
     domainLabel: "HR (CHRO)",
     agentId: "a0000001-0000-0000-0002-000000000002",
@@ -125,7 +124,7 @@ const USE_CASES: UseCase[] = [
       action: "compute_payroll",
       inputs: {
         employee_id: "EMP-4521",
-        name: "Rahul Sharma",
+        name: "Demo Employee",
         basic: 85000,
         hra: 42500,
         special_allowance: 22500,
@@ -138,7 +137,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "score-lead",
     emoji: "\uD83C\uDFAF",
-    title: "Score Lead",
+    title: "Score Sample Lead",
     domain: "marketing",
     domainLabel: "Marketing (CMO)",
     agentId: "a0000001-0000-0000-0003-000000000004",
@@ -146,7 +145,7 @@ const USE_CASES: UseCase[] = [
     input: {
       action: "score_lead",
       inputs: {
-        lead_name: "Acme Corp",
+        lead_name: "Example Prospect",
         source: "hubspot_form",
         company_size: "500-1000",
         industry: "BFSI",
@@ -160,7 +159,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "analyze-sentiment",
     emoji: "\uD83D\uDCCA",
-    title: "Analyze Brand Sentiment",
+    title: "Analyze Sample Brand Sentiment",
     domain: "marketing",
     domainLabel: "Marketing (CMO)",
     agentId: "a0000001-0000-0000-0003-000000000005",
@@ -168,7 +167,7 @@ const USE_CASES: UseCase[] = [
     input: {
       action: "analyze_sentiment",
       inputs: {
-        brand: "AgenticOrg",
+        brand: "Example Brand",
         platform: "twitter",
         timeframe: "last_24h",
         mention_count: 47,
@@ -183,7 +182,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "classify-ticket",
     emoji: "\uD83C\uDFAB",
-    title: "Classify Support Ticket",
+    title: "Classify Sample Support Ticket",
     domain: "operations",
     domainLabel: "Operations (COO)",
     agentId: "a0000001-0000-0000-0004-000000000001",
@@ -193,7 +192,7 @@ const USE_CASES: UseCase[] = [
       inputs: {
         ticket_id: "TKT-2026-8847",
         subject: "Payment failed after entering OTP",
-        body: "I tried to pay for my order #ORD-4521 but after entering OTP the page showed error 500. Amount was debited from my bank account but order shows unpaid. Please help urgently.",
+        body: "[Synthetic sample] A checkout attempt showed an error after OTP. The sample account shows a debit while the sample order remains unpaid. Route for provider verification; do not claim payment or order status.",
         customer_tier: "premium",
         channel: "email",
       },
@@ -202,7 +201,7 @@ const USE_CASES: UseCase[] = [
   {
     id: "incident-response",
     emoji: "\uD83D\uDEA8",
-    title: "Respond to P1 Incident",
+    title: "Draft a Sample P1 Incident Response",
     domain: "operations",
     domainLabel: "Operations (COO)",
     agentId: "a0000001-0000-0000-0004-000000000002",
@@ -283,7 +282,7 @@ function parseTraceLines(
   const perf = result.performance as Record<string, unknown> | undefined;
   const tokensUsed = traces.find(t => t.includes("tokens"))?.match(/(\d+)\s*tokens/)?.[1] || "~1000";
   const latencyMs = perf?.total_latency_ms ?? "—";
-  lines.push({ text: `LLM responded: gemini-2.5-flash, ${tokensUsed} tokens (${typeof latencyMs === "number" ? (latencyMs / 1000).toFixed(1) + "s" : "—"})`, color: "amber" });
+  lines.push({ text: `Model response received: ${tokensUsed} tokens (${typeof latencyMs === "number" ? (latencyMs / 1000).toFixed(1) + "s" : "?"})`, color: "amber" });
 
   // Parse output intelligently — show key fields, not raw JSON
   const out = (typeof output === "object" && output !== null) ? output as Record<string, unknown> : {};
@@ -295,8 +294,8 @@ function parseTraceLines(
   if (p.status) lines.push({ text: `Status: ${p.status}`, color: "green" });
   if (p.invoice_id) lines.push({ text: `Invoice: ${p.invoice_id}`, color: "green" });
   if (p.match_delta !== undefined) lines.push({ text: `3-Way Match Delta: ${p.match_delta ?? "N/A"}`, color: p.match_delta === 0 ? "green" : "amber" });
-  if (p.payment_scheduled_date) lines.push({ text: `Payment Scheduled: ${p.payment_scheduled_date}`, color: "green" });
-  if (p.gl_posting_id) lines.push({ text: `GL Posting: ${p.gl_posting_id}`, color: "green" });
+  if (p.payment_scheduled_date) lines.push({ text: `Payment schedule field (verify authorization and source): ${p.payment_scheduled_date}`, color: "amber" });
+  if (p.gl_posting_id) lines.push({ text: `GL posting reference (verify in source system): ${p.gl_posting_id}`, color: "amber" });
   if (p.escalation_reason) lines.push({ text: `Escalation: ${p.escalation_reason}`, color: "red" });
   if (p.score !== undefined) lines.push({ text: `Score: ${p.score}`, color: "green" });
   if (p.classification) lines.push({ text: `Classification: ${p.classification}`, color: "green" });
@@ -595,11 +594,6 @@ export default function Playground() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <Helmet>
-        <title>Agent Playground — Try AgenticOrg Live</title>
-        <meta name="description" content="Sign in to run your AgenticOrg AI agents and inspect their results in the playground." />
-        <link rel="canonical" href="https://agenticorg.ai/playground" />
-      </Helmet>
 
       {/* ============================================================ */}
       {/* HEADER                                                        */}
@@ -633,6 +627,9 @@ export default function Playground() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm leading-relaxed text-amber-100">
+          Built-in cards contain synthetic example values, but clicking Run submits the displayed request to the authenticated agent API and may call tools already allowed to that agent. Review the JSON, tool scopes, approval policy, and connected systems before running a sample. Output is not proof of a provider, payment, employment, payroll, accounting, or incident outcome.
+        </div>
         {/* ============================================================ */}
         {/* USE CASE SELECTOR                                            */}
         {/* ============================================================ */}
@@ -695,7 +692,7 @@ export default function Playground() {
           <section className="space-y-4">
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-semibold text-slate-200">
-                Live Output
+                Run Output
               </h2>
               {running && (
                 <span className="flex items-center gap-2 text-sm text-blue-400">
@@ -788,6 +785,10 @@ export default function Playground() {
                 </div>
               </div>
             )}
+
+            <p className="text-xs leading-relaxed text-slate-500">
+              Agent and model output can be incomplete or incorrect. Confirm consequential facts and external state in the authoritative provider or source system before acting.
+            </p>
 
             {/* Error state */}
             {error && !running && (

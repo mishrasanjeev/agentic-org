@@ -1,88 +1,88 @@
 #!/usr/bin/env node
 /**
- * Auto-generate sitemap.xml from blog + resource slugs.
- * Run: node scripts/generate-sitemap.mjs
- * Hooked into: "build" script in package.json
+ * Generate sitemap.xml from the same canonical route catalog as static HTML.
+ *
+ * Default output is dist/sitemap.xml so builds do not dirty the repository.
+ * Pass --sync-public when intentionally refreshing the tracked development
+ * snapshot at public/sitemap.xml.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  loadRouteDescriptors,
+  UI_ROOT,
+} from "./generate-static-seo.mjs";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
+const escapeXml = (value) =>
+  String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 
-// ── Extract slugs from TS source files using regex ──────────────────────────
-function extractSlugs(filePath) {
-  const src = readFileSync(filePath, "utf-8");
-  return [...src.matchAll(/slug:\s*"([^"]+)"/g)].map((m) => m[1]);
+const canonicalUrl = (siteUrl, path) => {
+  const base = siteUrl.replace(/\/+$/, "");
+  return path === "/" ? base + "/" : base + path;
+};
+
+export function buildSitemap(routes, siteUrl) {
+  const indexable = routes.filter((route) => route.index !== false);
+  const paths = new Set();
+  for (const route of indexable) {
+    if (paths.has(route.path)) {
+      throw new Error("Duplicate indexable route in sitemap: " + route.path);
+    }
+    paths.add(route.path);
+  }
+  const entries = indexable.map((route) => {
+    const lastmod = route.lastmod &&
+      /^\d{4}-\d{2}-\d{2}$/.test(route.lastmod)
+      ? "\n    <lastmod>" + route.lastmod + "</lastmod>"
+      : "";
+    return [
+      "  <url>",
+      "    <loc>" + escapeXml(canonicalUrl(siteUrl, route.path)) + "</loc>" +
+        lastmod,
+      "  </url>",
+    ].join("\n");
+  });
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    entries.join("\n"),
+    "</urlset>",
+    "",
+  ].join("\n");
 }
 
-const blogSlugs = extractSlugs(join(ROOT, "src/pages/blog/blogData.ts"));
-const resourceSlugs = extractSlugs(
-  join(ROOT, "src/pages/resources/contentData.ts"),
-);
-
-// ── Static pages (priority, changefreq) ─────────────────────────────────────
-const today = new Date().toISOString().slice(0, 10);
-
-const staticPages = [
-  { loc: "/", priority: "1.0", changefreq: "weekly" },
-  { loc: "/pricing", priority: "0.9", changefreq: "monthly" },
-  { loc: "/playground", priority: "0.9", changefreq: "weekly" },
-  { loc: "/evals", priority: "0.9", changefreq: "weekly" },
-  { loc: "/open-agentic-commerce-protocol", priority: "0.9", changefreq: "monthly" },
-  { loc: "/integration-workflow", priority: "0.9", changefreq: "monthly" },
-  { loc: "/blog", priority: "0.8", changefreq: "weekly" },
-  { loc: "/resources", priority: "0.8", changefreq: "weekly" },
-  // CxO solution pages
-  { loc: "/solutions/ca-firms", priority: "0.8", changefreq: "monthly" },
-  { loc: "/solutions/cfo", priority: "0.8", changefreq: "monthly" },
-  { loc: "/solutions/chro", priority: "0.8", changefreq: "monthly" },
-  { loc: "/solutions/cmo", priority: "0.8", changefreq: "monthly" },
-  { loc: "/solutions/coo", priority: "0.8", changefreq: "monthly" },
-  { loc: "/solutions/cbo", priority: "0.8", changefreq: "monthly" },
-  // Google Ads landing pages
-  { loc: "/solutions/ai-invoice-processing", priority: "0.7", changefreq: "monthly" },
-  { loc: "/solutions/automated-bank-reconciliation", priority: "0.7", changefreq: "monthly" },
-  { loc: "/solutions/payroll-automation", priority: "0.7", changefreq: "monthly" },
-];
-
-// ── Build URL entries ───────────────────────────────────────────────────────
-function entry({ loc, priority = "0.7", changefreq = "monthly" }) {
-  return `  <url>
-    <loc>https://agenticorg.ai${loc}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>${changefreq}</changefreq>
-    <priority>${priority}</priority>
-  </url>`;
+export function generateSitemap(
+  root = UI_ROOT,
+  { syncPublic = false } = {},
+) {
+  const { manifest, routes } = loadRouteDescriptors(root);
+  const sitemap = buildSitemap(routes, manifest.site.url);
+  const outputs = [join(root, "dist/sitemap.xml")];
+  if (syncPublic) outputs.push(join(root, "public/sitemap.xml"));
+  for (const output of outputs) {
+    mkdirSync(dirname(output), { recursive: true });
+    writeFileSync(output, sitemap, "utf8");
+  }
+  return {
+    count: routes.filter((route) => route.index !== false).length,
+    outputs,
+  };
 }
 
-const urls = [
-  ...staticPages.map((p) => entry(p)),
-  ...blogSlugs.map((s) => entry({ loc: `/blog/${s}` })),
-  ...resourceSlugs.map((s) => entry({ loc: `/resources/${s}` })),
-];
-
-const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join("\n")}
-</urlset>
-<!-- Auto-generated: ${new Date().toISOString()} -->
-`;
-
-// Codex 2026-04-22 audit: the previous path wrote to
-// ``public/sitemap.xml`` which is a tracked file, so every build
-// dirtied the working tree with a fresh ``lastmod`` date. That
-// breaks hermetic builds — CI couldn't tell "dev changed this file"
-// from "build stamped it". Write to ``dist/sitemap.xml`` instead so
-// the output is a real build artifact, and keep the tracked
-// ``public/sitemap.xml`` as a static placeholder for dev.
-const distDir = join(ROOT, "dist");
-if (!existsSync(distDir)) {
-  mkdirSync(distDir, { recursive: true });
+const isMain = process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const result = generateSitemap(UI_ROOT, {
+    syncPublic: process.argv.includes("--sync-public"),
+  });
+  console.log(
+    "Generated sitemap with " + result.count + " canonical, indexable URLs: " +
+    result.outputs.join(", "),
+  );
 }
-const outPath = join(distDir, "sitemap.xml");
-writeFileSync(outPath, sitemap, "utf-8");
-
-const count = urls.length;
-console.log(`sitemap.xml generated — ${count} URLs (${blogSlugs.length} blog + ${resourceSlugs.length} resources + ${staticPages.length} static)`);

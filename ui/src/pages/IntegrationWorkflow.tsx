@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ── Step data for the workflow ── */
 const WORKFLOW_STEPS = [
@@ -117,10 +116,6 @@ export default function IntegrationWorkflow() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Integration Workflow — OACP-Grounded Commerce Preview via MCP</title>
-        <meta name="description" content="Step-by-step workflow: how a third-party app like ChatGPT launches an AgenticOrg commerce preview via MCP using OACP artifacts, source checks, prepared handoff review, and fail-closed commerce guardrails." />
-      </Helmet>
 
       {/* Nav */}
       <nav className="bg-slate-900 border-b border-slate-700/50">
@@ -141,7 +136,7 @@ export default function IntegrationWorkflow() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
             <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            <span className="text-slate-300 text-sm">End-to-End Integration Example</span>
+            <span className="text-slate-300 text-sm">Illustrative Non-Executing MCP Example</span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-extrabold text-white leading-tight">
             How ChatGPT Launches an{" "}
@@ -151,7 +146,7 @@ export default function IntegrationWorkflow() {
             on AgenticOrg
           </h1>
           <p className="mt-6 text-lg text-slate-400 max-w-2xl mx-auto">
-            A user asks ChatGPT to compare earbuds. ChatGPT discovers AgenticOrg via MCP, the Commerce Sales Agent evaluates cached OACP artifacts, and the flow returns a prepared handoff or refusal with allowed_to_execute=false, without executing checkout or payment.
+            This fictional sample uses no live tenant, buyer, merchant, or provider data. It shows how a compatible MCP client could request a comparison while the Commerce Sales Agent evaluates cached OACP artifacts and returns a non-executing handoff or refusal.
           </p>
         </div>
       </section>
@@ -292,7 +287,7 @@ export default function IntegrationWorkflow() {
             {[
               { title: "OACP-Grounded, Not Provider-Direct", desc: "Commerce answers come from valid cached artifacts or Grantex authority paths. The agent does not call direct provider, merchant-private, checkout, or payment rails.", icon: "code" },
               { title: "HITL on Prepared Handoffs", desc: "Human review can acknowledge source/freshness limits, but it does not override revocation, stale evidence, or missing approval gates.", icon: "shield" },
-              { title: "Works with Any MCP Client", desc: "ChatGPT, Claude Desktop, Cursor, Windsurf, or any custom MCP client can use the same governed tool surface and refusal semantics.", icon: "plug" },
+              { title: "Designed for Compatible MCP Clients", desc: "Compatible MCP clients can use the governed tool surface when transport, authentication, versions, scopes, and tenant configuration are supported and tested.", icon: "plug" },
               { title: "Fail-Closed Commerce Boundary", desc: "Live checkout, live payments, public discovery, provider rails, and merchant-private APIs stay blocked until separately approved and verified.", icon: "key" },
             ].map((item) => (
               <div key={item.title} className="border border-slate-200 rounded-xl p-6 hover:shadow-md transition-shadow">
@@ -307,8 +302,8 @@ export default function IntegrationWorkflow() {
       {/* CTA */}
       <section className="py-16 bg-slate-900">
         <div className="max-w-3xl mx-auto px-4 text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Ready to Build a Governed Integration?</h2>
-          <p className="text-slate-400 mb-8">Get an API key and connect AgenticOrg to ChatGPT, Claude, or your own app with scoped tools, source checks, and fail-closed handoffs.</p>
+          <h2 className="text-2xl font-bold text-white mb-4">Ready to Evaluate a Governed Integration?</h2>
+          <p className="text-slate-400 mb-8">Start with a sandbox or fictional sample, verify client compatibility and scopes, and test source checks, refusals, provider outages, and rollback before production use.</p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               to="/signup"

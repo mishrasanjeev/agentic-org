@@ -1,172 +1,117 @@
 #!/usr/bin/env node
 /**
- * Submit all sitemap URLs to Google Indexing API + IndexNow (Bing/Yandex).
+ * Notify IndexNow participants after a production deployment.
  *
- * Setup (one-time):
- *   1. Create GCP service account:
- *      gcloud iam service-accounts create indexing-bot --display-name="GSC Indexing Bot"
- *      gcloud iam service-accounts keys create ui/keys/gsc-indexing.json \
- *        --iam-account=indexing-bot@<PROJECT_ID>.iam.gserviceaccount.com
- *
- *   2. Add the service account email as OWNER in Google Search Console:
- *      → GSC → Settings → Users and permissions → Add user
- *      → Paste: indexing-bot@<PROJECT_ID>.iam.gserviceaccount.com → Owner
- *
- *   3. Enable Indexing API:
- *      gcloud services enable indexing.googleapis.com
- *
- *   4. Set env var:
- *      export GSC_SERVICE_ACCOUNT_KEY=ui/keys/gsc-indexing.json
+ * Google discovers ordinary web pages through crawlable links and sitemap.xml;
+ * its Indexing API is intentionally not used here because that API is limited
+ * to JobPosting and BroadcastEvent pages.
  *
  * Usage:
- *   node scripts/submit-indexing.mjs              # submit all sitemap URLs
- *   node scripts/submit-indexing.mjs --check      # check indexing status (dry run)
- *   node scripts/submit-indexing.mjs --url https://agenticorg.ai/blog/my-post  # single URL
+ *   node scripts/submit-indexing.mjs
+ *   node scripts/submit-indexing.mjs --check
+ *   node scripts/submit-indexing.mjs --url https://agenticorg.ai/blog/example
  */
-import { readFileSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
-import { createSign } from "crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "..");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const UI_ROOT = join(SCRIPT_DIR, "..");
 const SITE = "https://agenticorg.ai";
-
-// ── Parse args ──────────────────────────────────────────────────────────────
+const HOST = new URL(SITE).host;
 const args = process.argv.slice(2);
 const CHECK_ONLY = args.includes("--check");
-const SINGLE_URL = args.find((_, i) => args[i - 1] === "--url");
 
-// ── Extract URLs from sitemap.xml ───────────────────────────────────────────
-function getSitemapUrls() {
-  const xml = readFileSync(join(ROOT, "public/sitemap.xml"), "utf-8");
-  return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+function selectedUrls() {
+  const explicit = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--url" && args[index + 1]) {
+      explicit.push(args[index + 1]);
+      index += 1;
+    }
+  }
+  if (explicit.length) return explicit;
+
+  const sitemapPath = [
+    join(UI_ROOT, "dist/sitemap.xml"),
+    join(UI_ROOT, "public/sitemap.xml"),
+  ].find(existsSync);
+  if (!sitemapPath) {
+    throw new Error("No generated sitemap found; run the sitemap generator first.");
+  }
+  const xml = readFileSync(sitemapPath, "utf8");
+  return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
 }
 
-// ── Google Indexing API via Service Account JWT ─────────────────────────────
-async function getGoogleAccessToken(keyFile) {
-  const key = JSON.parse(readFileSync(keyFile, "utf-8"));
-  const now = Math.floor(Date.now() / 1000);
-  const header = Buffer.from(
-    JSON.stringify({ alg: "RS256", typ: "JWT" }),
-  ).toString("base64url");
-  const payload = Buffer.from(
-    JSON.stringify({
-      iss: key.client_email,
-      scope: "https://www.googleapis.com/auth/indexing",
-      aud: "https://oauth2.googleapis.com/token",
-      iat: now,
-      exp: now + 3600,
-    }),
-  ).toString("base64url");
-  const sig = createSign("RSA-SHA256")
-    .update(`${header}.${payload}`)
-    .sign(key.private_key, "base64url");
-  const jwt = `${header}.${payload}.${sig}`;
+function validateUrls(values) {
+  const unique = [];
+  const seen = new Set();
+  for (const value of values) {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.host !== HOST) {
+      throw new Error("IndexNow URL must use the canonical HTTPS host: " + value);
+    }
+    url.hash = "";
+    const normalized = url.toString();
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      unique.push(normalized);
+    }
+  }
+  if (unique.length === 0) throw new Error("No canonical URLs to submit.");
+  if (unique.length > 10_000) throw new Error("IndexNow accepts at most 10,000 URLs.");
+  return unique;
+}
 
-  const res = await fetch("https://oauth2.googleapis.com/token", {
+function readKey() {
+  const key = (
+    process.env.INDEXNOW_KEY ||
+    readFileSync(join(UI_ROOT, "public/agenticorg-indexnow-key.txt"), "utf8")
+  ).trim();
+  if (!/^[A-Za-z0-9-]{8,128}$/.test(key)) {
+    throw new Error("INDEXNOW_KEY must be 8-128 ASCII letters, digits, or hyphens.");
+  }
+  return key;
+}
+
+export async function submitIndexNow(urls, key = readKey(), fetchImpl = fetch) {
+  const response = await fetchImpl("https://api.indexnow.org/indexnow", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+    headers: { "Content-Type": "application/json; charset=utf-8" },
+    body: JSON.stringify({
+      host: HOST,
+      key,
+      keyLocation: SITE + "/" + key + ".txt",
+      urlList: urls,
+    }),
   });
-  const data = await res.json();
-  if (!data.access_token) throw new Error(`Auth failed: ${JSON.stringify(data)}`);
-  return data.access_token;
-}
-
-async function submitToGoogle(urls, token) {
-  console.log(`\n🔍 Google Indexing API — ${urls.length} URLs\n`);
-  let ok = 0,
-    fail = 0;
-  for (const url of urls) {
-    try {
-      const res = await fetch(
-        "https://indexing.googleapis.com/v3/urlNotifications:publish",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url, type: "URL_UPDATED" }),
-        },
-      );
-      const data = await res.json();
-      if (res.ok) {
-        console.log(`  OK  ${url}`);
-        ok++;
-      } else {
-        console.log(`  FAIL ${url} — ${data.error?.message || res.status}`);
-        fail++;
-      }
-      // Rate limit: 200 req/day, keep it safe
-      await new Promise((r) => setTimeout(r, 250));
-    } catch (e) {
-      console.log(`  ERR  ${url} — ${e.message}`);
-      fail++;
-    }
+  if (response.status !== 200 && response.status !== 202) {
+    const detail = (await response.text()).slice(0, 1_000);
+    throw new Error(
+      "IndexNow rejected the submission with HTTP " + response.status +
+      (detail ? ": " + detail : ""),
+    );
   }
-  console.log(`\nGoogle: ${ok} submitted, ${fail} failed`);
+  return response.status;
 }
 
-// ── IndexNow (Bing, Yandex, Naver, Seznam) ─────────────────────────────────
-async function submitToIndexNow(urls) {
-  // Key file must exist at public/<key>.txt and contain the key itself
-  const INDEXNOW_KEY = "agenticorg-indexnow-key";
-  console.log(`\n🔍 IndexNow (Bing/Yandex) — ${urls.length} URLs\n`);
-  try {
-    const res = await fetch("https://api.indexnow.org/indexnow", {
-      method: "POST",
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      body: JSON.stringify({
-        host: "agenticorg.ai",
-        key: INDEXNOW_KEY,
-        keyLocation: `${SITE}/${INDEXNOW_KEY}.txt`,
-        urlList: urls,
-      }),
-    });
-    if (res.ok || res.status === 202) {
-      console.log(`  OK  ${urls.length} URLs accepted (HTTP ${res.status})`);
-    } else {
-      const text = await res.text();
-      console.log(`  FAIL HTTP ${res.status} — ${text}`);
-    }
-  } catch (e) {
-    console.log(`  ERR  ${e.message}`);
-  }
-}
-
-// ── Main ────────────────────────────────────────────────────────────────────
 async function main() {
-  const urls = SINGLE_URL ? [SINGLE_URL] : getSitemapUrls();
-  console.log(`Sitemap: ${urls.length} URLs`);
+  const urls = validateUrls(selectedUrls());
   if (CHECK_ONLY) {
-    urls.forEach((u) => console.log(`  ${u}`));
+    console.log("IndexNow dry run: " + urls.length + " canonical URLs");
+    for (const url of urls) console.log("  " + url);
     return;
   }
-
-  // Google Indexing API
-  const keyFile =
-    process.env.GSC_SERVICE_ACCOUNT_KEY ||
-    join(ROOT, "keys/gsc-indexing.json");
-  try {
-    readFileSync(keyFile);
-    const token = await getGoogleAccessToken(keyFile);
-    await submitToGoogle(urls, token);
-  } catch (e) {
-    if (e.code === "ENOENT") {
-      console.log("\n⚠  Google Indexing skipped — service account key not found");
-      console.log("   Run setup: see comments at top of this script\n");
-    } else {
-      console.log("\n⚠  Google Indexing error — check service account configuration\n");
-    }
-  }
-
-  // IndexNow (no auth needed, just key file in public/)
-  await submitToIndexNow(urls);
+  const status = await submitIndexNow(urls);
+  console.log(
+    "IndexNow accepted " + urls.length + " canonical URLs (HTTP " + status + ").",
+  );
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  main().catch((error) => {
+    console.error("IndexNow submission failed:", error.message);
+    process.exitCode = 1;
+  });
+}

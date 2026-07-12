@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../lib/api";
 
@@ -169,9 +168,6 @@ export default function Onboarding() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Helmet>
-        <title>Onboarding — AgenticOrg</title>
-      </Helmet>
       <div className="w-full max-w-lg">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Progress indicator */}

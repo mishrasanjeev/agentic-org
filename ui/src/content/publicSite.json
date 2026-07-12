@@ -1,0 +1,449 @@
+{
+  "site": {
+    "name": "AgenticOrg",
+    "url": "https://agenticorg.ai",
+    "appUrl": "https://app.agenticorg.ai",
+    "language": "en-IN",
+    "locale": "en_IN",
+    "defaultImage": "https://agenticorg.ai/og-image.png",
+    "logo": "https://agenticorg.ai/favicon-512x512.png",
+    "email": "sanjeev@agenticorg.ai",
+    "github": "https://github.com/mishrasanjeev/agentic-org",
+    "description": "AgenticOrg is an open-source platform for building, deploying, and governing enterprise AI agents with scoped tools, human approvals, audit evidence, and protocol-based integration."
+  },
+  "aliases": {
+    "/contact": "/support",
+    "/privacy-policy": "/privacy",
+    "/terms-of-service": "/terms",
+    "/refund-policy": "/refund",
+    "/cancellation": "/refund"
+  },
+  "pages": [
+    {
+      "path": "/",
+      "name": "AgenticOrg",
+      "title": "Governed Enterprise AI Agents | AgenticOrg",
+      "description": "Build, deploy, and govern enterprise AI agents with scoped tools, human approvals, evaluations, audit evidence, native connectors, APIs, MCP, and A2A.",
+      "summary": "AgenticOrg is an open-source enterprise agent platform for designing workflows, connecting business systems, applying approval and policy controls, evaluating behavior, and retaining evidence of agent actions.",
+      "section": "Platform",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How can enterprises deploy useful AI agents while retaining human control?",
+      "keywords": ["enterprise AI agents", "agent governance", "human-in-the-loop AI", "agent orchestration", "audit evidence"]
+    },
+    {
+      "path": "/status",
+      "name": "Service Status",
+      "title": "AgenticOrg Service Status and API Health",
+      "description": "Check current AgenticOrg platform and API availability, release information, and links for investigating operational incidents or requesting support.",
+      "summary": "The status page reports the current availability information exposed by AgenticOrg and provides a support path when an organization needs incident-specific help.",
+      "section": "Trust",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "Is the AgenticOrg service currently available?",
+      "keywords": ["AgenticOrg status", "API health", "service availability", "platform uptime"]
+    },
+    {
+      "path": "/evals",
+      "name": "Agent Evaluations",
+      "title": "AI Agent Evaluations and Quality Gates | AgenticOrg",
+      "description": "Review AgenticOrg evaluation methodology, quality dimensions, score interpretation, and the evidence teams should collect before promoting an agent.",
+      "summary": "AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.",
+      "section": "Governance",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How should an enterprise evaluate an AI agent before production?",
+      "keywords": ["AI agent evaluation", "agent quality gates", "LLM evaluation", "shadow mode", "AI safety testing"]
+    },
+    {
+      "path": "/pricing",
+      "name": "Pricing",
+      "title": "AgenticOrg Pricing: Free, Pro, and Enterprise Plans",
+      "description": "Compare AgenticOrg Free, Pro, and Enterprise plans, including agent, run, storage, support, connector, SSO, SCIM, and service-level options.",
+      "summary": "AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.",
+      "section": "Company",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How much does AgenticOrg cost and what does each plan include?",
+      "keywords": ["AgenticOrg pricing", "AI agent platform cost", "enterprise AI pricing", "self-hosted AI agents"]
+    },
+    {
+      "path": "/playground",
+      "name": "Agent Playground",
+      "title": "Enterprise AI Agent Playground | AgenticOrg",
+      "description": "Explore illustrative enterprise agent tasks, structured inputs, tool activity, confidence signals, and approval outcomes in the AgenticOrg playground.",
+      "summary": "The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.",
+      "section": "Platform",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "What does a governed enterprise agent run look like?",
+      "keywords": ["AI agent playground", "agent demo", "human approval workflow", "structured agent output"]
+    },
+    {
+      "path": "/support",
+      "name": "Support",
+      "title": "AgenticOrg Support, Sales, and Security Contact",
+      "description": "Contact AgenticOrg for product questions, deployment guidance, billing help, responsible security disclosure, or support with an existing environment.",
+      "summary": "Use the AgenticOrg support page to reach the team about product evaluation, deployment, account and billing questions, or responsible security disclosure.",
+      "section": "Company",
+      "schemaType": "ContactPage",
+      "index": true,
+      "primaryQuestion": "How can I contact AgenticOrg for support or a security report?",
+      "keywords": ["AgenticOrg support", "AgenticOrg contact", "security disclosure", "enterprise AI help"]
+    },
+    {
+      "path": "/privacy",
+      "name": "Privacy Policy",
+      "title": "AgenticOrg Privacy Policy",
+      "description": "Read how AgenticOrg describes personal-data collection, use, storage, disclosure, security, retention, user choices, and privacy contact channels.",
+      "summary": "The privacy policy explains how AgenticOrg handles personal information and how people can submit questions or requests about that handling.",
+      "section": "Legal",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How does AgenticOrg handle personal information?",
+      "keywords": ["AgenticOrg privacy", "data protection", "privacy policy", "personal data"]
+    },
+    {
+      "path": "/terms",
+      "name": "Terms of Service",
+      "title": "AgenticOrg Terms of Service",
+      "description": "Review the terms governing access to and use of AgenticOrg services, accounts, acceptable use, intellectual property, warranties, and liability.",
+      "summary": "The terms of service describe the rules and responsibilities that apply when a customer or user accesses AgenticOrg services.",
+      "section": "Legal",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "What terms apply when using AgenticOrg?",
+      "keywords": ["AgenticOrg terms", "terms of service", "acceptable use", "software terms"]
+    },
+    {
+      "path": "/refund",
+      "name": "Refund and Cancellation Policy",
+      "title": "AgenticOrg Refund and Cancellation Policy",
+      "description": "Review AgenticOrg subscription cancellation, billing, refund-request, renewal, and support procedures for paid service plans.",
+      "summary": "The refund and cancellation policy describes how subscription cancellation and eligible billing requests are handled.",
+      "section": "Legal",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How do AgenticOrg cancellations and refund requests work?",
+      "keywords": ["AgenticOrg refund", "subscription cancellation", "billing policy", "renewal"]
+    },
+    {
+      "path": "/blog",
+      "name": "Blog",
+      "title": "Enterprise AI Agent Engineering Blog | AgenticOrg",
+      "description": "Read practical articles about governed AI agents, enterprise automation, evaluations, human approvals, OACP boundaries, integrations, and operations.",
+      "summary": "The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.",
+      "section": "Learn",
+      "schemaType": "CollectionPage",
+      "index": true,
+      "primaryQuestion": "Where can I learn how governed enterprise AI agents are built and operated?",
+      "keywords": ["AI agent blog", "enterprise automation", "agent governance", "OACP", "AI engineering"]
+    },
+    {
+      "path": "/resources",
+      "name": "Resource Library",
+      "title": "Enterprise AI Agent Guides and Resources | AgenticOrg",
+      "description": "Browse AgenticOrg guides on agent architecture, automation use cases, governance, auditability, India-focused integrations, and OACP implementation.",
+      "summary": "The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.",
+      "section": "Learn",
+      "schemaType": "CollectionPage",
+      "index": true,
+      "primaryQuestion": "What should a team know before adopting enterprise AI agents?",
+      "keywords": ["AI agent guides", "enterprise AI resources", "agent adoption", "AI governance guide"]
+    },
+    {
+      "path": "/integration-workflow",
+      "name": "Integration Workflow",
+      "title": "AI Agent Integration Workflow and Controls | AgenticOrg",
+      "description": "Understand how AgenticOrg discovers connectors, scopes credentials and tools, validates access, tests workflows, requests approval, and records evidence.",
+      "summary": "The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.",
+      "section": "Platform",
+      "schemaType": "TechArticle",
+      "index": true,
+      "primaryQuestion": "How does AgenticOrg connect an agent to an enterprise system safely?",
+      "keywords": ["AI agent integration", "connector security", "scoped credentials", "workflow approval", "integration audit"]
+    },
+    {
+      "path": "/open-agentic-commerce-protocol",
+      "name": "Open Agentic Commerce Protocol",
+      "title": "Open Agentic Commerce Protocol (OACP) | AgenticOrg",
+      "description": "Learn the AgenticOrg OACP boundary for merchant source facts, Grantex authority, scoped artifact caching, buyer-safe answers, and provider-owned execution.",
+      "summary": "OACP separates commerce discovery evidence from execution authority. AgenticOrg can cache scoped artifacts and prepare a handoff, but cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.",
+      "section": "Protocols",
+      "schemaType": "TechArticle",
+      "index": true,
+      "primaryQuestion": "What does OACP let an AI buying agent know and do?",
+      "keywords": ["Open Agentic Commerce Protocol", "OACP", "agentic commerce", "buyer agent", "seller agent", "commerce artifacts"]
+    },
+    {
+      "path": "/how-grantex-works",
+      "name": "How Grantex Works",
+      "title": "How Grantex Delegated Authority Works | AgenticOrg",
+      "description": "Learn how Grantex authority artifacts, scopes, expiry, revocation, tenant boundaries, and audit evidence constrain delegated agent access in AgenticOrg.",
+      "summary": "Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.",
+      "section": "Governance",
+      "schemaType": "TechArticle",
+      "index": true,
+      "primaryQuestion": "How does Grantex constrain delegated authority for an AI agent?",
+      "keywords": ["Grantex", "delegated authority", "agent authorization", "scope enforcement", "revocation"]
+    },
+    {
+      "path": "/solutions/ca-firms",
+      "name": "AI Agents for CA Firms",
+      "title": "Governed AI Agents for CA Firms | AgenticOrg",
+      "description": "Explore governed workflows for CA firms across client operations, GST and TDS preparation, reconciliation, document collection, approvals, and audit evidence.",
+      "summary": "AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How can a CA firm use AI agents without losing review control?",
+      "keywords": ["AI agents for CA firms", "GST automation", "TDS workflow", "CA practice automation", "India accounting AI"]
+    },
+    {
+      "path": "/solutions/cfo",
+      "name": "AI Agents for Finance",
+      "title": "Governed Finance and CFO AI Agents | AgenticOrg",
+      "description": "Explore governed finance-agent workflows for accounts payable, reconciliation, close, treasury, reporting, tax preparation, approvals, and audit evidence.",
+      "summary": "Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "Which finance workflows can governed AI agents support?",
+      "keywords": ["CFO AI agents", "finance automation", "accounts payable AI", "bank reconciliation", "month-end close"]
+    },
+    {
+      "path": "/solutions/chro",
+      "name": "AI Agents for HR",
+      "title": "Governed HR and CHRO AI Agents | AgenticOrg",
+      "description": "Explore governed HR-agent workflows for onboarding, payroll preparation, recruiting, employee service, policy questions, approvals, and traceable handoffs.",
+      "summary": "HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How can HR teams use AI agents while protecting people and sensitive data?",
+      "keywords": ["CHRO AI agents", "HR automation", "employee onboarding AI", "payroll workflow", "HR governance"]
+    },
+    {
+      "path": "/solutions/cmo",
+      "name": "AI Agents for Marketing",
+      "title": "Governed Marketing and CMO AI Agents | AgenticOrg",
+      "description": "Explore governed marketing-agent workflows for research, content operations, campaign coordination, CRM follow-up, experiments, approvals, and measurement.",
+      "summary": "Marketing teams can coordinate research and campaign work with scoped tools, review gates, versioned prompts, and measurable workflow outcomes.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How can marketing teams govern AI agents across campaigns and content?",
+      "keywords": ["CMO AI agents", "marketing automation", "campaign agent", "content workflow", "CRM automation"]
+    },
+    {
+      "path": "/solutions/coo",
+      "name": "AI Agents for Operations",
+      "title": "Governed Operations and COO AI Agents | AgenticOrg",
+      "description": "Explore governed operations-agent workflows for ticket triage, IT operations, vendor coordination, compliance checks, contracts, and escalations.",
+      "summary": "Operations teams can route and coordinate repetitive work with agents while defining escalation rules, action scopes, approval requirements, and audit evidence.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "How can operations teams automate work without creating unbounded agent access?",
+      "keywords": ["COO AI agents", "operations automation", "ticket triage AI", "vendor workflow", "IT operations agent"]
+    },
+    {
+      "path": "/solutions/cbo",
+      "name": "AI Agents for Back Office",
+      "title": "Governed Back-Office AI Agents | AgenticOrg",
+      "description": "Explore governed back-office agent workflows for documents, shared services, case routing, compliance checks, records, and human-approved actions.",
+      "summary": "Back-office teams can assemble traceable workflows around documents, cases, and internal systems while preserving review and authorization boundaries.",
+      "section": "Solutions",
+      "schemaType": "WebPage",
+      "index": true,
+      "primaryQuestion": "Which back-office tasks are suitable for governed AI agents?",
+      "keywords": ["back-office AI agents", "shared services automation", "document workflow", "case routing", "compliance automation"]
+    },
+    {
+      "path": "/solutions/ai-invoice-processing",
+      "name": "AI Invoice Processing Campaign",
+      "title": "AI Invoice Processing Demo | AgenticOrg",
+      "description": "Campaign-specific demonstration of scoped invoice-processing workflows, validation, exception routing, approval gates, and evidence capture.",
+      "summary": "This campaign page demonstrates a possible invoice-processing workflow and does not promise a specific automation rate or financial outcome.",
+      "section": "Campaigns",
+      "schemaType": "WebPage",
+      "index": false,
+      "primaryQuestion": "What can a governed invoice-processing agent workflow demonstrate?",
+      "keywords": ["AI invoice processing", "invoice workflow demo", "accounts payable automation"]
+    },
+    {
+      "path": "/solutions/automated-bank-reconciliation",
+      "name": "Bank Reconciliation Campaign",
+      "title": "Automated Bank Reconciliation Demo | AgenticOrg",
+      "description": "Campaign-specific demonstration of reconciliation inputs, matching suggestions, exception handling, review gates, and traceable evidence.",
+      "summary": "This campaign page demonstrates a possible reconciliation workflow and does not promise a specific match rate, close time, or financial outcome.",
+      "section": "Campaigns",
+      "schemaType": "WebPage",
+      "index": false,
+      "primaryQuestion": "What can an agent-assisted bank reconciliation workflow demonstrate?",
+      "keywords": ["automated bank reconciliation", "reconciliation AI demo", "finance agent workflow"]
+    },
+    {
+      "path": "/solutions/payroll-automation",
+      "name": "Payroll Automation Campaign",
+      "title": "Payroll Automation Workflow Demo | AgenticOrg",
+      "description": "Campaign-specific demonstration of payroll preparation, data checks, exception handling, approval gates, and traceable workflow evidence.",
+      "summary": "This campaign page demonstrates a possible payroll workflow and does not promise error-free processing or replace statutory and human review.",
+      "section": "Campaigns",
+      "schemaType": "WebPage",
+      "index": false,
+      "primaryQuestion": "What can a governed payroll-preparation agent workflow demonstrate?",
+      "keywords": ["payroll automation", "payroll AI demo", "HR agent workflow"]
+    },
+    {
+      "path": "/login",
+      "name": "Sign In",
+      "title": "Sign In to AgenticOrg",
+      "description": "Sign in to an authorized AgenticOrg workspace.",
+      "summary": "Authentication entry point for existing AgenticOrg users.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/signup",
+      "name": "Create Account",
+      "title": "Create an AgenticOrg Account",
+      "description": "Create an AgenticOrg account and begin workspace setup.",
+      "summary": "Account registration entry point for AgenticOrg.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/forgot-password",
+      "name": "Forgot Password",
+      "title": "Reset Your AgenticOrg Password",
+      "description": "Request an AgenticOrg password-reset link.",
+      "summary": "Password recovery entry point for AgenticOrg users.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/reset-password",
+      "name": "Reset Password",
+      "title": "Choose a New AgenticOrg Password",
+      "description": "Complete an authorized AgenticOrg password reset.",
+      "summary": "Password reset completion page for AgenticOrg users.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/invite",
+      "name": "Accept Invitation",
+      "title": "Accept an AgenticOrg Workspace Invitation",
+      "description": "Accept an authorized invitation to an AgenticOrg workspace.",
+      "summary": "Invitation acceptance page for AgenticOrg workspaces.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/accept-invite",
+      "name": "Accept Workspace Invitation",
+      "title": "Complete an AgenticOrg Workspace Invitation",
+      "description": "Complete an authorized invitation flow for an AgenticOrg workspace.",
+      "summary": "Invitation completion page for an authorized AgenticOrg workspace user.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/sso/callback",
+      "name": "SSO Callback",
+      "title": "AgenticOrg Single Sign-On",
+      "description": "Complete an authorized AgenticOrg single sign-on flow.",
+      "summary": "Authentication callback used by AgenticOrg single sign-on.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    },
+    {
+      "path": "/onboarding",
+      "name": "Workspace Onboarding",
+      "title": "AgenticOrg Workspace Onboarding",
+      "description": "Configure an authenticated AgenticOrg workspace.",
+      "summary": "Private workspace onboarding flow for authenticated users.",
+      "section": "Application",
+      "schemaType": "WebPage",
+      "index": false,
+      "keywords": []
+    }
+  ],
+  "landingFaqs": [
+    {
+      "question": "What is AgenticOrg?",
+      "answer": "AgenticOrg is an open-source enterprise AI agent platform. It provides an agent runtime, workflow orchestration, native connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, API access, MCP, A2A, and bounded OACP commerce surfaces."
+    },
+    {
+      "question": "How does AgenticOrg keep AI agents under human control?",
+      "answer": "AgenticOrg combines role and tenant boundaries, scoped tool authorization, confidence and policy checks, shadow-mode evaluation, human-in-the-loop approval queues, version controls, kill switches, and audit records. Which controls apply depends on the configured workflow and deployment policy."
+    },
+    {
+      "question": "How many agents, connectors, and tools are available?",
+      "answer": "The current counts are published by the live GET /api/v1/product-facts endpoint and rendered from the runtime registries. Public documentation links to that endpoint instead of maintaining a separate hard-coded count."
+    },
+    {
+      "question": "What systems can AgenticOrg connect to?",
+      "answer": "The native registry covers finance, HR, marketing, operations, and communications systems. Optional integration gateways can extend that catalog. A listed connector is not proof that a tenant has configured credentials or approved write access; each action still requires the relevant scope, configuration, and provider availability."
+    },
+    {
+      "question": "What is OACP in AgenticOrg?",
+      "answer": "The Open Agentic Commerce Protocol boundary separates merchant source facts, Grantex authority artifacts, AgenticOrg's scoped cache, buyer-safe answers, and provider-owned execution. Cached evidence can support discovery and a prepared handoff, but it does not create an order, mandate, payment, inventory hold, refund, or paid state."
+    },
+    {
+      "question": "Can AgenticOrg be self-hosted?",
+      "answer": "Yes. The repository is Apache-2.0 licensed and includes Docker and deployment assets. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
+    },
+    {
+      "question": "Who is AgenticOrg for?",
+      "answer": "AgenticOrg is designed for engineering and operations teams that need governed agent workflows across finance, HR, marketing, operations, back office, communications, multi-company accounting, and buyer-seller commerce integrations."
+    }
+  ],
+  "plans": [
+    {
+      "id": "free",
+      "name": "Free",
+      "priceUsd": 0,
+      "priceInr": 0,
+      "agents": "3",
+      "runs": "1,000 per month",
+      "storage": "1 GB",
+      "features": ["3 governed agents", "1,000 agent runs per month", "1 GB storage", "Community support"]
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "priceUsd": 2,
+      "priceInr": 9999,
+      "agents": "15",
+      "runs": "10,000 per month",
+      "storage": "50 GB",
+      "features": ["15 governed agents", "10,000 agent runs per month", "50 GB storage", "Priority support", "Custom connectors"]
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise",
+      "priceUsd": 499,
+      "priceInr": 49999,
+      "agents": "Unlimited",
+      "runs": "Unlimited",
+      "storage": "Unlimited",
+      "features": ["Unlimited agents, runs, and storage", "24/7 support", "Custom SLAs", "Dedicated customer success", "SSO and SCIM"]
+    }
+  ]
+}

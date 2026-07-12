@@ -1,12 +1,10 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
-import ROICalculator from "../components/ROICalculator";
+import publicSite from "../content/publicSite.json";
 import AgentActivityTicker from "../components/AgentActivityTicker";
 import AgentsInAction from "../components/AgentsInAction";
 import WorkflowAnimation from "../components/WorkflowAnimation";
 import InteractiveDemo from "../components/InteractiveDemo";
-import SocialProof from "../components/SocialProof";
 import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
@@ -89,43 +87,43 @@ function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "72 hours", label: "Average month-end close cycle", color: "text-red-500" },
-  { value: "\u20B912L/year", label: "Lost to missed early-payment discounts", color: "text-orange-500" },
-  { value: "40%", label: "Of support tickets mis-routed on first attempt", color: "text-red-500" },
+  { value: "Fragmented", label: "Work and evidence spread across disconnected systems", color: "text-blue-600" },
+  { value: "Manual", label: "Reviews, exceptions, and handoffs that are hard to trace", color: "text-amber-600" },
+  { value: "Unbounded", label: "Automation risk when tools and authority are not scoped", color: "text-rose-600" },
 ];
 
 const ROLE_CARDS = [
   {
     role: "CFO",
     gradient: "from-emerald-500 to-teal-600",
-    pain: "Close the books in 1 day, not 5",
-    description: "10 finance agents handle AP, AR, Treasury, Expense Management, Bank Reconciliation, Tax Filing, Rev Rec, Fixed Assets, Month-end Close, and FP&A.",
+    pain: "Close with evidence, not guesswork",
+    description: "Coordinate AP, AR, treasury, expenses, reconciliation, tax preparation, revenue operations, fixed assets, close, and FP&A workflows.",
     agents: ["Accounts Payable", "Accounts Receivable", "Treasury", "Reconciliation", "Tax Filing", "Month-end Close", "FP&A", "Expense Mgmt", "Rev Rec", "Fixed Assets"],
-    metric: "Shadow mode measures exact ROI with your real data before go-live",
+    metric: "Evaluate workflow quality and measured outcomes before promotion",
   },
   {
     role: "CHRO",
     gradient: "from-blue-500 to-cyan-500",
-    pain: "Onboard in hours, not weeks",
-    description: "6 HR agents manage Onboarding, Payroll (847 employees), Talent Acquisition, Performance Reviews, L&D, and Offboarding.",
+    pain: "Coordinate sensitive work with review",
+    description: "Support onboarding, payroll preparation, recruiting, performance, learning, employee service, and offboarding workflows.",
     agents: ["Onboarding", "Payroll", "Talent Acquisition", "Performance", "L&D", "Offboarding"],
-    metric: "Zero payroll errors with automated PF/ESI/TDS",
+    metric: "Keep employment decisions and payroll release under human authority",
   },
   {
     role: "CMO",
     gradient: "from-blue-600 to-emerald-500",
-    pain: "Launch campaigns while you sleep",
-    description: "9 marketing agents run Campaign Management, A/B Testing, Email Drip Sequences, ABM with Intent Data (Bombora/G2/TrustRadius), Content Generation, SEO Optimization, CRM Nurturing, Brand Monitoring, and Competitive Intel.",
+    pain: "Move faster with reviewable campaign work",
+    description: "Coordinate research, content, experiments, campaign operations, CRM follow-up, brand monitoring, and competitive analysis.",
     agents: ["Campaign Mgmt", "A/B Testing", "Email Drip", "ABM + Intent", "Content Gen", "SEO", "CRM Nurture", "Brand Monitor", "Competitive Intel"],
-    metric: "A/B auto-winner selection + CMO override on multi-channel campaigns",
+    metric: "Use versioned prompts, scoped tools, and explicit publishing approvals",
   },
   {
     role: "COO",
     gradient: "from-orange-500 to-red-600",
-    pain: "Resolve P1s before the CEO asks",
-    description: "5 ops agents handle Support Triage (88% auto-classify), IT Ops, Compliance Guard (98.5%), Contract Intelligence, and Vendor Management.",
+    pain: "Route exceptions before they become incidents",
+    description: "Support ticket triage, IT operations, compliance checks, contract review, vendor coordination, and escalation workflows.",
     agents: ["Support Triage", "IT Ops", "Compliance", "Contracts", "Vendor Mgmt"],
-    metric: "42 tickets triaged per day with zero manual routing",
+    metric: "Measure routing quality and escalate ambiguous or high-risk work",
   },
 ];
 
@@ -244,7 +242,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </svg>
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We'll contact you within 24 hours.</p>
+            <p className="text-slate-600">We'll follow up using the contact details you provided.</p>
             <button
               onClick={onClose}
               className="mt-6 inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all duration-200 ease-out-quart"
@@ -352,9 +350,9 @@ export default function Landing() {
   const [showDemo, setShowDemo] = useState(false);
   const location = useLocation();
   const { facts } = useProductFacts();
-  const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "50+";
-  const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "25+";
-  const toolsText = facts.tool_count > 0 ? `${facts.tool_count}+` : "250+";
+  const connectorsText = facts.connector_count > 0 ? `${facts.connector_count}` : "Live registry";
+  const agentsText = facts.agent_count > 0 ? `${facts.agent_count}` : "Live registry";
+  const toolsText = facts.tool_count > 0 ? `${facts.tool_count}` : "Live registry";
   const versionText = facts.version ? `v${facts.version}` : "";
 
   // Scroll to hash anchor on navigation (e.g. /#developers from another page)
@@ -372,11 +370,6 @@ export default function Landing() {
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:bg-blue-600 focus:text-white focus:px-4 focus:py-2 focus:rounded-lg">Skip to main content</a>
-      <Helmet>
-        <title>AgenticOrg — Governed Enterprise AI Agents | Automate with Human Control</title>
-        <meta name="description" content="Enterprise AI agents for governed back-office automation, human approvals, audit trails, Grantex scope enforcement, and Open Agentic Commerce Protocol artifact boundaries." />
-        <link rel="canonical" href="https://agenticorg.ai/" />
-      </Helmet>
 
       {/* ============================================================ */}
       {/* 1. NAVBAR                                                     */}
@@ -476,15 +469,15 @@ export default function Landing() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight tracking-tight">
-              Your Back Office{" "}
+              Enterprise Work,{" "}
               <span className="bg-gradient-to-r from-blue-400 via-purple-400 to-emerald-400 bg-clip-text text-transparent">
-                Runs Itself.
+                Governed by Design.
               </span>
             </h1>
 
             <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed">
-              Name them. Train them. Deploy them. AI virtual employees that process invoices, run payroll, launch campaigns, and resolve incidents
-              &mdash; with human approval on every critical decision.
+              Build agents around defined workflows, connect only the tools they need, evaluate them before promotion,
+              and require human approval wherever policy or risk demands it.
             </p>
 
             {/* CTAs */}
@@ -507,13 +500,13 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-sm text-slate-500">
-              No credit card required &middot; Free to start &middot; Full audit trail built in
+              Apache-2.0 open source &middot; Free tier &middot; Audit evidence built in
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-4 text-sm text-slate-400">
               <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Upload your org chart CSV</span>
-              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Agents match your hierarchy</span>
-              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Human approval on every critical decision</span>
+              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Model reporting relationships</span>
+              <span className="flex items-center gap-1.5"><svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Configure approval gates by risk</span>
             </div>
           </div>
 
@@ -658,33 +651,29 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 3. LOGO BAR                                                   */}
+      {/* 3. RUNTIME-PUBLISHED PRODUCT FACTS                            */}
       {/* ============================================================ */}
-      <section className="py-10 bg-white border-b border-slate-100">
+      <section className="py-10 bg-white border-b border-slate-100" aria-labelledby="product-facts-heading">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6 text-center">
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">50+</div>
-              <p className="text-sm text-slate-500 mt-1">Pre-built AI Agents</p>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">1000+</div>
-              <p className="text-sm text-slate-500 mt-1">Connectors &amp; Tools</p>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-slate-900">20+</div>
-              <p className="text-sm text-slate-500 mt-1">Workflows</p>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-emerald-600">4</div>
-              <p className="text-sm text-slate-500 mt-1">Industry Packs</p>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="text-3xl font-extrabold text-blue-600">100%</div>
-              <p className="text-sm text-slate-500 mt-1">E2E Tests Passing</p>
-            </div>
+          <div className="text-center mb-6">
+            <h2 id="product-facts-heading" className="text-xl font-bold text-slate-900">Current runtime catalog</h2>
+            <p className="mt-2 text-sm text-slate-500">
+              These values come from the live runtime registries through <a className="text-blue-600 hover:underline" href="/api/v1/product-facts">GET /api/v1/product-facts</a>. A registered item still requires tenant configuration, credentials, scopes, and provider availability.
+            </p>
           </div>
-          <p className="text-center text-xs text-slate-400 mt-4">Connects with SAP, Oracle, Salesforce, GSTN, EPFO, Darwinbox, Tally, Slack, Jira, HubSpot, Stripe & more</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
+            {[
+              { value: agentsText, label: "Agent definitions" },
+              { value: connectorsText, label: "Connector definitions" },
+              { value: toolsText, label: "Tool bindings" },
+              { value: versionText || "Live", label: "Published version" },
+            ].map((fact) => (
+              <div key={fact.label} className="bg-slate-50 rounded-xl p-4">
+                <div className="text-3xl font-extrabold text-slate-900">{fact.value}</div>
+                <p className="text-sm text-slate-500 mt-1">{fact.label}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -696,7 +685,7 @@ export default function Landing() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your finance team spends 5 days closing the books. Your HR manually onboards every hire. Your ops team drowns in tickets.
+                Where does enterprise automation fail without governance?
               </h2>
             </div>
           </FadeIn>
@@ -715,7 +704,7 @@ export default function Landing() {
           <FadeIn>
             <div className="text-center mt-12">
               <a href="#platform" className="inline-flex items-center gap-2 text-blue-600 font-semibold hover:text-blue-700 transition-colors">
-                See how AgenticOrg fixes this
+                See the governed platform
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
                 </svg>
@@ -756,9 +745,9 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One Platform. Unlimited AI Employees. Complete Automation.</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">One platform. Scoped agents. Observable workflows.</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                {agentsText} pre-built agents across 6 domains that reason with Gemini AND execute real actions &mdash; creating Jira tickets, reading CRM data, querying repos. {connectorsText} native connectors + 1000+ via Composio ({toolsText} native tools), A/B testing, email drip, ABM with intent data, SDK/MCP/API access. Not chatbots. Virtual employees.
+                The live runtime reports {agentsText} agent definitions, {connectorsText} connector definitions, and {toolsText} tool bindings across enterprise workflows. Availability and write access depend on tenant configuration, credentials, scopes, provider support, and approval policy.
               </p>
             </div>
           </FadeIn>
@@ -774,7 +763,7 @@ export default function Landing() {
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  50+ pre-built agents across Finance, HR, Marketing, Ops, and Back Office &mdash; each connected to real tools (Jira, HubSpot, GitHub). Create custom virtual employees with names, personas, and tool access.
+                  {agentsText} runtime-registered agent definitions span Finance, HR, Marketing, Operations, Back Office, and Communications. Create or configure agents with explicit instructions, scoped tools, and tenant policy.
                 </p>
               </div>
             </FadeIn>
@@ -819,11 +808,11 @@ export default function Landing() {
                     </svg>
                   </div>
                   <p className="text-white font-semibold text-center">Create Your Own</p>
-                  <p className="text-blue-100 text-xs text-center mt-1">No code required</p>
+                  <p className="text-blue-100 text-xs text-center mt-1">Guided configuration</p>
                 </div>
                 <h3 className="text-xl font-bold text-slate-900">Agent Creator</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
-                  Build custom AI virtual employees in minutes. Give them a name, a role, and tailored instructions through a guided wizard &mdash; no code required. 27 production-tested prompt templates included.
+                  Configure custom AI virtual employees with a name, role, and tailored instructions through a guided wizard. Use the prompt-template library as a starting point, then review, evaluate, and version instructions for your own policy before promotion.
                 </p>
               </div>
             </FadeIn>
@@ -885,7 +874,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full" />
-                <span className="text-emerald-700 text-sm font-medium">Live in under 3 minutes</span>
+                <span className="text-emerald-700 text-sm font-medium">Guided setup with validation</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">From Org Chart to AI Workforce — 3 Steps</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
@@ -1028,7 +1017,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Three Steps to Autonomous Operations</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">A practical path from workflow to governed operation</h2>
             </div>
           </FadeIn>
 
@@ -1038,9 +1027,9 @@ export default function Landing() {
 
             <div className="grid md:grid-cols-3 gap-12">
               {[
-                { num: "1", title: "Create or pick your agents", desc: `Choose from ${agentsText} pre-built agents, or create custom AI virtual employees with names, specializations, and tool access — all through a guided wizard.` },
-                { num: "2", title: "Connect your systems", desc: `${connectorsText} connectors with ${toolsText} tools — SAP, Oracle, Jira, HubSpot, GitHub, GSTN, Darwinbox, Slack, Salesforce, and more. Configure auth, secrets, and health checks from the UI. Trigger workflows on email, schedule, webhook, or API events.` },
-                { num: "3", title: "Agents work, you approve", desc: "Agents reason with Gemini, execute tool calls, then return results. You approve critical decisions via HITL governance. Access from dashboard, Python SDK (pip install agenticorg), TypeScript SDK (npm i agenticorg-sdk), CLI, or ChatGPT/Claude via MCP Server." },
+                { num: "1", title: "Create or pick your agents", desc: `Review the runtime catalog or create an agent with a defined role, instructions, model policy, specialization, and explicit tool access.` },
+                { num: "2", title: "Connect your systems", desc: `Select a registered connector, configure tenant credentials and scopes, validate health, and bind only the required tools. Provider and event support varies by connector.` },
+                { num: "3", title: "Agents work, you approve", desc: "Evaluate the configured model and workflow in shadow mode, inspect evidence, define approval and escalation gates, then promote deliberately. Use the dashboard, REST API, SDKs, CLI, MCP, or A2A surfaces as appropriate." },
               ].map((step, i) => (
                 <FadeIn key={step.num} delay={i * 150}>
                   <div className="text-center">
@@ -1059,7 +1048,7 @@ export default function Landing() {
           <FadeIn delay={300}>
             <div className="mt-20">
               <h3 className="text-center text-xl font-bold text-slate-900 mb-2">How an Agent Processes a Task</h3>
-              <p className="text-center text-sm text-slate-500 mb-8 max-w-lg mx-auto">Watch a real invoice flow through the agent pipeline &mdash; from arrival to approval.</p>
+              <p className="text-center text-sm text-slate-500 mb-8 max-w-lg mx-auto">Illustrative invoice flow through intake, validation, policy checks, approval, and recorded outcome.</p>
               <div className="bg-slate-900 rounded-2xl p-8">
                 <WorkflowAnimation />
               </div>
@@ -1070,21 +1059,19 @@ export default function Landing() {
           <FadeIn>
             <div className="mt-16 bg-slate-50 rounded-2xl border border-slate-200 p-8">
               <div className="grid md:grid-cols-3 gap-6 text-center">
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">Free</div>
-                  <p className="text-sm text-slate-500 mt-1">{agentsText} agents, 20 connectors, 500 tasks/day</p>
-                  <Link to="/signup" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Start Free →</Link>
-                </div>
-                <div className="border-x border-slate-200 px-6">
-                  <div className="text-2xl font-bold text-blue-600">Pro - $2/mo</div>
-                  <p className="text-sm text-slate-500 mt-1">Unlimited agents, unlimited tasks, priority support</p>
-                  <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Get Started →</button>
-                </div>
-                <div>
-                  <div className="text-2xl font-bold text-slate-900">Enterprise</div>
-                  <p className="text-sm text-slate-500 mt-1">Custom SLA, on-premise, SSO, dedicated support</p>
-                  <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">Contact Sales →</button>
-                </div>
+                {publicSite.plans.map((plan, index) => (
+                  <div key={plan.id} className={index === 1 ? "border-x border-slate-200 px-6" : ""}>
+                    <div className={`text-2xl font-bold ${index === 1 ? "text-blue-600" : "text-slate-900"}`}>
+                      {plan.name} — ${plan.priceUsd}/month
+                    </div>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {plan.agents} agents · {plan.runs} · {plan.storage} storage
+                    </p>
+                    <Link to={plan.id === "free" ? "/signup" : "/pricing"} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">
+                      {plan.id === "free" ? "Start Free" : "View plan details"} →
+                    </Link>
+                  </div>
+                ))}
               </div>
             </div>
           </FadeIn>
@@ -1100,11 +1087,11 @@ export default function Landing() {
             <div className="text-center mb-4">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Live Agent Execution</span>
+                <span className="text-slate-300 text-sm">Illustrative Agent Execution</span>
               </div>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white">Watch Agents Think, Execute & Decide</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">Inspect an illustrative agent execution trace</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Real agent reasoning traces. Real tool calls. Real confidence scores. Pick a scenario and watch the full execution pipeline.
+                Sample data shows how tool activity, confidence signals, policy checks, and human escalation can appear. It is a product walkthrough, not a production result or performance claim.
               </p>
             </div>
           </FadeIn>
@@ -1139,9 +1126,9 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Enterprise-Grade from Day One</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governance controls for enterprise workflows</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Security, governance, and compliance are not afterthoughts. They are the foundation.
+                Scope, review, observability, and evidence are designed into the runtime. Your organization remains responsible for configuring controls and validating its compliance obligations.
               </p>
             </div>
           </FadeIn>
@@ -1155,7 +1142,7 @@ export default function Landing() {
                   </svg>
                 ),
                 title: "HITL Governance",
-                desc: "Every critical decision requires human approval. Configurable thresholds per agent, per domain, per risk level.",
+                desc: "Configure approval requirements and escalation thresholds per workflow, agent, domain, and risk level.",
               },
               {
                 icon: (
@@ -1165,7 +1152,7 @@ export default function Landing() {
                   </svg>
                 ),
                 title: "Shadow Mode",
-                desc: "Test agents in parallel before going live. Compare AI decisions against human decisions with zero production risk.",
+                desc: "Evaluate agents against representative or mirrored workloads before promotion, while preserving the isolation controls appropriate to the environment.",
               },
               {
                 icon: (
@@ -1174,7 +1161,7 @@ export default function Landing() {
                   </svg>
                 ),
                 title: "Complete Audit Trail",
-                desc: "WORM-compliant, 7-year retention, exportable evidence packages. Every agent action logged with full context.",
+                desc: "Record actor, tenant, scope, inputs, decisions, tool activity, approvals, and outcomes. Configure retention and export controls for your policy needs.",
               },
               {
                 icon: (
@@ -1199,18 +1186,6 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 9b. SOCIAL PROOF / TESTIMONIALS                               */}
-      {/* ============================================================ */}
-      <FadeIn>
-        <SocialProof />
-      </FadeIn>
-
-      {/* ============================================================ */}
-      {/* 10. ROI CALCULATOR                                            */}
-      {/* ============================================================ */}
-      <ROICalculator />
-
-      {/* ============================================================ */}
       {/* 11. INDIA-FIRST                                               */}
       {/* ============================================================ */}
       <section className="py-24 bg-white scroll-mt-16">
@@ -1226,8 +1201,7 @@ export default function Landing() {
                     Built for Indian Enterprise
                   </h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with India&apos;s most critical government and business platforms.
-                    GSTN, EPFO, Darwinbox, Tally &mdash; all pre-built and production-tested.
+                    Registry entries and connector implementations cover India-focused systems including GSTN, EPFO, Darwinbox, Tally, Account Aggregator, and DigiLocker. Production use depends on approved provider access, tenant credentials, consent, scopes, and environment validation.
                   </p>
                 </div>
 
@@ -1273,21 +1247,21 @@ export default function Landing() {
                       <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
                       <div>
                         <span className="font-semibold text-slate-900">Multi-Client Management</span>
-                        <span className="text-slate-600"> &mdash; Manage 20+ clients from one dashboard. Instant company switching with isolated data.</span>
+                        <span className="text-slate-600"> &mdash; Manage multiple client workspaces from one dashboard with explicit company switching and tenant-isolated data.</span>
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
                       <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
                       <div>
                         <span className="font-semibold text-slate-900">GST &amp; TDS Automation</span>
-                        <span className="text-slate-600"> &mdash; Auto GSTR-1/3B filing, TDS Form 26Q/24Q generation, 2A/26AS reconciliation with GSTN integration.</span>
+                        <span className="text-slate-600"> &mdash; Prepare GSTR and TDS data, compare source records, expose exceptions, and route an authorized filing handoff through configured providers.</span>
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
                       <CheckIcon className="w-5 h-5 text-emerald-500 mt-0.5 flex-shrink-0" />
                       <div>
                         <span className="font-semibold text-slate-900">Bank Reconciliation</span>
-                        <span className="text-slate-600"> &mdash; Auto-match 99.7% of bank transactions via Account Aggregator. Flag stale items and escalate to partners.</span>
+                        <span className="text-slate-600"> &mdash; Suggest matches from consented bank data, show confidence and source evidence, and escalate unresolved or stale items to reviewers.</span>
                       </div>
                     </li>
                     <li className="flex items-start gap-3">
@@ -1319,13 +1293,13 @@ export default function Landing() {
                       <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">CA</div>
                       <div>
                         <p className="font-semibold text-slate-900">CA Firm Dashboard</p>
-                        <p className="text-xs text-slate-500">7 clients &middot; 3 pending filings &middot; Health: 92%</p>
+                        <p className="text-xs text-slate-500">Illustrative workspace preview &middot; Sample data</p>
                       </div>
                     </div>
                     {[
-                      { label: "GST Filed", value: "94%", color: "bg-emerald-500" },
-                      { label: "Bank Recon", value: "99.7%", color: "bg-blue-500" },
-                      { label: "Month Close", value: "4 hrs", color: "bg-purple-500" },
+                      { label: "GST return", value: "Review", color: "bg-emerald-500" },
+                      { label: "Recon breaks", value: "4 open", color: "bg-blue-500" },
+                      { label: "Close pack", value: "Pending", color: "bg-purple-500" },
                     ].map((stat) => (
                       <div key={stat.label} className="flex items-center justify-between">
                         <span className="text-sm text-slate-600">{stat.label}</span>
@@ -1359,7 +1333,7 @@ export default function Landing() {
                 Built for Every C-Suite Executive
               </h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Dedicated AI agent teams for every function. Each CxO gets a purpose-built solution with role-specific dashboards, KPIs, and automation workflows.
+                Role-oriented dashboards and workflow patterns help each function define its own tools, approval gates, measures, and escalation paths.
               </p>
             </div>
           </FadeIn>
@@ -1369,7 +1343,7 @@ export default function Landing() {
               {
                 role: "CFO",
                 title: "Virtual Finance Team",
-                description: "AP/AR automation, bank reconciliation, tax compliance, and month-end close in 4 hours.",
+                description: "AP and AR coordination, reconciliation suggestions, tax-preparation workflows, close orchestration, approvals, and evidence.",
                 gradient: "from-emerald-500 to-teal-600",
                 icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
                 link: "/solutions/cfo",
@@ -1377,7 +1351,7 @@ export default function Landing() {
               {
                 role: "CHRO",
                 title: "Virtual HR Team",
-                description: "Screen 500 resumes/hr, day-1 onboarding, zero-error payroll, and EPFO/ESI compliance.",
+                description: "Recruiting coordination, onboarding workflows, payroll preparation, employee service, approvals, and sensitive-data boundaries.",
                 gradient: "from-blue-500 to-teal-600",
                 icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
                 link: "/solutions/chro",
@@ -1385,7 +1359,7 @@ export default function Landing() {
               {
                 role: "CMO",
                 title: "Virtual Marketing Team",
-                description: "3.2x ROAS, 42% lower CAC, AI content factory, and multi-channel campaign automation.",
+                description: "Research, content operations, experiments, CRM follow-up, campaign coordination, review gates, and measurement.",
                 gradient: "from-emerald-500 to-teal-600",
                 icon: "M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z",
                 link: "/solutions/cmo",
@@ -1393,7 +1367,7 @@ export default function Landing() {
               {
                 role: "COO",
                 title: "Virtual Operations Team",
-                description: "88% auto-triage, MTTR from 4hr to 15min, vendor SLA monitoring, and compliance guard.",
+                description: "Ticket triage, IT operations, vendor coordination, contract workflows, policy checks, and escalation.",
                 gradient: "from-cyan-500 to-blue-600",
                 icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z",
                 link: "/solutions/coo",
@@ -1401,7 +1375,7 @@ export default function Landing() {
               {
                 role: "CBO",
                 title: "Virtual Business Ops Team",
-                description: "Contract review in 2 days, continuous compliance, fraud detection, and data governance.",
+                description: "Document and case routing, shared-service workflows, review queues, compliance checks, and data governance.",
                 gradient: "from-amber-500 to-orange-600",
                 icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
                 link: "/solutions/cbo",
@@ -1612,7 +1586,7 @@ $ agenticorg sop deploy \\
                   to="/signup"
                   className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
                 >
-                  Get API Key — Free
+                  Open the developer dashboard
                 </Link>
                 <a
                   href="https://github.com/mishrasanjeev/agentic-org"
@@ -1630,26 +1604,26 @@ $ agenticorg sop deploy \\
       </section>
 
       {/* ============================================================ */}
-      {/* 12b. FEATURED: CA FIRM END-TO-END CASE STUDY                  */}
+      {/* 12b. CA FIRM IMPLEMENTATION BLUEPRINT                         */}
       {/* ============================================================ */}
       <section className="py-20 bg-gradient-to-b from-slate-950 to-slate-900">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-12">
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium tracking-wide uppercase mb-4">Case Study</span>
+              <span className="inline-block px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-medium tracking-wide uppercase mb-4">Implementation blueprint</span>
               <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-                CA Firm Goes Live in 8 Days
+                A reviewable CA-firm workflow from source data to filing handoff
               </h2>
-              <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-                End-to-end automation: Invoice processing, bank reconciliation, GST filing, and Tally sync — all running on AI agents.
+              <p className="text-lg text-slate-400 max-w-3xl mx-auto">
+                This illustrative sequence shows where source credentials, consent, validation, human review, and provider-owned execution belong. Timelines and outcomes depend on each firm's systems and approvals.
               </p>
             </div>
             <div className="grid md:grid-cols-4 gap-6 mb-10">
               {[
-                { stage: "1", title: "Invoice", desc: "Create invoices in Zoho Books with GSTIN validation and HSN codes", connector: "Zoho Books" },
-                { stage: "2", title: "Bank Reconcile", desc: "Fetch statements via Account Aggregator, auto-match with high accuracy", connector: "Finvu AA" },
-                { stage: "3", title: "GST Filing", desc: "Push GSTR-1/3B to GSTN via Adaequare GSP with DSC digital signing", connector: "GSTN" },
-                { stage: "4", title: "Tally Sync", desc: "Post vouchers to Tally Prime via XML/TDL protocol through local bridge", connector: "Tally Bridge" },
+                { stage: "1", title: "Prepare invoice data", desc: "Validate GSTIN, tax fields, HSN/SAC mappings, and source references before proposing an accounting entry.", connector: "Accounting source" },
+                { stage: "2", title: "Suggest matches", desc: "Compare consented bank data with book entries, expose confidence, and route unresolved breaks for review.", connector: "AA / statement source" },
+                { stage: "3", title: "Prepare return", desc: "Build a reviewable GST payload and retain validation evidence before an authorized filing handoff.", connector: "GSTN via approved GSP" },
+                { stage: "4", title: "Post after approval", desc: "Send approved vouchers through the configured accounting bridge and record the resulting provider reference.", connector: "Tally or ERP bridge" },
               ].map((s) => (
                 <div key={s.stage} className="relative bg-slate-800/50 border border-slate-700 rounded-xl p-6 hover:border-blue-500/50 transition-colors">
                   <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center text-sm font-bold mb-3">{s.stage}</div>
@@ -1661,14 +1635,49 @@ $ agenticorg sop deploy \\
             </div>
             <div className="text-center">
               <Link
-                to="/blog/ca-firm-ai-agent-end-to-end"
+                to="/solutions/ca-firms"
                 className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 font-medium transition-colors"
               >
-                Read the full case study
+                Explore the governed CA-firm solution
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
               </Link>
             </div>
           </FadeIn>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 13. ANSWER-READY FAQ                                          */}
+      {/* ============================================================ */}
+      <section id="faq" className="py-24 bg-white scroll-mt-16" aria-labelledby="faq-heading">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FadeIn>
+            <div className="text-center mb-12">
+              <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
+                Product answers
+              </div>
+              <h2 id="faq-heading" className="text-3xl sm:text-4xl font-bold text-slate-900">Frequently asked questions about AgenticOrg</h2>
+              <p className="mt-4 text-lg text-slate-500">
+                Direct answers about capabilities, governance, integrations, product facts, self-hosting, and OACP boundaries.
+              </p>
+            </div>
+          </FadeIn>
+          <div className="space-y-4">
+            {publicSite.landingFaqs.map((faq, index) => (
+              <FadeIn key={faq.question} delay={Math.min(index * 50, 250)}>
+                <details className="group rounded-2xl border border-slate-200 bg-slate-50 p-6" open={index === 0}>
+                  <summary className="cursor-pointer list-none font-semibold text-slate-900 flex items-start justify-between gap-4">
+                    <span>{faq.question}</span>
+                    <span className="text-blue-600 group-open:rotate-45 transition-transform" aria-hidden="true">+</span>
+                  </summary>
+                  <p className="mt-4 text-slate-600 leading-relaxed">{faq.answer}</p>
+                </details>
+              </FadeIn>
+            ))}
+          </div>
+          <p className="mt-8 text-center text-sm text-slate-500">
+            Need a deployment-specific answer? <Link to="/support" className="font-semibold text-blue-600 hover:underline">Contact support</Link>.
+          </p>
         </div>
       </section>
 
@@ -1679,10 +1688,10 @@ $ agenticorg sop deploy \\
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop paying people to do what AI virtual employees can do better.
+              Start with one measurable, governed workflow.
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              {agentsText} agents that act with human control, scoped tools, audit trails, and fail-closed release gates. Free to start.
+              Define the task, tool scope, approval policy, evaluation criteria, and evidence you need. Then test before promotion. The Free tier is available to start.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -1740,10 +1749,10 @@ $ agenticorg sop deploy \\
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Solutions</h4>
               <ul className="space-y-2">
-                <li><a href="#solutions" className="text-slate-400 hover:text-white text-sm transition-colors">For CFOs</a></li>
-                <li><a href="#solutions" className="text-slate-400 hover:text-white text-sm transition-colors">For CHROs</a></li>
-                <li><a href="#solutions" className="text-slate-400 hover:text-white text-sm transition-colors">For CMOs</a></li>
-                <li><a href="#solutions" className="text-slate-400 hover:text-white text-sm transition-colors">For COOs</a></li>
+                <li><Link to="/solutions/cfo" className="text-slate-400 hover:text-white text-sm transition-colors">For CFOs</Link></li>
+                <li><Link to="/solutions/chro" className="text-slate-400 hover:text-white text-sm transition-colors">For CHROs</Link></li>
+                <li><Link to="/solutions/cmo" className="text-slate-400 hover:text-white text-sm transition-colors">For CMOs</Link></li>
+                <li><Link to="/solutions/coo" className="text-slate-400 hover:text-white text-sm transition-colors">For COOs</Link></li>
               </ul>
             </div>
 
@@ -1753,7 +1762,7 @@ $ agenticorg sop deploy \\
               <ul className="space-y-2">
                 <li><a href="#how-it-works" className="text-slate-400 hover:text-white text-sm transition-colors">How It Works</a></li>
                 <li><Link to="/pricing" className="text-slate-400 hover:text-white text-sm transition-colors">Pricing</Link></li>
-                <li><a href="#roi-calculator" className="text-slate-400 hover:text-white text-sm transition-colors">ROI Calculator</a></li>
+                <li><a href="#product-facts-heading" className="text-slate-400 hover:text-white text-sm transition-colors">Runtime Facts</a></li>
                 <li><a href="#demo" className="text-slate-400 hover:text-white text-sm transition-colors">Live Demo</a></li>
                 <li><Link to="/blog" className="text-slate-400 hover:text-white text-sm transition-colors">Blog</Link></li>
                 <li>
@@ -1780,7 +1789,7 @@ $ agenticorg sop deploy \\
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
-                <li><a href="mailto:sanjeev@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
+                <li><Link to="/support" className="text-slate-400 hover:text-white text-sm transition-colors">Support and contact</Link></li>
                 <li><span className="text-slate-400 text-sm">AgenticOrg</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>

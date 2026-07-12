@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -53,55 +52,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "72-hour", label: "Average month-end close cycle", color: "text-red-500" },
-  { value: "\u20B912L/year", label: "Lost to missed early-payment discounts", color: "text-orange-500" },
-  { value: "42-day", label: "DSO average across Indian mid-market firms", color: "text-red-500" },
+  { value: "Fragmented", label: "Cash and close data spread across source systems", color: "text-red-500" },
+  { value: "Manual", label: "Invoice matching and approval queues", color: "text-orange-500" },
+  { value: "Delayed", label: "Receivables exceptions and collection follow-up", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Treasury Management",
-    description: "Real-time cash position across all bank accounts. AI forecasts 90-day cash runway, flags shortfalls, and recommends optimal fund allocation across FDs and liquid funds.",
+    description: "Consolidate cash positions from configured bank and accounting sources. Produce forecast scenarios, flag potential shortfalls, and present allocation options for finance review.",
     icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "AP Automation",
-    description: "Process digital PDF invoices in 11 seconds flat. Parse line items, 3-way match with PO and GRN, auto-route for approval, and schedule payments to capture early-pay discounts.",
+    description: "Extract fields from supported digital invoices, compare them with PO and GRN data, and route exceptions through configured approval queues. Payment preparation remains subject to finance approval and provider support.",
     icon: "M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z",
     gradient: "from-blue-500 to-cyan-600",
   },
   {
     title: "AR Collections",
-    description: "AI-prioritized dunning with automated reminders. Smart escalation paths, payment link generation, and real-time DSO tracking per customer segment.",
+    description: "Prioritize collection queues, draft reminders, and surface customer-segment context. Sending messages or creating payment links requires configured providers, scopes, and approval policies.",
     icon: "M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z",
     gradient: "from-orange-500 to-red-600",
   },
   {
     title: "Bank Reconciliation",
-    description: "99.7% auto-match rate via Account Aggregator integration. Flag stale items, identify duplicates, and escalate unmatched entries — all without touching a spreadsheet.",
+    description: "Propose matches from configured bank and ledger sources, flag stale or duplicate items, and route unmatched entries for review. Match quality depends on source data.",
     icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
     gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Tax Compliance",
-    description: "End-to-end GST (GSTR-1/3B/9) and TDS (26Q/24Q) automation. Auto-reconcile 2A vs books, generate Form 16A, and file via GSTN with DSC — zero manual intervention.",
+    description: "Prepare GST and TDS workpapers, reconciliation outputs, deadline alerts, and filing packets. GSTN, DSC, and filing actions require configured providers and authorized human approval.",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Month-End Close",
-    description: "Reduce close from 72 hours to 4 hours. Automated 7-step workflow: trial balance, accruals, reconciliation, adjustments, review, CFO sign-off, and reporting.",
+    description: "Coordinate a configurable close checklist across trial balance, accruals, reconciliation, adjustments, review, CFO sign-off, and reporting. Timing depends on source readiness and policy.",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect Tally", description: "Link Tally Prime, bank accounts via Account Aggregator, and GSTN. One-click OAuth setup takes under 5 minutes." },
-  { step: "2", title: "Shadow Mode", description: "AI agents run in parallel with your team for 1 week. Every output is reviewed before any action is taken." },
-  { step: "3", title: "Promote to Active", description: "Once you trust the outputs, promote agents to active. They handle invoices, reconciliation, and compliance autonomously." },
-  { step: "4", title: "Scale Operations", description: "Add more entities, bank accounts, and subsidiaries. Agents scale linearly with zero additional headcount." },
+  { step: "1", title: "Connect Sources", description: "Configure supported Tally, bank, Account Aggregator, and GSTN connections. Availability depends on credentials, scopes, tenant plan, and provider APIs." },
+  { step: "2", title: "Shadow Mode", description: "Run selected workflows in parallel with your team, evaluate outputs, and review exceptions before enabling any action." },
+  { step: "3", title: "Enable Governed Actions", description: "Enable selected actions only after evaluation. Invoices, payments, reconciliation, and filings remain bounded by scopes and approval policy." },
+  { step: "4", title: "Expand Deliberately", description: "Add entities, accounts, and workflows with separate source access, thresholds, and approval boundaries for each operating context." },
 ];
 
 const TRUST_LOGOS = [
@@ -114,10 +113,10 @@ const TRUST_LOGOS = [
 ];
 
 const KPI_CARDS = [
-  { label: "Cash Runway", value: "187 days", change: "+22 days", positive: true },
-  { label: "DSO", value: "28 days", change: "-14 days", positive: true },
-  { label: "DPO", value: "45 days", change: "+8 days", positive: true },
-  { label: "AR Aging >90d", value: "2.1%", change: "-4.8%", positive: true },
+  { label: "Cash Visibility", value: "Consolidated", change: "Configured sources", positive: true },
+  { label: "Close Workflow", value: "In review", change: "Approval required", positive: true },
+  { label: "AR Exceptions", value: "Prioritized", change: "Human follow-up", positive: true },
+  { label: "Reconciliation", value: "Exceptions", change: "Source-dependent", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +176,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your finance automation trial.</p>
+            <p className="text-slate-600">Your request was saved. Our team will follow up using the contact details you provided.</p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all">
               Close
             </button>
@@ -230,11 +229,6 @@ export default function CFOSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual Finance Team for CFOs | AgenticOrg</title>
-        <meta name="description" content="Reduce month-end close from 72 hours to 4 hours. Automate AP, AR, bank reconciliation, and tax compliance with AI agents built for Indian CFOs." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/cfo" />
-      </Helmet>
 
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
@@ -251,7 +245,7 @@ export default function CFOSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
-              Start Free Trial
+              Request a Demo
             </button>
           </div>
         </div>
@@ -281,7 +275,7 @@ export default function CFOSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Close books in 4 hours, not 72. Automate AP, AR, reconciliation, and tax compliance with AI agents that work 24/7 alongside your finance team.
+              Coordinate AP, AR, reconciliation, treasury analysis, and tax work through governed AI workflows with source-scoped access and human approval.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -289,7 +283,7 @@ export default function CFOSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CFO%20Solution%20Demo"
@@ -299,7 +293,7 @@ export default function CFOSolution() {
               </a>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">Deployment scope, connector availability, provider access, and approval requirements are confirmed during discovery.</p>
           </div>
         </div>
       </section>
@@ -310,10 +304,10 @@ export default function CFOSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your finance team is buried in manual work
+                Common finance operations friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for mid-market Indian companies with INR 50-500 Cr revenue.
+                Illustrative workflow states; actual priorities depend on your entities, source systems, controls, and operating model.
               </p>
             </div>
           </FadeIn>
@@ -336,9 +330,9 @@ export default function CFOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Your Complete Virtual Finance Team</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed AI Workflows for Finance</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered agents that handle every aspect of your finance operations, from invoicing to month-end close.
+                Configure scoped workflows for treasury, invoices, collections, reconciliation, tax workpapers, and close coordination.
               </p>
             </div>
           </FadeIn>
@@ -366,9 +360,9 @@ export default function CFOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Real-Time CFO Dashboard</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Operational CFO Dashboard</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Every metric a CFO needs, updated in real time. No more waiting for month-end reports.
+                Illustrative operational states. Actual metrics and freshness depend on connected source data and refresh configuration.
               </p>
             </div>
           </FadeIn>
@@ -395,8 +389,8 @@ export default function CFOSolution() {
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm">P&L</div>
                 <div>
-                  <p className="font-semibold text-slate-900">P&L Trend</p>
-                  <p className="text-xs text-slate-500">Revenue vs Expenses &middot; Last 6 months</p>
+                  <p className="font-semibold text-slate-900">Illustrative P&amp;L Trend</p>
+                  <p className="text-xs text-slate-500">Sample visualization &middot; replace with connected source data</p>
                 </div>
               </div>
               <div className="flex items-end gap-2 h-32">
@@ -419,11 +413,11 @@ export default function CFOSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full finance automation.
+                Connect sources, configure policy, validate in shadow mode, and enable selected actions with approval controls.
               </p>
             </div>
           </FadeIn>
@@ -455,24 +449,24 @@ export default function CFOSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                CFO Suite &mdash; Enterprise Ready
+                Configurable CFO Workflow Suite
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
                 Transform Your Finance Operations
               </h2>
               <p className="text-lg text-slate-600 mb-6 max-w-xl mx-auto">
-                Get your virtual finance team running in under a week. Full AP, AR, reconciliation, and compliance automation.
+                Select the finance workflows that fit your controls. Availability depends on plan, source connectors, provider access, and approval policy.
               </p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "11-second invoice processing",
-                  "99.7% auto-reconciliation",
-                  "72h to 4h month-end close",
-                  "Real-time cash forecasting",
-                  "GST & TDS automation",
-                  "Account Aggregator ready",
-                  "SOC2 audit trail",
-                  "14-day free trial",
+                  "Invoice extraction and matching",
+                  "Reconciliation exception queues",
+                  "Approval-gated close workflows",
+                  "Cash forecast scenarios",
+                  "GST & TDS workpapers",
+                  "Configurable source connectors",
+                  "Audit evidence and approvals",
+                  "Human approval gates",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -485,7 +479,7 @@ export default function CFOSolution() {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex items-center justify-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/25"
                 >
-                  Start Free Trial
+                  Request a Demo
                 </button>
                 <a
                   href="mailto:sanjeev@agenticorg.ai?subject=CFO%20Solution%20Demo"
@@ -494,7 +488,7 @@ export default function CFOSolution() {
                   Book a Demo
                 </a>
               </div>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">Commercial terms and enabled capabilities are confirmed for the selected plan and deployment scope.</p>
             </div>
           </FadeIn>
         </div>
@@ -510,9 +504,9 @@ export default function CFOSolution() {
                   <div className="inline-flex items-center gap-2 bg-emerald-100 text-emerald-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
                     Built for Indian Finance Teams
                   </div>
-                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Trusted Integrations</h2>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Connector Availability</h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with India&apos;s leading accounting, banking, and compliance platforms.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, and required approvals.
                   </p>
                 </div>
 
@@ -541,17 +535,17 @@ export default function CFOSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop losing money to manual finance processes
+              Bring finance operations into governed workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join CFOs who have cut month-end close from 72 hours to 4 hours and reclaimed INR 12L/year in early-pay discounts.
+              Review source-linked outputs, route exceptions, and retain human ownership of payments, filings, and financial decisions.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-emerald-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-emerald-600 hover:to-teal-700 transition-all shadow-lg shadow-emerald-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CFO%20Solution%20Demo"
