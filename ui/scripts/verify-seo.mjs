@@ -56,6 +56,19 @@ function sitemapLocations(xml) {
   );
 }
 
+function noindexMapPatterns(config) {
+  const mapBlock = config.match(
+    /map\s+\$request_uri\s+\$seo_robots_tag\s*\{([\s\S]*?)^\}/m,
+  );
+  if (!mapBlock) return [];
+  return [...mapBlock[1].matchAll(
+    /^\s*~(\S+)\s+"noindex,\s*nofollow";\s*$/gm,
+  )].map((match) => new RegExp(match[1]));
+}
+
+const hasNoindexHeader = (patterns, uri) =>
+  patterns.some((pattern) => pattern.test(uri));
+
 export function verifySeo(root = UI_ROOT) {
   const errors = [];
   const warnings = [];
@@ -308,6 +321,50 @@ export function verifySeo(root = UI_ROOT) {
     }
     if (!config.includes("X-Robots-Tag $seo_robots_tag always")) {
       fail(configName + " is missing private-route X-Robots-Tag");
+    }
+    const noindexPatterns = noindexMapPatterns(config);
+    if (noindexPatterns.length === 0) {
+      fail(configName + " is missing the $seo_robots_tag noindex map rules");
+    } else {
+      const noindexRoutes = routes.filter((route) => route.index === false);
+      for (const route of noindexRoutes) {
+        const variants = [
+          route.path,
+          route.path + "/",
+          route.path + "?source=seo-verifier",
+          route.path + "/?source=seo-verifier",
+        ];
+        for (const uri of variants) {
+          if (!hasNoindexHeader(noindexPatterns, uri)) {
+            fail(configName + " does not map registered noindex URI " + uri);
+          }
+        }
+      }
+      for (const route of routes.filter((candidate) => candidate.index !== false)) {
+        for (const uri of [route.path, route.path + "?source=seo-verifier"]) {
+          if (hasNoindexHeader(noindexPatterns, uri)) {
+            fail(configName + " incorrectly maps indexable URI " + uri + " to noindex");
+          }
+        }
+      }
+      for (const route of noindexRoutes.filter((candidate) =>
+        candidate.path.startsWith("/solutions/")
+      )) {
+        if (!hasNoindexHeader(noindexPatterns, route.path + "/confirmation")) {
+          fail(configName + " does not preserve noindex on campaign subpaths: " + route.path);
+        }
+        if (hasNoindexHeader(noindexPatterns, route.path + "-guide")) {
+          fail(configName + " overmatches campaign siblings: " + route.path);
+        }
+      }
+      for (const uri of ["/dashboard", "/dashboard/agents/agent-1", "/dashboard?tab=agents"]) {
+        if (!hasNoindexHeader(noindexPatterns, uri)) {
+          fail(configName + " does not preserve private dashboard noindex for " + uri);
+        }
+      }
+      if (hasNoindexHeader(noindexPatterns, "/login/help")) {
+        fail(configName + " broadens the exact auth-flow rule to /login/help");
+      }
     }
     for (const alias of ["/contact", "/privacy-policy", "/terms-of-service", "/refund-policy", "/cancellation"]) {
       if (!config.includes("location = " + alias + " {")) {
