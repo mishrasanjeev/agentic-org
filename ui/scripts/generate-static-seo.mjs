@@ -485,6 +485,66 @@ export function cspHash(body) {
   return "sha256-" + createHash("sha256").update(body, "utf8").digest("base64");
 }
 
+export const CSP_HASH_CHUNK_MAX = 2800;
+const CSP_HASH_BLOCK_START = "# BEGIN GENERATED JSON-LD CSP HASHES";
+const CSP_HASH_BLOCK_END = "# END GENERATED JSON-LD CSP HASHES";
+
+export function chunkCspHashes(hashes, maxLength = CSP_HASH_CHUNK_MAX) {
+  if (!Number.isInteger(maxLength) || maxLength < 64) {
+    throw new Error("CSP hash chunk limit must be an integer of at least 64");
+  }
+  const chunks = [];
+  let current = "";
+  for (const hash of hashes) {
+    const token = "'" + hash + "'";
+    if (token.length > maxLength) {
+      throw new Error("CSP hash token exceeds the configured chunk limit");
+    }
+    const candidate = current ? current + " " + token : token;
+    if (candidate.length > maxLength) {
+      chunks.push(current);
+      current = token;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function renderCspHashBlock(chunks) {
+  return [
+    "    " + CSP_HASH_BLOCK_START,
+    "    # Keep each value below nginx's configuration parser buffer.",
+    ...chunks.map(
+      (chunk, index) =>
+        "    set $csp_jsonld_hashes_" + (index + 1) + ' "' + chunk + '";',
+    ),
+    "    " + CSP_HASH_BLOCK_END,
+    "",
+    "",
+  ].join("\n");
+}
+
+export function replaceGeneratedCspHashReferences(text, hashReferences) {
+  const scriptSourcePattern =
+    /(script-src 'self')([^;\n]*?)( https:\/\/accounts\.google\.com)/;
+  if (!scriptSourcePattern.test(text)) {
+    throw new Error("script-src source list not found in nginx config");
+  }
+  return text.replace(
+    scriptSourcePattern,
+    (_match, prefix, middle, suffix) => {
+      const preserved = middle.trim().split(/\s+/).filter((token) =>
+        token &&
+        !/^\$csp_jsonld_hashes_\d+$/.test(token) &&
+        !/^'sha256-[A-Za-z0-9+/]+={0,2}'$/.test(token)
+      );
+      return prefix + " " + [hashReferences, ...preserved].join(" ") + suffix;
+    },
+  );
+}
+
 /**
  * Synchronize hashes for source index JSON-LD and every generated route graph.
  * This is intentionally opt-in: normal builds stay hermetic. Run after content
@@ -509,18 +569,36 @@ export function syncRouteCsp(root = UI_ROOT, routes = loadRouteDescriptors(root)
   }
   const hashes = [...new Set(bodies.map(cspHash))];
   if (!hashes.length) throw new Error("No JSON-LD bodies found for CSP sync");
-  const hashList = hashes.map((hash) => "'" + hash + "'").join(" ");
-  const pattern =
-    /(script-src 'self')(?: '(?:sha256-[A-Za-z0-9+/=]+|unsafe-inline)')*( https:\/\/accounts\.google\.com)/;
+  const chunks = chunkCspHashes(hashes);
+  const hashBlock = renderCspHashBlock(chunks);
+  const hashReferences = chunks
+    .map((_, index) => "$csp_jsonld_hashes_" + (index + 1))
+    .join(" ");
+  const generatedBlockPattern = new RegExp(
+    "    " + CSP_HASH_BLOCK_START + "\\n[\\s\\S]*?    " + CSP_HASH_BLOCK_END + "\\n(?:\\n)?",
+    "g",
+  );
+  const cspHeaderPattern = /^(\s*add_header Content-Security-Policy\b.*)$/m;
 
   const configs = ["nginx.conf", "nginx.cloudrun.conf.template"];
   for (const name of configs) {
     const path = join(root, name);
-    const text = readFileSync(path, "utf8");
-    if (!pattern.test(text)) throw new Error("script-src hash list not found in " + name);
-    writeFileSync(path, text.replace(pattern, "$1 " + hashList + "$2"), "utf8");
+    let text = readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+    if (!cspHeaderPattern.test(text)) {
+      throw new Error("Content-Security-Policy header not found in " + name);
+    }
+    text = text.replace(generatedBlockPattern, "");
+    text = text.replace(cspHeaderPattern, hashBlock + "$1");
+    text = replaceGeneratedCspHashReferences(text, hashReferences);
+    const oversizedLine = text.split("\n").find(
+      (line) => Buffer.byteLength(line, "utf8") >= 4096,
+    );
+    if (oversizedLine) {
+      throw new Error(name + " contains an nginx parameter line of 4096+ characters");
+    }
+    writeFileSync(path, text, "utf8");
   }
-  return { hashes, configs };
+  return { hashes, configs, chunks: chunks.length };
 }
 export function generateStaticSeo(root = UI_ROOT) {
   const { manifest, routes } = loadRouteDescriptors(root);

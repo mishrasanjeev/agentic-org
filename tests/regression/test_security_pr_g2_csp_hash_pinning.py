@@ -47,11 +47,22 @@ def _compute_inline_script_hashes(html: str) -> list[str]:
 
 
 def _extract_csp_header(text: str) -> str:
-    for line in text.splitlines():
-        if "Content-Security-Policy" in line:
-            return line
-    pytest.fail("Content-Security-Policy header not found in nginx config")
-    return ""  # unreachable
+    match = re.search(r'add_header\s+Content-Security-Policy\s+"([^"]+)"', text)
+    if not match:
+        pytest.fail("Content-Security-Policy header not found in nginx config")
+    csp = match.group(1)
+    variables = dict(
+        re.findall(r'set\s+\$(csp_jsonld_hashes_\d+)\s+"([^"]*)";', text)
+    )
+    csp = re.sub(
+        r"\$(csp_jsonld_hashes_\d+)",
+        lambda match: variables.get(match.group(1), match.group(0)),
+        csp,
+    )
+    assert "$csp_jsonld_hashes_" not in csp, (
+        "Content-Security-Policy references an undefined JSON-LD hash variable"
+    )
+    return csp
 
 
 def _extract_script_src_tokens(csp_line: str) -> list[str]:
@@ -122,6 +133,35 @@ def test_sec_009_nginx_configs_have_identical_script_src() -> None:
         "nginx.conf and nginx.cloudrun.conf.template have diverging "
         "script-src directives. They must stay aligned — run "
         "scripts/refresh_csp_hashes.sh after any edit."
+    )
+
+
+@pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda p: p.name)
+def test_sec_009_csp_parameters_fit_nginx_parser_buffer(config: Path) -> None:
+    text = config.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    assert all(len(line.encode("utf-8")) < 4096 for line in lines), (
+        f"{config.name}: nginx configuration parameters must stay below "
+        "the 4096-byte parser buffer"
+    )
+    csp_line = next(
+        line for line in lines if "Content-Security-Policy" in line
+    )
+    assert "$csp_jsonld_hashes_" in csp_line
+    chunks = re.findall(
+        r'set\s+\$csp_jsonld_hashes_\d+\s+"([^"]*)";', text
+    )
+    assert chunks, f"{config.name}: generated CSP hash chunks are missing"
+    assert all(len(chunk) <= 2800 for chunk in chunks)
+
+
+@pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda p: p.name)
+def test_sec_009_location_headers_merge_server_security_headers(config: Path) -> None:
+    """Location cache headers must not suppress the server-level CSP."""
+    text = config.read_text(encoding="utf-8")
+    assert "add_header_inherit merge;" in text, (
+        f"{config.name}: locations with add_header directives must merge the "
+        "server-level security headers"
     )
 
 
