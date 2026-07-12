@@ -11,12 +11,13 @@
  *   node scripts/submit-indexing.mjs --check
  *   node scripts/submit-indexing.mjs --url https://agenticorg.ai/blog/example
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const UI_ROOT = join(SCRIPT_DIR, "..");
+const PUBLIC_ROOT = join(UI_ROOT, "public");
 const SITE = "https://agenticorg.ai";
 const HOST = new URL(SITE).host;
 const args = process.argv.slice(2);
@@ -63,18 +64,37 @@ function validateUrls(values) {
   return unique;
 }
 
-function readKey() {
-  const key = (
-    process.env.INDEXNOW_KEY ||
-    readFileSync(join(UI_ROOT, "public/agenticorg-indexnow-key.txt"), "utf8")
-  ).trim();
-  if (!/^[A-Za-z0-9-]{8,128}$/.test(key)) {
-    throw new Error("INDEXNOW_KEY must be 8-128 ASCII letters, digits, or hyphens.");
+export function readHostedIndexNowKey(publicRoot = PUBLIC_ROOT) {
+  const fileNames = readdirSync(publicRoot);
+  const descriptiveFiles = fileNames.filter((name) => /indexnow/i.test(name));
+  if (descriptiveFiles.length) {
+    throw new Error(
+      "IndexNow key filenames must not be descriptive: " +
+      descriptiveFiles.join(", "),
+    );
+  }
+
+  const keyFiles = fileNames.filter((name) => /^[0-9a-f]{32}\.txt$/.test(name));
+  if (keyFiles.length !== 1) {
+    throw new Error(
+      "Expected exactly one 32-character generated IndexNow key file in public/.",
+    );
+  }
+
+  const fileName = keyFiles[0];
+  const key = fileName.slice(0, -4);
+  const contents = readFileSync(join(publicRoot, fileName), "utf8").trim();
+  if (contents !== key) {
+    throw new Error("IndexNow key file content must match its filename.");
   }
   return key;
 }
 
-export async function submitIndexNow(urls, key = readKey(), fetchImpl = fetch) {
+export async function submitIndexNow(
+  urls,
+  key = readHostedIndexNowKey(),
+  fetchImpl = fetch,
+) {
   const response = await fetchImpl("https://api.indexnow.org/indexnow", {
     method: "POST",
     headers: { "Content-Type": "application/json; charset=utf-8" },

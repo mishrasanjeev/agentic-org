@@ -12,6 +12,7 @@ import {
   outputPathsForRoute,
   UI_ROOT,
 } from "./generate-static-seo.mjs";
+import { readHostedIndexNowKey } from "./submit-indexing.mjs";
 
 const countMatches = (text, pattern) => [...text.matchAll(pattern)].length;
 const htmlDecode = (value) =>
@@ -272,6 +273,12 @@ export function verifySeo(root = UI_ROOT) {
   }
   if (!robots.includes("Sitemap: " + siteUrl.replace(/\/+$/, "") + "/sitemap.xml")) {
     fail("robots.txt sitemap URL does not match the canonical host");
+  }
+
+  try {
+    readHostedIndexNowKey(join(root, "public"));
+  } catch (error) {
+    fail("invalid hosted IndexNow key: " + error.message);
   }
 
   for (const configName of ["nginx.conf", "nginx.cloudrun.conf.template"]) {
