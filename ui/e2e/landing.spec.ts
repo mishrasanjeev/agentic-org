@@ -35,7 +35,7 @@ test.describe("Landing Page — Core Rendering", () => {
 
   test("hero section renders headline and CTAs", async ({ page }) => {
     await expect(
-      page.getByText("Your Back Office Runs Itself.").first()
+      page.getByRole("heading", { name: /Enterprise Work,\s*Governed by Design\./i }).first()
     ).toBeVisible({ timeout: 10000 });
 
     // CTA buttons
@@ -101,7 +101,7 @@ test.describe("Landing Page — Sections", () => {
 
   test("Trust & Security section renders", async ({ page }) => {
     await expect(
-      page.getByText("Enterprise-Grade from Day One").first()
+      page.getByRole("heading", { name: "Governance controls for enterprise workflows" }).first()
     ).toBeVisible({ timeout: 10000 });
 
     const features = [
@@ -121,9 +121,14 @@ test.describe("Landing Page — Sections", () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test("ROI Calculator section renders", async ({ page }) => {
-    const roiSection = page.locator("#roi-calculator");
-    await expect(roiSection).toBeAttached({ timeout: 10000 });
+  test("Open Commerce section renders", async ({ page }) => {
+    const commerceSection = page.locator("#open-commerce");
+    await expect(commerceSection).toBeAttached({ timeout: 10000 });
+    await expect(
+      commerceSection.getByRole("heading", {
+        name: /Buyer and seller AI-agent runtime for OACP commerce/i,
+      }).first(),
+    ).toBeVisible();
   });
 
   test("Footer renders with key sections", async ({ page }) => {
@@ -191,7 +196,7 @@ test.describe("Landing Page — Mobile", () => {
     await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByText("Your Back Office Runs Itself.").first()
+      page.getByRole("heading", { name: /Enterprise Work,\s*Governed by Design\./i }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -227,7 +232,7 @@ test.describe("Landing Page — Tablet", () => {
     await page.goto("https://agenticorg.ai/");
     await page.waitForLoadState("networkidle");
     await expect(
-      page.getByText("Your Back Office Runs Itself.").first()
+      page.getByRole("heading", { name: /Enterprise Work,\s*Governed by Design\./i }).first()
     ).toBeVisible({ timeout: 10000 });
   });
 

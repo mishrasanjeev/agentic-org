@@ -95,9 +95,6 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
         setBranding(next);
         applyToCssVars(next);
         applyFavicon(next.faviconUrl);
-        if (next.productName) {
-          document.title = next.productName;
-        }
       })
       .catch(() => {
         // Best effort — fall back to default branding silently.
