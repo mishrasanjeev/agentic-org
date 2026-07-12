@@ -290,7 +290,9 @@ export function verifySeo(root = UI_ROOT) {
       fail(configName + " must reference bounded JSON-LD CSP hash variables");
     }
     const imageSources = cspHeader.match(/img-src\s+([^;]+);/)?.[1] ?? "";
-    if (!imageSources.split(/\s+/).includes("https://www.googletagmanager.com")) {
+    if (!imageSources.split(/\s+/).some((source) =>
+      /^https:\/\/www\.googletagmanager\.com$/.test(source)
+    )) {
       fail(configName + " must allow the trusted Google Tag Manager image endpoint");
     }
     if (countMatches(config, /# BEGIN GENERATED JSON-LD CSP HASHES/g) !== 1 ||

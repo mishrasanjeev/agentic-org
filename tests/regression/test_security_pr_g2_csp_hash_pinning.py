@@ -142,7 +142,10 @@ def test_sec_009_img_src_allows_trusted_gtm_endpoint(config: Path) -> None:
     csp = _extract_csp_header(config.read_text(encoding="utf-8"))
     match = re.search(r"img-src\s+([^;]*);", csp)
     assert match, f"{config.name}: img-src directive not found"
-    assert "https://www.googletagmanager.com" in match.group(1).split(), (
+    assert any(
+        re.fullmatch(r"https://www\.googletagmanager\.com", source)
+        for source in match.group(1).split()
+    ), (
         f"{config.name}: img-src must allow the Google Tag Manager image endpoint"
     )
 
