@@ -8,7 +8,6 @@ from pathlib import Path
 
 from core.billing.limits import PLAN_PRICING
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PUBLIC_SITE_PATH = ROOT / "ui" / "src" / "content" / "publicSite.json"
 INDEX_PATH = ROOT / "ui" / "index.html"
