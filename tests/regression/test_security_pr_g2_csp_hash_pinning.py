@@ -137,6 +137,17 @@ def test_sec_009_nginx_configs_have_identical_script_src() -> None:
 
 
 @pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda p: p.name)
+def test_sec_009_img_src_allows_trusted_gtm_endpoint(config: Path) -> None:
+    """GTM emits a tracking image from its own already-trusted host."""
+    csp = _extract_csp_header(config.read_text(encoding="utf-8"))
+    match = re.search(r"img-src\s+([^;]*);", csp)
+    assert match, f"{config.name}: img-src directive not found"
+    assert "https://www.googletagmanager.com" in match.group(1).split(), (
+        f"{config.name}: img-src must allow the Google Tag Manager image endpoint"
+    )
+
+
+@pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda p: p.name)
 def test_sec_009_csp_parameters_fit_nginx_parser_buffer(config: Path) -> None:
     text = config.read_text(encoding="utf-8")
     lines = text.splitlines()
