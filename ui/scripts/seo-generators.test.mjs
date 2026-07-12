@@ -10,7 +10,10 @@ import {
   renderStaticHtml,
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
-import { submitIndexNow } from "./submit-indexing.mjs";
+import {
+  readHostedIndexNowKey,
+  submitIndexNow,
+} from "./submit-indexing.mjs";
 
 const manifest = {
   site: {
@@ -149,9 +152,10 @@ test("listing routes with children get both flat and directory-index shells", ()
 
 test("IndexNow submission uses the canonical host and surfaces acceptance", async () => {
   let request;
+  const key = "0123456789abcdef0123456789abcdef";
   const status = await submitIndexNow(
     ["https://agenticorg.ai/pricing"],
-    "valid-indexnow-key",
+    key,
     async (url, init) => {
       request = { url, init };
       return new Response("", { status: 202 });
@@ -164,16 +168,20 @@ test("IndexNow submission uses the canonical host and surfaces acceptance", asyn
   assert.equal(body.host, "agenticorg.ai");
   assert.equal(
     body.keyLocation,
-    "https://agenticorg.ai/valid-indexnow-key.txt",
+    "https://agenticorg.ai/" + key + ".txt",
   );
   assert.deepEqual(body.urlList, ["https://agenticorg.ai/pricing"]);
+});
+
+test("IndexNow hosted key uses generated-key format and matching root file", () => {
+  assert.match(readHostedIndexNowKey(), /^[0-9a-f]{32}$/);
 });
 
 test("IndexNow rejection fails instead of being silently ignored", async () => {
   await assert.rejects(
     submitIndexNow(
       ["https://agenticorg.ai/pricing"],
-      "valid-indexnow-key",
+      "0123456789abcdef0123456789abcdef",
       async () => new Response("invalid key", { status: 403 }),
     ),
     /HTTP 403: invalid key/,
