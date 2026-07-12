@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CSP_HASH_CHUNK_MAX,
+  chunkCspHashes,
   cspHash,
   extractObjectBlocks,
   outputPathsForRoute,
+  replaceGeneratedCspHashReferences,
   renderStaticHtml,
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
@@ -36,6 +39,32 @@ test("inline JSON-LD CSP hashes are deterministic", () => {
   assert.equal(
     cspHash(""),
     "sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+  );
+});
+
+test("JSON-LD CSP hashes stay in nginx-safe configuration chunks", () => {
+  const hashes = Array.from(
+    { length: 120 },
+    (_, index) => "sha256-" + String(index).padStart(44, "0"),
+  );
+  const chunks = chunkCspHashes(hashes);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= CSP_HASH_CHUNK_MAX));
+  const recovered = chunks.flatMap((chunk) =>
+    [...chunk.matchAll(/'([^']+)'/g)].map((match) => match[1]),
+  );
+  assert.deepEqual(recovered, hashes);
+});
+
+test("CSP synchronization preserves non-generated script sources", () => {
+  const input = "script-src 'self' 'sha256-old=' $csp_jsonld_hashes_9 https://cdn.example.com https://accounts.google.com;";
+  const result = replaceGeneratedCspHashReferences(
+    input,
+    "$csp_jsonld_hashes_1 $csp_jsonld_hashes_2",
+  );
+  assert.equal(
+    result,
+    "script-src 'self' $csp_jsonld_hashes_1 $csp_jsonld_hashes_2 https://cdn.example.com https://accounts.google.com;",
   );
 });
 

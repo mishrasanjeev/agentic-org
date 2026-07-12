@@ -266,12 +266,40 @@ export function verifySeo(root = UI_ROOT) {
     if (countMatches(config, /^\s*add_header Content-Security-Policy\b.*$/gm) !== 1) {
       fail(configName + " must contain one active Content-Security-Policy header");
     }
+    const configLines = config.replaceAll("\r\n", "\n").split("\n");
+    if (configLines.some((line) => Buffer.byteLength(line, "utf8") >= 4096)) {
+      fail(configName + " contains an nginx parameter line of 4096+ characters");
+    }
+    const cspHeader = configLines.find((line) =>
+      line.includes("add_header Content-Security-Policy")
+    ) || "";
+    if (!cspHeader.includes("$csp_jsonld_hashes_")) {
+      fail(configName + " must reference bounded JSON-LD CSP hash variables");
+    }
+    if (countMatches(config, /# BEGIN GENERATED JSON-LD CSP HASHES/g) !== 1 ||
+        countMatches(config, /# END GENERATED JSON-LD CSP HASHES/g) !== 1) {
+      fail(configName + " must contain exactly one generated JSON-LD CSP hash block");
+    }
+    const definedHashVariables = [...config.matchAll(
+      /set\s+\$(csp_jsonld_hashes_\d+)\s+"[^"]*";/g,
+    )].map((match) => match[1]);
+    const referencedHashVariables = [...cspHeader.matchAll(
+      /\$(csp_jsonld_hashes_\d+)/g,
+    )].map((match) => match[1]);
+    if (definedHashVariables.length === 0 ||
+        new Set(definedHashVariables).size !== definedHashVariables.length ||
+        definedHashVariables.join("|") !== referencedHashVariables.join("|")) {
+      fail(configName + " must reference every generated CSP hash chunk exactly once");
+    }
     for (const hash of routeCspHashes) {
       if (!config.includes("'" + hash + "'")) {
         fail(configName + " is missing generated JSON-LD CSP hash " + hash);
       }
     }
     if (config.includes("sub_filter")) fail(configName + " still uses sub_filter");
+    if (!config.includes("add_header_inherit merge;")) {
+      fail(configName + " does not preserve server security headers in locations");
+    }
     if (!config.includes("try_files $uri $uri.html /index.html;")) {
       fail(configName + " does not resolve generated route shells");
     }
