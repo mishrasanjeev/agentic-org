@@ -1,151 +1,102 @@
-# AgenticOrg — AI Virtual Employees for Enterprise
+# AgenticOrg
 
-> AgenticOrg lets you create AI virtual employees or deploy 29 pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
+> AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.
 
-## What is AgenticOrg?
-
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy 29 pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to 56 enterprise systems (430 tools) and executes domain-specific tasks with human approval on every critical decision.
-
-## Key Features
-
-- **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
-- **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
-- **29 Pre-Built AI Agents**: Ap Processor, Ar Collections, Close Agent, Fpa Agent, Recon Agent, Tax Compliance, Ld Coordinator, Offboarding Agent, Onboarding Agent, Payroll Engine, Performance Coach, Talent Acquisition, Abm, Brand Monitor, Campaign Pilot, Competitive Intel, Content Factory, Crm Intelligence, Seo Strategist, Social Media, Compliance Guard, Contract Intelligence, It Operations, Support Deflector, Support Triage, Vendor Manager, Facilities Agent, Legal Ops, Risk Sentinel
-- **56 Enterprise Connectors (430 tools)**: Banking Aa (5 tools), Gstn (9 tools), Gstn Sandbox (0 tools), Income Tax India (13 tools), Netsuite (8 tools), Oracle Fusion (10 tools), Pinelabs Plural (6 tools), Professional Tax (5 tools), Quickbooks (6 tools), Sap (7 tools), Stripe (8 tools), Tally (6 tools), Traces (4 tools), Zoho Books (35 tools), Darwinbox (10 tools), Docusign (6 tools), Epfo (6 tools), Greenhouse (8 tools), Keka (6 tools), Linkedin Talent (6 tools), Okta (8 tools), Zoom (6 tools), Ahrefs (5 tools), Bombora (4 tools), Brandwatch (5 tools), Buffer (5 tools), G2 (4 tools), Ga4 (6 tools), Google Ads (5 tools), Hubspot (32 tools), Linkedin Ads (4 tools), Mailchimp (10 tools), Meta Ads (5 tools), Mixpanel (5 tools), Moengage (6 tools), Salesforce (24 tools), Trustradius (4 tools), Wordpress (7 tools), Confluence (6 tools), Jira (11 tools), Mca Portal (4 tools), Pagerduty (6 tools), Sanctions Api (5 tools), Servicenow (6 tools), Zendesk (8 tools), Github (19 tools), Gmail (4 tools), Google Calendar (5 tools), Langsmith (5 tools), S3 (6 tools), Sendgrid (7 tools), Slack (7 tools), Twilio (5 tools), Twitter (6 tools), Whatsapp (5 tools), Youtube (6 tools)
-- **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
-- **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
-- **Shadow Mode**: Test agents against real data before promoting to production
-- **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
-- **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
-- **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
-- **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
-- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients)
-
-## Agents by Department
-
-### Finance (6 agents, CFO oversight)
-- Ap Processor (confidence: 0.88)
-- Ar Collections (confidence: 0.85)
-- Close Agent (confidence: 0.8)
-- Fpa Agent (confidence: 0.78)
-- Recon Agent (confidence: 0.95)
-- Tax Compliance (confidence: 0.92)
-
-### HR (6 agents, CHRO oversight)
-- Ld Coordinator (confidence: 0.82)
-- Offboarding Agent (confidence: 0.95)
-- Onboarding Agent (confidence: 0.95)
-- Payroll Engine (confidence: 0.99)
-- Performance Coach (confidence: 0.8)
-- Talent Acquisition (confidence: 0.88)
-
-### Marketing (8 agents, CMO oversight)
-- Abm (confidence: 0.8)
-- Brand Monitor (confidence: 0.8)
-- Campaign Pilot (confidence: 0.85)
-- Competitive Intel (confidence: 0.8)
-- Content Factory (confidence: 0.88)
-- Crm Intelligence (confidence: 0.8)
-- Seo Strategist (confidence: 0.8)
-- Social Media (confidence: 0.8)
-
-### Operations (6 agents, COO oversight)
-- Compliance Guard (confidence: 0.95)
-- Contract Intelligence (confidence: 0.82)
-- It Operations (confidence: 0.88)
-- Support Deflector (confidence: 0.7)
-- Support Triage (confidence: 0.85)
-- Vendor Manager (confidence: 0.88)
-
-### Back Office (3 agents, COO oversight)
-- Facilities Agent (confidence: 0.8)
-- Legal Ops (confidence: 0.9)
-- Risk Sentinel (confidence: 0.95)
-
-## India-First Connectors
-
-AgenticOrg is built for Indian enterprise with native connectors for: Banking Aa, Gstn, Income Tax India, Tally, Darwinbox, Epfo
-
-## Pricing
-
-- Free ($0/month): 20 connectors, 500 tasks/day, Community support
-- Pro ($2/month): Unlimited AI agents, Unlimited tasks, Email support
-- Enterprise (Custom): Unlimited AI agents, Unlimited everything, Dedicated support
-
-## Developer SDKs & Integration
-
-- **Python SDK + CLI**: `pip install agenticorg` — run agents, parse SOPs, A2A/MCP access, and install the direct `agenticorg` CLI ([PyPI](https://pypi.org/project/agenticorg/))
-- **TypeScript SDK**: `npm i agenticorg-sdk` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: `npx agenticorg-mcp-server` — expose AgenticOrg agents and read-only seller tools to ChatGPT, Claude Desktop, Cursor, VS Code MCP clients, and other MCP clients ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
-- **Direct CLI**: `agenticorg agents list`, `agenticorg agents run`, `agenticorg workflows run`, `agenticorg a2a card`, `agenticorg mcp tools`. Works from Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI, and shell scripts.
-- **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use `ao_sk_` prefix, bcrypt-hashed, scoped, revocable
-- **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at `/api/v1/a2a/agent-card`
-- **MCP Protocol**: Anthropic Model Context Protocol — agent management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools. Direct connector tools are not exposed.
-- **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
-
-## Links
+## Canonical facts
 
 - Website: https://agenticorg.ai
-- Playground (try live): https://agenticorg.ai/playground
-- Pricing: https://agenticorg.ai/pricing
-- Evaluation Matrix: https://agenticorg.ai/evals
-- Open Agentic Commerce Protocol: https://agenticorg.ai/open-agentic-commerce-protocol
-- Integration Workflow: https://agenticorg.ai/integration-workflow
-- Blog: https://agenticorg.ai/blog
-  - Merchant Self-Service Config for OACP Commerce: https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config
-  - How a Shopify Merchant Goes Live with a Seller Commerce Agent: https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp
-  - How ChatGPT, Claude, Gemini, Perplexity, WhatsApp, and Telegram Reach a Seller Agent: https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent
-  - How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts: https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts
-  - How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP: https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp
-  - How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth: https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth
-  - Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents: https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce
-  - How AI Agents Are Transforming CA Firms: GST, TDS, and Bank Reconciliation on Autopilot: https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation
-  - Why Your Month-End Close Takes 5 Days (And How AI Cuts It to 1.5): https://agenticorg.ai/blog/why-month-end-close-takes-5-days
-  - Measuring Real ROI from AI Agents: Our Honest Framework: https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents
-  - How a 200-Person IT Company's CFO Runs Finance with 3 People and 10 AI Agents: https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents
-  - How a CA Firm Goes Live with AI Agents: Invoice to Tally in 8 Days: https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end
-  - AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond: https://agenticorg.ai/blog/ai-invoice-processing-india
-  - AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation: https://agenticorg.ai/blog/virtual-employee-vs-rpa
-  - Automated Bank Reconciliation: How AI Achieves 99.7% Match Rates: https://agenticorg.ai/blog/automated-bank-reconciliation
-  - Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates: https://agenticorg.ai/blog/hitl-governance-enterprise-ai
-  - Mirror Your Company Org Chart with AI Virtual Employees: https://agenticorg.ai/blog/org-chart-ai-virtual-employees
-  - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/blog/no-code-ai-agent-builder
-  - Email-Triggered Workflows: Automate Finance Operations from Your Inbox: https://agenticorg.ai/blog/email-triggered-workflows
-- Resources: https://agenticorg.ai/resources
-  - Move Your Shopify Store to Agentic Commerce: https://agenticorg.ai/resources/move-shopify-store-to-agentic-commerce
-  - How Buyer Agents Shop Safely with OACP: https://agenticorg.ai/resources/buyer-agents-shop-safely-oacp
-  - Build Against OACP Artifacts and Bridges: https://agenticorg.ai/resources/build-against-oacp-artifacts-bridges
-  - How OACP Maps to Schema.org, UCP, ACP, AP2, A2A, and MCP: https://agenticorg.ai/resources/oacp-protocol-partner-mappings
-  - Provider-Owned Mandate and Payment Evidence in OACP: https://agenticorg.ai/resources/provider-owned-mandate-payment-evidence-oacp
-  - Launch and Rollback Runbook for OACP Commerce: https://agenticorg.ai/resources/oacp-launch-rollback-runbook
-  - Commerce Sales Agent with Grantex Controls: https://agenticorg.ai/resources/commerce-sales-agent-grantex
-  - What Are AI Agents for Enterprise?: https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise
-  - AI Agents vs RPA: Why Enterprises Are Moving Beyond Robotic Process Automation: https://agenticorg.ai/resources/ai-agents-vs-rpa
-  - AI Agents vs Chatbots: What's the Difference?: https://agenticorg.ai/resources/ai-agents-vs-chatbots
-  - Enterprise AI Automation Platform: How to Choose One: https://agenticorg.ai/resources/enterprise-ai-automation-platform
-  - Agentic AI Explained: What It Means for Business: https://agenticorg.ai/resources/agentic-ai-explained
-  - AI Accounts Payable Automation: From Invoice to Payment in 11 Seconds: https://agenticorg.ai/resources/ai-accounts-payable-automation
-  - Automated Bank Reconciliation with AI: 99.7% Match Rate: https://agenticorg.ai/resources/automated-bank-reconciliation-ai
-  - GST Compliance Automation: GSTR Filing with AI: https://agenticorg.ai/resources/gst-compliance-automation
-  - Month-End Close Automation: 5 Days to 1 Day with AI: https://agenticorg.ai/resources/month-end-close-automation
-  - AI Payroll Automation India: Zero Errors, Zero Anxiety: https://agenticorg.ai/resources/ai-payroll-automation-india
-  - AI Employee Onboarding: 2 Weeks to 4 Hours: https://agenticorg.ai/resources/ai-employee-onboarding
-  - AI Talent Acquisition: From Job Post to Offer in Days, Not Months: https://agenticorg.ai/resources/ai-talent-acquisition
-  - AI Support Ticket Triage: 88% Auto-Classification Accuracy: https://agenticorg.ai/resources/ai-support-ticket-triage
-  - AI IT Operations: Automated Incident Response and Monitoring: https://agenticorg.ai/resources/ai-it-operations
-  - AI Compliance Automation: Continuous Monitoring, Not Annual Audits: https://agenticorg.ai/resources/ai-compliance-automation
-  - Human-in-the-Loop AI: Why Enterprise AI Needs Human Approval Gates: https://agenticorg.ai/resources/human-in-the-loop-ai
-  - AI Audit Trail: Every Agent Decision Logged, Explained, Exportable: https://agenticorg.ai/resources/ai-audit-trail
-  - SOC-2 Compliance for AI: How to Audit AI Agent Systems: https://agenticorg.ai/resources/soc2-ai-compliance
-  - Shadow Mode: Test AI Agents Without Production Risk: https://agenticorg.ai/resources/shadow-mode-testing
-  - No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes: https://agenticorg.ai/resources/no-code-ai-agent-builder
-  - AI Virtual Employees: Name Them, Train Them, Deploy Them: https://agenticorg.ai/resources/ai-virtual-employees
-  - Prompt Template Management: Version Control for AI Instructions: https://agenticorg.ai/resources/prompt-template-management
-  - AI for Indian Enterprise: GSTN, EPFO, Darwinbox, Tally — All Built In: https://agenticorg.ai/resources/indian-enterprise-ai
-  - EPFO Automation: PF Compliance Without the Manual Work: https://agenticorg.ai/resources/epfo-automation-india
-  - Darwinbox + AI: Supercharge Your HRMS with Intelligent Agents: https://agenticorg.ai/resources/darwinbox-ai-integration
-  - Tally + AI: Automate Accounting with AI Agents: https://agenticorg.ai/resources/tally-ai-integration
-- GitHub: https://github.com/mishrasanjeev/agentic-org
-- Python SDK (PyPI): https://pypi.org/project/agenticorg/
-- TypeScript SDK (npm): https://www.npmjs.com/package/agenticorg-sdk
-- MCP Server (npm): https://www.npmjs.com/package/agenticorg-mcp-server
+- Application and API: https://app.agenticorg.ai
+- Repository: https://github.com/mishrasanjeev/agentic-org
+- Source version: 4.8.0 from pyproject.toml
+- Runtime requirement: Python >=3.12
+- Web application: React 19
+- Managed production: separate API and UI services on Google Cloud Run
+- License: Apache License 2.0
+- Live product facts: [https://app.agenticorg.ai/api/v1/product-facts](https://app.agenticorg.ai/api/v1/product-facts)
+
+The product facts endpoint is authoritative for the deployed version and current agent_count, connector_count, and tool_count. Do not infer totals by counting files, aliases, or tool bindings.
+
+## What AgenticOrg does
+
+- Runs built-in and tenant-created agents through authenticated APIs and a web application.
+- Orchestrates workflows, schedules, scoped tool calls, approvals, evaluations, and audit records.
+- Connects to native provider adapters and optional integration gateways when credentials and scopes are configured.
+- Provides REST, Python, TypeScript, CLI, MCP, and A2A interfaces.
+- Supports knowledge, reporting, notifications, voice, RPA, and local models when their services are configured.
+- Supports Shopify read-only sync, OACP artifact caching, buyer-safe answers, public commerce surfaces, and non-executing handoff preparation.
+
+## Boundaries
+
+- A connector listing is not proof that a tenant configured credentials or provider access.
+- Model-backed work requires a supported cloud provider or configured local model runtime.
+- Optional channels and provider rails require separate approvals, secrets, callbacks, and adapters.
+- OACP artifacts cannot create orders, inventory holds, mandates, payments, refunds, or paid states.
+- Merchant, bank, payment, POS, and SaaS providers remain sources of record.
+- Examples and editorial pages are not performance guarantees.
+- Repository security controls are not a claim of third-party certification.
+
+## Hosted pricing
+
+- Free: $0/month or INR 0/month; 3 agents; 1,000/mo runs; 1 GB storage; Community support.
+- Pro: $2/month or INR 9,999/month; 15 agents; 10,000/mo runs; 50 GB storage; Priority support, Custom connectors.
+- Enterprise: $499/month or INR 49,999/month; Unlimited agents; Unlimited runs; Unlimited storage; 24/7 support, Custom SLAs, Dedicated CSM, SSO / SCIM.
+
+Pricing comes from core/billing/limits.py. Infrastructure, model, provider, and external API costs are separate.
+
+## Key public pages
+
+- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent platform for designing workflows, connecting business systems, applying approval and policy controls, evaluating behavior, and retaining evidence of agent actions.
+- [Pricing](https://agenticorg.ai/pricing): AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.
+- [Agent Playground](https://agenticorg.ai/playground): The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.
+- [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
+- [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
+- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): OACP separates commerce discovery evidence from execution authority. AgenticOrg can cache scoped artifacts and prepare a handoff, but cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.
+- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
+- [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
+- [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
+- [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
+- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign work with scoped tools, review gates, versioned prompts, and measurable workflow outcomes.
+- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive work with agents while defining escalation rules, action scopes, approval requirements, and audit evidence.
+- [AI Agents for Back Office](https://agenticorg.ai/solutions/cbo): Back-office teams can assemble traceable workflows around documents, cases, and internal systems while preserving review and authorization boundaries.
+- [Blog](https://agenticorg.ai/blog): The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.
+- [Resource Library](https://agenticorg.ai/resources): The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.
+
+## Developer access
+
+- [Python SDK and CLI](https://github.com/mishrasanjeev/agentic-org/tree/main/sdk)
+- [TypeScript SDK](https://github.com/mishrasanjeev/agentic-org/tree/main/sdk-ts)
+- [MCP server](https://github.com/mishrasanjeev/agentic-org/tree/main/mcp-server)
+- A2A discovery: https://app.agenticorg.ai/api/v1/a2a/agent-card
+- MCP discovery: https://app.agenticorg.ai/api/v1/mcp/tools
+- [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
+
+## Direct answers
+
+### What is AgenticOrg?
+
+AgenticOrg is an open-source enterprise AI agent platform. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.
+
+### How many agents, connectors, and tools are available?
+
+Read https://app.agenticorg.ai/api/v1/product-facts. It computes current deployed totals from runtime registries so copied documentation does not drift.
+
+### Does a listed connector work without setup?
+
+No. Availability depends on provider credentials, subscriptions, scopes, tenant configuration, policy, and provider uptime.
+
+### Can AgenticOrg complete an OACP payment or order?
+
+Not from OACP artifacts. AgenticOrg can answer from valid evidence and prepare a provider or merchant handoff. The provider or merchant system must execute and confirm the result.
+
+### Can AgenticOrg be self-hosted?
+
+Yes. The repository is Apache-2.0 licensed and includes local Docker and deployment assets. The managed production path uses Google Cloud Run.
+
+## More
+
+- [Full product and evidence guide](https://agenticorg.ai/llms-full.txt)
+- [Sitemap](https://agenticorg.ai/sitemap.xml)
+- [Blog](https://agenticorg.ai/blog)
+- [Resources](https://agenticorg.ai/resources)
+- [OACP documentation](https://github.com/mishrasanjeev/agentic-org/tree/main/docs/oacp)
+- [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)

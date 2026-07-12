@@ -1,16 +1,8 @@
-import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 
 export default function Privacy() {
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Privacy Policy — AgenticOrg</title>
-        <meta
-          name="description"
-          content="How AgenticOrg collects, uses, discloses and secures your data."
-        />
-      </Helmet>
 
       <header className="border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -25,7 +17,7 @@ export default function Privacy() {
 
       <main className="max-w-3xl mx-auto px-6 py-12 prose prose-slate">
         <h1 className="text-4xl font-bold text-slate-900 mb-2">Privacy Policy</h1>
-        <p className="text-sm text-slate-500 mb-10">Last updated: 25 April 2026</p>
+        <p className="text-sm text-slate-500 mb-10">Last updated: 11 July 2026</p>
 
         <p className="text-slate-700 leading-relaxed mb-6">
           This Privacy Policy describes how Mu-Zero Technologies Private Limited
@@ -44,14 +36,20 @@ export default function Privacy() {
             request/response metadata, IP address, browser/OS for security and product analytics.
           </li>
           <li>
-            <strong>Connector content</strong> — when you connect a third-party tool (Gmail, Slack,
-            HubSpot, Tally, etc.) we process the data the agent reads/writes on your behalf.
-            This data is held only as long as needed to fulfil the agent task and is not used
-            for model training.
+            <strong>Connector content</strong> - when an administrator authorizes a
+            third-party system, the Service processes the selected content and metadata
+            needed for the configured task. Inputs, outputs, and audit references may be
+            retained according to workspace settings and the retention section below.
+            We do not intentionally use customer connector content to train our own
+            general-purpose models. Any configured model provider processes data under
+            the applicable account settings and provider terms.
           </li>
           <li>
-            <strong>Payment data</strong> — handled directly by Stripe (USD) or Pine Labs Plural
-            (INR). We never see or store full card numbers, CVVs, or bank credentials.
+            <strong>Payment and billing data</strong> - where checkout is available,
+            the configured processor handles payment-instrument details. We may retain
+            customer, subscription, invoice, amount, currency, status, and processor
+            reference data needed for billing and support. The Service is not intended
+            to store full card numbers or CVVs.
           </li>
           <li>
             <strong>Support communications</strong> — when you email or call us.
@@ -70,18 +68,21 @@ export default function Privacy() {
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">3. Who we share data with</h2>
         <ul className="list-disc pl-6 text-slate-700 space-y-2 mb-6">
           <li>
-            <strong>Cloud infrastructure (Google Cloud Platform)</strong> — hosts the Service,
-            stores your data in Singapore (compute) and Singapore (database). Encrypted at rest
-            (AES-256) and in transit (TLS 1.2+).
+            <strong>Cloud infrastructure</strong> - the current managed deployment uses
+            Google Cloud services for compute, database, storage, and secret management.
+            Regions and subprocessors can vary by deployment, customer agreement, and
+            self-hosted configuration. Providers receive data needed to deliver those services.
           </li>
           <li>
             <strong>Payment processors</strong> — Stripe Inc. (USD) and Pine Labs Pvt Ltd
             (INR/Plural) receive only the fields required to process the transaction.
           </li>
           <li>
-            <strong>LLM providers</strong> — Google (Gemini) and Anthropic (Claude) when used.
-            Content sent to providers follows their respective data-handling commitments;
-            we do not allow your data to be used for their model training.
+            <strong>Configured model providers</strong> - depending on workspace settings,
+            content may be sent to providers such as Google, Anthropic, OpenAI, or a
+            customer-operated model endpoint. Provider processing, retention, and training
+            terms depend on the selected service and account configuration; administrators
+            should review those terms before enabling a provider.
           </li>
           <li>
             <strong>Connector destinations</strong> — only the third-party tools you explicitly
@@ -98,36 +99,43 @@ export default function Privacy() {
 
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">4. How disclosure happens</h2>
         <p className="text-slate-700 leading-relaxed mb-6">
-          All sharing is over TLS 1.2+. Database backups, log archives, and document storage
-          are encrypted at rest using Google-managed keys. Access to production systems is
-          role-based, MFA-enforced, and audit-logged. Secrets (API keys, OAuth tokens, database
-          credentials) are stored in Google Secret Manager, never in source code or plaintext logs.
+          The managed deployment is designed to use encrypted transport and provider
+          encryption-at-rest controls, role-restricted production access, audit events,
+          and secret-management services. Exact controls can differ for self-hosted or
+          customer-configured deployments. No security measure eliminates all risk, and
+          this description is not a certification or independent assurance report.
         </p>
 
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">5. Security practices</h2>
-        <ul className="list-disc pl-6 text-slate-700 space-y-2 mb-6">
-          <li>TLS 1.2+ for all network traffic; HSTS enforced.</li>
-          <li>Database isolated from public network; access via Cloud SQL connector only.</li>
-          <li>Application secrets in Google Secret Manager, rotated on schedule.</li>
-          <li>Tenant isolation enforced at the database row-level (RLS).</li>
-          <li>JWT tokens with short expiry, blacklist on logout, refresh-token rotation.</li>
-          <li>PII masking in logs and traces.</li>
-          <li>Vulnerability scanning (bandit, pip-audit) in CI; dependencies tracked via Dependabot.</li>
+        <ul className="list-disc pl-6 text-slate-700 space-y-2 mb-3">
+          <li>Authentication, tenant, role, and scope checks for protected operations.</li>
+          <li>Managed secret references for configured cloud and connector credentials.</li>
+          <li>Transport and storage protections supplied by the deployed infrastructure.</li>
+          <li>Configurable PII masking, rate limiting, audit events, and security headers.</li>
+          <li>Dependency, static-analysis, container, and regression security checks.</li>
         </ul>
+        <p className="text-sm text-slate-600 mb-6">
+          Availability and effectiveness depend on deployment configuration, key custody,
+          provider settings, monitoring, and customer use. These practices do not assert
+          compliance with or certification to a particular standard.
+        </p>
 
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">6. Data retention</h2>
         <p className="text-slate-700 leading-relaxed mb-6">
-          Account data is retained for the lifetime of your account plus 90 days after closure.
-          Audit logs are retained for 400 days. Transient connector content is retained only as
-          long as needed to complete the agent task. You can request deletion of your data by
-          emailing <a className="text-blue-600 hover:underline" href="mailto:sanjeev@agenticorg.ai">sanjeev@agenticorg.ai</a>.
+          Retention depends on record type, workspace configuration, plan or contract,
+          security needs, backup cycles, and applicable law. Some billing, fraud-prevention,
+          audit, or legal records may be kept after account closure where permitted or
+          required. Deletion requests are subject to identity verification, legal holds,
+          technical backup cycles, and non-waivable obligations. Contact us for the
+          schedule applicable to your deployment.
         </p>
 
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">7. Your rights</h2>
         <p className="text-slate-700 leading-relaxed mb-6">
-          Subject to applicable law (including India&rsquo;s Digital Personal Data Protection
-          Act 2023, the EU GDPR where it applies, and California CCPA), you may request access,
-          correction, export, or deletion of your personal data. We will respond within 30 days.
+          Subject to applicable law and verification, you may have rights to access,
+          correct, export, object to, restrict, or delete personal data. Rights and
+          response periods vary by jurisdiction and may be limited by legal exceptions.
+          Submit a request using the contact details below.
         </p>
 
         <h2 className="text-2xl font-semibold text-slate-900 mt-8 mb-3">8. Children</h2>

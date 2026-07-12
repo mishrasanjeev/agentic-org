@@ -1,6 +1,5 @@
 import { useState, FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -32,10 +31,6 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Helmet>
-        <title>Forgot Password — AgenticOrg</title>
-        <meta name="robots" content="noindex, nofollow" />
-      </Helmet>
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           <div className="text-center mb-8">

@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Helmet } from "react-helmet-async";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,10 +62,6 @@ export default function StatusPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 p-4 md:p-8">
-      <Helmet>
-        <title>Status — AgenticOrg</title>
-        <meta name="description" content="AgenticOrg platform status page" />
-      </Helmet>
 
       <header>
         <h1 className="text-3xl font-bold">AgenticOrg Status</h1>
@@ -93,7 +88,7 @@ export default function StatusPage() {
                 {data.uptime_30d_percent.toFixed(2)}%
               </div>
               <p className="text-sm text-muted-foreground">
-                Target: 99.9% (Pro) / 99.95% (Enterprise) — see SLA
+                Historical availability calculated by the status service. Contractual targets, exclusions, remedies, and measurement terms apply only when stated in an executed SLA or order.
               </p>
             </CardContent>
           </Card>

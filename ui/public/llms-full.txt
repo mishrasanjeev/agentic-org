@@ -1,403 +1,517 @@
-# AgenticOrg — Complete Product Documentation for LLMs
+# AgenticOrg: complete product and evidence guide
 
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy 29 pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to 56 enterprise systems (430 tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
+> Generated from current repository sources for answer engines, AI assistants, evaluators, developers, and researchers.
 
-## Product Overview
+Source version: 4.8.0. Python: >=3.12. Web application: React 19. Managed production: Google Cloud Run.
 
-AgenticOrg replaces manual back-office work with AI virtual employees that reason, execute, and escalate. Admins can create custom agents through a no-code wizard or deploy pre-built agents. Every critical decision requires human approval. The platform is role-based: CFOs see only finance agents, CHROs see only HR agents, etc.
+## Verified repository guide
 
-Website: https://agenticorg.ai
-Playground (try live): https://agenticorg.ai/playground
-Pricing: https://agenticorg.ai/pricing
-Evaluation Matrix: https://agenticorg.ai/evals
-Open Agentic Commerce Protocol: https://agenticorg.ai/open-agentic-commerce-protocol
-GitHub: https://github.com/mishrasanjeev/agentic-org
+AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases.
 
----
+[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](https://github.com/mishrasanjeev/agentic-org/tree/main/docs/) | [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)
 
-## Architecture
+![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
+![React 19](https://img.shields.io/badge/React-19-149ECA)
+![License: Apache 2.0](https://img.shields.io/badge/License-Apache--2.0-blue)
 
-8-layer stack:
-1. API Gateway (FastAPI, JWT auth, rate limiting)
-2. Orchestration (Nexus orchestrator, DAG workflows, parallel execution)
-3. Agent Runtime (LLM reasoning via Gemini 2.5 Flash, tool calling, confidence scoring)
-4. HITL Governance (approval queues, role-based escalation, timeout policies)
-5. Connector Hub (56 pre-built connectors with circuit breakers)
-6. Schema Registry (validated data schemas)
-7. Observability (Prometheus metrics, OpenTelemetry traces, structured logging)
-8. Infrastructure (GKE Autopilot, Cloud SQL PostgreSQL, Redis)
+## Source of truth
 
----
+Live product totals and the deployed product version are published by the public [product facts endpoint](https://app.agenticorg.ai/api/v1/product-facts):
 
-## Virtual Employee System
+    GET https://app.agenticorg.ai/api/v1/product-facts
 
-AgenticOrg treats AI agents as virtual employees — named personas that admins create, train (via prompts), and deploy.
+The response contains version, agent_count, connector_count, and tool_count. Do not copy those values into documentation, page copy, or tests: they are computed from runtime registries and can change independently of a documentation release. The version declared for source builds is in [pyproject.toml](https://github.com/mishrasanjeev/agentic-org/blob/main/pyproject.toml).
 
-### Agent Creator (No-Code Wizard)
-5-step wizard available to admin/CEO users:
-1. **Persona**: Employee name, designation, avatar, domain
-2. **Role**: Agent type (pick from 29 built-in or create custom), specialization, routing filters
-3. **Prompt**: Select from production-tested prompt templates or write custom instructions, fill in template variables
-4. **Behavior**: Confidence floor, HITL conditions, LLM model, max retries
-5. **Review**: Summary and deploy as Shadow
+Billing limits and list prices come from [core/billing/limits.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/limits.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](https://github.com/mishrasanjeev/agentic-org/blob/main/scripts/deploy_cloud_run.sh).
 
-### Per-Agent LLM Selection
-Each agent can specify its preferred LLM model: Gemini 2.5 Flash (default, free tier), Claude 3.5 Sonnet (Anthropic), or GPT-4o (OpenAI). The system checks if the required API key is configured before using the specified model — if not, it safely falls back to the global default.
+## What is in this repository
 
-### Org Chart Hierarchy
-Agents can report to other agents via parent_agent_id. When an agent fails or triggers HITL, the task escalates to the parent agent, creating management chains.
+| Area | Current implementation |
+| --- | --- |
+| Agent runtime | FastAPI and LangGraph runtime with model routing, tool invocation, confidence handling, retry policy, and persisted execution state |
+| Agent authoring | Built-in agent definitions, custom agents, prompt templates, organization hierarchy, and a no-code UI |
+| Workflows | Workflow definitions, runs, schedules, conditions, approvals, and audit events |
+| Governance | Tenant and role boundaries, scoped tools, human-in-the-loop queues, shadow evaluation, policy checks, and kill-switch patterns |
+| Integrations | Native connector registry plus optional integration gateways; actual availability depends on credentials, scopes, provider access, and tenant configuration |
+| Knowledge and channels | Knowledge ingestion/search, reports, notifications, voice, RPA, and other channel features behind their required services and configuration |
+| Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces |
+| Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
+| Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
 
-### Per-Agent Budget Enforcement
-Each agent can have monthly cost caps. Before every execution, the system checks cumulative monthly spend. If exceeded, the agent returns E1008 (budget_exceeded) without making an LLM call.
+A source definition is not evidence that a specific tenant has connected the provider or enabled write access. Connector actions still require approved credentials, scopes, policies, and provider availability.
 
----
+## Capability status
 
-## All 29 Agents — Detailed
+### Implemented in the platform
 
-### Finance Domain (6 agents, CFO oversight)
+- Agent definitions and tenant-created agents
+- Agent and workflow execution through authenticated APIs
+- Human approval queues and configurable escalation conditions
+- Audit records for governed runtime activity
+- Prompt templates, organization structure, and role-aware application views
+- Native connector definitions and a scoped tool gateway
+- Public A2A and MCP discovery with authenticated execution paths
+- Python and TypeScript client packages plus an MCP server package
+- Hosted billing limits and checkout integration
+- OACP commerce configuration, Shopify read-only sync, artifact caching, buyer channels, and safe handoff preparation
 
-#### Ap Processor (ap_processor)
-- Domain: Finance
-- Confidence floor: 88%
+### Configuration-dependent or provider-gated
 
-#### Ar Collections (ar_collections)
-- Domain: Finance
-- Confidence floor: 85%
+- LLM calls require a configured supported model provider or a local model runtime.
+- Each connector requires provider credentials, tenant authorization, and the relevant scopes.
+- Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
+- RAG, voice, browser automation, outbound notifications, and local-model profiles require their supporting services.
+- SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
+- WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
+- WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
 
-#### Close Agent (close_agent)
-- Domain: Finance
-- Confidence floor: 80%
+### Explicit non-goals and boundaries
 
-#### Fpa Agent (fpa_agent)
-- Domain: Finance
-- Confidence floor: 78%
+- OACP artifacts do not create orders, reserve inventory, create mandates, capture payments, issue refunds, or prove a paid state.
+- AgenticOrg does not replace the merchant, bank, payment provider, POS, or SaaS system as its source of record.
+- Cached commerce evidence can support an answer or a prepared handoff; provider-owned execution must be confirmed by the provider.
+- A connector listed in source is not proof of a live customer integration.
+- Example workflows and editorial content are not performance guarantees.
+- Security controls in the repository are not a claim of third-party certification.
 
-#### Recon Agent (recon_agent)
-- Domain: Finance
-- Confidence floor: 95%
+## How the runtime fits together
 
-#### Tax Compliance (tax_compliance)
-- Domain: Finance
-- Confidence floor: 92%
+    Browser or SDK
+        |
+        v
+    React 19 application / FastAPI API
+        |
+        +-- Authentication, tenant context, roles, and scopes
+        +-- Agent registry and LangGraph execution
+        +-- Workflow engine, schedules, and approval queues
+        +-- Tool gateway and connector adapters
+        +-- Audit, evaluation, observability, and cost records
+        |
+        +-- PostgreSQL / Cloud SQL
+        +-- Redis
+        +-- GCS or compatible object storage
+        +-- Configured LLM and external service providers
 
-### HR Domain (6 agents, CHRO oversight)
+The managed production path runs separate API and UI services on Google Cloud Run. Artifact Registry images are commit-pinned, migrations can run before rollout, and traffic movement is explicit. Legacy Kubernetes material is not the current production path.
 
-#### Ld Coordinator (ld_coordinator)
-- Domain: HR
-- Confidence floor: 82%
+## OACP commerce boundary
 
-#### Offboarding Agent (offboarding_agent)
-- Domain: HR
-- Confidence floor: 95%
+AgenticOrg owns the buyer and seller agent runtime around OACP-backed commerce. [Grantex](https://grantex.dev) owns trust authority, protocol and policy governance, canonical artifacts, artifact verification, and adapter authority. Shopify and merchant systems remain operational sources of record. Pine Labs Plural/P3P, banks, POS systems, and payment providers own their execution rails.
 
-#### Onboarding Agent (onboarding_agent)
-- Domain: HR
-- Confidence floor: 95%
+The current supported source path is:
 
-#### Payroll Engine (payroll_engine)
-- Domain: HR
-- Confidence floor: 99%
+1. A merchant saves tenant-, merchant-, store-, and seller-agent-scoped configuration.
+2. AgenticOrg stores Shopify credentials through the approved custody path.
+3. AgenticOrg performs read-only Shopify Admin GraphQL sync.
+4. Public-safe evidence is submitted to the configured Grantex authority path.
+5. Issued OACP artifacts are cached with freshness, scope, risk, and revocation posture.
+6. Buyer surfaces answer from valid artifacts and disclose source and freshness.
+7. Purchase intent becomes a non-executing provider, merchant, or POS handoff, or a fail-closed blocker.
+8. Only a verified provider or merchant callback can confirm the external outcome.
 
-#### Performance Coach (performance_coach)
-- Domain: HR
-- Confidence floor: 80%
-
-#### Talent Acquisition (talent_acquisition)
-- Domain: HR
-- Confidence floor: 88%
-
-### Marketing Domain (8 agents, CMO oversight)
-
-#### Abm (abm)
-- Domain: Marketing
-- Confidence floor: 80%
-
-#### Brand Monitor (brand_monitor)
-- Domain: Marketing
-- Confidence floor: 80%
-
-#### Campaign Pilot (campaign_pilot)
-- Domain: Marketing
-- Confidence floor: 85%
-
-#### Competitive Intel (competitive_intel)
-- Domain: Marketing
-- Confidence floor: 80%
-
-#### Content Factory (content_factory)
-- Domain: Marketing
-- Confidence floor: 88%
-
-#### Crm Intelligence (crm_intelligence)
-- Domain: Marketing
-- Confidence floor: 80%
-
-#### Seo Strategist (seo_strategist)
-- Domain: Marketing
-- Confidence floor: 80%
-
-#### Social Media (social_media)
-- Domain: Marketing
-- Confidence floor: 80%
-
-### Operations Domain (6 agents, COO oversight)
-
-#### Compliance Guard (compliance_guard)
-- Domain: Operations
-- Confidence floor: 95%
-
-#### Contract Intelligence (contract_intelligence)
-- Domain: Operations
-- Confidence floor: 82%
-
-#### It Operations (it_operations)
-- Domain: Operations
-- Confidence floor: 88%
-
-#### Support Deflector (support_deflector)
-- Domain: Operations
-- Confidence floor: 70%
-
-#### Support Triage (support_triage)
-- Domain: Operations
-- Confidence floor: 85%
-
-#### Vendor Manager (vendor_manager)
-- Domain: Operations
-- Confidence floor: 88%
-
-### Back Office Domain (3 agents, COO oversight)
-
-#### Facilities Agent (facilities_agent)
-- Domain: Back Office
-- Confidence floor: 80%
-
-#### Legal Ops (legal_ops)
-- Domain: Back Office
-- Confidence floor: 90%
-
-#### Risk Sentinel (risk_sentinel)
-- Domain: Back Office
-- Confidence floor: 95%
-
----
-
-## 56 Enterprise Connectors (430 total tools)
-
-### Finance (14 connectors)
-- Banking Aa: 5 tools (aa_oauth2)
-- Gstn: 9 tools (gsp_dsc)
-- Gstn Sandbox: 0 tools (api_key)
-- Income Tax India: 13 tools (dsc)
-- Netsuite: 8 tools (token)
-- Oracle Fusion: 10 tools (basic)
-- Pinelabs Plural: 6 tools (oauth2)
-- Professional Tax: 5 tools (state_portal)
-- Quickbooks: 6 tools (oauth2)
-- Sap: 7 tools (odata_oauth2)
-- Stripe: 8 tools (api_key)
-- Tally: 6 tools (tdl_xml)
-- Traces: 4 tools (deductor_portal)
-- Zoho Books: 35 tools (oauth2)
-
-### HR (8 connectors)
-- Darwinbox: 10 tools (api_key_oauth2)
-- Docusign: 6 tools (jwt)
-- Epfo: 6 tools (dsc)
-- Greenhouse: 8 tools (api_key)
-- Keka: 6 tools (api_key)
-- Linkedin Talent: 6 tools (oauth2)
-- Okta: 8 tools (scim_oauth2)
-- Zoom: 6 tools (oauth2)
-
-### Marketing (16 connectors)
-- Ahrefs: 5 tools (api_token)
-- Bombora: 4 tools (api_key)
-- Brandwatch: 5 tools (oauth2)
-- Buffer: 5 tools (oauth2)
-- G2: 4 tools (api_key)
-- Ga4: 6 tools (oauth2)
-- Google Ads: 5 tools (oauth2)
-- Hubspot: 32 tools (oauth2)
-- Linkedin Ads: 4 tools (oauth2)
-- Mailchimp: 10 tools (basic)
-- Meta Ads: 5 tools (oauth2)
-- Mixpanel: 5 tools (basic)
-- Moengage: 6 tools (basic)
-- Salesforce: 24 tools (oauth2)
-- Trustradius: 4 tools (api_key)
-- Wordpress: 7 tools (basic)
-
-### Operations (7 connectors)
-- Confluence: 6 tools (oauth2)
-- Jira: 11 tools (oauth2)
-- Mca Portal: 4 tools (dsc)
-- Pagerduty: 6 tools (api_key)
-- Sanctions Api: 5 tools (api_key)
-- Servicenow: 6 tools (rest_oauth2)
-- Zendesk: 8 tools (api_token)
-
-### Communications & Cloud (11 connectors)
-- Github: 19 tools (pat_oauth2)
-- Gmail: 4 tools (oauth2)
-- Google Calendar: 5 tools (oauth2)
-- Langsmith: 5 tools (api_key)
-- S3: 6 tools (service_account)
-- Sendgrid: 7 tools (api_key)
-- Slack: 7 tools (bolt_bot_token)
-- Twilio: 5 tools (api_key_secret)
-- Twitter: 6 tools (oauth2)
-- Whatsapp: 5 tools (meta_business)
-- Youtube: 6 tools (oauth2)
-
----
-
-## Human-in-the-Loop (HITL) Governance
-
-Every agent has configurable HITL conditions. When triggered, the agent stops execution and creates an approval item. The relevant department head sees the item with full context and can approve, reject, or defer.
-
-### HITL Trigger Types
-- amount_threshold: Transaction amount exceeds configured limit
-- confidence_below_floor: Agent confidence below minimum threshold
-- regulatory_filing: All government filings (zero auto-file policy)
-- break_threshold: Reconciliation break above limit
-- anomaly_detection: Unexpected pattern detected
-- budget_approval: Spend above approval threshold
-- incident_escalation: High-severity incident requiring acknowledgment
-
-### HITL Flow
-1. Agent detects trigger condition
-2. Creates HITL item with priority (critical/high/normal/low)
-3. Assigns to role-based queue (cfo/chro/cmo/coo)
-4. Department head reviews context and decides (approve/reject/defer)
-5. Agent resumes or stops based on decision
-6. Full decision audit trail with timestamp, decision, notes
-
----
-
-## Shadow Mode & Quality Gates
-
-Before promoting an agent to production, it runs in "shadow mode" — processing real data without taking action. The Shadow Comparator evaluates across 6 quality gates:
-
-1. Output Accuracy (threshold >= 0.90)
-2. Confidence Calibration (Pearson r >= 0.70)
-3. HITL Rate Comparison (tolerance +/-5pp)
-4. Hallucination Detection (zero tolerance)
-5. Tool Error Rate (< 2%)
-6. Latency Comparison (<= 1.3x reference P95)
-
-All 6 gates must pass for promotion.
-
-### Shadow Limit Enforcement
-Shadow agents have configurable limits: minimum sample count (default 100), accuracy floor (default 0.95), and maximum shadow duration. If an agent exceeds shadow_max_runs without passing all 6 gates, it is automatically paused and flagged for review. This prevents indefinite shadow execution and ensures agents are either promoted or retired.
-
----
-
-## MCP Registry
-
-AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name `agenticorg-mcp-server`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and governed tools. The MCP server exposes agent-management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools via stdio transport. Direct connector tools are not exposed; agents invoke approved connector workflows through the AgenticOrg runtime.
-
----
-
-## Role-Based Access Control
-
-| Role | Sees | Can Write | HITL Queue |
-|------|------|-----------|------------|
-| CEO/Admin | All domains | Everything | All approvals |
-| CFO | Finance agents | Finance domain | Finance approvals |
-| CHRO | HR agents | HR domain | HR approvals |
-| CMO | Marketing agents | Marketing domain | Marketing approvals |
-| COO | Operations agents | Ops domain | Ops approvals |
-| Auditor | Audit log (all) | Nothing (read-only) | None |
-
----
-
-## Pricing
-
-### Free ($0/month)
-- 20 connectors
-- 500 tasks/day
-- Community support
-- Shadow mode testing
-- Basic audit log
-- Single workspace
-
-### Pro ($2/month)
-- Unlimited AI agents
-- Unlimited tasks
-- Email support
-- Custom workflows
-- Priority HITL queue
-- Advanced analytics
-- API access
-- Team workspaces
-
-### Enterprise (Custom)
-- Unlimited AI agents
-- Unlimited everything
-- Dedicated support
-- 99.9% SLA guarantee
-- Custom connectors
-- On-premise option
-- SSO / SAML
-- Custom integrations
-- Dedicated CSM
-
----
-
-## Security
-
-- Encryption at rest (Google-managed, Cloud SQL)
-- Encryption in transit (HTTPS/TLS)
-- JWT authentication with RS256/HS256
-- bcrypt password hashing (12 rounds)
-- Token revocation (logout blacklist)
-- Rate limiting (10 auth failures = 15-min block, 5 signups/IP/hour)
-- PII masking (email, Aadhaar, PAN, phone auto-masked in audit logs)
-- Tenant isolation (Row-Level Security)
-- RBAC (6 roles, domain-scoped)
-- Automated daily database backups (7 retained)
-- Complete audit trail (7-year retention)
-- Security headers: HSTS, CSP, X-Frame-Options DENY
-
----
-
-## Technology Stack
-
-- Backend: Python 3.12, FastAPI, SQLAlchemy (async), asyncpg
-- Frontend: React 18, TypeScript, Vite, Tailwind CSS, recharts
-- Database: PostgreSQL 16 (Cloud SQL), Redis 7
-- LLM: Gemini 2.5 Flash (default), Claude, GPT-4o (configurable)
-- Infrastructure: GKE Autopilot (asia-south1), Cloud SQL, Artifact Registry
-- CI/CD: GitHub Actions (lint → test → build → deploy)
-- Monitoring: Prometheus, OpenTelemetry, structlog
-- License: Apache 2.0
-
----
-
-## Blog
+Start with [docs/oacp/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md) and the [runtime launch closure PRD](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/runtime-launch-closure-prd.md).
+
+## Requirements
+
+- Python 3.12 or newer
+- Node.js 20 or newer
+- Docker with Docker Compose for local PostgreSQL and Redis
+- At least one supported LLM provider key, or a configured local model runtime, for model-backed execution
+
+The UI currently uses React 19. Dependency versions are declared in [pyproject.toml](https://github.com/mishrasanjeev/agentic-org/blob/main/pyproject.toml) and [ui/package.json](https://github.com/mishrasanjeev/agentic-org/blob/main/ui/package.json).
+
+## Local development
+
+Clone and configure the repository:
+
+    git clone https://github.com/mishrasanjeev/agentic-org.git
+    cd agentic-org
+    cp .env.example .env
+
+Install the platform and development extras:
+
+    python -m venv .venv
+    python -m pip install -e ".[v4,dev]"
+
+Start local dependencies:
+
+    docker compose up -d postgres redis minio
+
+Run migrations and the API:
+
+    python scripts/alembic_migrate.py
+    uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+In another terminal, install and run the UI:
+
+    cd ui
+    npm ci
+    npm run dev
+
+Do not use example secrets in staging or production. Configure real secrets through the approved secret-management path.
+
+Optional Compose profiles include local CPU/GPU model runtimes and supporting RAG or voice services. Review [docker-compose.yml](https://github.com/mishrasanjeev/agentic-org/blob/main/docker-compose.yml) before enabling a profile because hardware, images, and credentials vary by feature.
+
+## Public API and protocols
+
+All application API routes are mounted below /api/v1.
+
+| Surface | Purpose | Authentication posture |
+| --- | --- | --- |
+| GET /api/v1/health | Service health | Public |
+| GET /api/v1/product-facts | Live version and registry totals | Public |
+| GET /api/v1/a2a/agent-card | A2A discovery card | Public |
+| GET /api/v1/a2a/.well-known/agent.json | A2A discovery alias | Public |
+| GET /api/v1/mcp/tools | MCP-compatible agent discovery | Public |
+| Agent, workflow, tool, billing, and commerce mutations | Tenant operations | Authenticated and scoped |
+
+Interactive OpenAPI documentation is available from the API service when enabled by the deployment. The detailed route inventory is maintained in [docs/route_inventory.json](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/route_inventory.json), and narrative API documentation is in [docs/api-reference.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md).
+
+### Python SDK and CLI
+
+See [sdk/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md).
+
+    pip install agenticorg
+    agenticorg agents list
+    agenticorg a2a card
+
+The SDK supports authenticated platform operations exposed by its client. Server features may require a newer deployment than the installed client, so consumers should check package and server release notes.
+
+### TypeScript SDK
+
+See [sdk-ts/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk-ts/README.md).
+
+    npm install agenticorg-sdk
+
+### MCP server
+
+See [mcp-server/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/mcp-server/README.md).
+
+    npx agenticorg-mcp-server
+
+The MCP package exposes governed AgenticOrg agent and commerce discovery surfaces. It does not grant an MCP client unrestricted access to every connector action.
+
+## Pricing and limits
+
+The hosted plan source of truth is PLAN_PRICING in [core/billing/limits.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/limits.py).
+
+| Plan | USD list price | INR list price | Agents | Runs | Storage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
+| Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
+| Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
+
+Pro also includes priority support and custom connectors. Enterprise includes 24/7 support, custom SLAs, dedicated customer success, and SSO/SCIM according to the plan definition.
+
+The repository is Apache-2.0 licensed. Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software license.
+
+## Security and governance
+
+The codebase includes:
+
+- Tenant, role, and scope checks around protected API operations
+- Configurable human approvals and confidence or policy gates
+- Scoped connector tools and a centralized tool gateway
+- Secret-reference patterns for connector and cloud credentials
+- Configurable PII redaction before model calls and in logs
+- JWT verification through PyJWT with cryptographic support
+- Rate limiting, security headers, and authentication-state controls
+- Dependency, static-analysis, container, and regression security checks
+- Audit and observability records for governed operations
+- Fail-closed OACP freshness, revocation, and provider-boundary checks
+
+Production security depends on correct deployment configuration, key custody, provider settings, tenant policies, and operational monitoring. Report vulnerabilities through [SECURITY.md](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md); do not open a public issue for a suspected vulnerability.
+
+## Testing
+
+Backend:
+
+    pytest
+
+Focused backend checks can be run by directory or file:
+
+    pytest tests/unit
+    pytest tests/regression
+    pytest tests/connector_harness
+
+Frontend:
+
+    cd ui
+    npm ci
+    npm run lint
+    npm run typecheck
+    npm test
+    npm run build
+
+Browser tests:
+
+    cd ui
+    npx playwright test
+
+Playwright suites require the target application and any documented test credentials or fixtures. CI workflow files under [.github/workflows](https://github.com/mishrasanjeev/agentic-org/blob/main/.github/workflows) are the source of truth for which suites run on each event; the README does not claim that every E2E suite runs on every push.
+
+## Production deployment
+
+The current managed rollout helper targets Google Cloud Run:
+
+    bash scripts/deploy_cloud_run.sh --sha <commit-sha> --yes
+
+Useful modes include:
+
+    bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --with-migrations --yes
+    bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
+    bash scripts/deploy_cloud_run.sh --sha <commit-sha> --dry-run
+
+The helper stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md) before using production credentials.
+
+Default script configuration places Cloud Run services in asia-southeast1 and Artifact Registry in asia-south1. Both are configurable. Older Kubernetes material is retained only for historical or alternative deployment context.
+
+## Repository map
+
+    api/                 FastAPI application and versioned routes
+    auth/                Authentication and authorization middleware
+    core/                Agent runtime, models, billing, commerce, and orchestration
+    connectors/          Native connector implementations and framework
+    workflows/           Workflow definitions and runtime helpers
+    sdk/                 Python SDK and CLI
+    sdk-ts/              TypeScript SDK
+    mcp-server/          MCP server package
+    ui/                  React 19 application and public web assets
+    migrations/          Database migrations
+    observability/       Metrics, tracing, and logging helpers
+    tests/               Backend unit, regression, security, and integration tests
+    ui/e2e/              Playwright browser tests
+    docs/                Product, architecture, operations, and protocol documentation
+    scripts/             Validation, migration, release, and deployment helpers
+
+## Search and answer-engine assets
+
+The public site includes conventional search and answer-engine discovery assets:
+
+- [robots.txt](https://agenticorg.ai/robots.txt)
+- [sitemap.xml](https://agenticorg.ai/sitemap.xml)
+- [llms.txt](https://agenticorg.ai/llms.txt)
+- [llms-full.txt](https://agenticorg.ai/llms-full.txt)
+- Per-route titles, descriptions, canonicals, social metadata, and structured data
+- Crawlable blog, resource, product, protocol, solution, trust, and legal pages
+
+The two llms files are generated by [ui/scripts/generate-llms.mjs](https://github.com/mishrasanjeev/agentic-org/blob/main/ui/scripts/generate-llms.mjs). They are supplemental machine-readable navigation documents, not replacements for crawlable HTML, accurate structured data, robots controls, or the sitemap.
+
+To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
+
+    cd ui
+    npm run seo:sync
+    npm run seo:verify
+
+## Documentation
+
+- [Product requirements](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRD.md)
+- [Architecture](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md)
+- [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
+- [Deployment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md)
+- [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
+- [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
+- [Python SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md)
+- [TypeScript SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk-ts/README.md)
+- [MCP server](https://github.com/mishrasanjeev/agentic-org/blob/main/mcp-server/README.md)
+- [Changelog](https://github.com/mishrasanjeev/agentic-org/blob/main/CHANGELOG.md)
+- [Roadmap](https://github.com/mishrasanjeev/agentic-org/blob/main/ROADMAP.md)
+
+Some older reports describe prior architecture or point-in-time validation. Prefer current code, canonical runbooks, and live product facts when a historical document conflicts with the running system.
+
+## Contributing
+
+Read [CONTRIBUTING.md](https://github.com/mishrasanjeev/agentic-org/blob/main/CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](https://github.com/mishrasanjeev/agentic-org/blob/main/CODE_OF_CONDUCT.md). Keep pull requests focused, add tests for behavior changes, and update generated public documentation when a source-of-truth field changes.
+
+## License
+
+AgenticOrg is licensed under the [Apache License 2.0](https://github.com/mishrasanjeev/agentic-org/blob/main/LICENSE).
+
+
+## Machine-readable authority notes
+
+- Live deployed totals and version: https://app.agenticorg.ai/api/v1/product-facts
+- Hosted prices and limits: core/billing/limits.py
+- Production rollout: scripts/deploy_cloud_run.sh
+- Current commerce contract: docs/oacp/README.md
+- A source definition means implementation code exists; it does not mean a tenant enabled it.
+- A public article title is a topic, not independent proof of an outcome.
+
+## Built-in agent source index
+
+These names are parsed from core/agents. The product facts endpoint is authoritative for totals, and tenant-created agents are not included in this source index.
+
+### Marketing
+
+- Abm (abm)
+- Brand Monitor (brand_monitor)
+- Campaign Pilot (campaign_pilot)
+- Competitive Intel (competitive_intel)
+- Content Factory (content_factory)
+- Crm Intelligence (crm_intelligence)
+- Seo Strategist (seo_strategist)
+- Social Media (social_media)
+
+### Finance
+
+- Ap Processor (ap_processor)
+- Ar Collections (ar_collections)
+- Close Agent (close_agent)
+- Fpa Agent (fpa_agent)
+- Recon Agent (recon_agent)
+- Tax Compliance (tax_compliance)
+
+### Operations
+
+- Compliance Guard (compliance_guard)
+- Contract Intelligence (contract_intelligence)
+- It Operations (it_operations)
+- Support Deflector (support_deflector)
+- Support Triage (support_triage)
+- Vendor Manager (vendor_manager)
+
+### Back Office
+
+- Facilities Agent (facilities_agent)
+- Legal Ops (legal_ops)
+- Risk Sentinel (risk_sentinel)
+
+### HR
+
+- Ld Coordinator (ld_coordinator)
+- Offboarding Agent (offboarding_agent)
+- Onboarding Agent (onboarding_agent)
+- Payroll Engine (payroll_engine)
+- Performance Coach (performance_coach)
+- Talent Acquisition (talent_acquisition)
+
+## Native connector source index
+
+These names are parsed from connectors. A listing does not prove credentials, subscriptions, scopes, or provider access. Optional marketplace catalogs are separate. Use the product facts endpoint for current native connector and tool totals; do not sum files or tool bindings.
+
+### Marketing
+
+- Ahrefs - authentication type: api_token
+- Bombora - authentication type: api_key
+- Brandwatch - authentication type: oauth2
+- Buffer - authentication type: oauth2
+- G2 - authentication type: api_key
+- Ga4 - authentication type: oauth2
+- Google Ads - authentication type: oauth2
+- Hubspot - authentication type: oauth2
+- Linkedin Ads - authentication type: oauth2
+- Mailchimp - authentication type: basic
+- Meta Ads - authentication type: oauth2
+- Mixpanel - authentication type: basic
+- Moengage - authentication type: basic
+- Salesforce - authentication type: oauth2
+- Trustradius - authentication type: api_key
+- Wordpress - authentication type: basic
+
+### Finance
+
+- Banking Aa - authentication type: aa_oauth2
+- Gstn - authentication type: gsp_dsc
+- Gstn Sandbox
+- Income Tax India - authentication type: dsc
+- Netsuite - authentication type: token
+- Oracle Fusion - authentication type: basic
+- Pinelabs Plural - authentication type: oauth2
+- Professional Tax - authentication type: state_portal
+- Quickbooks - authentication type: oauth2
+- Sap - authentication type: odata_oauth2
+- Stripe - authentication type: api_key
+- Tally - authentication type: tdl_xml
+- Traces - authentication type: deductor_portal
+- Zoho Books - authentication type: oauth2
+
+### Operations
+
+- Confluence - authentication type: oauth2
+- Jira - authentication type: oauth2
+- Mca Portal - authentication type: dsc
+- Pagerduty - authentication type: api_key
+- Sanctions Api - authentication type: api_key
+- Servicenow - authentication type: rest_oauth2
+- Zendesk - authentication type: api_token
+
+### HR
+
+- Darwinbox - authentication type: api_key_oauth2
+- Docusign - authentication type: jwt
+- Epfo - authentication type: dsc
+- Greenhouse - authentication type: api_key
+- Keka - authentication type: api_key
+- Linkedin Talent - authentication type: oauth2
+- Okta - authentication type: scim_oauth2
+- Zoom - authentication type: oauth2
+
+### Communications and Cloud
+
+- Github - authentication type: pat_oauth2
+- Gmail - authentication type: oauth2
+- Google Calendar - authentication type: oauth2
+- Langsmith - authentication type: api_key
+- S3 - authentication type: service_account
+- Sendgrid - authentication type: api_key
+- Slack - authentication type: bolt_bot_token
+- Twilio - authentication type: api_key_secret
+- Twitter - authentication type: oauth2
+- Whatsapp - authentication type: meta_business
+- Youtube - authentication type: oauth2
+
+## Complete canonical public-page index
+
+- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent platform for designing workflows, connecting business systems, applying approval and policy controls, evaluating behavior, and retaining evidence of agent actions.
+- [Pricing](https://agenticorg.ai/pricing): AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.
+- [Agent Playground](https://agenticorg.ai/playground): The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.
+- [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
+- [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
+- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): OACP separates commerce discovery evidence from execution authority. AgenticOrg can cache scoped artifacts and prepare a handoff, but cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.
+- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
+- [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
+- [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
+- [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
+- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign work with scoped tools, review gates, versioned prompts, and measurable workflow outcomes.
+- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive work with agents while defining escalation rules, action scopes, approval requirements, and audit evidence.
+- [AI Agents for Back Office](https://agenticorg.ai/solutions/cbo): Back-office teams can assemble traceable workflows around documents, cases, and internal systems while preserving review and authorization boundaries.
+- [Blog](https://agenticorg.ai/blog): The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.
+- [Resource Library](https://agenticorg.ai/resources): The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.
+- [Support](https://agenticorg.ai/support): Use the AgenticOrg support page to reach the team about product evaluation, deployment, account and billing questions, or responsible security disclosure.
+- [Service Status](https://agenticorg.ai/status): The status page reports the current availability information exposed by AgenticOrg and provides a support path when an organization needs incident-specific help.
+- [Privacy Policy](https://agenticorg.ai/privacy): The privacy policy explains how AgenticOrg handles personal information and how people can submit questions or requests about that handling.
+- [Terms of Service](https://agenticorg.ai/terms): The terms of service describe the rules and responsibilities that apply when a customer or user accesses AgenticOrg services.
+- [Refund and Cancellation Policy](https://agenticorg.ai/refund): The refund and cancellation policy describes how subscription cancellation and eligible billing requests are handled.
+
+Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.
+
+## Blog index
+
+Titles describe editorial topics. Numerical examples and case-study language are not platform-wide performance guarantees.
 
 - [Merchant Self-Service Config for OACP Commerce](https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config)
-- [How a Shopify Merchant Goes Live with a Seller Commerce Agent](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
+- [How a Shopify Merchant Configures a Seller Commerce Agent](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
 - [How ChatGPT, Claude, Gemini, Perplexity, WhatsApp, and Telegram Reach a Seller Agent](https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent)
 - [How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts](https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts)
 - [How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP](https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp)
 - [How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth](https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth)
 - [Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents](https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce)
-- [How AI Agents Are Transforming CA Firms: GST, TDS, and Bank Reconciliation on Autopilot](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
-- [Why Your Month-End Close Takes 5 Days (And How AI Cuts It to 1.5)](https://agenticorg.ai/blog/why-month-end-close-takes-5-days)
-- [Measuring Real ROI from AI Agents: Our Honest Framework](https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents)
-- [How a 200-Person IT Company's CFO Runs Finance with 3 People and 10 AI Agents](https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents)
-- [How a CA Firm Goes Live with AI Agents: Invoice to Tally in 8 Days](https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end)
-- [AI Invoice Processing for Indian Enterprises: GSTN, 3-Way Matching, and Beyond](https://agenticorg.ai/blog/ai-invoice-processing-india)
-- [AI Virtual Employees vs RPA Bots: Why the Enterprise is Moving Beyond Robotic Process Automation](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
-- [Automated Bank Reconciliation: How AI Achieves 99.7% Match Rates](https://agenticorg.ai/blog/automated-bank-reconciliation)
-- [Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
-- [Mirror Your Company Org Chart with AI Virtual Employees](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
-- [No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes](https://agenticorg.ai/blog/no-code-ai-agent-builder)
-- [Email-Triggered Workflows: Automate Finance Operations from Your Inbox](https://agenticorg.ai/blog/email-triggered-workflows)
+- [AI Agents for CA Firms: Governed GST, TDS, and Reconciliation Workflows](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
+- [Why Month-End Close Stalls and How Governed Agents Can Help](https://agenticorg.ai/blog/why-month-end-close-takes-5-days)
+- [Measuring ROI from AI Agents: An Evidence-First Framework](https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents)
+- [Illustrative Finance-Agent Rollout for a Mid-Size IT Company](https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents)
+- [CA Firm AI Agent Deployment Guide: Invoice to Tally](https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end)
+- [AI Invoice Processing for Indian Enterprises: GSTN, Matching, and Review](https://agenticorg.ai/blog/ai-invoice-processing-india)
+- [AI Agents and RPA: Choosing the Right Automation Boundary](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
+- [Automated Bank Reconciliation: Candidate Matching with Human Review](https://agenticorg.ai/blog/automated-bank-reconciliation)
+- [Human-in-the-Loop Governance for Enterprise AI](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
+- [Model Agent Reporting Lines and Escalation Paths](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
+- [No-Code AI Agent Builder: Configure a Governed Agent](https://agenticorg.ai/blog/no-code-ai-agent-builder)
+- [Email-Triggered Workflows with Scoped Agent Actions](https://agenticorg.ai/blog/email-triggered-workflows)
 
-## Resources
+## Resource index
+
+Titles describe educational topics. Verify any numerical claim against page evidence and current behavior before quoting it as an outcome.
 
 - [Move Your Shopify Store to Agentic Commerce](https://agenticorg.ai/resources/move-shopify-store-to-agentic-commerce)
 - [How Buyer Agents Shop Safely with OACP](https://agenticorg.ai/resources/buyer-agents-shop-safely-oacp)
@@ -407,82 +521,75 @@ AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the na
 - [Launch and Rollback Runbook for OACP Commerce](https://agenticorg.ai/resources/oacp-launch-rollback-runbook)
 - [Commerce Sales Agent with Grantex Controls](https://agenticorg.ai/resources/commerce-sales-agent-grantex)
 - [What Are AI Agents for Enterprise?](https://agenticorg.ai/resources/what-are-ai-agents-for-enterprise)
-- [AI Agents vs RPA: Why Enterprises Are Moving Beyond Robotic Process Automation](https://agenticorg.ai/resources/ai-agents-vs-rpa)
-- [AI Agents vs Chatbots: What's the Difference?](https://agenticorg.ai/resources/ai-agents-vs-chatbots)
+- [AI Agents vs RPA: Choosing the Right Automation Approach](https://agenticorg.ai/resources/ai-agents-vs-rpa)
+- [AI Agents vs Chatbots: What Is the Difference?](https://agenticorg.ai/resources/ai-agents-vs-chatbots)
 - [Enterprise AI Automation Platform: How to Choose One](https://agenticorg.ai/resources/enterprise-ai-automation-platform)
 - [Agentic AI Explained: What It Means for Business](https://agenticorg.ai/resources/agentic-ai-explained)
-- [AI Accounts Payable Automation: From Invoice to Payment in 11 Seconds](https://agenticorg.ai/resources/ai-accounts-payable-automation)
-- [Automated Bank Reconciliation with AI: 99.7% Match Rate](https://agenticorg.ai/resources/automated-bank-reconciliation-ai)
-- [GST Compliance Automation: GSTR Filing with AI](https://agenticorg.ai/resources/gst-compliance-automation)
-- [Month-End Close Automation: 5 Days to 1 Day with AI](https://agenticorg.ai/resources/month-end-close-automation)
-- [AI Payroll Automation India: Zero Errors, Zero Anxiety](https://agenticorg.ai/resources/ai-payroll-automation-india)
-- [AI Employee Onboarding: 2 Weeks to 4 Hours](https://agenticorg.ai/resources/ai-employee-onboarding)
-- [AI Talent Acquisition: From Job Post to Offer in Days, Not Months](https://agenticorg.ai/resources/ai-talent-acquisition)
-- [AI Support Ticket Triage: 88% Auto-Classification Accuracy](https://agenticorg.ai/resources/ai-support-ticket-triage)
-- [AI IT Operations: Automated Incident Response and Monitoring](https://agenticorg.ai/resources/ai-it-operations)
-- [AI Compliance Automation: Continuous Monitoring, Not Annual Audits](https://agenticorg.ai/resources/ai-compliance-automation)
-- [Human-in-the-Loop AI: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/resources/human-in-the-loop-ai)
-- [AI Audit Trail: Every Agent Decision Logged, Explained, Exportable](https://agenticorg.ai/resources/ai-audit-trail)
-- [SOC-2 Compliance for AI: How to Audit AI Agent Systems](https://agenticorg.ai/resources/soc2-ai-compliance)
-- [Shadow Mode: Test AI Agents Without Production Risk](https://agenticorg.ai/resources/shadow-mode-testing)
-- [No-Code AI Agent Builder: Create Custom Virtual Employees in 5 Minutes](https://agenticorg.ai/resources/no-code-ai-agent-builder)
-- [AI Virtual Employees: Name Them, Train Them, Deploy Them](https://agenticorg.ai/resources/ai-virtual-employees)
-- [Prompt Template Management: Version Control for AI Instructions](https://agenticorg.ai/resources/prompt-template-management)
-- [AI for Indian Enterprise: GSTN, EPFO, Darwinbox, Tally — All Built In](https://agenticorg.ai/resources/indian-enterprise-ai)
-- [EPFO Automation: PF Compliance Without the Manual Work](https://agenticorg.ai/resources/epfo-automation-india)
-- [Darwinbox + AI: Supercharge Your HRMS with Intelligent Agents](https://agenticorg.ai/resources/darwinbox-ai-integration)
-- [Tally + AI: Automate Accounting with AI Agents](https://agenticorg.ai/resources/tally-ai-integration)
+- [AI Accounts Payable Automation: Invoice Review to Approved Handoff](https://agenticorg.ai/resources/ai-accounts-payable-automation)
+- [Automated Bank Reconciliation with Evidence-Backed Matching](https://agenticorg.ai/resources/automated-bank-reconciliation-ai)
+- [GST Compliance Workflow Automation with Human Review](https://agenticorg.ai/resources/gst-compliance-automation)
+- [Month-End Close Automation with Scoped Agents](https://agenticorg.ai/resources/month-end-close-automation)
+- [AI-Assisted Payroll Workflows for India](https://agenticorg.ai/resources/ai-payroll-automation-india)
+- [AI-Assisted Employee Onboarding with Approval Controls](https://agenticorg.ai/resources/ai-employee-onboarding)
+- [AI-Assisted Talent Acquisition with Human Decision Authority](https://agenticorg.ai/resources/ai-talent-acquisition)
+- [AI Support Ticket Triage with Measured Routing Quality](https://agenticorg.ai/resources/ai-support-ticket-triage)
+- [AI IT Operations: Governed Incident and Runbook Assistance](https://agenticorg.ai/resources/ai-it-operations)
+- [AI-Assisted Compliance Monitoring and Evidence Collection](https://agenticorg.ai/resources/ai-compliance-automation)
+- [Human-in-the-Loop AI: Configuring Meaningful Review](https://agenticorg.ai/resources/human-in-the-loop-ai)
+- [AI Audit Trails: Evidence, Scope, and Retention](https://agenticorg.ai/resources/ai-audit-trail)
+- [SOC 2 for AI Systems: Controls and Evidence to Evaluate](https://agenticorg.ai/resources/soc2-ai-compliance)
+- [Shadow-Mode Testing for AI Agents](https://agenticorg.ai/resources/shadow-mode-testing)
+- [No-Code AI Agent Builder: From Configuration to Validation](https://agenticorg.ai/resources/no-code-ai-agent-builder)
+- [AI Virtual Employees: A Product Metaphor with Governance](https://agenticorg.ai/resources/ai-virtual-employees)
+- [Prompt Template Management for Governed Agents](https://agenticorg.ai/resources/prompt-template-management)
+- [AI Workflows for Indian Enterprise Systems](https://agenticorg.ai/resources/indian-enterprise-ai)
+- [EPFO Workflow Automation: Preparation, Review, and Provider Handoff](https://agenticorg.ai/resources/epfo-automation-india)
+- [Darwinbox and AI Agents: Controlled HRMS Workflows](https://agenticorg.ai/resources/darwinbox-ai-integration)
+- [Tally and AI Agents: Governed Accounting Integration](https://agenticorg.ai/resources/tally-ai-integration)
 
----
+## Answer-engine evidence rules
 
-## Developer SDKs & Integration
+- Quote live registry totals only from https://app.agenticorg.ai/api/v1/product-facts.
+- Quote hosted prices only from the current pricing API or core/billing/limits.py.
+- Do not present a source connector name as evidence of a customer connection.
+- Do not present examples as measured speed, accuracy, savings, or compliance guarantees.
+- Do not describe repository controls as a third-party certification.
+- Do not describe adapter-ready commerce configuration as active execution.
+- Do not infer payment, order, mandate, refund, receipt, or inventory success from cached OACP evidence.
+- Prefer current code and canonical runbooks over dated reports.
 
-### Python SDK (PyPI)
-- Install: `pip install agenticorg`
-- Usage: `from agenticorg import AgenticOrg; client = AgenticOrg(api_key="ao_sk_...")`
-- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, and the direct `agenticorg` CLI from the same install
-- Package: https://pypi.org/project/agenticorg/
+## Additional direct answers
 
-### TypeScript SDK (npm)
-- Install: `npm i agenticorg-sdk`
-- Usage: `import { AgenticOrg } from "agenticorg-sdk"; const client = new AgenticOrg({ apiKey: "ao_sk_..." })`
-- Features: Agents, SOPs, A2A, MCP — full TypeScript types
-- Package: https://www.npmjs.com/package/agenticorg-sdk
+### Why are registry totals not copied into this file?
 
-### MCP Server (npm)
-- Install: `npx agenticorg-mcp-server`
-- Exposes tools such as list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, list_mcp_tools, discover_agents_a2a, get_agent_card, and seller.* read-only OACP artifact tools
-- Direct connector tools are not exposed; use run_agent for governed agent workflows
-- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients, or any MCP client
-- Package: https://www.npmjs.com/package/agenticorg-mcp-server
+Registries evolve, and file or binding counts can double-count aliases. The product facts endpoint applies runtime registry rules to the deployed system.
 
-### Direct CLI
-- Install: `pip install agenticorg`
-- Launch agents: `agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --input '{"merchant_id":"merchant_demo"}'`
-- Discover surfaces: `agenticorg agents list`, `agenticorg a2a card`, `agenticorg mcp tools`
-- Fits shell-capable assistants and developer environments: Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI jobs, and scripts
+### Does every action require manual approval?
 
-### API Keys
-- Generate from dashboard: Settings > API Keys
-- Format: `ao_sk_{40 hex chars}` — bcrypt-hashed, scoped, revocable
-- Scopes: agents:read, agents:run, connectors:read, mcp:read, mcp:call, a2a:read
-- Max 10 active keys per organization
-- Auth: `Authorization: Bearer ao_sk_...`
+No universal claim should be made. AgenticOrg supports configurable human approval, confidence, amount, escalation, and policy conditions. Whether a step pauses depends on the workflow and tenant policy.
 
-### Integration Protocols
-- **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at `/api/v1/a2a/agent-card`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. Agent-management, discovery, and read-only seller OACP artifact tools exposed via stdio transport. Listed in official MCP Registry
-- **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
+### Is Composio the native connector registry?
 
----
+No. Composio is an optional integration gateway. Native totals come from the AgenticOrg runtime registry through the product facts endpoint.
 
-## Contact
+### Which commerce source is runtime-supported?
 
-- Website: https://agenticorg.ai
-- Book a demo: https://agenticorg.ai (click "Book a Demo")
-- Open Agentic Commerce Protocol: https://agenticorg.ai/open-agentic-commerce-protocol
-- Integration Workflow: https://agenticorg.ai/integration-workflow
-- GitHub: https://github.com/mishrasanjeev/agentic-org
-- Python SDK: https://pypi.org/project/agenticorg/
-- TypeScript SDK: https://www.npmjs.com/package/agenticorg-sdk
-- MCP Server: https://www.npmjs.com/package/agenticorg-mcp-server
+Shopify is the current supported source path in the canonical OACP documentation. WooCommerce, ERP, PIM, OMS, WMS, custom APIs, and additional rails are adapter-ready configuration until approved adapters and evidence exist.
+
+### Is AgenticOrg certified to a particular security standard?
+
+This guide makes no certification claim. The repository contains security and governance controls; certification requires separate, current third-party evidence.
+
+### What does OACP evidence authorize?
+
+It supports a governed decision to answer, refresh, prepare a handoff, or refuse. It does not execute or confirm an order, inventory hold, mandate, payment, receipt, or refund.
+
+## Discovery endpoints
+
+- Robots: https://agenticorg.ai/robots.txt
+- Sitemap: https://agenticorg.ai/sitemap.xml
+- Summary guide: https://agenticorg.ai/llms.txt
+- Full guide: https://agenticorg.ai/llms-full.txt
+- Product facts: https://app.agenticorg.ai/api/v1/product-facts
+
+This file is supplemental discovery material. It does not override robots controls, canonical metadata, visible page content, provider responses, or the current application.

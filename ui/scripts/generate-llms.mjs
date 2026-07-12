@@ -1,584 +1,592 @@
 #!/usr/bin/env node
 /**
- * Auto-generate llms.txt + llms-full.txt from source-of-truth files.
+ * Generate public llms.txt documents from repository sources.
  *
- * Reads from:
- *   - core/agents/{domain}/*.py          → agent_type, domain, confidence_floor
- *   - connectors/{category}/*.py         → name, category, auth_type, tool count
- *   - ui/src/pages/Pricing.tsx           → TIERS (plan names, prices, features)
- *   - ui/src/pages/blog/blogData.ts      → blog slugs & titles
- *   - ui/src/pages/resources/contentData.ts → resource slugs & titles
- *
- * Run: node scripts/generate-llms.mjs
- * Hooked into: "build" script in package.json
+ * Default: write ui/dist/llms.txt and ui/dist/llms-full.txt.
+ * --sync-public: also refresh the tracked ui/public copies.
+ * --check: fail when the tracked copies are stale.
  */
 import {
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  statSync,
-  mkdirSync,
   existsSync,
-} from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const UI_ROOT = join(__dirname, "..");
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
+const UI_ROOT = join(SCRIPT_DIR, "..");
 const REPO_ROOT = join(UI_ROOT, "..");
+const PUBLIC_DIR = join(UI_ROOT, "public");
+const DIST_DIR = join(UI_ROOT, "dist");
 const SITE = "https://agenticorg.ai";
+const APP = "https://app.agenticorg.ai";
+const REPO = "https://github.com/mishrasanjeev/agentic-org";
+const FACTS = APP + "/api/v1/product-facts";
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 1. PARSE AGENTS from Python source
-// ═══════════════════════════════════════════════════════════════════════════
-function parseAgents() {
-  const agentsDir = join(REPO_ROOT, "core/agents");
-  const agents = [];
-  const domains = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
+const text = (path) => readFileSync(path, "utf8");
+const normalized = (value) => value.replace(/\r\n/g, "\n").trimEnd() + "\n";
+const clean = (value) =>
+  String(value || "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();
+const humanize = (value) =>
+  String(value || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+const url = (path) => (path === "/" ? SITE : SITE + path);
 
-  for (const domain of domains) {
-    const domainDir = join(agentsDir, domain);
-    try {
-      for (const file of readdirSync(domainDir)) {
-        if (!file.endsWith(".py") || file.startsWith("__")) continue;
-        const src = readFileSync(join(domainDir, file), "utf-8");
-        const type = src.match(/agent_type\s*=\s*"([^"]+)"/)?.[1];
-        const dom = src.match(/domain\s*=\s*"([^"]+)"/)?.[1];
-        const conf = src.match(/confidence_floor\s*=\s*([\d.]+)/)?.[1];
-        if (type) {
-          agents.push({
-            type,
-            domain: dom || domain,
-            confidence_floor: conf ? parseFloat(conf) : 0.8,
-            label: type
-              .replace(/_/g, " ")
-              .replace(/\b\w/g, (c) => c.toUpperCase()),
-          });
-        }
-      }
-    } catch {
-      /* domain dir may not exist */
+function json(path) {
+  try {
+    return JSON.parse(text(path));
+  } catch {
+    return null;
+  }
+}
+
+function unique(items, key) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (!item[key] || seen.has(item[key])) return false;
+    seen.add(item[key]);
+    return true;
+  });
+}
+
+function groups(items, key) {
+  const result = new Map();
+  for (const item of items) {
+    const group = item[key] || "other";
+    if (!result.has(group)) result.set(group, []);
+    result.get(group).push(item);
+  }
+  return result;
+}
+
+function projectMetadata() {
+  const source = text(join(REPO_ROOT, "pyproject.toml"));
+  const start = source.indexOf("[project]");
+  const end = source.indexOf("\n[", start + 1);
+  const project = source.slice(start, end < 0 ? source.length : end);
+  const version = project.match(/^version\s*=\s*"([^"]+)"/m)?.[1];
+  const python = project.match(/^requires-python\s*=\s*"([^"]+)"/m)?.[1];
+  const react = json(join(UI_ROOT, "package.json"))?.dependencies?.react;
+  const reactMajor = react?.match(/\d+/)?.[0];
+  if (!version || !python || !reactMajor) {
+    throw new Error("Unable to read project version, Python requirement, or React version");
+  }
+  return { version, python, reactMajor };
+}
+
+function field(block, name) {
+  const match = block.match(
+    new RegExp('"' + name + '"\\s*:\\s*(?:"([^"]*)"|([\\d_]+))'),
+  );
+  return match ? match[1] ?? Number(match[2].replace(/_/g, "")) : "";
+}
+
+function pricing() {
+  const source = normalized(text(join(REPO_ROOT, "core", "billing", "limits.py")));
+  const start = source.indexOf("PLAN_PRICING:");
+  const end = source.indexOf("\n]\n", start);
+  if (start < 0 || end < 0) throw new Error("PLAN_PRICING was not found");
+  const section = source.slice(start, end + 3);
+  const starts = [...section.matchAll(/"plan"\s*:\s*"([^"]+)"/g)];
+  const plans = starts.map((entry, index) => {
+    const block = section.slice(entry.index, starts[index + 1]?.index ?? section.length);
+    const featureSource =
+      block.match(/"features"\s*:\s*\[([\s\S]*?)\]/)?.[1] || "";
+    return {
+      id: entry[1],
+      label: field(block, "label") || humanize(entry[1]),
+      usd: field(block, "price_usd"),
+      inr: field(block, "price_inr"),
+      agents: field(block, "agents"),
+      runs: field(block, "runs"),
+      storage: field(block, "storage"),
+      features: [...featureSource.matchAll(/"([^"]+)"/g)].map((match) => match[1]),
+    };
+  });
+  if (plans.map((plan) => plan.id).sort().join(",") !== "enterprise,free,pro") {
+    throw new Error("Expected Free, Pro, and Enterprise PLAN_PRICING entries");
+  }
+  return plans;
+}
+
+const AGENT_DIRS = [
+  ["finance", "Finance"],
+  ["hr", "HR"],
+  ["marketing", "Marketing"],
+  ["ops", "Operations"],
+  ["backoffice", "Back Office"],
+  ["comms", "Communications"],
+];
+
+function agents() {
+  const result = [];
+  for (const [directory, domainLabel] of AGENT_DIRS) {
+    const path = join(REPO_ROOT, "core", "agents", directory);
+    if (!existsSync(path)) continue;
+    for (const file of readdirSync(path).sort()) {
+      if (!file.endsWith(".py") || file.startsWith("__")) continue;
+      const source = text(join(path, file));
+      const type = source.match(/agent_type\s*=\s*["']([^"']+)["']/)?.[1];
+      if (type) result.push({ type, label: humanize(type), domain: directory, domainLabel });
     }
   }
-  return agents;
+  return unique(result, "type").sort((a, b) => a.type.localeCompare(b.type));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 2. PARSE CONNECTORS from Python source
-// ═══════════════════════════════════════════════════════════════════════════
-function parseConnectors() {
-  const connDir = join(REPO_ROOT, "connectors");
-  const connectors = [];
-  const categories = ["finance", "hr", "marketing", "ops", "comms"];
+const CONNECTOR_DIRS = [
+  ["finance", "Finance"],
+  ["hr", "HR"],
+  ["marketing", "Marketing"],
+  ["ops", "Operations"],
+  ["comms", "Communications and Cloud"],
+];
 
-  for (const cat of categories) {
-    const catDir = join(connDir, cat);
-    try {
-      for (const file of readdirSync(catDir)) {
-        if (!file.endsWith(".py") || file.startsWith("__")) continue;
-        const src = readFileSync(join(catDir, file), "utf-8");
-        const name = src.match(/^\s*name\s*=\s*"([^"]+)"/m)?.[1];
-        const category = src.match(/^\s*category\s*=\s*"([^"]+)"/m)?.[1];
-        const authType = src.match(/^\s*auth_type\s*=\s*"([^"]+)"/m)?.[1];
-        // Count tool registrations
-        const tools = [
-          ...src.matchAll(/self\._tool_registry\["([^"]+)"\]/g),
-        ].map((m) => m[1]);
-        if (name) {
-          connectors.push({
-            name,
-            category: category || cat,
-            auth_type: authType || "api_key",
-            tool_count: tools.length,
-            tools,
-            label: name
-              .replace(/_/g, " ")
-              .replace(/\b\w/g, (c) => c.toUpperCase()),
-          });
-        }
+function connectors() {
+  const result = [];
+  for (const [directory, categoryLabel] of CONNECTOR_DIRS) {
+    const path = join(REPO_ROOT, "connectors", directory);
+    if (!existsSync(path)) continue;
+    for (const file of readdirSync(path).sort()) {
+      if (!file.endsWith(".py") || file.startsWith("__")) continue;
+      const source = text(join(path, file));
+      const name = source.match(/^\s*name\s*=\s*["']([^"']+)["']/m)?.[1];
+      const auth =
+        source.match(/^\s*auth_type\s*=\s*["']([^"']+)["']/m)?.[1] || "";
+      if (name) {
+        result.push({
+          name,
+          label: humanize(name),
+          auth,
+          category: directory,
+          categoryLabel,
+        });
       }
-    } catch {
-      /* category dir may not exist */
     }
   }
-  return connectors;
+  return unique(result, "name").sort((a, b) => a.name.localeCompare(b.name));
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 3. PARSE PRICING from Pricing.tsx
-// ═══════════════════════════════════════════════════════════════════════════
-function parsePricing() {
-  const src = readFileSync(
-    join(UI_ROOT, "src/pages/Pricing.tsx"),
-    "utf-8",
+function editorial(path, kind) {
+  const source = text(path);
+  const slugs = [...source.matchAll(/^\s*slug:\s*"([^"]+)"/gm)];
+  const titles = [...source.matchAll(/^\s*title:\s*"([^"]+)"/gm)];
+  return unique(
+    slugs.map((slug, index) => ({
+      slug: slug[1],
+      title: titles[index]?.[1] || humanize(slug[1]),
+      kind,
+    })),
+    "slug",
   );
-  const tiers = [];
-  // Match each tier block
-  const tierBlocks = src.match(
-    /\{\s*name:\s*"[^"]+",[\s\S]*?features:\s*\[[\s\S]*?\]\s*,?\s*\}/g,
+}
+
+const DEFAULT_PAGES = [
+  ["/", "Home", "Product overview, boundaries, governance, and direct answers."],
+  ["/pricing", "Pricing", "Hosted prices, usage limits, and support options."],
+  ["/playground", "Playground", "Interactive agent experience."],
+  ["/evals", "Evaluation matrix", "Agent evaluation and readiness dimensions."],
+  ["/integration-workflow", "Integration workflow", "Connector authorization and governed tool execution."],
+  ["/open-agentic-commerce-protocol", "Open Agentic Commerce Protocol", "OACP ownership, evidence, cache, and execution boundaries."],
+  ["/how-grantex-works", "How Grantex works", "Trust authority and authorization responsibilities."],
+  ["/solutions/ca-firms", "CA firms", "Multi-company accounting workflows."],
+  ["/solutions/cfo", "CFO solution", "Governed finance operations."],
+  ["/solutions/chro", "CHRO solution", "Governed HR operations."],
+  ["/solutions/cmo", "CMO solution", "Governed marketing operations."],
+  ["/solutions/coo", "COO solution", "Governed business operations."],
+  ["/solutions/cbo", "CBO solution", "Governed back-office operations."],
+  ["/blog", "Blog", "Product and implementation articles."],
+  ["/resources", "Resources", "Enterprise AI educational guides."],
+  ["/support", "Support", "Support and contact options."],
+  ["/status", "Status", "Public service status."],
+  ["/privacy", "Privacy", "Privacy notice."],
+  ["/terms", "Terms", "Terms of service."],
+  ["/refund", "Refund policy", "Refund and cancellation policy."],
+].map(([path, name, summary]) => ({ path, name, summary }));
+
+function pages() {
+  const registry = json(join(UI_ROOT, "src", "content", "publicSite.json"));
+  const configured = Array.isArray(registry?.pages)
+    ? registry.pages
+        .filter((page) => page?.path && page.index !== false)
+        .map((page) => ({
+          path: page.path,
+          name: page.name || page.title || humanize(page.path),
+          summary: page.summary || page.description || "",
+        }))
+    : [];
+  const merged = new Map(DEFAULT_PAGES.map((page) => [page.path, page]));
+  for (const page of configured) merged.set(page.path, { ...merged.get(page.path), ...page });
+  return [...merged.values()];
+}
+
+function money(value, currency) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return String(value);
+  return currency === "USD"
+    ? "$" + amount.toLocaleString("en-US")
+    : "INR " + amount.toLocaleString("en-IN");
+}
+
+function planLine(plan) {
+  const differentiators = plan.features.filter(
+    (feature) =>
+      !/^(?:Unlimited|\d[\d,.]*[Kk]?)\s+(?:agents|runs(?:\/month)?|(?:GB\s+)?storage)$/i.test(
+        feature,
+      ),
   );
-  if (!tierBlocks) return tiers;
-  for (const block of tierBlocks) {
-    const name = block.match(/name:\s*"([^"]+)"/)?.[1];
-    const price = block.match(/price:\s*"([^"]+)"/)?.[1];
-    const period = block.match(/period:\s*"([^"]*)"/)?.[1] || "";
-    // Extract only the features array content
-    const featBlock = block.match(/features:\s*\[([\s\S]*?)\]/)?.[1] || "";
-    const features = [...featBlock.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-    if (name) tiers.push({ name, price, period, features });
+  const featureText = differentiators.length
+    ? "; " + differentiators.join(", ")
+    : "";
+  return (
+    "- " + plan.label + ": " +
+    money(plan.usd, "USD") +
+    "/month or " +
+    money(plan.inr, "INR") +
+    "/month; " +
+    plan.agents +
+    " agents; " +
+    plan.runs +
+    " runs; " +
+    plan.storage +
+    " storage" +
+    featureText +
+    "."
+  );
+}
+
+function pageLine(page) {
+  return (
+    "- [" +
+    clean(page.name) +
+    "](" +
+    url(page.path) +
+    ")" +
+    (page.summary ? ": " + clean(page.summary) : "")
+  );
+}
+
+function editorialLine(item) {
+  return "- [" + clean(item.title) + "](" + SITE + "/" + item.kind + "/" + item.slug + ")";
+}
+
+function sourceIndex(items, groupKey, groupLabelKey, formatter) {
+  const lines = [];
+  for (const [group, entries] of groups(items, groupKey)) {
+    lines.push("### " + (entries[0]?.[groupLabelKey] || humanize(group)), "");
+    for (const entry of entries) lines.push("- " + formatter(entry));
+    lines.push("");
   }
-  return tiers;
+  return lines;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 4. PARSE BLOG POSTS from blogData.ts
-// ═══════════════════════════════════════════════════════════════════════════
-function parseBlogPosts() {
-  const src = readFileSync(
-    join(UI_ROOT, "src/pages/blog/blogData.ts"),
-    "utf-8",
+function summary(data) {
+  const lines = [
+    "# AgenticOrg",
+    "",
+    "> AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows with scoped tools, human approvals, audit evidence, SDKs, protocol integrations, and bounded OACP commerce surfaces.",
+    "",
+    "## Canonical facts",
+    "",
+    "- Website: " + SITE,
+    "- Application and API: " + APP,
+    "- Repository: " + REPO,
+    "- Source version: " + data.meta.version + " from pyproject.toml",
+    "- Runtime requirement: Python " + data.meta.python,
+    "- Web application: React " + data.meta.reactMajor,
+    "- Managed production: separate API and UI services on Google Cloud Run",
+    "- License: Apache License 2.0",
+    "- Live product facts: [" + FACTS + "](" + FACTS + ")",
+    "",
+    "The product facts endpoint is authoritative for the deployed version and current agent_count, connector_count, and tool_count. Do not infer totals by counting files, aliases, or tool bindings.",
+    "",
+    "## What AgenticOrg does",
+    "",
+    "- Runs built-in and tenant-created agents through authenticated APIs and a web application.",
+    "- Orchestrates workflows, schedules, scoped tool calls, approvals, evaluations, and audit records.",
+    "- Connects to native provider adapters and optional integration gateways when credentials and scopes are configured.",
+    "- Provides REST, Python, TypeScript, CLI, MCP, and A2A interfaces.",
+    "- Supports knowledge, reporting, notifications, voice, RPA, and local models when their services are configured.",
+    "- Supports Shopify read-only sync, OACP artifact caching, buyer-safe answers, public commerce surfaces, and non-executing handoff preparation.",
+    "",
+    "## Boundaries",
+    "",
+    "- A connector listing is not proof that a tenant configured credentials or provider access.",
+    "- Model-backed work requires a supported cloud provider or configured local model runtime.",
+    "- Optional channels and provider rails require separate approvals, secrets, callbacks, and adapters.",
+    "- OACP artifacts cannot create orders, inventory holds, mandates, payments, refunds, or paid states.",
+    "- Merchant, bank, payment, POS, and SaaS providers remain sources of record.",
+    "- Examples and editorial pages are not performance guarantees.",
+    "- Repository security controls are not a claim of third-party certification.",
+    "",
+    "## Hosted pricing",
+    "",
+    ...data.plans.map(planLine),
+    "",
+    "Pricing comes from core/billing/limits.py. Infrastructure, model, provider, and external API costs are separate.",
+    "",
+    "## Key public pages",
+    "",
+    ...data.pages.slice(0, 15).map(pageLine),
+    "",
+    "## Developer access",
+    "",
+    "- [Python SDK and CLI](" + REPO + "/tree/main/sdk)",
+    "- [TypeScript SDK](" + REPO + "/tree/main/sdk-ts)",
+    "- [MCP server](" + REPO + "/tree/main/mcp-server)",
+    "- A2A discovery: " + APP + "/api/v1/a2a/agent-card",
+    "- MCP discovery: " + APP + "/api/v1/mcp/tools",
+    "- [API reference](" + REPO + "/blob/main/docs/api-reference.md)",
+    "",
+    "## Direct answers",
+    "",
+    "### What is AgenticOrg?",
+    "",
+    "AgenticOrg is an open-source enterprise AI agent platform. It combines agent and workflow execution, connectors, scoped tools, human approval gates, evaluation, audit evidence, SDKs, MCP, A2A, and bounded commerce integrations.",
+    "",
+    "### How many agents, connectors, and tools are available?",
+    "",
+    "Read " + FACTS + ". It computes current deployed totals from runtime registries so copied documentation does not drift.",
+    "",
+    "### Does a listed connector work without setup?",
+    "",
+    "No. Availability depends on provider credentials, subscriptions, scopes, tenant configuration, policy, and provider uptime.",
+    "",
+    "### Can AgenticOrg complete an OACP payment or order?",
+    "",
+    "Not from OACP artifacts. AgenticOrg can answer from valid evidence and prepare a provider or merchant handoff. The provider or merchant system must execute and confirm the result.",
+    "",
+    "### Can AgenticOrg be self-hosted?",
+    "",
+    "Yes. The repository is Apache-2.0 licensed and includes local Docker and deployment assets. The managed production path uses Google Cloud Run.",
+    "",
+    "## More",
+    "",
+    "- [Full product and evidence guide](" + SITE + "/llms-full.txt)",
+    "- [Sitemap](" + SITE + "/sitemap.xml)",
+    "- [Blog](" + SITE + "/blog)",
+    "- [Resources](" + SITE + "/resources)",
+    "- [OACP documentation](" + REPO + "/tree/main/docs/oacp)",
+    "- [Security policy](" + REPO + "/blob/main/SECURITY.md)",
+  ];
+  return normalized(lines.join("\n"));
+}
+
+function absoluteReadme() {
+  let source = normalized(text(join(REPO_ROOT, "README.md")));
+  source = source.replace(
+    /\]\((?!https?:\/\/|#)([^)]+)\)/g,
+    (match, target) => {
+      const cleanTarget = target.replace(/^\.\//, "");
+      const directory =
+        cleanTarget.endsWith("/") ||
+        /^(docs|sdk|sdk-ts|mcp-server|tests|ui)(\/)?$/.test(cleanTarget);
+      return "](" + REPO + (directory ? "/tree/main/" : "/blob/main/") + cleanTarget + ")";
+    },
   );
-  const posts = [];
-  const slugs = [...src.matchAll(/slug:\s*"([^"]+)"/g)];
-  const titles = [...src.matchAll(/title:\s*"([^"]+)"/g)];
-  for (let i = 0; i < slugs.length; i++) {
-    posts.push({ slug: slugs[i][1], title: titles[i]?.[1] || slugs[i][1] });
-  }
-  return posts;
+  return source;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 5. PARSE RESOURCES from contentData.ts
-// ═══════════════════════════════════════════════════════════════════════════
-function parseResources() {
-  const src = readFileSync(
-    join(UI_ROOT, "src/pages/resources/contentData.ts"),
-    "utf-8",
+function full(data) {
+  const agentIndex = sourceIndex(
+    data.agents,
+    "domain",
+    "domainLabel",
+    (agent) => clean(agent.label) + " (" + agent.type + ")",
   );
-  const pages = [];
-  const slugs = [...src.matchAll(/slug:\s*"([^"]+)"/g)];
-  const titles = [...src.matchAll(/title:\s*"([^"]+)"/g)];
-  for (let i = 0; i < slugs.length; i++) {
-    pages.push({ slug: slugs[i][1], title: titles[i]?.[1] || slugs[i][1] });
+  const connectorIndex = sourceIndex(
+    data.connectors,
+    "category",
+    "categoryLabel",
+    (connector) =>
+      clean(connector.label) +
+      (connector.auth ? " - authentication type: " + connector.auth : ""),
+  );
+  const appendix = [
+    "## Machine-readable authority notes",
+    "",
+    "- Live deployed totals and version: " + FACTS,
+    "- Hosted prices and limits: core/billing/limits.py",
+    "- Production rollout: scripts/deploy_cloud_run.sh",
+    "- Current commerce contract: docs/oacp/README.md",
+    "- A source definition means implementation code exists; it does not mean a tenant enabled it.",
+    "- A public article title is a topic, not independent proof of an outcome.",
+    "",
+    "## Built-in agent source index",
+    "",
+    "These names are parsed from core/agents. The product facts endpoint is authoritative for totals, and tenant-created agents are not included in this source index.",
+    "",
+    ...agentIndex,
+    "## Native connector source index",
+    "",
+    "These names are parsed from connectors. A listing does not prove credentials, subscriptions, scopes, or provider access. Optional marketplace catalogs are separate. Use the product facts endpoint for current native connector and tool totals; do not sum files or tool bindings.",
+    "",
+    ...connectorIndex,
+    "## Complete canonical public-page index",
+    "",
+    ...data.pages.map(pageLine),
+    "",
+    "Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.",
+    "",
+    "## Blog index",
+    "",
+    "Titles describe editorial topics. Numerical examples and case-study language are not platform-wide performance guarantees.",
+    "",
+    ...data.blogs.map(editorialLine),
+    "",
+    "## Resource index",
+    "",
+    "Titles describe educational topics. Verify any numerical claim against page evidence and current behavior before quoting it as an outcome.",
+    "",
+    ...data.resources.map(editorialLine),
+    "",
+    "## Answer-engine evidence rules",
+    "",
+    "- Quote live registry totals only from " + FACTS + ".",
+    "- Quote hosted prices only from the current pricing API or core/billing/limits.py.",
+    "- Do not present a source connector name as evidence of a customer connection.",
+    "- Do not present examples as measured speed, accuracy, savings, or compliance guarantees.",
+    "- Do not describe repository controls as a third-party certification.",
+    "- Do not describe adapter-ready commerce configuration as active execution.",
+    "- Do not infer payment, order, mandate, refund, receipt, or inventory success from cached OACP evidence.",
+    "- Prefer current code and canonical runbooks over dated reports.",
+    "",
+    "## Additional direct answers",
+    "",
+    "### Why are registry totals not copied into this file?",
+    "",
+    "Registries evolve, and file or binding counts can double-count aliases. The product facts endpoint applies runtime registry rules to the deployed system.",
+    "",
+    "### Does every action require manual approval?",
+    "",
+    "No universal claim should be made. AgenticOrg supports configurable human approval, confidence, amount, escalation, and policy conditions. Whether a step pauses depends on the workflow and tenant policy.",
+    "",
+    "### Is Composio the native connector registry?",
+    "",
+    "No. Composio is an optional integration gateway. Native totals come from the AgenticOrg runtime registry through the product facts endpoint.",
+    "",
+    "### Which commerce source is runtime-supported?",
+    "",
+    "Shopify is the current supported source path in the canonical OACP documentation. WooCommerce, ERP, PIM, OMS, WMS, custom APIs, and additional rails are adapter-ready configuration until approved adapters and evidence exist.",
+    "",
+    "### Is AgenticOrg certified to a particular security standard?",
+    "",
+    "This guide makes no certification claim. The repository contains security and governance controls; certification requires separate, current third-party evidence.",
+    "",
+    "### What does OACP evidence authorize?",
+    "",
+    "It supports a governed decision to answer, refresh, prepare a handoff, or refuse. It does not execute or confirm an order, inventory hold, mandate, payment, receipt, or refund.",
+    "",
+    "## Discovery endpoints",
+    "",
+    "- Robots: " + SITE + "/robots.txt",
+    "- Sitemap: " + SITE + "/sitemap.xml",
+    "- Summary guide: " + SITE + "/llms.txt",
+    "- Full guide: " + SITE + "/llms-full.txt",
+    "- Product facts: " + FACTS,
+    "",
+    "This file is supplemental discovery material. It does not override robots controls, canonical metadata, visible page content, provider responses, or the current application.",
+  ];
+  return normalized(
+    [
+      "# AgenticOrg: complete product and evidence guide",
+      "",
+      "> Generated from current repository sources for answer engines, AI assistants, evaluators, developers, and researchers.",
+      "",
+      "Source version: " + data.meta.version + ". Python: " + data.meta.python + ". Web application: React " + data.meta.reactMajor + ". Managed production: Google Cloud Run.",
+      "",
+      "## Verified repository guide",
+      "",
+      absoluteReadme().replace(/^# AgenticOrg\s*/, ""),
+      "",
+      ...appendix,
+    ].join("\n"),
+  );
+}
+
+function validate(data, shortDoc, fullDoc) {
+  const combined = shortDoc + "\n" + fullDoc;
+  for (const required of [
+    FACTS,
+    "Google Cloud Run",
+    "React " + data.meta.reactMajor,
+    "Python " + data.meta.python,
+    "$2/month",
+    "$499/month",
+    "OACP artifacts",
+    "third-party certification",
+  ]) {
+    if (!combined.includes(required)) {
+      throw new Error("Generated documents are missing required text: " + required);
+    }
   }
-  return pages;
+  for (const [pattern, reason] of [
+    [/React 18/i, "stale React major"],
+    [/\b430\s+(?:total\s+)?tools\b/i, "derived tool total"],
+    [/\b50\+\s+(?:pre-built\s+)?agents\b/i, "hard-coded agent total"],
+    [/\b54\s+native connectors\b/i, "hard-coded connector total"],
+    [/\b1000\+\s+integrations\b/i, "external catalog total"],
+    [/SOC-?2 certified/i, "unsupported certification"],
+  ]) {
+    if (pattern.test(combined)) {
+      throw new Error("Generated documents contain " + reason + ": " + pattern);
+    }
+  }
+  if (new Set(data.pages.map((page) => page.path)).size !== data.pages.length) {
+    throw new Error("Public page index contains duplicate paths");
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 6. GROUP HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function groupBy(arr, key) {
-  return arr.reduce((acc, item) => {
-    (acc[item[key]] = acc[item[key]] || []).push(item);
-    return acc;
-  }, {});
+function generate() {
+  const data = {
+    meta: projectMetadata(),
+    plans: pricing(),
+    agents: agents(),
+    connectors: connectors(),
+    pages: pages(),
+    blogs: editorial(join(UI_ROOT, "src", "pages", "blog", "blogData.ts"), "blog"),
+    resources: editorial(
+      join(UI_ROOT, "src", "pages", "resources", "contentData.ts"),
+      "resources",
+    ),
+  };
+  const shortDoc = summary(data);
+  const fullDoc = full(data);
+  validate(data, shortDoc, fullDoc);
+  return { shortDoc, fullDoc };
 }
 
-const DOMAIN_LABELS = {
-  finance: "Finance",
-  hr: "HR",
-  marketing: "Marketing",
-  ops: "Operations",
-  backoffice: "Back Office",
-  comms: "Communications & Cloud",
-};
-
-const DOMAIN_ROLES = {
-  finance: "CFO",
-  hr: "CHRO",
-  marketing: "CMO",
-  ops: "COO",
-  backoffice: "COO",
-  comms: "CTO",
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 7. GENERATE llms.txt (summary)
-// ═══════════════════════════════════════════════════════════════════════════
-function generateLlmsTxt(agents, connectors, pricing, blogs, resources) {
-  const totalTools = connectors.reduce((s, c) => s + c.tool_count, 0);
-  const agentsByDomain = groupBy(agents, "domain");
-  const connsByCategory = groupBy(connectors, "category");
-
-  const agentList = agents.map((a) => a.label).join(", ");
-  const indiaConnectors = connectors
-    .filter((c) =>
-      ["gstn", "epfo", "darwinbox", "tally", "income_tax_india", "banking_aa"].includes(c.name),
-    )
-    .map((c) => c.label)
-    .join(", ");
-
-  const pricingLines = pricing
-    .map((t) => {
-      const feat = t.features.slice(0, 3).join(", ");
-      return `- ${t.name} (${t.price}${t.period}): ${feat}`;
-    })
-    .join("\n");
-
-  return `# AgenticOrg — AI Virtual Employees for Enterprise
-
-> AgenticOrg lets you create AI virtual employees or deploy ${agents.length} pre-built agents across 6 domains — Finance, HR, Marketing, Operations, Back Office, and Communications — with human-in-the-loop governance on every critical decision.
-
-## What is AgenticOrg?
-
-AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions through a no-code wizard — or deploy ${agents.length} pre-built agents that automate back-office operations across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications & Cloud. Each agent connects to ${connectors.length} enterprise systems (${totalTools} tools) and executes domain-specific tasks with human approval on every critical decision.
-
-## Key Features
-
-- **AI Virtual Employees**: Create custom AI agents with employee names, designations, and specializations. Multiple agents can share the same role with smart routing
-- **No-Code Agent Creator**: 5-step wizard to build agents — set persona, pick role, configure prompt from templates, define behavior, and deploy
-- **${agents.length} Pre-Built AI Agents**: ${agentList}
-- **${connectors.length} Enterprise Connectors (${totalTools} tools)**: ${connectors.map((c) => `${c.label} (${c.tool_count} tools)`).join(", ")}
-- **Agents That Act**: Agents don't just generate text — they call real external APIs via a tool_calls pipeline: LLM reasons → outputs tool calls → Tool Gateway executes → results fed back
-- **Human-in-the-Loop (HITL)**: Every critical decision requires human approval. Prompts are locked after agent promotion — clone to edit
-- **Shadow Mode**: Test agents against real data before promoting to production
-- **Role-Based Access Control**: Domain isolation per role (CEO, CFO, CHRO, CMO, COO, Auditor)
-- **Agent Observatory**: Real-time monitoring of agent reasoning traces, tool calls, confidence scores
-- **Per-Agent LLM Selection**: Gemini 2.5 Flash (default), Claude 3.5 Sonnet, or GPT-4o
-- **Shadow Limit Enforcement**: Agents in shadow mode have configurable sample limits, accuracy floors, and 6 quality gates that must all pass before promotion to production
-- **MCP Registry Listed**: AgenticOrg is listed in the official MCP Registry — discoverable by any MCP-compatible client (ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients)
-
-## Agents by Department
-
-${Object.entries(agentsByDomain)
-  .map(
-    ([dom, agts]) =>
-      `### ${DOMAIN_LABELS[dom] || dom} (${agts.length} agents, ${DOMAIN_ROLES[dom] || "COO"} oversight)\n${agts.map((a) => `- ${a.label} (confidence: ${a.confidence_floor})`).join("\n")}`,
-  )
-  .join("\n\n")}
-
-## India-First Connectors
-
-AgenticOrg is built for Indian enterprise with native connectors for: ${indiaConnectors}
-
-## Pricing
-
-${pricingLines}
-
-## Developer SDKs & Integration
-
-- **Python SDK + CLI**: \`pip install agenticorg\` — run agents, parse SOPs, A2A/MCP access, and install the direct \`agenticorg\` CLI ([PyPI](https://pypi.org/project/agenticorg/))
-- **TypeScript SDK**: \`npm i agenticorg-sdk\` — full TypeScript client library ([npm](https://www.npmjs.com/package/agenticorg-sdk))
-- **MCP Server**: \`npx agenticorg-mcp-server\` — expose AgenticOrg agents and read-only seller tools to ChatGPT, Claude Desktop, Cursor, VS Code MCP clients, and other MCP clients ([npm](https://www.npmjs.com/package/agenticorg-mcp-server))
-- **Direct CLI**: \`agenticorg agents list\`, \`agenticorg agents run\`, \`agenticorg workflows run\`, \`agenticorg a2a card\`, \`agenticorg mcp tools\`. Works from Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI, and shell scripts.
-- **API Keys**: Generate from Settings > API Keys in the dashboard. Keys use \`ao_sk_\` prefix, bcrypt-hashed, scoped, revocable
-- **A2A Protocol**: Google Agent-to-Agent discovery via Agent Cards at \`/api/v1/a2a/agent-card\`
-- **MCP Protocol**: Anthropic Model Context Protocol — agent management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools. Direct connector tools are not exposed.
-- **Grantex Authorization**: Delegated auth with scoped grant tokens for third-party agent access
-
-## Links
-
-- Website: ${SITE}
-- Playground (try live): ${SITE}/playground
-- Pricing: ${SITE}/pricing
-- Evaluation Matrix: ${SITE}/evals
-- Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
-- Integration Workflow: ${SITE}/integration-workflow
-- Blog: ${SITE}/blog
-${blogs.map((b) => `  - ${b.title}: ${SITE}/blog/${b.slug}`).join("\n")}
-- Resources: ${SITE}/resources
-${resources.map((r) => `  - ${r.title}: ${SITE}/resources/${r.slug}`).join("\n")}
-- GitHub: https://github.com/mishrasanjeev/agentic-org
-- Python SDK (PyPI): https://pypi.org/project/agenticorg/
-- TypeScript SDK (npm): https://www.npmjs.com/package/agenticorg-sdk
-- MCP Server (npm): https://www.npmjs.com/package/agenticorg-mcp-server
-`;
+function write(directory, docs) {
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "llms.txt"), docs.shortDoc, "utf8");
+  writeFileSync(join(directory, "llms-full.txt"), docs.fullDoc, "utf8");
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// 8. GENERATE llms-full.txt (detailed)
-// ═══════════════════════════════════════════════════════════════════════════
-function generateLlmsFullTxt(agents, connectors, pricing, blogs, resources) {
-  const totalTools = connectors.reduce((s, c) => s + c.tool_count, 0);
-  const agentsByDomain = groupBy(agents, "domain");
-  const connsByCategory = groupBy(connectors, "category");
-
-  const pricingSections = pricing
-    .map((t) => {
-      const features = t.features.map((f) => `- ${f}`).join("\n");
-      return `### ${t.name} (${t.price}${t.period})\n${features}`;
-    })
-    .join("\n\n");
-
-  const connectorSections = Object.entries(connsByCategory)
-    .map(([cat, conns]) => {
-      const label = DOMAIN_LABELS[cat] || cat;
-      const lines = conns
-        .map((c) => `- ${c.label}: ${c.tool_count} tools (${c.auth_type})`)
-        .join("\n");
-      return `### ${label} (${conns.length} connectors)\n${lines}`;
-    })
-    .join("\n\n");
-
-  const agentSections = Object.entries(agentsByDomain)
-    .map(([dom, agts]) => {
-      const label = DOMAIN_LABELS[dom] || dom;
-      const role = DOMAIN_ROLES[dom] || "COO";
-      const lines = agts
-        .map(
-          (a) =>
-            `#### ${a.label} (${a.type})\n- Domain: ${label}\n- Confidence floor: ${(a.confidence_floor * 100).toFixed(0)}%`,
-        )
-        .join("\n\n");
-      return `### ${label} Domain (${agts.length} agents, ${role} oversight)\n\n${lines}`;
-    })
-    .join("\n\n");
-
-  return `# AgenticOrg — Complete Product Documentation for LLMs
-
-> AgenticOrg is an enterprise AI virtual employee platform. Create custom AI agents with names, personas, and tailored instructions — or deploy ${agents.length} pre-built agents across 6 domains: Finance, HR, Marketing, Operations, Back Office, and Communications. Each agent automates domain-specific tasks with human-in-the-loop (HITL) governance, connecting to ${connectors.length} enterprise systems (${totalTools} tools). Built for Indian enterprise with native GSTN, EPFO, and Darwinbox connectors.
-
-## Product Overview
-
-AgenticOrg replaces manual back-office work with AI virtual employees that reason, execute, and escalate. Admins can create custom agents through a no-code wizard or deploy pre-built agents. Every critical decision requires human approval. The platform is role-based: CFOs see only finance agents, CHROs see only HR agents, etc.
-
-Website: ${SITE}
-Playground (try live): ${SITE}/playground
-Pricing: ${SITE}/pricing
-Evaluation Matrix: ${SITE}/evals
-Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
-GitHub: https://github.com/mishrasanjeev/agentic-org
-
----
-
-## Architecture
-
-8-layer stack:
-1. API Gateway (FastAPI, JWT auth, rate limiting)
-2. Orchestration (Nexus orchestrator, DAG workflows, parallel execution)
-3. Agent Runtime (LLM reasoning via Gemini 2.5 Flash, tool calling, confidence scoring)
-4. HITL Governance (approval queues, role-based escalation, timeout policies)
-5. Connector Hub (${connectors.length} pre-built connectors with circuit breakers)
-6. Schema Registry (validated data schemas)
-7. Observability (Prometheus metrics, OpenTelemetry traces, structured logging)
-8. Infrastructure (GKE Autopilot, Cloud SQL PostgreSQL, Redis)
-
----
-
-## Virtual Employee System
-
-AgenticOrg treats AI agents as virtual employees — named personas that admins create, train (via prompts), and deploy.
-
-### Agent Creator (No-Code Wizard)
-5-step wizard available to admin/CEO users:
-1. **Persona**: Employee name, designation, avatar, domain
-2. **Role**: Agent type (pick from ${agents.length} built-in or create custom), specialization, routing filters
-3. **Prompt**: Select from production-tested prompt templates or write custom instructions, fill in template variables
-4. **Behavior**: Confidence floor, HITL conditions, LLM model, max retries
-5. **Review**: Summary and deploy as Shadow
-
-### Per-Agent LLM Selection
-Each agent can specify its preferred LLM model: Gemini 2.5 Flash (default, free tier), Claude 3.5 Sonnet (Anthropic), or GPT-4o (OpenAI). The system checks if the required API key is configured before using the specified model — if not, it safely falls back to the global default.
-
-### Org Chart Hierarchy
-Agents can report to other agents via parent_agent_id. When an agent fails or triggers HITL, the task escalates to the parent agent, creating management chains.
-
-### Per-Agent Budget Enforcement
-Each agent can have monthly cost caps. Before every execution, the system checks cumulative monthly spend. If exceeded, the agent returns E1008 (budget_exceeded) without making an LLM call.
-
----
-
-## All ${agents.length} Agents — Detailed
-
-${agentSections}
-
----
-
-## ${connectors.length} Enterprise Connectors (${totalTools} total tools)
-
-${connectorSections}
-
----
-
-## Human-in-the-Loop (HITL) Governance
-
-Every agent has configurable HITL conditions. When triggered, the agent stops execution and creates an approval item. The relevant department head sees the item with full context and can approve, reject, or defer.
-
-### HITL Trigger Types
-- amount_threshold: Transaction amount exceeds configured limit
-- confidence_below_floor: Agent confidence below minimum threshold
-- regulatory_filing: All government filings (zero auto-file policy)
-- break_threshold: Reconciliation break above limit
-- anomaly_detection: Unexpected pattern detected
-- budget_approval: Spend above approval threshold
-- incident_escalation: High-severity incident requiring acknowledgment
-
-### HITL Flow
-1. Agent detects trigger condition
-2. Creates HITL item with priority (critical/high/normal/low)
-3. Assigns to role-based queue (cfo/chro/cmo/coo)
-4. Department head reviews context and decides (approve/reject/defer)
-5. Agent resumes or stops based on decision
-6. Full decision audit trail with timestamp, decision, notes
-
----
-
-## Shadow Mode & Quality Gates
-
-Before promoting an agent to production, it runs in "shadow mode" — processing real data without taking action. The Shadow Comparator evaluates across 6 quality gates:
-
-1. Output Accuracy (threshold >= 0.90)
-2. Confidence Calibration (Pearson r >= 0.70)
-3. HITL Rate Comparison (tolerance +/-5pp)
-4. Hallucination Detection (zero tolerance)
-5. Tool Error Rate (< 2%)
-6. Latency Comparison (<= 1.3x reference P95)
-
-All 6 gates must pass for promotion.
-
-### Shadow Limit Enforcement
-Shadow agents have configurable limits: minimum sample count (default 100), accuracy floor (default 0.95), and maximum shadow duration. If an agent exceeds shadow_max_runs without passing all 6 gates, it is automatically paused and flagged for review. This prevents indefinite shadow execution and ensures agents are either promoted or retired.
-
----
-
-## MCP Registry
-
-AgenticOrg is listed in the official MCP Registry (mcpregistry.com) under the name \`agenticorg-mcp-server\`. Any MCP-compatible client — ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code — can discover and connect to AgenticOrg agents and governed tools. The MCP server exposes agent-management, A2A discovery, platform MCP discovery, and read-only seller OACP artifact tools via stdio transport. Direct connector tools are not exposed; agents invoke approved connector workflows through the AgenticOrg runtime.
-
----
-
-## Role-Based Access Control
-
-| Role | Sees | Can Write | HITL Queue |
-|------|------|-----------|------------|
-| CEO/Admin | All domains | Everything | All approvals |
-| CFO | Finance agents | Finance domain | Finance approvals |
-| CHRO | HR agents | HR domain | HR approvals |
-| CMO | Marketing agents | Marketing domain | Marketing approvals |
-| COO | Operations agents | Ops domain | Ops approvals |
-| Auditor | Audit log (all) | Nothing (read-only) | None |
-
----
-
-## Pricing
-
-${pricingSections}
-
----
-
-## Security
-
-- Encryption at rest (Google-managed, Cloud SQL)
-- Encryption in transit (HTTPS/TLS)
-- JWT authentication with RS256/HS256
-- bcrypt password hashing (12 rounds)
-- Token revocation (logout blacklist)
-- Rate limiting (10 auth failures = 15-min block, 5 signups/IP/hour)
-- PII masking (email, Aadhaar, PAN, phone auto-masked in audit logs)
-- Tenant isolation (Row-Level Security)
-- RBAC (6 roles, domain-scoped)
-- Automated daily database backups (7 retained)
-- Complete audit trail (7-year retention)
-- Security headers: HSTS, CSP, X-Frame-Options DENY
-
----
-
-## Technology Stack
-
-- Backend: Python 3.12, FastAPI, SQLAlchemy (async), asyncpg
-- Frontend: React 18, TypeScript, Vite, Tailwind CSS, recharts
-- Database: PostgreSQL 16 (Cloud SQL), Redis 7
-- LLM: Gemini 2.5 Flash (default), Claude, GPT-4o (configurable)
-- Infrastructure: GKE Autopilot (asia-south1), Cloud SQL, Artifact Registry
-- CI/CD: GitHub Actions (lint → test → build → deploy)
-- Monitoring: Prometheus, OpenTelemetry, structlog
-- License: Apache 2.0
-
----
-
-## Blog
-
-${blogs.map((b) => `- [${b.title}](${SITE}/blog/${b.slug})`).join("\n")}
-
-## Resources
-
-${resources.map((r) => `- [${r.title}](${SITE}/resources/${r.slug})`).join("\n")}
-
----
-
-## Developer SDKs & Integration
-
-### Python SDK (PyPI)
-- Install: \`pip install agenticorg\`
-- Usage: \`from agenticorg import AgenticOrg; client = AgenticOrg(api_key="ao_sk_...")\`
-- Features: Run agents, parse SOPs, A2A discovery, MCP tool calls, and the direct \`agenticorg\` CLI from the same install
-- Package: https://pypi.org/project/agenticorg/
-
-### TypeScript SDK (npm)
-- Install: \`npm i agenticorg-sdk\`
-- Usage: \`import { AgenticOrg } from "agenticorg-sdk"; const client = new AgenticOrg({ apiKey: "ao_sk_..." })\`
-- Features: Agents, SOPs, A2A, MCP — full TypeScript types
-- Package: https://www.npmjs.com/package/agenticorg-sdk
-
-### MCP Server (npm)
-- Install: \`npx agenticorg-mcp-server\`
-- Exposes tools such as list_agents, run_agent, get_agent_details, create_agent_from_sop, deploy_agent, list_connectors, list_mcp_tools, discover_agents_a2a, get_agent_card, and seller.* read-only OACP artifact tools
-- Direct connector tools are not exposed; use run_agent for governed agent workflows
-- Works with ChatGPT, Claude Desktop, Cursor, Windsurf, VS Code MCP clients, or any MCP client
-- Package: https://www.npmjs.com/package/agenticorg-mcp-server
-
-### Direct CLI
-- Install: \`pip install agenticorg\`
-- Launch agents: \`agenticorg agents run commerce_sales_agent --action buyer_discovery_preview --input '{"merchant_id":"merchant_demo"}'\`
-- Discover surfaces: \`agenticorg agents list\`, \`agenticorg a2a card\`, \`agenticorg mcp tools\`
-- Fits shell-capable assistants and developer environments: Claude Code, Codex, Gemini CLI, VS Code terminals/tasks, CI jobs, and scripts
-
-### API Keys
-- Generate from dashboard: Settings > API Keys
-- Format: \`ao_sk_{40 hex chars}\` — bcrypt-hashed, scoped, revocable
-- Scopes: agents:read, agents:run, connectors:read, mcp:read, mcp:call, a2a:read
-- Max 10 active keys per organization
-- Auth: \`Authorization: Bearer ao_sk_...\`
-
-### Integration Protocols
-- **A2A (Agent-to-Agent)**: Google's protocol for agent discovery. Agent Card at \`/api/v1/a2a/agent-card\`
-- **MCP (Model Context Protocol)**: Anthropic's protocol. Agent-management, discovery, and read-only seller OACP artifact tools exposed via stdio transport. Listed in official MCP Registry
-- **Grantex**: Delegated authorization with RS256 grant tokens for cross-tenant agent access
-
----
-
-## Contact
-
-- Website: ${SITE}
-- Book a demo: ${SITE} (click "Book a Demo")
-- Open Agentic Commerce Protocol: ${SITE}/open-agentic-commerce-protocol
-- Integration Workflow: ${SITE}/integration-workflow
-- GitHub: https://github.com/mishrasanjeev/agentic-org
-- Python SDK: https://pypi.org/project/agenticorg/
-- TypeScript SDK: https://www.npmjs.com/package/agenticorg-sdk
-- MCP Server: https://www.npmjs.com/package/agenticorg-mcp-server
-`;
+function check(path, expected) {
+  if (!existsSync(path) || normalized(text(path)) !== expected) {
+    throw new Error(
+      "Generated file is stale: " +
+        path +
+        ". Run node scripts/generate-llms.mjs --sync-public",
+    );
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MAIN
-// ═══════════════════════════════════════════════════════════════════════════
-const agents = parseAgents();
-const connectors = parseConnectors();
-const pricing = parsePricing();
-const blogs = parseBlogPosts();
-const resources = parseResources();
-const totalTools = connectors.reduce((s, c) => s + c.tool_count, 0);
+const args = new Set(process.argv.slice(2));
+const docs = generate();
 
-const llmsTxt = generateLlmsTxt(agents, connectors, pricing, blogs, resources);
-const llmsFullTxt = generateLlmsFullTxt(
-  agents,
-  connectors,
-  pricing,
-  blogs,
-  resources,
-);
-
-// Codex 2026-04-22 audit: writing to public/ dirtied tracked files on
-// every build. Write to dist/ so the output is a real build artifact;
-// public/ keeps a static placeholder for dev.
-const LLMS_OUT_DIR = join(UI_ROOT, "dist");
-if (!existsSync(LLMS_OUT_DIR)) {
-  mkdirSync(LLMS_OUT_DIR, { recursive: true });
+if (args.has("--check")) {
+  check(join(PUBLIC_DIR, "llms.txt"), docs.shortDoc);
+  check(join(PUBLIC_DIR, "llms-full.txt"), docs.fullDoc);
+  process.stdout.write("llms.txt and llms-full.txt are current\n");
+} else {
+  write(DIST_DIR, docs);
+  if (args.has("--sync-public")) write(PUBLIC_DIR, docs);
+  process.stdout.write(
+    "Generated llms.txt and llms-full.txt" +
+      (args.has("--sync-public") ? " in dist and public\n" : " in dist\n"),
+  );
 }
-writeFileSync(join(LLMS_OUT_DIR, "llms.txt"), llmsTxt, "utf-8");
-writeFileSync(join(LLMS_OUT_DIR, "llms-full.txt"), llmsFullTxt, "utf-8");
-
-console.log(
-  `llms.txt + llms-full.txt generated — ${agents.length} agents, ${connectors.length} connectors (${totalTools} tools), ${pricing.length} tiers, ${blogs.length} blogs, ${resources.length} resources`,
-);

@@ -1,6 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -124,12 +123,6 @@ export default function Signup() {
 
   const signupForm = (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Helmet>
-        <title>Create Account — AgenticOrg</title>
-        <meta name="description" content="Create your AgenticOrg account to manage AI agents, workflows, and approvals." />
-        <meta name="robots" content="noindex, nofollow" />
-        <link rel="canonical" href="https://agenticorg.ai/signup" />
-      </Helmet>
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Branding */}

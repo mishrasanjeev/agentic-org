@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 import { CONTENT_PAGES, CLUSTERS } from "./contentData";
 
 export default function Resources() {
@@ -12,11 +11,6 @@ export default function Resources() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Resources — AgenticOrg | AI Virtual Employees for Enterprise</title>
-        <meta name="description" content="Guides, tutorials, and deep dives on enterprise AI agents, finance automation, HR automation, AI governance, and India-specific compliance." />
-        <link rel="canonical" href="https://agenticorg.ai/resources" />
-      </Helmet>
 
       <header className="bg-slate-900 py-16">
         <div className="max-w-4xl mx-auto px-4 text-center">
@@ -25,7 +19,7 @@ export default function Resources() {
             AgenticOrg
           </Link>
           <h1 className="text-4xl font-extrabold text-white">Resources</h1>
-          <p className="mt-4 text-lg text-slate-400">{CONTENT_PAGES.length} guides on AI agents, automation, and governance</p>
+          <p className="mt-4 text-lg text-slate-400">{CONTENT_PAGES.length} evidence-conscious guides on agent workflows, automation boundaries, and governance</p>
         </div>
       </header>
 
@@ -70,9 +64,9 @@ export default function Resources() {
 
         {/* Bottom CTA */}
         <div className="mt-12 text-center">
-          <h2 className="text-xl font-bold text-slate-900 mb-4">Ready to deploy AI virtual employees?</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-4">Ready to evaluate a governed agent workflow?</h2>
           <div className="flex justify-center gap-4">
-            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">Start Free</Link>
+            <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold">Create an Account</Link>
             <Link to="/playground" className="border text-slate-700 px-6 py-2.5 rounded-lg text-sm font-semibold">Try Playground</Link>
           </div>
         </div>

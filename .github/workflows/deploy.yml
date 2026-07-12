@@ -744,7 +744,7 @@ jobs:
           echo "Production health check failed after 20 attempts"
           exit 1
 
-  submit-indexing:
+  notify-indexnow:
     needs: [classify-changes, deploy-production]
     if: |
       always() &&
@@ -760,9 +760,7 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: "20" }
 
-      - name: Write service account key
-        run: mkdir -p ui/keys && echo "${{ secrets.GSC_INDEXING_KEY }}" | base64 -d > ui/keys/gsc-indexing.json
-        shell: bash
-
-      - name: Submit URLs to Google Indexing API + IndexNow
+      # Google consumes the deployed sitemap through robots.txt/Search Console.
+      # Its Indexing API is not valid for ordinary marketing or documentation pages.
+      - name: Notify IndexNow participants
         run: node ui/scripts/submit-indexing.mjs

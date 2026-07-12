@@ -1,6 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 export default function InviteAccept() {
   // SEC-002 (PR-F): after acceptance, we use a full-page navigation
@@ -83,9 +82,6 @@ export default function InviteAccept() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Helmet>
-        <title>Accept Invite — AgenticOrg</title>
-      </Helmet>
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           {/* Branding */}

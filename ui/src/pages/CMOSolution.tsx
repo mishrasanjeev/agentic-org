@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -53,55 +52,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "\u20B93,200", label: "Average customer acquisition cost bleeding your budget", color: "text-red-500" },
-  { value: "34%", label: "Email open rate ceiling that no amount of A/B testing can break", color: "text-orange-500" },
-  { value: "40%", label: "Of marketing budget wasted on underperforming channels", color: "text-red-500" },
+  { value: "Fragmented", label: "Spend and performance data across channels", color: "text-red-500" },
+  { value: "Manual", label: "Content review, testing, and publishing handoffs", color: "text-orange-500" },
+  { value: "Delayed", label: "Attribution and campaign exception follow-up", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Campaign Management",
-    description: "AI-optimized campaigns that deliver 3.2x ROAS. Auto-allocate budget across channels, A/B test creatives at scale, and pause underperformers in real time.",
+    description: "Generate campaign plans, budget recommendations, and test variants from configured channel data. Publishing, pausing, and budget changes require channel credentials and human approval.",
     icon: "M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z",
     gradient: "from-pink-500 to-rose-600",
   },
   {
     title: "Content Factory",
-    description: "Generate blog posts, social media content, ad copy, and landing pages. AI matches brand voice, optimizes for SEO, and adapts content for each channel automatically.",
+    description: "Draft blog posts, social content, ad copy, and landing-page variants against configured brand guidance. Teams review and approve content before publishing.",
     icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
     gradient: "from-blue-500 to-cyan-600",
   },
   {
-    title: "SEO Autopilot",
-    description: "Automated keyword research, content gap analysis, and on-page optimization. Track rankings, generate sitemaps, and build backlink strategies — all on autopilot.",
+    title: "SEO Planning & Review",
+    description: "Support keyword research, content-gap analysis, draft metadata, and sitemap review. Recommendations require editorial validation and do not guarantee rankings.",
     icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "Email Marketing",
-    description: "AI-crafted drip sequences with dynamic personalization. Smart send-time optimization, subject line testing, and automated list hygiene push open rates past 34%.",
+    description: "Draft sequences and personalization variants, recommend test plans, and surface list-quality issues. Sending depends on consent, provider configuration, scopes, and approval policy.",
     icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
     gradient: "from-orange-500 to-red-600",
   },
   {
     title: "Account-Based Marketing",
-    description: "AI identifies high-value accounts, personalizes outreach, and orchestrates multi-touch campaigns across email, ads, and social. Track account engagement scores in real time.",
+    description: "Prioritize candidate accounts, draft outreach variants, and coordinate review queues across configured channels. Outreach activation remains human-approved and provider-dependent.",
     icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Brand Monitoring",
-    description: "Track brand mentions, sentiment, and share of voice across social media, news, and review sites. Get instant alerts on negative sentiment and competitive moves.",
+    description: "Summarize mentions, sentiment signals, and share-of-voice inputs from configured sources. Alert freshness and coverage depend on provider APIs and source availability.",
     icon: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect Channels", description: "Link Google Ads, Meta, HubSpot, Mailchimp, and analytics. One-click OAuth setup takes under 10 minutes." },
-  { step: "2", title: "Set Goals", description: "Define target CAC, ROAS, and pipeline goals. AI creates a budget allocation plan optimized for your objectives." },
-  { step: "3", title: "Launch & Optimize", description: "AI agents create campaigns, test variations, and reallocate budget to winners. Every decision is explained and auditable." },
-  { step: "4", title: "Scale Revenue", description: "Expand to new channels and audiences. Agents identify lookalike segments and scale what works automatically." },
+  { step: "1", title: "Connect Channels", description: "Configure supported ad, CRM, email, and analytics sources. Availability depends on credentials, scopes, tenant plan, and provider APIs." },
+  { step: "2", title: "Set Goals & Guardrails", description: "Define objectives, budget boundaries, consent rules, brand guidance, and the approvals required for each channel action." },
+  { step: "3", title: "Draft, Review & Test", description: "Generate campaign drafts and test recommendations with source context. Authorized marketers approve publishing and budget changes." },
+  { step: "4", title: "Expand Deliberately", description: "Add channels and audiences only after reviewing evidence, provider requirements, policy boundaries, and measurement quality." },
 ];
 
 const TRUST_LOGOS = [
@@ -114,10 +113,10 @@ const TRUST_LOGOS = [
 ];
 
 const KPI_CARDS = [
-  { label: "CAC", value: "\u20B91,840", change: "-42% vs last Q", positive: true },
-  { label: "MQLs / SQLs", value: "2,140 / 648", change: "+38% pipeline", positive: true },
-  { label: "ROAS", value: "3.2x", change: "+1.4x improvement", positive: true },
-  { label: "Pipeline Value", value: "\u20B94.2 Cr", change: "+67% QoQ", positive: true },
+  { label: "Spend Pacing", value: "Monitored", change: "Source-linked", positive: true },
+  { label: "Lead Funnel", value: "Attributed", change: "Model-dependent", positive: true },
+  { label: "Campaign Tests", value: "In review", change: "Approval required", positive: true },
+  { label: "Pipeline View", value: "Source-linked", change: "CRM freshness", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +176,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your marketing automation trial.</p>
+            <p className="text-slate-600">Your request was saved. Our team will follow up using the contact details you provided.</p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-pink-500 to-rose-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-pink-600 hover:to-rose-700 transition-all">
               Close
             </button>
@@ -230,11 +229,6 @@ export default function CMOSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual Marketing Team for CMOs | AgenticOrg</title>
-        <meta name="description" content="Cut CAC by 42%, achieve 3.2x ROAS, and scale content across channels. AI agents for campaign management, SEO, email marketing, ABM, and brand monitoring." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/cmo" />
-      </Helmet>
 
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
@@ -251,7 +245,7 @@ export default function CMOSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-pink-500 to-rose-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-pink-600 hover:to-rose-700 transition-all shadow-lg shadow-pink-500/25">
-              Start Free Trial
+              Request a Demo
             </button>
           </div>
         </div>
@@ -281,7 +275,7 @@ export default function CMOSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Cut CAC by 42%, achieve 3.2x ROAS, and scale content across every channel. AI agents that run campaigns, optimize spend, and generate pipeline 24/7.
+              Coordinate campaigns, content, attribution, and channel analysis through governed AI workflows with explicit publishing and budget approvals.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -289,7 +283,7 @@ export default function CMOSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-pink-500 to-rose-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-pink-600 hover:to-rose-700 transition-all shadow-lg shadow-pink-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CMO%20Solution%20Demo"
@@ -299,7 +293,7 @@ export default function CMOSolution() {
               </a>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">Deployment scope, channel availability, provider access, consent controls, and approvals are confirmed during discovery.</p>
           </div>
         </div>
       </section>
@@ -310,10 +304,10 @@ export default function CMOSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your marketing budget is leaking money
+                Common marketing operations friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for Indian B2B and D2C companies spending INR 20L+/month on marketing.
+                Illustrative workflow states; actual priorities depend on channel mix, source quality, attribution model, and operating policy.
               </p>
             </div>
           </FadeIn>
@@ -336,9 +330,9 @@ export default function CMOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Your Complete Virtual Marketing Team</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed AI Workflows for Marketing</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered agents that cover every aspect of modern marketing, from content to conversion.
+                Configure scoped workflows for campaigns, content drafting, SEO planning, email review, account prioritization, and brand monitoring.
               </p>
             </div>
           </FadeIn>
@@ -366,9 +360,9 @@ export default function CMOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Real-Time CMO Dashboard</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Operational CMO Dashboard</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Every marketing metric that drives revenue, updated in real time across all channels.
+                Illustrative operational states. Actual metrics and freshness depend on connected channels, consented data, and attribution configuration.
               </p>
             </div>
           </FadeIn>
@@ -395,23 +389,23 @@ export default function CMOSolution() {
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center text-white font-bold text-sm">CH</div>
                 <div>
-                  <p className="font-semibold text-slate-900">ROAS by Channel</p>
-                  <p className="text-xs text-slate-500">Performance across active channels &middot; Last 30 days</p>
+                  <p className="font-semibold text-slate-900">Illustrative Channel Readiness</p>
+                  <p className="text-xs text-slate-500">Sample connection states &middot; not measured outcomes</p>
                 </div>
               </div>
               <div className="space-y-3">
                 {[
-                  { channel: "Google Ads", roas: "4.1x", width: "82%", color: "from-blue-500 to-cyan-500" },
-                  { channel: "Meta Ads", roas: "3.6x", width: "72%", color: "from-cyan-500 to-blue-500" },
-                  { channel: "Email", roas: "8.2x", width: "100%", color: "from-emerald-500 to-teal-500" },
-                  { channel: "SEO", roas: "5.4x", width: "66%", color: "from-amber-500 to-orange-500" },
+                  { channel: "Google Ads", status: "Configured", width: "82%", color: "from-blue-500 to-cyan-500" },
+                  { channel: "Meta Ads", status: "Pending", width: "72%", color: "from-cyan-500 to-blue-500" },
+                  { channel: "Email", status: "Connected", width: "100%", color: "from-emerald-500 to-teal-500" },
+                  { channel: "SEO", status: "Measured", width: "66%", color: "from-amber-500 to-orange-500" },
                 ].map((ch) => (
                   <div key={ch.channel} className="flex items-center gap-4">
                     <span className="text-sm text-slate-600 w-24 flex-shrink-0">{ch.channel}</span>
                     <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
                       <div className={`h-full bg-gradient-to-r ${ch.color} rounded-full transition-all duration-500`} style={{ width: ch.width }} />
                     </div>
-                    <span className="text-sm font-semibold text-slate-900 w-12 text-right">{ch.roas}</span>
+                    <span className="text-sm font-semibold text-slate-900 w-20 text-right">{ch.status}</span>
                   </div>
                 ))}
               </div>
@@ -427,11 +421,11 @@ export default function CMOSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-pink-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full marketing automation.
+                Connect channels, configure guardrails, validate drafts, and enable selected actions with explicit approval.
               </p>
             </div>
           </FadeIn>
@@ -463,24 +457,24 @@ export default function CMOSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-pink-50 via-white to-rose-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-pink-100 text-pink-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                CMO Suite &mdash; Enterprise Ready
+                Configurable CMO Workflow Suite
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
                 Transform Your Marketing Operations
               </h2>
               <p className="text-lg text-slate-600 mb-6 max-w-xl mx-auto">
-                Get your virtual marketing team running in under a week. Full campaign, content, and analytics automation.
+                Select the marketing workflows that fit your controls. Availability depends on plan, channel connectors, provider access, consent, and approval policy.
               </p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "3.2x ROAS improvement",
-                  "42% lower CAC",
-                  "AI content factory",
-                  "Multi-channel campaigns",
-                  "ABM at scale",
-                  "SEO autopilot",
-                  "Brand monitoring",
-                  "14-day free trial",
+                  "Campaign planning and review",
+                  "Spend pacing recommendations",
+                  "Content drafts with brand guidance",
+                  "Multi-channel review queues",
+                  "Account prioritization support",
+                  "SEO research and draft metadata",
+                  "Provider-dependent brand monitoring",
+                  "Human publishing and budget approval",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -493,7 +487,7 @@ export default function CMOSolution() {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex items-center justify-center bg-gradient-to-r from-pink-500 to-rose-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-pink-600 hover:to-rose-700 transition-all shadow-lg shadow-pink-500/25"
                 >
-                  Start Free Trial
+                  Request a Demo
                 </button>
                 <a
                   href="mailto:sanjeev@agenticorg.ai?subject=CMO%20Solution%20Demo"
@@ -502,7 +496,7 @@ export default function CMOSolution() {
                   Book a Demo
                 </a>
               </div>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">Commercial terms and enabled capabilities are confirmed for the selected plan and deployment scope.</p>
             </div>
           </FadeIn>
         </div>
@@ -518,9 +512,9 @@ export default function CMOSolution() {
                   <div className="inline-flex items-center gap-2 bg-pink-100 text-pink-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
                     Built for Growth-Focused Marketing Teams
                   </div>
-                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Trusted Integrations</h2>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Connector Availability</h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with the world&apos;s leading marketing platforms and ad networks.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, and platform approval.
                   </p>
                 </div>
 
@@ -549,17 +543,17 @@ export default function CMOSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop wasting budget on underperforming campaigns
+              Bring marketing operations into governed workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join CMOs who have cut CAC by 42% and scaled pipeline value by 67% with AI-powered marketing agents.
+              Review source-linked recommendations while marketers retain ownership of publishing, audience selection, consent, and budget decisions.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-pink-500 to-rose-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-pink-600 hover:to-rose-700 transition-all shadow-lg shadow-pink-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CMO%20Solution%20Demo"

@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -56,55 +55,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "72 hours", label: "Average month-end close cycle", color: "text-red-500" },
-  { value: "\u20B912L/year", label: "Lost to missed early-payment discounts", color: "text-orange-500" },
-  { value: "5 days", label: "To reconcile bank statements manually", color: "text-red-500" },
+  { value: "Fragmented", label: "Client records and close tasks across systems", color: "text-red-500" },
+  { value: "Manual", label: "Tax workpaper preparation and review queues", color: "text-orange-500" },
+  { value: "Exception-heavy", label: "Bank and ledger reconciliation follow-up", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Multi-Client Management",
-    description: "One login, 7+ client companies, instant switching. Manage all your clients from a single dashboard with company-level isolation and role-based access.",
+    description: "Manage configured client companies from one dashboard with company-level isolation and role-based access. Client capacity depends on the selected plan and CA Pack limits.",
     icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
     gradient: "from-blue-500 to-cyan-600",
   },
   {
     title: "GST Compliance",
-    description: "Auto GSTR-1/3B/9 filing with DSC, 2A reconciliation. GSTN portal integration with Adaequare GSP for seamless filing and real-time ITC matching.",
+    description: "Prepare GSTR workpapers, 2A reconciliation, deadline alerts, and filing packets. GSTN, GSP, DSC, and submission functions require configured providers, credentials, scopes, and authorized approval.",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
     gradient: "from-orange-500 to-red-600",
   },
   {
     title: "TDS Automation",
-    description: "Form 26Q/24Q auto-generation, Form 16A issuance, and 26AS reconciliation. Ensure timely TDS compliance with zero manual effort.",
+    description: "Prepare draft Form 26Q and 24Q materials, Form 16A inputs, and 26AS reconciliation outputs. An authorized professional reviews and submits statutory filings.",
     icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
     gradient: "from-blue-600 to-emerald-500",
   },
   {
     title: "Bank Reconciliation",
-    description: "Auto-match with Account Aggregator integration. Flag stale items, match 99.7% transactions automatically, escalate breaks to partners.",
+    description: "Propose matches from configured bank and ledger sources, flag stale or duplicate items, and route unresolved exceptions to partners. Match quality depends on source data.",
     icon: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "Month-End Close",
-    description: "7-step workflow with CFO sign-off. Reduce close cycle from 5 days to 4 hours with automated checklists, reconciliation, and approval chains.",
+    description: "Coordinate a configurable close checklist across reconciliation, adjustments, review, sign-off, and reporting. Cycle time depends on source readiness and firm policy.",
     icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Audit Trail",
-    description: "SOC2 compliant, HMAC-signed, partner approval tracking. Every action logged with immutable audit entries for regulatory compliance.",
+    description: "HMAC-signed audit entries and partner approval tracking support evidence collection and review. These controls do not by themselves confer SOC 2 or regulatory compliance.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Onboard Client", description: "Enter GSTIN, PAN, TAN, bank details. System auto-validates and creates the company profile." },
-  { step: "2", title: "Connect Systems", description: "Link Tally, bank accounts (via AA), GSTN, and EPFO. One-click OAuth or bridge setup." },
-  { step: "3", title: "Configure Agents", description: "Assign GST, TDS, Recon, and Close agents. Set thresholds, approval chains, and auto-file preferences." },
-  { step: "4", title: "Go Live", description: "Agents start working in shadow mode first. Review outputs, then promote to active. Full automation in under a week." },
+  { step: "1", title: "Onboard Client", description: "Enter client identifiers and source references, validate available fields, and create a draft company profile for authorized review." },
+  { step: "2", title: "Connect Systems", description: "Configure supported Tally, bank, Account Aggregator, GSTN, and statutory sources. Availability depends on credentials, scopes, tenant plan, and provider APIs." },
+  { step: "3", title: "Configure Guardrails", description: "Select GST, TDS, reconciliation, and close workflows, then set thresholds and approval chains. Filing actions remain human-approved." },
+  { step: "4", title: "Validate & Enable", description: "Run in shadow mode, evaluate outputs, and enable selected actions only within approved scopes and provider capabilities." },
 ];
 
 const TRUST_LOGOS = [
@@ -178,8 +177,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
             <p className="text-slate-600">
               {confirmationSent
-                ? "We sent a confirmation email and will contact you within 24 hours to set up your CA firm trial."
-                : "Your CA firm trial request was saved. We will contact you within 24 hours to set it up."}
+                ? "We sent a confirmation email for your CA Pack trial request. Our team will follow up using the details you provided."
+                : "Your CA Pack trial request was saved. Our team will follow up using the details you provided."}
             </p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all">
               Close
@@ -187,8 +186,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold text-slate-900 mb-1">Start Your Free Trial</h3>
-            <p className="text-sm text-slate-500 mb-6">Get CA Pack access for your firm. No credit card required.</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-1">Request a CA Pack Trial</h3>
+            <p className="text-sm text-slate-500 mb-6">Trial access is available for eligible accounts and remains subject to plan limits and provider configuration.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="ca-name" className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
@@ -214,7 +213,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
-                {submitting ? "Submitting..." : "Start Free Trial"}
+                {submitting ? "Submitting..." : "Request Trial"}
               </button>
             </form>
           </>
@@ -232,11 +231,6 @@ export default function CAFirmsSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual Employees for Chartered Accountant Firms | AgenticOrg</title>
-        <meta name="description" content="Manage 20+ clients from one dashboard. Automate GST filing, TDS compliance, bank reconciliation, and month-end close. Built for Indian CA firms." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/ca-firms" />
-      </Helmet>
 
       {/* ============================================================ */}
       {/* NAVBAR                                                        */}
@@ -255,7 +249,7 @@ export default function CAFirmsSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
-              Start Free Trial
+              Request CA Pack Trial
             </button>
           </div>
         </div>
@@ -287,7 +281,7 @@ export default function CAFirmsSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Manage 20+ clients from one dashboard. Automate GST filing, TDS compliance, bank reconciliation, and month-end close.
+              Coordinate multi-client GST and TDS workpapers, reconciliation, close checklists, approvals, and audit evidence from one governed workspace.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -295,7 +289,7 @@ export default function CAFirmsSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Start Free Trial
+                Request CA Pack Trial
               </button>
               <Link
                 to="/login?demo=true"
@@ -305,7 +299,7 @@ export default function CAFirmsSolution() {
               </Link>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">14-day CA Pack trial for eligible accounts &middot; plan limits, connectors, provider access, and filing approvals apply</p>
           </div>
         </div>
       </section>
@@ -318,10 +312,10 @@ export default function CAFirmsSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your firm is losing time and money to manual compliance work
+                Common multi-client compliance workflow friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for a mid-size CA practice with 10-20 clients.
+                Illustrative workflow states; actual priorities depend on client count, source quality, filing calendar, and firm controls.
               </p>
             </div>
           </FadeIn>
@@ -346,9 +340,9 @@ export default function CAFirmsSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Everything Your CA Firm Needs</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed Workflows for CA Firms</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered modules that cover the complete compliance lifecycle for every client.
+                Configure scoped modules for client management, GST and TDS workpapers, reconciliation, close coordination, approvals, and audit evidence.
               </p>
             </div>
           </FadeIn>
@@ -380,11 +374,11 @@ export default function CAFirmsSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full automation.
+                Onboard clients, connect approved sources, configure guardrails, and validate selected workflows before enabling actions.
               </p>
             </div>
           </FadeIn>
@@ -428,23 +422,23 @@ export default function CAFirmsSolution() {
               </h2>
               <p className="text-sm text-slate-500 mb-2">Separate paid add-on for your AgenticOrg subscription</p>
               <p className="text-lg text-slate-600 mb-2 max-w-xl mx-auto">
-                Includes all 6 modules: Multi-Client Management, GST Compliance, TDS Automation, Bank Reconciliation, Month-End Close, and Audit Trail.
+                Includes six CA Pack workflow areas. Enabled functions depend on plan limits, configured sources, provider capabilities, credentials, scopes, and approvals.
               </p>
-              <p className="text-sm font-medium text-emerald-600 mb-4">14-day free trial included</p>
+              <p className="text-sm font-medium text-emerald-600 mb-4">14-day CA Pack trial available for eligible accounts</p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "Unlimited agent runs",
-                  "Up to 50 clients",
-                  "Tally + GSTN integration",
-                  "Account Aggregator",
-                  "DSC digital signing",
-                  "SOC2 audit trail",
-                  "Priority email support",
-                  "14-day free trial",
-                  "Partner self-approval",
-                  "Bulk filing approval",
-                  "Compliance calendar with alerts",
-                  "GSTN credential vault",
+                  "Agent runs follow plan limits",
+                  "Client capacity follows plan limits",
+                  "Configurable Tally and GSTN connectors",
+                  "Account Aggregator, where available",
+                  "DSC-assisted filing with approval",
+                  "Approval and audit evidence",
+                  "Support level follows plan",
+                  "14-day trial for eligible accounts",
+                  "Partner approval queues",
+                  "Bulk filing review queues",
+                  "Compliance deadline alerts",
+                  "Credential and secret handling",
                   "Partner dashboard",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
@@ -457,9 +451,9 @@ export default function CAFirmsSolution() {
                 onClick={() => setShowDemo(true)}
                 className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Start Free Trial
+                Request CA Pack Trial
               </button>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">INR 4,999/month per client is a separate add-on. Trial, usage, connector, provider, and filing capabilities depend on eligibility and approved configuration.</p>
             </div>
           </FadeIn>
         </div>
@@ -478,10 +472,10 @@ export default function CAFirmsSolution() {
                     Built for Indian CA Firms
                   </div>
                   <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">
-                    Trusted Integrations
+                    Connector Availability
                   </h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with India&apos;s most critical government and business platforms. Production-tested and compliance-ready.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, portal access, and provider approval.
                   </p>
                 </div>
 
@@ -512,23 +506,23 @@ export default function CAFirmsSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop doing compliance manually. Let AI agents handle it.
+              Bring client compliance work into governed workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join CA firms that have cut month-end close from 5 days to 4 hours.
+              Review source-linked workpapers and exceptions while partners retain ownership of filings, signatures, approvals, and professional judgment.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Start Free Trial
+                Request CA Pack Trial
               </button>
               <Link
-                to="/signup"
+                to="/pricing"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
               >
-                Sign Up Free
+                View Plans
               </Link>
             </div>
           </FadeIn>

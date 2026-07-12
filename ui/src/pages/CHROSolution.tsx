@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -53,55 +52,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "500+", label: "Resumes per open position to screen manually", color: "text-red-500" },
-  { value: "5 days", label: "Average time to fully onboard a new hire", color: "text-orange-500" },
-  { value: "3 errors", label: "Payroll mistakes per month causing employee distrust", color: "text-red-500" },
+  { value: "High volume", label: "Candidate material requiring consistent review", color: "text-red-500" },
+  { value: "Multi-step", label: "Onboarding tasks across teams and systems", color: "text-orange-500" },
+  { value: "Exception-prone", label: "Payroll and statutory review queues", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Recruitment Engine",
-    description: "Screen 500 resumes per hour with AI scoring. Auto-shortlist candidates, schedule interviews, and generate offer letters. Reduce time-to-hire from 45 to 12 days.",
+    description: "Summarize and score candidates against configured criteria, surface shortlist recommendations, and draft interview or offer materials. Hiring decisions and offers remain human-owned.",
     icon: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z",
     gradient: "from-blue-500 to-teal-600",
   },
   {
-    title: "Day-1 Onboarding",
-    description: "Automated onboarding workflow: document collection, IT provisioning, compliance training, buddy assignment, and welcome kit — all completed before the employee walks in.",
+    title: "Onboarding Coordination",
+    description: "Coordinate document collection, provisioning requests, training, buddy assignment, and welcome tasks. Completion depends on connected systems, responsible teams, and approvals.",
     icon: "M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z",
     gradient: "from-blue-500 to-cyan-600",
   },
   {
-    title: "Zero-Error Payroll",
-    description: "AI validates every payslip before processing. Auto-calculate PF, ESI, PT, TDS. Handle reimbursements, bonuses, and arrears with zero manual errors.",
+    title: "Payroll Validation",
+    description: "Review draft payslips and surface exceptions across PF, ESI, PT, TDS, reimbursements, bonuses, and arrears. Final calculation, approval, and disbursement remain with authorized payroll systems and staff.",
     icon: "M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "Performance Management",
-    description: "Continuous feedback loops with AI-generated insights. OKR tracking, 360-degree reviews, bell curve analytics, and automatic PIP identification and tracking.",
+    description: "Summarize feedback, track configured OKRs and review cycles, and surface patterns for manager review. Performance ratings and improvement-plan decisions remain human-owned.",
     icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
     gradient: "from-orange-500 to-red-600",
   },
   {
     title: "Learning & Development",
-    description: "AI-curated learning paths based on role, skill gaps, and career goals. Track completion, certifications, and ROI of training programs across the organization.",
+    description: "Suggest learning paths from configured roles, skills, and goals, then track completion and certifications. Managers review recommendations and training decisions.",
     icon: "M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Statutory Compliance",
-    description: "Auto-file EPFO, ESI, and Professional Tax returns. Track compliance deadlines, generate Form 12BB, and maintain audit-ready records for all statutory obligations.",
+    description: "Prepare statutory workpapers, deadline alerts, and draft EPFO, ESI, Professional Tax, and Form 12BB materials. Authorized staff review and file through configured portals or providers.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect HR Systems", description: "Link Darwinbox, Keka, or your existing HRMS. Import employee data, org structure, and policies in minutes." },
-  { step: "2", title: "Configure Agents", description: "Set up recruitment, payroll, and compliance agents. Define approval workflows, escalation rules, and automation preferences." },
-  { step: "3", title: "Shadow & Validate", description: "Agents run alongside your HR team for 1 week. Every action is reviewed and validated before going live." },
-  { step: "4", title: "Scale HR Ops", description: "Promote to active. Agents handle recruitment, onboarding, payroll, and compliance autonomously across all locations." },
+  { step: "1", title: "Connect HR Systems", description: "Configure supported HRMS, recruiting, payroll, and statutory sources. Availability depends on credentials, scopes, tenant plan, and provider APIs." },
+  { step: "2", title: "Configure Guardrails", description: "Select recruitment, onboarding, payroll, and compliance workflows, then define scopes, review queues, escalation rules, and approvals." },
+  { step: "3", title: "Shadow & Validate", description: "Run selected workflows alongside your HR team, evaluate outputs, and review exceptions before enabling any action." },
+  { step: "4", title: "Enable Selected Actions", description: "Enable only validated actions within configured scopes. Hiring, payroll, employee, and filing decisions retain authorized human approval." },
 ];
 
 const TRUST_LOGOS = [
@@ -114,10 +113,10 @@ const TRUST_LOGOS = [
 ];
 
 const KPI_CARDS = [
-  { label: "Headcount", value: "1,247", change: "+32 this quarter", positive: true },
-  { label: "Attrition Rate", value: "8.2%", change: "-3.1%", positive: true },
-  { label: "eNPS Score", value: "72", change: "+14 pts", positive: true },
-  { label: "Time-to-Hire", value: "12 days", change: "-33 days", positive: true },
+  { label: "Candidate Queue", value: "Prioritized", change: "Human review", positive: true },
+  { label: "Onboarding", value: "In progress", change: "Checklist status", positive: true },
+  { label: "Payroll", value: "Exceptions", change: "Approval required", positive: true },
+  { label: "Compliance", value: "Due dates", change: "Source-dependent", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +176,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your HR automation trial.</p>
+            <p className="text-slate-600">Your request was saved. Our team will follow up using the contact details you provided.</p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-teal-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-teal-700 transition-all">
               Close
             </button>
@@ -230,11 +229,6 @@ export default function CHROSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual HR Team for CHROs | AgenticOrg</title>
-        <meta name="description" content="Screen 500 resumes per hour, onboard in 1 day, zero payroll errors. AI agents for recruitment, onboarding, payroll, performance, L&D, and compliance." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/chro" />
-      </Helmet>
 
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
@@ -251,7 +245,7 @@ export default function CHROSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-teal-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25">
-              Start Free Trial
+              Request a Demo
             </button>
           </div>
         </div>
@@ -281,7 +275,7 @@ export default function CHROSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Screen 500 resumes per hour, onboard employees on day 1, and run payroll with zero errors. AI agents that handle every HR function at scale.
+              Coordinate recruiting, onboarding, payroll review, learning, and statutory work through governed AI workflows while HR retains decision authority.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -289,7 +283,7 @@ export default function CHROSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CHRO%20Solution%20Demo"
@@ -299,7 +293,7 @@ export default function CHROSolution() {
               </a>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">Deployment scope, connector availability, provider access, data policy, and approval requirements are confirmed during discovery.</p>
           </div>
         </div>
       </section>
@@ -310,10 +304,10 @@ export default function CHROSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your HR team is drowning in admin work
+                Common HR operations friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for a growing Indian company with 500-5,000 employees.
+                Illustrative workflow states; actual priorities depend on workforce processes, source systems, policy, and review requirements.
               </p>
             </div>
           </FadeIn>
@@ -336,9 +330,9 @@ export default function CHROSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Your Complete Virtual HR Team</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed AI Workflows for HR</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered agents covering the full employee lifecycle, from hiring to compliance.
+                Configure scoped workflows for candidate review, onboarding coordination, payroll validation, performance support, learning, and statutory workpapers.
               </p>
             </div>
           </FadeIn>
@@ -366,9 +360,9 @@ export default function CHROSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Real-Time CHRO Dashboard</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Operational CHRO Dashboard</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Every people metric that matters, updated in real time across all locations and departments.
+                Illustrative operational states. Actual metrics and freshness depend on connected HR sources, permissions, and refresh configuration.
               </p>
             </div>
           </FadeIn>
@@ -399,11 +393,11 @@ export default function CHROSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-violet-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full HR automation.
+                Connect sources, configure guardrails, validate in shadow mode, and enable selected actions with human approval.
               </p>
             </div>
           </FadeIn>
@@ -435,24 +429,24 @@ export default function CHROSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-cyan-50 via-white to-teal-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                CHRO Suite &mdash; Enterprise Ready
+                Configurable CHRO Workflow Suite
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
                 Transform Your HR Operations
               </h2>
               <p className="text-lg text-slate-600 mb-6 max-w-xl mx-auto">
-                Get your virtual HR team running in under a week. Full recruitment, payroll, and compliance automation.
+                Select the HR workflows that fit your controls. Availability depends on plan, source connectors, provider access, data policy, and approvals.
               </p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "500 resumes/hr screening",
-                  "Day-1 ready onboarding",
-                  "Zero-error payroll",
-                  "EPFO/ESI/PT auto-filing",
-                  "360-degree performance",
-                  "AI learning paths",
-                  "SOC2 audit trail",
-                  "14-day free trial",
+                  "Candidate summaries and scoring",
+                  "Onboarding task coordination",
+                  "Payroll exception review",
+                  "Statutory filing workpapers",
+                  "Feedback and review support",
+                  "Learning path suggestions",
+                  "Approval and audit evidence",
+                  "Human-owned employment decisions",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -465,7 +459,7 @@ export default function CHROSolution() {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
                 >
-                  Start Free Trial
+                  Request a Demo
                 </button>
                 <a
                   href="mailto:sanjeev@agenticorg.ai?subject=CHRO%20Solution%20Demo"
@@ -474,7 +468,7 @@ export default function CHROSolution() {
                   Book a Demo
                 </a>
               </div>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">Commercial terms and enabled capabilities are confirmed for the selected plan and deployment scope.</p>
             </div>
           </FadeIn>
         </div>
@@ -490,9 +484,9 @@ export default function CHROSolution() {
                   <div className="inline-flex items-center gap-2 bg-violet-100 text-violet-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
                     Built for Indian HR Teams
                   </div>
-                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Trusted Integrations</h2>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Connector Availability</h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with India&apos;s leading HR platforms and government compliance portals.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, and portal access.
                   </p>
                 </div>
 
@@ -521,17 +515,17 @@ export default function CHROSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop losing top talent to slow HR processes
+              Bring HR operations into governed workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join CHROs who have cut time-to-hire from 45 to 12 days and achieved zero payroll errors.
+              Review source-linked recommendations while HR retains ownership of hiring, employee, payroll, performance, and statutory decisions.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-teal-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-teal-700 transition-all shadow-lg shadow-cyan-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=CHRO%20Solution%20Demo"

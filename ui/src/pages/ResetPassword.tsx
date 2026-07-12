@@ -1,6 +1,5 @@
 import { useState, FormEvent } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 export default function ResetPassword() {
   const navigate = useNavigate();
@@ -49,10 +48,6 @@ export default function ResetPassword() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <Helmet>
-        <title>Reset Password — AgenticOrg</title>
-        <meta name="robots" content="noindex, nofollow" />
-      </Helmet>
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-xl shadow-lg p-8">
           <div className="text-center mb-8">

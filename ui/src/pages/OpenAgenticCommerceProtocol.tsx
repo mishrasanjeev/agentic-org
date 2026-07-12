@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 const FLOW_NODES = [
   {
@@ -142,14 +141,6 @@ function NodeCard({
 export default function OpenAgenticCommerceProtocol() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-white text-slate-900">
-      <Helmet>
-        <title>Open Agentic Commerce Protocol | AgenticOrg</title>
-        <meta
-          name="description"
-          content="A visual end-to-end explanation of Open Agentic Commerce Protocol: seller agents, buyer agents, Grantex authority, OACP artifacts, cache freshness, prepared handoffs, and fail-closed commerce boundaries."
-        />
-        <link rel="canonical" href="https://agenticorg.ai/open-agentic-commerce-protocol" />
-      </Helmet>
 
       <nav className="sticky top-0 z-50 bg-slate-950/95 backdrop-blur border-b border-white/10">
         <div className="max-w-7xl mx-auto h-16 px-4 sm:px-6 lg:px-8 flex items-center justify-between">
@@ -238,7 +229,7 @@ export default function OpenAgenticCommerceProtocol() {
             <div className="grid lg:grid-cols-[0.85fr_1.15fr] gap-10 items-start">
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Runtime decision model</p>
-                <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-slate-950">Every buyer request resolves to one safe posture.</h2>
+                <h2 className="mt-3 text-3xl sm:text-4xl font-bold text-slate-950">Each evaluated buyer request should resolve to one bounded posture.</h2>
                 <p className="mt-4 text-lg text-slate-600 leading-relaxed">
                   A buyer agent should not guess. It should either answer from valid artifacts, refresh through approved authority, prepare a non-executing handoff, or refuse.
                 </p>

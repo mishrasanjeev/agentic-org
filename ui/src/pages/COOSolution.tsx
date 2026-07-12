@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Helmet } from "react-helmet-async";
 
 /* ------------------------------------------------------------------ */
 /*  useInView — Intersection Observer hook for scroll animations       */
@@ -53,55 +52,55 @@ function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: str
 /* ------------------------------------------------------------------ */
 
 const PAIN_STATS = [
-  { value: "88%", label: "Of support tickets mis-routed on first attempt", color: "text-red-500" },
-  { value: "4-hour", label: "Average mean time to resolution (MTTR)", color: "text-orange-500" },
-  { value: "15%", label: "Vendor SLA breaches going undetected each quarter", color: "text-red-500" },
+  { value: "Unstructured", label: "Ticket classification and routing queues", color: "text-red-500" },
+  { value: "Reactive", label: "Incident context assembled across tools", color: "text-orange-500" },
+  { value: "Fragmented", label: "Vendor obligations, evidence, and follow-up", color: "text-red-500" },
 ];
 
 const FEATURES = [
   {
     title: "Support Triage",
-    description: "88% auto-classification accuracy on first touch. AI reads tickets, assigns priority, routes to the right team, and suggests resolution — all in under 30 seconds.",
+    description: "Classify incoming tickets, propose priority and routing, and draft resolution suggestions from configured knowledge. Final assignment and response remain policy- and human-controlled.",
     icon: "M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z",
     gradient: "from-cyan-500 to-blue-600",
   },
   {
     title: "IT Ops & Incident Mgmt",
-    description: "Slash MTTR from 4 hours to 15 minutes. AI monitors systems, auto-creates incidents, triggers runbooks, and escalates to on-call engineers with full context.",
+    description: "Correlate configured alerts, draft incident records and runbook suggestions, and route context to on-call teams. Runbook execution requires explicit scope and approval.",
     icon: "M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
     gradient: "from-orange-500 to-red-600",
   },
   {
     title: "Vendor Management",
-    description: "Track vendor performance, contracts, and SLA compliance in real time. Auto-flag breaches, generate scorecards, and trigger renewal workflows 90 days in advance.",
+    description: "Track vendor performance, obligations, and SLA evidence from configured sources, then flag potential breaches and renewal dates for owner review.",
     icon: "M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4",
     gradient: "from-emerald-500 to-teal-600",
   },
   {
     title: "Contract Intelligence",
-    description: "AI reads and extracts key terms from contracts. Auto-flag risky clauses, track obligations, and surface renewal dates. No more missed deadlines or unfavorable auto-renewals.",
+    description: "Extract key terms, flag clauses against configured playbooks, track obligations, and surface renewal dates for legal and vendor-owner review.",
     icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z",
     gradient: "from-blue-600 to-emerald-500",
   },
   {
-    title: "Compliance Guard",
-    description: "Continuous compliance monitoring against SOC2, ISO 27001, and internal policies. Auto-generate evidence, track control effectiveness, and prepare for audits year-round.",
+    title: "Compliance Evidence Support",
+    description: "Map configured evidence to internal controls and SOC 2 or ISO 27001 reference sets, then track review status. This supports readiness work; it does not confer certification or compliance.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-amber-500 to-orange-600",
   },
   {
     title: "Facilities & Assets",
-    description: "Track physical assets, maintenance schedules, and workspace utilization. AI predicts maintenance needs, optimizes space allocation, and manages work orders automatically.",
+    description: "Track physical assets, maintenance schedules, and workspace utilization, then suggest maintenance or allocation actions. Work orders remain subject to configured owners and approvals.",
     icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
     gradient: "from-cyan-500 to-teal-600",
   },
 ];
 
 const HOW_IT_WORKS = [
-  { step: "1", title: "Connect Tools", description: "Link Jira, PagerDuty, Zendesk, and ServiceNow. AI agents start ingesting historical data and learning your patterns." },
-  { step: "2", title: "Set SLAs", description: "Define response times, resolution targets, and escalation rules. AI agents configure themselves based on your operational standards." },
-  { step: "3", title: "Shadow Operations", description: "Agents run in parallel for 1 week, triaging tickets, monitoring systems, and flagging issues — all reviewed before taking action." },
-  { step: "4", title: "Scale & Optimize", description: "Promote to active. Agents handle triage, incident response, and vendor management autonomously. MTTR drops within the first week." },
+  { step: "1", title: "Connect Tools", description: "Configure supported ITSM, monitoring, support, and collaboration sources. Availability depends on credentials, scopes, tenant plan, and provider APIs." },
+  { step: "2", title: "Set Policies", description: "Define response targets, routing rules, escalation paths, action scopes, and the approvals required for operational changes." },
+  { step: "3", title: "Shadow Operations", description: "Run selected workflows in parallel, evaluate triage and incident suggestions, and review exceptions before enabling any action." },
+  { step: "4", title: "Enable Selected Actions", description: "Enable only validated actions within configured scopes. Incident, vendor, contract, and facilities decisions retain accountable human owners." },
 ];
 
 const TRUST_LOGOS = [
@@ -114,10 +113,10 @@ const TRUST_LOGOS = [
 ];
 
 const KPI_CARDS = [
-  { label: "Active Incidents", value: "3", change: "-12 vs last week", positive: true },
-  { label: "MTTR", value: "15 min", change: "-3h 45m", positive: true },
-  { label: "CSAT Score", value: "94.2%", change: "+8.3%", positive: true },
-  { label: "SLA Compliance", value: "99.1%", change: "+14.1%", positive: true },
+  { label: "Incident Queue", value: "Triaged", change: "Owner assigned", positive: true },
+  { label: "Runbook Action", value: "Approval", change: "Scope required", positive: true },
+  { label: "Vendor Review", value: "Due", change: "Evidence linked", positive: true },
+  { label: "Control Evidence", value: "In review", change: "Not certification", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -177,7 +176,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               <CheckIcon className="w-8 h-8 text-emerald-600" />
             </div>
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We will contact you within 24 hours to set up your operations automation trial.</p>
+            <p className="text-slate-600">Your request was saved. Our team will follow up using the contact details you provided.</p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-cyan-600 hover:to-blue-700 transition-all">
               Close
             </button>
@@ -230,11 +229,6 @@ export default function COOSolution() {
 
   return (
     <div className="min-h-screen font-sans text-slate-900 antialiased overflow-x-hidden">
-      <Helmet>
-        <title>AI-Powered Virtual Operations Team for COOs | AgenticOrg</title>
-        <meta name="description" content="Cut MTTR from 4 hours to 15 minutes. Auto-triage 88% of tickets, monitor vendor SLAs, and ensure compliance. AI agents built for COOs and operations leaders." />
-        <link rel="canonical" href="https://agenticorg.ai/solutions/coo" />
-      </Helmet>
 
       {/* NAVBAR */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-700/50">
@@ -251,7 +245,7 @@ export default function COOSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg shadow-cyan-500/25">
-              Start Free Trial
+              Request a Demo
             </button>
           </div>
         </div>
@@ -281,7 +275,7 @@ export default function COOSolution() {
             </h1>
 
             <p className="mt-6 text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto leading-relaxed">
-              Cut MTTR from 4 hours to 15 minutes. Auto-triage tickets, monitor vendor SLAs, and ensure compliance with AI agents that never sleep.
+              Coordinate support triage, incident context, vendor reviews, contract obligations, control evidence, and facilities work through governed AI workflows.
             </p>
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -289,7 +283,7 @@ export default function COOSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg shadow-cyan-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=COO%20Solution%20Demo"
@@ -299,7 +293,7 @@ export default function COOSolution() {
               </a>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">No credit card required &middot; 14-day free trial &middot; Cancel anytime</p>
+            <p className="mt-4 text-sm text-slate-500">Deployment scope, connector availability, provider access, runbook permissions, and approvals are confirmed during discovery.</p>
           </div>
         </div>
       </section>
@@ -310,10 +304,10 @@ export default function COOSolution() {
           <FadeIn>
             <div className="text-center mb-16 max-w-3xl mx-auto">
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 leading-tight">
-                Your operations are held together by manual processes
+                Common operations coordination friction
               </h2>
               <p className="mt-4 text-lg text-slate-500">
-                These numbers are typical for companies with 200+ employees and 50+ vendor relationships.
+                Illustrative workflow states; actual priorities depend on systems, vendor obligations, incident policy, and operating model.
               </p>
             </div>
           </FadeIn>
@@ -336,9 +330,9 @@ export default function COOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Your Complete Virtual Operations Team</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Governed AI Workflows for Operations</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Six AI-powered agents that cover every aspect of operations, from support triage to facility management.
+                Configure scoped workflows for support triage, incident coordination, vendor review, contract intelligence, control evidence, and facilities tasks.
               </p>
             </div>
           </FadeIn>
@@ -366,9 +360,9 @@ export default function COOSolution() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <FadeIn>
             <div className="text-center mb-16">
-              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Real-Time COO Dashboard</h2>
+              <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Operational COO Dashboard</h2>
               <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                Every operational metric at a glance. No more digging through Jira, Zendesk, and spreadsheets.
+                Illustrative operational states. Actual metrics and freshness depend on connected source data, provider APIs, and refresh configuration.
               </p>
             </div>
           </FadeIn>
@@ -399,11 +393,11 @@ export default function COOSolution() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Go Live in Under a Week</span>
+                <span className="text-slate-300 text-sm">Configure, Validate, Then Enable</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">How It Works</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
-                Four simple steps from signup to full operations automation.
+                Connect tools, configure policies, validate in shadow mode, and enable selected actions with accountable approval.
               </p>
             </div>
           </FadeIn>
@@ -435,24 +429,24 @@ export default function COOSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-cyan-50 via-white to-blue-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-cyan-100 text-cyan-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                COO Suite &mdash; Enterprise Ready
+                Configurable COO Workflow Suite
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
                 Transform Your Operations
               </h2>
               <p className="text-lg text-slate-600 mb-6 max-w-xl mx-auto">
-                Get your virtual operations team running in under a week. Full triage, incident, and compliance automation.
+                Select the operational workflows that fit your controls. Availability depends on plan, connectors, provider access, action scopes, and approvals.
               </p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
-                  "88% auto-triage accuracy",
-                  "MTTR: 4hr to 15min",
-                  "Vendor SLA monitoring",
-                  "Contract intelligence",
-                  "SOC2/ISO compliance",
-                  "Asset management",
-                  "Real-time dashboards",
-                  "14-day free trial",
+                  "Ticket classification suggestions",
+                  "Incident context and runbook review",
+                  "Vendor obligation monitoring",
+                  "Contract term extraction",
+                  "Control-evidence readiness support",
+                  "Asset and maintenance coordination",
+                  "Source-linked operational views",
+                  "Human approval for operational actions",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-2 text-sm text-slate-700">
                     <CheckIcon className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -465,7 +459,7 @@ export default function COOSolution() {
                   onClick={() => setShowDemo(true)}
                   className="inline-flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg shadow-cyan-500/25"
                 >
-                  Start Free Trial
+                  Request a Demo
                 </button>
                 <a
                   href="mailto:sanjeev@agenticorg.ai?subject=COO%20Solution%20Demo"
@@ -474,7 +468,7 @@ export default function COOSolution() {
                   Book a Demo
                 </a>
               </div>
-              <p className="mt-3 text-sm text-slate-500">No credit card required. Cancel anytime.</p>
+              <p className="mt-3 text-sm text-slate-500">Commercial terms and enabled capabilities are confirmed for the selected plan and deployment scope.</p>
             </div>
           </FadeIn>
         </div>
@@ -490,9 +484,9 @@ export default function COOSolution() {
                   <div className="inline-flex items-center gap-2 bg-cyan-100 text-cyan-700 rounded-full px-4 py-1.5 text-sm font-medium mb-4">
                     Built for Ops-First Organizations
                   </div>
-                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Trusted Integrations</h2>
+                  <h2 className="text-3xl sm:text-4xl font-bold text-slate-900">Connector Availability</h2>
                   <p className="mt-4 text-lg text-slate-500 max-w-2xl mx-auto">
-                    Native integrations with the world&apos;s leading operations, ITSM, and monitoring platforms.
+                    Listed systems represent supported integration surfaces. Availability depends on credentials, scopes, provider APIs, tenant plan, and provider approval.
                   </p>
                 </div>
 
@@ -521,17 +515,17 @@ export default function COOSolution() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <FadeIn>
             <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-              Stop firefighting. Let AI agents handle operations.
+              Bring operational work into governed workflows
             </h2>
             <p className="text-lg text-slate-400 mb-10">
-              Join COOs who have cut MTTR from 4 hours to 15 minutes and achieved 99.1% SLA compliance.
+              Review source-linked suggestions while operations teams retain ownership of incident, vendor, contract, compliance, and facilities decisions.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-cyan-500 to-blue-600 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-cyan-600 hover:to-blue-700 transition-all shadow-lg shadow-cyan-500/25"
               >
-                Start Free Trial
+                Request a Demo
               </button>
               <a
                 href="mailto:sanjeev@agenticorg.ai?subject=COO%20Solution%20Demo"

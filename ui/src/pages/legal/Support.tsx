@@ -1,16 +1,8 @@
-import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 
 export default function Support() {
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Support &amp; Contact — AgenticOrg</title>
-        <meta
-          name="description"
-          content="Contact AgenticOrg support: registered company address, India phone, email."
-        />
-      </Helmet>
 
       <header className="border-b border-slate-200">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -26,7 +18,7 @@ export default function Support() {
       <main className="max-w-3xl mx-auto px-6 py-12">
         <h1 className="text-4xl font-bold text-slate-900 mb-2">Support &amp; Contact</h1>
         <p className="text-slate-600 mb-10">
-          We respond to support requests within one business day (Mon–Fri, 10:00–19:00 IST).
+          Support is staffed during the hours below. Response and resolution times vary by plan, severity, evidence, and provider dependencies; only an executed support agreement or SLA creates a binding target.
         </p>
 
         <section className="mb-10">

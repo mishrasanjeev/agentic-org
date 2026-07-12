@@ -1,83 +1,17 @@
-# ==============================================================================
-# AgenticOrg — robots.txt
-# Policy: Allow ALL crawlers on all public pages. Block only auth-gated pages.
-# ==============================================================================
+# AgenticOrg public crawl policy
+# Public marketing, documentation, blog, and resource routes are crawlable.
+# API, WebSocket, and tenant application routes are not public search content.
+# Authentication pages remain crawlable so their HTTP X-Robots-Tag noindex
+# directives can be observed. Access control remains the security boundary.
 
 User-agent: *
 Allow: /
-Allow: /pricing
-Allow: /playground
-Allow: /evals
-Allow: /blog
-Allow: /blog/
-Allow: /resources
-Allow: /resources/
-Allow: /how-grantex-works
-Allow: /integration-workflow
-Allow: /solutions/
-Disallow: /dashboard/
+Disallow: /dashboard
 Disallow: /api/
-Disallow: /onboarding
-Disallow: /invite
-Disallow: /accept-invite
-Disallow: /signup
-Disallow: /login
-Disallow: /forgot-password
-Disallow: /reset-password
+Disallow: /ws/
 
-# ── Search Engine Crawlers ───────────────────────────────────────────────────
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: YandexBot
-Allow: /
-
-User-agent: DuckDuckBot
-Allow: /
-
-User-agent: Baiduspider
-Allow: /
-
-# ── AI / LLM Crawlers ───────────────────────────────────────────────────────
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: OAI-SearchBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Applebot-Extended
-Allow: /
-
-User-agent: cohere-ai
-Allow: /
-
-User-agent: meta-externalagent
-Allow: /
-
-User-agent: Bytespider
-Allow: /
-
-# ── Sitemaps ─────────────────────────────────────────────────────────────────
 Sitemap: https://agenticorg.ai/sitemap.xml
 
-# ── LLM Discovery ───────────────────────────────────────────────────────────
-# llms.txt: https://agenticorg.ai/llms.txt
-# llms-full.txt: https://agenticorg.ai/llms-full.txt
+# Plain-text product documentation for language-model clients:
+# https://agenticorg.ai/llms.txt
+# https://agenticorg.ai/llms-full.txt

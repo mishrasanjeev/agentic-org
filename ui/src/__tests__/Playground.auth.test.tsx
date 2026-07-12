@@ -38,7 +38,7 @@ describe("Playground cookie authentication", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Process Invoice/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Review Sample Invoice/i }));
 
     expect(await screen.findByText("Sign in to run agents in the playground.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sign in to continue" })).toHaveAttribute(

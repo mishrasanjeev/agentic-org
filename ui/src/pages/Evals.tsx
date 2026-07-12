@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Helmet } from "react-helmet-async";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell, LabelList,
@@ -193,14 +192,14 @@ export default function Evals() {
         const parsed: EvalsData = {
           meta: {
             evaluatedAt: raw.generated_at || "",
-            goldenTestCases: pm.total_cases || 66,
-            version: raw.version || "1.0.0",
+            goldenTestCases: pm.total_cases || 0,
+            version: raw.version || "not reported",
           },
           platform: {
-            stpRate: pm.stp_rate ?? 0.87,
-            hitlRate: pm.hitl_rate ?? 0.13,
-            meanConfidence: pm.mean_confidence ?? pm.avg_composite ?? 0.93,
-            uptimeSla: pm.uptime_sla ?? 0.999,
+            stpRate: pm.stp_rate ?? 0,
+            hitlRate: pm.hitl_rate ?? 0,
+            meanConfidence: pm.mean_confidence ?? pm.avg_composite ?? 0,
+            uptimeSla: pm.uptime_sla ?? 0,
           },
           domains,
           agents,
@@ -263,12 +262,18 @@ export default function Evals() {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 font-semibold text-lg mb-2">Failed to load evaluations</p>
-          <p className="text-slate-500 text-sm">{error ?? "Unknown error"}</p>
+      <main className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="max-w-xl text-center">
+          <h1 className="text-3xl font-bold text-slate-900">AI Agent Evaluations and Quality Gates</h1>
+          <p className="mt-4 text-red-600 font-semibold" role="alert">Live evaluation data is unavailable</p>
+          <p className="mt-2 text-slate-600">
+            AgenticOrg does not substitute cached or fabricated scores when the evaluation API cannot be reached.
+            Reload the page to request the current scorecard, or contact support if the problem continues.
+          </p>
+          <p className="mt-3 text-sm text-slate-500">{error ?? "Unknown error"}</p>
+          <a className="mt-6 inline-flex font-semibold text-blue-600 hover:underline" href="/support">Contact AgenticOrg support</a>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -285,11 +290,6 @@ export default function Evals() {
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>Evaluation Matrix — AgenticOrg | 22 Agents Scored Across 6 Dimensions</title>
-        <meta name="description" content="Published evaluation scorecard for AgenticOrg's 50+ AI agents. Quality, safety, performance, reliability, security, and cost metrics." />
-        <link rel="canonical" href="https://agenticorg.ai/evals" />
-      </Helmet>
       {/* ---- Header ---- */}
       <header className="bg-slate-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -301,7 +301,7 @@ export default function Evals() {
               <div>
                 <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Evaluation Matrix</h1>
                 <p className="text-slate-400 text-sm mt-0.5">
-                  Last evaluated: {formatDate(data.meta.evaluatedAt)}
+                  Last evaluated: {data.meta.evaluatedAt ? formatDate(data.meta.evaluatedAt) : "Not reported"}
                 </p>
               </div>
             </div>
@@ -316,15 +316,23 @@ export default function Evals() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-14">
-        {/* ---- Section 1: Platform Summary ---- */}
+        <section className="rounded-2xl border border-blue-200 bg-blue-50 p-6">
+          <h2 className="text-lg font-bold text-slate-900">How to interpret this scorecard</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-700">
+            Values are rendered from <code className="rounded bg-white px-1.5 py-0.5">GET /api/v1/evals</code>.
+            They describe the reported test cases, evaluator version, and timestamp shown on this page. They are not a production SLA, a guarantee for every prompt, or a substitute for tenant-specific evaluation and human review.
+          </p>
+        </section>
+
+        {/* ---- Section 1: Reported Platform Metrics ---- */}
         <section>
-          <h2 className="text-xl font-bold text-slate-900 mb-6">Platform Summary</h2>
+          <h2 className="text-xl font-bold text-slate-900 mb-6">Reported Platform Metrics</h2>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {([
-              { label: "Target Auto-completion Rate", value: data.platform.stpRate },
-              { label: "Target HITL Rate", value: data.platform.hitlRate },
-              { label: "Target Confidence", value: data.platform.meanConfidence },
-              { label: "Target Uptime", value: data.platform.uptimeSla },
+              { label: "Reported Auto-completion Rate", value: data.platform.stpRate },
+              { label: "Reported HITL Rate", value: data.platform.hitlRate },
+              { label: "Reported Mean Confidence", value: data.platform.meanConfidence },
+              { label: "Reported Uptime Metric", value: data.platform.uptimeSla },
             ] as const).map((m) => (
               <div
                 key={m.label}
@@ -548,11 +556,11 @@ export default function Evals() {
               </div>
 
               <p className="mt-4 text-sm text-slate-500">
-                Evaluated against{" "}
+                Scorecard reports{" "}
                 <span className="font-semibold text-slate-700">
                   {data.meta.goldenTestCases.toLocaleString()}
                 </span>{" "}
-                golden test cases &middot; Scorecard v{data.meta.version}
+                test cases &middot; Evaluator version {data.meta.version}
               </p>
             </div>
           </div>

@@ -1,6 +1,9 @@
-import { useParams, Link } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { BLOG_POSTS } from "./blogData";
+
+const SITE_URL = "https://agenticorg.ai";
+const SOCIAL_IMAGE = SITE_URL + "/og-image.png";
 
 export default function BlogPost() {
   const { slug } = useParams();
@@ -8,46 +11,119 @@ export default function BlogPost() {
 
   if (!post) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Post not found</h1>
-          <Link to="/blog" className="text-blue-600 hover:underline">Back to Blog</Link>
-        </div>
-      </div>
+      <>
+        <Helmet htmlAttributes={{ lang: "en-IN" }}>
+          <title>Blog Post Not Found | AgenticOrg</title>
+          <meta name="robots" content="noindex, nofollow, noarchive" />
+          <meta name="googlebot" content="noindex, nofollow, noarchive" />
+          <meta name="bingbot" content="noindex, nofollow, noarchive" />
+        </Helmet>
+        <Navigate to="/404" replace />
+      </>
     );
   }
 
-  const articleSchema = {
+  const canonical = SITE_URL + "/blog/" + post.slug;
+  const pageTitle = post.title + " | AgenticOrg Blog";
+  const breadcrumbId = canonical + "#breadcrumb";
+  const authorNode =
+    post.author === "AgenticOrg Team"
+      ? {
+          "@type": "Organization",
+          name: post.author,
+          url: SITE_URL,
+        }
+      : {
+          "@type": "Person",
+          name: post.author,
+          jobTitle: post.authorRole,
+        };
+  const structuredData = {
     "@context": "https://schema.org",
-    "@type": "Article",
-    "headline": post.title,
-    "description": post.description,
-    "datePublished": post.date,
-    "dateModified": post.date,
-    "author": { "@type": "Organization", "name": "AgenticOrg", "url": "https://agenticorg.ai" },
-    "publisher": { "@type": "Organization", "name": "AgenticOrg", "logo": { "@type": "ImageObject", "url": "https://agenticorg.ai/favicon-512x512.png" } },
-    "mainEntityOfPage": { "@type": "WebPage", "@id": `https://agenticorg.ai/blog/${post.slug}` },
-    "keywords": post.keywords.join(", "),
+    "@graph": [
+      {
+        "@type": "BlogPosting",
+        "@id": canonical + "#article",
+        headline: post.title,
+        description: post.description,
+        image: SOCIAL_IMAGE,
+        datePublished: post.date,
+        articleSection: post.category,
+        keywords: post.keywords,
+        inLanguage: "en-IN",
+        author: authorNode,
+        publisher: {
+          "@type": "Organization",
+          name: "AgenticOrg",
+          url: SITE_URL,
+          logo: {
+            "@type": "ImageObject",
+            url: SITE_URL + "/favicon-512x512.png",
+          },
+        },
+        mainEntityOfPage: { "@type": "WebPage", "@id": canonical },
+        breadcrumb: { "@id": breadcrumbId },
+      },
+      {
+        "@type": "BreadcrumbList",
+        "@id": breadcrumbId,
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: SITE_URL + "/",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Blog",
+            item: SITE_URL + "/blog",
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: post.title,
+            item: canonical,
+          },
+        ],
+      },
+    ],
   };
 
   return (
     <div className="min-h-screen bg-white">
-      <Helmet>
-        <title>{post.title} — AgenticOrg Blog</title>
+      <Helmet htmlAttributes={{ lang: "en-IN" }}>
+        <title>{pageTitle}</title>
         <meta name="description" content={post.description} />
         <meta name="keywords" content={post.keywords.join(", ")} />
-        <link rel="canonical" href={`https://agenticorg.ai/blog/${post.slug}`} />
+        <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="googlebot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <meta name="bingbot" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+        <link rel="canonical" href={canonical} />
         <meta property="og:type" content="article" />
-        <meta property="og:title" content={post.title} />
+        <meta property="og:site_name" content="AgenticOrg" />
+        <meta property="og:locale" content="en_IN" />
+        <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={post.description} />
-        <meta property="og:url" content={`https://agenticorg.ai/blog/${post.slug}`} />
+        <meta property="og:url" content={canonical} />
+        <meta property="og:image" content={SOCIAL_IMAGE} />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta property="og:image:alt" content={post.title} />
         <meta property="article:published_time" content={post.date} />
         <meta property="article:author" content="AgenticOrg" />
         <meta property="article:section" content={post.category} />
         {post.keywords.map((kw) => (
           <meta key={kw} property="article:tag" content={kw} />
         ))}
-        <script type="application/ld+json">{JSON.stringify(articleSchema)}</script>
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={post.description} />
+        <meta name="twitter:url" content={canonical} />
+        <meta name="twitter:image" content={SOCIAL_IMAGE} />
+        <meta name="twitter:image:alt" content={post.title} />
+        <script type="application/ld+json">{JSON.stringify(structuredData)}</script>
       </Helmet>
 
       {/* Header */}
@@ -123,10 +199,10 @@ export default function BlogPost() {
         {/* CTA */}
         <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">
           <h3 className="text-xl font-bold text-slate-900 mb-2">Ready to try it?</h3>
-          <p className="text-sm text-slate-600 mb-6">Deploy AI virtual employees in minutes. No credit card required.</p>
+          <p className="text-sm text-slate-600 mb-6">Explore the public playground, or create an account to evaluate an agent with your own approved data and controls.</p>
           <div className="flex justify-center gap-4">
             <Link to="/signup" className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
-              Start Free
+              Create Account
             </Link>
             <Link to="/playground" className="border border-slate-300 text-slate-700 px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-white transition-all">
               Try Playground

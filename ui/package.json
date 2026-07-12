@@ -7,14 +7,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs",
+    "build": "tsc && vite build && node scripts/generate-static-seo.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs && node scripts/verify-seo.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:seo": "node --test scripts/seo-generators.test.mjs",
+    "seo:sync": "tsc && vite build && node scripts/generate-static-seo.mjs --sync-csp && node scripts/generate-sitemap.mjs --sync-public && node scripts/generate-llms.mjs --sync-public && node scripts/verify-seo.mjs",
+    "seo:verify": "node scripts/verify-seo.mjs && node scripts/generate-llms.mjs --check"
   },
   "dependencies": {
     "@fontsource/geist": "^5.2.9",

@@ -25,7 +25,7 @@ def test_landing_page_reflects_oacp_protocol_without_milestone_section() -> None
 
     for expected in (
         "From merchant data to a buyer-agent answer.",
-        "Every buyer request resolves to one safe posture.",
+        "Each evaluated buyer request should resolve to one bounded posture.",
         "Provider-owned execution boundary",
         "Non-goals this page does not claim",
         "No live checkout or payment execution claim",
@@ -43,8 +43,8 @@ def test_landing_page_reflects_oacp_protocol_without_milestone_section() -> None
     ):
         assert stale not in landing
 
-    assert "Open Agentic Commerce Protocol artifact boundaries" in index
-    assert "Open Agentic Commerce Protocol explains" in index
+    assert "Bounded OACP artifact caching and prepared commerce handoffs" in index
+    assert "Cached evidence does not create an order" in index
     assert "Latest foundation:" not in index
     assert "Commerce guardrail" not in index
     assert "Cloud Run release safety" not in index
@@ -86,12 +86,17 @@ def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
     user_guide = _read("docs/AgenticOrg_Complete_User_Guide_v5.0.html")
     ddl_roadmap = _read("docs/roadmap/startup_ddl_removal.md")
 
-    assert "Latest Mainline Status (2026-06-30)" in readme
-    assert "OACP Shopify runtime vertical" in readme
-    assert "OACP Seller And Buyer Commerce Runtime" in readme
-    assert "durable public-safe refs" in readme
-    assert "maintenance planner" in readme
-    assert "Cloud Run manual helper" in readme
+    assert "## Source of truth" in readme
+    assert "https://app.agenticorg.ai/api/v1/product-facts" in readme
+    assert "## Capability status" in readme
+    assert "Shopify read-only sync" in readme
+    assert "OACP artifacts do not create orders" in readme
+    assert "scripts/deploy_cloud_run.sh" in readme
+    assert "Legacy Kubernetes material is not the current production path" in readme
+    assert "React 19" in readme
+    assert "Python 3.12" in readme
+    assert "$2/month" in readme
+    assert "$499/month" in readme
     assert "GKE Production" not in readme
 
     assert "2026-06-13 status" in deploy
