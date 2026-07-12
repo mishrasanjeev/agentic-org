@@ -29,7 +29,11 @@ const FACTS = APP + "/api/v1/product-facts";
 const text = (path) => readFileSync(path, "utf8");
 const normalized = (value) => value.replace(/\r\n/g, "\n").trimEnd() + "\n";
 const clean = (value) =>
-  String(value || "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim();
+  String(value || "")
+    .replace(/\s+/g, " ")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .trim();
 const humanize = (value) =>
   String(value || "")
     .replace(/[_-]+/g, " ")

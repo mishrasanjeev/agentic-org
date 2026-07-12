@@ -15,12 +15,16 @@ import {
 
 const countMatches = (text, pattern) => [...text.matchAll(pattern)].length;
 const htmlDecode = (value) =>
-  String(value)
-    .replaceAll("&amp;", "&")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&#39;", "'")
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">");
+  String(value).replace(/&(?:amp|quot|#39|lt|gt);/g, (entity) => {
+    switch (entity) {
+      case "&amp;": return "&";
+      case "&quot;": return '"';
+      case "&#39;": return "'";
+      case "&lt;": return "<";
+      case "&gt;": return ">";
+      default: return entity;
+    }
+  });
 
 const canonicalUrl = (siteUrl, path) => {
   const base = siteUrl.replace(/\/+$/, "");

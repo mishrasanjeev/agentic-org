@@ -385,7 +385,10 @@ function stripRouteMetadata(html) {
   }
   html = html.replace(/<meta\s+[^>]*property=["'](?:og|article):[^"']+["'][^>]*>\s*/gi, "");
   html = html.replace(/<link\s+[^>]*rel=["']canonical["'][^>]*>\s*/gi, "");
-  html = html.replace(/<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi, "");
+  html = html.replace(
+    /<script\s+type=["']application\/ld\+json["'][^>]*>[\s\S]*?<\/script>\s*/gi,
+    "\n",
+  );
   html = html.replace(/<noscript\b[^>]*>[\s\S]*?<\/noscript>\s*/gi, "");
   return html;
 }
