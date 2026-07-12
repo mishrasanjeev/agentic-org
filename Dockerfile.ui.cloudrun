@@ -7,6 +7,8 @@ COPY ui/package.json ui/package-lock.json* ./
 RUN npm ci --no-audit --no-fund
 ARG CACHE_BUST=1
 COPY ui/ .
+COPY pyproject.toml README.md ../
+COPY core/billing/limits.py ../core/billing/limits.py
 COPY core/agents/ ../core/agents/
 COPY connectors/ ../connectors/
 ARG VITE_GA4_ID=""
