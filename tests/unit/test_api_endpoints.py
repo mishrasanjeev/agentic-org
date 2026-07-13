@@ -2396,6 +2396,32 @@ class TestLoadScorecard:
         assert result["data_quality"] == "demo"
         assert quality == "demo"
 
+    def test_load_scorecard_does_not_expose_exception_details(self, tmp_path):
+        """A corrupt scorecard must not leak filesystem or secret details."""
+        from api.v1.evals import _load_scorecard
+
+        scorecard_file = tmp_path / "scorecard.json"
+        scorecard_file.write_text("{}")
+        sensitive_details = (
+            "Authorization: Bearer secret-token at /srv/app/evals/scorecard.json"
+        )
+
+        with (
+            patch("api.v1.evals._SCORECARD_PATH", scorecard_file),
+            patch("api.v1.evals.json.load", side_effect=OSError(sensitive_details)),
+            patch("api.v1.evals.logger.exception") as log_exception,
+        ):
+            result, quality = _load_scorecard()
+
+        assert result["_is_baseline"] is True
+        assert result["data_quality"] == "demo"
+        assert quality == "demo"
+        assert "_load_error" not in result
+        assert sensitive_details not in json.dumps(result)
+        log_exception.assert_called_once_with(
+            "Failed to load evaluation scorecard; serving demo baseline"
+        )
+
     def test_load_scorecard_reads_latest(self, tmp_path):
         from api.v1.evals import _load_scorecard
 

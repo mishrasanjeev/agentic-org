@@ -11,12 +11,15 @@ measured benchmark output. Real scorecards are flagged
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Response
 
 from api.route_metadata import route_meta
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -96,10 +99,11 @@ def _load_scorecard() -> tuple[dict, str]:
             scorecard = json.load(f)
         scorecard["data_quality"] = "measured"
         return scorecard, "measured"
-    except (OSError, json.JSONDecodeError) as exc:
-        # If the on-disk file is corrupt, still don't blank the page.
+    except (OSError, json.JSONDecodeError):
+        # If the on-disk file is corrupt, still don't blank the page. Keep
+        # exception details in server logs because this endpoint is public.
+        logger.exception("Failed to load evaluation scorecard; serving demo baseline")
         baseline = dict(_DEFAULT_SCORECARD)
-        baseline["_load_error"] = str(exc)
         baseline["served_at"] = datetime.now(UTC).isoformat()
         baseline["data_quality"] = "demo"
         return baseline, "demo"
