@@ -3705,7 +3705,7 @@
     "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
     "rate_limit": "public-evals-read",
     "scope": "public:evals.scorecard.read",
-    "source_line": 132,
+    "source_line": 136,
     "tenant_required": false
   },
   {
@@ -3723,7 +3723,7 @@
     "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
     "rate_limit": "public-evals-read",
     "scope": "public:evals.agent_scorecard.read",
-    "source_line": 155,
+    "source_line": 159,
     "tenant_required": false
   },
   {
