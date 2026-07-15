@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Tax ID regexes (same as production validation)
 # ---------------------------------------------------------------------------
@@ -146,23 +148,40 @@ class TestSeedData:
 
 
 # ============================================================================
-# BUG: Demo user credentials were missing or wrong
-# FIX: seed_ca_demo.py now defines DEMO_USER_EMAIL and DEMO_USER_PASSWORD
+# BUG: Demo seeding previously embedded reusable credentials and lacked a direct-call guard
+# FIX: credentials are environment-provided and non-demo environments fail before writes
 # ============================================================================
 
 
 class TestDemoUser:
-    """Demo user must exist with correct credentials."""
+    """Demo users must be explicitly configured and remain local/demo only."""
 
-    def test_demo_user_email(self):
-        from core.seed_ca_demo import DEMO_USER_EMAIL
+    def test_production_environment_is_rejected(self, monkeypatch):
+        from core.seed_ca_demo import DemoSeedConfigurationError, _demo_seed_users
 
-        assert DEMO_USER_EMAIL == "demo@cafirm.agenticorg.ai"
+        monkeypatch.setenv("AGENTICORG_ENV", "production")
+        with pytest.raises(DemoSeedConfigurationError, match="restricted"):
+            _demo_seed_users()
 
-    def test_demo_user_password(self):
-        from core.seed_ca_demo import DEMO_USER_PASSWORD
+    def test_local_environment_requires_explicit_credentials(self, monkeypatch):
+        from core.seed_ca_demo import DemoSeedConfigurationError, _demo_seed_users
 
-        assert DEMO_USER_PASSWORD == "demo123!"
+        monkeypatch.setenv("AGENTICORG_ENV", "local")
+        monkeypatch.delenv("AGENTICORG_DEMO_USER_EMAIL", raising=False)
+        monkeypatch.delenv("AGENTICORG_DEMO_USER_PASSWORD", raising=False)
+        with pytest.raises(DemoSeedConfigurationError, match="explicitly"):
+            _demo_seed_users()
+
+    def test_local_environment_uses_environment_credentials(self, monkeypatch):
+        from core.seed_ca_demo import _demo_seed_users
+
+        monkeypatch.setenv("AGENTICORG_ENV", "local")
+        monkeypatch.setenv("AGENTICORG_DEMO_USER_EMAIL", "owner@example.test")
+        monkeypatch.setenv("AGENTICORG_DEMO_USER_PASSWORD", "local-only-secret")
+        primary, roles = _demo_seed_users()
+        assert primary["email"] == "owner@example.test"
+        assert primary["password"] == "local-only-secret"
+        assert roles == []
 
     def test_demo_user_role(self):
         from core.seed_ca_demo import DEMO_USER_ROLE
@@ -179,18 +198,12 @@ class TestDemoUser:
 
         assert DEMO_TENANT_SLUG == "demo-ca-firm"
 
-    def test_role_demo_users_match_documented_accounts(self):
+    def test_role_demo_users_declare_environment_variables_not_credentials(self):
         from core.seed_ca_demo import DEMO_ROLE_USERS
 
-        credentials = {(u["email"], u["password"], u["role"], u["domain"]) for u in DEMO_ROLE_USERS}
-        assert credentials == {
-            ("ceo@agenticorg.local", "ceo123!", "admin", "all"),
-            ("cfo@agenticorg.local", "cfo123!", "cfo", "finance"),
-            ("chro@agenticorg.local", "chro123!", "chro", "hr"),
-            ("cmo@agenticorg.local", "cmo123!", "cmo", "marketing"),
-            ("coo@agenticorg.local", "coo123!", "coo", "ops"),
-            ("auditor@agenticorg.local", "audit123!", "auditor", "all"),
-        }
+        assert all("email" not in user and "password" not in user for user in DEMO_ROLE_USERS)
+        assert all(user["email_env"].startswith("AGENTICORG_DEMO_") for user in DEMO_ROLE_USERS)
+        assert all(user["password_env"].endswith("_PASSWORD") for user in DEMO_ROLE_USERS)
 
     def test_role_demo_users_are_backed_by_rbac_roles(self):
         from core.rbac import ROLE_SCOPES

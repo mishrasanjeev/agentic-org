@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
+from core.billing.catalog import PUBLIC_PLAN_CATALOG, PublicPlanCatalog
 
 logger = structlog.get_logger()
 
@@ -134,11 +135,9 @@ class PortalRequest(BaseModel):
     audit_event="billing.plans.read",
     public_reason="public-pricing-no-tenant-data",
 )
-async def list_plans() -> list[dict[str, Any]]:
-    """List available plans with pricing (USD + INR)."""
-    from core.billing.limits import PLAN_PRICING
-
-    return PLAN_PRICING
+async def list_plans() -> PublicPlanCatalog:
+    """Return the complete, versioned public plan offer catalog."""
+    return PUBLIC_PLAN_CATALOG
 
 
 @router.get("/subscription")

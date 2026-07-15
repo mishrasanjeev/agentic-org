@@ -1,8 +1,10 @@
 # CFO Guide — AgenticOrg Finance Platform
 
+> **Current readiness boundary (2026-07-15):** This guide mixes target workflows, illustrative schedules/thresholds, and selected implemented surfaces. Unless a section links a current capability state and retained evidence, treat its agents, KPI cards, refresh timing, connector behavior, automation, matching rates, escalation timing, and report delivery as target behavior. Generic task telemetry is not a trusted CFO KPI, and filing/payment/external-write actions are not ready for autonomous production use. See the [Finance/CA gap analysis](readiness/GAP_ANALYSIS.md), [capability register](readiness/CAPABILITY_READINESS_REGISTER.md), and [domain readiness standard](readiness/DOMAIN_READINESS_STANDARD.md).
+
 ## Overview
 
-AgenticOrg gives CFOs a unified command center for enterprise finance operations. Instead of juggling spreadsheets, portals, and manual workflows, you get 10 specialized AI agents that handle accounts payable, receivables, reconciliation, tax compliance, month-end close, planning, treasury, expenses, revenue recognition, and fixed assets — all with human-in-the-loop approval on every critical decision.
+The target CFO experience is a unified command center across accounts payable, receivables, reconciliation, tax compliance, close, planning, treasury, expenses, revenue recognition, fixed assets, and leases. The capability register shows mixed maturity and open gates; inventory and UI presence do not establish end-to-end handling or safe approval on every critical decision.
 
 This guide covers everything a CFO needs to operate the platform: the finance dashboard, each finance agent, natural language querying, report scheduling, workflow templates, multi-company management, and HITL approval gates.
 
@@ -10,7 +12,7 @@ This guide covers everything a CFO needs to operate the platform: the finance da
 
 ## Finance Dashboard (`/dashboard/cfo`)
 
-The CFO Dashboard is your real-time financial cockpit. It aggregates data from all 10 finance agents and connected systems into a single view. Access it at `/dashboard/cfo` or by selecting "CFO Dashboard" from the sidebar.
+The target CFO dashboard aggregates reconciled finance data into a single governed view. The current route is `/dashboard/cfo`, but the KPI contract and external-source evidence remain incomplete; do not describe it as real-time or authoritative from route presence alone.
 
 ### KPI Cards
 
@@ -28,7 +30,7 @@ The CFO Dashboard is your real-time financial cockpit. It aggregates data from a
 
 ### How Data Flows
 
-Each KPI card refreshes automatically. The underlying agents query connected systems (Tally, Zoho Books, Banking AA, GSTN) on a configurable schedule — typically every 15 minutes for cash data and hourly for aging buckets. You can also force-refresh any card by clicking the refresh icon.
+Target refresh schedules must be configured per source and disclosed with lineage, freshness, reconciliation, and degraded-state metadata. The example cadences and connector names in this guide are not evidence of a live connection or current refresh.
 
 The dashboard respects RBAC: only users with CFO or CEO roles can access `/dashboard/cfo`. Other roles see a 403 if they attempt to navigate there directly.
 

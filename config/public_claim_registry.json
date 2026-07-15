@@ -1,0 +1,83 @@
+{
+  "schema_version": "agenticorg.claim-registry.v1",
+  "registry_version": "2026-07-15.1",
+  "product_version": "4.8.0",
+  "generated_at": "2026-07-15T00:00:00Z",
+  "capabilities": [
+    {
+      "capability_id": "PLAT-C12",
+      "domain": "Platform Safety",
+      "title": "Capability evidence and claim control",
+      "maturity": "Scaffolded",
+      "gate_result": "Blocked",
+      "public_availability": "Preview",
+      "claim_treatment": "Illustrative",
+      "owner": "PLAT-O (unassigned; W0-05)",
+      "expires_at": "2026-07-27T00:00:00Z",
+      "evidence_ids": [],
+      "permitted_claim_ids": ["PLAT-CLAIM-CONTROL-PREVIEW"],
+      "limitations": ["Seed control record only; no production-readiness claim is authorized."]
+    }
+  ],
+  "evidence": [],
+  "claims": [
+    {
+      "claim_id": "PLAT-CLAIM-CONTROL-PREVIEW",
+      "kind": "availability",
+      "treatment": "Illustrative",
+      "approved_text": ["Illustrative example: capability claim control preview."],
+      "capability_ids": ["PLAT-C12"],
+      "evidence_ids": [],
+      "required_evidence_state": null,
+      "asserted_availability": "Preview",
+      "owner": "PLAT-O (unassigned; W0-05)",
+      "approver": "Unassigned pending W0-05",
+      "product_version": "4.8.0",
+      "expires_at": "2026-07-27T00:00:00Z",
+      "surfaces": ["README.md"],
+      "inventory_source": null,
+      "limitations": ["Must be visibly labeled illustrative; it is not evidence-backed."]
+    },
+    {
+      "claim_id": "PLAT-INVENTORY-PRODUCT-FACTS",
+      "kind": "inventory",
+      "treatment": "EvidenceBacked",
+      "approved_text": ["Current product inventory is served by /api/v1/product-facts."],
+      "capability_ids": [],
+      "evidence_ids": [],
+      "required_evidence_state": null,
+      "asserted_availability": null,
+      "owner": "PLAT-O (unassigned; W0-05)",
+      "approver": "Unassigned pending W0-05",
+      "product_version": "4.8.0",
+      "expires_at": "2026-07-27T00:00:00Z",
+      "surfaces": ["README.md", "ui/src/pages/Landing.*", "ui/src/pages/Pricing.*"],
+      "inventory_source": "api/v1/product_facts.py:/api/v1/product-facts",
+      "limitations": ["Counts must be fetched or build-pinned from the canonical endpoint."]
+    },
+    {
+      "claim_id": "BILLING-CATALOG-PUBLIC-PLANS",
+      "kind": "inventory",
+      "treatment": "EvidenceBacked",
+      "approved_text": [
+        "| Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |",
+        "| Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |",
+        "| Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |",
+        "- Free: $0/month or INR 0/month; 3 agents; 1000 runs; 1 GB storage.",
+        "- Pro: $2/month or INR 9,999/month; 15 agents; 10000 runs; 50 GB storage.",
+        "- Enterprise: $499/month or INR 49,999/month; Unlimited agents; Unlimited runs; Unlimited storage."
+      ],
+      "capability_ids": [],
+      "evidence_ids": [],
+      "required_evidence_state": null,
+      "asserted_availability": null,
+      "owner": "Billing catalog contract",
+      "approver": "Automated billing catalog release gate",
+      "product_version": "4.8.0",
+      "expires_at": "2026-08-15T00:00:00Z",
+      "surfaces": ["README.md", "ui/public/llms*.txt", "ui/dist/llms*.txt"],
+      "inventory_source": "core/billing/catalog.py:PUBLIC_PLAN_CATALOG",
+      "limitations": ["Prices and limits are list-offer facts; checkout availability is reported separately by the billing API."]
+    }
+  ]
+}

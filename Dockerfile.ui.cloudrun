@@ -1,14 +1,15 @@
 # SEC-010: production base images pinned by digest. Refresh via
 # scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
-# node:25-slim @ 2026-05-01
+# node:26-slim @ 2026-05-01
 FROM node:26-slim@sha256:ffc78385a788964bb3cbab5e434ff79a10bdc25b8ae6db03fe5fe6cb14053c09 AS builder
 WORKDIR /app
-COPY ui/package.json ui/package-lock.json* ./
+COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 ARG CACHE_BUST=1
 COPY ui/ .
 COPY pyproject.toml README.md ../
 COPY core/billing/limits.py ../core/billing/limits.py
+COPY core/billing/catalog.py ../core/billing/catalog.py
 COPY core/agents/ ../core/agents/
 COPY connectors/ ../connectors/
 ARG VITE_GA4_ID=""

@@ -54,6 +54,8 @@ class AgentRegistry:
         instance = agent_cls(
             agent_id=config["id"],
             tenant_id=config["tenant_id"],
+            company_id=config.get("company_id"),
+            domain=config.get("domain"),
             authorized_tools=config.get("authorized_tools", []),
             prompt_variables=config.get("prompt_variables", {}),
             hitl_condition=config.get("hitl_condition", ""),
@@ -66,9 +68,7 @@ class AgentRegistry:
         # Override prompt if inline text provided (custom agents or persona-modified)
         system_prompt_text = config.get("system_prompt_text")
         if system_prompt_text:
-            resolved = cls._resolve_template(
-                system_prompt_text, config.get("prompt_variables", {})
-            )
+            resolved = cls._resolve_template(system_prompt_text, config.get("prompt_variables", {}))
             instance._system_prompt = resolved
 
         return instance

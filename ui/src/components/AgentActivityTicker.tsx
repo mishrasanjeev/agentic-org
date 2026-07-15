@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 
 const ACTIVITIES = [
-  { agent: "Priya", type: "AP Processor", domain: "finance", avatar: "P", color: "bg-emerald-500", action: "Processed invoice INV-2024-4521", detail: "3-way match passed, payment scheduled", confidence: 0.94, status: "completed" as const },
-  { agent: "Arjun", type: "Recon Agent", domain: "finance", avatar: "A", color: "bg-blue-500", action: "Reconciling 847 bank transactions", detail: "99.7% auto-matched, 3 breaks flagged", confidence: 0.97, status: "running" as const },
-  { agent: "Maya", type: "Onboarding", domain: "hr", avatar: "M", color: "bg-purple-500", action: "Onboarded Rahul Kumar (SDE-II)", detail: "IT provisioning, Darwinbox, Slack invite sent", confidence: 0.96, status: "completed" as const },
-  { agent: "CS Bot", type: "Customer Success", domain: "ops", avatar: "C", color: "bg-orange-500", action: "Analyzing churn risk for Acme Corp", detail: "NPS drop detected, retention playbook triggered", confidence: 0.89, status: "running" as const },
-  { agent: "Riya", type: "Tax Compliance", domain: "finance", avatar: "R", color: "bg-teal-500", action: "Filed GSTR-3B for March 2026", detail: "GSTN validated, ITC reconciled", confidence: 0.98, status: "completed" as const },
-  { agent: "Dev", type: "Support Triage", domain: "ops", avatar: "D", color: "bg-red-500", action: "Auto-classified 42 tickets", detail: "P1: 2, P2: 8, P3: 32 — zero mis-routes", confidence: 0.91, status: "completed" as const },
-  { agent: "Neha", type: "Campaign Pilot", domain: "marketing", avatar: "N", color: "bg-pink-500", action: "Launched Q1 email campaign", detail: "3 segments, 12,400 contacts, A/B test active", confidence: 0.93, status: "running" as const },
-  { agent: "Vikram", type: "Payroll Engine", domain: "hr", avatar: "V", color: "bg-indigo-500", action: "Processing March payroll for 847 employees", detail: "PF/ESI/TDS computed, zero errors", confidence: 0.99, status: "completed" as const },
-  { agent: "Priya", type: "AP Processor", domain: "finance", avatar: "P", color: "bg-emerald-500", action: "HITL escalated: Invoice INV-2024-4899", detail: "Amount exceeds threshold, awaiting CFO approval", confidence: 0.82, status: "hitl" as const },
-  { agent: "Sana", type: "Brand Monitor", domain: "marketing", avatar: "S", color: "bg-violet-500", action: "Sentiment alert: negative spike on Twitter", detail: "Product complaint trending, PR team notified", confidence: 0.87, status: "running" as const },
+  { agent: "Priya", type: "AP Processor", domain: "finance", avatar: "P", color: "bg-emerald-500", action: "Reviewed a sample invoice", detail: "Illustrative match passed; payment draft awaits policy", confidence: 0.94, status: "completed" as const },
+  { agent: "Arjun", type: "Recon Agent", domain: "finance", avatar: "A", color: "bg-blue-500", action: "Reviewing a sample bank batch", detail: "Potential matches and breaks surfaced for review", confidence: 0.97, status: "running" as const },
+  { agent: "Maya", type: "Onboarding", domain: "hr", avatar: "M", color: "bg-purple-500", action: "Prepared a sample onboarding checklist", detail: "Provisioning and invitations remain proposed actions", confidence: 0.96, status: "completed" as const },
+  { agent: "CS Bot", type: "Customer Success", domain: "ops", avatar: "C", color: "bg-orange-500", action: "Reviewing a sample retention signal", detail: "Illustrative playbook suggestion prepared", confidence: 0.89, status: "running" as const },
+  { agent: "Riya", type: "Tax Compliance", domain: "finance", avatar: "R", color: "bg-teal-500", action: "Prepared a sample GSTR-3B work item", detail: "Validation and filing remain approval-gated", confidence: 0.98, status: "completed" as const },
+  { agent: "Dev", type: "Support Triage", domain: "ops", avatar: "D", color: "bg-red-500", action: "Classified a sample ticket queue", detail: "Illustrative priorities proposed for review", confidence: 0.91, status: "completed" as const },
+  { agent: "Neha", type: "Campaign Pilot", domain: "marketing", avatar: "N", color: "bg-pink-500", action: "Prepared a sample campaign plan", detail: "Segments and experiment drafts await approval", confidence: 0.93, status: "running" as const },
+  { agent: "Vikram", type: "Payroll Engine", domain: "hr", avatar: "V", color: "bg-indigo-500", action: "Reviewing a sample payroll batch", detail: "Statutory calculations and exceptions queued for review", confidence: 0.99, status: "completed" as const },
+  { agent: "Priya", type: "AP Processor", domain: "finance", avatar: "P", color: "bg-emerald-500", action: "Sample HITL escalation", detail: "Illustrative threshold requires finance approval", confidence: 0.82, status: "hitl" as const },
+  { agent: "Sana", type: "Brand Monitor", domain: "marketing", avatar: "S", color: "bg-violet-500", action: "Reviewing a sample sentiment signal", detail: "Illustrative notification draft prepared", confidence: 0.87, status: "running" as const },
 ];
 
 const STATUS_STYLES = {
@@ -45,9 +45,9 @@ export default function AgentActivityTicker() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-sm font-medium text-slate-300">Live Agent Activity</span>
+          <span className="text-sm font-medium text-slate-300">Illustrative Agent Activity</span>
         </div>
-        <span className="text-xs text-slate-500">{ACTIVITIES.length} virtual employees active</span>
+        <span className="text-xs text-slate-500">Synthetic sample feed</span>
       </div>
 
       {/* Activity Feed */}
@@ -84,11 +84,9 @@ export default function AgentActivityTicker() {
                 <p className="text-xs text-slate-500 truncate">{a.detail}</p>
               </div>
 
-              {/* Confidence */}
+              {/* Synthetic signal label */}
               <div className="text-right flex-shrink-0">
-                <div className={`text-sm font-mono font-medium ${a.confidence >= 0.90 ? "text-emerald-400" : a.confidence >= 0.85 ? "text-amber-400" : "text-red-400"}`}>
-                  {(a.confidence * 100).toFixed(0)}%
-                </div>
+                <div className="text-xs font-medium text-slate-500">Sample score</div>
               </div>
             </div>
           );
@@ -98,11 +96,11 @@ export default function AgentActivityTicker() {
       {/* Bottom bar */}
       <div className="px-4 py-2 border-t border-slate-700/50 flex items-center justify-between">
         <div className="flex items-center gap-4 text-xs text-slate-500">
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> 6 completed</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> 3 running</span>
-          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> 1 HITL</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Completed samples</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-blue-400" /> Running samples</span>
+          <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> HITL example</span>
         </div>
-        <span className="text-xs text-slate-600">Auto-refreshing</span>
+        <span className="text-xs text-slate-600">Animated sample</span>
       </div>
 
       <style>{`

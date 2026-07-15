@@ -1,6 +1,19 @@
 # AgenticOrg Roadmap
 
-## Current (v4.0.0) — Shipped 2026-04-05
+> **Current planning source (reviewed 2026-07-15):** the detailed, dependency-driven roadmap is [docs/readiness/BUILD_ROADMAP.md](docs/readiness/BUILD_ROADMAP.md). It is backed by the [complete gap analysis](docs/readiness/GAP_ANALYSIS.md), [domain readiness standard](docs/readiness/DOMAIN_READINESS_STANDARD.md), row-level [capability readiness/evidence register](docs/readiness/CAPABILITY_READINESS_REGISTER.md), and durable [program memory](docs/readiness/PROGRAM_MEMORY.md). The release history below is retained for context and is not current readiness evidence or the execution backlog.
+
+## Current Readiness Program
+
+1. **Truth freeze:** evidence-controlled public claims, supported-scope decisions, owners, and unsafe-action containment.
+2. **Shared safety/runtime:** server-side domain authorization, typed action risk, approval before tool dispatch, single-use authority, idempotency, unified UI/API/workflow/A2A/MCP executor, privacy-safe audit.
+3. **Shared data/operations:** durable workflow engine, tenant-bound connector lifecycle, domain facts, KPI lineage/reconciliation, observability, protected release pipeline, worker/beat parity, restore/DR evidence, commercial offer/billing truth, and governed customer onboarding/support/exit.
+4. **Domain verticals:** Finance/CA, Marketing, HR, COO, and CBO work packages, each capability promoted through missing → scaffolded → implemented → integrated → sandbox-proven → production-proven → GA, with gate/public/claim states tracked separately.
+5. **Experience and documentation:** role command centers, six solution pages, trust center, role guides, developer/operator docs, route-specific rendering, accessibility/performance, and README truth alignment.
+6. **Controlled pilots:** domain evidence bundles and business/security/SRE/QA/compliance sign-off before enabling exact GA and outcome claims.
+
+Current internal maturity/gate posture is Finance implemented/blocked, CA integrated/blocked, Marketing implemented/blocked, HR scaffolded/blocked, COO scaffolded/blocked, and CBO scaffolded/blocked. Public workspace/beta/preview labels are narrower and capability-specific; filing/payment and other unsafe writes remain unavailable until their gates pass.
+
+## Historical Release Snapshot (v4.0.0) — Shipped 2026-04-05
 
 ### Project Apex (22 Features)
 - 1000+ integrations via Composio (MIT), smart LLM routing, pre-LLM PII redaction
@@ -79,7 +92,7 @@
 - Shadow deployment with 6 quality gates
 - Full PostgreSQL DDL, RLS, CI/CD pipeline
 
-## Next (v2.4) — In Progress
+## Historical Planned Work (original v2.4 label)
 
 ### More Live Connector Integrations
 - [ ] Stripe test mode (payment processing)
@@ -100,7 +113,7 @@
 - [ ] Conditional branching visualization
 - [ ] Real-time workflow monitoring
 
-## Future (v3.0) — Planned
+## Historical Future Plan (original v3.0 label)
 
 ### Multi-Agent Collaboration
 - Agent-to-agent communication (not just orchestrator-mediated)

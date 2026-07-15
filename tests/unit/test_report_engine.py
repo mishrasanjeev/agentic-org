@@ -26,7 +26,6 @@ class TestReportGenerator:
         "aging_report",
         "pnl_report",
         "campaign_report",
-        "shadow_reconciliation",
     ]
 
     def _make_generator(self):
@@ -74,6 +73,16 @@ class TestReportGenerator:
         gen = self._make_generator()
         with pytest.raises(ValueError, match="Unknown report type"):
             gen.generate(report_type="nonexistent_report", params={})
+
+    def test_shadow_reconciliation_fails_closed_without_measured_evidence(self):
+        from core.reports.generator import ReportEvidenceUnavailableError
+
+        gen = self._make_generator()
+        with pytest.raises(
+            ReportEvidenceUnavailableError,
+            match="no tenant-scoped measured evidence source",
+        ):
+            gen.generate(report_type="shadow_reconciliation", params={})
 
     def test_cfo_daily_has_expected_kpi_data(self):
         gen = self._make_generator()

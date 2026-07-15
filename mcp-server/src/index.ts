@@ -2,10 +2,11 @@
 /**
  * AgenticOrg MCP Server
  *
- * Exposes AgenticOrg AI agents as MCP tools. Any MCP-compatible client
- * (ChatGPT, Claude Desktop, Cursor, etc.) can:
- *   - List and run AI agents (AP Processor, Recon, Payroll, etc.)
- *   - Parse SOPs and deploy new agents
+ * Repository adapter that exposes configured AgenticOrg API records as MCP
+ * tools. Runtime availability depends on authentication, tenant/company
+ * context, deployed endpoints, grants, and provider configuration. It can:
+ *   - List agent records and submit company-scoped execution requests
+ *   - Parse SOPs and submit reviewed shadow candidates
  *   - List agent skills via A2A
  *   - List the native tool catalogue for informational use
  *
@@ -82,8 +83,7 @@ const server = new McpServer({
   name: "agenticorg",
   version: pkg.version,
   description:
-    "AgenticOrg MCP server - run AI agents as MCP tools. Live counts from " +
-    "GET /api/v1/product-facts (agents, connectors, tools, version).",
+    "Repository MCP adapter for company-scoped workflow candidates and conditional API discovery.",
 });
 
 // Tool: list_agents
@@ -91,7 +91,7 @@ const server = new McpServer({
 if (!COMMERCE_ONLY) {
 server.tool(
   "list_agents",
-  "List all available AI agents. Optionally filter by domain (finance, hr, marketing, ops).",
+  "List agent records returned by the configured endpoint. Optionally filter by domain.",
   { domain: z.string().optional().describe("Filter by domain: finance, hr, marketing, ops") },
   async ({ domain }) => {
     const params = domain ? `?domain=${domain}` : "";
@@ -112,18 +112,20 @@ server.tool(
 
 server.tool(
   "run_agent",
-  "Run an AI agent by type (e.g. 'ap_processor', 'recon_agent', 'payroll_agent'). Returns the agent's output including confidence score and reasoning trace.",
+  "Submit a tenant-authenticated, company-scoped request to the configured A2A endpoint.",
   {
     agent_type: z.string().describe("Agent type slug, e.g. 'ap_processor', 'recon_agent', 'support_triage'"),
+    company_id: z.string().min(1).describe("Company UUID in the authenticated tenant"),
     action: z.string().optional().default("process").describe("Action to perform (default: 'process')"),
     inputs: z.record(z.string(), z.unknown()).optional().default({}).describe("Input data for the agent (key-value pairs)"),
   },
-  async ({ agent_type, action, inputs }) => {
+  async ({ agent_type, company_id, action, inputs }) => {
     const result = await apiPost("/api/v1/a2a/tasks", {
       agent_type,
+      company_id,
       action,
       inputs,
-      context: {},
+      context: { company_id },
     });
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   },
@@ -133,7 +135,7 @@ server.tool(
 
 server.tool(
   "get_agent_details",
-  "Get full details of a specific agent by ID, including config, tools, confidence thresholds.",
+  "Get the agent record returned by the configured endpoint.",
   {
     agent_id: z.string().describe("UUID of the agent"),
   },
@@ -147,7 +149,7 @@ server.tool(
 
 server.tool(
   "create_agent_from_sop",
-  "Parse a Standard Operating Procedure (SOP) text and create a new AI agent from it. The SOP is analyzed to extract steps, tools, and decision logic.",
+  "Parse SOP text into a draft configuration that requires review.",
   {
     sop_text: z.string().describe("The SOP document text to parse"),
     domain_hint: z.string().optional().default("").describe("Domain hint: finance, hr, marketing, ops"),
@@ -165,12 +167,15 @@ server.tool(
 
 server.tool(
   "deploy_agent",
-  "Deploy an agent configuration (from SOP parsing or manual config) to make it live.",
+  "Submit a reviewed configuration as a company-scoped shadow candidate.",
   {
+    company_id: z.string().min(1).describe("Company UUID in the authenticated tenant"),
     config: z.record(z.string(), z.unknown()).describe("Agent configuration object (from create_agent_from_sop output)"),
   },
-  async ({ config }) => {
-    const result = await apiPost("/api/v1/sop/deploy", { config });
+  async ({ company_id, config }) => {
+    const result = await apiPost("/api/v1/sop/deploy", {
+      config: { ...config, company_id },
+    });
     return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
   },
 );
@@ -179,7 +184,7 @@ server.tool(
 
 server.tool(
   "list_connectors",
-  "List the AgenticOrg native connectors and their status. Note: connectors are NOT directly callable as MCP tools - see docs/mcp-product-model.md (we ship agents-as-tools, not connectors-as-tools). Use this for discovery only.",
+  "List connector records for discovery. Presence does not establish runtime configuration or execution authority.",
   async () => {
     const data = await apiGet("/api/v1/connectors");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
@@ -197,7 +202,7 @@ server.tool(
 
 server.tool(
   "list_mcp_tools",
-  "List every AgenticOrg agent exposed as an MCP tool (naming: agenticorg_<agent_type>). Each entry has name, description, and inputSchema. Invoke with `run_agent` or call /api/v1/mcp/call directly.",
+  "List agent-tool records returned by the configured MCP endpoint. Results are environment-specific.",
   async () => {
     const data = await apiGet("/api/v1/mcp/tools");
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };

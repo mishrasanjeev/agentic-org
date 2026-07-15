@@ -95,9 +95,7 @@ def test_case1_decrypt_old_fernet_after_adding_new_key(
     # T0 — only key A in the keyring; encrypt
     _set_keyring(monkeypatch, ("v1", "key-A-original" + "0" * 50))
     ciphertext = encrypt_credential("connector-secret-from-key-A")
-    assert ciphertext.startswith("agko_vv1$"), (
-        f"new ciphertext must be stamped 'agko_vv1$': got {ciphertext[:40]!r}"
-    )
+    assert ciphertext.startswith("agko_vv1$"), f"new ciphertext must be stamped 'agko_vv1$': got {ciphertext[:40]!r}"
 
     # T1 — rotation: v2 is now the active encryption key, v1 is kept
     # in the keyring as an allowed decryption key.
@@ -150,10 +148,9 @@ def test_case2_decrypt_envelope_after_kek_rotation(
         prefix = b"wrapped:" + kek.encode() + b":"
         if not wrapped.startswith(prefix):
             raise RuntimeError(
-                f"unwrap mismatch — payload was wrapped under a different KEK "
-                f"than the one supplied ({kek!r})"
+                f"unwrap mismatch — payload was wrapped under a different KEK than the one supplied ({kek!r})"
             )
-        return wrapped[len(prefix):]
+        return wrapped[len(prefix) :]
 
     monkeypatch.setattr(envelope, "_wrap_dek", fake_wrap)
     monkeypatch.setattr(envelope, "_unwrap_dek", fake_unwrap)
@@ -189,7 +186,9 @@ def test_case2_decrypt_envelope_after_kek_rotation(
 # ---------------------------------------------------------------------------
 
 
-def test_case3_reject_delete_old_key_while_referenced() -> None:
+def test_case3_reject_delete_old_key_while_referenced(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """``verify_all`` must extract key references from any ciphertext shape
     and refuse retirement of a key that's still referenced.
 
@@ -200,6 +199,7 @@ def test_case3_reject_delete_old_key_while_referenced() -> None:
     """
     import asyncio
 
+    import core.crypto.verify_all as verify_all_module
     from core.crypto.verify_all import (
         KeyRef,
         KeyStillReferencedError,
@@ -230,44 +230,25 @@ def test_case3_reject_delete_old_key_while_referenced() -> None:
     assert parse_jsonb_credentials({}) is None
 
     # ── Lifecycle gate: assert_key_unreferenced ──
-    # Use a fake session that returns a controlled ciphertext blob for
-    # one column and nothing for the others.
-    class _FakeResult:
-        def __init__(self, rows):
-            self._rows = rows
+    # Retirement always consumes the complete exact-scope scan.  The optional
+    # legacy session argument cannot reduce that global guarantee.
+    async def scan_all_scopes():
+        return {"connector_configs.credentials_encrypted": {KeyRef("vault", "v1")}}
 
-        def all(self):
-            return [(r,) for r in self._rows]
+    monkeypatch.setattr(
+        verify_all_module,
+        "scan_encrypted_columns_all_scopes",
+        scan_all_scopes,
+    )
 
-    class _FakeSession:
-        def __init__(self, rows_per_column):
-            self._rows = rows_per_column
-            self._calls = 0
-
-        async def execute(self, _stmt):
-            self._calls += 1
-            try:
-                return _FakeResult(self._rows[self._calls - 1])
-            except IndexError:
-                return _FakeResult([])
-
-    # Seed: one connector_config row references vault key 'v1'
-    fake = _FakeSession([
-        [{"_encrypted": "agko_vv1$ciphertext-bytes"}],  # connector_configs
-        [],  # gstn_credentials (no rows)
-    ])
     # 'v1' is referenced — assert refuses
     with pytest.raises(KeyStillReferencedError) as exc_info:
-        asyncio.run(assert_key_unreferenced("v1", fake))
+        asyncio.run(assert_key_unreferenced("v1", object()))
     assert "v1" in str(exc_info.value)
     assert "connector_configs" in str(exc_info.value)
 
     # 'v99' is NOT referenced — assert succeeds (returns None)
-    fake2 = _FakeSession([
-        [{"_encrypted": "agko_vv1$ciphertext-bytes"}],
-        [],
-    ])
-    asyncio.run(assert_key_unreferenced("v99", fake2))  # no raise = pass
+    asyncio.run(assert_key_unreferenced("v99", object()))  # no raise = pass
 
 
 # ---------------------------------------------------------------------------

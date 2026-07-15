@@ -206,6 +206,20 @@ class TestWithMocks:
         assert redacted == text
         assert token_map == {}
 
+    def test_missing_spacy_model_fails_closed_in_production(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from core.pii import redactor as redactor_module
+
+        monkeypatch.setenv("AGENTICORG_ENV", "production")
+        monkeypatch.setattr(redactor_module, "_PRESIDIO_AVAILABLE", True)
+        monkeypatch.setattr(redactor_module, "_spacy_model_available", lambda: False)
+        redactor_module.PIIRedactor.reset()
+
+        with pytest.raises(RuntimeError, match="strict runtime"):
+            redactor_module.PIIRedactor()
+
 
 class TestDeanonymizer:
     """Unit tests for the deanonymizer module directly."""

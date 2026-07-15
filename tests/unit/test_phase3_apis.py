@@ -5,12 +5,17 @@ Phase 3-4 API endpoint tests using FastAPI TestClient.
 
 from __future__ import annotations
 
-import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+from tests.company_scope import (
+    TEST_COMPANY_ID,
+    TEST_TENANT_ID,
+    owned_company_validator,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures — create a TestClient with mocked auth and DB
@@ -71,9 +76,10 @@ async def _fake_kpi_response(tenant_id: str, role: str, company_id: str) -> dict
 
 
 @pytest.fixture
-def client(app):
+def client(app, hermetic_chat_runtime, hermetic_company_runtime):
     """TestClient with auth middleware bypassed via mocked validate_token."""
-    test_tenant_id = f"test-tenant-{uuid.uuid4().hex[:8]}"
+    test_tenant_id = str(TEST_TENANT_ID)
+    test_company_id = str(TEST_COMPANY_ID)
 
     # Override the dependency so it returns our test tenant
     from api.deps import get_current_tenant
@@ -103,11 +109,32 @@ def client(app):
                     with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
                         with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
                             with patch("api.v1.kpis._build_kpi_response", side_effect=_fake_kpi_response):
-                                with TestClient(app, raise_server_exceptions=False) as c:
-                                    # Add a Bearer token header so middleware doesn't reject outright
-                                    c.headers["Authorization"] = "Bearer fake-test-token"
-                                    c._test_tenant_id = test_tenant_id
-                                    yield c
+                                with patch(
+                                    "api.v1.agents._require_company_for_tenant",
+                                    side_effect=owned_company_validator(),
+                                ):
+                                    with TestClient(app, raise_server_exceptions=False) as c:
+                                        # Add a Bearer token header so middleware doesn't reject outright
+                                        c.headers["Authorization"] = "Bearer fake-test-token"
+                                        c._test_tenant_id = test_tenant_id
+                                        c._test_company_id = test_company_id
+                                        raw_post = c.post
+
+                                        def _company_scoped_post(url, *args, **kwargs):
+                                            payload = kwargs.get("json")
+                                            if (
+                                                url == "/api/v1/chat/query"
+                                                and isinstance(payload, dict)
+                                                and "query" in payload
+                                            ):
+                                                kwargs["json"] = {
+                                                    **payload,
+                                                    "company_id": test_company_id,
+                                                }
+                                            return raw_post(url, *args, **kwargs)
+
+                                        c.post = _company_scoped_post  # type: ignore[method-assign]
+                                        yield c
 
     app.dependency_overrides.pop(get_current_tenant, None)
 
@@ -324,7 +351,10 @@ class TestChatHistory:
     """GET /chat/history returns list of messages."""
 
     def test_history_returns_list(self, client):
-        resp = client.get("/api/v1/chat/history")
+        resp = client.get(
+            "/api/v1/chat/history",
+            params={"company_id": client._test_company_id},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
@@ -332,7 +362,10 @@ class TestChatHistory:
     def test_history_populates_after_query(self, client):
         # Send a chat query first
         client.post("/api/v1/chat/query", json={"query": "What is our revenue?"})
-        resp = client.get("/api/v1/chat/history")
+        resp = client.get(
+            "/api/v1/chat/history",
+            params={"company_id": client._test_company_id},
+        )
         data = resp.json()
         # Should have at least the user message and agent response
         assert len(data) >= 2

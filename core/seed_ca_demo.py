@@ -10,6 +10,7 @@ Idempotent -- checks for existing records before inserting.
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from datetime import UTC
 
@@ -29,54 +30,110 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 DEMO_TENANT_SLUG = "demo-ca-firm"
 DEMO_TENANT_NAME = "Demo CA Firm"
-DEMO_USER_EMAIL = "demo@cafirm.agenticorg.ai"
-DEMO_USER_PASSWORD = "demo123!"
 DEMO_USER_NAME = "Demo Partner"
 DEMO_USER_ROLE = "admin"  # platform role -- company-level role is "partner"
+DEMO_USER_EMAIL_ENV = "AGENTICORG_DEMO_USER_EMAIL"
+DEMO_USER_PASSWORD_ENV = "AGENTICORG_DEMO_USER_PASSWORD"
 DEMO_ROLE_USERS: list[dict[str, str]] = [
     {
-        "email": "ceo@agenticorg.local",
-        "password": "ceo123!",
+        "email_env": "AGENTICORG_DEMO_CEO_EMAIL",
+        "password_env": "AGENTICORG_DEMO_CEO_PASSWORD",
         "name": "Demo CEO",
         "role": "admin",
         "domain": "all",
     },
     {
-        "email": "cfo@agenticorg.local",
-        "password": "cfo123!",
+        "email_env": "AGENTICORG_DEMO_CFO_EMAIL",
+        "password_env": "AGENTICORG_DEMO_CFO_PASSWORD",
         "name": "Demo CFO",
         "role": "cfo",
         "domain": "finance",
     },
     {
-        "email": "chro@agenticorg.local",
-        "password": "chro123!",
+        "email_env": "AGENTICORG_DEMO_CHRO_EMAIL",
+        "password_env": "AGENTICORG_DEMO_CHRO_PASSWORD",
         "name": "Demo CHRO",
         "role": "chro",
         "domain": "hr",
     },
     {
-        "email": "cmo@agenticorg.local",
-        "password": "cmo123!",
+        "email_env": "AGENTICORG_DEMO_CMO_EMAIL",
+        "password_env": "AGENTICORG_DEMO_CMO_PASSWORD",
         "name": "Demo CMO",
         "role": "cmo",
         "domain": "marketing",
     },
     {
-        "email": "coo@agenticorg.local",
-        "password": "coo123!",
+        "email_env": "AGENTICORG_DEMO_COO_EMAIL",
+        "password_env": "AGENTICORG_DEMO_COO_PASSWORD",
         "name": "Demo COO",
         "role": "coo",
         "domain": "ops",
     },
     {
-        "email": "auditor@agenticorg.local",
-        "password": "audit123!",
+        "email_env": "AGENTICORG_DEMO_AUDITOR_EMAIL",
+        "password_env": "AGENTICORG_DEMO_AUDITOR_PASSWORD",
         "name": "Demo Auditor",
         "role": "auditor",
         "domain": "all",
     },
 ]
+
+_ALLOWED_DEMO_ENVIRONMENTS = frozenset(
+    {"local", "demo", "development", "dev", "test", "testing"}
+)
+
+
+class DemoSeedConfigurationError(RuntimeError):
+    """Raised before writes when the demo seed is unsafe or incomplete."""
+
+
+def _demo_seed_users() -> tuple[dict[str, str], list[dict[str, str]]]:
+    """Load demo credentials from the environment after enforcing a local/demo mode."""
+    environment = os.getenv("AGENTICORG_ENV", "production").strip().lower()
+    if environment not in _ALLOWED_DEMO_ENVIRONMENTS:
+        raise DemoSeedConfigurationError(
+            "CA demo seeding is restricted to local, development, test, or demo environments"
+        )
+
+    email = os.getenv(DEMO_USER_EMAIL_ENV, "").strip()
+    password = os.getenv(DEMO_USER_PASSWORD_ENV, "")
+    if not email or not password:
+        raise DemoSeedConfigurationError(
+            f"Set {DEMO_USER_EMAIL_ENV} and {DEMO_USER_PASSWORD_ENV} explicitly"
+        )
+    if len(password) < 12:
+        raise DemoSeedConfigurationError("Demo passwords must contain at least 12 characters")
+
+    primary = {
+        "email": email,
+        "password": password,
+        "name": DEMO_USER_NAME,
+        "role": DEMO_USER_ROLE,
+        "domain": "all",
+    }
+    roles: list[dict[str, str]] = []
+    for spec in DEMO_ROLE_USERS:
+        role_email = os.getenv(spec["email_env"], "").strip()
+        role_password = os.getenv(spec["password_env"], "")
+        if bool(role_email) != bool(role_password):
+            raise DemoSeedConfigurationError(
+                f"Set both {spec['email_env']} and {spec['password_env']}, or neither"
+            )
+        if not role_email:
+            continue
+        if len(role_password) < 12:
+            raise DemoSeedConfigurationError("Demo passwords must contain at least 12 characters")
+        roles.append(
+            {
+                "email": role_email,
+                "password": role_password,
+                "name": spec["name"],
+                "role": spec["role"],
+                "domain": spec["domain"],
+            }
+        )
+    return primary, roles
 
 # ---------------------------------------------------------------------------
 # 7 realistic Indian companies
@@ -233,38 +290,46 @@ async def _ensure_demo_tenant(session: AsyncSession) -> uuid.UUID:
     return tenant.id
 
 
-async def _ensure_demo_user(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+async def _ensure_demo_user(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    demo_user: dict[str, str],
+) -> None:
     """Create the demo partner user if it does not exist."""
     result = await session.execute(
         select(User.id).where(
             User.tenant_id == tenant_id,
-            User.email == DEMO_USER_EMAIL,
+            User.email == demo_user["email"],
         )
     )
     if result.scalar_one_or_none():
         return
 
     pw_hash = _bcrypt.hashpw(
-        DEMO_USER_PASSWORD.encode(), _bcrypt.gensalt(rounds=12)
+        demo_user["password"].encode(), _bcrypt.gensalt(rounds=12)
     ).decode()
     user = User(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
-        email=DEMO_USER_EMAIL,
-        name=DEMO_USER_NAME,
-        role=DEMO_USER_ROLE,
-        domain="all",
+        email=demo_user["email"],
+        name=demo_user["name"],
+        role=demo_user["role"],
+        domain=demo_user["domain"],
         password_hash=pw_hash,
         status="active",
     )
     session.add(user)
     await session.flush()
-    logger.info("Created demo user %s for tenant %s", DEMO_USER_EMAIL, tenant_id)
+    logger.info("Created configured demo user for tenant %s", tenant_id)
 
 
-async def _ensure_demo_role_users(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+async def _ensure_demo_role_users(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    role_users: list[dict[str, str]],
+) -> None:
     """Create the documented role demo users if they do not exist."""
-    for data in DEMO_ROLE_USERS:
+    for data in role_users:
         result = await session.execute(
             select(User.id).where(
                 User.tenant_id == tenant_id,
@@ -349,17 +414,19 @@ async def seed_ca_demo(session: AsyncSession, tenant_id: uuid.UUID | None = None
     If *tenant_id* is provided the companies are created under that
     existing tenant.  Otherwise a dedicated demo tenant is created.
     """
+    demo_user, role_users = _demo_seed_users()
+
     if tenant_id is None:
         tenant_id = await _ensure_demo_tenant(session)
 
-    await _ensure_demo_user(session, tenant_id)
-    await _ensure_demo_role_users(session, tenant_id)
+    await _ensure_demo_user(session, tenant_id, demo_user)
+    await _ensure_demo_role_users(session, tenant_id, role_users)
 
     # Fetch demo user id for role mapping
     result = await session.execute(
         select(User.id).where(
             User.tenant_id == tenant_id,
-            User.email == DEMO_USER_EMAIL,
+            User.email == demo_user["email"],
         )
     )
     demo_user_id = result.scalar_one_or_none()

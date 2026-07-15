@@ -1,7 +1,9 @@
 # AgenticOrg — Product Requirements Document
 
-**Version**: 2.1.0 | **Date**: 2026-03-25 | **Status**: Live (Production)
+**Version**: 2.1.0 | **Date**: 2026-03-25 | **Status**: historical requirements snapshot; superseded for current readiness
 **URL**: https://agenticorg.ai | **App**: https://app.agenticorg.ai
+
+> **Evidence warning (2026-07-15):** This document contains historical targets, examples, counts, timelines, and outcome figures. It is not proof of current implementation, production deployment, customer results, connector readiness, or external-action safety. Use the canonical [readiness program](readiness/README.md), its [capability register](readiness/CAPABILITY_READINESS_REGISTER.md), generated OpenAPI, and retained release evidence for current decisions. Numeric examples below are illustrative unless a non-expired claim record identifies their owner, source, and evidence.
 
 > **Latest posture (2026-06-13):** Production deployment is Cloud Run-first, with API/UI Cloud Run services, Cloud SQL, Redis, Secret Manager, and Artifact Registry images. Commerce work through C6X5 is an OACP-grounded preview/cache foundation only: it supports public-safe artifact evaluation, prepared handoffs, refusals, and cache maintenance planning, but it does not enable public OACP publication, live checkout, live payments, live provider rails, merchant private APIs, or production commerce readiness.
 

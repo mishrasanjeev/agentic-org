@@ -81,7 +81,7 @@ export default function StatusPage() {
         <>
           <Card>
             <CardHeader>
-              <CardTitle>30-day uptime</CardTitle>
+              <CardTitle>Availability history &middot; trailing 30 days</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-4xl font-bold text-primary">

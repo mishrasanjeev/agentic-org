@@ -76,8 +76,13 @@ async def list_tools():
                         "type": "object",
                         "description": "Additional context (e.g., org settings, thresholds)",
                     },
+                    "company_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Company whose agents and connector credentials may be used",
+                    },
                 },
-                "required": ["inputs"],
+                "required": ["inputs", "company_id"],
             },
         })
     return {"tools": tools}
@@ -89,6 +94,7 @@ class MCPCallRequest(BaseModel):
     name: str = ""  # e.g., "agenticorg_ap_processor"
     tool: str = ""  # MCP spec alias for name
     arguments: dict[str, Any] = {}
+    company_id: str = ""
 
     def model_post_init(self, __context: Any) -> None:
         # Accept either 'name' or 'tool' — MCP spec uses 'tool'
@@ -152,6 +158,10 @@ async def call_tool(
             "Check _AGENT_TYPE_DEFAULT_TOOLS configuration.",
         )
     grant_token = getattr(request.state, "grant_token", "")
+    from api.v1.agents import _require_company_for_tenant
+
+    requested_company_id = body.company_id or str(body.arguments.get("company_id") or "")
+    company_uuid = await _require_company_for_tenant(tenant_id, requested_company_id)
 
     # Build connector config (Ramesh/Uday 2026-04-28). Previously MCP
     # only checked `request.state.connector_config`, but no middleware
@@ -160,38 +170,44 @@ async def call_tool(
     # via the canonical helper so MCP picks up real creds the same
     # way the explicit /run route does.
     connector_config: dict[str, Any] | None = None
-    if hasattr(request.state, "connector_config") and request.state.connector_config:
-        connector_config = request.state.connector_config
-    else:
-        try:
-            from api.v1.agents import (
-                _assert_connectors_ready_for_dispatch,
-                _load_connector_configs_for_agent,
-                _resolve_agent_connector_ids_for_type,
-            )
+    try:
+        from api.v1.agents import (
+            _assert_connectors_ready_for_dispatch,
+            _load_connector_configs_for_agent,
+            _resolve_agent_connector_ids_for_type,
+        )
 
-            connector_ids = await _resolve_agent_connector_ids_for_type(
-                tenant_id=tenant_id, agent_type=agent_type,
-            )
-            if connector_ids:
-                tid = _uuid.UUID(tenant_id)
-                async with get_tenant_session(tid) as session:
-                    await _assert_connectors_ready_for_dispatch(session, tid, connector_ids)
-            connector_config = await _load_connector_configs_for_agent(
-                tenant_id=tenant_id, connector_ids=connector_ids,
-            )
-        except (RuntimeError, TypeError, ValueError) as exc:
-            _log.warning("mcp_connector_resolve_failed", agent_type=agent_type)
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "Connector configuration unavailable. Review agent configuration and retry.",
-                    }
-                ],
-                "isError": True,
-                "error": type(exc).__name__,
-            }
+        connector_ids = await _resolve_agent_connector_ids_for_type(
+            tenant_id=tenant_id,
+            agent_type=agent_type,
+            company_id=company_uuid,
+        )
+        if connector_ids:
+            tid = _uuid.UUID(tenant_id)
+            async with get_tenant_session(tid, company_uuid) as session:
+                await _assert_connectors_ready_for_dispatch(
+                    session,
+                    tid,
+                    connector_ids,
+                    company_uuid,
+                )
+        connector_config = await _load_connector_configs_for_agent(
+            tenant_id=tenant_id,
+            connector_ids=connector_ids,
+            company_id=company_uuid,
+        )
+    except (RuntimeError, TypeError, ValueError) as exc:
+        _log.warning("mcp_connector_resolve_failed", agent_type=agent_type)
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Connector configuration unavailable. Review agent configuration and retry.",
+                }
+            ],
+            "isError": True,
+            "error": type(exc).__name__,
+        }
 
     # Execute via LangGraph
     from core.langgraph.runner import run_agent as langgraph_run
@@ -211,6 +227,7 @@ async def call_tool(
             },
             grant_token=grant_token,
             connector_config=connector_config,
+            company_id=str(company_uuid),
         )
     except (KeyError, RuntimeError, TypeError, ValueError) as exc:
         _log.error("mcp_call_failed", tool=body.name, error=str(exc))

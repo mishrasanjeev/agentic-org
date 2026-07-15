@@ -269,7 +269,7 @@ async def test_kpis_cmo_exposes_approval_review_summary(monkeypatch: pytest.Monk
             "domain_breakdown": [],
         }
 
-    async def fake_configs(tenant_id: str) -> list:
+    async def fake_configs(tenant_id: str, company_id: str | None = None) -> list:
         return []
 
     async def fake_approval_timeout(tenant_id: str, company_id: str) -> dict:

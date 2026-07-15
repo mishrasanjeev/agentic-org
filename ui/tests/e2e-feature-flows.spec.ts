@@ -773,7 +773,7 @@ test.describe("Flow 6: Dashboard Data Consistency", () => {
 // =============================================================================
 
 test.describe("Flow 7: Public Pages Accessibility", () => {
-  test("Pricing page — 3 tiers with correct connector counts", async ({ page }) => {
+  test("Pricing page — 3 tiers with readiness-gated terms", async ({ page }) => {
     await page.goto(`${SITE}/pricing`);
     await page.waitForLoadState("networkidle");
 
@@ -785,14 +785,12 @@ test.describe("Flow 7: Public Pages Accessibility", () => {
     await expect(page.locator("text=Pro").first()).toBeVisible();
     await expect(page.locator("text=Enterprise").first()).toBeVisible();
 
-    // Verify pricing
-    await expect(page.locator("text=$0").first()).toBeVisible();
-    await expect(page.locator("text=$2").first()).toBeVisible();
-    await expect(page.locator("text=Custom").first()).toBeVisible();
+    await expect(page.getByText("Connector readiness").first()).toBeVisible();
+    await expect(page.getByText("Validate separately").first()).toBeVisible();
 
-    // Verify "54 connectors" appears (Pro and Enterprise both have it)
-    const connectorMentions = page.locator("text=54 connectors");
-    expect(await connectorMentions.count()).toBeGreaterThanOrEqual(2);
+    const body = (await page.locator("body").textContent()) || "";
+    expect(body).not.toContain("54 connectors");
+    expect(body).not.toContain("Custom");
   });
 
   test("Evals page — loads successfully", async ({ page }) => {

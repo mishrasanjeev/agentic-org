@@ -70,6 +70,14 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help=f"Tenant UUID. Defaults to {SANDBOX_ENV_PREFIX}TENANT_ID.",
     )
+    parser.add_argument(
+        "--company-id",
+        default=None,
+        help=(
+            "Optional exact company UUID. Defaults to "
+            f"{SANDBOX_ENV_PREFIX}COMPANY_ID; omit for tenant-global rows."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true", help="Validate only; do not write DB rows.")
     parser.add_argument("--format", choices=("text", "json"), default="text")
     return parser.parse_args()
@@ -136,16 +144,18 @@ async def _upsert_connector_configs(
     tenant_id: uuid.UUID,
     inputs: Mapping[str, ConnectorInput],
     *,
+    company_id: uuid.UUID | None = None,
     dry_run: bool,
 ) -> dict[str, Any]:
     from sqlalchemy import select
 
     from core.crypto import encrypt_for_tenant
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
+    from core.models.company import Company
     from core.models.connector_config import ConnectorConfig
     from core.models.tenant import Tenant
 
-    async with async_session_factory() as session:
+    async with get_tenant_session(tenant_id) as session:
         tenant_result = await session.execute(select(Tenant.id).where(Tenant.id == tenant_id))
         if tenant_result.scalar_one_or_none() is None:
             return {
@@ -155,6 +165,23 @@ async def _upsert_connector_configs(
                 "missing_categories": list(CATEGORY_ORDER),
             }
 
+    if company_id is not None:
+        async with get_tenant_session(tenant_id) as session:
+            company_result = await session.execute(
+                select(Company.id).where(
+                    Company.id == company_id,
+                    Company.tenant_id == tenant_id,
+                )
+            )
+            if company_result.scalar_one_or_none() is None:
+                return {
+                    "status": "blocked",
+                    "message": "Target company does not belong to the tenant.",
+                    "categories": [],
+                    "missing_categories": list(CATEGORY_ORDER),
+                }
+
+    async with get_tenant_session(tenant_id, company_id) as session:
         summaries: list[dict[str, Any]] = []
         for category in CATEGORY_ORDER:
             connector_input = inputs[category]
@@ -166,6 +193,11 @@ async def _upsert_connector_configs(
             existing_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tenant_id,
+                    (
+                        ConnectorConfig.company_id == company_id
+                        if company_id is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector_input.connector_name,
                 )
             )
@@ -192,6 +224,7 @@ async def _upsert_connector_configs(
                 session.add(
                     ConnectorConfig(
                         tenant_id=tenant_id,
+                        company_id=company_id,
                         connector_name=connector_input.connector_name,
                         display_name=connector_input.display_name,
                         auth_type=connector_input.auth_type,
@@ -213,11 +246,10 @@ async def _upsert_connector_configs(
                     "mock_or_test_double": False,
                 }
             )
-        if not dry_run:
-            await session.commit()
         return {
             "status": "ready",
             "message": "Vendor-sandbox ConnectorConfig rows validated." if dry_run else "Vendor-sandbox ConnectorConfig rows configured.",
+            "company_id": str(company_id) if company_id else None,
             "categories": summaries,
             "missing_categories": [],
         }
@@ -277,6 +309,7 @@ async def _amain() -> int:
     _load_local_dotenv()
     args = _parse_args()
     tenant_id_raw = args.tenant_id or os.getenv(f"{SANDBOX_ENV_PREFIX}TENANT_ID")
+    company_id_raw = args.company_id or os.getenv(f"{SANDBOX_ENV_PREFIX}COMPANY_ID")
     if not tenant_id_raw:
         summary = {
             "status": "blocked",
@@ -293,24 +326,34 @@ async def _amain() -> int:
                 "missing_categories": list(CATEGORY_ORDER),
             }
         else:
-            file_inputs = _load_file_inputs(Path(args.config))
-            env_inputs = _load_env_inputs(os.environ)
-            inputs = {**env_inputs, **file_inputs}
-            missing = [category for category in CATEGORY_ORDER if category not in inputs]
-            if missing:
+            try:
+                company_id = uuid.UUID(str(company_id_raw)) if company_id_raw else None
+            except ValueError:
                 summary = {
                     "status": "blocked",
-                    "message": "Missing real vendor-sandbox credentials for one or more categories.",
-                    "missing_categories": missing,
-                    "configured_categories": sorted(inputs),
-                    "config_file_checked": str(Path(args.config)),
+                    "message": f"{SANDBOX_ENV_PREFIX}COMPANY_ID is not a valid UUID.",
+                    "missing_categories": list(CATEGORY_ORDER),
                 }
             else:
-                summary = await _upsert_connector_configs(
-                    tenant_id,
-                    inputs,
-                    dry_run=args.dry_run,
-                )
+                file_inputs = _load_file_inputs(Path(args.config))
+                env_inputs = _load_env_inputs(os.environ)
+                inputs = {**env_inputs, **file_inputs}
+                missing = [category for category in CATEGORY_ORDER if category not in inputs]
+                if missing:
+                    summary = {
+                        "status": "blocked",
+                        "message": "Missing real vendor-sandbox credentials for one or more categories.",
+                        "missing_categories": missing,
+                        "configured_categories": sorted(inputs),
+                        "config_file_checked": str(Path(args.config)),
+                    }
+                else:
+                    summary = await _upsert_connector_configs(
+                        tenant_id,
+                        inputs,
+                        company_id=company_id,
+                        dry_run=args.dry_run,
+                    )
 
     safe = _safe_summary(summary)
     if args.format == "json":

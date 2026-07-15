@@ -14,6 +14,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.company_scope import TEST_COMPANY_ID, owned_company_validator
+
 
 @pytest.fixture(scope="module")
 def app():
@@ -42,21 +44,30 @@ def tenant_client(app, tenant_id: str):
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=tenant_id):
             with patch("auth.grantex_middleware.extract_scopes", return_value=admin_scopes):
-                with TestClient(app, raise_server_exceptions=False) as c:
-                    c.headers["Authorization"] = f"Bearer fake-token-{tenant_id[:8]}"
-                    yield c
+                with patch(
+                    "api.v1.agents._require_company_for_tenant",
+                    side_effect=owned_company_validator(tenant_id, TEST_COMPANY_ID),
+                ):
+                    with TestClient(app, raise_server_exceptions=False) as c:
+                        c.headers["Authorization"] = f"Bearer fake-token-{tenant_id[:8]}"
+                        yield c
 
     app.dependency_overrides.pop(get_current_tenant, None)
 
 
 @pytest.fixture
 def tenant_a():
-    return f"iso-a-{uuid.uuid4().hex[:8]}"
+    return str(uuid.uuid4())
 
 
 @pytest.fixture
 def tenant_b():
-    return f"iso-b-{uuid.uuid4().hex[:8]}"
+    return str(uuid.uuid4())
+
+
+@pytest.fixture(autouse=True)
+def _isolate_company_api_from_live_database(hermetic_company_runtime):
+    """The isolation unit suite verifies boundaries without live infrastructure."""
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -186,9 +197,12 @@ class TestKPIIsolation:
 
 class TestChatIsolation:
 
-    def test_chat_query_works_with_company(self, app, tenant_a):
+    def test_chat_query_works_with_company(self, app, tenant_a, hermetic_chat_runtime):
         with tenant_client(app, tenant_a) as client:
-            resp = client.post("/api/v1/chat/query", json={"query": "cash position", "company_id": "comp-1"})
+            resp = client.post(
+                "/api/v1/chat/query",
+                json={"query": "cash position", "company_id": str(TEST_COMPANY_ID)},
+            )
             assert resp.status_code == 200
 
     def test_chat_history_returns_list(self, app, tenant_a):

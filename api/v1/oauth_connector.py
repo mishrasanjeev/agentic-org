@@ -362,6 +362,7 @@ async def _payload_from_existing_connector_config(
         cc_result = await session.execute(
             select(ConnectorConfig).where(
                 ConnectorConfig.tenant_id == tenant_id,
+                ConnectorConfig.company_id.is_(None),
                 ConnectorConfig.connector_name == spec.connector_name,
             )
         )
@@ -654,6 +655,7 @@ async def _upsert_oauth_connector(
         cc_result = await session.execute(
             select(ConnectorConfig).where(
                 ConnectorConfig.tenant_id == tenant_id,
+                ConnectorConfig.company_id.is_(None),
                 ConnectorConfig.connector_name == connector_name,
             )
         )
@@ -662,6 +664,7 @@ async def _upsert_oauth_connector(
             session.add(
                 ConnectorConfig(
                     tenant_id=tenant_id,
+                    company_id=None,
                     connector_name=connector_name,
                     display_name=spec.display_name,
                     auth_type="oauth2",
@@ -833,6 +836,7 @@ async def revoke_and_retry(
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    ConnectorConfig.company_id.is_(None),
                     ConnectorConfig.connector_name == spec.connector_name,
                 )
             )

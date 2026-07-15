@@ -159,6 +159,7 @@ class CMOVendorSandboxConnectorInput(BaseModel):
 
 class CMOVendorSandboxConnectorsRequest(BaseModel):
     connectors: dict[str, CMOVendorSandboxConnectorInput] = Field(default_factory=dict)
+    company_id: str | None = None
 
 _ZOHO_IN_BASE = "https://www.zohoapis.in/books/v3"
 _ZOHO_GLOBAL_BASE = "https://www.zohoapis.com/books/v3"
@@ -658,6 +659,36 @@ def _assert_public_base_url(base_url: str) -> None:
 router = APIRouter()
 
 
+async def _validated_company_scope(
+    tenant_id: _uuid.UUID,
+    company_id: str | _uuid.UUID | None,
+) -> _uuid.UUID | None:
+    """Parse optional company scope and prove tenant ownership."""
+    if company_id is None or not str(company_id).strip():
+        return None
+    try:
+        company_uuid = (
+            company_id
+            if isinstance(company_id, _uuid.UUID)
+            else _uuid.UUID(str(company_id))
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(400, "Invalid company_id format") from exc
+
+    from core.models.company import Company
+
+    async with get_tenant_session(tenant_id) as session:
+        company_result = await session.execute(
+            select(Company.id).where(
+                Company.id == company_uuid,
+                Company.tenant_id == tenant_id,
+            )
+        )
+        if company_result.scalar_one_or_none() is None:
+            raise HTTPException(404, "Company not found")
+    return company_uuid
+
+
 def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None = None) -> dict:
     # Return a boolean flag for whether credentials are configured —
     # NEVER return the actual auth_config (secrets) in the API response.
@@ -768,12 +799,14 @@ async def list_registry_connectors(category: str | None = None):
 )
 async def marketing_connector_contracts(
     tenant_id: str = Depends(get_current_tenant),
+    company_id: str | None = None,
 ):
     """Return connector readiness contracts used by CMO workflows."""
     from core.models.connector_config import ConnectorConfig
 
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         conn_result = await session.execute(
             select(Connector).where(
                 Connector.tenant_id == tid,
@@ -785,6 +818,11 @@ async def marketing_connector_contracts(
         cfg_result = await session.execute(
             select(ConnectorConfig).where(
                 ConnectorConfig.tenant_id == tid,
+                (
+                    ConnectorConfig.company_id == company_uuid
+                    if company_uuid is not None
+                    else ConnectorConfig.company_id.is_(None)
+                ),
                 ConnectorConfig.connector_name == "hubspot",
             )
         )
@@ -901,6 +939,7 @@ async def list_tools(
 )
 async def list_connectors(
     category: str | None = None,
+    company_id: str | None = None,
     page: int = 1,
     per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
@@ -911,7 +950,8 @@ async def list_connectors(
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         # Uday 2026-04-23: soft-deleted connectors ("archived") must
         # stay out of the default listing, otherwise the Connectors
         # page continues to show them and the user can't distinguish
@@ -945,6 +985,11 @@ async def list_connectors(
             cc_result = await session.execute(
                 select(ConnectorConfig.connector_name).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name.in_(names),
                     ConnectorConfig.credentials_encrypted != {},
                 )
@@ -973,6 +1018,7 @@ async def register_connector(
     tenant_id: str = Depends(get_current_tenant),
 ):
     tid = _uuid.UUID(tenant_id)
+    company_uuid = await _validated_company_scope(tid, body.company_id)
     normalised_base_url = _normalise_connector_base_url(body.name, body.base_url)
 
     # MEDIUM-12: reject SSRF-capable base_urls before persisting.
@@ -1002,7 +1048,7 @@ async def register_connector(
     else:
         secret_fields = _canonicalize_connector_secret_urls(body.name, secret_fields)
 
-    async with get_tenant_session(tid) as session:
+    async with get_tenant_session(tid, company_uuid) as session:
         connector = Connector(
             tenant_id=tid,
             name=body.name,
@@ -1089,6 +1135,11 @@ async def register_connector(
             cc_existing_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == body.name,
                 )
             )
@@ -1106,6 +1157,7 @@ async def register_connector(
             else:
                 cc = ConnectorConfig(
                     tenant_id=tid,
+                    company_id=company_uuid,
                     connector_name=body.name,
                     display_name=body.name,
                     auth_type=body.auth_type or "api_key",
@@ -1135,13 +1187,22 @@ async def register_connector(
 )
 async def get_cmo_vendor_sandbox_connectors(
     tenant_id: str = Depends(get_current_tenant),
+    company_id: str | None = None,
 ):
     from core.models.connector_config import ConnectorConfig
 
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         result = await session.execute(
-            select(ConnectorConfig).where(ConnectorConfig.tenant_id == tid)
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tid,
+                (
+                    ConnectorConfig.company_id == company_uuid
+                    if company_uuid is not None
+                    else ConnectorConfig.company_id.is_(None)
+                ),
+            )
         )
         rows = result.scalars().all()
 
@@ -1205,6 +1266,7 @@ async def upsert_cmo_vendor_sandbox_connectors(
     from core.models.connector_config import ConnectorConfig
 
     tid = _uuid.UUID(tenant_id)
+    company_uuid = await _validated_company_scope(tid, body.company_id)
     inputs_by_category: dict[str, CMOVendorSandboxConnectorInput] = {}
     for raw_category, connector_input in body.connectors.items():
         category = _normalise_cmo_sandbox_category(raw_category)
@@ -1279,7 +1341,7 @@ async def upsert_cmo_vendor_sandbox_connectors(
         }
 
     summaries: list[dict[str, Any]] = []
-    async with get_tenant_session(tid) as session:
+    async with get_tenant_session(tid, company_uuid) as session:
         for category in _CMO_SANDBOX_CATEGORIES:
             row = prepared[category]
             encrypted = await encrypt_for_tenant(
@@ -1316,6 +1378,11 @@ async def upsert_cmo_vendor_sandbox_connectors(
             config_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == row["connector_name"],
                 )
             )
@@ -1325,6 +1392,7 @@ async def upsert_cmo_vendor_sandbox_connectors(
                 session.add(
                     ConnectorConfig(
                         tenant_id=tid,
+                        company_id=company_uuid,
                         connector_name=row["connector_name"],
                         display_name=row["display_name"],
                         auth_type=row["auth_type"],
@@ -1381,9 +1449,11 @@ async def upsert_cmo_vendor_sandbox_connectors(
 async def get_connector(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    company_id: str | None = None,
 ):
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         result = await session.execute(
             select(Connector).where(
                 Connector.id == conn_id, Connector.tenant_id == tid
@@ -1397,6 +1467,11 @@ async def get_connector(
             cc_result = await session.execute(
                 select(ConnectorConfig.id).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                     ConnectorConfig.credentials_encrypted != {},
                 )
@@ -1423,7 +1498,8 @@ async def update_connector(
     tenant_id: str = Depends(get_current_tenant),
 ):
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, body.company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         result = await session.execute(
             select(Connector).where(
                 Connector.id == conn_id, Connector.tenant_id == tid
@@ -1436,7 +1512,7 @@ async def update_connector(
         # Prevent blind setattr on secret-bearing or internal fields.
         # auth_config is deprecated for new writes — secrets go via
         # connector_configs.credentials_encrypted.
-        _blocked_fields = {"id", "tenant_id", "auth_config", "secret_ref"}
+        _blocked_fields = {"id", "tenant_id", "company_id", "auth_config", "secret_ref"}
         updates = body.model_dump(exclude_none=True)
         # MEDIUM-12: same SSRF guard on update paths.
         if "base_url" in updates:
@@ -1502,6 +1578,11 @@ async def update_connector(
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1597,6 +1678,7 @@ async def update_connector(
             else:
                 new_cc = ConnectorConfig(
                     tenant_id=tid,
+                    company_id=company_uuid,
                     connector_name=connector.name,
                     display_name=connector.name,
                     auth_type=connector.auth_type or "api_key",
@@ -1616,6 +1698,11 @@ async def update_connector(
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1695,9 +1782,11 @@ async def delete_connector(
 async def connector_health(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    company_id: str | None = None,
 ):
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         result = await session.execute(
             select(Connector).where(Connector.id == conn_id, Connector.tenant_id == tid)
         )
@@ -1706,7 +1795,7 @@ async def connector_health(
     if not connector:
         raise HTTPException(404, "Connector not found")
 
-    probe = await test_connector(conn_id, tenant_id)
+    probe = await test_connector(conn_id, tenant_id, company_id)
     health = probe.get("health") if isinstance(probe, dict) else None
     status = (
         health.get("status")
@@ -1715,7 +1804,7 @@ async def connector_health(
     )
     healthy = bool(probe.get("tested") and isinstance(health, dict) and status == "healthy")
 
-    async with get_tenant_session(tid) as session:
+    async with get_tenant_session(tid, company_uuid) as session:
         refreshed = (
             await session.execute(
                 select(Connector).where(Connector.id == conn_id, Connector.tenant_id == tid)
@@ -1750,6 +1839,7 @@ async def connector_health(
 async def test_connector(
     conn_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    company_id: str | None = None,
 ):
     """Run a live connectivity test against the connector's API.
 
@@ -1762,7 +1852,8 @@ async def test_connector(
     from connectors.registry import ConnectorRegistry
 
     tid = _uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
+    company_uuid = await _validated_company_scope(tid, company_id)
+    async with get_tenant_session(tid, company_uuid) as session:
         result = await session.execute(
             select(Connector).where(Connector.id == conn_id, Connector.tenant_id == tid)
         )
@@ -1790,10 +1881,15 @@ async def test_connector(
     try:
         from core.models.connector_config import ConnectorConfig
 
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_uuid) as session:
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1821,16 +1917,17 @@ async def test_connector(
     # vault was clearly populated. Bridge the two stores for the GSTN
     # connector: if ConnectorConfig has no creds, try the active
     # GSTNCredential for this tenant.
-    if not config and connector.name.lower() in ("gstn", "gst"):
+    if not config and company_uuid is not None and connector.name.lower() in ("gstn", "gst"):
         try:
             from core.crypto import decrypt_for_tenant
             from core.models.gstn_credential import GSTNCredential
 
-            async with get_tenant_session(tid) as session:
+            async with get_tenant_session(tid, company_uuid) as session:
                 gstn_result = await session.execute(
                     select(GSTNCredential)
                     .where(
                         GSTNCredential.tenant_id == tid,
+                        GSTNCredential.company_id == company_uuid,
                         GSTNCredential.is_active.is_(True),
                     )
                     .order_by(GSTNCredential.last_verified_at.desc())
@@ -1877,10 +1974,15 @@ async def test_connector(
 
         from core.models.connector_config import ConnectorConfig
 
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_uuid) as session:
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1903,7 +2005,7 @@ async def test_connector(
         # Update last health check time
         from datetime import UTC, datetime
 
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_uuid) as session:
             result = await session.execute(
                 select(Connector).where(Connector.id == conn_id)
             )
@@ -1916,6 +2018,11 @@ async def test_connector(
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1943,10 +2050,15 @@ async def test_connector(
 
         from core.models.connector_config import ConnectorConfig
 
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_uuid) as session:
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )
@@ -1973,10 +2085,15 @@ async def test_connector(
 
         from core.models.connector_config import ConnectorConfig
 
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_uuid) as session:
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tid,
+                    (
+                        ConnectorConfig.company_id == company_uuid
+                        if company_uuid is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector.name,
                 )
             )

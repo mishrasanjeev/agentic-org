@@ -1,5 +1,7 @@
 # Architecture Guide
 
+> **Historical architecture warning (2026-07-15):** Layer, table, span, metric, alert, connector, agent, WORM, and retention descriptions in this page are a design snapshot, not current operating evidence. For release decisions use the [readiness program](readiness/README.md), runtime inventories, current migrations, and retained CI/deployment evidence. Registration and diagrams do not establish integration, sandbox proof, or production readiness.
+
 ## System Overview
 
 AgenticOrg is an 8-layer enterprise platform that orchestrates AI agents to automate business workflows.

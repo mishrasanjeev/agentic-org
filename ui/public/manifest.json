@@ -1,7 +1,7 @@
 {
-  "name": "AgenticOrg — Enterprise AI Agent Platform",
+  "name": "AgenticOrg — AI Workflow Evaluation Workspace",
   "short_name": "AgenticOrg",
-  "description": "Deploy 50+ AI agents across Finance, HR, Marketing & Ops with 1000+ integrations, voice agents, knowledge base, and HITL governance.",
+  "description": "Review repository-backed AI workflow candidates, evidence, and approval controls before deployment.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -17,8 +17,8 @@
     {"src": "/favicon-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
   ],
   "screenshots": [
-    {"src": "/screenshots/dashboard.png", "sizes": "1920x1080", "type": "image/png", "label": "Dashboard with agent metrics and charts"},
-    {"src": "/screenshots/observatory.png", "sizes": "1920x1080", "type": "image/png", "label": "Live Agent Observatory"},
-    {"src": "/screenshots/approvals.png", "sizes": "1920x1080", "type": "image/png", "label": "HITL Approval Queue"}
+    {"src": "/screenshots/dashboard.png", "sizes": "1920x1080", "type": "image/png", "label": "Repository dashboard view"},
+    {"src": "/screenshots/observatory.png", "sizes": "1920x1080", "type": "image/png", "label": "Illustrative activity view"},
+    {"src": "/screenshots/approvals.png", "sizes": "1920x1080", "type": "image/png", "label": "Approval review interface"}
   ]
 }

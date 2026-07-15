@@ -26,6 +26,7 @@ import asyncio
 import io
 import json
 import sys
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -37,6 +38,10 @@ from core.crypto.credential_vault import (
     decrypt_credential,
     encrypt_credential,
 )
+from core.crypto.verify_all import TenantCompanyScope
+
+_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+_COMPANY_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
 # ──────────────────────────────────────────────────────────────────────
 # Helpers (used across multiple tests)
@@ -46,6 +51,31 @@ from core.crypto.credential_vault import (
 @asynccontextmanager
 async def _session_cm(session: Any):
     yield session
+
+
+def _install_scope_session(
+    monkeypatch: pytest.MonkeyPatch,
+    session: Any,
+) -> None:
+    """Route a rewrap test through one exact company maintenance scope."""
+
+    scope = TenantCompanyScope(_TENANT_ID, _COMPANY_ID)
+
+    async def scope_plan(columns):
+        return {label: ([scope], True) for label, _dotted in columns}
+
+    monkeypatch.setattr(rw, "_build_scope_plan", scope_plan)
+    monkeypatch.setattr(
+        rw,
+        "get_tenant_session",
+        lambda _tenant_id, _company_id=None: _session_cm(session),
+    )
+
+
+def _update_result() -> MagicMock:
+    result = MagicMock()
+    result.rowcount = 1
+    return result
 
 
 def _mock_session_for(rows_per_call: list[list[tuple[Any, Any]]]):
@@ -61,6 +91,7 @@ def _mock_session_for(rows_per_call: list[list[tuple[Any, Any]]]):
 
     async def execute(_stmt, _params=None):
         result = MagicMock()
+        result.rowcount = 1
         i = state["i"]
         if i < len(rows_per_call):
             result.all.return_value = rows_per_call[i]
@@ -139,17 +170,14 @@ def test_run_dry_run_does_not_write(
     old_ct = _stamp_with("v1", "value-A")
     rows = [[("row-1", {"_encrypted": old_ct})]]
     session = _mock_session_for(rows_per_call=rows)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
     # Limit scanners to one column so the mock only sees one query.
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid=None, batch_size=10, dry_run=True
-        )
-    )
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=10, dry_run=True))
     assert rc == 0
     # No commit, no UPDATE — execute was called once for _count_pending only
     session.commit.assert_not_called()
@@ -160,7 +188,8 @@ def test_run_rewraps_old_rows_under_active_key(
 ) -> None:
     monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active-key,v1:old-key")
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
 
@@ -192,17 +221,13 @@ def test_run_rewraps_old_rows_under_active_key(
         sql = str(getattr(stmt, "text", stmt))
         if "UPDATE" in sql:
             captured_updates.append((sql, params or {}))
-            return MagicMock()
+            return _update_result()
         return await original_execute(stmt, params)
 
     session.execute = capturing_execute
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
 
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid=None, batch_size=10, dry_run=False
-        )
-    )
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=10, dry_run=False))
     assert rc == 0
     # Two UPDATEs were issued, one per old row.
     assert len(captured_updates) == 2
@@ -217,10 +242,65 @@ def test_run_rewraps_old_rows_under_active_key(
         assert decrypt_credential(new_ct) in {"from-old-A", "from-old-B"}
 
 
+def test_run_keyset_pages_past_active_rows_to_legacy_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Bounded pages must advance even when a page has no pending rows."""
+
+    monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
+    monkeypatch.setattr(
+        rw,
+        "_SCANNERS",
+        [("connector_configs.credentials_encrypted", "ignored")],
+    )
+
+    row_ids = [str(uuid.UUID(int=value)) for value in range(1, 6)]
+    active_ct = encrypt_credential("already-active")
+    rows = [
+        (row_ids[0], {"_encrypted": active_ct}),
+        (row_ids[1], {"_encrypted": active_ct}),
+        (row_ids[2], {"_encrypted": _stamp_with("v1", "legacy-3")}),
+        (row_ids[3], {"_encrypted": _stamp_with("v1", "legacy-4")}),
+        (row_ids[4], {"_encrypted": _stamp_with("v1", "legacy-5")}),
+    ]
+    # The count phase uses one bounded 1000-row page.  The write phase uses
+    # three 2-row keyset pages; its first page contains only active rows.
+    select_pages = [rows, rows[:2], rows[2:4], rows[4:]]
+    select_params: list[dict[str, Any]] = []
+    updated_ids: list[str] = []
+    session = MagicMock()
+
+    async def execute(statement, params=None):
+        sql = str(getattr(statement, "text", statement))
+        if "UPDATE" in sql:
+            updated_ids.append((params or {})["id"])
+            return _update_result()
+        select_params.append(dict(params or {}))
+        result = MagicMock()
+        result.all.return_value = select_pages[len(select_params) - 1]
+        return result
+
+    session.execute = execute
+    _install_scope_session(monkeypatch, session)
+
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=2, dry_run=False))
+
+    assert rc == 0
+    assert updated_ids == row_ids[2:]
+    assert [params["limit"] for params in select_params] == [1000, 2, 2, 2]
+    assert [params.get("after_id") for params in select_params] == [
+        None,
+        None,
+        row_ids[1],
+        row_ids[3],
+    ]
+
+
 def test_run_with_only_kid_filter(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v3:active,v2:mid,v1:older")
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("gstn_credentials.password_encrypted", "ignored")],
     )
 
@@ -239,17 +319,13 @@ def test_run_with_only_kid_filter(monkeypatch: pytest.MonkeyPatch) -> None:
         sql = str(getattr(stmt, "text", stmt))
         if "UPDATE" in sql:
             captured_updates.append(params or {})
-            return MagicMock()
+            return _update_result()
         return await original_execute(stmt, params)
 
     session.execute = capturing_execute
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
 
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid="v2", batch_size=10, dry_run=False
-        )
-    )
+    rc = asyncio.run(rw.run(only_column=None, only_kid="v2", batch_size=10, dry_run=False))
     assert rc == 0
     assert len(captured_updates) == 1
     assert captured_updates[0]["id"] == "b"
@@ -271,13 +347,14 @@ def test_run_unknown_column_returns_2(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_verify_returns_zero_when_clean(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
     active_ct = encrypt_credential("clean")
     rows = [[("a", {"_encrypted": active_ct})]]
     session = _mock_session_for(rows_per_call=rows)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
     rc = asyncio.run(rw.verify(only_column=None))
     assert rc == 0
 
@@ -285,13 +362,14 @@ def test_verify_returns_zero_when_clean(monkeypatch: pytest.MonkeyPatch) -> None
 def test_verify_returns_one_when_pending(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
     old_ct = _stamp_with("v1", "leftover")
     rows = [[("a", {"_encrypted": old_ct})]]
     session = _mock_session_for(rows_per_call=rows)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
     rc = asyncio.run(rw.verify(only_column=None))
     assert rc == 1
 
@@ -307,7 +385,8 @@ def test_run_decrypt_failure_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setenv("AGENTICORG_VAULT_KEYRING", "v2:active,v1:older")
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
     # Stamped with v9 (not in keyring); the payload after the $ is
@@ -316,12 +395,8 @@ def test_run_decrypt_failure_exits_one(monkeypatch: pytest.MonkeyPatch) -> None:
     full_set = [("a", {"_encrypted": bad_ct})]
     rows_per_call = [full_set, full_set]
     session = _mock_session_for(rows_per_call=rows_per_call)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid=None, batch_size=10, dry_run=False
-        )
-    )
+    _install_scope_session(monkeypatch, session)
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=10, dry_run=False))
     assert rc == 1
 
 
@@ -342,9 +417,7 @@ def test_cache_invalidator_registry_includes_tenant_ai_credentials() -> None:
     """
     from core.crypto.verify_all import _CACHE_INVALIDATORS
 
-    invalidators = _CACHE_INVALIDATORS.get(
-        "tenant_ai_credentials.credentials_encrypted"
-    )
+    invalidators = _CACHE_INVALIDATORS.get("tenant_ai_credentials.credentials_encrypted")
     assert invalidators is not None, (
         "tenant_ai_credentials.credentials_encrypted must be registered "
         "in _CACHE_INVALIDATORS so rewrap flushes the resolver cache"
@@ -417,28 +490,25 @@ def test_run_invalidates_cache_after_rewrap(
     monkeypatch.setitem(sys.modules, "fake_mod_for_iter4_run", fake_mod)
 
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
     # Override the registry so this test doesn't depend on the live
     # tenant_ai_credentials wiring (that's covered separately).
     monkeypatch.setattr(
-        rw, "_CACHE_INVALIDATORS",
-        {"connector_configs.credentials_encrypted":
-         ["fake_mod_for_iter4_run:flush"]},
+        rw,
+        "_CACHE_INVALIDATORS",
+        {"connector_configs.credentials_encrypted": ["fake_mod_for_iter4_run:flush"]},
     )
 
     old_ct = _stamp_with("v1", "x")
     full_set = [("a", {"_encrypted": old_ct})]
     rows_per_call = [full_set, full_set, []]
     session = _mock_session_for(rows_per_call=rows_per_call)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
 
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid=None, batch_size=10, dry_run=False
-        )
-    )
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=10, dry_run=False))
     assert rc == 0
     # Invalidator fired exactly once after the loop, not per-row.
     assert invalidator_calls == ["flushed"]
@@ -464,13 +534,14 @@ def test_run_does_not_invalidate_when_nothing_touched(
     monkeypatch.setitem(sys.modules, "fake_mod_for_iter4_clean", fake_mod)
 
     monkeypatch.setattr(
-        rw, "_SCANNERS",
+        rw,
+        "_SCANNERS",
         [("connector_configs.credentials_encrypted", "ignored")],
     )
     monkeypatch.setattr(
-        rw, "_CACHE_INVALIDATORS",
-        {"connector_configs.credentials_encrypted":
-         ["fake_mod_for_iter4_clean:flush"]},
+        rw,
+        "_CACHE_INVALIDATORS",
+        {"connector_configs.credentials_encrypted": ["fake_mod_for_iter4_clean:flush"]},
     )
 
     # Only active-key ciphertext present → 0 rows pending.
@@ -478,13 +549,9 @@ def test_run_does_not_invalidate_when_nothing_touched(
     full_set = [("a", {"_encrypted": active_ct})]
     rows_per_call = [full_set]
     session = _mock_session_for(rows_per_call=rows_per_call)
-    monkeypatch.setattr(rw, "async_session_factory", lambda: _session_cm(session))
+    _install_scope_session(monkeypatch, session)
 
-    rc = asyncio.run(
-        rw.run(
-            only_column=None, only_kid=None, batch_size=10, dry_run=False
-        )
-    )
+    rc = asyncio.run(rw.run(only_column=None, only_kid=None, batch_size=10, dry_run=False))
     assert rc == 0
     assert invalidator_calls == []
 
@@ -524,7 +591,4 @@ def _stamp_with(kid: str, plaintext: str) -> str:
         if entry_kid == kid:
             token = Fernet(kbytes).encrypt(plaintext.encode()).decode()
             return f"agko_v{kid}${token}"
-    raise RuntimeError(
-        f"_stamp_with: no keyring entry id={kid!r} (env: "
-        f"AGENTICORG_VAULT_KEYRING)"
-    )
+    raise RuntimeError(f"_stamp_with: no keyring entry id={kid!r} (env: AGENTICORG_VAULT_KEYRING)")

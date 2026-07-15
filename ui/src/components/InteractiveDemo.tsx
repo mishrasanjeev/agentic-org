@@ -33,36 +33,36 @@ const SCENARIOS: Scenario[] = [
     avatar: "P",
     avatarColor: "bg-emerald-500",
     domain: "finance",
-    taskTitle: "Process Invoice INV-2024-4521",
-    taskInput: '{ "vendor": "Tata Steel Ltd", "amount": "₹3,24,500", "po_ref": "PO-8847" }',
+    taskTitle: "Simulate an invoice review",
+    taskInput: '{ "vendor": "Example Metals", "amount": "sample", "po_ref": "PO-SAMPLE" }',
     lines: [
       { type: "system", text: "Task assigned to Priya (AP Processor — Mumbai)", delay: 0 },
       { type: "system", text: "Loading prompt template: ap_processor.prompt.txt", delay: 400 },
       { type: "separator", text: "", delay: 600 },
       { type: "agent", text: "STEP 1 — EXTRACT", delay: 800 },
       { type: "tool", text: "→ ocr_extract_invoice(s3_key: inv-2024-4521.pdf)", delay: 1000 },
-      { type: "result", text: "  ✓ Extracted: vendor=Tata Steel, GSTIN=27AAACT2727Q1ZV, amount=₹3,24,500", delay: 1800 },
+      { type: "result", text: "  ✓ Synthetic fields extracted for review", delay: 1800 },
       { type: "separator", text: "", delay: 2000 },
       { type: "agent", text: "STEP 2 — VALIDATE", delay: 2200 },
-      { type: "tool", text: "→ gstn_validate(gstin: 27AAACT2727Q1ZV)", delay: 2400 },
-      { type: "result", text: "  ✓ GSTIN valid: Tata Steel Limited, Maharashtra", delay: 3200 },
+      { type: "tool", text: "→ simulate_gstin_validation(sample_gstin)", delay: 2400 },
+      { type: "result", text: "  ✓ Synthetic validation result prepared", delay: 3200 },
       { type: "tool", text: "→ check_duplicate(inv_id: INV-2024-4521, vendor: tata_steel)", delay: 3400 },
       { type: "result", text: "  ✓ No duplicate found", delay: 4000 },
       { type: "separator", text: "", delay: 4200 },
       { type: "agent", text: "STEP 3 — 3-WAY MATCH", delay: 4400 },
       { type: "tool", text: "→ erp_get_po(po_ref: PO-8847)", delay: 4600 },
-      { type: "result", text: "  ✓ PO amount: ₹3,25,000 | Invoice: ₹3,24,500 | Delta: ₹500 (0.15%)", delay: 5400 },
-      { type: "result", text: "  ✓ Within 2% tolerance — MATCHED", delay: 5800, color: "text-emerald-400" },
+      { type: "result", text: "  ✓ Sample PO and invoice values compared", delay: 5400 },
+      { type: "result", text: "  ✓ Proposed match remains subject to policy", delay: 5800, color: "text-emerald-400" },
       { type: "separator", text: "", delay: 6000 },
-      { type: "agent", text: "STEP 4 — SCHEDULE PAYMENT", delay: 6200 },
-      { type: "tool", text: "→ erp_queue_payment(date: 2026-04-02, discount: 2% early-pay)", delay: 6400 },
-      { type: "result", text: "  ✓ Payment scheduled for Apr 2 — saving ₹6,490 in early-pay discount", delay: 7200 },
+      { type: "agent", text: "STEP 4 — PREPARE PAYMENT DRAFT", delay: 6200 },
+      { type: "tool", text: "→ simulate_payment_draft(sample_invoice)", delay: 6400 },
+      { type: "result", text: "  ✓ Payment proposal held for authorized review", delay: 7200 },
       { type: "separator", text: "", delay: 7400 },
-      { type: "agent", text: "STEP 5 — POST TO GL", delay: 7600 },
-      { type: "tool", text: "→ erp_post_journal(idempotency_key: INV-2024-4521_gl_post)", delay: 7800 },
-      { type: "result", text: "  ✓ Journal entry JE-29847 posted to GL", delay: 8600 },
+      { type: "agent", text: "STEP 5 — PREPARE JOURNAL DRAFT", delay: 7600 },
+      { type: "tool", text: "→ simulate_journal_draft(sample_invoice)", delay: 7800 },
+      { type: "result", text: "  ✓ Draft journal prepared; nothing was posted", delay: 8600 },
       { type: "separator", text: "", delay: 8800 },
-      { type: "confidence", text: "Confidence: 94% | Status: COMPLETED | Latency: 2.3s | Tokens: 847", delay: 9000 },
+      { type: "confidence", text: "Sample review signal | Status: SIMULATION_COMPLETE", delay: 9000 },
     ],
   },
   {
@@ -74,33 +74,33 @@ const SCENARIOS: Scenario[] = [
     avatar: "M",
     avatarColor: "bg-purple-500",
     domain: "hr",
-    taskTitle: "Onboard New Hire: Rahul Kumar (SDE-II)",
-    taskInput: '{ "name": "Rahul Kumar", "role": "SDE-II", "dept": "Engineering", "start": "2026-04-01" }',
+    taskTitle: "Simulate an onboarding workflow",
+    taskInput: '{ "name": "Sample Employee", "role": "Example Role", "dept": "Example Team" }',
     lines: [
       { type: "system", text: "Task assigned to Maya (Onboarding Specialist)", delay: 0 },
       { type: "system", text: "Loading prompt template: onboarding_agent.prompt.txt", delay: 400 },
       { type: "separator", text: "", delay: 600 },
       { type: "agent", text: "STEP 1 — CREATE EMPLOYEE RECORD", delay: 800 },
       { type: "tool", text: "→ darwinbox.create_employee(name: Rahul Kumar, role: SDE-II)", delay: 1000 },
-      { type: "result", text: "  ✓ Employee ID: EMP-10847 created in Darwinbox", delay: 1800 },
+      { type: "result", text: "  ✓ Sample employee-record draft prepared", delay: 1800 },
       { type: "separator", text: "", delay: 2000 },
       { type: "agent", text: "STEP 2 — PROVISION IT ACCESS", delay: 2200 },
       { type: "tool", text: "→ google_workspace.create_account(rahul.kumar@agenticorg.ai)", delay: 2400 },
-      { type: "result", text: "  ✓ Email account created", delay: 3000 },
+      { type: "result", text: "  ✓ Email provisioning proposal prepared", delay: 3000 },
       { type: "tool", text: "→ slack.invite_user(rahul.kumar@agenticorg.ai, channels: #engineering, #general)", delay: 3200 },
-      { type: "result", text: "  ✓ Slack invite sent to 2 channels", delay: 3800 },
+      { type: "result", text: "  ✓ Sample collaboration invite drafted", delay: 3800 },
       { type: "tool", text: "→ github.add_to_team(user: rahulkumar, team: engineering)", delay: 4000 },
-      { type: "result", text: "  ✓ Added to GitHub Engineering team", delay: 4600 },
+      { type: "result", text: "  ✓ Repository-access request drafted", delay: 4600 },
       { type: "separator", text: "", delay: 4800 },
       { type: "agent", text: "STEP 3 — SCHEDULE ORIENTATION", delay: 5000 },
       { type: "tool", text: "→ google_calendar.create_event(Day 1 Orientation, Apr 1, 10:00 AM)", delay: 5200 },
-      { type: "result", text: "  ✓ Orientation scheduled with hiring manager", delay: 5800 },
+      { type: "result", text: "  ✓ Orientation proposal awaits confirmation", delay: 5800 },
       { type: "separator", text: "", delay: 6000 },
       { type: "agent", text: "STEP 4 — SEND WELCOME KIT", delay: 6200 },
       { type: "tool", text: "→ email.send(to: rahul.kumar@agenticorg.ai, template: welcome_kit)", delay: 6400 },
-      { type: "result", text: "  ✓ Welcome email sent with Day 1 checklist, laptop setup guide, benefits enrollment", delay: 7200 },
+      { type: "result", text: "  ✓ Welcome message draft prepared for review", delay: 7200 },
       { type: "separator", text: "", delay: 7400 },
-      { type: "confidence", text: "Confidence: 96% | Status: COMPLETED | Latency: 1.8s | Tokens: 623", delay: 7600 },
+      { type: "confidence", text: "Sample review signal | Status: SIMULATION_COMPLETE", delay: 7600 },
     ],
   },
   {
@@ -112,7 +112,7 @@ const SCENARIOS: Scenario[] = [
     avatar: "D",
     avatarColor: "bg-orange-500",
     domain: "ops",
-    taskTitle: "Triage: 'Payment gateway timeout in production'",
+    taskTitle: "Simulate support-ticket triage",
     taskInput: '{ "ticket": "TKT-9921", "subject": "Payment gateway timeout", "source": "PagerDuty", "severity": "P1" }',
     lines: [
       { type: "system", text: "Task assigned to Dev (Support Triage Lead)", delay: 0 },
@@ -131,14 +131,14 @@ const SCENARIOS: Scenario[] = [
       { type: "tool", text: "→ get_oncall_engineer(team: payments, escalation_level: 1)", delay: 4200 },
       { type: "result", text: "  ✓ On-call: Amit Shah (Payments Team Lead)", delay: 4800 },
       { type: "tool", text: "→ slack.send_alert(channel: #payments-oncall, mention: @amitshah)", delay: 5000 },
-      { type: "result", text: "  ✓ P1 alert sent to #payments-oncall with full context", delay: 5600 },
+      { type: "result", text: "  ✓ Sample alert draft prepared; nothing was sent", delay: 5600 },
       { type: "separator", text: "", delay: 5800 },
       { type: "agent", text: "STEP 4 — CREATE WAR ROOM", delay: 6000 },
       { type: "tool", text: "→ zoom.create_meeting(title: P1 War Room — Payment Gateway, auto_record: true)", delay: 6200 },
-      { type: "result", text: "  ✓ War room created, link shared in #payments-oncall", delay: 6800 },
+      { type: "result", text: "  ✓ Sample war-room proposal prepared; nothing was created", delay: 6800 },
       { type: "separator", text: "", delay: 7000 },
-      { type: "hitl", text: "⚠ HITL TRIGGERED: P1 incident requires COO acknowledgment within 15 minutes", delay: 7200 },
-      { type: "confidence", text: "Confidence: 91% | Status: HITL_TRIGGERED | Latency: 1.4s | Tokens: 712", delay: 7800 },
+      { type: "hitl", text: "⚠ SAMPLE HITL: configured policy routes the incident to an authorized owner", delay: 7200 },
+      { type: "confidence", text: "Sample review signal | Status: SIMULATION_HITL", delay: 7800 },
     ],
   },
   {
@@ -150,23 +150,23 @@ const SCENARIOS: Scenario[] = [
     avatar: "A",
     avatarColor: "bg-blue-500",
     domain: "finance",
-    taskTitle: "Daily Bank Reconciliation — March 24, 2026",
-    taskInput: '{ "date": "2026-03-24", "bank": "HDFC Current A/C", "expected_txns": 847 }',
+    taskTitle: "Simulate bank reconciliation",
+    taskInput: '{ "bank": "Example account", "batch": "synthetic" }',
     lines: [
       { type: "system", text: "Task assigned to Arjun (Recon Agent — East)", delay: 0 },
       { type: "system", text: "Loading prompt template: recon_agent.prompt.txt", delay: 400 },
       { type: "separator", text: "", delay: 600 },
       { type: "agent", text: "STEP 1 — FETCH DATA", delay: 800 },
       { type: "tool", text: "→ banking_api.get_transactions(date: 2026-03-24, account: HDFC-001)", delay: 1000 },
-      { type: "result", text: "  ✓ Fetched 847 bank transactions (₹4.2 Cr total)", delay: 1800 },
+      { type: "result", text: "  ✓ Synthetic bank batch loaded", delay: 1800 },
       { type: "tool", text: "→ erp.get_gl_entries(date: 2026-03-24)", delay: 2000 },
-      { type: "result", text: "  ✓ Fetched 839 GL entries", delay: 2600 },
+      { type: "result", text: "  ✓ Synthetic ledger batch loaded", delay: 2600 },
       { type: "separator", text: "", delay: 2800 },
       { type: "agent", text: "STEP 2 — AUTO-MATCH", delay: 3000 },
       { type: "tool", text: "→ match_engine.run(bank_txns: 847, gl_entries: 839, tolerance: ₹10)", delay: 3200 },
-      { type: "result", text: "  ✓ Round 1 (exact match): 812 matched", delay: 4000 },
-      { type: "result", text: "  ✓ Round 2 (fuzzy ref match): 31 matched", delay: 4600 },
-      { type: "result", text: "  ✓ Total matched: 843 / 847 (99.5%)", delay: 5200, color: "text-emerald-400" },
+      { type: "result", text: "  ✓ Exact-match proposals prepared", delay: 4000 },
+      { type: "result", text: "  ✓ Reference-match proposals prepared", delay: 4600 },
+      { type: "result", text: "  ✓ Sample exceptions remain for human review", delay: 5200, color: "text-emerald-400" },
       { type: "separator", text: "", delay: 5400 },
       { type: "agent", text: "STEP 3 — ANALYZE BREAKS", delay: 5600 },
       { type: "result", text: "  Break 1: ₹15,400 — Bank debit, no GL entry (possible bank charge)", delay: 6000 },
@@ -174,8 +174,8 @@ const SCENARIOS: Scenario[] = [
       { type: "result", text: "  Break 3: ₹8,200 — Amount mismatch (bank ₹8,200 vs GL ₹8,000)", delay: 6800 },
       { type: "result", text: "  Break 4: ₹47,500 — Timing difference (posted Mar 25 in bank)", delay: 7200 },
       { type: "separator", text: "", delay: 7400 },
-      { type: "hitl", text: "⚠ HITL TRIGGERED: 4 breaks totaling ₹3,01,100 — CFO review required", delay: 7600 },
-      { type: "confidence", text: "Confidence: 97% | Status: HITL_TRIGGERED | Latency: 3.1s | Tokens: 1,243", delay: 8200 },
+      { type: "hitl", text: "⚠ SAMPLE HITL: unresolved breaks require finance review", delay: 7600 },
+      { type: "confidence", text: "Sample review signal | Status: SIMULATION_HITL", delay: 8200 },
     ],
   },
 ];
@@ -295,6 +295,10 @@ export default function InteractiveDemo() {
 
   return (
     <div className="max-w-5xl mx-auto">
+      <div className="mb-6 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-center text-sm text-amber-200">
+        Interactive simulation with synthetic data. Tool calls and results shown below are examples;
+        no external system action is executed.
+      </div>
       {/* Scenario Tabs */}
       <div className="flex flex-wrap gap-2 mb-6 justify-center">
         {SCENARIOS.map((s, i) => (
@@ -327,7 +331,7 @@ export default function InteractiveDemo() {
           <div className="flex-1 mx-4">
             <div className="bg-slate-800 rounded-md px-3 py-1 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
               <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? "bg-blue-400 animate-pulse" : isDone ? "bg-emerald-400" : "bg-slate-600"}`} />
-              AgenticOrg Agent Terminal — {scenario.agent} ({scenario.designation})
+              AgenticOrg Simulation Terminal — {scenario.agent} ({scenario.designation})
             </div>
           </div>
           <button
@@ -397,7 +401,7 @@ export default function InteractiveDemo() {
           <div className="flex items-center gap-4 text-xs">
             <span className={`flex items-center gap-1.5 ${isDone ? "text-emerald-400" : isHITL ? "text-amber-400" : isRunning ? "text-blue-400" : "text-slate-600"}`}>
               <span className={`w-2 h-2 rounded-full ${isDone ? "bg-emerald-400" : isHITL ? "bg-amber-400 animate-pulse" : isRunning ? "bg-blue-400 animate-pulse" : "bg-slate-600"}`} />
-              {isDone ? (isHITL ? "HITL Triggered" : "Completed") : isRunning ? "Executing" : "Ready"}
+              {isDone ? (isHITL ? "Sample HITL" : "Simulation complete") : isRunning ? "Simulating" : "Ready"}
             </span>
             <span className="text-slate-600">Steps: {Math.min(visibleLines, scenario.lines.filter(l => l.type === "agent").length)}/{scenario.lines.filter(l => l.type === "agent").length}</span>
           </div>

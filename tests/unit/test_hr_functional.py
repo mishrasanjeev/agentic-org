@@ -30,8 +30,10 @@ def workflow_engine(mock_state_store):
 
 
 @pytest.fixture
-def base_state():
+def base_state(workflow_company_scope):
     return {
+        **workflow_company_scope,
+        "domain": "hr",
         "id": "wfr_hr_test001",
         "status": "running",
         "trigger_payload": {},
@@ -61,7 +63,7 @@ class TestHRFunctional:
     # FT-HR-001: JD generation from role brief
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_001_jd_generation(self):
+    async def test_ft_hr_001_jd_generation(self, workflow_company_scope):
         """FT-HR-001: JD generated from role brief with required sections."""
         step = {
             "id": "generate_jd",
@@ -70,6 +72,8 @@ class TestHRFunctional:
             "action": "generate_jd",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "hr",
             "context": {
                 "role_title": "Senior Backend Engineer",
                 "department": "Engineering",
@@ -91,7 +95,7 @@ class TestHRFunctional:
     # FT-HR-002: Bias-free resume screening (PII stripped, no gender bias)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_002_bias_free_resume_screening(self):
+    async def test_ft_hr_002_bias_free_resume_screening(self, workflow_company_scope):
         """FT-HR-002: Resume screening with PII stripped — email, phone, Aadhaar masked."""
         resume_data = {
             "name": "Priya Sharma",
@@ -128,7 +132,12 @@ class TestHRFunctional:
             "agent": "talent_acquisition",
             "action": "screen_resume",
         }
-        state = {"context": {"masked_resume": masked}, "step_results": {}}
+        state = {
+            **workflow_company_scope,
+            "domain": "hr",
+            "context": {"masked_resume": masked},
+            "step_results": {},
+        }
         result = await execute_step(step, state)
         assert result["status"] == "completed"
 
@@ -391,7 +400,7 @@ class TestHRFunctional:
     # FT-HR-008: Payroll computation accuracy (all deductions within ±₹1)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_008_payroll_computation_accuracy(self):
+    async def test_ft_hr_008_payroll_computation_accuracy(self, workflow_company_scope):
         """FT-HR-008: Payroll computation — gross, PF, PT, TDS, net within ±₹1."""
         # Simulate payroll for an employee
         basic = 50000
@@ -419,6 +428,8 @@ class TestHRFunctional:
             "action": "compute_payroll",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "hr",
             "context": {
                 "employee_id": "EMP-001",
                 "basic": basic,
@@ -437,7 +448,7 @@ class TestHRFunctional:
     # FT-HR-009: Variable pay inclusion (gross recomputed, TDS recalculated)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_hr_009_variable_pay_inclusion(self):
+    async def test_ft_hr_009_variable_pay_inclusion(self, workflow_company_scope):
         """FT-HR-009: Variable pay added to gross, TDS recomputed correctly."""
         base_gross = 90000
         variable_pay = 30000
@@ -462,6 +473,8 @@ class TestHRFunctional:
             "action": "include_variable_pay",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "hr",
             "context": {
                 "base_gross": base_gross,
                 "variable_pay": variable_pay,

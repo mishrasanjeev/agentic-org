@@ -50,6 +50,9 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         # stamped-but-missing table caused prod A2A commerce to return 500
         # on 2026-06-14; migration success must verify more than version_num.
         "a2a_tasks",
+        "capability_readiness_records",
+        "capability_evidence_records",
+        "capability_promotion_events",
     }
 )
 
@@ -118,8 +121,7 @@ def main() -> int:
 
     if BASELINE_PROBE_TABLE in tables:
         logger.info(
-            "legacy schema detected (no alembic_version, %s present) — "
-            "stamping %s then upgrading head",
+            "legacy schema detected (no alembic_version, %s present) — stamping %s then upgrading head",
             BASELINE_PROBE_TABLE,
             BASELINE_REVISION,
         )

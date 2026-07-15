@@ -30,7 +30,7 @@ from core.models.tenant import Tenant
 logger = structlog.get_logger()
 
 
-# Plan pricing — aligned with core.billing.limits.PLAN_PRICING
+# Plan pricing — aligned with core.billing.catalog.PUBLIC_PLAN_CATALOG
 PLAN_MONTHLY_FEE = {
     "free": Decimal("0"),
     "pro": Decimal("2.00"),

@@ -12,7 +12,7 @@ import logging
 import re
 import uuid as _uuid
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from cryptography.fernet import InvalidToken
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile
@@ -1428,8 +1428,8 @@ class CASubscriptionOut(BaseModel):
 
 
 class CASubscriptionActivate(BaseModel):
-    plan: str = Field(default="ca_pro", max_length=50)
-    billing_cycle: str = Field(default="monthly", max_length=20)
+    plan: Literal["ca_pro"] = "ca_pro"
+    billing_cycle: Literal["monthly"] = "monthly"
 
 
 def _subscription_to_out(s: CASubscription) -> CASubscriptionOut:
@@ -2014,11 +2014,11 @@ async def activate_ca_subscription(
     body: CASubscriptionActivate | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Activate a CA subscription or start a 14-day trial.
+    """Start or return the tenant's internal CA evaluation period.
 
     If no subscription exists, creates one in trial status with
-    14 days free and max 7 clients.  If a subscription already exists
-    and is in trial/expired/cancelled, reactivates it.
+    a 14-day evaluation window and max 7 clients. Paid activation is
+    fail-closed until a verified payment path is integrated.
     """
     tid = _uuid.UUID(tenant_id)
     plan = body.plan if body else "ca_pro"
@@ -2047,21 +2047,14 @@ async def activate_ca_subscription(
                 current_period_end=now + timedelta(days=14),
             )
             session.add(sub)
-        elif sub.status in ("trial", "expired", "cancelled"):
-            # Reactivate
-            sub.status = "active"
-            sub.plan = plan
-            sub.billing_cycle = billing_cycle
-            sub.current_period_start = now
-            if billing_cycle == "annual":
-                sub.current_period_end = now + timedelta(days=365)
-                sub.max_clients = 50
-            else:
-                sub.current_period_end = now + timedelta(days=30)
-                sub.max_clients = 25
-            sub.cancelled_at = None
-            sub.updated_at = now
-            session.add(sub)
+        elif sub.status == "trial":
+            # Idempotent evaluation request. Never convert a trial to paid/active.
+            pass
+        elif sub.status in ("expired", "cancelled"):
+            raise HTTPException(
+                409,
+                "Paid CA activation is unavailable until payment is verified",
+            )
         elif sub.status == "active":
             raise HTTPException(409, "Subscription is already active")
 

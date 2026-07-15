@@ -34,6 +34,15 @@ from core.models.ca_client_billing import CAClientInvoice as CAClientInvoice
 from core.models.ca_client_billing import CAClientPayment as CAClientPayment
 from core.models.ca_client_billing import CAServicePlan as CAServicePlan
 from core.models.ca_subscription import CASubscription as CASubscription
+from core.models.capability_readiness import (
+    CapabilityEvidenceRecord as CapabilityEvidenceRecord,
+)
+from core.models.capability_readiness import (
+    CapabilityPromotionEvent as CapabilityPromotionEvent,
+)
+from core.models.capability_readiness import (
+    CapabilityReadinessRecord as CapabilityReadinessRecord,
+)
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument

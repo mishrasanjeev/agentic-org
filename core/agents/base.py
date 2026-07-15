@@ -40,6 +40,8 @@ class BaseAgent:
         self,
         agent_id: str,
         tenant_id: str,
+        company_id: str | None = None,
+        domain: str | None = None,
         authorized_tools: list[str] | None = None,
         prompt_variables: dict[str, str] | None = None,
         hitl_condition: str = "",
@@ -50,6 +52,9 @@ class BaseAgent:
     ):
         self.agent_id = agent_id
         self.tenant_id = tenant_id
+        self.company_id = company_id
+        if domain:
+            self.domain = domain
         self.authorized_tools = authorized_tools or []
         self.prompt_variables = prompt_variables or {}
         self.hitl_condition = hitl_condition
@@ -102,14 +107,10 @@ class BaseAgent:
             # 3. Execute tool calls if the LLM requested any
             requested_tools = output.pop("tool_calls", None)
             if requested_tools and isinstance(requested_tools, list) and self.tool_gateway:
-                tool_results = await self._execute_tool_calls(
-                    requested_tools, trace, tool_calls
-                )
+                tool_results = await self._execute_tool_calls(requested_tools, trace, tool_calls)
                 # Feed tool results back to LLM for final synthesis
                 if tool_results:
-                    output = await self._synthesize_with_tools(
-                        context, output, tool_results, trace
-                    )
+                    output = await self._synthesize_with_tools(context, output, tool_results, trace)
 
             # 4. Validate output
             if not self._validate_output(output):
@@ -191,6 +192,7 @@ class BaseAgent:
         # Claude requires Anthropic API key
         if "claude" in model:
             from core.config import external_keys
+
             if external_keys.anthropic_api_key:
                 return self.llm_model
             return None  # Fall back to global default
@@ -198,6 +200,7 @@ class BaseAgent:
         # GPT requires OpenAI API key
         if "gpt" in model:
             from core.config import external_keys
+
             if external_keys.openai_api_key:
                 return self.llm_model
             return None  # Fall back to global default
@@ -212,9 +215,7 @@ class BaseAgent:
         ]
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
-        response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override
-        )
+        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
         # Strip markdown code blocks (```json ... ```) that Gemini often wraps
@@ -309,11 +310,13 @@ class BaseAgent:
             instance._register_tools()
             handler = instance._tool_registry.get(tool_name)
             desc = (handler.__doc__ or "").strip() if handler else ""
-            tools.append({
-                "connector": connector_name,
-                "tool": tool_name,
-                "description": desc,
-            })
+            tools.append(
+                {
+                    "connector": connector_name,
+                    "tool": tool_name,
+                    "description": desc,
+                }
+            )
         return tools if tools else None
 
     async def _execute_tool_calls(
@@ -342,30 +345,38 @@ class BaseAgent:
                 latency = int((time.monotonic() - call_start) * 1000)
                 status = "error" if "error" in result else "success"
                 trace.append(f"[tool] {connector}.{tool} → {status} ({latency}ms)")
-                tool_records.append(ToolCallRecord(
-                    tool_name=f"{connector}.{tool}",
-                    status=status,
-                    latency_ms=latency,
-                ))
-                results.append({
-                    "connector": connector,
-                    "tool": tool,
-                    "result": result,
-                })
+                tool_records.append(
+                    ToolCallRecord(
+                        tool_name=f"{connector}.{tool}",
+                        status=status,
+                        latency_ms=latency,
+                    )
+                )
+                results.append(
+                    {
+                        "connector": connector,
+                        "tool": tool,
+                        "result": result,
+                    }
+                )
             # enterprise-gate: broad-except-ok reason=agent-tool-call-failure-returns-explicit-error-result
             except Exception as e:
                 latency = int((time.monotonic() - call_start) * 1000)
                 trace.append(f"[tool] {connector}.{tool} → error: {e}")
-                tool_records.append(ToolCallRecord(
-                    tool_name=f"{connector}.{tool}",
-                    status="error",
-                    latency_ms=latency,
-                ))
-                results.append({
-                    "connector": connector,
-                    "tool": tool,
-                    "result": {"error": str(e)},
-                })
+                tool_records.append(
+                    ToolCallRecord(
+                        tool_name=f"{connector}.{tool}",
+                        status="error",
+                        latency_ms=latency,
+                    )
+                )
+                results.append(
+                    {
+                        "connector": connector,
+                        "tool": tool,
+                        "result": {"error": str(e)},
+                    }
+                )
         return results
 
     async def _synthesize_with_tools(
@@ -391,9 +402,7 @@ class BaseAgent:
             },
         ]
         model_override = self._resolve_llm_model()
-        response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override
-        )
+        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 
         content = response.content.strip()
@@ -423,15 +432,21 @@ class BaseAgent:
         if not self.tool_gateway:
             return {"error": "No tool gateway configured"}
 
-        return await self.tool_gateway.execute(
-            tenant_id=self.tenant_id,
-            agent_id=self.agent_id,
-            agent_scopes=self.authorized_tools,
-            connector_name=connector_name,
-            tool_name=tool_name,
-            params=params or {},
-            idempotency_key=idempotency_key or None,
-        )
+        gateway_args: dict[str, Any] = {
+            "tenant_id": self.tenant_id,
+            "agent_id": self.agent_id,
+            "agent_scopes": self.authorized_tools,
+            "connector_name": connector_name,
+            "tool_name": tool_name,
+            "params": params or {},
+            "idempotency_key": idempotency_key or None,
+        }
+        # Keep third-party/test gateway implementations source-compatible.
+        # The real gateway still fails closed in strict runtimes when company
+        # context is absent because its optional parameters default to None.
+        if self.company_id:
+            gateway_args.update(company_id=self.company_id, domain=self.domain)
+        return await self.tool_gateway.execute(**gateway_args)
 
     def _make_result(
         self,

@@ -78,7 +78,7 @@ const FEATURES = [
   },
   {
     title: "Performance Management",
-    description: "Summarize feedback, track configured OKRs and review cycles, and surface patterns for manager review. Performance ratings and improvement-plan decisions remain human-owned.",
+    description: "Summarize feedback, track configured OKRs and review cycles, and surface patterns as inputs for manager review. Managers interpret those inputs; the workflow does not assign ratings or make employment decisions.",
     icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
     gradient: "from-orange-500 to-red-600",
   },

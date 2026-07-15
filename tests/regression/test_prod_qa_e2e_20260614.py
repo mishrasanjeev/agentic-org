@@ -22,7 +22,10 @@ def test_support_triage_accepts_raw_ticket_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_workflow_agent_step_uses_stored_agent_config(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_workflow_agent_step_uses_stored_agent_config(
+    monkeypatch: pytest.MonkeyPatch,
+    workflow_company_scope: dict[str, str],
+) -> None:
     from core.agents.registry import AgentRegistry
     from core.schemas.messages import TaskResult
     from workflows import step_types
@@ -34,6 +37,8 @@ async def test_workflow_agent_step_uses_stored_agent_config(monkeypatch: pytest.
         return {
             "id": agent_id,
             "tenant_id": tenant_id,
+            "company_id": workflow_company_scope["company_id"],
+            "domain": "operations",
             "agent_type": "support_triage",
             "authorized_tools": ["freshdesk:update_ticket"],
             "prompt_variables": {"tone": "concise"},
@@ -80,8 +85,8 @@ async def test_workflow_agent_step_uses_stored_agent_config(monkeypatch: pytest.
             "inputs": {"ticket": "QA smoke ticket: dashboard is blank after login"},
         },
         {
+            **workflow_company_scope,
             "id": "wfr_test",
-            "tenant_id": "22222222-2222-2222-2222-222222222222",
             "context": {},
         },
     )
@@ -89,11 +94,13 @@ async def test_workflow_agent_step_uses_stored_agent_config(monkeypatch: pytest.
     assert result["status"] == "completed"
     assert captured["loaded"] == {
         "agent_id": "11111111-1111-1111-1111-111111111111",
-        "tenant_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": workflow_company_scope["tenant_id"],
     }
     assert captured["config"] == {
         "id": "11111111-1111-1111-1111-111111111111",
-        "tenant_id": "22222222-2222-2222-2222-222222222222",
+        "tenant_id": workflow_company_scope["tenant_id"],
+        "company_id": workflow_company_scope["company_id"],
+        "domain": "operations",
         "agent_type": "support_triage",
         "authorized_tools": ["freshdesk:update_ticket"],
         "prompt_variables": {"tone": "concise"},

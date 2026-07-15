@@ -1397,7 +1397,7 @@ class TestToolGateway:
         connector = MagicMock()
         gateway.register_connector("sap", connector)
         # Cache key is now (tenant_id, connector_name) tuple — default tenant is "_global"
-        assert ("_global", "sap") in gateway._connectors
+        assert ("_global", None, "sap") in gateway._connectors
 
 
 # =============================================================================
@@ -1894,12 +1894,12 @@ class TestParallelExecutor:
 
 class TestStepTypes:
     @pytest.mark.asyncio
-    async def test_execute_agent_step(self):
+    async def test_execute_agent_step(self, workflow_company_scope):
         from workflows.step_types import execute_step
 
         result = await execute_step(
             {"id": "s1", "type": "agent", "agent": "finance-agent", "action": "review"},
-            {},
+            workflow_company_scope,
         )
         assert result["type"] == "agent"
         assert result["status"] == "completed"
@@ -1950,23 +1950,23 @@ class TestStepTypes:
         assert result["assignee_role"] == "manager"
 
     @pytest.mark.asyncio
-    async def test_execute_parallel_step(self):
+    async def test_execute_parallel_step(self, workflow_company_scope):
         from workflows.step_types import execute_step
 
         result = await execute_step(
             {"id": "s1", "type": "parallel", "steps": ["step_a", "step_b"], "wait_for": "all"},
-            {},
+            workflow_company_scope,
         )
         assert result["type"] == "parallel"
         assert len(result["results"]) == 2
 
     @pytest.mark.asyncio
-    async def test_execute_loop_step(self):
+    async def test_execute_loop_step(self, workflow_company_scope):
         from workflows.step_types import execute_step
 
         result = await execute_step(
             {"id": "s1", "type": "loop", "items": ["item1", "item2"]},
-            {},
+            workflow_company_scope,
         )
         assert result["type"] == "loop"
         assert len(result["results"]) == 2
@@ -2025,7 +2025,7 @@ class TestStepTypes:
         assert "not found" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_execute_parallel_any(self):
+    async def test_execute_parallel_any(self, workflow_company_scope):
         """Parallel with wait_for='any' passes coroutines to asyncio.wait.
 
         In Python 3.11+, asyncio.wait rejects bare coroutines (requires tasks).
@@ -2035,7 +2035,7 @@ class TestStepTypes:
 
         result = await execute_step(
             {"id": "s1", "type": "parallel", "steps": ["a", "b"], "wait_for": "any"},
-            {},
+            workflow_company_scope,
         )
         assert result["status"] == "completed"
         assert result["results"][0]["status"] == "completed"

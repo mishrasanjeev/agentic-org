@@ -5,11 +5,13 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
 NOW = datetime(2026, 6, 23, 12, 0, tzinfo=UTC)
+WORKFLOW_TENANT_ID = "22222222-2222-2222-2222-222222222222"
+WORKFLOW_COMPANY_ID = "33333333-3333-3333-3333-333333333333"
 
 
 def _connector_config(name: str, config: dict) -> SimpleNamespace:
@@ -122,10 +124,7 @@ async def test_sendgrid_get_stats_accepts_json_tool_input_wrapper() -> None:
     connector._client = client
 
     result = await connector.get_stats(
-        tool_input=(
-            '{"parameters":{"start_date":"2026-06-18",'
-            '"end_date":"2026-06-19","aggregated_by":"day"}}'
-        )
+        tool_input=('{"parameters":{"start_date":"2026-06-18","end_date":"2026-06-19","aggregated_by":"day"}}')
     )
 
     assert result["stats"][0]["metrics"]["delivered"] == 8
@@ -177,10 +176,7 @@ async def test_google_ads_campaign_performance_accepts_prompt_dates_and_campaign
     connector._gaql_search = fake_gaql_search
 
     result = await connector.get_campaign_performance(
-        prompt=(
-            "Use get_campaign_performance with start_date=2026-06-18 "
-            "end_date=2026-06-19 campaign_id=9876543210"
-        )
+        prompt=("Use get_campaign_performance with start_date=2026-06-18 end_date=2026-06-19 campaign_id=9876543210")
     )
 
     assert result["date_range"] == {"start": "2026-06-18", "end": "2026-06-19"}
@@ -192,22 +188,45 @@ async def test_google_ads_campaign_performance_accepts_prompt_dates_and_campaign
 @pytest.mark.asyncio
 async def test_retrieve_hubspot_contacts_workflow_alias_executes_connector_tool(monkeypatch) -> None:
     from core.langgraph import tool_adapter
-    from workflows.step_types import execute_step
+    from workflows import step_types
+
+    execute_step = step_types.execute_step
 
     captured: dict[str, object] = {}
 
-    async def fake_execute_connector_tool(connector, tool, params, config):
+    async def fake_execute_connector_tool(
+        connector,
+        tool,
+        params,
+        config,
+        *,
+        tenant_id=None,
+        company_id=None,
+        domain=None,
+    ):
         captured.update(
             {
                 "connector": connector,
                 "tool": tool,
                 "params": params,
                 "config": config,
+                "tenant_id": tenant_id,
+                "company_id": company_id,
+                "domain": domain,
             }
         )
         return {"contacts": [{"id": "1", "email": "qa@example.com"}]}
 
     monkeypatch.setattr(tool_adapter, "_execute_connector_tool", fake_execute_connector_tool)
+
+    async def valid_company_scope(_tenant_id: str, _company_id: object) -> UUID:
+        return UUID(WORKFLOW_COMPANY_ID)
+
+    async def load_connector_config(*_args, **_kwargs) -> dict[str, str]:
+        return {"access_token": "pat-test"}
+
+    monkeypatch.setattr(step_types, "_validated_workflow_company", valid_company_scope)
+    monkeypatch.setattr(step_types, "_load_workflow_connector_config", load_connector_config)
 
     result = await execute_step(
         {
@@ -218,7 +237,7 @@ async def test_retrieve_hubspot_contacts_workflow_alias_executes_connector_tool(
             "inputs": {"limit": 5},
             "connector_config": {"access_token": "pat-test"},
         },
-        {"tenant_id": "22222222-2222-2222-2222-222222222222"},
+        {"tenant_id": WORKFLOW_TENANT_ID, "company_id": WORKFLOW_COMPANY_ID},
     )
 
     assert result["status"] == "completed"
@@ -227,6 +246,9 @@ async def test_retrieve_hubspot_contacts_workflow_alias_executes_connector_tool(
         "tool": "list_contacts",
         "params": {"limit": 5},
         "config": {"access_token": "pat-test"},
+        "tenant_id": WORKFLOW_TENANT_ID,
+        "company_id": WORKFLOW_COMPANY_ID,
+        "domain": None,
     }
 
 

@@ -1,5 +1,7 @@
 # AgenticOrg CxO Platform PRD v5.0
 
+> **Status note (2026-07-13):** this is a detailed requirements source, not the current implementation baseline. Several as-is statements are now stale. Use [readiness/GAP_ANALYSIS.md](readiness/GAP_ANALYSIS.md), [readiness/DOMAIN_READINESS_STANDARD.md](readiness/DOMAIN_READINESS_STANDARD.md), and [readiness/BUILD_ROADMAP.md](readiness/BUILD_ROADMAP.md) for current readiness and sequencing.
+
 **Document Version:** 5.0.0
 **Date:** 2026-04-08
 **Author:** Sanjeev Kumar, CEO, AgenticOrg

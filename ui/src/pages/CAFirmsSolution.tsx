@@ -93,7 +93,7 @@ const FEATURES = [
   },
   {
     title: "Audit Trail",
-    description: "HMAC-signed audit entries and partner approval tracking support evidence collection and review. These controls do not by themselves confer SOC 2 or regulatory compliance.",
+    description: "HMAC-signed audit entries and partner approval tracking provide inputs for a scoped readiness review. Their presence does not establish the applicability or sufficiency of any external assurance framework.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-cyan-500 to-teal-600",
   },
@@ -177,8 +177,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
             <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
             <p className="text-slate-600">
               {confirmationSent
-                ? "We sent a confirmation email for your CA Pack trial request. Our team will follow up using the details you provided."
-                : "Your CA Pack trial request was saved. Our team will follow up using the details you provided."}
+                ? "We sent a confirmation email for your CA Pack evaluation request. Our team will follow up using the details you provided."
+                : "Your CA Pack evaluation request was saved. Our team will follow up using the details you provided."}
             </p>
             <button onClick={onClose} className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all">
               Close
@@ -186,8 +186,8 @@ function DemoModal({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold text-slate-900 mb-1">Request a CA Pack Trial</h3>
-            <p className="text-sm text-slate-500 mb-6">Trial access is available for eligible accounts and remains subject to plan limits and provider configuration.</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-1">Request a CA Pack Evaluation</h3>
+            <p className="text-sm text-slate-500 mb-6">Evaluation access, scope, and duration are confirmed during discovery and remain subject to current plan limits, provider configuration, and signed terms.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label htmlFor="ca-name" className="block text-sm font-medium text-slate-700 mb-1">Name <span className="text-red-500">*</span></label>
@@ -213,7 +213,7 @@ function DemoModal({ onClose }: { onClose: () => void }) {
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button type="submit" disabled={submitting} className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25 disabled:opacity-60 disabled:cursor-not-allowed">
-                {submitting ? "Submitting..." : "Request Trial"}
+                {submitting ? "Submitting..." : "Request Evaluation"}
               </button>
             </form>
           </>
@@ -249,7 +249,7 @@ export default function CAFirmsSolution() {
           <div className="flex items-center gap-3">
             <Link to="/login" className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all">Sign In</Link>
             <button onClick={() => setShowDemo(true)} className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25">
-              Request CA Pack Trial
+              Request CA Pack Evaluation
             </button>
           </div>
         </div>
@@ -289,7 +289,7 @@ export default function CAFirmsSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Request CA Pack Trial
+                Request CA Pack Evaluation
               </button>
               <Link
                 to="/login?demo=true"
@@ -299,7 +299,7 @@ export default function CAFirmsSolution() {
               </Link>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">14-day CA Pack trial for eligible accounts &middot; plan limits, connectors, provider access, and filing approvals apply</p>
+            <p className="mt-4 text-sm text-slate-500">Evaluation scope and duration are confirmed during discovery &middot; plan limits, connectors, provider access, filing approvals, and signed terms apply</p>
           </div>
         </div>
       </section>
@@ -412,19 +412,16 @@ export default function CAFirmsSolution() {
           <FadeIn>
             <div className="bg-gradient-to-br from-blue-50 via-white to-teal-50 rounded-3xl border border-slate-200 p-8 sm:p-12 text-center">
               <div className="inline-flex items-center gap-2 bg-blue-100 text-blue-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-                CA Pack &mdash; Paid Add-on
+                CA Pack &mdash; Current Commercial Terms
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-4">
-                <span className="text-5xl sm:text-6xl font-extrabold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">
-                  &#8377;4,999
-                </span>
-                <span className="text-lg text-slate-500 font-normal">/month per client</span>
+                Request current CA Pack pricing and scope
               </h2>
-              <p className="text-sm text-slate-500 mb-2">Separate paid add-on for your AgenticOrg subscription</p>
+              <p className="text-sm text-slate-500 mb-2">The current billing catalog and your signed order govern commercial terms.</p>
               <p className="text-lg text-slate-600 mb-2 max-w-xl mx-auto">
                 Includes six CA Pack workflow areas. Enabled functions depend on plan limits, configured sources, provider capabilities, credentials, scopes, and approvals.
               </p>
-              <p className="text-sm font-medium text-emerald-600 mb-4">14-day CA Pack trial available for eligible accounts</p>
+              <p className="text-sm font-medium text-emerald-600 mb-4">Evaluation availability, scope, and duration are confirmed during discovery</p>
               <ul className="grid sm:grid-cols-2 gap-3 mb-8 max-w-lg mx-auto text-left">
                 {[
                   "Agent runs follow plan limits",
@@ -434,7 +431,7 @@ export default function CAFirmsSolution() {
                   "DSC-assisted filing with approval",
                   "Approval and audit evidence",
                   "Support level follows plan",
-                  "14-day trial for eligible accounts",
+                  "Evaluation scope confirmed during discovery",
                   "Partner approval queues",
                   "Bulk filing review queues",
                   "Compliance deadline alerts",
@@ -451,9 +448,9 @@ export default function CAFirmsSolution() {
                 onClick={() => setShowDemo(true)}
                 className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-10 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Request CA Pack Trial
+                Request CA Pack Evaluation
               </button>
-              <p className="mt-3 text-sm text-slate-500">INR 4,999/month per client is a separate add-on. Trial, usage, connector, provider, and filing capabilities depend on eligibility and approved configuration.</p>
+              <p className="mt-3 text-sm text-slate-500">Current billing terms and the signed order govern pricing, usage, and scope. Connector, provider, and filing capabilities depend on approved configuration.</p>
             </div>
           </FadeIn>
         </div>
@@ -516,7 +513,7 @@ export default function CAFirmsSolution() {
                 onClick={() => setShowDemo(true)}
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Request CA Pack Trial
+                Request CA Pack Evaluation
               </button>
               <Link
                 to="/pricing"

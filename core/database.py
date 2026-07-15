@@ -1,5 +1,7 @@
 """Async SQLAlchemy engine, session management, and tenant RLS middleware."""
 
+# ruff: noqa: S608 -- legacy startup repair interpolates only hard-coded identifiers.
+
 from __future__ import annotations
 
 import logging
@@ -65,8 +67,11 @@ async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_o
 
 
 @asynccontextmanager
-async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, None]:
-    """Yield a session with RLS tenant context set."""
+async def get_tenant_session(
+    tenant_id: UUID,
+    company_id: UUID | None = None,
+) -> AsyncGenerator[AsyncSession, None]:
+    """Yield a session with exact tenant and optional company RLS context."""
     async with async_session_factory() as session:
         import re as _re
 
@@ -79,6 +84,16 @@ async def get_tenant_session(tenant_id: UUID) -> AsyncGenerator[AsyncSession, No
         await session.execute(
             text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
             {"tenant_id": tid_str},
+        )
+        company_str = str(company_id) if company_id is not None else ""
+        if company_str and not _re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            company_str,
+        ):
+            raise ValueError(f"Invalid company_id format: {company_str}")
+        await session.execute(
+            text("SELECT set_config('agenticorg.company_id', :company_id, true)"),
+            {"company_id": company_str},
         )
         try:
             yield session
@@ -155,9 +170,7 @@ async def verify_runtime_schema_current(
     if len(versions) > 1 and versions != expected:
         current = ", ".join(sorted(versions))
         wanted = ", ".join(sorted(expected))
-        raise _schema_error(
-            f"Database has multiple Alembic versions ({current}) but this build expects ({wanted})."
-        )
+        raise _schema_error(f"Database has multiple Alembic versions ({current}) but this build expects ({wanted}).")
 
     if versions != expected:
         current = ", ".join(sorted(versions))
@@ -227,7 +240,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
 
         # v4.0.0: Ensure prompt_amendments column exists on agents table.
         # Safe to run every startup (IF NOT EXISTS check).
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -237,10 +251,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE agents ADD COLUMN prompt_amendments JSONB DEFAULT '[]'::jsonb;
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # v4.3.0: Ensure connector_ids column exists on agents table.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -250,7 +266,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE agents ADD COLUMN connector_ids JSONB DEFAULT '[]'::jsonb;
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # v4.1.0: Ensure company_id column exists on operational tables.
         # Enables CA multi-tenant use case where a tenant manages N client
@@ -266,7 +283,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
         for _tbl in _company_tables:
             # Table names come from the hardcoded _company_tables list above,
             # never from user input — safe to interpolate.
-            await conn.execute(text(f"""
+            await conn.execute(
+                text(f"""
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -276,10 +294,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                         ALTER TABLE {_tbl} ADD COLUMN company_id UUID;
                     END IF;
                 END $$;
-            """))  # noqa: S608  # nosec B608
+            """)  # noqa: S608  # nosec B608
+            )
 
         # v4.1.0: Ensure the companies table exists (CA multi-company model).
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS companies (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -314,7 +334,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ,
                 UNIQUE (tenant_id, gstin)
             );
-        """))
+        """)
+        )
 
         # v4.2.0: Add new columns to companies if missing.
         for _col, _type, _default in [
@@ -323,7 +344,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
             ("document_vault_enabled", "BOOLEAN NOT NULL DEFAULT TRUE", None),
             ("compliance_alerts_email", "VARCHAR(255)", None),
         ]:
-            await conn.execute(text(f"""
+            await conn.execute(
+                text(f"""
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -333,10 +355,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                         ALTER TABLE companies ADD COLUMN {_col} {_type};
                     END IF;
                 END $$;
-            """))  # noqa: S608  # nosec B608
+            """)  # noqa: S608  # nosec B608
+            )
 
         # v4.2.0: Ensure ca_subscriptions table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS ca_subscriptions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -354,8 +378,10 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ,
                 UNIQUE (tenant_id)
             );
-        """))
-        await conn.execute(text("""
+        """)
+        )
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS industry_pack_installs (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -364,18 +390,18 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 agent_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
                 workflow_ids JSONB NOT NULL DEFAULT '[]'::jsonb
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_tenant_id "
-            "ON industry_pack_installs(tenant_id)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_pack_name "
-            "ON industry_pack_installs(pack_name)"
-        ))
+        """)
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_tenant_id ON industry_pack_installs(tenant_id)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_industry_pack_installs_pack_name ON industry_pack_installs(pack_name)")
+        )
 
         # v4.2.0: Ensure filing_approvals table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS filing_approvals (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -392,10 +418,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ
             );
-        """))
+        """)
+        )
 
         # v4.2.0: Ensure gstn_uploads table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS gstn_uploads (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -412,10 +440,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ
             );
-        """))
+        """)
+        )
 
         # v5.0.0: Ensure kpi_cache table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS kpi_cache (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -429,18 +459,16 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 stale BOOLEAN NOT NULL DEFAULT FALSE,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_kpi_cache_tenant_role "
-            "ON kpi_cache(tenant_id, role)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_kpi_cache_metric "
-            "ON kpi_cache(tenant_id, role, metric_name)"
-        ))
+        """)
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_kpi_cache_tenant_role ON kpi_cache(tenant_id, role)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_kpi_cache_metric ON kpi_cache(tenant_id, role, metric_name)")
+        )
 
         # v5.0.0: Ensure agent_task_results table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS agent_task_results (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -463,25 +491,23 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 company_id UUID REFERENCES companies(id),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_agent_results_tenant "
-            "ON agent_task_results(tenant_id)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_agent_results_domain "
-            "ON agent_task_results(tenant_id, domain)"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_agent_results_created "
-            "ON agent_task_results(created_at)"
-        ))
+        """)
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_agent_results_tenant ON agent_task_results(tenant_id)"))
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_agent_results_domain ON agent_task_results(tenant_id, domain)")
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_agent_results_created ON agent_task_results(created_at)")
+        )
 
         # v5.0.0: Ensure connector_configs table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS connector_configs (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
+                company_id UUID NULL REFERENCES companies(id) ON DELETE RESTRICT,
                 connector_name VARCHAR(100) NOT NULL,
                 display_name VARCHAR(255),
                 auth_type VARCHAR(50) NOT NULL DEFAULT 'api_key',
@@ -493,18 +519,72 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 last_sync_at TIMESTAMPTZ,
                 sync_error TEXT,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ,
-                CONSTRAINT uq_connector_config_tenant
-                    UNIQUE (tenant_id, connector_name)
+                updated_at TIMESTAMPTZ
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_connector_configs_tenant "
-            "ON connector_configs(tenant_id)"
-        ))
+        """)
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_connector_configs_tenant ON connector_configs(tenant_id)")
+        )
+        await conn.execute(
+            text("ALTER TABLE connector_configs ADD COLUMN IF NOT EXISTS company_id UUID NULL")
+        )
+        await conn.execute(
+            text("ALTER TABLE connector_configs DROP CONSTRAINT IF EXISTS uq_connector_config_tenant")
+        )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_connector_configs_tenant_global "
+                "ON connector_configs(tenant_id, connector_name) WHERE company_id IS NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_connector_configs_tenant_company "
+                "ON connector_configs(tenant_id, company_id, connector_name) "
+                "WHERE company_id IS NOT NULL"
+            )
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_connector_configs_tenant_company "
+                "ON connector_configs(tenant_id, company_id)"
+            )
+        )
+        await conn.execute(text("ALTER TABLE connector_configs ENABLE ROW LEVEL SECURITY"))
+        await conn.execute(text("ALTER TABLE connector_configs FORCE ROW LEVEL SECURITY"))
+        await conn.execute(text("DROP POLICY IF EXISTS tenant_isolation ON connector_configs"))
+        await conn.execute(
+            text(
+                "DROP POLICY IF EXISTS connector_configs_tenant_isolation "
+                "ON connector_configs"
+            )
+        )
+        await conn.execute(
+            text(
+                "DROP POLICY IF EXISTS connector_configs_scope_isolation "
+                "ON connector_configs"
+            )
+        )
+        await conn.execute(
+            text("""
+            CREATE POLICY connector_configs_scope_isolation ON connector_configs
+            USING (
+                tenant_id::text = current_setting('agenticorg.tenant_id', true)
+                AND company_id IS NOT DISTINCT FROM
+                    NULLIF(current_setting('agenticorg.company_id', true), '')::uuid
+            )
+            WITH CHECK (
+                tenant_id::text = current_setting('agenticorg.tenant_id', true)
+                AND company_id IS NOT DISTINCT FROM
+                    NULLIF(current_setting('agenticorg.company_id', true), '')::uuid
+            )
+        """)
+        )
 
         # v4.3.0: gstn_auto_upload flag on companies
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -514,10 +594,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE companies ADD COLUMN gstn_auto_upload BOOLEAN NOT NULL DEFAULT FALSE;
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # v4.3.0: Ensure gstn_credentials table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS gstn_credentials (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -534,10 +616,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ,
                 UNIQUE (company_id, portal_type)
             );
-        """))
+        """)
+        )
 
         # v4.3.0: Ensure compliance_deadlines table exists.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS compliance_deadlines (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -553,7 +637,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ,
                 UNIQUE (company_id, deadline_type, filing_period)
             );
-        """))
+        """)
+        )
 
         # ── v4.6.0: Enterprise readiness — run every startup, idempotent ──
 
@@ -563,7 +648,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
             ("locale", "VARCHAR(10) NOT NULL DEFAULT 'en'"),
             ("department_id", "UUID"),
         ]:
-            await conn.execute(text(f"""
+            await conn.execute(
+                text(f"""
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -573,10 +659,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                         ALTER TABLE users ADD COLUMN {_col} {_type};
                     END IF;
                 END $$;
-            """))  # noqa: S608  # nosec B608
+            """)  # noqa: S608  # nosec B608
+            )
 
         # 2. Company.currency (ISO 4217)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -586,10 +674,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE companies ADD COLUMN currency CHAR(3) NOT NULL DEFAULT 'INR';
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # 3. Departments + cost centers (org hierarchy)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS departments (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -601,13 +691,14 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, company_id, name)
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_departments_tenant_company "
-            "ON departments(tenant_id, company_id);"
-        ))
+        """)
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_departments_tenant_company ON departments(tenant_id, company_id);")
+        )
 
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS cost_centers (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -620,12 +711,14 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, company_id, code)
             );
-        """))
+        """)
+        )
 
         # Add FK from users.department_id to departments.id (now that the
         # table exists).  PostgreSQL doesn't support IF NOT EXISTS on FK so
         # we check information_schema.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -639,14 +732,16 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     REFERENCES departments(id) ON DELETE SET NULL;
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # 4. Agent maturity + cost center pointer
         for _col, _type in [
             ("maturity", "VARCHAR(20) NOT NULL DEFAULT 'beta'"),
             ("cost_center_id", "UUID"),
         ]:
-            await conn.execute(text(f"""
+            await conn.execute(
+                text(f"""
                 DO $$
                 BEGIN
                     IF NOT EXISTS (
@@ -656,10 +751,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                         ALTER TABLE agents ADD COLUMN {_col} {_type};
                     END IF;
                 END $$;
-            """))  # noqa: S608  # nosec B608
+            """)  # noqa: S608  # nosec B608
+            )
 
         # 5. User delegation table (approval forwarding)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS user_delegations (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -672,15 +769,19 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 CONSTRAINT ck_delegation_different_users CHECK (delegator_id <> delegate_id)
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_delegations_active "
-            "ON user_delegations(tenant_id, delegator_id) "
-            "WHERE revoked_at IS NULL;"
-        ))
+        """)
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_delegations_active "
+                "ON user_delegations(tenant_id, delegator_id) "
+                "WHERE revoked_at IS NULL;"
+            )
+        )
 
         # 6. Feature flags table
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS feature_flags (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID,
@@ -693,14 +794,13 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, flag_key)
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_feature_flags_key "
-            "ON feature_flags(flag_key);"
-        ))
+        """)
+        )
+        await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_feature_flags_key ON feature_flags(flag_key);"))
 
         # 7. Budget alerts table
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS budget_alerts (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -715,10 +815,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 last_triggered_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
-        """))
+        """)
+        )
 
         # 8. SSO configuration per tenant
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS sso_configs (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -734,10 +836,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, provider_key)
             );
-        """))
+        """)
+        )
 
         # 8b. Tenant BYOK KEK resource — customer-managed KMS key
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -747,10 +851,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE tenants ADD COLUMN byok_kek_resource VARCHAR(500) NOT NULL DEFAULT '';
                 END IF;
             END $$;
-        """))
+        """)
+        )
 
         # 8c. Invoices
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS invoices (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -771,14 +877,15 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, invoice_number)
             );
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_invoices_tenant_period "
-            "ON invoices(tenant_id, period_start);"
-        ))
+        """)
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_invoices_tenant_period ON invoices(tenant_id, period_start);")
+        )
 
         # 9. Approval policies (configurable multi-step approval chains)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS approval_policies (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -791,11 +898,13 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (tenant_id, name)
             );
-        """))
+        """)
+        )
 
         # v4.7.0 hotfix: the initial v4.7.0 ship created approval_policies
         # with is_active as VARCHAR(10). Convert to BOOLEAN if still varchar.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF EXISTS (
@@ -811,8 +920,10 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                         ALTER COLUMN is_active SET DEFAULT TRUE;
                 END IF;
             END $$;
-        """))
-        await conn.execute(text("""
+        """)
+        )
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS approval_steps (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 policy_id UUID NOT NULL REFERENCES approval_policies(id) ON DELETE CASCADE,
@@ -827,10 +938,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 CHECK (quorum_required >= 1),
                 CHECK (quorum_required <= quorum_total)
             );
-        """))
+        """)
+        )
 
         # 9a. Tenant branding (white-label)
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS tenant_branding (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL UNIQUE,
@@ -845,10 +958,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
-        """))
+        """)
+        )
 
         # 9b. Workflow A/B variants
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS workflow_variants (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL,
@@ -864,7 +979,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 UNIQUE (workflow_id, variant_name)
             );
-        """))
+        """)
+        )
 
         # 9d. v4.4.0 safety net — report_schedules.
         # The v4.4.0 alembic migration created this table, but envs that
@@ -876,7 +992,8 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
         # surfaced because instrumentation revealed
         # `relation "report_schedules" does not exist`. Idempotent on
         # repeat startups.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS report_schedules (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 tenant_id UUID NOT NULL REFERENCES tenants(id),
@@ -894,10 +1011,12 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
                 updated_at TIMESTAMPTZ
             );
-        """))
+        """)
+        )
         # If the table already existed from an older env without the
         # v488 company_id migration, ensure the column is present.
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -908,15 +1027,17 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                     ALTER TABLE report_schedules ADD COLUMN company_id UUID NULL;
                 END IF;
             END $$;
-        """))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant "
-            "ON report_schedules(tenant_id);"
-        ))
-        await conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant_company "
-            "ON report_schedules(tenant_id, company_id);"
-        ))
+        """)
+        )
+        await conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant ON report_schedules(tenant_id);")
+        )
+        await conn.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_report_schedules_tenant_company "
+                "ON report_schedules(tenant_id, company_id);"
+            )
+        )
 
         # 9c. RLS for ALL v4.7 tenant-scoped tables
         # (Missing from the original v4.7.0 ship — found in gap analysis #6)
@@ -931,28 +1052,35 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
         for _rls_tbl in _v47_rls_tables:
             await conn.execute(text(f"ALTER TABLE {_rls_tbl} ENABLE ROW LEVEL SECURITY;"))  # noqa: S608
             await conn.execute(text(f"ALTER TABLE {_rls_tbl} FORCE ROW LEVEL SECURITY;"))  # noqa: S608
-            await conn.execute(text(
-                f"DROP POLICY IF EXISTS {_rls_tbl}_tenant_isolation ON {_rls_tbl};"  # noqa: S608
-            ))
-            await conn.execute(text(
-                f"CREATE POLICY {_rls_tbl}_tenant_isolation ON {_rls_tbl} "  # noqa: S608
-                "USING (tenant_id::text = current_setting('agenticorg.tenant_id', true));"
-            ))
+            await conn.execute(
+                text(
+                    f"DROP POLICY IF EXISTS {_rls_tbl}_tenant_isolation ON {_rls_tbl};"  # noqa: S608
+                )
+            )
+            await conn.execute(
+                text(
+                    f"CREATE POLICY {_rls_tbl}_tenant_isolation ON {_rls_tbl} "  # noqa: S608
+                    "USING (tenant_id::text = current_setting('agenticorg.tenant_id', true));"
+                )
+            )
         # approval_steps is a child of approval_policies — RLS via FK cascade,
         # but add direct policy too for defense in depth.
         await conn.execute(text("ALTER TABLE approval_steps ENABLE ROW LEVEL SECURITY;"))
         await conn.execute(text("ALTER TABLE approval_steps FORCE ROW LEVEL SECURITY;"))
         await conn.execute(text("DROP POLICY IF EXISTS approval_steps_tenant_isolation ON approval_steps;"))
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE POLICY approval_steps_tenant_isolation ON approval_steps
             USING (policy_id IN (
                 SELECT id FROM approval_policies
                 WHERE tenant_id::text = current_setting('agenticorg.tenant_id', true)
             ));
-        """))
+        """)
+        )
 
         # 10. Audit log immutability trigger — rejects UPDATE/DELETE
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$
             BEGIN
                 RAISE EXCEPTION
@@ -960,13 +1088,16 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
                   USING ERRCODE = 'insufficient_privilege';
             END;
             $$ LANGUAGE plpgsql;
-        """))
+        """)
+        )
         await conn.execute(text("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_log;"))
-        await conn.execute(text("""
+        await conn.execute(
+            text("""
             CREATE TRIGGER audit_log_immutable
             BEFORE UPDATE OR DELETE ON audit_log
             FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation();
-        """))
+        """)
+        )
 
     await _seed_demo_ca_companies_if_enabled()
 

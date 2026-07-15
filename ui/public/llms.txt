@@ -37,11 +37,11 @@ The product facts endpoint is authoritative for the deployed version and current
 
 ## Hosted pricing
 
-- Free: $0/month or INR 0/month; 3 agents; 1,000/mo runs; 1 GB storage; Community support.
-- Pro: $2/month or INR 9,999/month; 15 agents; 10,000/mo runs; 50 GB storage; Priority support, Custom connectors.
-- Enterprise: $499/month or INR 49,999/month; Unlimited agents; Unlimited runs; Unlimited storage; 24/7 support, Custom SLAs, Dedicated CSM, SSO / SCIM.
+- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Free: $0/month or INR 0/month; 3 agents; 1000 runs; 1 GB storage.
+- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro: $2/month or INR 9,999/month; 15 agents; 10000 runs; 50 GB storage.
+- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise: $499/month or INR 49,999/month; Unlimited agents; Unlimited runs; Unlimited storage.
 
-Pricing comes from core/billing/limits.py. Infrastructure, model, provider, and external API costs are separate.
+Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and external API costs are separate.
 
 ## Key public pages
 
@@ -55,8 +55,8 @@ Pricing comes from core/billing/limits.py. Infrastructure, model, provider, and 
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
 - [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
-- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign work with scoped tools, review gates, versioned prompts, and measurable workflow outcomes.
-- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive work with agents while defining escalation rules, action scopes, approval requirements, and audit evidence.
+- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign workflows using scoped tools, review gates, versioned prompts, and owner-defined evaluation measures.
+- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive workflows using agents subject to escalation rules, action scopes, approval requirements, and audit evidence.
 - [AI Agents for Back Office](https://agenticorg.ai/solutions/cbo): Back-office teams can assemble traceable workflows around documents, cases, and internal systems while preserving review and authorization boundaries.
 - [Blog](https://agenticorg.ai/blog): The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.
 - [Resource Library](https://agenticorg.ai/resources): The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.

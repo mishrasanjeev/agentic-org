@@ -187,6 +187,7 @@ class HITLItemResponse(BaseModel):
 class ConnectorCreate(BaseModel):
     name: str
     category: str
+    company_id: str | None = None
     base_url: str | None = None
     auth_type: str
     auth_config: dict[str, Any] = {}
@@ -198,6 +199,7 @@ class ConnectorCreate(BaseModel):
 
 class ConnectorUpdate(BaseModel):
     name: str | None = None
+    company_id: str | None = None
     base_url: str | None = None
     auth_type: str | None = None
     auth_config: dict[str, Any] | None = None

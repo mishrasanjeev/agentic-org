@@ -1,5 +1,7 @@
 # AgenticOrg — QA Test Cases
 
+> **Historical production snapshot; unsafe as current evidence (reviewed 2026-07-15):** results below were recorded on 2026-03-25 and must not be reused for release approval. Any historical token-return result proves only that the old request completed; no token or fixed credential may be retained or replayed. Re-run against the target commit with ephemeral tester-controlled identities and store redacted evidence in the release bundle.
+
 **Last Run**: 2026-03-25 03:05 UTC
 **Environment**: Production (https://app.agenticorg.ai)
 **Total Tests**: 70 | **Passed**: 69 | **Warnings**: 1
@@ -40,12 +42,12 @@
 
 | ID | Test Case | Steps | Expected | Actual | Status |
 |----|-----------|-------|----------|--------|--------|
-| T21 | Login as CEO | POST /auth/login {ceo@agenticorg.local, ceo123!} | 200 + access_token | Token returned | PASS |
-| T22 | Login as CFO | POST /auth/login {cfo@agenticorg.local, cfo123!} | 200 + access_token | Token returned | PASS |
-| T23 | Login as CHRO | POST /auth/login {chro@agenticorg.local, chro123!} | 200 + access_token | Token returned | PASS |
-| T24 | Login as CMO | POST /auth/login {cmo@agenticorg.local, cmo123!} | 200 + access_token | Token returned | PASS |
-| T25 | Login as COO | POST /auth/login {coo@agenticorg.local, coo123!} | 200 + access_token | Token returned | PASS |
-| T26 | Login as Auditor | POST /auth/login {auditor@agenticorg.local, audit123!} | 200 + access_token | Token returned | PASS |
+| T21 | Login as CEO | POST `/auth/login` with ephemeral local CEO-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
+| T22 | Login as CFO | POST `/auth/login` with ephemeral local CFO-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
+| T23 | Login as CHRO | POST `/auth/login` with ephemeral local CHRO-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
+| T24 | Login as CMO | POST `/auth/login` with ephemeral local CMO-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
+| T25 | Login as COO | POST `/auth/login` with ephemeral local COO-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
+| T26 | Login as Auditor | POST `/auth/login` with ephemeral local auditor-role credentials | 200 + access token | Historical token-return result; token not retained | HISTORICAL PASS |
 | T27 | Signup — new account | POST /auth/signup {org_name, admin_name, admin_email, password} | HTTP 201 + token | 201, token OK | PASS |
 | T28 | Signup — duplicate email | POST /auth/signup with same email | HTTP 409 | 409 | PASS |
 | T29 | Login — wrong password | POST /auth/login with wrong password | HTTP 401 | 401 | PASS |
@@ -202,15 +204,9 @@ These tests require a browser and should be done manually by the QA team:
 
 ## Test Data
 
-### Demo Credentials
-| Role | Email | Password |
-|------|-------|----------|
-| CEO/Admin | ceo@agenticorg.local | ceo123! |
-| CFO | cfo@agenticorg.local | cfo123! |
-| CHRO | chro@agenticorg.local | chro123! |
-| CMO | cmo@agenticorg.local | cmo123! |
-| COO | coo@agenticorg.local | coo123! |
-| Auditor | auditor@agenticorg.local | audit123! |
+### Local test identities
+
+Create ephemeral local identities for each role with tester-controlled credentials outside source control. Evidence may identify the role alias and generated test-run ID, but must not contain passwords, bearer tokens, refresh tokens, provider credentials, or production user identifiers.
 
 ### Key URLs
 | Page | URL |

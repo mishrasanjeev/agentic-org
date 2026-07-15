@@ -5,19 +5,19 @@ const AGENTS = [
     name: "Priya", designation: "AP Processor - Mumbai", avatar: "P", color: "from-emerald-500 to-teal-600",
     domain: "Finance", specialization: "Domestic invoices < 5L",
     steps: [
-      { text: "Parsing invoice PDF line items...", icon: "scan" },
-      { text: "Validating GSTIN against government portal...", icon: "check" },
-      { text: "3-way match: Invoice vs PO vs GRN...", icon: "match" },
-      { text: "Match confirmed. Scheduling payment for day 9.", icon: "done" },
+      { text: "Parsing sample invoice line items...", icon: "scan" },
+      { text: "Preparing a GSTIN validation request...", icon: "check" },
+      { text: "Comparing sample invoice, PO, and GRN...", icon: "match" },
+      { text: "Proposed match routed for payment approval.", icon: "done" },
     ],
   },
   {
     name: "Arjun", designation: "Recon Agent - East", avatar: "A", color: "from-blue-500 to-indigo-600",
     domain: "Finance", specialization: "Bank reconciliation",
     steps: [
-      { text: "Fetching 847 bank transactions...", icon: "scan" },
+      { text: "Loading a synthetic bank batch...", icon: "scan" },
       { text: "Matching against GL entries by amount+date...", icon: "match" },
-      { text: "843 matched (99.5%), 4 breaks identified...", icon: "check" },
+      { text: "Sample matches proposed; exceptions identified...", icon: "check" },
       { text: "Breaks escalated to CFO for review.", icon: "done" },
     ],
   },
@@ -25,40 +25,40 @@ const AGENTS = [
     name: "Maya", designation: "Onboarding Specialist", avatar: "M", color: "from-purple-500 to-pink-600",
     domain: "HR", specialization: "New hire onboarding",
     steps: [
-      { text: "Creating employee record in Darwinbox...", icon: "scan" },
-      { text: "Provisioning IT access: email, Slack, GitHub...", icon: "check" },
-      { text: "Scheduling Day 1 orientation with manager...", icon: "match" },
-      { text: "Welcome kit sent. Onboarding complete.", icon: "done" },
+      { text: "Preparing a sample employee-record draft...", icon: "scan" },
+      { text: "Drafting IT provisioning tasks...", icon: "check" },
+      { text: "Proposing an orientation time...", icon: "match" },
+      { text: "Checklist ready for authorized review.", icon: "done" },
     ],
   },
   {
     name: "Neha", designation: "Campaign Pilot", avatar: "N", color: "from-pink-500 to-rose-600",
     domain: "Marketing", specialization: "Multi-channel campaigns",
     steps: [
-      { text: "Segmenting audience: 3 cohorts, 12.4K contacts...", icon: "scan" },
+      { text: "Preparing an illustrative audience plan...", icon: "scan" },
       { text: "Generating A/B variants for subject lines...", icon: "check" },
-      { text: "Scheduling email + LinkedIn + Google Ads...", icon: "match" },
-      { text: "Campaign launched. Monitoring CTR in real-time.", icon: "done" },
+      { text: "Routing channel drafts for approval...", icon: "match" },
+      { text: "Sample engagement view ready for review.", icon: "done" },
     ],
   },
   {
     name: "Dev", designation: "Support Triage Lead", avatar: "D", color: "from-orange-500 to-red-600",
     domain: "Operations", specialization: "Ticket classification",
     steps: [
-      { text: "Scanning 42 new tickets from Zendesk...", icon: "scan" },
-      { text: "Classifying by priority: P1=2, P2=8, P3=32...", icon: "check" },
+      { text: "Reading a synthetic support queue...", icon: "scan" },
+      { text: "Preparing sample priority suggestions...", icon: "check" },
       { text: "Routing to specialist queues by category...", icon: "match" },
-      { text: "All tickets routed. Zero mis-classifications.", icon: "done" },
+      { text: "Routing suggestions ready for review.", icon: "done" },
     ],
   },
   {
     name: "Vikram", designation: "Payroll Engine", avatar: "V", color: "from-indigo-500 to-blue-600",
     domain: "HR", specialization: "Monthly payroll processing",
     steps: [
-      { text: "Computing gross pay for 847 employees...", icon: "scan" },
+      { text: "Computing a synthetic payroll batch...", icon: "scan" },
       { text: "Calculating PF, ESI, TDS deductions...", icon: "check" },
       { text: "Validating against Darwinbox attendance data...", icon: "match" },
-      { text: "Payroll processed. Zero errors. Slips generated.", icon: "done" },
+      { text: "Sample exceptions and payslip drafts queued for review.", icon: "done" },
     ],
   },
 ];
@@ -188,6 +188,9 @@ export default function AgentsInAction() {
 
   return (
     <div>
+      <p className="mb-6 text-center text-sm text-slate-400">
+        Illustrative simulation using synthetic data. No live system action is executed.
+      </p>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {AGENTS.map((agent, i) => (
           <button key={agent.name} onClick={() => setActiveIndex(i)} className="cursor-pointer text-left w-full" aria-label={`View ${agent.name}'s activity`} aria-pressed={i === activeIndex}>

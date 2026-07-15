@@ -2,6 +2,14 @@ from __future__ import annotations
 
 import pytest
 
+from tests.company_scope import TEST_COMPANY_ID, TEST_TENANT_ID
+
+
+@pytest.fixture(autouse=True)
+def _owned_workflow_company(workflow_company_scope: dict[str, str]) -> None:
+    assert workflow_company_scope["tenant_id"] == str(TEST_TENANT_ID)
+    assert workflow_company_scope["company_id"] == str(TEST_COMPANY_ID)
+
 
 def _contract(
     *,
@@ -27,7 +35,8 @@ def _contract(
 def _active_state(**overrides: object) -> dict:
     state = {
         "id": "wfr_cmo_write",
-        "tenant_id": "tenant-1",
+        "tenant_id": str(TEST_TENANT_ID),
+        "company_id": str(TEST_COMPANY_ID),
         "workflow_id": "campaign_launch",
         "workflow_mode": "active",
         "domain": "marketing",

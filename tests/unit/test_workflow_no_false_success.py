@@ -4,8 +4,20 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import pytest
+
+TEST_TENANT_ID = "22222222-2222-2222-2222-222222222222"
+TEST_COMPANY_ID = "33333333-3333-3333-3333-333333333333"
+
+
+def _mock_valid_company_scope(monkeypatch, step_types) -> None:
+    monkeypatch.setattr(
+        step_types,
+        "_validated_workflow_company",
+        AsyncMock(return_value=UUID(TEST_COMPANY_ID)),
+    )
 
 
 def _strict_workflow_runtime(monkeypatch):
@@ -62,6 +74,7 @@ async def test_no_false_success_agent_execution_exception_fails_in_strict_mode(m
     from workflows import step_types
 
     monkeypatch.setattr(step_types.external_keys, "google_gemini_api_key", "test-key")
+    _mock_valid_company_scope(monkeypatch, step_types)
 
     class BrokenAgent:
         async def execute(self, task):
@@ -75,7 +88,7 @@ async def test_no_false_success_agent_execution_exception_fails_in_strict_mode(m
 
     result = await step_types.execute_step(
         {"id": "agent_step", "type": "agent", "agent": "ap_processor"},
-        {},
+        {"tenant_id": TEST_TENANT_ID, "company_id": TEST_COMPANY_ID},
     )
 
     assert result["status"] == "failed"
@@ -207,31 +220,47 @@ async def test_no_false_success_failed_step_fails_workflow_in_engine(monkeypatch
 
     assert result["status"] == "failed"
     assert result["step_results"]["notify_step"]["status"] == "failed"
-    assert (
-        result["step_results"]["notify_step"]["error"]["code"]
-        == "notify_side_effect_not_configured"
-    )
+    assert result["step_results"]["notify_step"]["error"]["code"] == "notify_side_effect_not_configured"
 
 
 @pytest.mark.asyncio
 async def test_connector_tool_alias_executes_hubspot_contacts_in_workflow(monkeypatch):
     from core.langgraph import tool_adapter
+    from workflows import step_types
     from workflows.step_types import execute_step
 
     captured: dict[str, object] = {}
 
-    async def fake_execute_connector_tool(connector, tool, params, config):
+    async def fake_execute_connector_tool(
+        connector,
+        tool,
+        params,
+        config,
+        *,
+        tenant_id=None,
+        company_id=None,
+        domain=None,
+    ):
         captured.update(
             {
                 "connector": connector,
                 "tool": tool,
                 "params": params,
                 "config": config,
+                "tenant_id": tenant_id,
+                "company_id": company_id,
+                "domain": domain,
             }
         )
         return {"contacts": [{"id": "1", "email": "qa@example.com"}]}
 
     monkeypatch.setattr(tool_adapter, "_execute_connector_tool", fake_execute_connector_tool)
+    _mock_valid_company_scope(monkeypatch, step_types)
+    monkeypatch.setattr(
+        step_types,
+        "_load_workflow_connector_config",
+        AsyncMock(return_value={"access_token": "pat-test"}),
+    )
 
     result = await execute_step(
         {
@@ -240,7 +269,7 @@ async def test_connector_tool_alias_executes_hubspot_contacts_in_workflow(monkey
             "inputs": {"limit": 5},
             "connector_config": {"access_token": "pat-test"},
         },
-        {"tenant_id": "22222222-2222-2222-2222-222222222222"},
+        {"tenant_id": TEST_TENANT_ID, "company_id": TEST_COMPANY_ID},
     )
 
     assert result["status"] == "completed"
@@ -250,12 +279,16 @@ async def test_connector_tool_alias_executes_hubspot_contacts_in_workflow(monkey
         "tool": "list_contacts",
         "params": {"limit": 5},
         "config": {"access_token": "pat-test"},
+        "tenant_id": TEST_TENANT_ID,
+        "company_id": TEST_COMPANY_ID,
+        "domain": None,
     }
 
 
 @pytest.mark.asyncio
 async def test_connector_tool_failure_returns_structured_step_error(monkeypatch):
     from core.langgraph import tool_adapter
+    from workflows import step_types
     from workflows.step_types import execute_step
 
     async def fake_execute_connector_tool(*_args, **_kwargs):
@@ -266,6 +299,12 @@ async def test_connector_tool_failure_returns_structured_step_error(monkeypatch)
         }
 
     monkeypatch.setattr(tool_adapter, "_execute_connector_tool", fake_execute_connector_tool)
+    _mock_valid_company_scope(monkeypatch, step_types)
+    monkeypatch.setattr(
+        step_types,
+        "_load_workflow_connector_config",
+        AsyncMock(return_value={"access_token": "pat-test"}),
+    )
 
     result = await execute_step(
         {
@@ -274,7 +313,7 @@ async def test_connector_tool_failure_returns_structured_step_error(monkeypatch)
             "inputs": {"limit": 5},
             "connector_config": {"access_token": "pat-test"},
         },
-        {"tenant_id": "22222222-2222-2222-2222-222222222222"},
+        {"tenant_id": TEST_TENANT_ID, "company_id": TEST_COMPANY_ID},
     )
 
     assert result["status"] == "failed"

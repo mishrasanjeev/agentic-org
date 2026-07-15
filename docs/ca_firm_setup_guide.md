@@ -1,8 +1,10 @@
 # CA Firm Setup Guide — AgenticOrg AI Agent Platform
 
+> **Current safe posture (2026-07-13):** Use this guide for workspace setup, draft/reconciliation/review, portal, and explicit manual handoff only. Production filing/payment requires the pre-dispatch, exact-payload approval, DSC/provider, idempotency, receipt, reconciliation, and qualified-CA gates in the [readiness program](readiness/README.md).
+
 ## Overview
 
-This guide covers everything needed to demo and deploy the AgenticOrg AI agent platform for a Chartered Accountant firm. The core workflow automates: **Invoice Processing → Bank Reconciliation → GST Filing → Tally Sync**.
+This guide supports an isolated evaluation of draft invoice processing, bank-reconciliation assistance, GST return preparation/review, and Tally handoff. It does not authorize deployment, filing, payment, voucher posting, or production credential use.
 
 ---
 
@@ -41,7 +43,9 @@ This guide covers everything needed to demo and deploy the AgenticOrg AI agent p
 
 ---
 
-## Setup Timeline
+## Illustrative Evaluation Timeline
+
+The sequence below is a planning example, not a deployment or go-live commitment.
 
 | Phase | Duration | Activities |
 |-------|----------|-----------|
@@ -49,10 +53,10 @@ This guide covers everything needed to demo and deploy the AgenticOrg AI agent p
 | **Day 2-3: Platform Setup** | 1-2 days | Create tenant, configure connectors, install Tally bridge |
 | **Day 4-5: Shadow Mode** | 2 days | Run agents in shadow mode — process real data without taking action |
 | **Day 6-7: Validation** | 2 days | CA firm validates shadow results against their manual work |
-| **Day 8: Go-Live** | Half day | Promote agents to active, enable HITL approvals |
+| **Day 8: Review Decision** | Half day | Review evidence, residual gaps, and manual handoff; do not promote external writes |
 | **Ongoing** | Continuous | Monitor dashboards, tune confidence thresholds |
 
-**Total: 5-8 business days from kickoff to go-live.**
+**Illustrative total: 5-8 business days to complete an evaluation cycle; production timing is not established.**
 
 ---
 
@@ -170,9 +174,9 @@ POST /api/v1/agents/<agent_id>/shadow
 
 Dashboard shows: match rate, discrepancies, confidence scores.
 
-### Step 6: Go Live
+### Step 6: Complete Evaluation - Do Not Enable Filing
 
-Once the CA firm validates shadow results:
+The historical promotion payload below is retained only as an API-shape example. Do not submit it or change an agent to active mode. Record validation evidence and continue with manual handoff until every readiness gate passes:
 ```python
 POST /api/v1/agents/<agent_id>/promote
 {
@@ -190,8 +194,8 @@ For a quick demo to a prospective CA firm:
 1. **Show the problem** (2 min): Open Tally, show manual voucher entry, GSTN portal login, bank statement download
 2. **Create an invoice** (3 min): Use Zoho Books connector to create a test invoice
 3. **Bank reconciliation** (5 min): Fetch bank statement via AA, show auto-matching
-4. **GST filing** (5 min): Push GSTR-1 data, show filing status
-5. **Tally sync** (5 min): Post voucher to Tally via bridge, verify in Tally
+4. **GST draft review** (5 min): Prepare sample GSTR-1 data and show a simulated status; do not submit
+5. **Tally handoff** (5 min): Preview a sample voucher payload; do not post to production Tally
 6. **HITL demo** (5 min): Show high-value invoice triggering CFO approval
 7. **Dashboard** (5 min): Show agent activity, confidence metrics, ROI calculator
 

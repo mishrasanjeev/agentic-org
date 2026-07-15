@@ -33,6 +33,10 @@ class ReportOutput:
     generated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
+class ReportEvidenceUnavailableError(RuntimeError):
+    """Raised when a customer-exportable report has no measured evidence source."""
+
+
 # ---------------------------------------------------------------------------
 # HTML helpers
 # ---------------------------------------------------------------------------
@@ -487,47 +491,10 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
-
-        # In production this queries the shadow-mode audit log.  For now,
-        # emit a placeholder that confirms the system is running.
-        data: dict[str, Any] = {
-            "shadow_agents_active": 25,
-            "shadow_tasks_evaluated": 1_482,
-            "agreement_rate_pct": 96.2,
-            "disagreements": 56,
-            "escalations": 3,
-            "period": "last 7 days",
-        }
-
-        kpis = "".join([
-            "<div class='kpi-row'>",
-            _kpi_card("Shadow Agents", str(data["shadow_agents_active"])),
-            _kpi_card("Tasks Evaluated", f"{data['shadow_tasks_evaluated']:,}"),
-            _kpi_card("Agreement Rate", f"{data['agreement_rate_pct']:.1f}%"),
-            _kpi_card("Disagreements", str(data["disagreements"])),
-            _kpi_card("Escalations", str(data["escalations"])),
-            "</div>",
-        ])
-
-        body = (
-            f"{kpis}"
-            f"<p>Period: {html.escape(data['period'])}</p>"
-            f"<p>All 50+ agents ran in shadow mode during the evaluation period. "
-            f"Agreement rate is above the 95% confidence threshold.</p>"
-        )
-
-        content_html = _wrap_html(
-            "Shadow Reconciliation Report",
-            f"System audit | {now_str}",
-            body,
-            now_str,
-        )
-
-        return ReportOutput(
-            content_html=content_html,
-            content_data=data,
-            report_type="shadow_reconciliation",
+        del params, company_id, tenant_id
+        raise ReportEvidenceUnavailableError(
+            "Shadow reconciliation export is unavailable: no tenant-scoped measured "
+            "evidence source is implemented. Customer export is blocked."
         )
 
     # ------------------------------------------------------------------

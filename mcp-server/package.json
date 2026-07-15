@@ -2,7 +2,7 @@
   "name": "agenticorg-mcp-server",
   "version": "4.0.5",
   "mcpName": "io.github.mishrasanjeev/agenticorg",
-  "description": "MCP server for AgenticOrg — expose every AgenticOrg AI agent and native tool to ChatGPT, Claude, and any MCP client",
+  "description": "Repository MCP adapter for company-scoped AgenticOrg workflow candidates and read-only discovery",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

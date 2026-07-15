@@ -229,7 +229,10 @@ async def test_cmo_kpi_response_includes_connector_setup_and_policy(monkeypatch)
             "source": "computed",
         }
 
-    async def fake_connector_configs(tenant_id: str) -> list[dict]:
+    async def fake_connector_configs(
+        tenant_id: str,
+        company_id: str | None = None,
+    ) -> list[dict]:
         return []
 
     async def fake_approval_timeout(tenant_id: str, company_id: str) -> dict:

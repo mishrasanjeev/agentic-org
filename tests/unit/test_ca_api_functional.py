@@ -526,14 +526,15 @@ class TestSubscriptionEndpoints:
         assert "409" in source
         assert "already active" in source
 
-    def test_reactivate_from_cancelled(self):
-        """activate_ca_subscription reactivates from cancelled/expired."""
+    def test_paid_reactivation_fails_closed_without_verified_payment(self):
+        """Cancelled/expired CA subscriptions cannot become paid without payment proof."""
         from api.v1.companies import activate_ca_subscription
 
         source = inspect.getsource(activate_ca_subscription)
         assert '"cancelled"' in source
         assert '"expired"' in source
-        assert '"active"' in source
+        assert "payment is verified" in source
+        assert 'sub.status = "active"' not in source
 
     def test_activate_reconciles_ca_pack_install(self):
         """activate_ca_subscription repairs missing ca-firm install state."""

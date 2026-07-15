@@ -22,7 +22,7 @@ Live product totals and the deployed product version are published by the public
 
 The response contains version, agent_count, connector_count, and tool_count. Do not copy those values into documentation, page copy, or tests: they are computed from runtime registries and can change independently of a documentation release. The version declared for source builds is in [pyproject.toml](https://github.com/mishrasanjeev/agentic-org/blob/main/pyproject.toml).
 
-Billing limits and list prices come from [core/billing/limits.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/limits.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](https://github.com/mishrasanjeev/agentic-org/blob/main/scripts/deploy_cloud_run.sh).
+Billing limits and list prices come from [core/billing/catalog.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/catalog.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](https://github.com/mishrasanjeev/agentic-org/blob/main/scripts/deploy_cloud_run.sh).
 
 ## What is in this repository
 
@@ -193,15 +193,13 @@ The MCP package exposes governed AgenticOrg agent and commerce discovery surface
 
 ## Pricing and limits
 
-The hosted plan source of truth is PLAN_PRICING in [core/billing/limits.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/limits.py).
+The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/billing/catalog.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/catalog.py). A compatibility view in `core/billing/limits.py` is derived from that catalog.
 
 | Plan | USD list price | INR list price | Agents | Runs | Storage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
-| Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
-| Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
-
-Pro also includes priority support and custom connectors. Enterprise includes 24/7 support, custom SLAs, dedicated customer success, and SSO/SCIM according to the plan definition.
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
 
 The repository is Apache-2.0 licensed. Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software license.
 
@@ -309,6 +307,12 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Architecture](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md)
 - [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
 - [Deployment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md)
+- [Product readiness program](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/README.md)
+- [Gap analysis](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/GAP_ANALYSIS.md)
+- [Domain readiness standard](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/DOMAIN_READINESS_STANDARD.md)
+- [Capability Readiness Register](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/CAPABILITY_READINESS_REGISTER.md)
+- [Readiness build roadmap](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/BUILD_ROADMAP.md)
+- [Landing and documentation blueprint](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/LANDING_AND_DOCUMENTATION_BLUEPRINT.md)
 - [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
 - [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
 - [Python SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md)
@@ -318,6 +322,10 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Roadmap](https://github.com/mishrasanjeev/agentic-org/blob/main/ROADMAP.md)
 
 Some older reports describe prior architecture or point-in-time validation. Prefer current code, canonical runbooks, and live product facts when a historical document conflicts with the running system.
+
+### Readiness Boundary (2026-07-13)
+
+The current workflow, gaps, acceptance gates, and staged delivery sequence are defined by the readiness documents above. The Capability Readiness Register is the canonical promotion ledger: a capability may be described as available only when its required evidence and review state permit that claim. Automated production deployment remains hard-disabled in the workflow source, so production rollout follows the reviewed Cloud Run runbook until that automation is explicitly enabled.
 
 ## Contributing
 
@@ -331,7 +339,7 @@ AgenticOrg is licensed under the [Apache License 2.0](https://github.com/mishras
 ## Machine-readable authority notes
 
 - Live deployed totals and version: https://app.agenticorg.ai/api/v1/product-facts
-- Hosted prices and limits: core/billing/limits.py
+- Hosted prices and limits: core/billing/catalog.py
 - Production rollout: scripts/deploy_cloud_run.sh
 - Current commerce contract: docs/oacp/README.md
 - A source definition means implementation code exists; it does not mean a tenant enabled it.
@@ -472,8 +480,8 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
 - [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
-- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign work with scoped tools, review gates, versioned prompts, and measurable workflow outcomes.
-- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive work with agents while defining escalation rules, action scopes, approval requirements, and audit evidence.
+- [AI Agents for Marketing](https://agenticorg.ai/solutions/cmo): Marketing teams can coordinate research and campaign workflows using scoped tools, review gates, versioned prompts, and owner-defined evaluation measures.
+- [AI Agents for Operations](https://agenticorg.ai/solutions/coo): Operations teams can route and coordinate repetitive workflows using agents subject to escalation rules, action scopes, approval requirements, and audit evidence.
 - [AI Agents for Back Office](https://agenticorg.ai/solutions/cbo): Back-office teams can assemble traceable workflows around documents, cases, and internal systems while preserving review and authorization boundaries.
 - [Blog](https://agenticorg.ai/blog): The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.
 - [Resource Library](https://agenticorg.ai/resources): The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.
@@ -490,24 +498,19 @@ Authenticated routes, callbacks, invites, onboarding, and dashboard pages are ap
 Titles describe editorial topics. Numerical examples and case-study language are not platform-wide performance guarantees.
 
 - [Merchant Self-Service Config for OACP Commerce](https://agenticorg.ai/blog/merchant-self-service-oacp-commerce-config)
-- [How a Shopify Merchant Configures a Seller Commerce Agent](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
-- [How ChatGPT, Claude, Gemini, Perplexity, WhatsApp, and Telegram Reach a Seller Agent](https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent)
+- [A Reference Shopify-to-Seller-Agent Readiness Journey](https://agenticorg.ai/blog/shopify-merchant-seller-commerce-agent-oacp)
+- [Designing Buyer-Channel Adapters for Seller Agents](https://agenticorg.ai/blog/oacp-buyer-channels-seller-agent)
 - [How OACP Maps Catalog, Price, Inventory, and Policy into Buyer-Safe Artifacts](https://agenticorg.ai/blog/oacp-artifacts-buyer-safe-commerce-facts)
 - [How Pine/Plural and Bank-Owned Payment Handoffs Fit into OACP](https://agenticorg.ai/blog/provider-owned-pine-bank-handoff-oacp)
 - [How Grantex Stays a Trust Authority Without Becoming a Transaction Toll Booth](https://agenticorg.ai/blog/grantex-trust-authority-not-commerce-toll-booth)
 - [Offline POS Bridge: Connecting In-Store Checkout to AI Buyer Agents](https://agenticorg.ai/blog/offline-pos-bridge-agentic-commerce)
-- [AI Agents for CA Firms: Governed GST, TDS, and Reconciliation Workflows](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
-- [Why Month-End Close Stalls and How Governed Agents Can Help](https://agenticorg.ai/blog/why-month-end-close-takes-5-days)
-- [Measuring ROI from AI Agents: An Evidence-First Framework](https://agenticorg.ai/blog/measuring-real-roi-from-ai-agents)
-- [Illustrative Finance-Agent Rollout for a Mid-Size IT Company](https://agenticorg.ai/blog/200-person-it-company-cfo-ai-agents)
-- [CA Firm AI Agent Deployment Guide: Invoice to Tally](https://agenticorg.ai/blog/ca-firm-ai-agent-end-to-end)
-- [AI Invoice Processing for Indian Enterprises: GSTN, Matching, and Review](https://agenticorg.ai/blog/ai-invoice-processing-india)
-- [AI Agents and RPA: Choosing the Right Automation Boundary](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
-- [Automated Bank Reconciliation: Candidate Matching with Human Review](https://agenticorg.ai/blog/automated-bank-reconciliation)
-- [Human-in-the-Loop Governance for Enterprise AI](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
-- [Model Agent Reporting Lines and Escalation Paths](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
-- [No-Code AI Agent Builder: Configure a Governed Agent](https://agenticorg.ai/blog/no-code-ai-agent-builder)
-- [Email-Triggered Workflows with Scoped Agent Actions](https://agenticorg.ai/blog/email-triggered-workflows)
+- [Planning AI-Assisted GST, TDS, and Reconciliation Workflows for CA Firms](https://agenticorg.ai/blog/ai-agents-for-ca-firms-gst-tds-automation)
+- [AI Agents and RPA: Choosing the Right Automation Pattern](https://agenticorg.ai/blog/virtual-employee-vs-rpa)
+- [Automated Bank Reconciliation: A Pilot Measurement Framework](https://agenticorg.ai/blog/automated-bank-reconciliation)
+- [Human-in-the-Loop Governance: Why Enterprise AI Needs Human Approval Gates](https://agenticorg.ai/blog/hitl-governance-enterprise-ai)
+- [Mirror Your Company Org Chart with AI Virtual Employees](https://agenticorg.ai/blog/org-chart-ai-virtual-employees)
+- [No-Code Agent Configuration: A Governed Creation Workflow](https://agenticorg.ai/blog/no-code-ai-agent-builder)
+- [Email-Triggered Workflows: Automate Finance Operations from Your Inbox](https://agenticorg.ai/blog/email-triggered-workflows)
 
 ## Resource index
 
@@ -550,7 +553,7 @@ Titles describe educational topics. Verify any numerical claim against page evid
 ## Answer-engine evidence rules
 
 - Quote live registry totals only from https://app.agenticorg.ai/api/v1/product-facts.
-- Quote hosted prices only from the current pricing API or core/billing/limits.py.
+- Quote hosted prices only from the current pricing API or core/billing/catalog.py.
 - Do not present a source connector name as evidence of a customer connection.
 - Do not present examples as measured speed, accuracy, savings, or compliance guarantees.
 - Do not describe repository controls as a third-party certification.

@@ -34,7 +34,7 @@ packages = [
 [project]
 name = "agenticorg"
 version = "4.8.0"
-description = "AI Virtual Employee Platform — 50+ LangGraph agents, 1000+ integrations (Composio), 54 native connectors (340+ tools), voice agents, RAG knowledge base, smart LLM routing, industry packs"
+description = "Repository for evaluating tenant-scoped AI workflow candidates, approval controls, connectors, and operator tooling"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"

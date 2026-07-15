@@ -31,6 +31,7 @@ import pytest
 from fastapi import HTTPException
 
 TENANT_ID = uuid.UUID("49ca24aa-c6e7-4124-91af-059023295da4")
+COMPANY_ID = uuid.UUID("56e585f7-b283-4743-9889-7e264cf4515e")
 
 # The connector_ids an already-provisioned CA TDS agent carries from the
 # pre-fix installer: every connector any authorized tool references.
@@ -309,6 +310,7 @@ async def test_promote_agent_passes_required_subset_to_gate() -> None:
     agent.shadow_sample_count = 10  # tester generated 10 samples
     agent.shadow_accuracy_current = 0.97
     agent.shadow_accuracy_floor = 0.60
+    agent.company_id = COMPANY_ID
 
     # session.execute: 1) select(Agent) -> agent, then AgentVersion probes -> None
     results = [agent, None, None, None]
@@ -325,8 +327,9 @@ async def test_promote_agent_passes_required_subset_to_gate() -> None:
 
     captured: dict = {}
 
-    async def _fake_gate(_session, _tid, connector_ids):
+    async def _fake_gate(_session, _tid, connector_ids, company_id):
         captured["connector_ids"] = connector_ids  # must be narrowed
+        captured["company_id"] = company_id
 
     with patch.object(
         agents_mod,
@@ -342,6 +345,7 @@ async def test_promote_agent_passes_required_subset_to_gate() -> None:
         )
 
     assert captured["connector_ids"] == ["registry-zoho_books"]
+    assert captured["company_id"] == COMPANY_ID
     assert result["promoted"] is True
     assert result["from"] == "shadow"
     assert result["to"] == "active"

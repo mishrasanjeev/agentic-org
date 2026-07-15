@@ -17,11 +17,12 @@ import json
 import logging
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.models.connector import Connector
 from core.models.connector_config import ConnectorConfig
+from core.models.tenant import Tenant
 
 logger = structlog.get_logger(__name__)
 
@@ -32,9 +33,27 @@ async def backfill() -> dict[str, int]:
     skipped = 0
     errors = 0
 
+    # ConnectorConfig is FORCE-RLS protected.  Connector is tenant-global,
+    # so enumerate tenants first and do every credential read/write with an
+    # explicit global (company_id NULL) tenant context.
     async with async_session_factory() as session:
-        result = await session.execute(select(Connector))
-        connectors = result.scalars().all()
+        # Fail closed if the maintenance role cannot enumerate the tenant
+        # catalog; row_security=off never grants a bypass.
+        await session.execute(text("SET LOCAL row_security = off"))
+        tenant_ids = list((await session.scalars(select(Tenant.id))).all())
+
+    connectors: list[Connector] = []
+    for tenant_id in tenant_ids:
+        async with get_tenant_session(tenant_id) as session:
+            connectors.extend(
+                list(
+                    (
+                        await session.scalars(
+                            select(Connector).where(Connector.tenant_id == tenant_id)
+                        )
+                    ).all()
+                )
+            )
 
     for conn in connectors:
         if not conn.auth_config or conn.auth_config == {}:
@@ -42,10 +61,11 @@ async def backfill() -> dict[str, int]:
             continue
 
         # Check if ConnectorConfig already exists
-        async with async_session_factory() as session:
+        async with get_tenant_session(conn.tenant_id) as session:
             existing = await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == conn.tenant_id,
+                    ConnectorConfig.company_id.is_(None),
                     ConnectorConfig.connector_name == conn.name,
                 )
             )
@@ -60,9 +80,10 @@ async def backfill() -> dict[str, int]:
             plaintext = json.dumps(conn.auth_config)
             encrypted = await encrypt_for_tenant(plaintext, conn.tenant_id)
 
-            async with async_session_factory() as session:
+            async with get_tenant_session(conn.tenant_id) as session:
                 cc = ConnectorConfig(
                     tenant_id=conn.tenant_id,
+                    company_id=None,
                     connector_name=conn.name,
                     config={},
                     credentials_encrypted={"_encrypted": encrypted},
