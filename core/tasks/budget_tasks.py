@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import structlog
 
+from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
 logger = structlog.get_logger()
@@ -19,4 +18,4 @@ def run_budget_evaluator() -> dict:
     """
     from core.billing.budget_evaluator import evaluate_budget_alerts
 
-    return asyncio.run(evaluate_budget_alerts())
+    return run_async(evaluate_budget_alerts())

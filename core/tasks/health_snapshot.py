@@ -17,7 +17,6 @@ live_snapshot``) rather than silently producing a stale chart.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid as _uuid
 from datetime import UTC, datetime, timedelta
@@ -28,6 +27,7 @@ from sqlalchemy import text
 
 from core.config import settings
 from core.database import async_session_factory
+from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
 logger = structlog.get_logger()
@@ -131,7 +131,7 @@ def record_health_snapshot() -> dict:
     Scheduled every 5 minutes by Celery Beat (see celery_app.beat_schedule).
     """
     try:
-        result = asyncio.run(_record_snapshot_async())
+        result = run_async(_record_snapshot_async())
         logger.info(
             "health_snapshot_recorded",
             status=result["status"],

@@ -8,11 +8,11 @@ keys as authoritative.
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import structlog
 
+from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 from workflows.event_waits import WorkflowEventWaitStore
 from workflows.state_store import WorkflowStateStore
@@ -128,7 +128,7 @@ async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
 def resume_workflow_wait(run_id: str, step_id: str) -> dict:
     """Resume a workflow paused at a wait_delay or wait_for_event step."""
     try:
-        result = asyncio.run(_resume_workflow_wait_async(run_id, step_id))
+        result = run_async(_resume_workflow_wait_async(run_id, step_id))
         if result.get("status") in {"resumed", "noop"}:
             _best_effort_clean_event_wait_keys(run_id, step_id)
         return result
@@ -209,7 +209,7 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
 def timeout_workflow_event(run_id: str, step_id: str) -> dict:
     """Mark an event wait as timed_out and let the engine continue later."""
     try:
-        result = asyncio.run(_timeout_workflow_event_async(run_id, step_id))
+        result = run_async(_timeout_workflow_event_async(run_id, step_id))
         if result.get("status") in {"timed_out", "already_completed", "noop"}:
             _best_effort_clean_event_wait_keys(run_id, step_id)
         return result

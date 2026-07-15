@@ -63,7 +63,7 @@ test.describe("Public Pages", () => {
     await page.goto(MARKETING, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
     await expect(
-      page.getByRole("link", { name: /Start Free|Get Started|Try Free/i }).first()
+      page.getByRole("link", { name: /Review Plans/i }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 
@@ -85,35 +85,24 @@ test.describe("Public Pages", () => {
     expect(count).toBeGreaterThanOrEqual(4);
   });
 
-  test("Blog post: ca-firm loads", async ({ page }) => {
-    await page.goto(`${MARKETING}/blog/ca-firm`, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle").catch(() => {});
-    const body = await page.textContent("body");
-    expect(body?.length).toBeGreaterThan(300);
-  });
+  const representativePosts = [
+    "ai-agents-for-ca-firms-gst-tds-automation",
+    "automated-bank-reconciliation",
+    "virtual-employee-vs-rpa",
+    "hitl-governance-enterprise-ai",
+  ];
 
-  test("Blog post: month-end-close loads", async ({ page }) => {
-    await page.goto(`${MARKETING}/blog/month-end-close`, {
-      waitUntil: "domcontentloaded",
+  for (const slug of representativePosts) {
+    test(`Blog post: ${slug} loads`, async ({ page }) => {
+      await page.goto(`${MARKETING}/blog/${slug}`, { waitUntil: "domcontentloaded" });
+      await page.waitForLoadState("networkidle").catch(() => {});
+      await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible({
+        timeout: 15000,
+      });
+      const body = await page.textContent("body");
+      expect(body?.length).toBeGreaterThan(300);
     });
-    await page.waitForLoadState("networkidle").catch(() => {});
-    const body = await page.textContent("body");
-    expect(body?.length).toBeGreaterThan(200);
-  });
-
-  test("Blog post: honest-roi loads", async ({ page }) => {
-    await page.goto(`${MARKETING}/blog/honest-roi`, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle").catch(() => {});
-    const body = await page.textContent("body");
-    expect(body?.length).toBeGreaterThan(200);
-  });
-
-  test("Blog post: it-cfo-story loads", async ({ page }) => {
-    await page.goto(`${MARKETING}/blog/it-cfo-story`, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle").catch(() => {});
-    const body = await page.textContent("body");
-    expect(body?.length).toBeGreaterThan(200);
-  });
+  }
 
   test("Resources page loads", async ({ page }) => {
     await page.goto(`${MARKETING}/resources`, { waitUntil: "domcontentloaded" });
@@ -385,7 +374,7 @@ test.describe("Responsive -- Mobile (375px)", () => {
     await page.goto(MARKETING, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
     await expect(
-      page.getByText("Your Back Office Runs Itself").first()
+      page.getByRole("heading", { name: /Enterprise Work,\s*Governed by Design\./i }).first()
     ).toBeVisible({ timeout: 15000 });
   });
 });
