@@ -29,8 +29,10 @@ def workflow_engine(mock_state_store):
 
 
 @pytest.fixture
-def base_state():
+def base_state(workflow_company_scope):
     return {
+        **workflow_company_scope,
+        "domain": "operations",
         "id": "wfr_ops_test001",
         "status": "running",
         "trigger_payload": {},
@@ -190,7 +192,7 @@ class TestOpsFunctional:
     # FT-OPS-003: L1 ticket resolution (payment status, <30s, closed)
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_ops_003_l1_ticket_resolution(self):
+    async def test_ft_ops_003_l1_ticket_resolution(self, workflow_company_scope):
         """FT-OPS-003: L1 support ticket — payment status query resolved and closed."""
         step = {
             "id": "resolve_l1",
@@ -199,6 +201,8 @@ class TestOpsFunctional:
             "action": "resolve_payment_status_query",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "operations",
             "context": {
                 "ticket_id": "TKT-20260321-001",
                 "category": "payment_status",

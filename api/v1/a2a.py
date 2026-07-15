@@ -98,6 +98,7 @@ async def list_available_agents():
 
 class A2ATaskRequest(BaseModel):
     agent_type: str
+    company_id: str = ""
     action: str = "process"
     inputs: dict[str, Any] = {}
     context: dict[str, Any] = {}
@@ -125,6 +126,9 @@ async def create_task(
     """
     task_id = f"a2a_{_uuid.uuid4().hex[:16]}"
     tid = _uuid.UUID(tenant_id)
+    from api.v1.agents import _require_company_for_tenant
+
+    company_uuid = await _require_company_for_tenant(tenant_id, body.company_id)
 
     # Check if the requested agent type exists
     from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
@@ -144,6 +148,7 @@ async def create_task(
                 "inputs": body.inputs,
                 "context": body.context,
                 "metadata": body.metadata,
+                "company_id": str(company_uuid),
             },
         )
         session.add(task_row)
@@ -180,15 +185,18 @@ async def create_task(
         # to decrypted creds, and pass them through. Same defect class
         # as the original /agents/{id}/run fix — sibling-route sweep.
         connector_ids = await _resolve_agent_connector_ids_for_type(
-            tenant_id=tenant_id, agent_type=body.agent_type,
+            tenant_id=tenant_id,
+            agent_type=body.agent_type,
+            company_id=company_uuid,
         )
         if connector_ids:
             try:
-                async with get_tenant_session(tid) as session:
+                async with get_tenant_session(tid, company_uuid) as session:
                     await _assert_connectors_ready_for_dispatch(
                         session,
                         tid,
                         connector_ids,
+                        company_uuid,
                     )
             except HTTPException as exc:
                 async with get_tenant_session(tid) as session:
@@ -209,6 +217,7 @@ async def create_task(
         connector_config = await _load_connector_configs_for_agent(
             tenant_id=tenant_id,
             connector_ids=connector_ids,
+            company_id=company_uuid,
         )
 
         result = await langgraph_run(
@@ -225,6 +234,7 @@ async def create_task(
             },
             grant_token=grant_token,
             connector_config=connector_config,
+            company_id=str(company_uuid),
         )
 
         final_status = result.get("status", "completed")

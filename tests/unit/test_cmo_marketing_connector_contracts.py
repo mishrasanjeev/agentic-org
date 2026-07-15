@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 
@@ -17,6 +18,8 @@ from core.marketing.data_readiness import build_marketing_data_readiness
 from core.marketing.workflow_activation import build_cmo_workflow_activation
 
 NOW = datetime(2026, 5, 23, 12, 0, tzinfo=UTC)
+WORKFLOW_TENANT_ID = "22222222-2222-2222-2222-222222222222"
+WORKFLOW_COMPANY_ID = "33333333-3333-3333-3333-333333333333"
 
 
 def _connector_config(
@@ -535,6 +538,11 @@ def _patch_workflow_agent(monkeypatch: pytest.MonkeyPatch, output: dict) -> None
     monkeypatch.setattr(step_types.external_keys, "google_gemini_api_key", "test-key")
     monkeypatch.setattr(step_types, "_llm_available_for_workflow", lambda: True)
 
+    async def valid_company_scope(_tenant_id: str, _company_id: object) -> UUID:
+        return UUID(WORKFLOW_COMPANY_ID)
+
+    monkeypatch.setattr(step_types, "_validated_workflow_company", valid_company_scope)
+
     class FakeAgent:
         async def execute(self, task):
             return TaskResult(
@@ -573,7 +581,12 @@ async def test_marketing_write_agent_step_without_confirmation_fails(
             "external_write_required": True,
             "marketing_policy_approval_satisfied": True,
         },
-        {"domain": "marketing", "workflow_mode": "active"},
+        {
+            "tenant_id": WORKFLOW_TENANT_ID,
+            "company_id": WORKFLOW_COMPANY_ID,
+            "domain": "marketing",
+            "workflow_mode": "active",
+        },
     )
 
     assert result["status"] == "failed"
@@ -609,7 +622,12 @@ async def test_marketing_write_agent_step_with_confirmation_completes(
             "external_write_required": True,
             "marketing_policy_approval_satisfied": True,
         },
-        {"domain": "marketing", "workflow_mode": "active"},
+        {
+            "tenant_id": WORKFLOW_TENANT_ID,
+            "company_id": WORKFLOW_COMPANY_ID,
+            "domain": "marketing",
+            "workflow_mode": "active",
+        },
     )
 
     assert result["status"] == "completed"
@@ -633,7 +651,12 @@ async def test_marketing_shadow_write_agent_step_can_remain_internal(
             "connector_key": "google_ads",
             "external_write_required": True,
         },
-        {"domain": "marketing", "workflow_mode": "shadow"},
+        {
+            "tenant_id": WORKFLOW_TENANT_ID,
+            "company_id": WORKFLOW_COMPANY_ID,
+            "domain": "marketing",
+            "workflow_mode": "shadow",
+        },
     )
 
     assert result["status"] == "completed"

@@ -50,176 +50,287 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     # Finance
     "ap_processor": [
-        "fetch_bank_statement", "check_account_balance",
-        "post_voucher", "get_ledger_balance", "get_trial_balance",
-        "list_vendors", "create_vendor", "create_item", "create_bill",
-        "list_vendor_bills", "list_bills", "search_bills", "get_bill_by_id",
-        "create_order", "check_order_status",
+        "fetch_bank_statement",
+        "check_account_balance",
+        "post_voucher",
+        "get_ledger_balance",
+        "get_trial_balance",
+        "list_vendors",
+        "create_vendor",
+        "create_item",
+        "create_bill",
+        "list_vendor_bills",
+        "list_bills",
+        "search_bills",
+        "get_bill_by_id",
+        "create_order",
+        "check_order_status",
     ],
     "ar_collections": [
-        "create_invoice", "list_invoices", "search_invoices", "get_invoice_by_id",
-        "create_payment_link", "send_email",
+        "create_invoice",
+        "list_invoices",
+        "search_invoices",
+        "get_invoice_by_id",
+        "create_payment_link",
+        "send_email",
         "check_account_balance",
     ],
     "recon_agent": [
-        "fetch_bank_statement", "get_transaction_list",
-        "check_account_balance", "list_invoices",
+        "fetch_bank_statement",
+        "get_transaction_list",
+        "check_account_balance",
+        "list_invoices",
     ],
     "tax_compliance": [
-        "fetch_gstr2a", "push_gstr1_data",
-        "file_gstr3b", "file_gstr9",
-        "generate_eway_bill", "generate_einvoice_irn",
+        "fetch_gstr2a",
+        "push_gstr1_data",
+        "file_gstr3b",
+        "file_gstr9",
+        "generate_eway_bill",
+        "generate_einvoice_irn",
         "check_filing_status",
     ],
     "close_agent": [
         # Tools the agent actually calls — see core/agents/finance/close_agent.py.
         # Trial balance + P&L chain (zoho_books / quickbooks / tally) +
         # balance sheet (zoho_books / quickbooks).
-        "get_trial_balance", "get_profit_loss", "get_balance_sheet",
-        "list_invoices", "fetch_bank_statement",
-        "get_balance", "search_content_fulltext",
+        "get_trial_balance",
+        "get_profit_loss",
+        "get_balance_sheet",
+        "list_invoices",
+        "fetch_bank_statement",
+        "get_balance",
+        "search_content_fulltext",
     ],
     "fpa_agent": [
         # Tools the agent actually calls — see core/agents/finance/fpa_agent.py.
         # P&L chain (zoho_books / quickbooks / tally trial balance) plus
         # the original ledger/invoice helpers used in MIS narration.
-        "get_profit_loss", "get_trial_balance",
-        "list_invoices", "get_balance",
-        "get_campaign_performance_metrics", "get_project_metrics",
+        "get_profit_loss",
+        "get_trial_balance",
+        "list_invoices",
+        "get_balance",
+        "get_campaign_performance_metrics",
+        "get_project_metrics",
     ],
     "treasury": [
-        "check_account_balance", "fetch_bank_statement",
-        "get_balance", "get_balance_sheet", "get_cash_position",
+        "check_account_balance",
+        "fetch_bank_statement",
+        "get_balance",
+        "get_balance_sheet",
+        "get_cash_position",
     ],
     "expense_manager": [
-        "record_expense", "create_bill", "list_vendors", "create_vendor",
+        "record_expense",
+        "create_bill",
+        "list_vendors",
+        "create_vendor",
         "create_ap_invoice",
-        "check_order_status", "list_invoices", "get_profit_loss",
+        "check_order_status",
+        "list_invoices",
+        "get_profit_loss",
     ],
     "rev_rec": [
-        "query", "create_invoice", "post_journal_entry",
-        "get_trial_balance", "list_invoices",
+        "query",
+        "create_invoice",
+        "post_journal_entry",
+        "get_trial_balance",
+        "list_invoices",
     ],
     "fixed_assets": [
-        "post_journal_entry", "record_expense",
-        "get_trial_balance", "get_balance_sheet", "create_ap_invoice",
+        "post_journal_entry",
+        "record_expense",
+        "get_trial_balance",
+        "get_balance_sheet",
+        "create_ap_invoice",
     ],
     # HR
     "talent_acquisition": [
-        "post_job", "search_candidates", "get_applications",
-        "schedule_interview", "send_offer", "send_inmail",
+        "post_job",
+        "search_candidates",
+        "get_applications",
+        "schedule_interview",
+        "send_offer",
+        "send_inmail",
     ],
     "onboarding_agent": [
-        "create_employee", "provision_user", "assign_group",
-        "create_page", "schedule_social_post",
+        "create_employee",
+        "provision_user",
+        "assign_group",
+        "create_page",
+        "schedule_social_post",
     ],
     "payroll_engine": [
-        "run_payroll", "get_payslip", "get_attendance",
-        "post_leave", "file_24q_return",
+        "run_payroll",
+        "get_payslip",
+        "get_attendance",
+        "post_leave",
+        "file_24q_return",
     ],
     "performance_coach": [
-        "update_performance", "get_employee",
-        "get_org_chart", "add_comment",
+        "update_performance",
+        "get_employee",
+        "get_org_chart",
+        "add_comment",
     ],
     "ld_coordinator": [
-        "search_content_fulltext", "create_page",
-        "get_employee", "schedule_interview",
+        "search_content_fulltext",
+        "create_page",
+        "get_employee",
+        "schedule_interview",
     ],
     "offboarding_agent": [
-        "terminate_employee", "deactivate_user",
-        "remove_group", "list_active_sessions",
+        "terminate_employee",
+        "deactivate_user",
+        "remove_group",
+        "list_active_sessions",
     ],
     # Marketing
     "content_factory": [
-        "schedule_social_post", "get_post_analytics",
-        "manage_publishing_queue", "approve_draft_post",
+        "schedule_social_post",
+        "get_post_analytics",
+        "manage_publishing_queue",
+        "approve_draft_post",
         "create_page",
     ],
     "campaign_pilot": [
-        "search_campaigns", "get_campaign_performance",
-        "mutate_campaign_budget", "get_search_terms",
-        "get_analytics", "get_stats",
+        "search_campaigns",
+        "get_campaign_performance",
+        "mutate_campaign_budget",
+        "get_search_terms",
+        "get_analytics",
+        "get_stats",
     ],
     "seo_strategist": [
         "get_campaign_performance_metrics",
-        "get_search_term_report", "search_content_fulltext",
+        "get_search_term_report",
+        "search_content_fulltext",
         "get_post_analytics",
     ],
     "crm_intelligence": [
-        "list_contacts", "search_contacts", "list_deals",
-        "get_deal", "get_campaign_analytics", "create_contact",
-        "update_contact", "delete_contact", "assign_contact_owner",
-        "associate_contact_to_company", "list_owners",
+        "list_contacts",
+        "search_contacts",
+        "list_deals",
+        "get_deal",
+        "get_campaign_analytics",
+        "create_contact",
+        "update_contact",
+        "delete_contact",
+        "assign_contact_owner",
+        "associate_contact_to_company",
+        "list_owners",
     ],
     "brand_monitor": [
-        "get_post_analytics", "get_campaign_performance",
-        "schedule_social_post", "search_contacts",
+        "get_post_analytics",
+        "get_campaign_performance",
+        "schedule_social_post",
+        "search_contacts",
     ],
     "email_marketing": [
-        "send_email", "create_campaign", "send_campaign",
-        "get_campaign_report", "add_list_member", "get_campaign_stats",
+        "send_email",
+        "create_campaign",
+        "send_campaign",
+        "get_campaign_report",
+        "add_list_member",
+        "get_campaign_stats",
     ],
     "social_media": [
-        "create_tweet", "create_update", "get_post_analytics",
-        "list_channel_videos", "get_campaign_insights",
+        "create_tweet",
+        "create_update",
+        "get_post_analytics",
+        "list_channel_videos",
+        "get_campaign_insights",
     ],
     "abm": [
-        "query", "search_contacts", "get_analytics",
-        "get_campaign_performance", "create_campaign",
+        "query",
+        "search_contacts",
+        "get_analytics",
+        "get_campaign_performance",
+        "create_campaign",
     ],
     "competitive_intel": [
-        "get_domain_rating", "get_organic_keywords",
-        "get_mentions", "get_share_of_voice", "get_backlinks",
+        "get_domain_rating",
+        "get_organic_keywords",
+        "get_mentions",
+        "get_share_of_voice",
+        "get_backlinks",
     ],
     # Ops
     "support_triage": [
-        "create_ticket", "update_ticket", "escalate_to_group",
-        "get_sla_breach_status", "get_csat_score", "apply_macro",
-        "send_message", "post_alert",
+        "create_ticket",
+        "update_ticket",
+        "escalate_to_group",
+        "get_sla_breach_status",
+        "get_csat_score",
+        "apply_macro",
+        "send_message",
+        "post_alert",
     ],
     "vendor_manager": [
-        "search_issues", "create_issue", "add_comment",
-        "create_page", "get_project_metrics",
+        "search_issues",
+        "create_issue",
+        "add_comment",
+        "create_page",
+        "get_project_metrics",
     ],
     "contract_intelligence": [
-        "search_content_fulltext", "create_page",
-        "search_issues", "get_page_tree",
+        "search_content_fulltext",
+        "create_page",
+        "search_issues",
+        "get_page_tree",
     ],
     "compliance_guard": [
-        "get_compliance_notice", "get_access_log",
-        "search_issues", "create_incident",
+        "get_compliance_notice",
+        "get_access_log",
+        "search_issues",
+        "create_incident",
         "send_message",
     ],
     "it_operations": [
-        "create_incident", "trigger_alert_with_context",
-        "acknowledge_incident", "manage_on_call_schedule",
-        "run_automated_runbook", "send_message",
+        "create_incident",
+        "trigger_alert_with_context",
+        "acknowledge_incident",
+        "manage_on_call_schedule",
+        "run_automated_runbook",
+        "send_message",
         "post_alert",
     ],
     # Backoffice
     "legal_ops": [
-        "search_content_fulltext", "create_page",
-        "search_issues", "get_page_tree",
+        "search_content_fulltext",
+        "create_page",
+        "search_issues",
+        "get_page_tree",
         "manage_space_permissions",
     ],
     "risk_sentinel": [
-        "get_access_log", "create_incident",
-        "get_compliance_notice", "search_issues",
+        "get_access_log",
+        "create_incident",
+        "get_compliance_notice",
+        "search_issues",
         "generate_postmortem_doc",
     ],
     "facilities_agent": [
-        "create_ticket", "update_ticket",
-        "create_issue", "get_sla_breach_status",
+        "create_ticket",
+        "update_ticket",
+        "create_issue",
+        "get_sla_breach_status",
     ],
     # Comms
     "email_agent": [
-        "send_email", "read_inbox", "search_emails",
+        "send_email",
+        "read_inbox",
+        "search_emails",
     ],
     "notification_agent": [
-        "send_email", "create_calendar_event", "slack_send_message",
+        "send_email",
+        "create_calendar_event",
+        "slack_send_message",
     ],
     "chat_agent": [
-        "slack_send_message", "send_email", "read_inbox",
+        "slack_send_message",
+        "send_email",
+        "read_inbox",
     ],
 }
 
@@ -234,30 +345,46 @@ _AGENT_TYPE_DEFAULT_CONNECTOR_IDS: dict[str, list[str]] = {
 _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "commerce": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
     "finance": [
-        "fetch_bank_statement", "create_payment_intent",
-        "get_balance", "list_invoices", "search_invoices", "list_vendors",
-        "create_bill", "list_vendor_bills", "list_bills", "search_bills",
+        "fetch_bank_statement",
+        "create_payment_intent",
+        "get_balance",
+        "list_invoices",
+        "search_invoices",
+        "list_vendors",
+        "create_bill",
+        "list_vendor_bills",
+        "list_bills",
+        "search_bills",
     ],
     "hr": [
-        "get_employee", "create_employee",
-        "provision_user", "post_job",
+        "get_employee",
+        "create_employee",
+        "provision_user",
+        "post_job",
     ],
     "marketing": [
         "get_campaign_performance_metrics",
-        "schedule_social_post", "list_contacts",
+        "schedule_social_post",
+        "list_contacts",
         "get_post_analytics",
     ],
     "ops": [
-        "create_ticket", "search_issues",
-        "create_incident", "get_sla_breach_status",
+        "create_ticket",
+        "search_issues",
+        "create_incident",
+        "get_sla_breach_status",
     ],
     "backoffice": [
-        "search_content_fulltext", "create_page",
-        "search_issues", "get_access_log",
+        "search_content_fulltext",
+        "create_page",
+        "search_issues",
+        "get_access_log",
     ],
     "comms": [
-        "send_email", "read_inbox",
-        "slack_send_message", "create_calendar_event",
+        "send_email",
+        "read_inbox",
+        "slack_send_message",
+        "create_calendar_event",
     ],
 }
 
@@ -356,6 +483,29 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
         return _uuid.UUID(company_id)
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, "Invalid company_id format") from exc
+
+
+async def _require_company_for_tenant(
+    tenant_id: str | _uuid.UUID,
+    company_id: str | _uuid.UUID | None,
+) -> _uuid.UUID:
+    """Resolve a required company and prove it belongs to the tenant."""
+    if company_id is None or not str(company_id).strip():
+        raise HTTPException(400, "company_id is required for connector-backed execution")
+    company_uuid = _parse_company_id(str(company_id))
+    if company_uuid is None:
+        raise HTTPException(400, "company_id is required for connector-backed execution")
+    tid = tenant_id if isinstance(tenant_id, _uuid.UUID) else _uuid.UUID(str(tenant_id))
+    async with get_tenant_session(tid) as session:
+        company_result = await session.execute(
+            select(Company.id).where(
+                Company.id == company_uuid,
+                Company.tenant_id == tid,
+            )
+        )
+        if company_result.scalar_one_or_none() is None:
+            raise HTTPException(404, "Company not found")
+    return company_uuid
 
 
 def _has_meaningful_run_text(value: str) -> bool:
@@ -502,11 +652,7 @@ def _shadow_metric_update_decision(
         }
 
     tool_failed = _tool_calls_contain_failure(tool_calls)
-    if (
-        incoming_action == "shadow_sample"
-        and task_status in ("completed", "hitl_triggered")
-        and not tool_failed
-    ):
+    if incoming_action == "shadow_sample" and task_status in ("completed", "hitl_triggered") and not tool_failed:
         return {
             "sample_counted": True,
             "accuracy_updated": False,
@@ -668,7 +814,9 @@ def _derive_default_tools(
 
 
 async def _resolve_agent_connector_ids_for_type(
-    tenant_id: str, agent_type: str,
+    tenant_id: str,
+    agent_type: str,
+    company_id: str | _uuid.UUID | None = None,
 ) -> list[str]:
     """Find connector_ids for the first active/shadow agent matching agent_type.
 
@@ -690,6 +838,7 @@ async def _resolve_agent_connector_ids_for_type(
 
     from core.database import get_tenant_session
     from core.models.agent import Agent
+    from core.models.company import Company
 
     try:
         tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
@@ -697,7 +846,25 @@ async def _resolve_agent_connector_ids_for_type(
         return []
 
     try:
+        company_uuid = (
+            company_id
+            if isinstance(company_id, _uuid.UUID)
+            else _uuid.UUID(str(company_id)) if company_id else None
+        )
+    except (TypeError, ValueError):
+        return []
+
+    try:
         async with get_tenant_session(tid) as session:
+            if company_uuid is not None:
+                company_result = await session.execute(
+                    select(Company.id).where(
+                        Company.id == company_uuid,
+                        Company.tenant_id == tid,
+                    )
+                )
+                if company_result.scalar_one_or_none() is None:
+                    raise RuntimeError("Company scope does not belong to tenant")
             status_priority = case(
                 (Agent.status == "active", 0),
                 (Agent.status == "shadow", 1),
@@ -709,6 +876,11 @@ async def _resolve_agent_connector_ids_for_type(
                     .where(
                         Agent.tenant_id == tid,
                         Agent.agent_type == agent_type,
+                        (
+                            Agent.company_id == company_uuid
+                            if company_uuid is not None
+                            else Agent.company_id.is_(None)
+                        ),
                     )
                     .order_by(status_priority)
                     .limit(1)
@@ -731,6 +903,7 @@ async def _resolve_connector_configs(
     tenant_id: str,
     connector_ids: list[str],
     agent_level_config: dict[str, Any] | None = None,
+    company_id: str | _uuid.UUID | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Resolve an agent's ``connector_ids`` into (merged_config, resolved_names).
 
@@ -754,6 +927,7 @@ async def _resolve_connector_configs(
     from sqlalchemy import select
 
     from core.database import get_tenant_session
+    from core.models.company import Company
     from core.models.connector_config import ConnectorConfig
 
     try:
@@ -765,10 +939,31 @@ async def _resolve_connector_configs(
         )
         return dict(agent_level_config or {}), []
 
+    try:
+        company_uuid = (
+            company_id
+            if isinstance(company_id, _uuid.UUID)
+            else _uuid.UUID(str(company_id)) if company_id else None
+        )
+    except (TypeError, ValueError):
+        logger.warning("load_connector_configs_invalid_company", company_id=str(company_id))
+        return {}, []
+
+    if company_uuid is not None:
+        async with get_tenant_session(tid) as tenant_session:
+            company_result = await tenant_session.execute(
+                select(Company.id).where(
+                    Company.id == company_uuid,
+                    Company.tenant_id == tid,
+                )
+            )
+            if company_result.scalar_one_or_none() is None:
+                raise RuntimeError("Company scope does not belong to tenant")
+
     merged: dict[str, Any] = {}
     resolved_names: list[str] = []
     failed_connectors: list[str] = []
-    async with get_tenant_session(tid) as session:
+    async with get_tenant_session(tid, company_uuid) as session:
         for raw_id in connector_ids:
             if not isinstance(raw_id, str) or not raw_id.strip():
                 continue
@@ -777,6 +972,11 @@ async def _resolve_connector_configs(
                 cc_result = await session.execute(
                     select(ConnectorConfig).where(
                         ConnectorConfig.tenant_id == tid,
+                        (
+                            ConnectorConfig.company_id == company_uuid
+                            if company_uuid is not None
+                            else ConnectorConfig.company_id.is_(None)
+                        ),
                         ConnectorConfig.connector_name == connector_name,
                     )
                 )
@@ -807,6 +1007,11 @@ async def _resolve_connector_configs(
                     cc_result = await session.execute(
                         select(ConnectorConfig).where(
                             ConnectorConfig.tenant_id == tid,
+                            (
+                                ConnectorConfig.company_id == company_uuid
+                                if company_uuid is not None
+                                else ConnectorConfig.company_id.is_(None)
+                            ),
                             ConnectorConfig.id == row_uuid,
                         )
                     )
@@ -853,10 +1058,7 @@ async def _resolve_connector_configs(
                 failed_connectors.append(connector_name)
 
     if failed_connectors:
-        raise RuntimeError(
-            "Failed to load connector configuration for "
-            + ", ".join(sorted(set(failed_connectors)))
-        )
+        raise RuntimeError("Failed to load connector configuration for " + ", ".join(sorted(set(failed_connectors))))
 
     if agent_level_config:
         merged.update(agent_level_config)
@@ -867,6 +1069,7 @@ async def _load_connector_configs_for_agent(
     tenant_id: str,
     connector_ids: list[str],
     agent_level_config: dict[str, Any] | None = None,
+    company_id: str | _uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Backward-compatible wrapper around :func:`_resolve_connector_configs`.
 
@@ -880,6 +1083,7 @@ async def _load_connector_configs_for_agent(
         tenant_id=tenant_id,
         connector_ids=connector_ids,
         agent_level_config=agent_level_config,
+        company_id=company_id,
     )
     return merged
 
@@ -915,9 +1119,7 @@ def _required_connector_ids_for_agent(agent: Any) -> list[str]:
     full_set = set(full)
 
     pack_install = cfg.get("pack_install")
-    pack_name = (
-        pack_install.get("pack_name") if isinstance(pack_install, dict) else None
-    )
+    pack_name = pack_install.get("pack_name") if isinstance(pack_install, dict) else None
     if pack_name:
         try:
             from core.agents.packs.installer import (
@@ -937,11 +1139,7 @@ def _required_connector_ids_for_agent(agent: Any) -> list[str]:
             )
             declared = None
         if declared:
-            scoped = (
-                [cid for cid in declared if cid in full_set]
-                if full_set
-                else list(declared)
-            )
+            scoped = [cid for cid in declared if cid in full_set] if full_set else list(declared)
             if scoped:
                 return scoped
 
@@ -959,6 +1157,7 @@ async def _assert_connectors_ready_for_activation(
     session: Any,
     tenant_id: _uuid.UUID,
     connector_ids: list[str] | None,
+    company_id: _uuid.UUID | None = None,
 ) -> None:
     """Block active status unless every linked connector is truly ready."""
     if not connector_ids:
@@ -981,6 +1180,11 @@ async def _assert_connectors_ready_for_activation(
             await session.execute(
                 select(ConnectorConfig).where(
                     ConnectorConfig.tenant_id == tenant_id,
+                    (
+                        ConnectorConfig.company_id == company_id
+                        if company_id is not None
+                        else ConnectorConfig.company_id.is_(None)
+                    ),
                     ConnectorConfig.connector_name == connector_name,
                 )
             )
@@ -995,6 +1199,11 @@ async def _assert_connectors_ready_for_activation(
                     await session.execute(
                         select(ConnectorConfig).where(
                             ConnectorConfig.tenant_id == tenant_id,
+                            (
+                                ConnectorConfig.company_id == company_id
+                                if company_id is not None
+                                else ConnectorConfig.company_id.is_(None)
+                            ),
                             ConnectorConfig.id == cc_uuid,
                         )
                     )
@@ -1057,10 +1266,16 @@ async def _assert_connectors_ready_for_dispatch(
     session: Any,
     tenant_id: _uuid.UUID,
     connector_ids: list[str] | None,
+    company_id: _uuid.UUID | None = None,
 ) -> None:
     """Block agent execution before tools run when required connectors are not ready."""
     try:
-        await _assert_connectors_ready_for_activation(session, tenant_id, connector_ids)
+        await _assert_connectors_ready_for_activation(
+            session,
+            tenant_id,
+            connector_ids,
+            company_id,
+        )
     except HTTPException as exc:
         detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
         connectors = detail.get("connectors")
@@ -1202,11 +1417,13 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             if company_exists.scalar_one_or_none() is None:
                 raise HTTPException(404, "Company not found")
         if initial_status == "active":
-            await _assert_connectors_ready_for_activation(
-                session,
-                tid,
-                connector_ids,
-            )
+            async with get_tenant_session(tid, company_uuid) as connector_session:
+                await _assert_connectors_ready_for_activation(
+                    connector_session,
+                    tid,
+                    connector_ids,
+                    company_uuid,
+                )
         # ── SET-008: Enforce shadow agent limit ────────────────────────
         #
         # Codex 2026-04-22 audit gap #7 — fail-closed on safety errors.
@@ -1219,30 +1436,19 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
         # request rather than bypass the budget.
         if initial_status == "shadow":
             try:
-                tenant_result = await session.execute(
-                    select(Tenant).where(Tenant.id == tid)
-                )
+                tenant_result = await session.execute(select(Tenant).where(Tenant.id == tid))
                 tenant_row = tenant_result.scalar_one_or_none()
-                stored = (
-                    (tenant_row.settings or {}).get("fleet_limits")
-                    if tenant_row
-                    else None
-                )
+                stored = (tenant_row.settings or {}).get("fleet_limits") if tenant_row else None
                 limits = FleetLimits(**stored) if stored else FleetLimits()
                 shadow_count = (
                     await session.execute(
-                        select(func.count(Agent.id)).where(
-                            Agent.tenant_id == tid, Agent.status == "shadow"
-                        )
+                        select(func.count(Agent.id)).where(Agent.tenant_id == tid, Agent.status == "shadow")
                     )
                 ).scalar() or 0
                 if shadow_count >= limits.max_shadow_agents:
                     raise HTTPException(
                         409,
-                        detail=(
-                            f"Shadow limit reached "
-                            f"({shadow_count}/{limits.max_shadow_agents})"
-                        ),
+                        detail=(f"Shadow limit reached ({shadow_count}/{limits.max_shadow_agents})"),
                     )
             except HTTPException:
                 raise
@@ -1298,9 +1504,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             routing_filter=body.routing_filter,
             reporting_to=body.reporting_to,
             org_level=body.org_level or 0,
-            parent_agent_id=(
-                _uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None
-            ),
+            parent_agent_id=(_uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None),
             connector_ids=connector_ids,
         )
         session.add(agent)
@@ -1349,7 +1553,8 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
                 cid.strip().removeprefix("registry-")
                 for cid in (body.connector_ids or [])
                 if isinstance(cid, str) and cid.strip()
-            ] or None,
+            ]
+            or None,
         )
         if grantex_info:
             # Store Grantex metadata in agent config JSONB
@@ -1357,9 +1562,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
                 from sqlalchemy import update
 
                 await session.execute(
-                    update(Agent)
-                    .where(Agent.id == agent.id)
-                    .values(config={**agent.config, "grantex": grantex_info})
+                    update(Agent).where(Agent.id == agent.id).values(config={**agent.config, "grantex": grantex_info})
                 )
     except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
         logger.warning(
@@ -1463,9 +1666,7 @@ async def list_agents(
                     )
                     await session.flush()
                     query = select(Agent).where(Agent.tenant_id == tid)
-                    count_query = select(func.count()).select_from(Agent).where(
-                        Agent.tenant_id == tid
-                    )
+                    count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
                     if isinstance(user_domains, list):
                         query = query.where(Agent.domain.in_(user_domains))
                         count_query = count_query.where(Agent.domain.in_(user_domains))
@@ -1477,9 +1678,7 @@ async def list_agents(
                         count_query = count_query.where(Agent.status == status)
                     else:
                         query = query.where(Agent.status.notin_(["deleted", "error", "broken"]))
-                        count_query = count_query.where(
-                            Agent.status.notin_(["deleted", "error", "broken"])
-                        )
+                        count_query = count_query.where(Agent.status.notin_(["deleted", "error", "broken"]))
                     query = query.where(Agent.company_id == company_uuid)
                     count_query = count_query.where(Agent.company_id == company_uuid)
                     total = (await session.execute(count_query)).scalar() or 0
@@ -1589,9 +1788,7 @@ async def delegate_to_agent(
     tid = _uuid.UUID(tenant_id)
 
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         child = result.scalar_one_or_none()
         if not child:
             raise HTTPException(404, "Agent not found")
@@ -1709,20 +1906,24 @@ async def import_agents_csv(
 
             # TC-011: Validate data formats
             if not name_pattern.match(name):
-                skipped.append({
-                    "reason": "invalid name — must start with a letter, alphanumeric only",
-                    "row": dict(row),
-                })
+                skipped.append(
+                    {
+                        "reason": "invalid name — must start with a letter, alphanumeric only",
+                        "row": dict(row),
+                    }
+                )
                 continue
             if not name_pattern.match(agent_type):
                 skipped.append({"reason": "invalid agent_type format", "row": dict(row)})
                 continue
             if domain not in valid_domains:
                 allowed = ", ".join(sorted(valid_domains))
-                skipped.append({
-                    "reason": f"invalid domain '{domain}' — must be: {allowed}",
-                    "row": dict(row),
-                })
+                skipped.append(
+                    {
+                        "reason": f"invalid domain '{domain}' — must be: {allowed}",
+                        "row": dict(row),
+                    }
+                )
                 continue
 
             designation = (row.get("designation") or "").strip()
@@ -1741,30 +1942,44 @@ async def import_agents_csv(
                     confidence_floor = Decimal("0.88")
 
             agent = Agent(
-                tenant_id=tid, company_id=company_uuid, name=name, employee_name=name,
-                agent_type=agent_type, domain=domain,
+                tenant_id=tid,
+                company_id=company_uuid,
+                name=name,
+                employee_name=name,
+                agent_type=agent_type,
+                domain=domain,
                 designation=designation or None,
                 specialization=specialization or None,
-                system_prompt_ref="", system_prompt_text="",
+                system_prompt_ref="",
+                system_prompt_text="",
                 hitl_condition="confidence < 0.88",
-                status="shadow", version="1.0.0",
+                status="shadow",
+                version="1.0.0",
                 confidence_floor=confidence_floor,
-                org_level=org_level, llm_model=llm_model or None,
+                org_level=org_level,
+                llm_model=llm_model or None,
                 parent_agent_id=None,
             )
             session.add(agent)
             await session.flush()
-            imported.append({
-                "id": str(agent.id), "name": name,
-                "agent_type": agent_type, "domain": domain,
-                "company_id": str(company_uuid) if company_uuid else None,
-            })
+            imported.append(
+                {
+                    "id": str(agent.id),
+                    "name": name,
+                    "agent_type": agent_type,
+                    "domain": domain,
+                    "company_id": str(company_uuid) if company_uuid else None,
+                }
+            )
             if reporting_to_name:
-                rows_with_parent.append({
-                    "agent_id": str(agent.id), "agent_name": name,
-                    "agent_domain": domain,
-                    "reporting_to_name": reporting_to_name,
-                })
+                rows_with_parent.append(
+                    {
+                        "agent_id": str(agent.id),
+                        "agent_name": name,
+                        "agent_domain": domain,
+                        "reporting_to_name": reporting_to_name,
+                    }
+                )
 
     parent_links_set = 0
     if rows_with_parent:
@@ -1785,14 +2000,14 @@ async def import_agents_csv(
                     continue
                 pid = name_map.get((rtn, link["agent_domain"]))
                 if not pid:
-                    skipped.append({
-                        "reason": f"parent '{rtn}' not found in {link['agent_domain']}",
-                        "agent": link["agent_name"],
-                    })
+                    skipped.append(
+                        {
+                            "reason": f"parent '{rtn}' not found in {link['agent_domain']}",
+                            "agent": link["agent_name"],
+                        }
+                    )
                     continue
-                ar = await session.execute(
-                    select(Agent).where(Agent.id == _uuid.UUID(link["agent_id"]))
-                )
+                ar = await session.execute(select(Agent).where(Agent.id == _uuid.UUID(link["agent_id"])))
                 agent_row = ar.scalar_one_or_none()
                 if agent_row:
                     agent_row.parent_agent_id = pid
@@ -1800,9 +2015,11 @@ async def import_agents_csv(
                     parent_links_set += 1
 
     return {
-        "imported": len(imported), "skipped": len(skipped),
+        "imported": len(imported),
+        "skipped": len(skipped),
         "parent_links_set": parent_links_set,
-        "agents": imported, "skip_details": skipped[:10],
+        "agents": imported,
+        "skip_details": skipped[:10],
     }
 
 
@@ -1837,7 +2054,8 @@ async def generate_agent(
 
     if not description or len(description) < 10:
         raise HTTPException(
-            422, detail="Description must be at least 10 characters.",
+            422,
+            detail="Description must be at least 10 characters.",
         )
 
     try:
@@ -1915,10 +2133,7 @@ async def generate_agent(
                 agent_id=agent.id,
                 resource_type="agent",
                 resource_id=str(agent.id),
-                action=(
-                    f"Generated and deployed agent '{agent.name}' "
-                    f"({agent.agent_type}) from NL description"
-                ),
+                action=(f"Generated and deployed agent '{agent.name}' ({agent.agent_type}) from NL description"),
                 outcome="success",
             )
             session.add(audit_entry)
@@ -1957,9 +2172,7 @@ async def get_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(404, "Agent not found")
@@ -2004,9 +2217,7 @@ async def replace_agent(
     """
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -2014,9 +2225,7 @@ async def replace_agent(
         # Domain RBAC also guards the target domain: a user limited to
         # ``finance`` cannot PUT an agent into ``hr`` via the replace path.
         if isinstance(user_domains, list) and body.domain and body.domain not in user_domains:
-            raise HTTPException(
-                403, f"You do not have access to the '{body.domain}' domain."
-            )
+            raise HTTPException(403, f"You do not have access to the '{body.domain}' domain.")
 
         # Active-agent prompt lock — matches PATCH semantics so users
         # can't swap out a live agent's prompt via PUT either.
@@ -2062,7 +2271,16 @@ async def replace_agent(
         # doesn't explode on unrelated callers passing partial bodies.
         raw_company_id = getattr(body, "company_id", None)
         if isinstance(raw_company_id, str) and raw_company_id:
-            agent.company_id = _parse_company_id(raw_company_id)
+            replacement_company_id = _parse_company_id(raw_company_id)
+            company_result = await session.execute(
+                select(Company.id).where(
+                    Company.id == replacement_company_id,
+                    Company.tenant_id == tid,
+                )
+            )
+            if company_result.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
+            agent.company_id = replacement_company_id
         elif raw_company_id is None:
             # Explicit clear — caller sent null.
             agent.company_id = None
@@ -2129,20 +2347,14 @@ async def update_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
         _enforce_domain_access(agent, user_domains)
 
         update_data = body.model_dump(exclude_unset=True)
-        if (
-            isinstance(user_domains, list)
-            and "domain" in update_data
-            and update_data["domain"] not in user_domains
-        ):
+        if isinstance(user_domains, list) and "domain" in update_data and update_data["domain"] not in user_domains:
             raise HTTPException(
                 403,
                 f"You do not have access to the '{update_data['domain']}' domain.",
@@ -2196,14 +2408,13 @@ async def update_agent(
                 # of the alphabetically-first match in the global tool
                 # index. See _tools_to_scopes docstring.
                 effective_connector_ids = (
-                    update_data.get("connector_ids")
-                    if "connector_ids" in update_data
-                    else (agent.connector_ids or [])
+                    update_data.get("connector_ids") if "connector_ids" in update_data else (agent.connector_ids or [])
                 ) or []
                 _, resolved_names = await _resolve_connector_configs(
                     tenant_id=tenant_id,
                     connector_ids=list(effective_connector_ids),
                     agent_level_config=None,
+                    company_id=agent.company_id,
                 )
                 refreshed_scopes = _tools_to_scopes(
                     update_data["authorized_tools"],
@@ -2294,9 +2505,7 @@ async def run_agent(
 
     # 1. Load agent config from DB
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent_row = result.scalar_one_or_none()
         if not agent_row:
             raise HTTPException(404, "Agent not found")
@@ -2390,6 +2599,7 @@ async def run_agent(
         prompt_ref = agent_config.get("system_prompt_ref", "")
         if prompt_ref:
             from pathlib import Path
+
             prompt_path = Path(__file__).resolve().parent.parent.parent / prompt_ref
             if prompt_path.exists():
                 try:
@@ -2427,12 +2637,8 @@ async def run_agent(
         try:
             import importlib
 
-            mod = importlib.import_module(
-                f"core.langgraph.agents.{agent_config['agent_type']}"
-            )
-            load_fn = getattr(mod, "load_prompt", None) or getattr(
-                mod, "load_ap_processor_prompt", None
-            )
+            mod = importlib.import_module(f"core.langgraph.agents.{agent_config['agent_type']}")
+            load_fn = getattr(mod, "load_prompt", None) or getattr(mod, "load_ap_processor_prompt", None)
             if load_fn:
                 system_prompt = load_fn(agent_config.get("prompt_variables", {}))
         except (ImportError, AttributeError):
@@ -2523,22 +2729,23 @@ async def run_agent(
     # per-connector dicts).
     raw_connector_ids = agent_config.get("connector_ids") or []
     if not raw_connector_ids:
-        raw_connector_ids = list(
-            _AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(agent_config.get("agent_type"), [])
-        )
+        raw_connector_ids = list(_AGENT_TYPE_DEFAULT_CONNECTOR_IDS.get(agent_config.get("agent_type"), []))
     if not dispatch_connector_ids:
         dispatch_connector_ids = raw_connector_ids
     if dispatch_connector_ids:
-        async with get_tenant_session(tid) as session:
+        company_uuid = _parse_company_id(agent_config.get("company_id"))
+        async with get_tenant_session(tid, company_uuid) as session:
             await _assert_connectors_ready_for_dispatch(
                 session,
                 tid,
                 list(dispatch_connector_ids),
+                company_uuid,
             )
     resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
         connector_ids=raw_connector_ids,
         agent_level_config=agent_config.get("config"),
+        company_id=agent_config.get("company_id"),
     )
     # BUG-08 (RU-May01 verification, 2026-05-02): when an agent has
     # connector_ids declared but none resolve to a live ConnectorConfig
@@ -2691,9 +2898,7 @@ async def run_agent(
             incoming_inputs["shadow_prompt"] = str(fixture["prompt"])
             incoming_inputs["shadow_fixture_origin"] = True
             if fixture.get("expected_tool"):
-                incoming_inputs["shadow_expected_tool"] = str(
-                    fixture["expected_tool"]
-                )
+                incoming_inputs["shadow_expected_tool"] = str(fixture["expected_tool"])
 
     try:
         if locals().get("_shadow_route_taken"):
@@ -2719,6 +2924,7 @@ async def run_agent(
                 grant_token=grant_token,
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
+                company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
             )
     except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
         # Surface enough information for the caller to act on without
@@ -2891,14 +3097,16 @@ async def run_agent(
                     ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
                     ledger.task_count = (ledger.task_count or 0) + 1
                 else:
-                    session.add(AgentCostLedger(
-                        agent_id=agent_id,
-                        tenant_id=tid,
-                        cost_usd=cost_usd,
-                        token_count=tokens_used,
-                        task_count=1,
-                        period_date=today,
-                    ))
+                    session.add(
+                        AgentCostLedger(
+                            agent_id=agent_id,
+                            tenant_id=tid,
+                            cost_usd=cost_usd,
+                            token_count=tokens_used,
+                            task_count=1,
+                            period_date=today,
+                        )
+                    )
         except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
             logger.error(
                 "cost_ledger_write_failed",
@@ -2956,9 +3164,7 @@ async def run_agent(
 async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3004,16 +3210,12 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
 async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
         if agent.status != "paused":
-            raise HTTPException(
-                409, f"Cannot resume agent in '{agent.status}' status; must be paused"
-            )
+            raise HTTPException(409, f"Cannot resume agent in '{agent.status}' status; must be paused")
 
         # TC_AGENT-007: Look up the status the agent was in before it was paused
         # so we resume to the correct state (shadow agents must not bypass checks)
@@ -3055,11 +3257,13 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
             )
 
         if resume_to == "active":
-            await _assert_connectors_ready_for_activation(
-                session,
-                tid,
-                _required_connector_ids_for_agent(agent),
-            )
+            async with get_tenant_session(tid, agent.company_id) as connector_session:
+                await _assert_connectors_ready_for_activation(
+                    connector_session,
+                    tid,
+                    _required_connector_ids_for_agent(agent),
+                    agent.company_id,
+                )
         agent.status = resume_to
 
         event = AgentLifecycleEvent(
@@ -3091,9 +3295,7 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3114,8 +3316,7 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         if new_status is None:
             raise HTTPException(
                 409,
-                f"Cannot promote agent from '{agent.status}'; "
-                f"valid promotion statuses: {list(_PROMOTE_MAP.keys())}",
+                f"Cannot promote agent from '{agent.status}'; valid promotion statuses: {list(_PROMOTE_MAP.keys())}",
             )
 
         # For shadow->active, validate minimum shadow samples met
@@ -3139,11 +3340,13 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {required_accuracy}",
                 )
 
-        await _assert_connectors_ready_for_activation(
-            session,
-            tid,
-            _required_connector_ids_for_agent(agent),
-        )
+        async with get_tenant_session(tid, agent.company_id) as connector_session:
+            await _assert_connectors_ready_for_activation(
+                connector_session,
+                tid,
+                _required_connector_ids_for_agent(agent),
+                agent.company_id,
+            )
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
@@ -3223,9 +3426,7 @@ async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
     """Retire an agent — marks as retired, removes from active fleet."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3274,9 +3475,7 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
     """TC_AGENT-008: Reset shadow counters so users can re-evaluate a shadow agent."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3287,11 +3486,7 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
             )
 
         old_sample_count = agent.shadow_sample_count
-        old_accuracy = (
-            float(agent.shadow_accuracy_current)
-            if agent.shadow_accuracy_current is not None
-            else None
-        )
+        old_accuracy = float(agent.shadow_accuracy_current) if agent.shadow_accuracy_current is not None else None
 
         agent.shadow_sample_count = 0
         agent.shadow_accuracy_current = None
@@ -3334,9 +3529,7 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3384,10 +3577,7 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
                     from_status=old_status,
                     to_status="shadow",
                     triggered_by="api",
-                    reason=(
-                        "Rolled back active agent to shadow "
-                        f"{checkpoint_note}"
-                    ),
+                    reason=(f"Rolled back active agent to shadow {checkpoint_note}"),
                     shadow_accuracy=agent.shadow_accuracy_current,
                     shadow_samples=agent.shadow_sample_count,
                 )
@@ -3424,9 +3614,7 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
             from_status=old_status,
             to_status=new_status,
             triggered_by="api",
-            reason=(
-                f"Rolled back from version {old_version} to {prev_version.version}"
-            ),
+            reason=(f"Rolled back from version {old_version} to {prev_version.version}"),
             shadow_accuracy=agent.shadow_accuracy_current,
             shadow_samples=agent.shadow_sample_count,
         )
@@ -3462,12 +3650,25 @@ async def clone_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         parent = result.scalar_one_or_none()
         if not parent:
             raise HTTPException(404, "Parent agent not found")
+
+        clone_company_id = (
+            _parse_company_id(body.overrides.get("company_id"))
+            if "company_id" in body.overrides
+            else getattr(parent, "company_id", None)
+        )
+        if clone_company_id is not None:
+            company_result = await session.execute(
+                select(Company.id).where(
+                    Company.id == clone_company_id,
+                    Company.tenant_id == tid,
+                )
+            )
+            if company_result.scalar_one_or_none() is None:
+                raise HTTPException(404, "Company not found")
 
         # Validate scope ceiling: clone cannot have higher-privilege tools
         if body.overrides.get("authorized_tools"):
@@ -3492,9 +3693,7 @@ async def clone_agent(
             llm_model=parent.llm_model,
             llm_fallback=parent.llm_fallback,
             llm_config=parent.llm_config,
-            confidence_floor=Decimal(
-                str(body.overrides.get("confidence_floor", parent.confidence_floor))
-            ),
+            confidence_floor=Decimal(str(body.overrides.get("confidence_floor", parent.confidence_floor))),
             hitl_condition=parent.hitl_condition,
             max_retries=parent.max_retries,
             authorized_tools=body.overrides.get("authorized_tools", parent.authorized_tools),
@@ -3503,9 +3702,7 @@ async def clone_agent(
             version="1.0.0",
             parent_agent_id=parent.id,
             shadow_comparison_agent_id=(
-                _uuid.UUID(body.shadow_comparison_agent)
-                if body.shadow_comparison_agent
-                else parent.id
+                _uuid.UUID(body.shadow_comparison_agent) if body.shadow_comparison_agent else parent.id
             ),
             shadow_min_samples=parent.shadow_min_samples,
             shadow_accuracy_floor=parent.shadow_accuracy_floor,
@@ -3524,13 +3721,9 @@ async def clone_agent(
             # depended on. Preserve both by default (overrides can still
             # move the clone to a different company or clear connectors).
             company_id=(
-                _parse_company_id(body.overrides["company_id"])
-                if "company_id" in body.overrides
-                else getattr(parent, "company_id", None)
+                clone_company_id
             ),
-            connector_ids=list(
-                body.overrides.get("connector_ids", parent.connector_ids or [])
-            ),
+            connector_ids=list(body.overrides.get("connector_ids", parent.connector_ids or [])),
             reporting_to=body.overrides.get("reporting_to", parent.reporting_to),
             org_level=body.overrides.get("org_level", parent.org_level),
         )
@@ -3617,9 +3810,7 @@ async def get_agent_budget(
     """Return current budget usage for an agent."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3630,9 +3821,8 @@ async def get_agent_budget(
 
         # Query monthly spend
         from sqlalchemy import func as sqlfunc
-        month_start = datetime.now(UTC).replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None
-        )
+
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
         spent_q = await session.execute(
             select(
                 sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0),
@@ -3815,21 +4005,14 @@ async def get_latest_explanation(
     # Derive bullets from real trace — no hardcoded filler.
     bullets: list[str] = []
     tool_calls_list = row.tool_calls or []
-    tools_cited = sorted(
-        {
-            (tc.get("tool") if isinstance(tc, dict) else None) or ""
-            for tc in tool_calls_list
-        }
-        - {""}
-    )
+    tools_cited = sorted({(tc.get("tool") if isinstance(tc, dict) else None) or "" for tc in tool_calls_list} - {""})
 
     if tools_cited:
         bullets.append(
             f"Called {len(tool_calls_list)} tool invocation"
             f"{'s' if len(tool_calls_list) != 1 else ''} "
             f"across {len(tools_cited)} distinct tool"
-            f"{'s' if len(tools_cited) != 1 else ''}: "
-            + ", ".join(tools_cited)
+            f"{'s' if len(tools_cited) != 1 else ''}: " + ", ".join(tools_cited)
         )
     else:
         bullets.append("No tool calls were required for this run.")
@@ -3905,9 +4088,7 @@ async def list_agent_amendments(
     amendments: list[str] = []
 
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3954,9 +4135,7 @@ async def delete_agent(
     """
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -3969,8 +4148,7 @@ async def delete_agent(
         if agent.status not in deletable_statuses:
             raise HTTPException(
                 409,
-                f"Cannot delete agent in '{agent.status}' status. "
-                f"Pause or retire the agent first.",
+                f"Cannot delete agent in '{agent.status}' status. Pause or retire the agent first.",
             )
 
         # Audit log entry before deletion (all NOT NULL fields populated)

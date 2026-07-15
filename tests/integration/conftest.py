@@ -74,7 +74,8 @@ TEST_JWKS = {
 # Test tenant / user identifiers
 # ---------------------------------------------------------------------------
 TEST_TENANT_ID = str(uuid.uuid4())
-TEST_USER_SUB = f"user|{uuid.uuid4().hex[:12]}"
+TEST_USER_ID = str(uuid.uuid4())
+TEST_USER_SUB = "integration-admin@example.com"
 TEST_AGENT_ID = str(uuid.uuid4())
 
 
@@ -94,6 +95,7 @@ def _make_jwt(
         "iat": now,
         "exp": now + expires_in,
         "agenticorg:tenant_id": tenant_id,
+        "agenticorg:user_id": TEST_USER_ID,
         "agenticorg:agent_id": agent_id,
         "grantex:scopes": scopes or ["agenticorg:admin"],
     }
@@ -226,6 +228,16 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
             "slug": "test-tenant", "plan": "enterprise",
             "region": "IN", "settings": "{}",
         })
+        await conn.execute(sa_text(
+            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
+            "VALUES (:id, :tenant_id, :email, :name, 'admin', 'active', false) "
+            "ON CONFLICT (tenant_id, email) DO NOTHING"
+        ), {
+            "id": TEST_USER_ID,
+            "tenant_id": TEST_TENANT_ID,
+            "email": TEST_USER_SUB,
+            "name": "Integration Admin",
+        })
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -265,6 +277,12 @@ def make_auth_headers():
 @pytest.fixture
 def tenant_id() -> str:
     return TEST_TENANT_ID
+
+
+@pytest.fixture
+def user_id() -> str:
+    """Return the active admin user ID represented by the default JWT."""
+    return TEST_USER_ID
 
 
 @pytest.fixture

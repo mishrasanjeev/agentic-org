@@ -11,83 +11,65 @@ Soft warning at 80%, hard block at 100%.
 from __future__ import annotations
 
 import os
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import structlog
+
+from core.billing.catalog import PUBLIC_PLAN_CATALOG
 
 logger = structlog.get_logger()
 
 # ── Tier definitions ─────────────────────────────────────────────────
 
+def _runtime_limit(value: int | None) -> int:
+    return -1 if value is None else value
+
+
 TIERS: dict[str, dict[str, int]] = {
-    "free": {
-        "agent_count": 3,
-        "agent_runs": 1_000,
-        "storage_bytes": 1 * 1024 * 1024 * 1024,  # 1 GB
-    },
-    "pro": {
-        "agent_count": 15,
-        "agent_runs": 10_000,
-        "storage_bytes": 50 * 1024 * 1024 * 1024,  # 50 GB
-    },
-    "enterprise": {
-        "agent_count": -1,  # unlimited
-        "agent_runs": -1,
-        "storage_bytes": -1,
-    },
+    plan.plan_id: {
+        "agent_count": _runtime_limit(plan.limits.agent_count),
+        "agent_runs": _runtime_limit(plan.limits.agent_runs),
+        "storage_bytes": _runtime_limit(plan.limits.storage_bytes),
+    }
+    for plan in PUBLIC_PLAN_CATALOG.plans
 }
+
+
+def _major_price(plan_id: str, currency: str) -> int:
+    plan = next(plan for plan in PUBLIC_PLAN_CATALOG.plans if plan.plan_id == plan_id)
+    amount_minor = next(price.amount_minor for price in plan.prices if price.currency == currency)
+    if amount_minor % 100:
+        raise ValueError(f"{plan_id}:{currency} is not a whole-unit public list price")
+    return amount_minor // 100
+
+
+def _storage_label(storage_bytes: int | None) -> str:
+    if storage_bytes is None:
+        return "Unlimited"
+    gibibyte = 1024**3
+    if storage_bytes % gibibyte:
+        raise ValueError("public storage limits must be whole GiB values")
+    return f"{storage_bytes // gibibyte} GB"
+
+
+# Backward-compatible view for public metadata consumers. Values are derived
+# from PUBLIC_PLAN_CATALOG; do not add or override plan facts here.
+PLAN_PRICING: list[dict[str, object]] = [
+    {
+        "plan": plan.plan_id,
+        "label": plan.display_name,
+        "price_usd": _major_price(plan.plan_id, "USD"),
+        "price_inr": _major_price(plan.plan_id, "INR"),
+        "agents": plan.limits.agent_count if plan.limits.agent_count is not None else "Unlimited",
+        "runs": plan.limits.agent_runs if plan.limits.agent_runs is not None else "Unlimited",
+        "storage": _storage_label(plan.limits.storage_bytes),
+        "features": [],
+    }
+    for plan in PUBLIC_PLAN_CATALOG.plans
+]
 
 SOFT_WARNING_THRESHOLD = 0.80  # 80%
 HARD_BLOCK_THRESHOLD = 1.00  # 100%
-
-# Pricing for plan listing
-PLAN_PRICING: list[dict[str, Any]] = [
-    {
-        "plan": "free",
-        "label": "Free",
-        "price_usd": 0,
-        "price_inr": 0,
-        "agents": 3,
-        "runs": "1,000/mo",
-        "storage": "1 GB",
-        "features": ["3 agents", "1K runs/month", "Community support"],
-    },
-    {
-        "plan": "pro",
-        "label": "Pro",
-        "price_usd": 2,
-        "price_inr": 9_999,
-        "agents": 15,
-        "runs": "10,000/mo",
-        "storage": "50 GB",
-        "features": [
-            "15 agents",
-            "10K runs/month",
-            "50 GB storage",
-            "Priority support",
-            "Custom connectors",
-        ],
-    },
-    {
-        "plan": "enterprise",
-        "label": "Enterprise",
-        "price_usd": 499,
-        "price_inr": 49_999,
-        "agents": "Unlimited",
-        "runs": "Unlimited",
-        "storage": "Unlimited",
-        "features": [
-            "Unlimited agents",
-            "Unlimited runs",
-            "Unlimited storage",
-            "24/7 support",
-            "Custom SLAs",
-            "Dedicated CSM",
-            "SSO / SCIM",
-        ],
-    },
-]
-
 
 # ── Limit check ──────────────────────────────────────────────────────
 

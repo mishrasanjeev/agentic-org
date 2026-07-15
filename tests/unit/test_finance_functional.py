@@ -31,9 +31,11 @@ def workflow_engine(mock_state_store):
 
 
 @pytest.fixture
-def base_state():
+def base_state(workflow_company_scope):
     """Minimal workflow run state template."""
     return {
+        **workflow_company_scope,
+        "domain": "finance",
         "id": "wfr_test001",
         "status": "running",
         "trigger_payload": {},
@@ -69,7 +71,11 @@ class TestFinanceFunctional:
     # Expected: Fields extracted <2 min, confidence >88%, Oracle Fusion record created.
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_001_invoice_ingestion(self, mock_state_store):
+    async def test_ft_fin_001_invoice_ingestion(
+        self,
+        mock_state_store,
+        workflow_company_scope,
+    ):
         """FT-FIN-001: Invoice ingestion from email attachment.
         Agent step extracts invoice fields; returns completed with required fields."""
         step = {
@@ -79,6 +85,8 @@ class TestFinanceFunctional:
             "action": "extract_invoice",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "finance",
             "context": {
                 "source_type": "email_attachment",
                 "s3_key": "invoices/INV-001.pdf",
@@ -446,7 +454,7 @@ class TestFinanceFunctional:
     # FT-FIN-010: Bank recon — 200 txns all matched
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_010_bank_recon_all_matched(self):
+    async def test_ft_fin_010_bank_recon_all_matched(self, workflow_company_scope):
         """FT-FIN-010: Bank reconciliation with 200 transactions — all matched."""
         txn_count = 200
         items = [f"txn_{i:04d}" for i in range(txn_count)]
@@ -456,7 +464,12 @@ class TestFinanceFunctional:
             "type": "loop",
             "items": items,
         }
-        state = {"context": {}, "step_results": {}}
+        state = {
+            **workflow_company_scope,
+            "domain": "finance",
+            "context": {},
+            "step_results": {},
+        }
 
         result = await execute_step(step, state)
 
@@ -704,7 +717,7 @@ class TestFinanceFunctional:
     # FT-FIN-015: TDS computation accuracy
     # -----------------------------------------------------------------------
     @pytest.mark.asyncio
-    async def test_ft_fin_015_tds_computation_accuracy(self):
+    async def test_ft_fin_015_tds_computation_accuracy(self, workflow_company_scope):
         """FT-FIN-015: TDS computation matches expected deduction amounts."""
         # Simulate TDS computation for Section 194C (contractor payment)
         gross_amount = 500000
@@ -732,6 +745,8 @@ class TestFinanceFunctional:
             "action": "compute_tds",
         }
         state = {
+            **workflow_company_scope,
+            "domain": "finance",
             "context": {
                 "section": "194C",
                 "gross_amount": gross_amount,

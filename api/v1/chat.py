@@ -94,7 +94,9 @@ def _classify_domain(query: str) -> str:
 
 
 async def _find_agent_for_domain(
-    domain: str, tenant_id: str,
+    domain: str,
+    tenant_id: str,
+    company_id: _uuid.UUID,
 ) -> tuple[str, str | None, str | None, list[str]]:
     """Find the best active agent for a domain from the DB.
 
@@ -104,11 +106,12 @@ async def _find_agent_for_domain(
     db_domain = _DOMAIN_TO_DB_DOMAIN.get(domain, domain)
     try:
         tid = _uuid.UUID(tenant_id)
-        async with get_tenant_session(tid) as session:
+        async with get_tenant_session(tid, company_id) as session:
             result = await session.execute(
                 select(Agent)
                 .where(
                     Agent.tenant_id == tid,
+                    Agent.company_id == company_id,
                     Agent.domain == db_domain,
                     Agent.status.in_(["active", "shadow"]),
                 )
@@ -520,6 +523,9 @@ async def chat_query(
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
+    from api.v1.agents import _require_company_for_tenant
+
+    company_uuid = await _require_company_for_tenant(tenant_id, body.company_id)
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
     # If the caller specified an agent_id, look it up directly instead of
@@ -528,9 +534,13 @@ async def chat_query(
         try:
             aid = _uuid.UUID(body.agent_id)
             tid = _uuid.UUID(tenant_id)
-            async with get_tenant_session(tid) as session:
+            async with get_tenant_session(tid, company_uuid) as session:
                 agent = (await session.execute(
-                    select(Agent).where(Agent.id == aid, Agent.tenant_id == tid)
+                    select(Agent).where(
+                        Agent.id == aid,
+                        Agent.tenant_id == tid,
+                        Agent.company_id == company_uuid,
+                    )
                 )).scalar_one_or_none()
                 if agent:
                     domain = agent.domain or "general"
@@ -547,14 +557,24 @@ async def chat_query(
                         )
                 else:
                     domain = _classify_domain(body.query)
-                    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
+                    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
+                        domain,
+                        tenant_id,
+                        company_uuid,
+                    )
         except ValueError:
             domain = _classify_domain(body.query)
-            agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(domain, tenant_id)
+            agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
+                domain,
+                tenant_id,
+                company_uuid,
+            )
     else:
         domain = _classify_domain(body.query)
         agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
-            domain, tenant_id,
+            domain,
+            tenant_id,
+            company_uuid,
         )
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
@@ -631,9 +651,6 @@ async def chat_query(
     # same way the explicit /run route does.
     connector_config: dict[str, Any] = {}
     connector_names: list[str] | None = None
-    if hasattr(request.state, "connector_config") and request.state.connector_config:
-        connector_config = dict(request.state.connector_config)
-
     try:
         from api.v1.agents import (
             _assert_connectors_ready_for_dispatch,
@@ -644,15 +661,22 @@ async def chat_query(
         connector_ids = agent_connector_ids or await _resolve_agent_connector_ids_for_type(
             tenant_id=tenant_id,
             agent_type=resolved_agent_type,
+            company_id=company_uuid,
         )
         if connector_ids:
             tid = _uuid.UUID(tenant_id)
-            async with get_tenant_session(tid) as session:
-                await _assert_connectors_ready_for_dispatch(session, tid, connector_ids)
+            async with get_tenant_session(tid, company_uuid) as session:
+                await _assert_connectors_ready_for_dispatch(
+                    session,
+                    tid,
+                    connector_ids,
+                    company_uuid,
+                )
             connector_config, resolved_names = await _resolve_connector_configs(
                 tenant_id=tenant_id,
                 connector_ids=connector_ids,
                 agent_level_config=connector_config or None,
+                company_id=company_uuid,
             )
             connector_names = resolved_names
             if not resolved_names:
@@ -715,6 +739,7 @@ async def chat_query(
                 grant_token=grant_token,
                 connector_config=connector_config,
                 connector_names=connector_names,
+                company_id=str(company_uuid),
             )
             hitl_trigger = lg_result.get("hitl_trigger") or None
             if lg_result.get("status") in ("completed", "hitl_triggered") and lg_result.get("output"):

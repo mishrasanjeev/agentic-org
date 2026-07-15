@@ -1,5 +1,7 @@
 # Agent Maturity Matrix
 
+> **Superseded for release decisions (2026-07-13):** labels in this file predate the current repository audit and are not sufficient evidence for GA or SLA claims. Use [readiness/GAP_ANALYSIS.md](readiness/GAP_ANALYSIS.md) and the evidence states in [readiness/README.md](readiness/README.md). This file remains historical until rebuilt from runtime contracts and retained sandbox/pilot evidence.
+
 This document labels every agent in AgenticOrg with a maturity level so
 customers know what is production-ready vs. preview.
 

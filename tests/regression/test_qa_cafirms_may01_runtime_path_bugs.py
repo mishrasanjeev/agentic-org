@@ -76,7 +76,7 @@ async def test_bug_01_local_protocol_error_evicts_cache_and_retries() -> None:
 
     # Pre-populate the cache with a stale instance.
     stale = _StaleConnector({})
-    cache_key = 'fake_connector:{"foo": "bar"}'
+    cache_key = '_global:_global:fake_connector:{"foo": "bar"}'
     tool_adapter._connector_cache[cache_key] = stale
 
     with patch.object(
@@ -118,7 +118,7 @@ async def test_bug_01_remote_protocol_error_also_triggers_reconnect() -> None:
             return {"ok": True}
 
     instance = _Conn({})
-    tool_adapter._connector_cache['fake:{}'] = instance
+    tool_adapter._connector_cache['_global:_global:fake:{}'] = instance
 
     with patch.object(tool_adapter.ConnectorRegistry, "get", return_value=_Conn):
         result = await tool_adapter._execute_connector_tool(
@@ -144,7 +144,7 @@ async def test_bug_01_non_transport_errors_do_not_trigger_reconnect() -> None:
             raise ValueError("upstream API said no")
 
     instance = _Conn()
-    tool_adapter._connector_cache['fake:{}'] = instance
+    tool_adapter._connector_cache['_global:_global:fake:{}'] = instance
 
     with patch.object(tool_adapter.ConnectorRegistry, "get", return_value=_Conn):
         result = await tool_adapter._execute_connector_tool(
@@ -178,7 +178,7 @@ async def test_bug_01_reconnect_failure_returns_clear_error_class() -> None:
         async def execute_tool(self, *_a, **_kw):
             raise httpx.LocalProtocolError("stale")
 
-    tool_adapter._connector_cache['fake:{}'] = _AlwaysDeadConnector()
+    tool_adapter._connector_cache['_global:_global:fake:{}'] = _AlwaysDeadConnector()
 
     with patch.object(
         tool_adapter.ConnectorRegistry, "get", return_value=_AlwaysDeadConnector

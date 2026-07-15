@@ -15,6 +15,7 @@ Configuration via ``AGENTICORG_PII_REDACTION_MODE`` env var:
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import threading
@@ -50,6 +51,8 @@ PII_MODE_DISABLED = "disabled"
 
 _VALID_MODES = {PII_MODE_BEFORE_LLM, PII_MODE_LOGS_ONLY, PII_MODE_DISABLED}
 
+_SPACY_MODEL = "en_core_web_sm"
+
 _REGEX_FALLBACK_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("AADHAAR", re.compile(r"\b\d{4}\s\d{4}\s\d{4}\b")),
     ("GSTIN", re.compile(r"\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]\b")),
@@ -66,6 +69,22 @@ def _get_pii_mode() -> str:
         logger.warning("pii_invalid_mode", mode=mode, fallback=PII_MODE_BEFORE_LLM)
         return PII_MODE_BEFORE_LLM
     return mode
+
+
+def _strict_runtime() -> bool:
+    """Return whether missing full PII support must stop execution."""
+    from core.config import is_strict_runtime_env, settings
+
+    runtime_env = os.environ.get("AGENTICORG_ENV", settings.env)
+    return is_strict_runtime_env(runtime_env)
+
+
+def _spacy_model_available() -> bool:
+    """Check the packaged spaCy model without invoking its downloader."""
+    try:
+        return importlib.util.find_spec(_SPACY_MODEL) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
 
 
 def _regex_fallback_redact(text: str) -> tuple[str, dict[str, str]]:
@@ -136,7 +155,14 @@ class PIIRedactor:
             if self._initialized:
                 return
             if not _PRESIDIO_AVAILABLE:
-                logger.warning("presidio_not_installed", msg="PII redaction will be a no-op")
+                if _strict_runtime():
+                    raise RuntimeError(
+                        "Presidio is unavailable in a strict runtime; refusing to initialize PII redaction"
+                    )
+                logger.warning(
+                    "presidio_not_installed",
+                    msg="Using bounded regex PII redaction in this relaxed runtime",
+                )
                 # Defensive explicit assignment even though class-level
                 # defaults already cover this. Keeps the intent obvious.
                 self._analyzer = None
@@ -160,23 +186,28 @@ class PIIRedactor:
             try:
                 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+                if not _spacy_model_available():
+                    raise OSError(f"spaCy model {_SPACY_MODEL!r} is not installed")
                 nlp_engine = NlpEngineProvider(
                     nlp_configuration={
                         "nlp_engine_name": "spacy",
-                        "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+                        "models": [{"lang_code": "en", "model_name": _SPACY_MODEL}],
                     }
                 ).create_engine()
                 self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
                 self._anonymizer = AnonymizerEngine()
-            except OSError as exc:
-                logger.error(
-                    "presidio_spacy_model_missing",
+            except (OSError, SystemExit) as exc:
+                if _strict_runtime():
+                    raise RuntimeError(
+                        "Full Presidio NLP support is unavailable in a strict runtime; "
+                        "refusing to continue with partial PII coverage"
+                    ) from exc
+                logger.warning(
+                    "presidio_spacy_model_unavailable",
                     error=str(exc),
                     msg=(
-                        "Presidio is installed but its spaCy model failed to "
-                        "load. PII redaction will be a no-op for this process. "
-                        "Ensure the Docker image runs `python -m spacy download "
-                        "en_core_web_sm`."
+                        "Presidio's spaCy model is unavailable; using bounded "
+                        "regex PII redaction in this relaxed runtime"
                     ),
                 )
                 self._analyzer = None

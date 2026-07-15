@@ -9,15 +9,15 @@
 import { expect, test } from "@playwright/test";
 import { setSessionToken } from "./helpers/auth";
 
-const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
+const APP = process.env.BASE_URL || "http://127.0.0.1:4173";
+const MARKETING = process.env.MARKETING_URL || APP;
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
 function requireAuth(): void {
   if (!canAuth) {
     throw new Error(
-      "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+      "E2E_TOKEN is required for the authenticated product-claims check.",
     );
   }
 }
@@ -56,7 +56,7 @@ test.describe("Product claims consistency", () => {
     await expect(pill).toContainText(`v${facts.version}`);
   });
 
-  test("Landing hero references current connector + agent counts", async ({ page, request }) => {
+  test("Landing hero references every current inventory count", async ({ page, request }) => {
     const facts = await fetchFacts(request);
 
     await page.goto(MARKETING, { waitUntil: "domcontentloaded" });
@@ -72,11 +72,16 @@ test.describe("Product claims consistency", () => {
     expect(body, "stale `v4.0.0` must be removed").not.toContain("v4.0.0");
     expect(body, "stale `v4.3.0` must be removed").not.toContain("v4.3.0");
 
-    // The real current counts must actually appear somewhere.
-    expect(
-      body.includes(`${facts.connector_count}`),
-      `body should mention real connector_count=${facts.connector_count}`,
-    ).toBe(true);
+    for (const [name, value] of [
+      ["connector_count", facts.connector_count],
+      ["agent_count", facts.agent_count],
+      ["tool_count", facts.tool_count],
+    ] as const) {
+      expect(
+        body.includes(String(value)),
+        `body should mention real ${name}=${value}`,
+      ).toBe(true);
+    }
   });
 
   test("Dashboard counts strip matches /product-facts", async ({ page, request }) => {

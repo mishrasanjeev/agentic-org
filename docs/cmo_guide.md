@@ -1,8 +1,10 @@
 # CMO Guide — AgenticOrg Marketing Platform
 
+> **Current readiness boundary (2026-07-15):** This guide includes detailed implemented local contracts and older target prose. Marketing remains beta/preview until current real-vendor or approved sandbox evidence, persistent audit/evidence, owner sign-off, and release proof exist. KPI refresh schedules, connector lists, automatic actions, and historic dated observations are not current production evidence unless independently revalidated.
+
 ## Overview
 
-AgenticOrg gives CMOs a unified command center for marketing operations, but the CMO agent surface is not yet production-grade across all CMO pillars. Current production-strength work is concentrated in Campaign Pilot, with substantial beta capability in Content Factory, Email Marketing, Social Media, ABM, Competitive Intel, Brand Monitor, SEO Strategist, and CRM Intelligence. Every CMO marketing-agent pillar in `core/agents/marketing` now has first-class deterministic code, but production claim still requires real-vendor pilot proof, persistent evidence storage, and vendor adapter rollout. Web push notifications and HITL approvals apply where the underlying workflow is implemented.
+AgenticOrg's strongest local marketing implementation is concentrated in Campaign Pilot, with substantial beta capability in Content Factory, Email Marketing, Social Media, ABM, Competitive Intel, Brand Monitor, SEO Strategist, and CRM Intelligence. Deterministic code is not production proof: marketing still requires real-vendor pilot evidence, persistent evidence storage, vendor adapter rollout, and accountable sign-off. Web push notifications and HITL approvals apply only where the underlying workflow and its evidence gate are implemented.
 
 This guide distinguishes production, beta, stub, unavailable, and demo surfaces so buyers and operators do not confuse roadmap or demo coverage with production-grade CMO autonomy.
 
@@ -174,7 +176,7 @@ The dashboard respects RBAC: only users with CMO or CEO roles can access `/dashb
 **Connected systems**: WordPress, Ahrefs, Semrush, GA4.
 
 ### 2. Campaign Pilot
-**Status**: Production. Campaign Pilot is the strongest current CMO agent and has domain-specific execution logic for campaign setup, budget checks, channel performance polling, optimization decisions, and HITL triggers.
+**Status**: Implemented locally / gate blocked / public beta. Campaign Pilot is the strongest current CMO agent and has domain-specific execution logic for campaign setup, budget checks, channel performance polling, optimization decisions, and HITL triggers; it is not production-proven.
 
 **What it does**: Multi-channel advertising campaign management — from setup to optimization to reporting.
 

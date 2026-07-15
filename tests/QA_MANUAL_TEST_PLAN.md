@@ -1,5 +1,7 @@
 # AgenticOrg — Manual QA Test Plan
 
+> **Historical and unsafe for release sign-off (reviewed 2026-07-15):** this 2026-04-02 checklist contains point-in-time expectations that predate the readiness audit. It is not current production evidence. Use only an isolated local environment with newly seeded accounts and tester-controlled, non-reused credentials. Never paste production tokens, provider secrets, or fixed passwords into this file or a test report.
+
 **Version**: 3.2.0
 **Date**: 2026-04-02
 **Environment**: https://app.agenticorg.ai
@@ -48,7 +50,7 @@ FLOW 3: Agent Runs a Task
   → If confidence < threshold → HITL triggered (human reviews)
 
 FLOW 4: CFO Logs In → Sees Only Finance
-  CFO logs in with cfo@agenticorg.local
+  Tester logs in with a locally seeded CFO-role account
   → Dashboard shows only finance agents (AP, AR, Recon, Tax, Close, FPA)
   → Cannot see HR, Marketing, or Ops agents
   → Cannot access admin pages (Settings, Connectors)
@@ -56,16 +58,9 @@ FLOW 4: CFO Logs In → Sees Only Finance
 
 ---
 
-## Test Credentials
+## Local test identities
 
-| Role | Email | Password | What They See |
-|------|-------|----------|---------------|
-| CEO/Admin | ceo@agenticorg.local | ceo123! | Everything — all domains, all pages |
-| CFO | cfo@agenticorg.local | cfo123! | Finance agents only |
-| CHRO | chro@agenticorg.local | chro123! | HR agents only |
-| CMO | cmo@agenticorg.local | cmo123! | Marketing agents only |
-| COO | coo@agenticorg.local | coo123! | Operations agents only |
-| Auditor | auditor@agenticorg.local | audit123! | Read-only audit log |
+Seed unique local accounts for the roles under test using developer-controlled credentials supplied outside source control. Record only role aliases in evidence, rotate values after shared testing, and never reuse these identities against production. Expected access remains a test hypothesis until direct API denial tests pass.
 
 ---
 
@@ -96,9 +91,9 @@ FLOW 4: CFO Logs In → Sees Only Finance
 | B1 | Signup — happy path | Go to /signup. Fill: Org name, Your name, Email (use a unique email), Password. Click Sign Up | Account created, redirected to onboarding. Token stored (check localStorage) | | |
 | B2 | Signup — duplicate email | Try signing up again with same email | Error message: "Email already registered" or similar 409 error | | |
 | B3 | Signup — empty fields | Leave Name blank, click Sign Up | Validation error — form should not submit | | |
-| B4 | Login — CEO | Go to /login. Enter ceo@agenticorg.local / ceo123! | Logged in, redirected to /dashboard. Sidebar shows ALL menu items | | |
-| B5 | Login — CFO | Login as cfo@agenticorg.local / cfo123! | Logged in. Sidebar shows: Dashboard, Observatory, Agents, Workflows, Approvals, Audit. NO Settings, Connectors, Schemas | | |
-| B6 | Login — wrong password | Enter ceo@agenticorg.local / wrongpassword | Error: "Invalid credentials" | | |
+| B4 | Login — CEO | Use the locally seeded CEO-role alias and tester-supplied credential | Logged in, redirected to `/dashboard`; UI visibility is recorded separately from API authorization | | |
+| B5 | Login — CFO | Use the locally seeded CFO-role alias and tester-supplied credential | Finance navigation is visible; direct cross-domain API denial tests are still required | | |
+| B6 | Login — wrong password | Use the local alias with a deliberately incorrect, non-recorded value | Error: "Invalid credentials" | | |
 | B7 | Logout | Click logout (if available) or clear localStorage and refresh | Redirected to /login | | |
 | B8 | Session expiry | Login, wait 60+ minutes, try navigating | Should redirect to /login (token expired) | | |
 
@@ -306,7 +301,7 @@ Severity: [Critical/High/Medium/Low]
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| G1 | Page loads for CFO role | Login as CFO (cfo@agenticorg.local). Navigate to /dashboard/cfo | Page loads with title "Finance Dashboard". No console errors | | |
+| G1 | Page loads for CFO role | Login with the locally seeded CFO-role alias. Navigate to `/dashboard/cfo` | Page loads with title "Finance Dashboard". No console errors | | |
 | G2 | Cash Runway card shows number + unit | On /dashboard/cfo, locate "Cash Runway" KPI card | Card displays a numeric value followed by "months" unit (e.g., "8.2 months") | | |
 | G3 | Burn Rate card shows INR amount with trend | On /dashboard/cfo, locate "Burn Rate" KPI card | Card shows amount in INR format (e.g., "INR 12,50,000") with a trend arrow (up/down) indicating direction | | |
 | G4 | DSO card shows days value | On /dashboard/cfo, locate "DSO" (Days Sales Outstanding) KPI card | Card shows a numeric value in days (e.g., "42 days") | | |
@@ -319,14 +314,14 @@ Severity: [Critical/High/Medium/Low]
 | G11 | Loading state | Navigate to /dashboard/cfo. Observe before data loads (throttle network to Slow 3G in DevTools) | Spinner or skeleton placeholders are visible while data is loading. No flash of empty content | | |
 | G12 | Error state | Navigate to /dashboard/cfo. Disconnect network (DevTools > Network > Offline) after page load begins | Page shows a user-friendly error message (e.g., "Failed to load data"). No white screen or crash | | |
 | G13 | Empty state — new tenant | Login as CFO for a newly created tenant with no financial data | Page shows "No data yet" or similar empty state message. No crash or broken layout | | |
-| G14 | CMO role cannot access CFO dashboard | Login as CMO (cmo@agenticorg.local). Navigate to /dashboard/cfo | User is redirected away or sees a 403 Forbidden message. CFO data is NOT displayed | | |
+| G14 | CMO role cannot access CFO dashboard | Login with the ephemeral local CMO-role identity. Navigate to /dashboard/cfo | User is redirected away or sees a 403 Forbidden message. CFO data is NOT displayed | | |
 | G15 | Responsive layout on mobile | Navigate to /dashboard/cfo. Resize browser to 375px width (or use DevTools mobile emulation) | KPI cards stack vertically in a single column. Charts resize to fit viewport. No horizontal scrollbar | | |
 
 ### SECTION H: CMO Dashboard (/dashboard/cmo)
 
 | # | Test Case | Steps | Expected Result | Pass/Fail | Notes |
 |---|-----------|-------|-----------------|-----------|-------|
-| H1 | Page loads for CMO role | Login as CMO (cmo@agenticorg.local). Navigate to /dashboard/cmo | Page loads with title "Marketing Dashboard". No console errors | | |
+| H1 | Page loads for CMO role | Login with the ephemeral local CMO-role identity. Navigate to /dashboard/cmo | Page loads with title "Marketing Dashboard". No console errors | | |
 | H2 | CAC card shows currency value | On /dashboard/cmo, locate "CAC" (Customer Acquisition Cost) KPI card | Card displays a currency amount (e.g., "INR 2,450") | | |
 | H3 | MQLs card shows count | On /dashboard/cmo, locate "MQLs" (Marketing Qualified Leads) KPI card | Card shows a numeric count (e.g., "342") | | |
 | H4 | SQLs card shows count | On /dashboard/cmo, locate "SQLs" (Sales Qualified Leads) KPI card | Card shows a numeric count (e.g., "87") | | |

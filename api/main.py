@@ -25,6 +25,7 @@ from api.v1 import (
     bridge,
     ca_billing,
     ca_operations,
+    capability_readiness,
     cdc_webhooks,
     chat,
     client_portal,
@@ -132,10 +133,7 @@ _is_strict_runtime = is_strict_runtime_env(settings.env)
 
 app = FastAPI(
     title="AgenticOrg",
-    description=(
-        "AI Virtual Employee Platform. "
-        "Real-time counts: GET /api/v1/product-facts."
-    ),
+    description=("AI Virtual Employee Platform. Real-time counts: GET /api/v1/product-facts."),
     version=product_facts._version_from_pyproject(),
     lifespan=lifespan,
     docs_url=None if _is_strict_runtime else "/docs",
@@ -216,6 +214,11 @@ app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
+app.include_router(
+    capability_readiness.router,
+    prefix="/api/v1",
+    tags=["Capability Readiness"],
+)
 app.include_router(professional_tax.router, prefix="/api/v1", tags=["Professional Tax"])
 app.include_router(client_portal.router, prefix="/api/v1", tags=["Client Portal"])
 app.include_router(ca_billing.router, prefix="/api/v1", tags=["CA Client Billing"])

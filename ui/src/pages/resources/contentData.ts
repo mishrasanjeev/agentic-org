@@ -210,7 +210,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "Use a Hybrid When Appropriate", body: "A workflow may use an API for data, an agent for classification, a human for an exception, and browser automation for a legacy portal. Evaluate each step by risk and recoverability rather than assuming one technology universally replaces another." },
     ],
     faqs: [
-      { q: "Do AI agents eliminate RPA maintenance?", a: "No. The maintenance profile changes, but agents and integrations still require testing, monitoring, and change control." },
+      { q: "How does agent maintenance differ from RPA maintenance?", a: "The maintenance profile changes, but agents and integrations still require testing, monitoring, and change control." },
       { q: "Should we replace every bot?", a: "No. Baseline current behavior and migrate one bounded step at a time where the evidence supports it." },
     ],
     relatedSlugs: ["what-are-ai-agents-for-enterprise", "shadow-mode-testing"],
@@ -490,7 +490,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { heading: "Meaningful Review", body: "Reviewers need source evidence, the proposed action, uncertainty, policy, alternatives, and consequences. Approval fatigue, unavailable reviewers, and timeouts also need controls." },
     ],
     faqs: [
-      { q: "Does HITL guarantee safety?", a: "No. It can reduce risk, but reviewers and configurations can fail. Test coverage and outcomes." },
+      { q: "Does HITL guarantee safety?", a: "No. HITL adds a review checkpoint, but reviewers and configurations can fail. Test the review path, coverage, and observed behavior." },
       { q: "Are routine tasks always auto-approved?", a: "No universal rule applies. Automation and approval behavior are tenant and workflow configuration." },
     ],
     relatedSlugs: ["shadow-mode-testing", "ai-audit-trail"],
@@ -531,7 +531,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     ],
     faqs: [
       { q: "What is AgenticOrg's SOC 2 status?", a: "This page makes no certification or audit-status claim. Request current, authorized evidence through the appropriate business channel." },
-      { q: "Does an audit log make a system SOC 2 compliant?", a: "No. Logging is one potential control among many, and design and operating effectiveness must be evaluated in scope." },
+      { q: "What does audit logging contribute to a SOC 2 review?", a: "Logging is one potential control among many; it does not establish compliance or certification. Design and operating effectiveness are evaluated within the system and examination scope." },
     ],
     relatedSlugs: ["ai-compliance-automation", "ai-audit-trail"],
     cta: { text: "Review security information", link: "/resources" },
@@ -571,7 +571,7 @@ export const CONTENT_PAGES: ContentPage[] = [
     ],
     faqs: [
       { q: "Can anyone create a production agent in minutes?", a: "No such guarantee is made. Permissions, integration work, evaluation, security review, and operating approval determine readiness." },
-      { q: "Are templates production-certified?", a: "No. Templates are starting points and must be adapted and evaluated for the deployment." },
+      { q: "What is required before using a template in production?", a: "Templates are starting points and must be adapted, reviewed, and evaluated for the intended deployment." },
     ],
     relatedSlugs: ["shadow-mode-testing", "prompt-template-management", "ai-virtual-employees"],
     cta: { text: "Explore the builder", link: "/playground" },

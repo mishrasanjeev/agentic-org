@@ -11,7 +11,6 @@ from sqlalchemy import (
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
     text,
 )
@@ -24,8 +23,23 @@ from core.models.base import BaseModel
 class ConnectorConfig(BaseModel):
     __tablename__ = "connector_configs"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "connector_name", name="uq_connector_config_tenant"),
+        Index(
+            "uq_connector_configs_tenant_global",
+            "tenant_id",
+            "connector_name",
+            unique=True,
+            postgresql_where=text("company_id IS NULL"),
+        ),
+        Index(
+            "uq_connector_configs_tenant_company",
+            "tenant_id",
+            "company_id",
+            "connector_name",
+            unique=True,
+            postgresql_where=text("company_id IS NOT NULL"),
+        ),
         Index("ix_connector_configs_tenant", "tenant_id"),
+        Index("ix_connector_configs_tenant_company", "tenant_id", "company_id"),
         Index("ix_connector_configs_status", "tenant_id", "status"),
     )
 
@@ -34,6 +48,11 @@ class ConnectorConfig(BaseModel):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
+    )
+    company_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("companies.id", ondelete="RESTRICT"),
+        nullable=True,
     )
     connector_name: Mapped[str] = mapped_column(String(100), nullable=False)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

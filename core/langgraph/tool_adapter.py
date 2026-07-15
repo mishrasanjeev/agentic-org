@@ -20,6 +20,14 @@ from langchain_core.tools import StructuredTool
 
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
+from core.config import is_strict_runtime_env, settings
+from core.governance.action_policy import (
+    ActionContext,
+    ActionDomain,
+    CapabilityAuthorization,
+    database_feature_flag_resolver,
+    evaluate_action,
+)
 
 logger = structlog.get_logger()
 
@@ -161,10 +169,7 @@ def _connector_exception_payload(
     if isinstance(exc, httpx.RequestError):
         return {
             "error": "upstream_connection_error",
-            "message": (
-                f"{connector_name}.{tool_name} could not reach the upstream API "
-                f"({type(exc).__name__})."
-            ),
+            "message": (f"{connector_name}.{tool_name} could not reach the upstream API ({type(exc).__name__})."),
             "connector": connector_name,
             "tool": tool_name,
             "error_class": type(exc).__name__,
@@ -172,10 +177,7 @@ def _connector_exception_payload(
     detail = _sanitize_error_text(exc)
     return {
         "error": "connector_tool_execution_failed",
-        "message": (
-            f"{connector_name}.{tool_name} failed: {type(exc).__name__}"
-            + (f": {detail}" if detail else "")
-        ),
+        "message": (f"{connector_name}.{tool_name} failed: {type(exc).__name__}" + (f": {detail}" if detail else "")),
         "connector": connector_name,
         "tool": tool_name,
         "error_class": type(exc).__name__,
@@ -261,9 +263,7 @@ async def _build_connector(
         await instance.connect()
     # enterprise-gate: broad-except-ok reason=connector-connect-boundary-returns-explicit-error
     except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "connector_connect_failed", connector=connector_name, error=str(exc)
-        )
+        logger.warning("connector_connect_failed", connector=connector_name, error=str(exc))
         return None
     return instance
 
@@ -273,6 +273,11 @@ async def _execute_connector_tool(
     tool_name: str,
     params: dict[str, Any],
     config: dict[str, Any] | None = None,
+    *,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: ActionDomain | str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
 ) -> dict[str, Any]:
     """Execute a connector tool and return the result.
 
@@ -282,12 +287,45 @@ async def _execute_connector_tool(
     had been running long enough for the upstream HTTP keep-alive to
     expire.
     """
+    # This is the connector dispatch boundary used by LangGraph and workflow
+    # connector steps. Evaluate policy before registry lookup, cache access,
+    # connection setup, retry, or any provider side effect.
+    if is_strict_runtime_env(settings.env) or tenant_id is not None or company_id is not None or domain is not None:
+        decision = await evaluate_action(
+            f"{connector_name}:{tool_name}",
+            context=ActionContext(
+                tenant_id=tenant_id,
+                company_id=company_id,
+                domain=domain,
+                runtime_env=settings.env,
+            ),
+            capability_authorization=capability_authorization,
+            feature_flags=database_feature_flag_resolver,
+        )
+        if not decision.dispatch_allowed:
+            governance = decision.to_dict()
+            logger.warning(
+                "connector_action_contained",
+                connector=connector_name,
+                tool=tool_name,
+                reason=decision.reason,
+                governance=governance,
+            )
+            return {
+                "error": "action_contained",
+                "message": f"Connector action contained: {decision.reason}",
+                "governance": governance,
+            }
+
     connector_cls = ConnectorRegistry.get(connector_name)
     if not connector_cls:
         return {"error": f"Connector '{connector_name}' not found in registry"}
 
     config_fingerprint = json.dumps(config or {}, sort_keys=True)
-    cache_key = f"{connector_name}:{config_fingerprint}"
+    cache_key = (
+        f"{tenant_id or '_global'}:{company_id or '_global'}:"
+        f"{connector_name}:{config_fingerprint}"
+    )
     if cache_key not in _connector_cache:
         instance = await _build_connector(connector_cls, config, connector_name)
         if instance is None:
@@ -399,6 +437,11 @@ def build_tools_for_agent(
     authorized_tools: list[str],
     connector_config: dict[str, Any] | None = None,
     connector_names: list[str] | None = None,
+    *,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: ActionDomain | str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
 ) -> list[StructuredTool]:
     """Build LangChain tools from an agent's authorized_tools list.
 
@@ -441,17 +484,23 @@ def build_tools_for_agent(
         connector_name, description = match
         connector_hint, parsed_tool_name = _split_connector_tool_ref(tool_ref)
         actual_tool_name = parsed_tool_name if connector_hint else _actual_tool_name(tool_ref)
-        public_tool_name = (
-            _llm_safe_tool_name(connector_name, actual_tool_name)
-            if connector_hint
-            else actual_tool_name
-        )
+        public_tool_name = _llm_safe_tool_name(connector_name, actual_tool_name) if connector_hint else actual_tool_name
 
         # Create an async wrapper that calls the connector
         def _make_tool_fn(cn: str, tn: str, desc: str):
             async def _tool_fn(**kwargs: Any) -> dict[str, Any]:
                 params = _flatten_structured_tool_kwargs(kwargs)
-                return await _execute_connector_tool(cn, tn, params, connector_config)
+                return await _execute_connector_tool(
+                    cn,
+                    tn,
+                    params,
+                    connector_config,
+                    tenant_id=tenant_id,
+                    company_id=company_id,
+                    domain=domain,
+                    capability_authorization=capability_authorization,
+                )
+
             _tool_fn.__name__ = tn
             _tool_fn.__doc__ = desc or f"Execute {tn} on {cn} connector"
             return _tool_fn
@@ -459,8 +508,7 @@ def build_tools_for_agent(
         tool = StructuredTool.from_function(
             coroutine=_make_tool_fn(connector_name, actual_tool_name, description),
             name=public_tool_name,
-            description=description
-            or f"Execute {actual_tool_name} on {connector_name}",
+            description=description or f"Execute {actual_tool_name} on {connector_name}",
         )
         tools.append(tool)
 
@@ -503,11 +551,7 @@ def _build_tool_index(
     allowed: set[str] | None = None
     if connector_names is not None:
         # Normalise — strip any "registry-" UI prefix and lowercase.
-        allowed = {
-            n.removeprefix("registry-").strip().lower()
-            for n in connector_names
-            if n
-        }
+        allowed = {n.removeprefix("registry-").strip().lower() for n in connector_names if n}
 
     index: dict[str, tuple[str, str]] = {}
 

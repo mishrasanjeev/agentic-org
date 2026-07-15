@@ -16,7 +16,7 @@ Live product totals and the deployed product version are published by the public
 
 The response contains version, agent_count, connector_count, and tool_count. Do not copy those values into documentation, page copy, or tests: they are computed from runtime registries and can change independently of a documentation release. The version declared for source builds is in [pyproject.toml](pyproject.toml).
 
-Billing limits and list prices come from [core/billing/limits.py](core/billing/limits.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](scripts/deploy_cloud_run.sh).
+Billing limits and list prices come from [core/billing/catalog.py](core/billing/catalog.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](scripts/deploy_cloud_run.sh).
 
 ## What is in this repository
 
@@ -187,15 +187,13 @@ The MCP package exposes governed AgenticOrg agent and commerce discovery surface
 
 ## Pricing and limits
 
-The hosted plan source of truth is PLAN_PRICING in [core/billing/limits.py](core/billing/limits.py).
+The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/billing/catalog.py](core/billing/catalog.py). A compatibility view in `core/billing/limits.py` is derived from that catalog.
 
 | Plan | USD list price | INR list price | Agents | Runs | Storage |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
-| Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
-| Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
-
-Pro also includes priority support and custom connectors. Enterprise includes 24/7 support, custom SLAs, dedicated customer success, and SSO/SCIM according to the plan definition.
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
 
 The repository is Apache-2.0 licensed. Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software license.
 
@@ -303,6 +301,12 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Architecture](docs/architecture.md)
 - [API reference](docs/api-reference.md)
 - [Deployment](docs/deployment.md)
+- [Product readiness program](docs/readiness/README.md)
+- [Gap analysis](docs/readiness/GAP_ANALYSIS.md)
+- [Domain readiness standard](docs/readiness/DOMAIN_READINESS_STANDARD.md)
+- [Capability Readiness Register](docs/readiness/CAPABILITY_READINESS_REGISTER.md)
+- [Readiness build roadmap](docs/readiness/BUILD_ROADMAP.md)
+- [Landing and documentation blueprint](docs/readiness/LANDING_AND_DOCUMENTATION_BLUEPRINT.md)
 - [Testing guide](docs/TEST_PLAN.md)
 - [OACP runtime documentation](docs/oacp/README.md)
 - [Python SDK](sdk/README.md)
@@ -312,6 +316,10 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Roadmap](ROADMAP.md)
 
 Some older reports describe prior architecture or point-in-time validation. Prefer current code, canonical runbooks, and live product facts when a historical document conflicts with the running system.
+
+### Readiness Boundary (2026-07-13)
+
+The current workflow, gaps, acceptance gates, and staged delivery sequence are defined by the readiness documents above. The Capability Readiness Register is the canonical promotion ledger: a capability may be described as available only when its required evidence and review state permit that claim. Automated production deployment remains hard-disabled in the workflow source, so production rollout follows the reviewed Cloud Run runbook until that automation is explicitly enabled.
 
 ## Contributing
 

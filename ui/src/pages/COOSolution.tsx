@@ -84,7 +84,7 @@ const FEATURES = [
   },
   {
     title: "Compliance Evidence Support",
-    description: "Map configured evidence to internal controls and SOC 2 or ISO 27001 reference sets, then track review status. This supports readiness work; it does not confer certification or compliance.",
+    description: "Map configured evidence to internal controls and SOC 2 or ISO 27001 reference sets, then track readiness-review status. Applicability and sufficiency remain subject to a scoped independent assessment.",
     icon: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
     gradient: "from-amber-500 to-orange-600",
   },
@@ -116,7 +116,7 @@ const KPI_CARDS = [
   { label: "Incident Queue", value: "Triaged", change: "Owner assigned", positive: true },
   { label: "Runbook Action", value: "Approval", change: "Scope required", positive: true },
   { label: "Vendor Review", value: "Due", change: "Evidence linked", positive: true },
-  { label: "Control Evidence", value: "In review", change: "Not certification", positive: true },
+  { label: "Control Evidence", value: "In review", change: "Reference set only", positive: true },
 ];
 
 /* ------------------------------------------------------------------ */

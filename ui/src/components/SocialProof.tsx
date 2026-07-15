@@ -5,9 +5,9 @@ import { useState, useEffect, useCallback } from "react";
 /* ------------------------------------------------------------------ */
 
 const STATS = [
-  { value: "500+", label: "tasks automated daily" },
-  { value: "99.7%", label: "reconciliation accuracy" },
-  { value: "4.8/5", label: "customer rating" },
+  { value: "HITL", label: "approval for critical actions" },
+  { value: "Shadow", label: "validation before promotion" },
+  { value: "Evidence", label: "required for readiness claims" },
 ];
 
 interface Testimonial {
@@ -22,73 +22,64 @@ interface Testimonial {
 
 const TESTIMONIALS: Testimonial[] = [
   {
-    name: "Rajesh Mehta",
-    role: "CFO",
-    company: "Larsen Manufacturing",
-    initials: "RM",
+    name: "Finance workflow",
+    role: "Illustrative CFO scenario",
+    company: "Sample manufacturer",
+    initials: "FW",
     gradient: "from-blue-500 to-cyan-500",
     quote:
-      "Our month-end close went from 5 days to 18 hours. The AP Processor catches GST mismatches we used to find weeks later.",
-    result: "72% faster close cycle",
+      "An AP reviewer surfaces invoice and GST mismatches while a governed close checklist keeps approvals and exceptions visible.",
+    result: "Illustrative workflow — results vary",
   },
   {
-    name: "Ananya Sharma",
-    role: "CHRO",
-    company: "Nexgen Fintech",
-    initials: "AS",
+    name: "People workflow",
+    role: "Illustrative CHRO scenario",
+    company: "Sample services company",
+    initials: "PW",
     gradient: "from-purple-500 to-pink-500",
     quote:
-      "Onboarding that took our HR team 2 weeks now happens in a day. PF and ESI calculations are 100% accurate.",
-    result: "Zero payroll errors in 6 months",
+      "An onboarding coordinator routes document, provisioning, and policy tasks while payroll exceptions remain subject to review.",
+    result: "Illustrative workflow — results vary",
   },
   {
-    name: "Vikrant Desai",
-    role: "COO",
-    company: "CloudServe India",
-    initials: "VD",
+    name: "Operations workflow",
+    role: "Illustrative COO scenario",
+    company: "Sample technology company",
+    initials: "OW",
     gradient: "from-orange-500 to-red-500",
     quote:
-      "Support triage went from 40% mis-route rate to near zero. The P1 war room auto-creation alone saved us 3 outages.",
-    result: "88% first-contact resolution",
+      "A support triage agent proposes priority and routing, then escalates high-impact incidents to the designated human owner.",
+    result: "Illustrative workflow — results vary",
   },
   {
-    name: "Priya Nair",
-    role: "CMO",
-    company: "ShopLocal",
-    initials: "PN",
+    name: "Marketing workflow",
+    role: "Illustrative CMO scenario",
+    company: "Sample retailer",
+    initials: "MW",
     gradient: "from-emerald-500 to-teal-500",
     quote:
-      "Campaign setup that used to take our team a full week launches overnight. ROI tracking is automatic.",
-    result: "3.2x campaign ROI improvement",
+      "A campaign agent prepares audience, copy, and measurement drafts, with spend and publishing held for explicit approval.",
+    result: "Illustrative workflow — results vary",
   },
   {
-    name: "Suresh Iyer",
-    role: "VP Finance",
-    company: "GreenEnergy Corp",
-    initials: "SI",
+    name: "Reconciliation workflow",
+    role: "Illustrative finance scenario",
+    company: "Sample energy company",
+    initials: "RW",
     gradient: "from-indigo-500 to-violet-500",
     quote:
-      "Bank reconciliation runs at 4 AM every day. We went from 3 FTEs reconciling to zero manual work.",
-    result: "\u20B969,800/month saved in early-pay discounts",
+      "A reconciliation agent proposes matches, flags stale items, and sends unresolved exceptions to an accountable reviewer.",
+    result: "Illustrative workflow — results vary",
   },
 ];
 
 /* ------------------------------------------------------------------ */
 /*  Star Rating                                                        */
 /* ------------------------------------------------------------------ */
-function Stars() {
+function ScenarioBadge() {
   return (
-    <div className="flex gap-0.5">
-      {[...Array(5)].map((_, i) => (
-        <svg
-          key={i}
-          className="w-4 h-4 text-yellow-400"
-          fill="currentColor"
-          viewBox="0 0 20 20"
-        >
-          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-        </svg>
-      ))}
+    <div className="inline-flex rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-cyan-300">
+      Illustrative scenario
     </div>
   );
 }
@@ -111,8 +102,7 @@ function TestimonialCard({
           : "opacity-0 scale-95 translate-y-4 absolute inset-0 pointer-events-none"
       }`}
     >
-      {/* Stars */}
-      <Stars />
+      <ScenarioBadge />
 
       {/* Quote */}
       <blockquote className="mt-4 text-white text-base sm:text-lg leading-relaxed font-medium">
@@ -201,10 +191,11 @@ export default function SocialProof() {
         {/* -------- Section Header -------- */}
         <div className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
-            Trusted by Teams Across India
+            Explore Governed Operating Scenarios
           </h2>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-            Enterprise leaders share how AgenticOrg transformed their operations.
+            These fictional examples show intended workflows, not customer testimonials or
+            guaranteed outcomes. Availability depends on configuration and readiness evidence.
           </p>
         </div>
 
@@ -266,7 +257,7 @@ export default function SocialProof() {
                   ? "bg-blue-500 w-6"
                   : "bg-slate-600 hover:bg-slate-500"
               }`}
-              aria-label={`Show testimonial ${idx + 1}`}
+              aria-label={`Show illustrative scenario ${idx + 1}`}
             />
           ))}
         </div>

@@ -24,6 +24,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
+from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import create_chat_model
 from core.langgraph.state import AgentState
@@ -206,10 +207,13 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
                 reason=result.reason,
             )
             return {
-                "messages": [AIMessage(
-                    content=f"Access denied: {result.reason}. "
-                    f"Tool '{actual_tool_name}' on '{connector_name}' is not permitted by your current authorization."
-                )],
+                "messages": [
+                    AIMessage(
+                        content=f"Access denied: {result.reason}. "
+                        f"Tool '{actual_tool_name}' on '{connector_name}' is not permitted "
+                        "by your current authorization."
+                    )
+                ],
                 "status": "failed",
                 "error": f"Scope denied: {result.reason}",
             }
@@ -225,6 +229,10 @@ def build_agent_graph(
     hitl_condition: str = "",
     connector_config: dict[str, Any] | None = None,
     connector_names: list[str] | None = None,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: ActionDomain | str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -245,7 +253,15 @@ def build_agent_graph(
         A compiled LangGraph graph ready for invocation.
     """
     # Build LangChain tools from authorized tools
-    tools = build_tools_for_agent(authorized_tools, connector_config, connector_names)
+    tools = build_tools_for_agent(
+        authorized_tools,
+        connector_config,
+        connector_names,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        domain=domain,
+        capability_authorization=capability_authorization,
+    )
 
     # LLM is created lazily on first call to avoid API key validation at build time
     _llm_cache: dict[str, Any] = {}
@@ -303,11 +319,9 @@ def build_agent_graph(
 
         # Compute variable confidence from observable signals (not a fixed default)
         # Signals: tool success rate, output structure, output length, error presence
-        any_tool_failed = any(
-            (isinstance(entry, dict) and entry.get("status") == "error")
-            for entry in tool_calls_log
-        )
+        any_tool_failed = any((isinstance(entry, dict) and entry.get("status") == "error") for entry in tool_calls_log)
         from langchain_core.messages import ToolMessage
+
         tool_msg_count = 0
         tool_error_count = 0
         # BUG-11 follow-up (2026-05-02): build tool_calls_log from the
@@ -356,10 +370,7 @@ def build_agent_graph(
                     }
                 )
 
-        output_incomplete = (
-            not output
-            or output.get("status") == "error"
-        )
+        output_incomplete = not output or output.get("status") == "error"
 
         # Use LLM-reported confidence if present, otherwise compute from signals
         confidence = _extract_confidence(output, content_length=len(content))
@@ -372,9 +383,9 @@ def build_agent_graph(
             try:
                 from observability.metrics import tool_success_rate as tool_success_rate_metric
 
-                tool_success_rate_metric.labels(
-                    agent_type=str(state.get("agent_type") or "unknown")
-                ).set(tool_success_rate)
+                tool_success_rate_metric.labels(agent_type=str(state.get("agent_type") or "unknown")).set(
+                    tool_success_rate
+                )
             except (RuntimeError, ValueError, TypeError):
                 logger.debug("tool_success_rate_metric_update_failed")
 
@@ -390,9 +401,7 @@ def build_agent_graph(
         try:
             from observability.metrics import confidence_avg
 
-            confidence_avg.labels(
-                agent_type=str(state.get("agent_type") or "unknown")
-            ).set(confidence)
+            confidence_avg.labels(agent_type=str(state.get("agent_type") or "unknown")).set(confidence)
         except (RuntimeError, ValueError, TypeError):
             logger.debug("confidence_metric_update_failed")
 
@@ -419,15 +428,17 @@ def build_agent_graph(
         # LangGraph interrupt — pauses execution until human resumes.
         # When interrupt() raises GraphInterrupt, the runner catches it and
         # extracts hitl_trigger from the interrupt payload below.
-        decision = interrupt({
-            "type": "hitl_approval",
-            "trigger": trigger,
-            "hitl_trigger": trigger,
-            "confidence": confidence,
-            "output": output,
-            "agent_id": state.get("agent_id", ""),
-            "agent_type": state.get("agent_type", ""),
-        })
+        decision = interrupt(
+            {
+                "type": "hitl_approval",
+                "trigger": trigger,
+                "hitl_trigger": trigger,
+                "confidence": confidence,
+                "output": output,
+                "agent_id": state.get("agent_id", ""),
+                "agent_type": state.get("agent_type", ""),
+            }
+        )
 
         # Human resumed with a decision
         trace.append(f"HITL decision: {decision}")
@@ -486,22 +497,34 @@ def build_agent_graph(
 
     if tools:
         graph.add_node("validate_scopes", validate_tool_scopes)
-        graph.add_conditional_edges("reason", should_use_tools, {
-            "execute_tools": "validate_scopes",
-            "evaluate": "evaluate",
-        })
-        graph.add_conditional_edges("validate_scopes", scopes_passed, {
-            "execute_tools": "execute_tools",
-            "evaluate": "evaluate",
-        })
+        graph.add_conditional_edges(
+            "reason",
+            should_use_tools,
+            {
+                "execute_tools": "validate_scopes",
+                "evaluate": "evaluate",
+            },
+        )
+        graph.add_conditional_edges(
+            "validate_scopes",
+            scopes_passed,
+            {
+                "execute_tools": "execute_tools",
+                "evaluate": "evaluate",
+            },
+        )
         graph.add_edge("execute_tools", "reason")
     else:
         graph.add_edge("reason", "evaluate")
 
-    graph.add_conditional_edges("evaluate", should_escalate, {
-        "hitl_gate": "hitl_gate",
-        END: END,
-    })
+    graph.add_conditional_edges(
+        "evaluate",
+        should_escalate,
+        {
+            "hitl_gate": "hitl_gate",
+            END: END,
+        },
+    )
     graph.add_edge("hitl_gate", END)
 
     return graph
@@ -607,9 +630,12 @@ def _check_hitl_trigger(
             import operator
 
             ops = {
-                ast.Gt: operator.gt, ast.Lt: operator.lt,
-                ast.GtE: operator.ge, ast.LtE: operator.le,
-                ast.Eq: operator.eq, ast.NotEq: operator.ne,
+                ast.Gt: operator.gt,
+                ast.Lt: operator.lt,
+                ast.GtE: operator.ge,
+                ast.LtE: operator.le,
+                ast.Eq: operator.eq,
+                ast.NotEq: operator.ne,
             }
             tree = ast.parse(hitl_condition, mode="eval")
             if isinstance(tree.body, ast.Compare) and len(tree.body.comparators) == 1:

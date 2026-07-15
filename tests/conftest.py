@@ -82,6 +82,64 @@ def _reset_fake_doubles_between_tests():
 
 
 @pytest.fixture
+def workflow_company_scope(monkeypatch):
+    """Provide a valid, exactly-owned company scope to workflow unit tests."""
+    from tests.company_scope import owned_company_validator, scoped_state
+    from workflows import step_types
+
+    monkeypatch.setattr(
+        step_types,
+        "_validated_workflow_company",
+        owned_company_validator(),
+    )
+    return scoped_state()
+
+
+@pytest.fixture
+def hermetic_chat_runtime(monkeypatch):
+    """Keep API routing tests company-aware without touching live DB bindings."""
+    from api.v1 import agents, chat
+    from tests.company_scope import (
+        no_scoped_connector_bindings,
+        scoped_test_chat_agent,
+    )
+
+    monkeypatch.setattr(chat, "_find_agent_for_domain", scoped_test_chat_agent)
+    monkeypatch.setattr(
+        agents,
+        "_resolve_agent_connector_ids_for_type",
+        no_scoped_connector_bindings,
+    )
+
+
+@pytest.fixture
+def hermetic_company_runtime(monkeypatch):
+    """Keep no-infrastructure company API tests off live PostgreSQL seams."""
+    from fastapi import HTTPException
+
+    from api.v1 import companies
+
+    class _UnavailableCompanySession:
+        async def __aenter__(self):
+            raise HTTPException(
+                status_code=400,
+                detail="Tenant database session is unavailable in this unit test",
+            )
+
+        async def __aexit__(self, *_args):
+            return False
+
+    async def _skip_ca_pack_sync(_tenant_id):
+        return None
+
+    def _unavailable_company_session(*_args, **_kwargs):
+        return _UnavailableCompanySession()
+
+    monkeypatch.setattr(companies, "_ensure_ca_pack_ready", _skip_ca_pack_sync)
+    monkeypatch.setattr(companies, "get_tenant_session", _unavailable_company_session)
+
+
+@pytest.fixture
 def tenant_id():
     return str(uuid.uuid4())
 

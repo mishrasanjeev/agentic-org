@@ -62,10 +62,20 @@ from core.crypto.credential_vault import (
     decrypt_credential,
     encrypt_credential,
 )
-from core.crypto.verify_all import _CACHE_INVALIDATORS, _SCANNERS
-from core.database import async_session_factory
+from core.crypto.verify_all import (
+    _CACHE_INVALIDATORS,
+    _SCANNERS,
+    TenantCompanyScope,
+    discover_tenant_company_scopes,
+    scopes_for_scanner,
+)
+from core.database import get_tenant_session
 
 logger = structlog.get_logger()
+
+
+class _RewrapRowError(RuntimeError):
+    """Abort the current scoped transaction without committing partial work."""
 
 
 def _active_kid() -> str:
@@ -185,6 +195,23 @@ def _wrap_ciphertext_for_column(label: str, ct: str) -> Any:
 # ──────────────────────────────────────────────────────────────────────
 
 
+def _scope_sql(
+    scope: TenantCompanyScope | None,
+    *,
+    exact_company_scope: bool,
+) -> tuple[str, dict[str, Any]]:
+    """Return explicit predicates in addition to the session's RLS GUCs."""
+
+    if scope is None:
+        return "", {}
+    clauses = ["tenant_id = CAST(:tenant_id AS UUID)"]
+    params: dict[str, Any] = {"tenant_id": str(scope.tenant_id)}
+    if exact_company_scope:
+        clauses.append("company_id IS NOT DISTINCT FROM CAST(:company_id AS UUID)")
+        params["company_id"] = str(scope.company_id) if scope.company_id is not None else None
+    return " AND " + " AND ".join(clauses), params
+
+
 async def _fetch_rows(
     session: Any,
     label: str,
@@ -192,24 +219,33 @@ async def _fetch_rows(
     only_kid: str | None,
     active_kid: str,
     limit: int,
-) -> list[tuple[Any, Any]]:
-    """Return ``[(row_id, raw_value), …]`` for rows that need rewrapping.
+    scope: TenantCompanyScope | None = None,
+    exact_company_scope: bool = False,
+    after_id: Any | None = None,
+) -> tuple[list[tuple[Any, Any]], Any | None, bool]:
+    """Return one bounded keyset page and its pending rows.
 
     ``only_kid`` filter is applied client-side because the column may
-    be JSONB (cannot pattern-match the embedded ciphertext in SQL
-    portably). The ``limit`` is a load-control knob — we never read
-    the entire table into memory at once.
+    be JSONB.  The cursor always advances across the raw page, even when all
+    rows in that page are already active or do not match ``only_kid``.  This
+    avoids both unbounded ``result.all()`` calls and LIMIT starvation.
     """
     table, column = _split_column_label(label)
+    scope_sql, params = _scope_sql(scope, exact_company_scope=exact_company_scope)
+    cursor_sql = ""
+    if after_id is not None:
+        cursor_sql = " AND id > CAST(:after_id AS UUID)"
+        params["after_id"] = str(after_id)
+    params["limit"] = limit
     q = (
         f"SELECT id, {column} FROM {table} "  # nosec B608 — table/column from _SCANNERS module-level constants
-        f"WHERE {column} IS NOT NULL "
-        f"ORDER BY id "
-        f"LIMIT :limit"
+        f"WHERE {column} IS NOT NULL{scope_sql}{cursor_sql} "
+        "ORDER BY id LIMIT CAST(:limit AS INTEGER)"
     )
-    result = await session.execute(text(q), {"limit": limit})
+    result = await session.execute(text(q), params)
+    raw_rows = result.all()
     out: list[tuple[Any, Any]] = []
-    for row in result.all():
+    for row in raw_rows:
         ct = _extract_ciphertext(label, row[1])
         kid = _stamp_kid(ct)
         if kid is None:
@@ -219,7 +255,8 @@ async def _fetch_rows(
         if kid == active_kid:
             continue
         out.append((row[0], row[1]))
-    return out
+    last_id = raw_rows[-1][0] if raw_rows else after_id
+    return out, last_id, len(raw_rows) < limit
 
 
 async def _count_pending(
@@ -228,24 +265,31 @@ async def _count_pending(
     *,
     only_kid: str | None,
     active_kid: str,
+    scope: TenantCompanyScope | None = None,
+    exact_company_scope: bool = False,
+    page_size: int = 1000,
 ) -> int:
-    """Count rows whose stamp != active key id (matches _fetch_rows shape)."""
-    table, column = _split_column_label(label)
-    q = (
-        f"SELECT id, {column} FROM {table} WHERE {column} IS NOT NULL"  # nosec B608 — table/column from _SCANNERS
-    )
-    result = await session.execute(text(q))
+    """Count pending rows with bounded-memory keyset pagination."""
+
     n = 0
-    for row in result.all():
-        ct = _extract_ciphertext(label, row[1])
-        kid = _stamp_kid(ct)
-        if kid is None:
-            continue
-        if only_kid is not None and kid != only_kid:
-            continue
-        if kid != active_kid:
-            n += 1
-    return n
+    after_id: Any | None = None
+    while True:
+        rows, last_id, exhausted = await _fetch_rows(
+            session,
+            label,
+            only_kid=only_kid,
+            active_kid=active_kid,
+            limit=page_size,
+            scope=scope,
+            exact_company_scope=exact_company_scope,
+            after_id=after_id,
+        )
+        n += len(rows)
+        if exhausted:
+            return n
+        if last_id is None or last_id == after_id:
+            raise RuntimeError(f"rewrap: keyset cursor did not advance for {label}")
+        after_id = last_id
 
 
 async def _update_row(
@@ -253,6 +297,9 @@ async def _update_row(
     label: str,
     row_id: Any,
     new_value: Any,
+    *,
+    scope: TenantCompanyScope | None = None,
+    exact_company_scope: bool = False,
 ) -> None:
     """Persist ``new_value`` on the named column for ``row_id``.
 
@@ -261,21 +308,35 @@ async def _update_row(
     binds the parameter correctly across asyncpg versions.
     """
     table, column = _split_column_label(label)
+    scope_sql, scope_params = _scope_sql(scope, exact_company_scope=exact_company_scope)
     if label.endswith("credentials_encrypted"):
-        params = {"v": json.dumps(new_value), "id": str(row_id)}
-        await session.execute(
+        params = {"v": json.dumps(new_value), "id": str(row_id), **scope_params}
+        result = await session.execute(
             text(
                 f"UPDATE {table} SET {column} = CAST(:v AS jsonb) "  # nosec B608 — table/column from _SCANNERS
-                "WHERE id = :id"
+                f"WHERE id = CAST(:id AS UUID){scope_sql}"
             ),
             params,
         )
     else:
-        params = {"v": new_value, "id": str(row_id)}
-        await session.execute(
-            text(f"UPDATE {table} SET {column} = :v WHERE id = :id"),  # nosec B608 — table/column from _SCANNERS
+        params = {"v": new_value, "id": str(row_id), **scope_params}
+        result = await session.execute(
+            text(f"UPDATE {table} SET {column} = :v WHERE id = CAST(:id AS UUID){scope_sql}"),  # nosec B608
             params,
         )
+    if scope is not None and getattr(result, "rowcount", None) != 1:
+        raise RuntimeError(
+            "rewrap: scoped UPDATE did not affect exactly one row "
+            f"({label}, row={row_id}, tenant={scope.tenant_id}, "
+            f"company={scope.company_id})"
+        )
+
+
+async def _build_scope_plan(
+    columns: list[tuple[str, str]],
+) -> dict[str, tuple[list[TenantCompanyScope], bool]]:
+    discovered_scopes = await discover_tenant_company_scopes()
+    return {label: scopes_for_scanner(dotted, discovered_scopes) for label, dotted in columns}
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -293,27 +354,53 @@ async def run(
     """Main rewrap loop. Returns process exit code."""
     active_kid = _active_kid()
     print(f"active key id: {active_kid}")
-    columns = [
-        (label, dotted)
-        for label, dotted in _SCANNERS
-        if only_column is None or label == only_column
-    ]
+    columns = [(label, dotted) for label, dotted in _SCANNERS if only_column is None or label == only_column]
     if only_column is not None and not columns:
         print(
-            f"abort: --column={only_column!r} is not registered in "
-            f"core.crypto.verify_all._SCANNERS",
+            f"abort: --column={only_column!r} is not registered in core.crypto.verify_all._SCANNERS",
             file=sys.stderr,
         )
         return 2
+    if batch_size < 1:
+        print("abort: --batch-size must be at least 1", file=sys.stderr)
+        return 2
+
+    try:
+        scope_plan = await _build_scope_plan(columns)
+    # enterprise-gate: broad-except-ok reason=scope-discovery-failure-returns-explicit-nonzero
+    except Exception as exc:
+        logger.exception("rewrap_scope_discovery_failed")
+        print(
+            f"abort: exact-scope discovery failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
 
     total_pending = 0
-    async with async_session_factory() as session:
+    try:
         for label, _dotted in columns:
-            n = await _count_pending(
-                session, label, only_kid=only_kid, active_kid=active_kid
-            )
-            print(f"  {label}: {n} row(s) pending")
-            total_pending += n
+            label_pending = 0
+            scanner_scopes, exact_company_scope = scope_plan[label]
+            for scope in scanner_scopes:
+                async with get_tenant_session(scope.tenant_id, scope.company_id) as session:
+                    label_pending += await _count_pending(
+                        session,
+                        label,
+                        only_kid=only_kid,
+                        active_kid=active_kid,
+                        scope=scope,
+                        exact_company_scope=exact_company_scope,
+                    )
+            print(f"  {label}: {label_pending} row(s) pending")
+            total_pending += label_pending
+    # enterprise-gate: broad-except-ok reason=rewrap-scoped-count-failure-must-return-nonzero
+    except Exception as exc:
+        logger.exception("rewrap_scoped_count_failed")
+        print(
+            f"abort: exact-scope count failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     print(f"pending total: {total_pending}")
     if dry_run:
         print("dry-run: no writes performed")
@@ -325,62 +412,95 @@ async def run(
     started = time.monotonic()
     touched_columns: set[str] = set()
     for label, _dotted in columns:
-        while True:
-            async with async_session_factory() as session:
-                rows = await _fetch_rows(
-                    session,
-                    label,
-                    only_kid=only_kid,
-                    active_kid=active_kid,
-                    limit=batch_size,
-                )
-                if not rows:
-                    break
-                touched_columns.add(label)
-                for row_id, raw in rows:
-                    ct = _extract_ciphertext(label, raw)
-                    if ct is None:
-                        continue
-                    old_kid = _stamp_kid(ct)
-                    try:
-                        plaintext = decrypt_credential(ct)
-                    # enterprise-gate: broad-except-ok reason=rewrap-decrypt-failure-aborts-with-nonzero-status
-                    except Exception as exc:
-                        logger.exception(
-                            "rewrap_decrypt_failed",
-                            column=label,
-                            row_id=str(row_id),
-                            old_kid=old_kid,
+        scanner_scopes, exact_company_scope = scope_plan[label]
+        for scope in scanner_scopes:
+            after_id: Any | None = None
+            while True:
+                try:
+                    async with get_tenant_session(scope.tenant_id, scope.company_id) as session:
+                        rows, last_id, exhausted = await _fetch_rows(
+                            session,
+                            label,
+                            only_kid=only_kid,
+                            active_kid=active_kid,
+                            limit=batch_size,
+                            scope=scope,
+                            exact_company_scope=exact_company_scope,
+                            after_id=after_id,
                         )
-                        print(
-                            f"abort: decrypt failed on {label} row {row_id} "
-                            f"(stamp={old_kid!r}): {type(exc).__name__}: {exc}",
-                            file=sys.stderr,
-                        )
-                        return 1
-                    new_ct = encrypt_credential(plaintext)
-                    new_value = _wrap_ciphertext_for_column(label, new_ct)
-                    await _update_row(session, label, row_id, new_value)
-                    written += 1
-                    print(
-                        json.dumps(
-                            {
-                                "ts": datetime.now(UTC).isoformat(),
-                                "column": label,
-                                "row_id": str(row_id),
-                                "old_kid": old_kid,
-                                "new_kid": active_kid,
-                            }
-                        )
+                        if rows:
+                            touched_columns.add(label)
+                        for row_id, raw in rows:
+                            ct = _extract_ciphertext(label, raw)
+                            if ct is None:
+                                continue
+                            old_kid = _stamp_kid(ct)
+                            try:
+                                plaintext = decrypt_credential(ct)
+                            # enterprise-gate: broad-except-ok reason=rewrap-decrypt-failure-rolls-back-scoped-batch
+                            except Exception as exc:
+                                logger.exception(
+                                    "rewrap_decrypt_failed",
+                                    column=label,
+                                    row_id=str(row_id),
+                                    old_kid=old_kid,
+                                    tenant_id=str(scope.tenant_id),
+                                    company_id=(str(scope.company_id) if scope.company_id is not None else None),
+                                )
+                                raise _RewrapRowError(
+                                    f"decrypt failed on {label} row {row_id} "
+                                    f"(stamp={old_kid!r}): "
+                                    f"{type(exc).__name__}: {exc}"
+                                ) from exc
+                            new_ct = encrypt_credential(plaintext)
+                            new_value = _wrap_ciphertext_for_column(label, new_ct)
+                            await _update_row(
+                                session,
+                                label,
+                                row_id,
+                                new_value,
+                                scope=scope,
+                                exact_company_scope=exact_company_scope,
+                            )
+                            written += 1
+                            print(
+                                json.dumps(
+                                    {
+                                        "ts": datetime.now(UTC).isoformat(),
+                                        "column": label,
+                                        "row_id": str(row_id),
+                                        "tenant_id": str(scope.tenant_id),
+                                        "company_id": (str(scope.company_id) if scope.company_id is not None else None),
+                                        "old_kid": old_kid,
+                                        "new_kid": active_kid,
+                                    }
+                                )
+                            )
+                # enterprise-gate: broad-except-ok reason=rewrap-scoped-batch-failure-rolls-back-and-returns-nonzero
+                except Exception as exc:
+                    logger.exception(
+                        "rewrap_scoped_batch_failed",
+                        column=label,
+                        tenant_id=str(scope.tenant_id),
+                        company_id=(str(scope.company_id) if scope.company_id is not None else None),
                     )
-                await session.commit()
-            elapsed = time.monotonic() - started
-            rate = written / elapsed if elapsed > 0 else 0.0
-            print(
-                f"  progress: {written}/{total_pending} "
-                f"(rate={rate:.1f} rows/s)",
-                file=sys.stderr,
-            )
+                    print(f"abort: {exc}", file=sys.stderr)
+                    return 1
+                if exhausted:
+                    break
+                if last_id is None or last_id == after_id:
+                    print(
+                        f"abort: keyset cursor did not advance for {label}",
+                        file=sys.stderr,
+                    )
+                    return 1
+                after_id = last_id
+                elapsed = time.monotonic() - started
+                rate = written / elapsed if elapsed > 0 else 0.0
+                print(
+                    f"  progress: {written}/{total_pending} (rate={rate:.1f} rows/s)",
+                    file=sys.stderr,
+                )
     # Foundation #4 iter 4: flush downstream credential caches for any
     # column we actually wrote to. Eager flush; cache re-warms on next
     # access. Failures don't propagate — see _fire_cache_invalidators.
@@ -392,19 +512,48 @@ async def run(
 async def verify(only_column: str | None) -> int:
     """Read-only check: every row's stamp == active key id, or exit 1."""
     active_kid = _active_kid()
-    columns = [
-        (label, dotted)
-        for label, dotted in _SCANNERS
-        if only_column is None or label == only_column
-    ]
+    columns = [(label, dotted) for label, dotted in _SCANNERS if only_column is None or label == only_column]
+    if only_column is not None and not columns:
+        print(
+            f"abort: --column={only_column!r} is not registered in core.crypto.verify_all._SCANNERS",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        scope_plan = await _build_scope_plan(columns)
+    # enterprise-gate: broad-except-ok reason=verify-scope-discovery-failure-returns-explicit-nonzero
+    except Exception as exc:
+        logger.exception("rewrap_verify_scope_discovery_failed")
+        print(
+            f"verify: exact-scope discovery failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     pending: dict[str, int] = {}
-    async with async_session_factory() as session:
+    try:
         for label, _dotted in columns:
-            n = await _count_pending(
-                session, label, only_kid=None, active_kid=active_kid
-            )
+            n = 0
+            scanner_scopes, exact_company_scope = scope_plan[label]
+            for scope in scanner_scopes:
+                async with get_tenant_session(scope.tenant_id, scope.company_id) as session:
+                    n += await _count_pending(
+                        session,
+                        label,
+                        only_kid=None,
+                        active_kid=active_kid,
+                        scope=scope,
+                        exact_company_scope=exact_company_scope,
+                    )
             if n:
                 pending[label] = n
+    # enterprise-gate: broad-except-ok reason=rewrap-verify-scoped-read-failure-must-not-false-green
+    except Exception as exc:
+        logger.exception("rewrap_verify_scoped_read_failed")
+        print(
+            f"verify: exact-scope read failed: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
     if not pending:
         print(f"verify: every row is on active key {active_kid!r} (OK)")
         return 0
@@ -422,10 +571,7 @@ def main(argv: list[str] | None = None) -> int:
         "--column",
         type=str,
         default=None,
-        help=(
-            "Limit to one registered column (e.g. "
-            "'connector_configs.credentials_encrypted')."
-        ),
+        help=("Limit to one registered column (e.g. 'connector_configs.credentials_encrypted')."),
     )
     parser.add_argument(
         "--key-id",
@@ -451,10 +597,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--verify",
         action="store_true",
-        help=(
-            "Exit 0 if every row is on the active key, 1 otherwise. "
-            "No writes."
-        ),
+        help=("Exit 0 if every row is on the active key, 1 otherwise. No writes."),
     )
     args = parser.parse_args(argv)
 

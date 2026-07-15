@@ -246,36 +246,30 @@ class TestPlansEndpointReturnsTiers:
     """test_plans_endpoint_returns_tiers — /billing/plans returns all tiers."""
 
     def test_plans_endpoint_returns_tiers(self):
-        from core.billing.limits import PLAN_PRICING
+        from core.billing.catalog import PUBLIC_PLAN_CATALOG
 
-        assert len(PLAN_PRICING) == 3
-        plan_names = [p["plan"] for p in PLAN_PRICING]
+        assert PUBLIC_PLAN_CATALOG.complete is True
+        assert PUBLIC_PLAN_CATALOG.plan_count == len(PUBLIC_PLAN_CATALOG.plans) == 3
+        plan_names = [plan.plan_id for plan in PUBLIC_PLAN_CATALOG.plans]
         assert "free" in plan_names
         assert "pro" in plan_names
         assert "enterprise" in plan_names
 
-        # Each plan has required fields
-        for plan in PLAN_PRICING:
-            assert "price_usd" in plan
-            assert "price_inr" in plan
-            assert "features" in plan
-            assert isinstance(plan["features"], list)
-            assert len(plan["features"]) > 0
+        for plan in PUBLIC_PLAN_CATALOG.plans:
+            assert {price.currency for price in plan.prices} == {"USD", "INR"}
+            assert all(price.interval == "month" for price in plan.prices)
 
 
 class TestIndiaPricingInINR:
     """test_india_pricing_in_inr — Plural plans have correct INR amounts."""
 
     def test_india_pricing_in_inr(self):
-        from core.billing.limits import PLAN_PRICING
+        from core.billing.catalog import plan_price_minor
 
-        pro = next(p for p in PLAN_PRICING if p["plan"] == "pro")
-        ent = next(p for p in PLAN_PRICING if p["plan"] == "enterprise")
-
-        assert pro["price_inr"] == 9_999
-        assert ent["price_inr"] == 49_999
-        assert pro["price_usd"] == 2
-        assert ent["price_usd"] == 499
+        assert plan_price_minor("pro", "INR") == 9_999_00
+        assert plan_price_minor("enterprise", "INR") == 49_999_00
+        assert plan_price_minor("pro", "USD") == 2_00
+        assert plan_price_minor("enterprise", "USD") == 499_00
 
     def test_pinelabs_plan_amounts(self):
         from core.billing.pinelabs_client import PLAN_AMOUNT_INR
@@ -284,11 +278,10 @@ class TestIndiaPricingInINR:
         assert PLAN_AMOUNT_INR["enterprise"] == 49_999_00
 
     def test_free_plan_has_zero_inr(self):
-        from core.billing.limits import PLAN_PRICING
+        from core.billing.catalog import plan_price_minor
 
-        free = next(p for p in PLAN_PRICING if p["plan"] == "free")
-        assert free["price_inr"] == 0
-        assert free["price_usd"] == 0
+        assert plan_price_minor("free", "INR") == 0
+        assert plan_price_minor("free", "USD") == 0
 
 
 # ── Plural API v1 Tests ─────────────────────────────────────────────

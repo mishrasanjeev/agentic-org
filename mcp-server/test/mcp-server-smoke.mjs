@@ -161,11 +161,15 @@ try {
     name: "run_agent",
     arguments: {
       agent_type: "commerce_sales_agent",
+      company_id: "00000000-0000-0000-0000-000000000001",
       action: "discover",
       inputs: { merchant_id: "mch_C6W3" },
     },
   });
   assert.match(run.content[0].text, /commerce_sales_agent|Commerce Sales Agent|completed/);
+  const runCall = calls.find((call) => call.path === "/api/v1/a2a/tasks");
+  assert.equal(runCall.body.company_id, "00000000-0000-0000-0000-000000000001");
+  assert.equal(runCall.body.context.company_id, runCall.body.company_id);
 
   const listed = await client.callTool({ name: "list_mcp_tools", arguments: {} });
   assert.match(listed.content[0].text, /agenticorg_commerce_sales_agent/);

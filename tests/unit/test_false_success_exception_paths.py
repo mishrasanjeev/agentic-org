@@ -159,7 +159,11 @@ async def test_agent_connector_config_failure_does_not_return_partial_success(mo
         async def execute(self, _stmt):
             return _Result()
 
-    monkeypatch.setattr(core.database, "get_tenant_session", lambda _tenant_id: _Session())
+    monkeypatch.setattr(
+        core.database,
+        "get_tenant_session",
+        lambda _tenant_id, _company_id=None: _Session(),
+    )
     monkeypatch.setattr(
         core.crypto,
         "decrypt_for_tenant",

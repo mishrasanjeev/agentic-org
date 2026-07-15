@@ -14,13 +14,13 @@
 import { test, expect, Page } from "@playwright/test";
 import { setSessionToken } from "./helpers/auth";
 
-const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const MARKETING = process.env.MARKETING_URL || "https://agenticorg.ai";
+const APP = process.env.BASE_URL || "http://127.0.0.1:4173";
+const MARKETING = process.env.MARKETING_URL || APP;
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(
-    "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
+    "E2E_TOKEN is required for the authenticated CA regression checks.",
   );
 }
 
@@ -91,7 +91,7 @@ test.describe("CA Firms Solution Page", () => {
 
     // CTA buttons
     await expect(
-      page.getByRole("button", { name: /Start Free Trial/i }).first()
+      page.getByRole("button", { name: /Request Evaluation/i }).first()
     ).toBeVisible({ timeout: 10000 });
 
     await expect(
@@ -115,19 +115,17 @@ test.describe("CA Firms Solution Page", () => {
     }
   });
 
-  test("pricing section renders with INR 4999", async ({ page }) => {
+  test("CA Pack presents evaluation scope without unverified commercial claims", async ({ page }) => {
     await expect(
-      page.getByText("4,999").first()
+      page.getByText("CA Pack Evaluation").first()
     ).toBeVisible({ timeout: 10000 });
 
     await expect(
-      page.getByText(/per client/i).first()
+      page.getByText(/Commercial terms and plan limits are confirmed/)
     ).toBeVisible({ timeout: 10000 });
 
-    // Pricing section has the CA Pack badge
-    await expect(
-      page.getByText("CA Pack").first()
-    ).toBeVisible({ timeout: 10000 });
+    const body = (await page.locator("body").textContent()) || "";
+    expect(body).not.toMatch(/₹?\s?4,999|14-day free trial|Start Free Trial/i);
   });
 });
 
@@ -1361,21 +1359,15 @@ test.describe("Partner Dashboard Details", () => {
     await authenticate(page);
   });
 
-  test("shows revenue card with INR amount", async ({ page }) => {
+  test("shows a well-formed revenue card without a hardcoded amount", async ({ page }) => {
     await page.goto(`${APP}/dashboard/partner`, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle").catch(() => {});
 
     const body = (await page.locator("body").textContent()) || "";
-    // Revenue should show INR symbol or amount
-    const hasRevenue =
-      body.includes("Revenue") ||
-      body.includes("INR") ||
-      body.includes("\u20B9") || // Rupee symbol
-      body.includes("4,999") ||
-      body.includes("4999");
-    expect(hasRevenue).toBeTruthy();
+    await expect(page.getByText(/Revenue/i).first()).toBeVisible();
+    expect(body).not.toMatch(/\bundefined\b|\bNaN\b/);
   });
 
   test("shows 7 client rows in health table", async ({ page }) => {

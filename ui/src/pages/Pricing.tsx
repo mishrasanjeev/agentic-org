@@ -1,46 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import publicSite from "../content/publicSite.json";
 
-/* ------------------------------------------------------------------ */
-/*  CheckIcon                                                          */
-/* ------------------------------------------------------------------ */
-function CheckIcon({ className = "w-5 h-5 text-emerald-500" }: { className?: string }) {
+import {
+  formatPlanPrice,
+  isPublicPlanCatalog,
+  orderedPlans,
+  type PublicPlan,
+  type PublicPlanCatalog,
+} from "@/lib/billingCatalog";
+import api from "@/lib/api";
+
+function CheckIcon() {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="h-5 w-5 flex-shrink-0 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
     </svg>
   );
 }
 
-function XIcon({ className = "w-5 h-5 text-slate-300" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  DemoModal                                                          */
-/* ------------------------------------------------------------------ */
 function DemoModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "" });
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
     setSubmitting(true);
     try {
-      const res = await fetch("/api/v1/demo-request", {
+      const response = await fetch("/api/v1/demo-request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (!res.ok) throw new Error("Request failed");
+      if (!response.ok) throw new Error("Request failed");
       setDone(true);
     } catch {
       setError("Something went wrong. Please try again.");
@@ -50,62 +44,42 @@ function DemoModal({ onClose }: { onClose: () => void }) {
   };
 
   const fieldClass =
-    "w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all";
+    "w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20";
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 backdrop-blur-sm px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm"
+      onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl p-8">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
-          aria-label="Close"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
+      <div className="relative w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <button type="button" onClick={onClose} className="absolute right-4 top-4 text-slate-400 hover:text-slate-600" aria-label="Close">
+          <span aria-hidden="true">×</span>
         </button>
-
         {done ? (
-          <div className="text-center py-8">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <CheckIcon className="w-8 h-8 text-emerald-600" />
+          <div className="py-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
+              <CheckIcon />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 mb-2">Thanks!</h3>
-            <p className="text-slate-600">We'll follow up using the contact details you provided.</p>
-            <button
-              onClick={onClose}
-              className="mt-6 bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all"
-            >
+            <h3 className="mb-2 text-xl font-bold text-slate-900">Thanks!</h3>
+            <p className="text-slate-600">Your request was received. We will contact you to discuss evaluation scope and next steps.</p>
+            <button type="button" onClick={onClose} className="mt-6 rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-blue-700">
               Close
             </button>
           </div>
         ) : (
           <>
-            <h3 className="text-xl font-bold text-slate-900 mb-1">Book a Demo</h3>
-            <p className="text-sm text-slate-500 mb-6">See AgenticOrg in action for your organization.</p>
+            <h3 className="mb-1 text-xl font-bold text-slate-900">Book a Demo</h3>
+            <p className="mb-6 text-sm text-slate-500">Review AgenticOrg for your organization.</p>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input required type="text" placeholder="Your name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={fieldClass} />
-              <input required type="email" placeholder="Work email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={fieldClass} />
-              <input type="text" placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} className={fieldClass} />
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className={fieldClass}>
+              <input required type="text" placeholder="Your name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className={fieldClass} />
+              <input required type="email" placeholder="Work email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className={fieldClass} />
+              <input type="text" placeholder="Company" value={form.company} onChange={(event) => setForm({ ...form, company: event.target.value })} className={fieldClass} />
+              <select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className={fieldClass}>
                 <option value="">Select your role</option>
-                <option value="CEO">CEO</option>
-                <option value="CFO">CFO</option>
-                <option value="CHRO">CHRO</option>
-                <option value="CMO">CMO</option>
-                <option value="COO">COO</option>
-                <option value="CTO">CTO</option>
-                <option value="Other">Other</option>
+                {['CEO', 'CFO', 'CHRO', 'CMO', 'COO', 'CTO', 'Other'].map((role) => <option key={role} value={role}>{role}</option>)}
               </select>
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2.5 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all disabled:opacity-50"
-              >
+              <button type="submit" disabled={submitting} className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
                 {submitting ? "Sending..." : "Request Demo"}
               </button>
             </form>
@@ -116,356 +90,219 @@ function DemoModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Tier data                                                          */
-/* ------------------------------------------------------------------ */
-function buildTiers() {
-  const descriptions: Record<string, string> = {
-    free: "Evaluate core governed workflows with published usage limits.",
-    pro: "Increase agent, run, and storage limits with priority support and custom connectors.",
-    enterprise: "Operate without published usage caps and add enterprise identity, support, and service options.",
-  };
-
-  return publicSite.plans.map((plan) => ({
-    name: plan.name,
-    price: `$${plan.priceUsd}`,
-    period: "/month",
-    description: descriptions[plan.id],
-    highlight: plan.id === "pro",
-    cta: plan.id === "free" ? "Start Free" : plan.id === "pro" ? "Discuss Pro" : "Contact Sales",
-    ctaLink: plan.id === "free" ? "/signup" : "demo",
-    features: plan.features,
-  }));
+function formatLimit(value: number | null): string {
+  return value === null ? "No finite catalog cap" : value.toLocaleString("en-US");
 }
 
-/* ------------------------------------------------------------------ */
-/*  Feature comparison table data                                      */
-/* ------------------------------------------------------------------ */
-interface ComparisonRow {
-  feature: string;
-  free: string | boolean;
-  pro: string | boolean;
-  enterprise: string | boolean;
+function formatStorage(value: number | null): string {
+  if (value === null) return "No finite catalog cap";
+  return `${(value / (1024 * 1024 * 1024)).toLocaleString("en-US")} GB`;
 }
 
-function buildComparison(): ComparisonRow[] {
+function planFacts(plan: PublicPlan): string[] {
   return [
-    { feature: "Governed agents", free: "3", pro: "15", enterprise: "Unlimited" },
-    { feature: "Agent runs per month", free: "1,000", pro: "10,000", enterprise: "Unlimited" },
-    { feature: "Storage", free: "1 GB", pro: "50 GB", enterprise: "Unlimited" },
-    { feature: "Support", free: "Community", pro: "Priority", enterprise: "24/7" },
-    { feature: "Custom connectors", free: false, pro: true, enterprise: true },
-    { feature: "SSO and SCIM", free: false, pro: false, enterprise: true },
-    { feature: "Custom service-level agreement", free: false, pro: false, enterprise: true },
-    { feature: "Dedicated customer success", free: false, pro: false, enterprise: true },
+    `Agents: ${formatLimit(plan.limits.agent_count)}`,
+    `Agent runs per ${plan.limits.agent_runs_interval}: ${formatLimit(plan.limits.agent_runs)}`,
+    `Storage: ${formatStorage(plan.limits.storage_bytes)}`,
+    `Account signup: ${plan.signup_available ? "Available" : "Not offered by this catalog"}`,
+    `Checkout mode: ${plan.checkout_mode}`,
   ];
 }
 
-/* ------------------------------------------------------------------ */
-/*  FAQ data                                                           */
-/* ------------------------------------------------------------------ */
 const FAQS = [
   {
-    q: "Is there a free AgenticOrg plan?",
-    a: "Yes. The Free plan is $0 per month and includes up to 3 governed agents, 1,000 agent runs per month, 1 GB of storage, and community support.",
+    question: "Where do these plan facts come from?",
+    answer: "The page validates and renders the complete versioned response from the public billing catalog. It does not maintain a second set of prices or plan limits.",
   },
   {
-    q: "What is included in Pro?",
-    a: "Pro is $2 per month in the published USD plan. It includes up to 15 governed agents, 10,000 runs per month, 50 GB of storage, priority support, and custom connectors.",
+    question: "What happens when I reach a plan limit?",
+    answer: "The catalog publishes offer limits, but this page does not claim that every runtime enforcement hook is integrated. Confirm enforcement readiness before relying on a limit.",
   },
   {
-    q: "What is included in Enterprise?",
-    a: "Enterprise is $499 per month in the published USD plan. It removes the published agent, run, and storage caps and adds 24/7 support, custom service-level agreements, dedicated customer success, SSO, and SCIM.",
+    question: "Are connectors included with a plan?",
+    answer: "The catalog does not grant connector readiness. Each connector still requires tenant configuration, authentication, compatibility checks, and release evidence.",
   },
   {
-    q: "Does a listed connector work automatically for every customer?",
-    a: "No. The product catalog reports registered connector definitions. Actual availability depends on the plan, provider support, tenant configuration, approved credentials, scopes, consent, and any required human authorization.",
-  },
-  {
-    q: "Can AgenticOrg be self-hosted?",
-    a: "Yes. The repository is Apache-2.0 licensed and includes Docker and deployment assets. Managed-service pricing is separate from the right to operate the open-source software in your own approved environment.",
-  },
-  {
-    q: "Are taxes, currency conversion, and provider charges included?",
-    a: "Displayed plan prices describe the application subscription. Applicable taxes, currency conversion, cloud infrastructure, model usage, and third-party provider charges may be separate. Confirm the final amount in the billing flow or with support.",
+    question: "Are annual discounts or service levels included?",
+    answer: "No annual discount, support level, or service-level commitment is asserted by this page. Confirm applicable terms in a verified checkout or signed agreement.",
   },
 ];
 
-/* ------------------------------------------------------------------ */
-/*  FAQ Accordion Item                                                 */
-/* ------------------------------------------------------------------ */
-function FaqItem({ q, a }: { q: string; a: string }) {
+function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="border-b border-slate-200 last:border-0">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        className="w-full flex items-center justify-between py-5 text-left"
+        className="flex w-full items-center justify-between py-5 text-left"
       >
-        <span className="text-base font-medium text-slate-900">{q}</span>
-        <svg
-          className={`w-5 h-5 text-slate-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <span className="text-base font-medium text-slate-900">{question}</span>
+        <span className={`text-slate-500 transition-transform ${open ? "rotate-45" : ""}`} aria-hidden="true">+</span>
       </button>
-      {open && (
-        <p className="pb-5 text-sm text-slate-600 leading-relaxed">{a}</p>
-      )}
+      {open && <p className="pb-5 text-sm leading-relaxed text-slate-600">{answer}</p>}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  CellValue — renders check/x/text in the comparison table           */
-/* ------------------------------------------------------------------ */
-function CellValue({ value }: { value: string | boolean }) {
-  if (value === true) return <CheckIcon />;
-  if (value === false) return <XIcon />;
-  return <span className="text-sm text-slate-700">{value}</span>;
-}
-
-/* ================================================================== */
-/*  Pricing Page                                                       */
-/* ================================================================== */
 export default function Pricing() {
   const [showDemo, setShowDemo] = useState(false);
-  const TIERS = buildTiers();
-  const COMPARISON = buildComparison();
+  const [catalog, setCatalog] = useState<PublicPlanCatalog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    api.get<unknown>("/billing/plans")
+      .then((response) => {
+        if (!mounted) return;
+        if (isPublicPlanCatalog(response.data)) {
+          setCatalog(response.data);
+          setFailed(false);
+        } else {
+          setCatalog(null);
+          setFailed(true);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setCatalog(null);
+          setFailed(true);
+        }
+      })
+      .finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, []);
+
+  const plans = catalog ? orderedPlans(catalog) : [];
+  const comparisonRows = catalog ? [
+    { label: "Prices", values: plans.map((plan) => plan.prices.map(formatPlanPrice).join(" · ")) },
+    { label: "Agents", values: plans.map((plan) => formatLimit(plan.limits.agent_count)) },
+    { label: "Agent runs", values: plans.map((plan) => `${formatLimit(plan.limits.agent_runs)} / ${plan.limits.agent_runs_interval}`) },
+    { label: "Storage", values: plans.map((plan) => formatStorage(plan.limits.storage_bytes)) },
+    { label: "Account signup", values: plans.map((plan) => plan.signup_available ? "Available" : "Not offered") },
+    { label: "Checkout mode", values: plans.map((plan) => plan.checkout_mode) },
+  ] : [];
 
   return (
     <div className="min-h-screen bg-white">
-
-      {/* Demo modal */}
       {showDemo && <DemoModal onClose={() => setShowDemo(false)} />}
 
-      {/* ============================================================ */}
-      {/* NAVBAR                                                        */}
-      {/* ============================================================ */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-slate-700/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <nav className="fixed inset-x-0 top-0 z-50 border-b border-slate-700/50 bg-slate-900/95 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-sm">
-              AO
-            </div>
-            <span className="text-white font-semibold text-lg">AgenticOrg</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 text-sm font-bold text-white">AO</div>
+            <span className="text-lg font-semibold text-white">AgenticOrg</span>
           </Link>
-
-          <div className="hidden md:flex items-center gap-8">
-            <Link to="/" className="text-slate-300 hover:text-white text-sm transition-colors">Home</Link>
-            <Link to="/pricing" className="text-white text-sm font-medium">Pricing</Link>
-            <Link to="/evals" className="text-slate-300 hover:text-white text-sm transition-colors">Evals</Link>
+          <div className="hidden items-center gap-8 md:flex">
+            <Link to="/" className="text-sm text-slate-300 hover:text-white">Home</Link>
+            <Link to="/pricing" className="text-sm font-medium text-white">Pricing</Link>
+            <Link to="/evals" className="text-sm text-slate-300 hover:text-white">Evals</Link>
           </div>
-
           <div className="flex items-center gap-3">
-            <Link
-              to="/login"
-              className="hidden sm:inline-flex border border-slate-500 text-slate-300 hover:text-white hover:border-white px-4 py-2 rounded-lg text-sm font-medium transition-all"
-            >
+            <Link to="/login" className="hidden rounded-lg border border-slate-500 px-4 py-2 text-sm font-medium text-slate-300 hover:border-white hover:text-white sm:inline-flex">
               Sign In
             </Link>
-            <button
-              onClick={() => setShowDemo(true)}
-              className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-5 py-2 rounded-lg text-sm font-medium hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
-            >
+            <button type="button" onClick={() => setShowDemo(true)} className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-5 py-2 text-sm font-medium text-white hover:from-blue-600 hover:to-cyan-600">
               Book a Demo
             </button>
           </div>
         </div>
       </nav>
 
-      {/* ============================================================ */}
-      {/* HERO                                                          */}
-      {/* ============================================================ */}
-      <section className="pt-32 pb-16 px-4 bg-gradient-to-b from-slate-900 via-slate-800 to-white">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-white mb-4 tracking-tight">
-            Simple, transparent pricing
-          </h1>
-          <p className="text-lg text-slate-300 max-w-2xl mx-auto">
-            Compare the published Free, Pro, and Enterprise limits for agents, monthly runs, storage, support, connectors, identity, and service options.
+      <section className="bg-gradient-to-b from-slate-900 via-slate-800 to-white px-4 pb-20 pt-32">
+        <div className="mx-auto max-w-4xl text-center">
+          <p className="mb-4 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-300">Versioned offer catalog</p>
+          <h1 className="mb-5 text-4xl font-extrabold tracking-tight text-white sm:text-5xl">Plan facts from one source</h1>
+          <p className="mx-auto max-w-2xl text-lg text-slate-300">
+            This page renders the complete response from the public billing catalog. Runtime enforcement, connector readiness, and additional terms are verified separately.
           </p>
         </div>
       </section>
 
-      {/* ============================================================ */}
-      {/* PRICING CARDS                                                 */}
-      {/* ============================================================ */}
-      <section className="pb-20 px-4 -mt-4">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          {TIERS.map((tier) => (
-            <div
-              key={tier.name}
-              className={`relative rounded-2xl border p-8 flex flex-col ${
-                tier.highlight
-                  ? "border-blue-500 shadow-xl shadow-blue-500/10 ring-2 ring-blue-500/20 bg-white scale-[1.02]"
-                  : "border-slate-200 bg-white shadow-sm hover:shadow-md transition-shadow"
-              }`}
-            >
-              {/* Popular badge */}
-              {tier.highlight && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-wider">
-                    Most Popular
-                  </span>
-                </div>
-              )}
+      <main>
+        <section className="-mt-6 px-4 pb-20">
+          {(loading || failed) && (
+            <p className="mx-auto mb-8 max-w-3xl rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-center text-sm text-amber-900" role="status">
+              {loading
+                ? "Loading the complete billing catalog..."
+                : "The complete billing catalog is unavailable. No plan offer is displayed; query the service again before relying on commercial terms."}
+            </p>
+          )}
+          {!loading && catalog && (
+            <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
+              {plans.map((plan) => (
+                <article key={plan.plan_id} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-sm transition-shadow hover:shadow-lg" data-testid="plan-card">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">{plan.plan_id}</p>
+                  <h2 className="mb-5 text-2xl font-bold text-slate-900">{plan.display_name}</h2>
+                  <div className="mb-7 space-y-1 border-b border-slate-100 pb-6">
+                    {plan.prices.map((price) => <p key={price.currency} className="text-2xl font-extrabold text-slate-900">{formatPlanPrice(price)}</p>)}
+                  </div>
+                  <ul className="flex-1 space-y-3">
+                    {planFacts(plan).map((fact) => (
+                      <li key={fact} className="flex items-start gap-3"><CheckIcon /><span className="text-sm text-slate-700">{fact}</span></li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
 
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-1">{tier.name}</h3>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold text-slate-900">{tier.price}</span>
-                  {tier.period && <span className="text-slate-500 text-sm">{tier.period}</span>}
-                </div>
-                <p className="text-sm text-slate-500 mt-2">{tier.description}</p>
+        {catalog && (
+          <section className="bg-slate-50 px-4 py-20">
+            <div className="mx-auto max-w-6xl">
+              <div className="mb-10 text-center">
+                <h2 className="text-3xl font-bold text-slate-900">Catalog facts by plan</h2>
+                <p className="mt-3 text-sm text-slate-500">Catalog version {catalog.catalog_version}</p>
               </div>
+              <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table className="w-full border-collapse">
+                  <thead><tr className="border-b-2 border-slate-200">
+                    <th className="px-5 py-4 text-left text-sm font-semibold text-slate-600">Fact</th>
+                    {plans.map((plan) => <th key={plan.plan_id} className="px-5 py-4 text-center text-sm font-semibold text-slate-600">{plan.display_name}</th>)}
+                  </tr></thead>
+                  <tbody>{comparisonRows.map((row) => (
+                    <tr key={row.label} className="border-b border-slate-100 last:border-0">
+                      <td className="px-5 py-4 text-sm font-medium text-slate-700">{row.label}</td>
+                      {row.values.map((value, index) => <td key={plans[index].plan_id} className="px-5 py-4 text-center text-sm text-slate-700">{value}</td>)}
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
 
-              {/* CTA */}
-              {tier.ctaLink === "demo" ? (
-                <button
-                  onClick={() => setShowDemo(true)}
-                  className={`w-full py-3 rounded-lg text-sm font-semibold transition-all mb-8 ${
-                    tier.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/25"
-                      : "bg-slate-900 text-white hover:bg-slate-800"
-                  }`}
-                >
-                  {tier.cta}
-                </button>
-              ) : (
-                <Link
-                  to={tier.ctaLink}
-                  className={`w-full py-3 rounded-lg text-sm font-semibold transition-all mb-8 block text-center ${
-                    tier.highlight
-                      ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:from-blue-600 hover:to-cyan-600 shadow-lg shadow-blue-500/25"
-                      : "bg-slate-900 text-white hover:bg-slate-800"
-                  }`}
-                >
-                  {tier.cta}
+        <section className="px-4 py-20">
+          <div className="mx-auto max-w-3xl">
+            <h2 className="mb-12 text-center text-3xl font-bold text-slate-900">Commercial truth boundaries</h2>
+            <div className="border-t border-slate-200">{FAQS.map((faq) => <FaqItem key={faq.question} {...faq} />)}</div>
+          </div>
+        </section>
+
+        <section className="bg-gradient-to-r from-slate-900 to-slate-800 px-4 py-20">
+          <div className="mx-auto max-w-4xl text-center">
+            <h2 className="mb-4 text-3xl font-bold text-white">Evaluate against your requirements</h2>
+            <p className="mx-auto mb-8 max-w-xl text-slate-300">Use the catalog as the offer source, then verify runtime readiness and applicable terms before making a purchase decision.</p>
+            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+              {catalog && plans.some((plan) => plan.signup_available) && (
+                <Link to="/signup" className="rounded-lg bg-white px-8 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-100">
+                  Create an Account
                 </Link>
               )}
-
-              {/* Feature list */}
-              <ul className="space-y-3 flex-1">
-                {tier.features.map((f) => (
-                  <li key={f} className="flex items-start gap-3">
-                    <CheckIcon className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                    <span className="text-sm text-slate-700">{f}</span>
-                  </li>
-                ))}
-              </ul>
+              <button type="button" onClick={() => setShowDemo(true)} className="rounded-lg bg-gradient-to-r from-blue-500 to-cyan-500 px-8 py-3 text-sm font-semibold text-white hover:from-blue-600 hover:to-cyan-600">Book a Demo</button>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* FEATURE COMPARISON TABLE                                      */}
-      {/* ============================================================ */}
-      <section className="py-20 px-4 bg-slate-50">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-12">
-            Compare plans in detail
-          </h2>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b-2 border-slate-200">
-                  <th className="text-left py-4 pr-4 text-sm font-semibold text-slate-600 w-1/3">Feature</th>
-                  <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600">Free</th>
-                  <th className="text-center py-4 px-4 text-sm font-semibold text-blue-600 bg-blue-50/50 rounded-t-lg">Pro</th>
-                  <th className="text-center py-4 px-4 text-sm font-semibold text-slate-600">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON.map((row) => (
-                  <tr key={row.feature} className="border-b border-slate-100 hover:bg-slate-50/80">
-                    <td className="py-3.5 pr-4 text-sm text-slate-700 font-medium">{row.feature}</td>
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex justify-center"><CellValue value={row.free} /></div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center bg-blue-50/30">
-                      <div className="flex justify-center"><CellValue value={row.pro} /></div>
-                    </td>
-                    <td className="py-3.5 px-4 text-center">
-                      <div className="flex justify-center"><CellValue value={row.enterprise} /></div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
-        </div>
-      </section>
+        </section>
+      </main>
 
-      {/* ============================================================ */}
-      {/* FAQ                                                           */}
-      {/* ============================================================ */}
-      <section className="py-20 px-4">
-        <div className="max-w-3xl mx-auto">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-12">
-            Frequently asked questions
-          </h2>
-          <div className="divide-y divide-slate-200 border-t border-slate-200">
-            {FAQS.map((faq) => (
-              <FaqItem key={faq.q} q={faq.q} a={faq.a} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* CTA BANNER                                                    */}
-      {/* ============================================================ */}
-      <section className="py-20 px-4 bg-gradient-to-r from-slate-900 to-slate-800">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Choose a plan for a measurable, governed workflow
-          </h2>
-          <p className="text-slate-300 mb-8 max-w-xl mx-auto">
-            Start with 3 governed agents and 1,000 monthly runs. Move to Pro or Enterprise when your usage, support, connector, identity, or service requirements grow.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link
-              to="/signup"
-              className="bg-white text-slate-900 px-8 py-3 rounded-lg text-sm font-semibold hover:bg-slate-100 transition-all"
-            >
-              Start Free
-            </Link>
-            <button
-              onClick={() => setShowDemo(true)}
-              className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3 rounded-lg text-sm font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
-            >
-              Book a Demo
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ============================================================ */}
-      {/* FOOTER                                                        */}
-      {/* ============================================================ */}
-      <footer className="bg-slate-900 border-t border-slate-800 py-12 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-[10px]">
-              AO
-            </div>
-            <span className="text-slate-400 text-sm">AgenticOrg</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <Link to="/" className="text-slate-400 hover:text-white text-sm transition-colors">Home</Link>
-            <Link to="/evals" className="text-slate-400 hover:text-white text-sm transition-colors">Evals</Link>
-            <Link to="/login" className="text-slate-400 hover:text-white text-sm transition-colors">Sign In</Link>
-          </div>
-          <p className="text-slate-500 text-xs">
-            &copy; {new Date().getFullYear()} AgenticOrg. All rights reserved.
-          </p>
+      <footer className="border-t border-slate-800 bg-slate-900 px-4 py-10">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 md:flex-row">
+          <span className="text-sm text-slate-400">AgenticOrg</span>
+          <div className="flex items-center gap-6"><Link to="/" className="text-sm text-slate-400 hover:text-white">Home</Link><Link to="/evals" className="text-sm text-slate-400 hover:text-white">Evals</Link><Link to="/login" className="text-sm text-slate-400 hover:text-white">Sign In</Link></div>
+          <p className="text-xs text-slate-500">&copy; {new Date().getFullYear()} AgenticOrg.</p>
         </div>
       </footer>
     </div>

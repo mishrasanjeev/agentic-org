@@ -1,5 +1,7 @@
 # Agent Guide
 
+> **Historical inventory warning (2026-07-13):** Agent counts, confidence percentages, capabilities, and promotion examples in this guide are not current availability evidence. Use the runtime product-facts endpoint and the [readiness program](readiness/README.md); each capability must satisfy the [domain readiness standard](readiness/DOMAIN_READINESS_STANDARD.md) and evidence register before a production or GA claim.
+
 ## Overview
 
 AgenticOrg ships with 24+ specialist agents (plus unlimited custom agents) across 5 enterprise domains, coordinated by the NEXUS orchestrator. Each agent has:

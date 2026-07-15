@@ -278,6 +278,7 @@ def discover_sandbox_pilot_config(
     db_result = _discover_connector_config_categories(
         env=env,
         tenant_id=tenant_id,
+        company_id=company_id,
         db_url=db_url,
         connector_rows=connector_rows,
     )
@@ -544,6 +545,7 @@ def _discover_connector_config_categories(
     *,
     env: Mapping[str, str],
     tenant_id: str | None,
+    company_id: str | None,
     db_url: str | None,
     connector_rows: Sequence[Any] | None,
 ) -> dict[str, Any]:
@@ -559,8 +561,18 @@ def _discover_connector_config_categories(
         }
 
     try:
+        parsed_company_id = uuid.UUID(str(company_id)) if company_id else None
+    except ValueError:
+        return {
+            "state": "blocked",
+            "message": f"{SANDBOX_ENV_PREFIX}COMPANY_ID must be a valid UUID.",
+            "categories": {},
+        }
+
+    try:
         rows = list(connector_rows) if connector_rows is not None else _load_connector_config_rows(
             parsed_tenant_id,
+            parsed_company_id,
             db_url,
         )
     # enterprise-gate: broad-except-ok reason=sandbox-preflight-must-fail-closed-on-db-discovery-errors
@@ -583,7 +595,11 @@ def _discover_connector_config_categories(
     return {"state": "ready", "message": "Tenant ConnectorConfig discovery completed.", "categories": categories}
 
 
-def _load_connector_config_rows(tenant_id: uuid.UUID, db_url: str | None) -> list[dict[str, Any]]:
+def _load_connector_config_rows(
+    tenant_id: uuid.UUID,
+    company_id: uuid.UUID | None,
+    db_url: str | None,
+) -> list[dict[str, Any]]:
     if not db_url:
         return []
     from sqlalchemy import create_engine, text
@@ -591,6 +607,15 @@ def _load_connector_config_rows(tenant_id: uuid.UUID, db_url: str | None) -> lis
     engine = create_engine(_sync_db_url(db_url), connect_args={"connect_timeout": 2}, pool_pre_ping=True)
     try:
         with engine.connect() as conn:
+            company_scope = str(company_id) if company_id is not None else ""
+            conn.execute(
+                text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
+                {"tenant_id": str(tenant_id)},
+            )
+            conn.execute(
+                text("SELECT set_config('agenticorg.company_id', :company_id, true)"),
+                {"company_id": company_scope},
+            )
             result = conn.execute(
                 text(
                     """
@@ -603,9 +628,11 @@ def _load_connector_config_rows(tenant_id: uuid.UUID, db_url: str | None) -> lis
                         credentials_encrypted
                     FROM connector_configs
                     WHERE tenant_id = CAST(:tenant_id AS UUID)
+                      AND company_id IS NOT DISTINCT FROM
+                          CAST(NULLIF(:company_id, '') AS UUID)
                     """
                 ),
-                {"tenant_id": str(tenant_id)},
+                {"tenant_id": str(tenant_id), "company_id": company_scope},
             )
             return [dict(row._mapping) for row in result.fetchall()]
     finally:

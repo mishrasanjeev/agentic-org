@@ -1,16 +1,11 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api";
-
-interface Plan {
-  plan: string;
-  label: string;
-  price_usd: number;
-  price_inr: number;
-  agents: number | string;
-  runs: string;
-  storage: string;
-  features: string[];
-}
+import {
+  formatPlanPrice,
+  isPublicPlanCatalog,
+  orderedPlans,
+  type PublicPlan,
+} from "@/lib/billingCatalog";
 
 interface Usage {
   agent_runs: number;
@@ -56,11 +51,8 @@ function ProgressBar({ value, max, label }: { value: number; max: number; label:
   );
 }
 
-// Plan ordering for upgrade/downgrade detection
-const PLAN_RANK: Record<string, number> = { free: 0, pro: 1, enterprise: 2 };
-
 export default function Billing() {
-  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plans, setPlans] = useState<PublicPlan[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   // Currency switcher and INR (Pine Labs Plural) rail removed 2026-04-25 —
@@ -77,12 +69,13 @@ export default function Billing() {
     setLoading(true);
     setError(null);
     Promise.all([
-      api.get("/billing/plans").then((r) => r.data),
+      api.get("/billing/plans").then((response) => response.data),
       api.get("/billing/subscription").then((r) => r.data).catch(() => null),
       api.get("/billing/usage").then((r) => r.data).catch(() => null),
     ])
       .then(([p, sub, u]) => {
-        setPlans(Array.isArray(p) ? p : []);
+        if (!isPublicPlanCatalog(p)) throw new Error("Incomplete billing catalog");
+        setPlans(orderedPlans(p));
         setSubscription(sub);
         setUsage(u);
       })
@@ -138,16 +131,16 @@ export default function Billing() {
     );
   }
 
-  const tierLimits: Record<string, { runs: number; agents: number; storage: number }> = {
-    free: { runs: 1000, agents: 3, storage: 1073741824 },
-    pro: { runs: 10000, agents: 15, storage: 53687091200 },
-    enterprise: { runs: -1, agents: -1, storage: -1 },
-  };
-  const limits = tierLimits[currentPlan] || tierLimits.free;
-  const currentRank = PLAN_RANK[currentPlan] ?? 0;
+  const currentDefinition = plans.find((plan) => plan.plan_id === currentPlan);
+  const limits = currentDefinition ? {
+    runs: currentDefinition.limits.agent_runs ?? -1,
+    agents: currentDefinition.limits.agent_count ?? -1,
+    storage: currentDefinition.limits.storage_bytes ?? -1,
+  } : null;
+  const currentRank = currentDefinition?.display_order ?? 0;
 
   const getButtonLabel = (targetPlan: string): string => {
-    const targetRank = PLAN_RANK[targetPlan] ?? 0;
+    const targetRank = plans.find((plan) => plan.plan_id === targetPlan)?.display_order ?? 0;
     if (targetRank > currentRank) return `Upgrade to ${targetPlan.charAt(0).toUpperCase() + targetPlan.slice(1)}`;
     if (targetRank < currentRank) return `Downgrade to ${targetPlan.charAt(0).toUpperCase() + targetPlan.slice(1)}`;
     return "Current plan";
@@ -195,7 +188,7 @@ export default function Billing() {
             )}
           </div>
         </div>
-        {usage && (
+        {usage && limits && (
           <div>
             <ProgressBar value={usage.agent_runs} max={limits.runs} label="Agent Runs (this month)" />
             <ProgressBar value={usage.agent_count} max={limits.agents} label="Active Agents" />
@@ -213,25 +206,26 @@ export default function Billing() {
         <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
         <div className="grid md:grid-cols-3 gap-4">
           {plans.map((p) => {
-            const isCurrent = p.plan === currentPlan;
-            const targetRank = PLAN_RANK[p.plan] ?? 0;
+            const isCurrent = p.plan_id === currentPlan;
+            const targetRank = p.display_order;
             const isUpgrade = targetRank > currentRank;
+            const usdPrice = p.prices.find((price) => price.currency === "USD");
 
             return (
               <div
-                key={p.plan}
+                key={p.plan_id}
                 className={`border rounded-lg p-5 flex flex-col ${
                   isCurrent ? "border-primary ring-2 ring-primary/20" : ""
                 }`}
-                data-testid={`plan-${p.plan}`}
+                data-testid={`plan-${p.plan_id}`}
               >
-                <h3 className="text-lg font-bold mb-1">{p.label}</h3>
+                <h3 className="text-lg font-bold mb-1">{p.display_name}</h3>
                 <p className="text-2xl font-semibold mb-3">
-                  {p.price_usd === 0 ? "Free" : `$${p.price_usd}/mo`}
+                  {usdPrice ? formatPlanPrice(usdPrice) : "No USD price in catalog"}
                 </p>
 
                 {/* Adjustment note for upgrades/downgrades */}
-                {!isCurrent && p.plan !== "free" && subscription?.is_paid && (
+                {!isCurrent && p.checkout_mode === "hosted" && subscription?.is_paid && (
                   <p className="text-xs text-muted-foreground mb-2 bg-muted rounded px-2 py-1">
                     {isUpgrade
                       ? "Stripe applies prorated charges according to your billing settings."
@@ -240,10 +234,15 @@ export default function Billing() {
                 )}
 
                 <ul className="text-sm space-y-1 flex-1 mb-4">
-                  {p.features.map((f, i) => (
-                    <li key={i} className="flex items-start gap-1.5">
+                  {[
+                    `Agents: ${p.limits.agent_count ?? "No finite catalog cap"}`,
+                    `Runs per ${p.limits.agent_runs_interval}: ${p.limits.agent_runs ?? "No finite catalog cap"}`,
+                    `Storage bytes: ${p.limits.storage_bytes ?? "No finite catalog cap"}`,
+                    `Checkout mode: ${p.checkout_mode}`,
+                  ].map((fact) => (
+                    <li key={fact} className="flex items-start gap-1.5">
                       <span className="text-green-500 mt-0.5">&#10003;</span>
-                      {f}
+                      {fact}
                     </li>
                   ))}
                 </ul>
@@ -252,7 +251,7 @@ export default function Billing() {
                   <span className="text-center text-sm font-medium text-primary py-2">
                     Current plan
                   </span>
-                ) : p.plan === "free" ? (
+                ) : p.checkout_mode === "none" ? (
                   subscription?.is_paid ? (
                     <button
                       onClick={handleCancel}
@@ -264,15 +263,15 @@ export default function Billing() {
                   ) : null
                 ) : (
                   <button
-                    onClick={() => handleSubscribe(p.plan)}
-                    disabled={actionLoading === p.plan}
+                    onClick={() => handleSubscribe(p.plan_id)}
+                    disabled={actionLoading === p.plan_id}
                     className={`w-full py-2 rounded text-sm font-medium disabled:opacity-50 ${
                       isUpgrade
                         ? "bg-primary text-primary-foreground hover:opacity-90"
                         : "border border-muted-foreground text-muted-foreground hover:bg-muted"
                     }`}
                   >
-                    {actionLoading === p.plan ? "Processing..." : getButtonLabel(p.plan)}
+                    {actionLoading === p.plan_id ? "Processing..." : getButtonLabel(p.plan_id)}
                   </button>
                 )}
               </div>

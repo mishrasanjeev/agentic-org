@@ -372,7 +372,7 @@ async def test_kpis_cmo_response_exposes_reconciliation_summary(monkeypatch: pyt
             "total_tasks_30d": 0,
         }
 
-    async def fake_configs(tenant_id: str) -> list:
+    async def fake_configs(tenant_id: str, company_id: str | None = None) -> list:
         return []
 
     async def fake_approval_timeout(tenant_id: str, company_id: str) -> dict:

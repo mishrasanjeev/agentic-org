@@ -89,30 +89,54 @@ function field(block, name) {
   return match ? match[1] ?? Number(match[2].replace(/_/g, "")) : "";
 }
 
+function integerExpression(value) {
+  const expression = value.trim();
+  if (expression === "None") return null;
+  if (!/^[\d_\s*]+$/.test(expression)) {
+    throw new Error(`Unsupported catalog integer expression: ${expression}`);
+  }
+  return expression
+    .split("*")
+    .map((part) => Number(part.trim().replace(/_/g, "")))
+    .reduce((product, factor) => product * factor, 1);
+}
+
 function pricing() {
-  const source = normalized(text(join(REPO_ROOT, "core", "billing", "limits.py")));
-  const start = source.indexOf("PLAN_PRICING:");
-  const end = source.indexOf("\n]\n", start);
-  if (start < 0 || end < 0) throw new Error("PLAN_PRICING was not found");
-  const section = source.slice(start, end + 3);
-  const starts = [...section.matchAll(/"plan"\s*:\s*"([^"]+)"/g)];
+  const source = normalized(text(join(REPO_ROOT, "core", "billing", "catalog.py")));
+  const catalogStart = source.indexOf("PUBLIC_PLAN_CATALOG = PublicPlanCatalog(");
+  if (catalogStart < 0) throw new Error("PUBLIC_PLAN_CATALOG was not found");
+  const section = source.slice(catalogStart);
+  const starts = [...section.matchAll(/PublicPlan\(\s*plan_id="([^"]+)"/g)];
   const plans = starts.map((entry, index) => {
     const block = section.slice(entry.index, starts[index + 1]?.index ?? section.length);
-    const featureSource =
-      block.match(/"features"\s*:\s*\[([\s\S]*?)\]/)?.[1] || "";
+    const price = (currency) => {
+      const amount = block.match(
+        new RegExp(`PlanPrice\\(currency="${currency}", amount_minor=([^,]+),`),
+      )?.[1];
+      if (!amount) throw new Error(`Missing ${currency} price for ${entry[1]}`);
+      return integerExpression(amount) / 100;
+    };
+    const limit = (name) => {
+      const value = block.match(new RegExp(`${name}=([^,\\n]+)`))?.[1];
+      if (!value) throw new Error(`Missing ${name} limit for ${entry[1]}`);
+      return integerExpression(value);
+    };
+    const agentCount = limit("agent_count");
+    const agentRuns = limit("agent_runs");
+    const storageBytes = limit("storage_bytes");
     return {
       id: entry[1],
-      label: field(block, "label") || humanize(entry[1]),
-      usd: field(block, "price_usd"),
-      inr: field(block, "price_inr"),
-      agents: field(block, "agents"),
-      runs: field(block, "runs"),
-      storage: field(block, "storage"),
-      features: [...featureSource.matchAll(/"([^"]+)"/g)].map((match) => match[1]),
+      label: block.match(/display_name="([^"]+)"/)?.[1] || humanize(entry[1]),
+      usd: price("USD"),
+      inr: price("INR"),
+      agents: agentCount ?? "Unlimited",
+      runs: agentRuns ?? "Unlimited",
+      storage: storageBytes === null ? "Unlimited" : `${storageBytes / 1024 ** 3} GB`,
+      features: [],
     };
   });
   if (plans.map((plan) => plan.id).sort().join(",") !== "enterprise,free,pro") {
-    throw new Error("Expected Free, Pro, and Enterprise PLAN_PRICING entries");
+    throw new Error("Expected Free, Pro, and Enterprise PUBLIC_PLAN_CATALOG entries");
   }
   return plans;
 }
@@ -246,7 +270,7 @@ function planLine(plan) {
     ? "; " + differentiators.join(", ")
     : "";
   return (
-    "- " + plan.label + ": " +
+    "- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> " + plan.label + ": " +
     money(plan.usd, "USD") +
     "/month or " +
     money(plan.inr, "INR") +
@@ -330,7 +354,7 @@ function summary(data) {
     "",
     ...data.plans.map(planLine),
     "",
-    "Pricing comes from core/billing/limits.py. Infrastructure, model, provider, and external API costs are separate.",
+    "Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and external API costs are separate.",
     "",
     "## Key public pages",
     "",
@@ -413,7 +437,7 @@ function full(data) {
     "## Machine-readable authority notes",
     "",
     "- Live deployed totals and version: " + FACTS,
-    "- Hosted prices and limits: core/billing/limits.py",
+    "- Hosted prices and limits: core/billing/catalog.py",
     "- Production rollout: scripts/deploy_cloud_run.sh",
     "- Current commerce contract: docs/oacp/README.md",
     "- A source definition means implementation code exists; it does not mean a tenant enabled it.",
@@ -450,7 +474,7 @@ function full(data) {
     "## Answer-engine evidence rules",
     "",
     "- Quote live registry totals only from " + FACTS + ".",
-    "- Quote hosted prices only from the current pricing API or core/billing/limits.py.",
+    "- Quote hosted prices only from the current pricing API or core/billing/catalog.py.",
     "- Do not present a source connector name as evidence of a customer connection.",
     "- Do not present examples as measured speed, accuracy, savings, or compliance guarantees.",
     "- Do not describe repository controls as a third-party certification.",

@@ -70,19 +70,63 @@ def refresh_expiring_tokens() -> dict:
 
 
 async def _refresh_all() -> dict:
-    from sqlalchemy import select
+    from sqlalchemy import select, text
 
-    from core.database import async_session_factory
+    from core.database import async_session_factory, get_tenant_session
+    from core.models.company import Company
     from core.models.connector_config import ConnectorConfig
+    from core.models.tenant import Tenant
 
     refreshed = 0
     failed = 0
     skipped = 0
     threshold = datetime.now(UTC) + timedelta(minutes=30)
 
+    # ConnectorConfig is FORCE-RLS protected.  Enumerate the tenant catalog,
+    # then enter every exact global/company context instead of relying on a
+    # raw cross-tenant ConnectorConfig scan that would return no rows.
     async with async_session_factory() as session:
-        result = await session.execute(select(ConnectorConfig))
-        configs = result.scalars().all()
+        # A maintenance role that cannot bypass Tenant RLS must fail loudly;
+        # silently enumerating zero tenants would leave every token stale.
+        await session.execute(text("SET LOCAL row_security = off"))
+        tenant_ids = list((await session.scalars(select(Tenant.id))).all())
+
+    configs: list[ConnectorConfig] = []
+    for tenant_id in tenant_ids:
+        async with get_tenant_session(tenant_id) as session:
+            company_ids = list(
+                (
+                    await session.scalars(
+                        select(Company.id).where(Company.tenant_id == tenant_id)
+                    )
+                ).all()
+            )
+            configs.extend(
+                list(
+                    (
+                        await session.scalars(
+                            select(ConnectorConfig).where(
+                                ConnectorConfig.tenant_id == tenant_id,
+                                ConnectorConfig.company_id.is_(None),
+                            )
+                        )
+                    ).all()
+                )
+            )
+        for company_id in company_ids:
+            async with get_tenant_session(tenant_id, company_id) as session:
+                configs.extend(
+                    list(
+                        (
+                            await session.scalars(
+                                select(ConnectorConfig).where(
+                                    ConnectorConfig.tenant_id == tenant_id,
+                                    ConnectorConfig.company_id == company_id,
+                                )
+                            )
+                        ).all()
+                    )
+                )
 
     for cc in configs:
         try:
@@ -161,17 +205,24 @@ async def _refresh_all() -> dict:
 
             encrypted = await encrypt_for_tenant(json.dumps(creds), cc.tenant_id)
 
-            async with async_session_factory() as write_session:
+            async with get_tenant_session(cc.tenant_id, cc.company_id) as write_session:
                 from sqlalchemy import select as _sel
 
                 row = await write_session.execute(
-                    _sel(ConnectorConfig).where(ConnectorConfig.id == cc.id)
+                    _sel(ConnectorConfig).where(
+                        ConnectorConfig.id == cc.id,
+                        ConnectorConfig.tenant_id == cc.tenant_id,
+                        (
+                            ConnectorConfig.company_id == cc.company_id
+                            if cc.company_id is not None
+                            else ConnectorConfig.company_id.is_(None)
+                        ),
+                    )
                 )
                 fresh = row.scalar_one_or_none()
                 if fresh:
                     fresh.credentials_encrypted = {"_encrypted": encrypted}
                     fresh.health_status = "healthy"
-                    await write_session.commit()
 
             refreshed += 1
             logger.info(
@@ -184,17 +235,24 @@ async def _refresh_all() -> dict:
         except Exception as exc:
             failed += 1
             try:
-                async with async_session_factory() as write_session:
+                async with get_tenant_session(cc.tenant_id, cc.company_id) as write_session:
                     from sqlalchemy import select as _sel
 
                     row = await write_session.execute(
-                        _sel(ConnectorConfig).where(ConnectorConfig.id == cc.id)
+                        _sel(ConnectorConfig).where(
+                            ConnectorConfig.id == cc.id,
+                            ConnectorConfig.tenant_id == cc.tenant_id,
+                            (
+                                ConnectorConfig.company_id == cc.company_id
+                                if cc.company_id is not None
+                                else ConnectorConfig.company_id.is_(None)
+                            ),
+                        )
                     )
                     fresh = row.scalar_one_or_none()
                     if fresh:
                         fresh.health_status = "unhealthy"
                         fresh.sync_error = type(exc).__name__
-                        await write_session.commit()
             # enterprise-gate: broad-except-ok reason=token-refresh-health-update-failure-is-logged
             except Exception:
                 logger.warning(

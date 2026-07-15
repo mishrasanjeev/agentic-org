@@ -9,6 +9,7 @@ Each endpoint:
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -484,18 +485,40 @@ async def _build_kpi_response(
     }
 
 
-async def _load_marketing_connector_configs(tenant_id: str) -> list[Any]:
-    """Load marketing ConnectorConfig rows for CMO readiness projections."""
+async def _load_marketing_connector_configs(
+    tenant_id: str,
+    company_id: str | None = None,
+) -> list[Any]:
+    """Load exact-scope ConnectorConfig rows for CMO readiness projections.
+
+    ``default``/``all``/blank retain the tenant-global contract.  A malformed
+    explicit company selector fails closed instead of falling back to those
+    global credentials.
+    """
 
     from core.models.connector_config import ConnectorConfig
 
     connector_keys = marketing_connector_keys()
+    company_uuid_text = _parse_company_uuid(company_id)
+    explicit_company = bool(company_id and company_id not in ("", "default", "all"))
+    if explicit_company and company_uuid_text is None:
+        logger.warning(
+            "cmo_connector_setup_invalid_company_scope",
+            extra={"tenant_id": tenant_id},
+        )
+        return []
+    company_uuid = _uuid.UUID(company_uuid_text) if company_uuid_text else None
     try:
-        async with get_tenant_session(tenant_id) as session:
+        async with get_tenant_session(tenant_id, company_uuid) as session:
             rows = (
                 await session.execute(
                     select(ConnectorConfig).where(
                         ConnectorConfig.tenant_id == tenant_id,
+                        (
+                            ConnectorConfig.company_id == company_uuid
+                            if company_uuid is not None
+                            else ConnectorConfig.company_id.is_(None)
+                        ),
                         ConnectorConfig.connector_name.in_(connector_keys)
                     )
                 )
@@ -546,10 +569,13 @@ async def _load_latest_weekly_report_pilot_proof(
     }
 
 
-async def _load_marketing_connector_setup(tenant_id: str) -> list[dict[str, Any]]:
+async def _load_marketing_connector_setup(
+    tenant_id: str,
+    company_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Load CMO connector setup states from existing ConnectorConfig rows."""
 
-    rows = await _load_marketing_connector_configs(tenant_id)
+    rows = await _load_marketing_connector_configs(tenant_id, company_id)
     return build_marketing_connector_setup(rows)
 
 
@@ -698,7 +724,7 @@ def _apply_cmo_production_data_policy(
 
 async def _build_cmo_kpi_response(tenant_id: str, company_id: str) -> dict[str, Any]:
     base = await _build_kpi_response(tenant_id, "cmo", company_id)
-    connector_configs = await _load_marketing_connector_configs(tenant_id)
+    connector_configs = await _load_marketing_connector_configs(tenant_id, company_id)
     connector_setup = build_marketing_connector_setup(connector_configs)
     connector_summary = summarize_marketing_connector_setup(connector_setup)
     connector_contracts = build_marketing_connector_contracts(

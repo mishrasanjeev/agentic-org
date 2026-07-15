@@ -110,7 +110,7 @@ test("OAuth2 connector setup registers internally without external authorization
   });
 });
 
-test("CA firms trial request posts firm metadata and reports confirmation email", async ({ page }) => {
+test("CA firms evaluation request posts firm metadata and reports confirmation email", async ({ page }) => {
   let demoBody: any = null;
   await page.route("**/api/v1/demo-request", async (route) => {
     demoBody = route.request().postDataJSON();
@@ -125,12 +125,12 @@ test("CA firms trial request posts firm metadata and reports confirmation email"
   });
 
   await page.goto("/solutions/ca-firms");
-  await page.getByRole("button", { name: /start free trial/i }).first().click();
+  await page.getByRole("button", { name: /request evaluation/i }).first().click();
   await page.getByRole("textbox", { name: /^Name \*/ }).fill("Aishwarya");
   await page.getByLabel(/Work Email/).fill("aishwarya@agenticorg.ai");
   await page.getByLabel(/Firm Name/).fill("Aishwarya CA LLP");
   await page.getByLabel(/Number of Clients/).selectOption("6-15");
-  await page.getByRole("dialog").getByRole("button", { name: "Start Free Trial" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Request Evaluation" }).click();
 
   await expect(page.getByText(/We sent a confirmation email/)).toBeVisible();
   expect(demoBody).toMatchObject({

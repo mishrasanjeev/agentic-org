@@ -89,11 +89,7 @@ def _fake_llm_allowed() -> bool:
 
 
 def _real_llm_provider_configured() -> bool:
-    return bool(
-        external_keys.google_gemini_api_key
-        or external_keys.anthropic_api_key
-        or external_keys.openai_api_key
-    )
+    return bool(external_keys.google_gemini_api_key or external_keys.anthropic_api_key or external_keys.openai_api_key)
 
 
 def _llm_available_for_workflow() -> bool:
@@ -158,9 +154,7 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     from core.models.agent import Agent
 
     async with get_tenant_session(tenant_uuid) as session:
-        result = await session.execute(
-            select(Agent).where(Agent.id == agent_uuid, Agent.tenant_id == tenant_uuid)
-        )
+        result = await session.execute(select(Agent).where(Agent.id == agent_uuid, Agent.tenant_id == tenant_uuid))
         agent = result.scalar_one_or_none()
     if agent is None or agent.status in {"deleted", "retired"}:
         return {}
@@ -168,6 +162,8 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     return {
         "id": str(agent.id),
         "tenant_id": str(agent.tenant_id),
+        "company_id": str(agent.company_id) if agent.company_id else None,
+        "domain": agent.domain,
         "agent_type": agent.agent_type,
         "authorized_tools": agent.authorized_tools or [],
         "prompt_variables": agent.prompt_variables or {},
@@ -179,7 +175,35 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     }
 
 
-async def _load_workflow_connector_config(connector_name: str, tenant_id: str) -> dict[str, Any]:
+async def _validated_workflow_company(tenant_id: str, company_id: Any) -> uuid.UUID:
+    try:
+        tenant_uuid = uuid.UUID(str(tenant_id))
+        company_uuid = uuid.UUID(str(company_id))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("A valid company_id is required for workflow execution") from exc
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.company import Company
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(
+            select(Company.id).where(
+                Company.id == company_uuid,
+                Company.tenant_id == tenant_uuid,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise ValueError("Workflow company scope does not belong to tenant")
+    return company_uuid
+
+
+async def _load_workflow_connector_config(
+    connector_name: str,
+    tenant_id: str,
+    company_id: uuid.UUID,
+) -> dict[str, Any]:
     if not connector_name or not tenant_id:
         return {}
     try:
@@ -194,10 +218,11 @@ async def _load_workflow_connector_config(connector_name: str, tenant_id: str) -
     from core.database import get_tenant_session
     from core.models.connector_config import ConnectorConfig
 
-    async with get_tenant_session(tenant_uuid) as session:
+    async with get_tenant_session(tenant_uuid, company_id) as session:
         result = await session.execute(
             select(ConnectorConfig).where(
                 ConnectorConfig.tenant_id == tenant_uuid,
+                ConnectorConfig.company_id == company_id,
                 ConnectorConfig.connector_name == connector_name,
             )
         )
@@ -273,12 +298,7 @@ def _requires_marketing_write_confirmation(
 
 
 def _connector_key(step: dict, output: dict[str, Any]) -> str | None:
-    value = (
-        step.get("connector_key")
-        or step.get("connector")
-        or output.get("connector_key")
-        or output.get("connector")
-    )
+    value = step.get("connector_key") or step.get("connector") or output.get("connector_key") or output.get("connector")
     return str(value).strip().lower() if value else None
 
 
@@ -457,12 +477,28 @@ async def _execute_connector_tool_step(step: dict, state: dict) -> dict[str, Any
             ),
         )
 
-    config = step.get("connector_config")
-    if not isinstance(config, dict):
-        state_config = _state_lookup(state, "connector_config", f"{connector}_connector_config")
-        config = state_config if isinstance(state_config, dict) else {}
-    if not config:
-        config = await _load_workflow_connector_config(connector, str(state.get("tenant_id") or ""))
+    tenant_id = str(state.get("tenant_id") or "")
+    requested_company_id = step.get("company_id") or _state_lookup(state, "company_id")
+    try:
+        company_uuid = await _validated_workflow_company(tenant_id, requested_company_id)
+        config = await _load_workflow_connector_config(
+            connector,
+            tenant_id,
+            company_uuid,
+        )
+    except ValueError as exc:
+        result = {"error": "company_scope_invalid", "message": str(exc)}
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="connector_tool",
+            failure=ConnectorToolExecutionError(
+                step_id=str(step.get("id", "")),
+                connector=connector,
+                tool=tool,
+                result=result,
+            ),
+            output=result,
+        )
 
     from core.langgraph.tool_adapter import _execute_connector_tool
 
@@ -471,6 +507,9 @@ async def _execute_connector_tool_step(step: dict, state: dict) -> dict[str, Any
         tool,
         _connector_step_inputs(step, state),
         config,
+        tenant_id=tenant_id or None,
+        company_id=str(company_uuid),
+        domain=step.get("domain") or _state_lookup(state, "domain"),
     )
     if isinstance(result, dict) and result.get("error"):
         return failure_result(
@@ -509,6 +548,32 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
     if not _llm_available_for_workflow():
         return _missing_llm_result(step, agent_type, action)
 
+    step_company_id = step.get("company_id")
+    stored_company_id = stored_config.get("company_id")
+    requested_company_id = step_company_id or stored_company_id or _state_lookup(state, "company_id")
+    if step_company_id and stored_company_id and str(step_company_id) != str(stored_company_id):
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="agent",
+            failure=AgentExecutionError(
+                agent=agent_type,
+                step_id=str(step.get("id", "")),
+                cause="Workflow step cannot override the stored agent company scope.",
+            ),
+        )
+    try:
+        company_uuid = await _validated_workflow_company(tenant_id, requested_company_id)
+    except ValueError as exc:
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="agent",
+            failure=AgentExecutionError(
+                agent=agent_type,
+                step_id=str(step.get("id", "")),
+                cause=str(exc),
+            ),
+        )
+
     try:
         import core.agents  # noqa: F401 - triggers registration
         from core.agents.registry import AgentRegistry
@@ -523,38 +588,26 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
         config = {
             "id": stored_config.get("id") or agent_id or f"wf_agent_{step['id']}",
             "tenant_id": stored_config.get("tenant_id") or tenant_id,
+            "company_id": str(company_uuid),
+            "domain": (step.get("domain") or stored_config.get("domain") or _state_lookup(state, "domain")),
             "agent_type": agent_type,
             "authorized_tools": (
-                step["authorized_tools"]
-                if "authorized_tools" in step
-                else stored_config.get("authorized_tools", [])
+                step["authorized_tools"] if "authorized_tools" in step else stored_config.get("authorized_tools", [])
             ),
             "prompt_variables": (
-                step["prompt_variables"]
-                if "prompt_variables" in step
-                else stored_config.get("prompt_variables", {})
+                step["prompt_variables"] if "prompt_variables" in step else stored_config.get("prompt_variables", {})
             ),
             "hitl_condition": (
-                step["hitl_condition"]
-                if "hitl_condition" in step
-                else stored_config.get("hitl_condition", "")
+                step["hitl_condition"] if "hitl_condition" in step else stored_config.get("hitl_condition", "")
             ),
-            "output_schema": (
-                step["output_schema"]
-                if "output_schema" in step
-                else stored_config.get("output_schema")
-            ),
+            "output_schema": (step["output_schema"] if "output_schema" in step else stored_config.get("output_schema")),
             "system_prompt_text": (
                 step["system_prompt_text"]
                 if "system_prompt_text" in step
                 else stored_config.get("system_prompt_text", "")
             ),
             "llm_model": step.get("llm_model") or stored_config.get("llm_model"),
-            "cost_controls": (
-                step["cost_controls"]
-                if "cost_controls" in step
-                else stored_config.get("cost_controls")
-            ),
+            "cost_controls": (step["cost_controls"] if "cost_controls" in step else stored_config.get("cost_controls")),
         }
 
         if _fake_llm_allowed() and not _real_llm_provider_configured():
@@ -563,6 +616,8 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             agent_instance = BaseAgent(
                 agent_id=config["id"],
                 tenant_id=config["tenant_id"],
+                company_id=config.get("company_id"),
+                domain=config.get("domain"),
                 authorized_tools=config.get("authorized_tools", []),
                 llm_model=config.get("llm_model"),
             )
@@ -712,9 +767,7 @@ async def _execute_hitl(step: dict, state: dict) -> dict[str, Any]:
     )
     timeout_policy = timeout_policy_for_action(action, step) if action else None
     timeout_hours = (
-        timeout_policy.get("default_sla_hours")
-        if isinstance(timeout_policy, dict)
-        else step.get("timeout_hours", 4)
+        timeout_policy.get("default_sla_hours") if isinstance(timeout_policy, dict) else step.get("timeout_hours", 4)
     )
     return {
         "step_id": step["id"],
@@ -743,15 +796,12 @@ def _parallel_failures(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
 async def _execute_parallel(step: dict, state: dict) -> dict[str, Any]:
     sub_steps = step.get("steps", [])
     wait_for = str(step.get("wait_for", "all"))
-    task_factories = [
-        (lambda child=child: execute_step(_parallel_child_step(child), state))
-        for child in sub_steps
-    ]
+    task_factories = [(lambda child=child: execute_step(_parallel_child_step(child), state)) for child in sub_steps]
     results = await execute_parallel(task_factories, wait_for=wait_for)
     failures = _parallel_failures(results)
 
-    should_fail = bool(failures) if wait_for != "any" else not any(
-        is_success_status(result.get("status")) for result in results
+    should_fail = (
+        bool(failures) if wait_for != "any" else not any(is_success_status(result.get("status")) for result in results)
     )
     if should_fail:
         return failure_result(
@@ -1005,14 +1055,10 @@ async def _execute_wait_for_event(step: dict, state: dict) -> dict[str, Any]:
     if not isinstance(trigger_payload, dict):
         trigger_payload = {}
     tenant_id = (
-        state.get("tenant_id")
-        or trigger_payload.get("tenant_id")
-        or trigger_payload.get("agenticorg:tenant_id")
+        state.get("tenant_id") or trigger_payload.get("tenant_id") or trigger_payload.get("agenticorg:tenant_id")
     )
     workflow_run_id = (
-        state.get("workflow_run_id")
-        or state.get("db_workflow_run_id")
-        or state.get("database_workflow_run_id")
+        state.get("workflow_run_id") or state.get("db_workflow_run_id") or state.get("database_workflow_run_id")
     )
 
     event_wait_store = state.get("_event_wait_store")

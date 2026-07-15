@@ -1,41 +1,39 @@
 # agenticorg-mcp-server
 
-MCP (Model Context Protocol) server for [AgenticOrg](https://agenticorg.ai). It exposes AgenticOrg AI agents, A2A discovery, SOP parsing/deploy, connector discovery, and platform MCP tool discovery to any MCP-compatible client.
+Repository MCP adapter for AgenticOrg API surfaces. The server exposes records
+and actions returned by a configured AgenticOrg endpoint; tool presence is not
+evidence that an agent, connector, provider, or external action is available in
+a particular deployment.
 
-## Quick Start
+Compatibility is conditional on an MCP client that supports the configured
+stdio transport and the package's protocol-library version. Authentication,
+tenant access, company access, grants, backend routes, and provider setup must
+also be valid at runtime.
+
+## Install and verify
+
+When the package is available from the configured npm registry:
 
 ```bash
 npm install -g agenticorg-mcp-server
 AGENTICORG_API_KEY=your-key agenticorg-mcp
 ```
 
-Or run directly with npx:
+For repository verification:
 
 ```bash
-AGENTICORG_API_KEY=your-key npx agenticorg-mcp-server
+cd mcp-server
+npm ci
+npm test
 ```
 
-For shell-capable tools such as Claude Code, Codex, Gemini CLI, VS Code
-terminals/tasks, CI jobs, and runbooks, the direct Python CLI is also
-available:
+The smoke test validates this repository build against a local stub API. It is
+not production, provider, or client-compatibility evidence.
 
-```bash
-pip install agenticorg
-AGENTICORG_API_KEY=your-key agenticorg agents run commerce_sales_agent \
-  --action buyer_discovery_preview \
-  --input '{"merchant_id":"merchant_demo"}'
-```
+## Client configuration
 
-Use this MCP server when the client should discover and call AgenticOrg
-through MCP tools. Use the direct CLI when the client can run shell
-commands.
-
-For buyer-commerce clients, set `AGENTICORG_MCP_COMMERCE_ONLY=true`. That mode
-exposes only read-only seller commerce tools backed by cached OACP artifacts.
-
-## Configure in ChatGPT / Claude Desktop / Cursor
-
-Add to your MCP client configuration:
+The exact configuration path and schema belong to the MCP client. A typical
+stdio entry is:
 
 ```json
 {
@@ -44,145 +42,89 @@ Add to your MCP client configuration:
       "command": "npx",
       "args": ["agenticorg-mcp-server"],
       "env": {
-        "AGENTICORG_API_KEY": "your-api-key"
-      }
-    }
-  }
-}
-```
-
-For ChatGPT/Claude-style buyer commerce clients, use the restricted tool mode:
-
-```json
-{
-  "mcpServers": {
-    "agenticorg-commerce": {
-      "command": "npx",
-      "args": ["agenticorg-mcp-server"],
-      "env": {
         "AGENTICORG_API_KEY": "your-api-key",
-        "AGENTICORG_MCP_COMMERCE_ONLY": "true"
+        "AGENTICORG_BASE_URL": "https://your-reviewed-endpoint.example"
       }
     }
   }
 }
 ```
 
-### Config file paths by platform
+Confirm current client documentation before relying on this example.
 
-| Client | macOS | Windows |
-|--------|-------|---------|
-| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| **ChatGPT Desktop** | Currently in beta; config path may change. Check OpenAI docs for the latest. | Currently in beta; config path may change. |
-| **Cursor** | `.cursor/mcp.json` in your project root | `.cursor/mcp.json` in your project root |
+## Authentication and company context
 
-## Available Tools
+Set one authentication value:
 
-| Tool | Description |
-|------|-------------|
-| `list_agents` | List all AI agents, filter by domain |
-| `run_agent` | Run any agent, including `commerce_sales_agent` |
-| `get_agent_details` | Get full agent config and capabilities |
-| `create_agent_from_sop` | Parse SOP text and create a draft agent |
-| `deploy_agent` | Deploy an agent configuration |
-| `list_connectors` | List native connectors and status for discovery |
-| `list_mcp_tools` | Discover AgenticOrg agent tools exposed by the platform MCP API |
-| `discover_agents_a2a` | A2A protocol agent discovery |
-| `get_agent_card` | Get the public A2A Agent Card |
-| `seller.list_products` | List cached Seller Commerce Agent product snapshots |
-| `seller.search_products` | Search cached Seller Commerce Agent product snapshots |
-| `seller.get_product_facts` | Answer product fact questions from cached OACP artifacts |
-| `seller.get_offer_snapshot` | Return cached price/offer snapshot labels without creating checkout sessions |
-| `seller.get_inventory_snapshot` | Return cached inventory snapshot labels without reservations |
-| `seller.get_mandate_capability` | Read cached mandate/payment capability posture without creating mandates, checkout sessions, orders, or payments |
-| `seller.ask_product_question` | Ask buyer-safe product questions from cached artifacts |
+- `AGENTICORG_API_KEY` for an API key accepted by the configured endpoint; or
+- `AGENTICORG_GRANTEX_TOKEN` for a delegated grant accepted by that endpoint.
 
-Connector tools are not exposed as direct MCP tools. The `seller.*` tools read AgenticOrg cached OACP artifact evidence only and do not create checkout, payment, order, hold, refund, return, shipping, mandate, or live-provider actions. Use `run_agent` for agent workflows, or run `list_mcp_tools` to see platform agent tools such as `agenticorg_commerce_sales_agent`.
+`AGENTICORG_BASE_URL` selects the API endpoint. Endpoint trust and readiness
+require separate verification.
 
-Current runtime note, June 30, 2026: the MCP seller tools and the
-`AGENTICORG_MCP_COMMERCE_ONLY=true` restricted buyer mode build and pass the
-local MCP smoke. Live merchant facts still require valid AgenticOrg credentials,
-fresh cached OACP artifacts, merchant publishing/channel approval where
-applicable, and provider-owned capability evidence for handoff preparation. Do
-not treat MCP tool presence as checkout/payment approval, mandate execution,
-certification, conformance, or production launch readiness.
+Execution and SOP submission tools require `company_id`. The server sends that
+identifier as top-level request data and, for A2A execution, in the task
+context. The backend remains responsible for verifying that the authenticated
+tenant may access the company. A caller must not substitute a tenant identifier
+or infer a company from untrusted content.
 
-## Authentication
+## Tool boundaries
 
-Set one of these environment variables:
+| Tool | Repository behavior |
+|---|---|
+| `list_agents` | Lists agent records returned by the configured endpoint. |
+| `run_agent` | Submits a company-scoped request to the A2A task endpoint. |
+| `get_agent_details` | Reads one agent record. |
+| `create_agent_from_sop` | Parses text into a draft configuration for review. |
+| `deploy_agent` | Submits a reviewed configuration as a company-scoped shadow candidate. |
+| `list_connectors` | Lists connector records for discovery only. |
+| `list_mcp_tools` | Lists environment-specific agent-tool records. |
+| `discover_agents_a2a` | Reads A2A skill records. |
+| `get_agent_card` | Reads the configured endpoint's public discovery document. |
 
-- `AGENTICORG_API_KEY`: API key from your AgenticOrg dashboard (Settings > API Keys)
-- `AGENTICORG_GRANTEX_TOKEN`: Grantex grant token for delegated agent access
+The `seller.*` tools are read-oriented views over cached commerce artifacts.
+Their output can be stale or incomplete and does not authorize checkout,
+payment, order, hold, refund, return, shipping, reservation, or mandate action.
+Set `AGENTICORG_MCP_COMMERCE_ONLY=true` to expose only those seller tools; this
+setting limits the visible tool surface but does not create transaction authority.
 
-Optional:
+Direct connector invocation is not exposed by this server. Connector records
+and agent-tool records are discovery data, not proof that provider credentials,
+permissions, or live accounts are configured.
 
-- `AGENTICORG_BASE_URL`: custom API base URL (default: `https://app.agenticorg.ai`)
-- `AGENTICORG_MCP_COMMERCE_ONLY`: set `true` for buyer-channel deployments that
-  should expose only seller commerce read tools.
-
-## Example: Run a Commerce Agent from ChatGPT
-
-Once configured, you can say in ChatGPT:
-
-> "Use AgenticOrg to show a read-only buyer discovery preview for merchant_demo."
-
-ChatGPT will call the `run_agent` tool with:
+## Company-scoped execution example
 
 ```json
 {
   "agent_type": "commerce_sales_agent",
+  "company_id": "00000000-0000-0000-0000-000000000001",
   "action": "buyer_discovery_preview",
   "inputs": {
     "merchant_id": "merchant_demo",
-    "request_text": "show a read-only buyer discovery preview"
+    "request_text": "show a read-only discovery preview"
   }
 }
 ```
 
-## Example: Create an Agent from SOP via ChatGPT
+Identifiers and responses in this example are illustrative. Review the returned
+status and evidence; do not treat a response as approval for an external action.
 
-You can create a new agent draft directly from a standard operating procedure:
+## SOP workflow
 
-> "Use AgenticOrg to create an agent from this SOP: Step 1 - Receive vendor invoice. Step 2 - Validate GSTIN. Step 3 - 3-way match with PO and GRN. Step 4 - If amount > 5L, escalate to CFO."
-
-ChatGPT will call the `create_agent_from_sop` tool with:
-
-```json
-{
-  "sop_text": "Step 1: Receive vendor invoice\nStep 2: Validate GSTIN on GST portal\nStep 3: 3-way match with PO and GRN\nStep 4: If amount > 5L, escalate to CFO",
-  "domain_hint": "finance"
-}
-```
-
-The server parses the SOP, generates an agent configuration, and returns the draft for review before deployment.
+`create_agent_from_sop` returns a draft. A reviewer must check the proposed
+instructions, tools, grants, policy thresholds, evidence, and company. If the
+reviewer chooses to submit it, `deploy_agent` requires the reviewed `config` and
+the target `company_id`. The repository backend creates a shadow candidate;
+further promotion requires the backend's separate authorization path.
 
 ## Troubleshooting
 
-**"AGENTICORG_API_KEY not set" error**
-
-Make sure the `env` block in your MCP config includes the key, or export it in your shell before running:
-
-```bash
-export AGENTICORG_API_KEY=your-api-key
-```
-
-**"Connection refused" or server not starting**
-
-- Verify Node.js >= 18 is installed: `node --version`
-- Try running manually first: `AGENTICORG_API_KEY=your-key npx agenticorg-mcp-server`
-- Check that no firewall or proxy is blocking local stdio communication
-
-**"Tool not found" when calling a connector tool**
-
-- Direct connector tools are not exposed by this MCP server.
-- Use `run_agent` for the agent that owns the connector workflow.
-- Run `list_mcp_tools` to see agent tools exposed by the platform.
-
-**Claude Desktop / Cursor not detecting the server**
-
-- Ensure the config JSON is valid.
-- Restart the client after editing the config file.
-- Check the client's MCP log for error messages.
+- Confirm the client supports stdio MCP servers and inspect its own MCP logs.
+- Confirm the selected endpoint, credentials, tenant, and company are correct.
+- Treat an HTTP authorization or scope error as a denial; do not retry with a
+  broader identity without explicit authorization.
+- Use `list_mcp_tools` and connector listing only as environment-specific
+  discovery, not as an availability promise.
 
 ## License
 

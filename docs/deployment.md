@@ -1,5 +1,7 @@
 # Deployment Guide
 
+> **Current limitation (2026-07-15):** The Cloud Run helper covers API/UI release mechanics only. The repository production workflow remains disabled, worker/beat rollout is not covered by the helper, and no command in this guide substitutes for green required CI, migration evidence, release-manifest/image-digest retention, post-deploy checks, rollback proof, or an approved change owner. Lower Helm/GKE and raw-SQL sections are historical reference material.
+
 > **2026-06-13 status:** production runs on Cloud Run. The default production
 > Cloud Run services are `agenticorg-api` and `agenticorg-ui` in
 > `asia-southeast1`; Artifact Registry images live in `asia-south1` by
@@ -241,7 +243,13 @@ agentScaling:
 
 ## Database Migrations
 
-Run migrations in order:
+The canonical application migration path is:
+
+```bash
+python scripts/alembic_migrate.py
+```
+
+The following raw-SQL sequence is retained only for legacy deployment shapes. Do not run it against a current environment unless an approved migration plan explicitly requires it:
 
 ```bash
 psql -h $DB_HOST -U agenticorg -d agenticorg \
@@ -302,7 +310,7 @@ curl http://localhost:8000/api/v1/health
 # Prometheus metrics
 curl http://localhost:8000/metrics
 
-# Key alerts (auto-configured):
+# Example alert targets; verify the deployed rules and retained firing tests:
 # - P95 latency > 5s
 # - HITL rate > 5%
 # - Agent confidence avg < 0.80

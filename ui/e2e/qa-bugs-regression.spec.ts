@@ -2,7 +2,7 @@
  * QA Bug Regression Tests
  *
  * Tests ALL bugs found by manual QA team.
- * Runs against PRODUCTION with real browser interactions.
+ * Runs against the configured target with real browser interactions.
  *
  * NO page.route() mocking -- all responses are real.
  * Auth-dependent tests skip if E2E_TOKEN is not set.
@@ -13,6 +13,10 @@ import { setSessionToken } from "./helpers/auth";
 
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
+const MARKETING =
+  process.env.MARKETING_URL ||
+  process.env.BASE_URL ||
+  "http://127.0.0.1:4173";
 function requireAuth(): void {
   if (!canAuth) throw new Error(
     "E2E_TOKEN is required for this spec. Set the E2E_TOKEN env var — the suite runs against production and must have credentials.",
@@ -39,7 +43,7 @@ test.describe("A1: Mobile Responsiveness @375px", () => {
   test("Landing page renders without horizontal scroll", async ({
     page,
   }) => {
-    await page.goto("https://agenticorg.ai/", {
+    await page.goto(MARKETING, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");
@@ -51,7 +55,7 @@ test.describe("A1: Mobile Responsiveness @375px", () => {
   test("Hamburger menu opens and has navigation links", async ({
     page,
   }) => {
-    await page.goto("https://agenticorg.ai/", {
+    await page.goto(MARKETING, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");
@@ -73,7 +77,7 @@ test.describe("A1: Mobile Responsiveness @375px", () => {
   });
 
   test("No horizontal overflow after scrolling", async ({ page }) => {
-    await page.goto("https://agenticorg.ai/", {
+    await page.goto(MARKETING, {
       waitUntil: "domcontentloaded",
     });
     await page.waitForLoadState("networkidle");

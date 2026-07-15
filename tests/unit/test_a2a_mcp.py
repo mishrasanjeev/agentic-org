@@ -169,6 +169,11 @@ class TestMCPTools:
         import api.v1.mcp as mcp
         from api.v1 import agents
         from api.v1.mcp import MCPCallRequest, call_tool
+        from tests.company_scope import (
+            TEST_COMPANY_ID,
+            TEST_TENANT_ID,
+            owned_company_validator,
+        )
 
         agent_type = next(iter(agents._AGENT_TYPE_DEFAULT_TOOLS))
 
@@ -177,13 +182,22 @@ class TestMCPTools:
 
         monkeypatch.setattr(mcp, "_load_agent_prompt", lambda _agent_type: "prompt")
         monkeypatch.setattr(agents, "_resolve_agent_connector_ids_for_type", _fail_resolve)
+        monkeypatch.setattr(
+            agents,
+            "_require_company_for_tenant",
+            owned_company_validator(),
+        )
 
         request = type("R", (), {"state": type("S", (), {"grant_token": ""})()})()
 
         result = await call_tool(
-            MCPCallRequest(name=f"agenticorg_{agent_type}", arguments={"inputs": {}}),
+            MCPCallRequest(
+                name=f"agenticorg_{agent_type}",
+                arguments={"inputs": {}},
+                company_id=str(TEST_COMPANY_ID),
+            ),
             request,
-            "00000000-0000-0000-0000-000000000001",
+            str(TEST_TENANT_ID),
         )
 
         assert result["isError"] is True

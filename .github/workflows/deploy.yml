@@ -120,6 +120,56 @@ jobs:
       - name: Build production frontend
         run: npm run build
 
+  frontend-quality:
+    needs: lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - uses: actions/setup-python@v6
+        with: { python-version: "3.12" }
+      - run: pip install uv && uv pip install --system -e .
+      - name: Install locked UI dependencies
+        working-directory: ui
+        run: npm ci
+      - name: Typecheck UI
+        working-directory: ui
+        run: npm run typecheck
+      - name: Lint UI
+        working-directory: ui
+        run: npm run lint
+      - name: Test UI
+        working-directory: ui
+        run: npm test
+      - name: Audit UI production dependencies
+        working-directory: ui
+        run: npm audit --omit=dev --audit-level=high
+      - name: Build UI and generate governed artifacts
+        working-directory: ui
+        run: npm run build
+      - name: Verify tracked LLMS artifacts are current
+        shell: bash
+        run: |
+          status=0
+          for file in llms.txt llms-full.txt; do
+            if ! cmp -s "ui/public/$file" "ui/dist/$file"; then
+              echo "::error file=ui/public/$file::Tracked artifact differs from generated output"
+              diff -u "ui/public/$file" "ui/dist/$file" | head -200 || true
+              status=1
+            fi
+          done
+          exit "$status"
+      - name: Enforce evidence-backed public claims
+        run: python scripts/lint_public_claims.py
+      - name: Enforce billing catalog consistency
+        run: python scripts/check_billing_catalog.py
+
   unit-tests:
     needs: lint
     runs-on: ubuntu-latest
@@ -152,6 +202,10 @@ jobs:
             python scripts/check_encrypted_migration_uses_helpers.py
       - name: Enterprise stability release gates
         run: python scripts/check_enterprise_stability_gates.py
+      - name: Enforce evidence-backed public claims
+        run: python scripts/lint_public_claims.py
+      - name: Enforce billing catalog consistency
+        run: python scripts/check_billing_catalog.py
       - run: pytest tests/unit/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
@@ -238,7 +292,7 @@ jobs:
           pip-audit --desc --timeout 60 -r requirements-v4.txt
 
   release-acceptance:
-    needs: [classify-changes, unit-tests, integration-tests, security-scan, frontend-validation]
+    needs: [classify-changes, frontend-validation, frontend-quality, unit-tests, integration-tests, security-scan]
     if: |
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.classify-changes.outputs.docs_only != 'true'
@@ -278,7 +332,7 @@ jobs:
           retention-days: 30
 
   build:
-    needs: [classify-changes, unit-tests, integration-tests, security-scan, frontend-validation, release-acceptance]
+    needs: [classify-changes, frontend-validation, frontend-quality, unit-tests, integration-tests, security-scan, release-acceptance]
     if: |
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.classify-changes.outputs.docs_only != 'true'
@@ -520,7 +574,7 @@ jobs:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
 
       - name: Install Playwright
-        run: cd ui && npm install --legacy-peer-deps && npx playwright install --with-deps chromium
+        run: cd ui && npm ci && npx playwright install --with-deps chromium
 
       - name: Run ALL Playwright E2E regression suite against production
         # Blocking. PR #151 (Phase 1 auth role) and #152 (Phase 2 cxo
@@ -762,5 +816,7 @@ jobs:
 
       # Google consumes the deployed sitemap through robots.txt/Search Console.
       # Its Indexing API is not valid for ordinary marketing or documentation pages.
-      - name: Notify IndexNow participants
-        run: node ui/scripts/submit-indexing.mjs
+      - name: Generate current sitemap and notify IndexNow participants
+        run: |
+          node ui/scripts/generate-sitemap.mjs
+          node ui/scripts/submit-indexing.mjs

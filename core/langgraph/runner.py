@@ -84,6 +84,7 @@ async def run_agent(
     connector_config: dict[str, Any] | None = None,
     connector_names: list[str] | None = None,
     thread_id: str | None = None,
+    company_id: str | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -122,9 +123,7 @@ async def run_agent(
                 from sqlalchemy import text as _sql_text
 
                 _row = await _sess.execute(
-                    _sql_text(
-                        "SELECT prompt_amendments FROM agents WHERE id = :aid AND tenant_id = :tid"
-                    ),
+                    _sql_text("SELECT prompt_amendments FROM agents WHERE id = :aid AND tenant_id = :tid"),
                     {"aid": agent_id, "tid": str(_tid)},
                 )
                 _result = _row.fetchone()
@@ -157,6 +156,9 @@ async def run_agent(
         hitl_condition=hitl_condition,
         connector_config=connector_config,
         connector_names=connector_names,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        domain=domain,
     )
 
     # Compile with checkpointer
@@ -188,6 +190,7 @@ async def run_agent(
     if pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
         # Recursively redact all string values in task_input
         from copy import deepcopy
+
         redacted_input = deepcopy(task_input) if isinstance(task_input, dict) else task_input
         if isinstance(redacted_input, dict):
             for k, v in list(redacted_input.items()):
@@ -254,13 +257,11 @@ async def run_agent(
                     # usage_metadata can be a dict or object depending on provider
                     if isinstance(usage, dict):
                         total = usage.get("total_tokens", 0) or (
-                            (usage.get("input_tokens", 0) or 0)
-                            + (usage.get("output_tokens", 0) or 0)
+                            (usage.get("input_tokens", 0) or 0) + (usage.get("output_tokens", 0) or 0)
                         )
                     else:
                         total = getattr(usage, "total_tokens", 0) or (
-                            (getattr(usage, "input_tokens", 0) or 0)
-                            + (getattr(usage, "output_tokens", 0) or 0)
+                            (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
                         )
                     tokens_used += total
                     continue
@@ -269,9 +270,17 @@ async def run_agent(
                 if isinstance(resp_meta, dict):
                     usage_meta = resp_meta.get("usage_metadata") or resp_meta.get("token_usage") or {}
                     if isinstance(usage_meta, dict):
-                        total = usage_meta.get("total_token_count", 0) or usage_meta.get("total_tokens", 0) or (
-                            (usage_meta.get("prompt_token_count", 0) or usage_meta.get("input_tokens", 0) or 0)
-                            + (usage_meta.get("candidates_token_count", 0) or usage_meta.get("output_tokens", 0) or 0)
+                        total = (
+                            usage_meta.get("total_token_count", 0)
+                            or usage_meta.get("total_tokens", 0)
+                            or (
+                                (usage_meta.get("prompt_token_count", 0) or usage_meta.get("input_tokens", 0) or 0)
+                                + (
+                                    usage_meta.get("candidates_token_count", 0)
+                                    or usage_meta.get("output_tokens", 0)
+                                    or 0
+                                )
+                            )
                         )
                         tokens_used += total
 
@@ -299,8 +308,7 @@ async def run_agent(
             trace = result.get("reasoning_trace", [])
             if trace:
                 result["reasoning_trace"] = [
-                    pii_redactor.deanonymize(t, pii_token_map) if isinstance(t, str) else t
-                    for t in trace
+                    pii_redactor.deanonymize(t, pii_token_map) if isinstance(t, str) else t for t in trace
                 ]
             logger.info("pii_deanonymized_after_llm", entities=len(pii_token_map), agent_id=agent_id)
 
@@ -315,6 +323,7 @@ async def run_agent(
                 _cs_output = result.get("output", {})
                 if isinstance(_cs_output, dict):
                     import json as _cs_json
+
                     _cs_text = _cs_json.dumps(_cs_output, default=str)
                 else:
                     _cs_text = str(_cs_output)
@@ -340,7 +349,8 @@ async def run_agent(
                 trace = result.get("reasoning_trace", [])
                 out = result.get("output", {})
                 tools = [
-                    tc.get("tool", "") for tc in result.get("tool_calls_log", [])
+                    tc.get("tool", "")
+                    for tc in result.get("tool_calls_log", [])
                     if isinstance(tc, dict) and tc.get("tool")
                 ]
                 explanation = await generate_explanation(trace, out, tools)
@@ -488,6 +498,9 @@ async def resume_agent(
     hitl_condition: str = "",
     connector_config: dict[str, Any] | None = None,
     connector_names: list[str] | None = None,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: str | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -504,6 +517,9 @@ async def resume_agent(
         hitl_condition=hitl_condition,
         connector_config=connector_config,
         connector_names=connector_names,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        domain=domain,
     )
     compiled = graph.compile(checkpointer=_checkpointer)
 

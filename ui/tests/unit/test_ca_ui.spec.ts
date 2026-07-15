@@ -359,14 +359,18 @@ describe("CAFirmsSolution", () => {
     });
   });
 
-  it("shows pricing at INR 4,999", async () => {
+  it("shows CA Pack evaluation scope without a fixed public price", async () => {
     const { default: CAFirmsSolution } = await import("../../src/pages/CAFirmsSolution");
 
     renderWithRouter(<CAFirmsSolution />);
 
     await waitFor(() => {
-      expect(screen.getByText(/4,999/)).toBeInTheDocument();
+      expect(screen.getByText("CA Pack Evaluation")).toBeInTheDocument();
+      expect(
+        screen.getByText(/Commercial terms and plan limits are confirmed/),
+      ).toBeInTheDocument();
     });
+    expect(document.body).not.toHaveTextContent(/4,999|Start Free Trial/i);
   });
 
   it("shows feature cards for CA firms", async () => {

@@ -490,6 +490,7 @@ async def upsert_shopify_connector_credentials(
         result = await session.execute(
             select(ConnectorConfig).where(
                 ConnectorConfig.tenant_id == tid,
+                ConnectorConfig.company_id.is_(None),
                 ConnectorConfig.connector_name == connector_name,
             )
         )
@@ -497,6 +498,7 @@ async def upsert_shopify_connector_credentials(
         if row is None:
             row = ConnectorConfig(
                 tenant_id=tid,
+                company_id=None,
                 connector_name=connector_name,
                 display_name=f"Shopify read-only - {body.merchant_id}",
                 auth_type="shopify_admin_api",
@@ -733,7 +735,10 @@ async def receive_shopify_product_webhook(
         normalized_shop = _normalize_shopify_domain_for_api(shop_domain)
         async with get_tenant_session(_tenant_uuid(tenant_id)) as session:
             result = await session.execute(
-                select(ConnectorConfig).where(ConnectorConfig.tenant_id == _tenant_uuid(tenant_id))
+                select(ConnectorConfig).where(
+                    ConnectorConfig.tenant_id == _tenant_uuid(tenant_id),
+                    ConnectorConfig.company_id.is_(None),
+                )
             )
             connector_rows = result.scalars().all()
             merchant_ids = {
@@ -2311,6 +2316,7 @@ async def _load_shopify_connector_config_row(
     result = await session.execute(
         select(ConnectorConfig).where(
             ConnectorConfig.tenant_id == tenant_id,
+            ConnectorConfig.company_id.is_(None),
             ConnectorConfig.connector_name.in_(names),
         )
     )
