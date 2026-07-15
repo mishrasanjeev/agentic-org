@@ -333,14 +333,11 @@ def deliver_report(
             },
         ]
 
-        # delivery.deliver is async — run via event loop.
-        import asyncio
+        # delivery.deliver is async; reuse the worker process event loop so
+        # pooled async clients stay bound to one loop across tasks.
+        from core.tasks.async_runner import run_async
 
-        loop = asyncio.new_event_loop()
-        try:
-            loop.run_until_complete(deliver(report_path, delivery_cfg))
-        finally:
-            loop.close()
+        run_async(deliver(report_path, delivery_cfg))
 
         log.info(
             "report_delivery_complete",

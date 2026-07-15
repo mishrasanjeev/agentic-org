@@ -13,13 +13,13 @@ execution time and the user can manually re-authenticate.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
 import httpx
 import structlog
 
+from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
 logger = structlog.get_logger()
@@ -66,7 +66,7 @@ def _canonical_refresh_token_url(connector_name: str, creds: dict) -> str | None
 @app.task(name="core.tasks.token_refresh.refresh_expiring_tokens")
 def refresh_expiring_tokens() -> dict:
     """Celery-compatible sync entry point."""
-    return asyncio.run(_refresh_all())
+    return run_async(_refresh_all())
 
 
 async def _refresh_all() -> dict:

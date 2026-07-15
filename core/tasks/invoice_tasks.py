@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import structlog
 
+from core.tasks.async_runner import run_async
 from core.tasks.celery_app import app
 
 logger = structlog.get_logger()
@@ -19,4 +18,4 @@ def generate_monthly_invoices() -> dict:
     """
     from core.billing.invoice_generator import generate_invoices_for_period
 
-    return asyncio.run(generate_invoices_for_period())
+    return run_async(generate_invoices_for_period())

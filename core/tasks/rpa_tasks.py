@@ -15,11 +15,9 @@ Design notes
 ============
 
 - **Synchronous body inside a sync Celery task.** Celery tasks are
-  sync by default; the existing report / workflow tasks already call
-  async coroutines via ``asyncio.run`` and we follow the same pattern
-  here. The tradeoff is higher worker CPU usage during the event-loop
-  setup, but scheduling cadence is O(minutes), not O(requests), so
-  it's fine.
+  sync by default, so async work runs on the worker process's persistent
+  event loop. Reusing that loop is required by the pooled async database
+  engine.
 - **Quality gate runs BEFORE embedding.** Embedding rejected chunks
   would waste compute and pollute retrieval; the registry spec says
   4.8+/5 is the target, and we refuse to publish anything below 4.5
@@ -32,7 +30,6 @@ Design notes
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import uuid as _uuid
@@ -43,19 +40,10 @@ from typing import Any
 
 from sqlalchemy import select, text
 
+from core.tasks.async_runner import run_async as _run_async
 from core.tasks.celery_app import app
 
 logger = logging.getLogger(__name__)
-
-
-def _run_async(coro):
-    """Run ``coro`` to completion from a sync Celery task body."""
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 # ---------------------------------------------------------------------------

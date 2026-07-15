@@ -87,9 +87,9 @@ test.describe("Landing Page — Sections", () => {
 
   test("How It Works — 3 steps render", async ({ page }) => {
     const steps = [
-      "Register agent roles",
-      "Configure system access",
-      "Validate and promote",
+      "Create or pick your agents",
+      "Connect your systems",
+      "Agents work, you approve",
     ];
     for (const step of steps) {
       await expect(page.getByText(step).first()).toBeVisible({ timeout: 10000 });
