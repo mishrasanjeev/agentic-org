@@ -2,7 +2,7 @@
 # reproducible. Refresh via scripts/refresh_image_digests.sh after a
 # Renovate/Dependabot bump confirms upstream is safe.
 # python:3.14-slim @ 2026-05-01
-FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1 AS builder
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6 AS builder
 WORKDIR /app
 # Build deps for patched Pillow (required by fastembed) and other C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +27,7 @@ RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 # smallest English model into the image so PII redaction actually runs.
 RUN python -m spacy download en_core_web_sm
 
-FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a27986facfc3355c1
+FROM python:3.14-slim@sha256:cea0e6040540fb2b965b6e7fb5ffa00871e632eef63719f0ea54bca189ce14a6
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
     && apt-get autoremove -y \
