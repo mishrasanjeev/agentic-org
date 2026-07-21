@@ -42,7 +42,7 @@
     "react-i18next": "^17.0.10",
     "react-router-dom": "^7.18.1",
     "reactflow": "^11.11.0",
-    "recharts": "^3.9.2",
+    "recharts": "^3.10.0",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },
