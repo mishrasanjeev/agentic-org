@@ -73,7 +73,7 @@ langsmith==0.10.9
 google-cloud-storage==2.19.0
 google-cloud-secret-manager==2.30.0
 google-api-python-client==2.198.0
-google-auth==2.56.0
+google-auth==2.56.2
 
 # ─── Observability & Monitoring ──────────────────────────────────────────────
 structlog==25.5.0
