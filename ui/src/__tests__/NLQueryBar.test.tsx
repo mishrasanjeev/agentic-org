@@ -6,7 +6,7 @@
  * empty query prevention, and dropdown behavior.
  */
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import _userEvent from "@testing-library/user-event";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
@@ -68,7 +68,7 @@ describe("NLQueryBar", () => {
     vi.useRealTimers();
   });
 
-  // ── Rendering ──────────────────────────────────────────────────────────
+  // â”€â”€ Rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("renders search input with placeholder", () => {
     renderNLQuery();
@@ -86,7 +86,7 @@ describe("NLQueryBar", () => {
     expect(svg).toBeInTheDocument();
   });
 
-  // ── Keyboard Shortcut: Cmd+K ───────────────────────────────────────────
+  // â”€â”€ Keyboard Shortcut: Cmd+K â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("Cmd+K focuses the input", () => {
     renderNLQuery();
@@ -109,7 +109,7 @@ describe("NLQueryBar", () => {
     expect(document.activeElement).toBe(input);
   });
 
-  // ── Query Submission ───────────────────────────────────────────────────
+  // â”€â”€ Query Submission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("submitting a query calls API with correct payload", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -188,7 +188,7 @@ describe("NLQueryBar", () => {
     expect(spinner).toBeInTheDocument();
   });
 
-  // ── Empty Query Prevention ─────────────────────────────────────────────
+  // â”€â”€ Empty Query Prevention â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("empty query does not trigger API call on submit", async () => {
     renderNLQuery();
@@ -218,7 +218,7 @@ describe("NLQueryBar", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  // ── Debounce Behavior ──────────────────────────────────────────────────
+  // â”€â”€ Debounce Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("does not auto-fire API on typing (requires explicit submit)", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -240,7 +240,7 @@ describe("NLQueryBar", () => {
       vi.advanceTimersByTime(500);
     });
 
-    // API should STILL not be called — requires explicit submit (BUG #18 fix)
+    // API should STILL not be called â€” requires explicit submit (BUG #18 fix)
     expect(mockPost).not.toHaveBeenCalled();
   });
 
@@ -260,7 +260,7 @@ describe("NLQueryBar", () => {
     expect(mockPost).not.toHaveBeenCalled();
   });
 
-  // ── Dropdown Behavior ──────────────────────────────────────────────────
+  // â”€â”€ Dropdown Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("Open Chat button calls onOpenChat callback", async () => {
     mockPost.mockResolvedValue({ data: MOCK_FINANCE_RESPONSE });
@@ -353,7 +353,7 @@ describe("NLQueryBar", () => {
     expect(screen.queryByText("fpa-analyst")).not.toBeInTheDocument();
   });
 
-  // ── Error Handling ─────────────────────────────────────────────────────
+  // â”€â”€ Error Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("handles API error gracefully without crashing", async () => {
     mockPost.mockRejectedValue(new Error("Network Error"));

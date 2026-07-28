@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router";
 import { I18nextProvider } from "react-i18next";
 import i18n from "./i18n";
 import Analytics from "./components/Analytics";

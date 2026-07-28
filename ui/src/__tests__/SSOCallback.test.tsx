@@ -10,8 +10,8 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ loginWithToken }),
 }));
 
-vi.mock("react-router-dom", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("react-router-dom")>();
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
   return { ...actual, useNavigate: () => navigate };
 });
 

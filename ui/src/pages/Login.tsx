@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
 import { useAuth } from "../contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
@@ -13,7 +13,7 @@ export default function Login() {
   // can re-route the user back to where they were after re-auth.
   const nextPath = (() => {
     const raw = searchParams.get("next") || "/dashboard";
-    // Allow relative app paths only — never an absolute URL.
+    // Allow relative app paths only â€” never an absolute URL.
     return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
   })();
   const [email, setEmail] = useState("");
@@ -31,7 +31,7 @@ export default function Login() {
       .then((data) => {
         if (data.google_client_id) setGoogleClientId(data.google_client_id);
       })
-      .catch(() => {}); // silently ignore — Google login just won't show
+      .catch(() => {}); // silently ignore â€” Google login just won't show
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -174,7 +174,7 @@ export default function Login() {
             </button>
           </form>
 
-          {/* Create account — prominent */}
+          {/* Create account â€” prominent */}
           <div className="mt-6 p-4 rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 text-center">
             <p className="text-sm text-muted-foreground mb-2">New to AgenticOrg?</p>
             <Link to="/signup" className="inline-flex items-center justify-center w-full rounded-lg border border-primary bg-primary/10 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/20 transition-colors">

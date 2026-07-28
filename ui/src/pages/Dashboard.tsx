@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
   // P6.1 (Enterprise Readiness): every metric is derived from real data
   // pulled above. The old hardcoded "Deflection Rate 73%" card was removed
-  // — it was a fabricated KPI with no backing API, exactly the decorative
+  // â€” it was a fabricated KPI with no backing API, exactly the decorative
   // state the plan bans. "Approvals Resolved" is a real ratio computed
   // from the approvals we already fetched.
   const resolvedApprovals = approvals.filter(
@@ -139,7 +139,7 @@ export default function Dashboard() {
     { label: t("dashboard.shadowAgents", "Shadow Agents"), value: shadowAgents, color: "text-yellow-600", subtitle: "" },
     {
       label: t("dashboard.approvalsResolved", "Approvals Resolved"),
-      value: approvals.length > 0 ? `${resolvedPct}%` : "—",
+      value: approvals.length > 0 ? `${resolvedPct}%` : "â€”",
       color: "text-green-600",
       subtitle: approvals.length > 0
         ? t("dashboard.decisionsCount", "{{resolved}}/{{total}} decisions", {
@@ -162,7 +162,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <Helmet>
-        <title>{t("nav.dashboard", "Dashboard")} — AgenticOrg</title>
+        <title>{t("nav.dashboard", "Dashboard")} â€” AgenticOrg</title>
       </Helmet>
       <h2 className="text-2xl font-bold">{t("nav.dashboard", "Dashboard")}</h2>
 

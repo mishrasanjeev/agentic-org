@@ -1,8 +1,8 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 /* ------------------------------------------------------------------ */
-/*  useInView — Intersection Observer hook for scroll animations       */
+/*  useInView â€” Intersection Observer hook for scroll animations       */
 /* ------------------------------------------------------------------ */
 function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void; visible: boolean } {
   const [visible, setVisible] = useState(false);

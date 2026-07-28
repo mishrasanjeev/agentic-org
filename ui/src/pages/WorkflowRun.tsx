@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -122,7 +122,7 @@ export default function WorkflowRun() {
       const detail = e?.response?.data?.detail || e?.response?.data?.message;
       setError(
         status === 404
-          ? "Run not found — it may have been deleted, or the URL is wrong."
+          ? "Run not found â€” it may have been deleted, or the URL is wrong."
           : status
             ? `Failed to load workflow run (HTTP ${status})${detail ? `: ${detail}` : ""}`
             : `Failed to load workflow run: ${e?.message || "network error"}`
@@ -202,7 +202,7 @@ export default function WorkflowRun() {
               onClick={cancelRun}
               disabled={cancelInFlight}
             >
-              {cancelInFlight ? "Cancelling…" : "Cancel"}
+              {cancelInFlight ? "Cancellingâ€¦" : "Cancel"}
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={() => fetchRun({ showLoading: true })}>Refresh</Button>

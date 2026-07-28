@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { HelmetProvider } from "react-helmet-async";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router";
 import { describe, expect, it } from "vitest";
 import RouteSeo, { buildRouteSchema, resolveRouteSeo } from "@/components/RouteSeo";
 import BlogPost from "@/pages/blog/BlogPost";

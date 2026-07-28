@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import type { Workflow } from "@/types";
 
 /**
- * Workflow template catalog item — shape returned by
+ * Workflow template catalog item â€” shape returned by
  * `GET /api/v1/workflows/templates` (Enterprise Readiness P7.2 / PR-C3).
  * Pre-PR-C3 the UI embedded a 21-entry hardcoded array that drifted
  * away from the backend. The catalog is now backend-served so adding
@@ -170,7 +170,7 @@ export default function Workflows() {
       {/* Templates tab */}
       {activeTab === "templates" && templatesLoading && templates.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="templates-loading">
-          Loading templates…
+          Loading templatesâ€¦
         </p>
       )}
       {activeTab === "templates" && !templatesLoading && templates.length === 0 && (

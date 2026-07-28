@@ -5,7 +5,7 @@
  * that match the current CMOKPIData interface (basic metrics shape).
  */
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import { HelmetProvider } from "react-helmet-async";
 
