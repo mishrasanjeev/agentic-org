@@ -1,5 +1,5 @@
 import { useState, useEffect, lazy, Suspense, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,7 +18,7 @@ const ChatPanel = lazy(() => import("@/components/ChatPanel"));
  * Normalise an Axios error's `detail` payload into a human-readable string.
  *
  * Uday CA-Firms 17-May (bug 1): the agent activation gate returns a
- * *structured* 409 — `detail` is an object
+ * *structured* 409 â€” `detail` is an object
  * `{ error, message, connectors: [{ connector, reason }] }`. The lifecycle
  * handlers stored that object straight into the `actionError` string state,
  * and `{actionError}` then rendered an object as a React child, which throws
@@ -496,7 +496,7 @@ export default function AgentDetail() {
   );
 }
 
-/* ─── Overview Tab ─── */
+/* â”€â”€â”€ Overview Tab â”€â”€â”€ */
 function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void }) {
   const [editingParent, setEditingParent] = useState(false);
   const [parentCandidates, setParentCandidates] = useState<Agent[]>([]);
@@ -554,7 +554,7 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
           ))}
         </div>
 
-        {/* Reports To — Editable */}
+        {/* Reports To â€” Editable */}
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-xs uppercase tracking-wide">Reports To (Org Chart)</span>
@@ -571,7 +571,7 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
                 onChange={(e) => setSelectedParentId(e.target.value)}
                 className="border rounded px-3 py-1.5 text-sm flex-1"
               >
-                <option value="">— No parent (escalates to human) —</option>
+                <option value="">â€” No parent (escalates to human) â€”</option>
                 {parentCandidates.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.employee_name || a.name} ({a.agent_type.replace(/_/g, " ")})
@@ -589,7 +589,7 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
             <p className="text-sm mt-1">
               {agent.reporting_to
                 ? <><span className="font-medium">{agent.reporting_to}</span> <span className="text-muted-foreground">(escalates to parent agent)</span></>
-                : <span className="text-muted-foreground">None — escalates directly to human</span>}
+                : <span className="text-muted-foreground">None â€” escalates directly to human</span>}
             </p>
           )}
         </div>
@@ -615,7 +615,7 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
   );
 }
 
-/* ─── Explainer Panel (collapsible "Why did the agent do this?") ─── */
+/* â”€â”€â”€ Explainer Panel (collapsible "Why did the agent do this?") â”€â”€â”€ */
 function ExplainerPanel({ agentId }: { agentId: string }) {
   const [expanded, setExpanded] = useState(false);
   const [explanation, setExplanation] = useState<{
@@ -630,7 +630,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   const [correctionText, setCorrectionText] = useState("");
 
   // Load the latest run explanation when expanded. Real trace data
-  // from GET /agents/{id}/explanation/latest (PR-C1) — replaces the
+  // from GET /agents/{id}/explanation/latest (PR-C1) â€” replaces the
   // hardcoded-bullet mock that shipped pre-Enterprise-Readiness.
   const [explanationHasRun, setExplanationHasRun] = useState<boolean | null>(null);
 
@@ -662,7 +662,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
           bullets: Array.isArray(data.bullets) ? data.bullets : [],
           confidence: typeof data.confidence === "number" ? data.confidence : undefined,
           tools_cited: Array.isArray(data.tools_cited) ? data.tools_cited : [],
-          // readability_grade is deliberately not returned — we won't
+          // readability_grade is deliberately not returned â€” we won't
           // fabricate it client-side.
           readability_grade: undefined,
         });
@@ -821,7 +821,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
   );
 }
 
-/* ─── Learning Tab (Feedback + Amendments) ─── */
+/* â”€â”€â”€ Learning Tab (Feedback + Amendments) â”€â”€â”€ */
 function LearningTab({ agent }: { agent: Agent }) {
   const [feedback, setFeedback] = useState<any[]>([]);
   const [amendments, setAmendments] = useState<string[]>([]);
@@ -977,7 +977,7 @@ function LearningTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* ──�� Config Tab ─── */
+/* â”€â”€ï¿½ï¿½ Config Tab â”€â”€â”€ */
 function ConfigTab({ agent }: { agent: Agent }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1167,7 +1167,7 @@ function ConfigTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* ─── Prompt Tab ─── */
+/* â”€â”€â”€ Prompt Tab â”€â”€â”€ */
 function PromptTab({ agent }: { agent: Agent }) {
   const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
   const [editing, setEditing] = useState(false);
@@ -1287,7 +1287,7 @@ function PromptTab({ agent }: { agent: Agent }) {
                     <p className="text-sm mt-1">Reason: {entry.change_reason}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {entry.prompt_before ? `Changed ${entry.prompt_before.length} → ${entry.prompt_after.length} chars` : `Initial prompt (${entry.prompt_after.length} chars)`}
+                    {entry.prompt_before ? `Changed ${entry.prompt_before.length} â†’ ${entry.prompt_after.length} chars` : `Initial prompt (${entry.prompt_after.length} chars)`}
                   </p>
                 </div>
               ))}
@@ -1299,7 +1299,7 @@ function PromptTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* ─── Shadow Tab ─── */
+/* â”€â”€â”€ Shadow Tab â”€â”€â”€ */
 function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
   const [generating, setGenerating] = useState(false);
   const [retesting, setRetesting] = useState(false);
@@ -1317,7 +1317,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
   // ref BETWEEN iterations. For batchSize=1 (the common case) the
   // single iteration's await ran to completion and the user-visible
   // "Stop" did nothing. Real fix: an AbortController whose signal
-  // is passed to api.post — clicking Stop now cancels the in-flight
+  // is passed to api.post â€” clicking Stop now cancels the in-flight
   // POST and the catch+finally fires immediately.
   const abortRef = useRef<AbortController | null>(null);
 
@@ -1377,7 +1377,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
         }
         setGenResult({
           type: "success",
-          msg: `Generating sample ${i + 1}/${plannedRuns}…`,
+          msg: `Generating sample ${i + 1}/${plannedRuns}â€¦`,
         });
         try {
           const response = await api.post(
@@ -1557,7 +1557,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
           <p className="text-xs text-muted-foreground">
             {meetsCount
               ? "Sample count requirement met"
-              : `${minSamples - sampleCount} more samples needed — use "Generate Test Sample" to collect samples`}
+              : `${minSamples - sampleCount} more samples needed â€” use "Generate Test Sample" to collect samples`}
           </p>
         </CardContent>
       </Card>
@@ -1609,7 +1609,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
   );
 }
 
-/* ─── Cost Tab ─── */
+/* â”€â”€â”€ Cost Tab â”€â”€â”€ */
 function CostTab({ agent }: { agent: Agent }) {
   const monthlyCap =
     agent.cost_controls?.monthly_cap_usd ??
@@ -1675,7 +1675,7 @@ function CostTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* ─── Scope Helpers ─── */
+/* â”€â”€â”€ Scope Helpers â”€â”€â”€ */
 type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
 
 function getToolPermission(toolName: string): PermissionLevel {
@@ -1788,7 +1788,7 @@ function enforcementEntries(agent: Agent): EnforcementEntry[] {
   return Array.isArray(raw) ? raw : [];
 }
 
-/* ─── Voice Tab ─── */
+/* â”€â”€â”€ Voice Tab â”€â”€â”€ */
 function VoiceTab({ agent }: { agent: Agent }) {
   // Mock: check if voice is configured (use agent config or a flag)
   const voiceConfigured = !!(agent as any).voice_config;
@@ -1869,7 +1869,7 @@ function VoiceTab({ agent }: { agent: Agent }) {
   );
 }
 
-/* ─── Scopes Tab ─── */
+/* â”€â”€â”€ Scopes Tab â”€â”€â”€ */
 function ScopesTab({ agent }: { agent: Agent }) {
   const tools = agent.authorized_tools || [];
   const hasGrantex = grantexConfigured(agent);

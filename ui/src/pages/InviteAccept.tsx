@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 
 export default function InviteAccept() {
   // SEC-002 (PR-F): after acceptance, we use a full-page navigation
@@ -23,7 +23,7 @@ export default function InviteAccept() {
 
   useEffect(() => {
     if (!inviteId) {
-      setError("Invalid invite link — no code provided.");
+      setError("Invalid invite link â€” no code provided.");
       setFetching(false);
       return;
     }

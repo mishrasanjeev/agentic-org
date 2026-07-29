@@ -1,13 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "./contexts/AuthContext";
 import { BrandingProvider } from "./contexts/BrandingContext";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
-// Self-hosted fonts — loaded via Vite bundler so there is no external
+// Self-hosted fonts â€” loaded via Vite bundler so there is no external
 // CSS request that a strict CSP (style-src) would block. See the
 // impeccable pass 1 notes in docs/impeccable-applied.md.
 import "@fontsource/geist/400.css";

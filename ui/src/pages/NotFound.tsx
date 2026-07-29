@@ -1,11 +1,11 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useEffect } from "react";
 
 export default function NotFound() {
   // Set HTTP status hint for crawlers via meta refresh + noindex
   useEffect(() => {
     // Mark page as 404 in browser so analytics/SEO tools record correctly
-    document.title = "404 — Page Not Found | AgenticOrg";
+    document.title = "404 â€” Page Not Found | AgenticOrg";
   }, []);
 
   return (

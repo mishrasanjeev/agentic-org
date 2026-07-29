@@ -6,7 +6,7 @@
  * and loading state.
  */
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter } from "react-router";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
 // ---------------------------------------------------------------------------
@@ -61,7 +61,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // ── Loading State ──────────────────────────────────────────────────────
+  // â”€â”€ Loading State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("renders loading skeleton initially", () => {
     mockGet.mockReturnValue(new Promise(() => {}));
@@ -73,7 +73,7 @@ describe("CompanySwitcher", () => {
     expect(skeleton).toBeInTheDocument();
   });
 
-  // ── Single Company: No Dropdown ────────────────────────────────────────
+  // â”€â”€ Single Company: No Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("renders company name without dropdown for single company", async () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
@@ -101,7 +101,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // ── Multiple Companies: Dropdown ───────────────────────────────────────
+  // â”€â”€ Multiple Companies: Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("renders dropdown toggle for multiple companies", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -187,7 +187,7 @@ describe("CompanySwitcher", () => {
     expect(activeButton).toBeDefined();
   });
 
-  // ── Selection & Persistence ────────────────────────────────────────────
+  // â”€â”€ Selection & Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("selecting a company stores company_id in localStorage", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -238,7 +238,7 @@ describe("CompanySwitcher", () => {
     expect(window.location.reload).toHaveBeenCalled();
   });
 
-  // ── Auto-select First Company ──────────────────────────────────────────
+  // â”€â”€ Auto-select First Company â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("auto-selects first company when none is stored", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -254,7 +254,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // ── Dropdown Close Behavior ────────────────────────────────────────────
+  // â”€â”€ Dropdown Close Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("closes dropdown when clicking the backdrop", async () => {
     mockGet.mockResolvedValue({ data: MULTI_COMPANIES });
@@ -285,7 +285,7 @@ describe("CompanySwitcher", () => {
     expect(screen.queryByText("Acme Corp")).not.toBeInTheDocument();
   });
 
-  // ── Error Handling ─────────────────────────────────────────────────────
+  // â”€â”€ Error Handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("handles API error gracefully without crashing", async () => {
     mockGet.mockRejectedValue(new Error("Network Error"));
@@ -299,7 +299,7 @@ describe("CompanySwitcher", () => {
     });
   });
 
-  // ── API Call ───────────────────────────────────────────────────────────
+  // â”€â”€ API Call â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   it("calls /companies endpoint on mount", async () => {
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });

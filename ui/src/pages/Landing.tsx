@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router";
 import publicSite from "../content/publicSite.json";
 import AgentActivityTicker from "../components/AgentActivityTicker";
 import AgentsInAction from "../components/AgentsInAction";
@@ -8,7 +8,7 @@ import InteractiveDemo from "../components/InteractiveDemo";
 import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
-/*  useInView — Intersection Observer hook for scroll animations       */
+/*  useInView â€” Intersection Observer hook for scroll animations       */
 /* ------------------------------------------------------------------ */
 function useInView(threshold = 0.15): { ref: (el: HTMLDivElement | null) => void; visible: boolean } {
   const [visible, setVisible] = useState(false);
@@ -47,7 +47,7 @@ function FadeIn({ children, className = "", delay = 0 }: {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Browser Chrome Frame — wraps iframes in a macOS-style window       */
+/*  Browser Chrome Frame â€” wraps iframes in a macOS-style window       */
 /* ------------------------------------------------------------------ */
 function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
   src: string;
@@ -71,7 +71,7 @@ function BrowserFrame({ src, title, alt, className = "", loading = "lazy" }: {
           </div>
         </div>
       </div>
-      {/* Content — static screenshot */}
+      {/* Content â€” static screenshot */}
       <img
         src={src}
         alt={alt || title}
@@ -176,7 +176,7 @@ function CheckIcon({ className = "w-4 h-4 text-emerald-500" }: { className?: str
 }
 
 /* ------------------------------------------------------------------ */
-/*  DemoModal — Book-a-Demo form overlay                               */
+/*  DemoModal â€” Book-a-Demo form overlay                               */
 /* ------------------------------------------------------------------ */
 function DemoModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({ name: "", email: "", company: "", role: "", phone: "" });
@@ -458,13 +458,13 @@ export default function Landing() {
         />
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16 grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left — Copy */}
+          {/* Left â€” Copy */}
           <div>
             {/* Badge */}
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
-                {versionText ? `${versionText} — ` : ""}Governed agents with OACP trust boundaries
+                {versionText ? `${versionText} â€” ` : ""}Governed agents with OACP trust boundaries
               </span>
             </div>
 
@@ -486,7 +486,7 @@ export default function Landing() {
                 to="/pricing"
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Review Plans →
+                Review Plans â†’
               </Link>
               <a
                 href="#demo"
@@ -510,7 +510,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Right — Live agent activity ticker */}
+          {/* Right â€” Live agent activity ticker */}
           <div className="hidden lg:block">
             <AgentActivityTicker />
           </div>
@@ -529,7 +529,7 @@ export default function Landing() {
             <div className="relative flex flex-col sm:flex-row items-center gap-3 sm:gap-6 rounded-[15px] bg-slate-900/95 backdrop-blur px-5 py-3">
               <span className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-cyan-500 to-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg shadow-cyan-500/20" data-testid="landing-version-pill">
                 <span className="w-1.5 h-1.5 bg-white rounded-full" />
-                {versionText || "v…"}
+                {versionText || "vâ€¦"}
               </span>
 
               <p className="text-sm text-slate-300 text-center sm:text-left leading-snug">
@@ -715,7 +715,7 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
-      {/* 4b. AGENTS IN ACTION — Animated Virtual Employees             */}
+      {/* 4b. AGENTS IN ACTION â€” Animated Virtual Employees             */}
       {/* ============================================================ */}
       <section className="py-24 bg-slate-900 scroll-mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -759,7 +759,7 @@ export default function Landing() {
                 <BrowserFrame
                   src="/screenshots/agents.webp"
                   title="app.agenticorg.ai/dashboard/agents"
-                  alt="Agent fleet management view — AI agents across Finance, HR, Marketing, and Ops"
+                  alt="Agent fleet management view â€” AI agents across Finance, HR, Marketing, and Ops"
                 />
                 <h3 className="text-xl font-bold text-slate-900">Agent Fleet</h3>
                 <p className="text-slate-600 text-sm leading-relaxed">
@@ -818,7 +818,7 @@ export default function Landing() {
             </FadeIn>
           </div>
 
-          {/* Org Chart Hierarchy — 3-card row */}
+          {/* Org Chart Hierarchy â€” 3-card row */}
           <div className="grid md:grid-cols-3 gap-8 mt-16">
             <FadeIn delay={0}>
               <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-2xl p-6 border border-slate-200 hover:shadow-lg transition-all duration-300 ease-out-quart h-full">
@@ -899,7 +899,7 @@ export default function Landing() {
                   <div className="text-slate-700">Arjun,ap_processor,finance,VP Finance</div>
                 </div>
                 <Link to="/pricing" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700">
-                  Review Setup Requirements →
+                  Review Setup Requirements â†’
                 </Link>
               </div>
             </FadeIn>
@@ -921,7 +921,7 @@ export default function Landing() {
                   </div>
                 </div>
                 <Link to="/login" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-purple-600 hover:text-purple-700">
-                  Try Demo Dashboard →
+                  Try Demo Dashboard â†’
                 </Link>
               </div>
             </FadeIn>
@@ -937,10 +937,10 @@ export default function Landing() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-yellow-500" /><span className="text-slate-600">Shadow: Agent observes, humans do the work</span></div>
                   <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-slate-600">Active: Eligible stages run within signed policy; high-impact actions stay gated</span></div>
-                  <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-slate-600">Escalation: Junior → Senior → Head → Human</span></div>
+                  <div className="flex items-center gap-2 text-xs"><span className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-slate-600">Escalation: Junior â†’ Senior â†’ Head â†’ Human</span></div>
                 </div>
                 <Link to="/playground" className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-emerald-600 hover:text-emerald-700">
-                  Try in Playground →
+                  Try in Playground â†’
                 </Link>
               </div>
             </FadeIn>
@@ -1063,21 +1063,21 @@ export default function Landing() {
                   <div className="text-2xl font-bold text-slate-900">Explore</div>
                   <p className="text-sm text-slate-500 mt-1">Review the current agent and connector inventory</p>
                   <Link to="/pricing" className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">
-                    Review Plans →
+                    Review Plans â†’
                   </Link>
                 </div>
                 <div className="border-x border-slate-200 px-6">
                   <div className="text-2xl font-bold text-blue-600">Configure</div>
                   <p className="text-sm text-slate-500 mt-1">Map scopes, tools, policies, and approval owners</p>
                   <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">
-                    Get Started →
+                    Get Started â†’
                   </button>
                 </div>
                 <div>
                   <div className="text-2xl font-bold text-slate-900">Promote</div>
                   <p className="text-sm text-slate-500 mt-1">Use readiness evidence and signed terms</p>
                   <button onClick={() => setShowDemo(true)} className="inline-flex items-center justify-center mt-3 text-sm font-semibold text-blue-600 hover:text-blue-700">
-                    Contact Sales →
+                    Contact Sales â†’
                   </button>
                 </div>
               </div>
@@ -1114,7 +1114,7 @@ export default function Landing() {
                 to="/playground"
                 className="inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Try It Yourself — Playground
+                Try It Yourself â€” Playground
               </Link>
               <Link
                 to="/login"
@@ -1426,7 +1426,7 @@ export default function Landing() {
             <div className="text-center mb-16">
               <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
                 <span className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                <span className="text-slate-300 text-sm">Open-Source SDKs — Apache 2.0</span>
+                <span className="text-slate-300 text-sm">Open-Source SDKs â€” Apache 2.0</span>
               </div>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">Build With AgenticOrg</h2>
               <p className="mt-4 text-lg text-slate-400 max-w-2xl mx-auto">
@@ -1707,7 +1707,7 @@ $ agenticorg sop deploy \\
                 to="/pricing"
                 className="w-full sm:w-auto inline-flex items-center justify-center bg-gradient-to-r from-blue-500 to-cyan-500 text-white px-8 py-3.5 rounded-xl text-base font-semibold hover:from-blue-600 hover:to-cyan-600 transition-all shadow-lg shadow-blue-500/25"
               >
-                Review Plans →
+                Review Plans â†’
               </Link>
               <button
                 onClick={() => setShowDemo(true)}

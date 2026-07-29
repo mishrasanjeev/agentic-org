@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 
 const GA_ID = import.meta.env.VITE_GA4_ID || "";
 let analyticsInitialized = false;
