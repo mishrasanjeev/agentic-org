@@ -2,18 +2,18 @@
  * CA Features UI Unit Tests (Vitest + Testing Library)
  *
  * Tests component rendering for CA-specific pages:
- *   1. CompanyDashboard — health indicators on company cards
- *   2. CompanyDetail — all 7 tabs including Approvals
- *   3. CompanyDetail Approvals — approve buttons for pending items
- *   4. CompanyDetail Compliance — GSTN upload section
- *   5. Login page — CA Partner demo option
- *   6. CAFirmsSolution — "CA Pack" text
+ *   1. CompanyDashboard â€” health indicators on company cards
+ *   2. CompanyDetail â€” all 7 tabs including Approvals
+ *   3. CompanyDetail Approvals â€” approve buttons for pending items
+ *   4. CompanyDetail Compliance â€” GSTN upload section
+ *   5. Login page â€” CA Partner demo option
+ *   6. CAFirmsSolution â€” "CA Pack" text
  *
  * These tests run in JSDOM via Vitest and do not require a running server.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent, act } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router";
 
 // ---------------------------------------------------------------------------
 // Mock API module

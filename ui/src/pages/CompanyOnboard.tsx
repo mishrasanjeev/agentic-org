@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,7 +43,7 @@ interface CompanyForm {
   tally_bridge_url: string;
   tally_bridge_id: string;
   tally_company_name: string;
-  /* Step 6: Review — includes GST Config */
+  /* Step 6: Review â€” includes GST Config */
   gst_auto_file: boolean;
   compliance_email: string;
 }
@@ -153,7 +153,7 @@ export default function CompanyOnboard() {
         address?: string;
       };
       // BUG-005 / BUG-008: honour the `detected` flag. On failure the
-      // backend puts the user-friendly error in `address` — surface
+      // backend puts the user-friendly error in `address` â€” surface
       // that instead of the generic "Auto-detect failed" fallback.
       if (data?.detected && data.company_name) {
         setTallyDetectResult({
@@ -201,7 +201,7 @@ export default function CompanyOnboard() {
     setTallyTestMessage("");
     try {
       // BUG-008: the backend already returns a user-friendly reason in
-      // TallyTestResponse.message (e.g. "Could not reach bridge at X —
+      // TallyTestResponse.message (e.g. "Could not reach bridge at X â€”
       // verify the URL and that the AgenticOrg Tally Bridge is
       // running."). The wizard used to swallow the response and render
       // only "Connection failed. Check bridge URL..." regardless.
@@ -316,7 +316,7 @@ export default function CompanyOnboard() {
       navigate("/dashboard/companies");
     } catch (e: unknown) {
       // BUG-004: the old handler set submitError but didn't keep the
-      // user on Step 6 — form state reset to Step 0 next render, so
+      // user on Step 6 â€” form state reset to Step 0 next render, so
       // the error banner was invisible and the form appeared to
       // silently lose data. Stay on the current step and flatten
       // Pydantic 422 detail arrays into a readable message.
@@ -601,13 +601,13 @@ export default function CompanyOnboard() {
                   <Badge variant="outline">1</Badge> Basic Info
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground">Name:</span> {form.name || "—"}</div>
-                  <div><span className="text-muted-foreground">GSTIN:</span> <span className="font-mono">{form.gstin || "—"}</span></div>
-                  <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{form.pan || "—"}</span></div>
-                  <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{form.tan || "—"}</span></div>
-                  <div><span className="text-muted-foreground">State:</span> {stateNameFromCode(form.state) || "—"}</div>
-                  <div><span className="text-muted-foreground">Industry:</span> {form.industry || "—"}</div>
-                  <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {form.address || "—"}</div>
+                  <div><span className="text-muted-foreground">Name:</span> {form.name || "â€”"}</div>
+                  <div><span className="text-muted-foreground">GSTIN:</span> <span className="font-mono">{form.gstin || "â€”"}</span></div>
+                  <div><span className="text-muted-foreground">PAN:</span> <span className="font-mono">{form.pan || "â€”"}</span></div>
+                  <div><span className="text-muted-foreground">TAN:</span> <span className="font-mono">{form.tan || "â€”"}</span></div>
+                  <div><span className="text-muted-foreground">State:</span> {stateNameFromCode(form.state) || "â€”"}</div>
+                  <div><span className="text-muted-foreground">Industry:</span> {form.industry || "â€”"}</div>
+                  <div className="sm:col-span-2"><span className="text-muted-foreground">Address:</span> {form.address || "â€”"}</div>
                 </div>
               </div>
 
@@ -617,9 +617,9 @@ export default function CompanyOnboard() {
                   <Badge variant="outline">2</Badge> Compliance
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground">PF Reg:</span> {form.pf_reg || "—"}</div>
-                  <div><span className="text-muted-foreground">ESI Reg:</span> {form.esi_reg || "—"}</div>
-                  <div><span className="text-muted-foreground">PT Reg:</span> {form.pt_reg || "—"}</div>
+                  <div><span className="text-muted-foreground">PF Reg:</span> {form.pf_reg || "â€”"}</div>
+                  <div><span className="text-muted-foreground">ESI Reg:</span> {form.esi_reg || "â€”"}</div>
+                  <div><span className="text-muted-foreground">PT Reg:</span> {form.pt_reg || "â€”"}</div>
                   <div><span className="text-muted-foreground">FY:</span> {form.fy_start} to {form.fy_end}</div>
                 </div>
               </div>
@@ -630,12 +630,12 @@ export default function CompanyOnboard() {
                   <Badge variant="outline">3</Badge> Signatory
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground">Name:</span> {form.signatory_name || "—"}</div>
-                  <div><span className="text-muted-foreground">Designation:</span> {form.signatory_designation || "—"}</div>
-                  <div><span className="text-muted-foreground">Email:</span> {form.signatory_email || "—"}</div>
-                  <div><span className="text-muted-foreground">DSC Serial:</span> {form.dsc_serial || "—"}</div>
-                  <div><span className="text-muted-foreground">DSC Holder:</span> {form.dsc_holder || "—"}</div>
-                  <div><span className="text-muted-foreground">DSC Expiry:</span> {form.dsc_expiry || "—"}</div>
+                  <div><span className="text-muted-foreground">Name:</span> {form.signatory_name || "â€”"}</div>
+                  <div><span className="text-muted-foreground">Designation:</span> {form.signatory_designation || "â€”"}</div>
+                  <div><span className="text-muted-foreground">Email:</span> {form.signatory_email || "â€”"}</div>
+                  <div><span className="text-muted-foreground">DSC Serial:</span> {form.dsc_serial || "â€”"}</div>
+                  <div><span className="text-muted-foreground">DSC Holder:</span> {form.dsc_holder || "â€”"}</div>
+                  <div><span className="text-muted-foreground">DSC Expiry:</span> {form.dsc_expiry || "â€”"}</div>
                 </div>
               </div>
 
@@ -645,10 +645,10 @@ export default function CompanyOnboard() {
                   <Badge variant="outline">4</Badge> Banking
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground">Bank:</span> {form.bank_name || "—"}</div>
-                  <div><span className="text-muted-foreground">Account:</span> {form.account_number ? "****" + form.account_number.slice(-4) : "—"}</div>
-                  <div><span className="text-muted-foreground">IFSC:</span> <span className="font-mono">{form.ifsc || "—"}</span></div>
-                  <div><span className="text-muted-foreground">Branch:</span> {form.branch || "—"}</div>
+                  <div><span className="text-muted-foreground">Bank:</span> {form.bank_name || "â€”"}</div>
+                  <div><span className="text-muted-foreground">Account:</span> {form.account_number ? "****" + form.account_number.slice(-4) : "â€”"}</div>
+                  <div><span className="text-muted-foreground">IFSC:</span> <span className="font-mono">{form.ifsc || "â€”"}</span></div>
+                  <div><span className="text-muted-foreground">Branch:</span> {form.branch || "â€”"}</div>
                 </div>
               </div>
 
@@ -658,8 +658,8 @@ export default function CompanyOnboard() {
                   <Badge variant="outline">5</Badge> Tally Connection
                 </h4>
                 <div className="grid sm:grid-cols-2 gap-2 text-sm">
-                  <div><span className="text-muted-foreground">Bridge URL:</span> {form.tally_bridge_url || "—"}</div>
-                  <div><span className="text-muted-foreground">Company:</span> {form.tally_company_name || "—"}</div>
+                  <div><span className="text-muted-foreground">Bridge URL:</span> {form.tally_bridge_url || "â€”"}</div>
+                  <div><span className="text-muted-foreground">Company:</span> {form.tally_company_name || "â€”"}</div>
                 </div>
               </div>
 

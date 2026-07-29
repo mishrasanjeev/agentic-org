@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,7 +44,7 @@ const EMPTY_CREDS = { account_sid: "", auth_token: "", custom_url: "" };
 // and parameters. Rejects bare words like "invalid_sip_url" and spaces / <>.
 const SIP_URI_RE = /^sips?:(?:[A-Za-z0-9._!~*'()&=+$,;?/%-]+@)?[A-Za-z0-9.-]+(?::\d+)?(?:[;?][A-Za-z0-9._!~*'()&=+$,;?/%-]*)?$/;
 
-// Session 5 TC-012: E.164 — optional leading +, 1–15 digits, nothing else.
+// Session 5 TC-012: E.164 â€” optional leading +, 1â€“15 digits, nothing else.
 const PHONE_E164_RE = /^\+?\d{1,15}$/;
 
 /* ------------------------------------------------------------------ */
@@ -91,7 +91,7 @@ export default function VoiceSetup() {
         const v = config.credentials.custom_url.trim();
         if (!v) errs.custom_url = "SIP Trunk URL is required";
         else if (!SIP_URI_RE.test(v))
-          errs.custom_url = "Invalid SIP endpoint format — use sip:user@host or sips:user@host";
+          errs.custom_url = "Invalid SIP endpoint format â€” use sip:user@host or sips:user@host";
       } else {
         if (!config.credentials.account_sid.trim()) errs.account_sid = "Account SID is required";
         if (!config.credentials.auth_token.trim()) errs.auth_token = "Auth Token is required";
@@ -100,7 +100,7 @@ export default function VoiceSetup() {
     if (s === 2) {
       if (!trimmedPhone) errs.phone_number = "Phone number is required";
       else if (!PHONE_E164_RE.test(trimmedPhone))
-        errs.phone_number = "Invalid phone number — use E.164 (digits only, optional leading +)";
+        errs.phone_number = "Invalid phone number â€” use E.164 (digits only, optional leading +)";
     }
     if (s === 3) {
       // TC-011: Google TTS / Deepgram STT need their own API key.
@@ -141,7 +141,7 @@ export default function VoiceSetup() {
       setTestResult({ ok, msg: res.data?.message || (ok ? "Connection successful" : "Connection failed") });
     } catch (e: unknown) {
       const resp = (e as { response?: { data?: { detail?: string } } })?.response;
-      setTestResult({ ok: false, msg: resp?.data?.detail || "Connection test failed — check network and credentials." });
+      setTestResult({ ok: false, msg: resp?.data?.detail || "Connection test failed â€” check network and credentials." });
     } finally {
       setTesting(false);
     }
@@ -156,7 +156,7 @@ export default function VoiceSetup() {
       );
       return;
     }
-    // Re-validate everything — the wizard guarded forward navigation, but
+    // Re-validate everything â€” the wizard guarded forward navigation, but
     // a user can still hit Save after toggling TTS/STT on the review step.
     const aggregate: Record<string, string> = {
       ...validateStep(0),
@@ -411,11 +411,11 @@ export default function VoiceSetup() {
               <div className="border rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">SIP Provider</span>
-                  <span className="font-medium capitalize">{config.sip_provider || "—"}</span>
+                  <span className="font-medium capitalize">{config.sip_provider || "â€”"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Phone Number</span>
-                  <span className="font-medium">{trimmedPhone || "—"}</span>
+                  <span className="font-medium">{trimmedPhone || "â€”"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">STT Engine</span>

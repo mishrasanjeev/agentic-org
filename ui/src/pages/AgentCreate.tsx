@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -159,7 +159,7 @@ export default function AgentCreate() {
   // Load available function-level tools from the registry. When the
   // user has picked specific connectors, restrict the tool list to
   // those connectors only (UR-Bug-2). When nothing is picked, show
-  // the full catalog — preserves the previous behaviour so agents
+  // the full catalog â€” preserves the previous behaviour so agents
   // without an explicit connector selection still discover tools.
   useEffect(() => {
     const connectorNames = connectorIds
@@ -261,7 +261,7 @@ export default function AgentCreate() {
     return true;
   }
 
-  // ── NL Generate handler ────────────────────────────────────────────────
+  // â”€â”€ NL Generate handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   async function handleGenerate() {
     setGenerating(true);
     setGenerateError("");
@@ -364,7 +364,7 @@ export default function AgentCreate() {
         <Button variant="outline" onClick={() => navigate("/dashboard/agents")}>Back</Button>
       </div>
 
-      {/* Progress bar — only show when past NL step */}
+      {/* Progress bar â€” only show when past NL step */}
       {step >= 0 && (
         <div className="flex gap-1">
           {STEPS.map((s, i) => (
@@ -400,10 +400,10 @@ export default function AgentCreate() {
               <p className="text-sm text-destructive">{generateError}</p>
             )}
 
-            {/* Suggestions list — shown when multiple options returned */}
+            {/* Suggestions list â€” shown when multiple options returned */}
             {suggestions.length > 1 && (
               <div className="space-y-2">
-                <p className="text-sm font-medium">Multiple matches found — pick the best fit:</p>
+                <p className="text-sm font-medium">Multiple matches found â€” pick the best fit:</p>
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
@@ -418,7 +418,7 @@ export default function AgentCreate() {
                       </div>
                       <Badge variant="outline">{Math.round(s.confidence * 100)}% match</Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{s.designation} — {humanize(s.domain)}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{s.designation} â€” {humanize(s.domain)}</p>
                   </button>
                 ))}
               </div>
@@ -466,7 +466,7 @@ export default function AgentCreate() {
                 <div>
                   <label className="text-sm font-medium">Employee Name *</label>
                   <input type="text" value={employeeName} onChange={(e) => setEmployeeName(e.target.value)} placeholder="e.g. Priya, Arjun, Maya" className="border rounded px-3 py-2 text-sm w-full mt-1" />
-                  <p className="text-xs text-muted-foreground mt-1">The virtual employee's identity — how they'll appear across the platform.</p>
+                  <p className="text-xs text-muted-foreground mt-1">The virtual employee's identity â€” how they'll appear across the platform.</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Designation</label>
@@ -525,10 +525,10 @@ export default function AgentCreate() {
                     const parent = availableParents.find((a) => a.id === e.target.value);
                     setReportingTo(parent ? (parent.employee_name || parent.name) : "");
                   }} className="border rounded px-3 py-2 text-sm w-full">
-                    <option value="">— No parent (escalates to human) —</option>
+                    <option value="">â€” No parent (escalates to human) â€”</option>
                     {availableParents.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.employee_name || a.name} ({humanize(a.agent_type)}) — {humanize(a.domain)}
+                        {a.employee_name || a.name} ({humanize(a.agent_type)}) â€” {humanize(a.domain)}
                       </option>
                     ))}
                   </select>
@@ -542,7 +542,7 @@ export default function AgentCreate() {
                 <div>
                   <label className="text-sm font-medium">Select Template</label>
                   <select value={selectedTemplateId} onChange={(e) => setSelectedTemplateId(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                    <option value="">— Write custom prompt —</option>
+                    <option value="">â€” Write custom prompt â€”</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
                         {humanize(t.name)} {t.is_builtin ? "(built-in)" : ""}
@@ -585,7 +585,7 @@ export default function AgentCreate() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {llmModel.includes("claude") || llmModel.includes("gpt")
                       ? "This model requires an API key. If not configured, the agent will fall back to Gemini."
-                      : "Gemini is always available — no additional API key needed."}
+                      : "Gemini is always available â€” no additional API key needed."}
                   </p>
                 </div>
                 <div>
@@ -693,7 +693,7 @@ export default function AgentCreate() {
                   <p className="text-xs text-muted-foreground mb-2">
                     Tools this agent can call. {connectorIds.length > 0
                       ? "Filtered to the connectors you picked above."
-                      : "Auto-populated based on agent type — add or remove as needed."}
+                      : "Auto-populated based on agent type â€” add or remove as needed."}
                   </p>
                   {authorizedTools.length > 0 ? (
                     <div className="space-y-2 mb-2">

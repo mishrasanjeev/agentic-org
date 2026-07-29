@@ -1,11 +1,11 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * AccessDenied — explicit 403 UX for role-gated routes.
+ * AccessDenied â€” explicit 403 UX for role-gated routes.
  *
  * Before Enterprise Readiness PR-C2, `ProtectedRoute` silently redirected
  * unauthorized users to `/dashboard/audit`. That was confusing ("why am I
@@ -35,7 +35,7 @@ export default function AccessDenied() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <Helmet>
-        <title>Access Denied — AgenticOrg</title>
+        <title>Access Denied â€” AgenticOrg</title>
       </Helmet>
       <Card className="max-w-xl w-full" data-testid="access-denied">
         <CardHeader>

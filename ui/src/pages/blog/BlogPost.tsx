@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router";
 import { Helmet } from "react-helmet-async";
 import { BLOG_POSTS } from "./blogData";
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import api, { extractApiError } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
 
@@ -249,7 +249,7 @@ const TRACE_COLOR_MAP: Record<string, string> = {
 };
 
 /* ------------------------------------------------------------------ */
-/*  parseTraceLines — turns reasoning_trace + output into colored lines */
+/*  parseTraceLines â€” turns reasoning_trace + output into colored lines */
 /* ------------------------------------------------------------------ */
 
 function parseTraceLines(
@@ -281,10 +281,10 @@ function parseTraceLines(
   // Extract performance from real response
   const perf = result.performance as Record<string, unknown> | undefined;
   const tokensUsed = traces.find(t => t.includes("tokens"))?.match(/(\d+)\s*tokens/)?.[1] || "~1000";
-  const latencyMs = perf?.total_latency_ms ?? "—";
+  const latencyMs = perf?.total_latency_ms ?? "â€”";
   lines.push({ text: `Model response received: ${tokensUsed} tokens (${typeof latencyMs === "number" ? (latencyMs / 1000).toFixed(1) + "s" : "?"})`, color: "amber" });
 
-  // Parse output intelligently — show key fields, not raw JSON
+  // Parse output intelligently â€” show key fields, not raw JSON
   const out = (typeof output === "object" && output !== null) ? output as Record<string, unknown> : {};
   const rawOut = out.raw_output as string | undefined;
   const parsed = rawOut ? (() => { try { return JSON.parse(rawOut); } catch { return out; } })() : out;
@@ -300,9 +300,9 @@ function parseTraceLines(
   if (p.score !== undefined) lines.push({ text: `Score: ${p.score}`, color: "green" });
   if (p.classification) lines.push({ text: `Classification: ${p.classification}`, color: "green" });
   if (p.priority) lines.push({ text: `Priority: ${p.priority}`, color: "amber" });
-  if (p.net_pay) lines.push({ text: `Net Pay: ₹${Number(p.net_pay).toLocaleString("en-IN")}`, color: "green" });
-  if (p.pf_deduction) lines.push({ text: `PF Deduction: ₹${Number(p.pf_deduction).toLocaleString("en-IN")}`, color: "gray" });
-  if (p.tds) lines.push({ text: `TDS: ₹${Number(p.tds).toLocaleString("en-IN")}`, color: "gray" });
+  if (p.net_pay) lines.push({ text: `Net Pay: â‚¹${Number(p.net_pay).toLocaleString("en-IN")}`, color: "green" });
+  if (p.pf_deduction) lines.push({ text: `PF Deduction: â‚¹${Number(p.pf_deduction).toLocaleString("en-IN")}`, color: "gray" });
+  if (p.tds) lines.push({ text: `TDS: â‚¹${Number(p.tds).toLocaleString("en-IN")}`, color: "gray" });
   if (p.recommendation) lines.push({ text: `Recommendation: ${p.recommendation}`, color: "green" });
   if (p.root_cause) lines.push({ text: `Root Cause: ${p.root_cause}`, color: "amber" });
   if (p.sentiment_score !== undefined) lines.push({ text: `Sentiment: ${p.sentiment_score}`, color: Number(p.sentiment_score) < 0 ? "red" : "green" });
@@ -313,7 +313,7 @@ function parseTraceLines(
   const agentTrace = (p.processing_trace ?? p.trace ?? p.steps) as string[] | undefined;
   if (Array.isArray(agentTrace)) {
     for (const step of agentTrace) {
-      lines.push({ text: `  → ${step}`, color: "gray" });
+      lines.push({ text: `  - ${step}`, color: "gray" });
     }
   }
 
@@ -356,7 +356,7 @@ function parseTraceLines(
   // HITL info
   const hitl = result.hitl_request as Record<string, unknown> | undefined;
   if (hitl) {
-    lines.push({ text: `⚠️ Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
+    lines.push({ text: `Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
   }
 
   lines.push({ text: "> Run complete.", color: "gray" });
@@ -367,7 +367,7 @@ function parseTraceLines(
 /*  Playground Component                                               */
 /* ------------------------------------------------------------------ */
 
-/* ── Your Agents section — shows user-created agents from API ── */
+/* â”€â”€ Your Agents section â€” shows user-created agents from API â”€â”€ */
 function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) => void; running: boolean; selectedId?: string }) {
   const [agents, setAgents] = useState<any[]>([]);
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
@@ -436,7 +436,7 @@ function UserAgentsSection({ onRun, running, selectedId }: { onRun: (uc: any) =>
   return (
     <section>
       <h2 className="text-xl font-semibold text-slate-200 mb-4">Your Agents</h2>
-      <p className="text-sm text-slate-400 mb-4">Agents you created — edit the input JSON and click Run.</p>
+      <p className="text-sm text-slate-400 mb-4">Agents you created â€” edit the input JSON and click Run.</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {agents.map((agent) => {
           const ucId = `custom-${agent.id}`;
@@ -727,7 +727,7 @@ export default function Playground() {
                   <div className="w-3 h-3 rounded-full bg-green-500/80" />
                 </div>
                 <span className="text-xs text-slate-500 ml-2 font-mono">
-                  {selectedUseCase ? `${selectedUseCase.agentName} — agent trace` : "terminal"}
+                  {selectedUseCase ? `${selectedUseCase.agentName} â€” agent trace` : "terminal"}
                 </span>
               </div>
 

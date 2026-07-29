@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 interface AdsPageProps {
   keyword: string;
@@ -173,7 +173,7 @@ export default function AdsLanding() {
       {/* Hero + Form */}
       <section className="py-16 lg:py-24">
         <div className="max-w-5xl mx-auto px-4 grid lg:grid-cols-2 gap-12 items-start">
-          {/* Left — Copy */}
+          {/* Left â€” Copy */}
           <div>
             <span className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-4">{page.keyword}</span>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight">{page.headline}</h1>
@@ -189,7 +189,7 @@ export default function AdsLanding() {
             <p className="mt-6 text-slate-500 text-sm italic">"{page.painPoint}"</p>
           </div>
 
-          {/* Right — Form */}
+          {/* Right â€” Form */}
           <div className="bg-white rounded-2xl border-2 border-slate-200 p-6 shadow-lg sticky top-24">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Request a scoped evaluation</h2>
             <p className="text-sm text-slate-500 mb-4">Share your workflow and evaluation goals. Response times vary by request and plan.</p>

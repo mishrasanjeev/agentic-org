@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import api from "../lib/api";
 
-/* ── Milestone Tracker Types ──────────────────────────────────────────── */
+/* â”€â”€ Milestone Tracker Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface MilestoneTask {
   id: string;
   label: string;
@@ -97,7 +97,7 @@ export default function Onboarding() {
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSuccess, setInviteSuccess] = useState(false);
 
-  /* ── Milestone tracker state ────────────────────────────────────── */
+  /* â”€â”€ Milestone tracker state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   const [milestones, setMilestones] = useState<WeekMilestone[]>(loadMilestones);
 
   useEffect(() => {
@@ -160,10 +160,10 @@ export default function Onboarding() {
 
   const GETTING_STARTED_STEPS = [
     { icon: "1", title: "Explore your AI agents", desc: "50+ pre-built agents are ready across Finance, HR, Marketing, Operations, and Back Office.", link: "/dashboard/agents" },
-    { icon: "2", title: "Try the Playground", desc: "Run agents with sample data to see how they work — no configuration needed.", link: "/playground" },
+    { icon: "2", title: "Try the Playground", desc: "Run agents with sample data to see how they work â€” no configuration needed.", link: "/playground" },
     { icon: "3", title: "Set up Connectors", desc: "Connect your ERP, CRM, HRIS, and other tools to power your agents with real data.", link: "/dashboard/connectors" },
     { icon: "4", title: "Create Workflows", desc: "Chain agents together into automated workflows with human-in-the-loop approval gates.", link: "/dashboard/workflows" },
-    { icon: "5", title: "Review Prompt Templates", desc: "Customize agent behavior using the prompt library — clone and edit to match your processes.", link: "/dashboard/prompt-templates" },
+    { icon: "5", title: "Review Prompt Templates", desc: "Customize agent behavior using the prompt library â€” clone and edit to match your processes.", link: "/dashboard/prompt-templates" },
   ];
 
   return (

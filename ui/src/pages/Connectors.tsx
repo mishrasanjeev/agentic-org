@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import type { Connector } from "@/types";
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
 
 /**
- * Native connector catalog item — shape returned by
+ * Native connector catalog item â€” shape returned by
  * `GET /api/v1/connectors/registry` (Enterprise Readiness P5 PR-B2).
  * Prior to this PR the UI embedded a hardcoded array of 55 connectors
  * that drifted away from the runtime registry; the catalog is now
@@ -28,7 +28,7 @@ interface NativeCatalogItem {
 }
 
 // ---------------------------------------------------------------------------
-// Composio Marketplace — real data from /api/v1/composio/apps
+// Composio Marketplace â€” real data from /api/v1/composio/apps
 // ---------------------------------------------------------------------------
 
 interface ComposioApp {
@@ -90,7 +90,7 @@ export default function Connectors() {
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
   const [connectedApps, setConnectedApps] = useState<Set<string>>(new Set());
 
-  // Native-connector catalog sourced from /api/v1/connectors/registry — the
+  // Native-connector catalog sourced from /api/v1/connectors/registry â€” the
   // single source of truth (runtime registry + connectors/catalog_meta.py).
   const [nativeCatalog, setNativeCatalog] = useState<NativeCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
@@ -270,7 +270,7 @@ export default function Connectors() {
         </button>
       </div>
 
-      {/* ── Native Connectors Tab ── */}
+      {/* â”€â”€ Native Connectors Tab â”€â”€ */}
       {activeTab === "native" && (
         <>
           <div className="grid grid-cols-3 gap-4">
@@ -332,7 +332,7 @@ export default function Connectors() {
             </div>
           )}
 
-          {/* Browse All Native Connectors — catalog from /api/v1/connectors/registry */}
+          {/* Browse All Native Connectors â€” catalog from /api/v1/connectors/registry */}
           {!loading && (
             <div className="mt-8" data-testid="native-catalog">
               <h3 className="text-lg font-semibold mb-4">
@@ -342,7 +342,7 @@ export default function Connectors() {
                 Full catalog of supported native connectors. Click "Register" to add one to your tenant.
               </p>
               {catalogLoading && nativeCatalog.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Loading catalog…</p>
+                <p className="text-sm text-muted-foreground">Loading catalogâ€¦</p>
               ) : nativeCatalog.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Catalog unavailable. Check that /api/v1/connectors/registry is reachable.
@@ -394,7 +394,7 @@ export default function Connectors() {
         </>
       )}
 
-      {/* ── Marketplace Tab ── */}
+      {/* â”€â”€ Marketplace Tab â”€â”€ */}
       {activeTab === "marketplace" && (
         <>
           <div className="flex gap-4 items-center">
@@ -454,7 +454,7 @@ export default function Connectors() {
                       {connectedApps.has(app.key) ? "Connected (Demo)" : "Connect (Demo)"}
                     </Button>
                     <p className="text-[10px] text-muted-foreground text-center mt-1">
-                      OAuth handoff pending — UI state only
+                      OAuth handoff pending â€” UI state only
                     </p>
                   </CardContent>
                 </Card>

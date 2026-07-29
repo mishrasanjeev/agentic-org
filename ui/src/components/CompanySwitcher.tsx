@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import api from "../lib/api";
 
 interface Company {
@@ -38,7 +38,7 @@ export default function CompanySwitcher() {
           localStorage.setItem("company_id", first);
         }
       } catch {
-        // Silently fail — header should still render
+        // Silently fail â€” header should still render
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -64,7 +64,7 @@ export default function CompanySwitcher() {
     );
   }
 
-  // Single company — no switcher needed
+  // Single company â€” no switcher needed
   if (companies.length <= 1) {
     return (
       <span className="text-sm text-slate-300 font-medium truncate max-w-[160px]">
@@ -136,7 +136,7 @@ export default function CompanySwitcher() {
                 <span className="block truncate">{c.name}</span>
                 <span className="block text-[10px] text-slate-500 mt-0.5">
                   {c.gstin ? `GSTIN: ${c.gstin}` : ""}
-                  {c.gstin && c.industry ? " · " : ""}
+                  {c.gstin && c.industry ? " Â· " : ""}
                   {c.industry || ""}
                 </span>
               </button>

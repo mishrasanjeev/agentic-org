@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import api from "../lib/api";
 
 export default function HITLBadge() {
@@ -13,7 +13,7 @@ export default function HITLBadge() {
         const total = data?.total ?? (Array.isArray(data) ? data.length : 0);
         setCount(total);
       } catch {
-        // Silently fail — badge just won't show
+        // Silently fail â€” badge just won't show
       }
     };
     fetchCount();
