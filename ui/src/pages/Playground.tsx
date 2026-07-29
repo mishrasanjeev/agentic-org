@@ -313,7 +313,7 @@ function parseTraceLines(
   const agentTrace = (p.processing_trace ?? p.trace ?? p.steps) as string[] | undefined;
   if (Array.isArray(agentTrace)) {
     for (const step of agentTrace) {
-      lines.push({ text: `  â†’ ${step}`, color: "gray" });
+      lines.push({ text: `  - ${step}`, color: "gray" });
     }
   }
 
@@ -356,7 +356,7 @@ function parseTraceLines(
   // HITL info
   const hitl = result.hitl_request as Record<string, unknown> | undefined;
   if (hitl) {
-    lines.push({ text: `âš ï¸ Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
+    lines.push({ text: `Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
   }
 
   lines.push({ text: "> Run complete.", color: "gray" });
