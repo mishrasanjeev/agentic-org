@@ -384,6 +384,19 @@ export function verifySeo(root = UI_ROOT) {
         fail(configName + " is missing canonical redirect for " + alias);
       }
     }
+    const legacyBlogRedirects = {
+      "/blog/ai-invoice-processing-india": "/resources/ai-accounts-payable-automation",
+      "/blog/why-month-end-close-takes-5-days": "/resources/month-end-close-automation",
+      "/blog/measuring-real-roi-from-ai-agents": "/resources/enterprise-ai-automation-platform",
+      "/blog/200-person-it-company-cfo-ai-agents": "/solutions/cfo",
+      "/blog/ca-firm-ai-agent-end-to-end": "/solutions/ca-firms",
+    };
+    for (const [legacyPath, targetPath] of Object.entries(legacyBlogRedirects)) {
+      const expectedRedirect = `location = ${legacyPath} {\n        return 301 https://agenticorg.ai${targetPath};`;
+      if (!config.includes(expectedRedirect)) {
+        fail(configName + " is missing legacy blog redirect for " + legacyPath);
+      }
+    }
   }
   return { errors, warnings, routeCount: routes.length };
 }

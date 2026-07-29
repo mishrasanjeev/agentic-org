@@ -136,6 +136,25 @@ server {
         return 301 https://agenticorg.ai/refund;
     }
 
+    # Preserve historical blog URLs whose articles were consolidated into
+    # current canonical resources or solution pages. These redirects prevent
+    # stale Search Console links from becoming hard 404s.
+    location = /blog/ai-invoice-processing-india {
+        return 301 https://agenticorg.ai/resources/ai-accounts-payable-automation;
+    }
+    location = /blog/why-month-end-close-takes-5-days {
+        return 301 https://agenticorg.ai/resources/month-end-close-automation;
+    }
+    location = /blog/measuring-real-roi-from-ai-agents {
+        return 301 https://agenticorg.ai/resources/enterprise-ai-automation-platform;
+    }
+    location = /blog/200-person-it-company-cfo-ai-agents {
+        return 301 https://agenticorg.ai/solutions/cfo;
+    }
+    location = /blog/ca-firm-ai-agent-end-to-end {
+        return 301 https://agenticorg.ai/solutions/ca-firms;
+    }
+
     # Authenticated and authentication-flow pages remain usable but are not
     # search results. The server-level X-Robots-Tag map supplies the header.
     location ~ ^/(?:dashboard(?:/.*)?|login/?|signup/?|forgot-password/?|reset-password/?|invite/?|accept-invite/?|onboarding/?|sso/callback/?)$ {
