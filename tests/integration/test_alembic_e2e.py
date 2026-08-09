@@ -53,6 +53,19 @@ _READINESS_TRIGGERS = {
     "capability_promotion_chain",
     "capability_promotion_events_immutable",
 }
+_LEGACY_FK_INDEXES = {
+    "ix_ca_client_invoices_company_id",
+    "ix_ca_client_payments_company_id",
+    "ix_ca_client_payments_invoice_id",
+    "ix_client_portal_documents_company_id",
+    "ix_client_portal_invites_company_id",
+    "ix_filing_approvals_company_id",
+    "ix_gstn_credentials_tenant_id",
+    "ix_gstn_uploads_company_id",
+    "ix_professional_tax_registrations_company_id",
+    "ix_professional_tax_returns_company_id",
+    "ix_professional_tax_returns_registration_id",
+}
 
 
 def _pg_available() -> bool:
@@ -535,6 +548,47 @@ def test_stamped_legacy_db_repairs_missing_agent_feedback_table():
         "learning_weight",
         "created_at",
     } <= columns
+    assert version == _current_head()
+    _assert_database_index_health()
+
+
+def test_v6z10_repairs_legacy_foreign_key_index_drift():
+    """Upgrade a v6z9 catalog missing ORM-created foreign-key indexes."""
+    _reset_schema()
+    _run_migrate_wrapper()
+    command.downgrade(_alembic_cfg(), "v6z9_query_performance")
+
+    engine = create_engine(_SYNC_URL)
+    with engine.connect() as conn:
+        indexes_before = set(
+            conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = current_schema()"
+                )
+            ).scalars()
+        )
+    engine.dispose()
+    assert not (_LEGACY_FK_INDEXES & indexes_before)
+
+    result = _run_migrate_wrapper()
+    assert result.returncode == 0
+    assert "alembic_version present" in result.stderr
+
+    engine = create_engine(_SYNC_URL)
+    with engine.connect() as conn:
+        indexes_after = set(
+            conn.execute(
+                text(
+                    "SELECT indexname FROM pg_indexes "
+                    "WHERE schemaname = current_schema()"
+                )
+            ).scalars()
+        )
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+
+    assert _LEGACY_FK_INDEXES <= indexes_after
     assert version == _current_head()
     _assert_database_index_health()
 
