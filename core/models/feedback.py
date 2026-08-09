@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,12 @@ class AgentFeedback(BaseModel):
             "tenant_id",
             "source_event_id",
             name="uq_agent_feedback_tenant_source_event",
+        ),
+        Index(
+            "ix_agent_feedback_agent_tenant_created",
+            "agent_id",
+            "tenant_id",
+            text("created_at DESC"),
         ),
     )
 

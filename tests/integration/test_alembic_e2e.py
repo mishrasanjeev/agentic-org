@@ -21,6 +21,7 @@ without Docker). CI ``integration-tests`` always has Postgres.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -112,6 +113,118 @@ def _run_migrate_wrapper() -> subprocess.CompletedProcess[str]:
         env=env,
         check=True,
     )
+
+
+def _assert_database_index_health() -> None:
+    env = os.environ.copy()
+    env["AGENTICORG_DB_URL"] = _DB_URL
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "scripts/check_database_indexes.py"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "DATABASE INDEX AUDIT PASSED" in result.stdout
+
+
+def _assert_hot_query_plans() -> None:
+    """Prove each critical query shape can use its intended index.
+
+    Empty/CI databases naturally prefer sequential scans.  Disabling them for
+    these EXPLAIN-only probes checks index eligibility without inserting test
+    data or mutating planner statistics.
+    """
+    tenant_id = "00000000-0000-0000-0000-000000000001"
+    agent_id = "00000000-0000-0000-0000-000000000002"
+    workflow_id = "00000000-0000-0000-0000-000000000003"
+    company_id = "00000000-0000-0000-0000-000000000004"
+    probes = {
+        "ix_audit_log_tenant_created": (
+            "SELECT * FROM audit_log WHERE tenant_id = :tenant_id "
+            "ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_audit_log_event_type_trgm": (
+            "SELECT count(*) FROM audit_log WHERE event_type ILIKE '%invoice%'"
+        ),
+        "ix_hitl_queue_tenant_status_created": (
+            "SELECT * FROM hitl_queue WHERE tenant_id = :tenant_id "
+            "AND status = 'pending' ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_agent_feedback_agent_tenant_created": (
+            "SELECT * FROM agent_feedback WHERE agent_id = :agent_id "
+            "AND tenant_id = :tenant_id ORDER BY created_at DESC LIMIT 50"
+        ),
+        "ix_api_keys_active_prefix": (
+            "SELECT * FROM api_keys WHERE prefix = 'ao_sk_probe' AND status = 'active'"
+        ),
+        "ix_agent_lifecycle_agent_status_created": (
+            "SELECT * FROM agent_lifecycle_events WHERE agent_id = :agent_id "
+            "AND to_status = 'paused' ORDER BY created_at DESC LIMIT 1"
+        ),
+        "ix_agent_versions_agent_created": (
+            "SELECT * FROM agent_versions WHERE agent_id = :agent_id "
+            "ORDER BY created_at DESC LIMIT 1"
+        ),
+        "ix_agents_tenant_created": (
+            "SELECT * FROM agents WHERE tenant_id = :tenant_id "
+            "ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_workflow_definitions_tenant_created": (
+            "SELECT * FROM workflow_definitions WHERE tenant_id = :tenant_id "
+            "ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_schema_registry_tenant_created": (
+            "SELECT * FROM schema_registry WHERE tenant_id = :tenant_id "
+            "ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_lead_pipeline_tenant_stage_score_created": (
+            "SELECT * FROM lead_pipeline WHERE tenant_id = :tenant_id AND stage = 'new' "
+            "ORDER BY score DESC, created_at DESC"
+        ),
+        "ix_filing_approvals_scope_created": (
+            "SELECT * FROM filing_approvals WHERE tenant_id = :tenant_id "
+            "AND company_id = :company_id ORDER BY created_at DESC"
+        ),
+        "ix_c6z_connector_evidence_scope_synced": (
+            "SELECT * FROM commerce_c6z_connector_evidence_records "
+            "WHERE tenant_id = 'tenant' AND merchant_id = 'merchant' "
+            "AND seller_agent_id = 'seller' ORDER BY synced_at DESC"
+        ),
+        "ix_documents_tenant_created_live": (
+            "SELECT * FROM documents WHERE tenant_id = :tenant_id "
+            "AND status <> 'deleted' ORDER BY created_at DESC"
+        ),
+        "ix_workflow_runs_definition_tenant_created": (
+            "SELECT * FROM workflow_runs WHERE workflow_def_id = :workflow_id "
+            "AND tenant_id = :tenant_id ORDER BY created_at DESC LIMIT 20"
+        ),
+        "ix_companies_tenant_name": (
+            "SELECT * FROM companies WHERE tenant_id = :tenant_id ORDER BY name LIMIT 50"
+        ),
+        "ix_connectors_tenant_category_live": (
+            "SELECT * FROM connectors WHERE tenant_id = :tenant_id "
+            "AND category = 'crm' AND COALESCE(status, 'active') <> 'deleted'"
+        ),
+    }
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(text("SET LOCAL enable_seqscan = off"))
+        for expected_index, query in probes.items():
+            plan = conn.execute(
+                text(f"EXPLAIN (FORMAT JSON) {query}"),
+                {
+                    "tenant_id": tenant_id,
+                    "agent_id": agent_id,
+                    "workflow_id": workflow_id,
+                    "company_id": company_id,
+                },
+            ).scalar_one()
+            assert expected_index in json.dumps(plan), (
+                f"planner cannot use {expected_index} for: {query}; plan={plan}"
+            )
+    engine.dispose()
 
 
 def _table_names() -> set[str]:
@@ -352,6 +465,8 @@ def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
     assert version == _current_head()
     _assert_readiness_controls()
     _assert_connector_config_controls()
+    _assert_database_index_health()
+    _assert_hot_query_plans()
 
 
 def test_legacy_db_gets_stamped_at_baseline():
@@ -379,6 +494,7 @@ def test_legacy_db_gets_stamped_at_baseline():
     assert version == expected_head
     _assert_readiness_controls()
     _assert_connector_config_controls()
+    _assert_database_index_health()
 
 
 def test_already_managed_db_is_noop():
@@ -395,6 +511,7 @@ def test_already_managed_db_is_noop():
     assert "alembic_version" in _table_names()
     _assert_readiness_controls()
     _assert_connector_config_controls()
+    _assert_database_index_health()
 
 
 def test_readiness_migration_downgrade_upgrade_round_trip():
@@ -425,6 +542,7 @@ def test_readiness_migration_downgrade_upgrade_round_trip():
     command.upgrade(_alembic_cfg(), "head")
     _assert_readiness_controls()
     _assert_connector_config_controls()
+    _assert_database_index_health()
 
 
 def test_connector_config_migration_replaces_legacy_policies_and_round_trips():

@@ -28,7 +28,26 @@ from core.models.base import BaseModel
 
 class WorkflowDefinition(BaseModel):
     __tablename__ = "workflow_definitions"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", "version"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", "version"),
+        Index(
+            "ix_workflow_definitions_tenant_created",
+            "tenant_id",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_workflow_definitions_tenant_domain_created",
+            "tenant_id",
+            "domain",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_workflow_definitions_tenant_company_created",
+            "tenant_id",
+            "company_id",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -60,8 +79,19 @@ class WorkflowDefinition(BaseModel):
 class WorkflowRun(BaseModel):
     __tablename__ = "workflow_runs"
     __table_args__ = (
-        Index("idx_wf_runs_tenant_status", "tenant_id", "status"),
         Index("idx_wf_runs_created", "created_at"),
+        Index(
+            "ix_workflow_runs_definition_tenant_created",
+            "workflow_def_id",
+            "tenant_id",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_workflow_runs_tenant_status_created",
+            "tenant_id",
+            "status",
+            text("created_at DESC"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

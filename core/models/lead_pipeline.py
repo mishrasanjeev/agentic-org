@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,8 +26,20 @@ from core.models.base import BaseModel
 class LeadPipeline(BaseModel):
     __tablename__ = "lead_pipeline"
     __table_args__ = (
-        Index("idx_lead_pipeline_tenant", "tenant_id", "stage"),
         Index("idx_lead_pipeline_email", "email"),
+        Index(
+            "ix_lead_pipeline_tenant_score_created",
+            "tenant_id",
+            text("score DESC"),
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_lead_pipeline_tenant_stage_score_created",
+            "tenant_id",
+            "stage",
+            text("score DESC"),
+            text("created_at DESC"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -85,6 +98,12 @@ class EmailSequence(BaseModel):
     __tablename__ = "email_sequences"
     __table_args__ = (
         Index("idx_email_sequences_lead", "lead_id", "sequence_name", "step_number"),
+        Index(
+            "ix_email_sequences_tenant_status_sent",
+            "tenant_id",
+            "status",
+            "sent_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import TIMESTAMP, BigInteger, Date, ForeignKey, String, func
+from sqlalchemy import TIMESTAMP, BigInteger, Date, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,20 @@ from core.models.base import BaseModel
 
 class Document(BaseModel):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index(
+            "ix_documents_tenant_filename_live",
+            "tenant_id",
+            "filename",
+            postgresql_where=text("status <> 'deleted'"),
+        ),
+        Index(
+            "ix_documents_tenant_created_live",
+            "tenant_id",
+            text("created_at DESC"),
+            postgresql_where=text("status <> 'deleted'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

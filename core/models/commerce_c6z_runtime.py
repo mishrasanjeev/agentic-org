@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, TIMESTAMP, Boolean, Index, Integer, String, Text, func
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Index, Integer, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -26,6 +26,13 @@ class C6ZSellerOnboardingPacketRow(BaseModel):
         Index("ix_c6z_onboarding_merchant_id", "merchant_id"),
         Index("ix_c6z_onboarding_seller_agent_id", "seller_agent_id"),
         Index("ix_c6z_onboarding_status", "status"),
+        Index(
+            "ix_c6z_onboarding_scope_created",
+            "tenant_id",
+            "merchant_id",
+            "seller_agent_id",
+            text("created_at DESC"),
+        ),
     )
 
     packet_id: Mapped[str] = mapped_column(String(180), primary_key=True)
@@ -67,6 +74,13 @@ class C6ZConnectorEvidenceRow(BaseModel):
         Index("ix_c6z_connector_evidence_packet_id", "packet_id"),
         Index("ix_c6z_connector_evidence_synced_at", "synced_at"),
         Index("ix_c6z_connector_evidence_source_ref", "source_evidence_ref"),
+        Index(
+            "ix_c6z_connector_evidence_scope_synced",
+            "tenant_id",
+            "merchant_id",
+            "seller_agent_id",
+            text("synced_at DESC"),
+        ),
     )
 
     evidence_id: Mapped[str] = mapped_column(String(180), primary_key=True)
@@ -108,6 +122,13 @@ class C6ZProviderCapabilityEvidenceRow(BaseModel):
         Index("ix_c6z_capability_provider", "provider"),
         Index("ix_c6z_capability_result_status", "result_status"),
         Index("ix_c6z_capability_expires_at", "expires_at"),
+        Index(
+            "ix_c6z_capability_scope_checked",
+            "tenant_id",
+            "merchant_id",
+            "seller_agent_id",
+            text("checked_at DESC"),
+        ),
     )
 
     evidence_id: Mapped[str] = mapped_column(String(180), primary_key=True)
@@ -145,6 +166,13 @@ class C6ZMerchantCommerceConfigRow(BaseModel):
         Index("ix_c6z_merchant_config_seller_agent_id", "seller_agent_id"),
         Index("ix_c6z_merchant_config_status", "status"),
         Index("uq_c6z_merchant_config_scope", "tenant_id", "merchant_id", "seller_agent_id", unique=True),
+        Index(
+            "ix_c6z_merchant_config_scope_created",
+            "tenant_id",
+            "merchant_id",
+            "seller_agent_id",
+            text("created_at DESC"),
+        ),
     )
 
     config_id: Mapped[str] = mapped_column(String(180), primary_key=True)

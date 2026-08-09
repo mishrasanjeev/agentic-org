@@ -41,6 +41,7 @@ class ConnectorConfig(BaseModel):
         Index("ix_connector_configs_tenant", "tenant_id"),
         Index("ix_connector_configs_tenant_company", "tenant_id", "company_id"),
         Index("ix_connector_configs_status", "tenant_id", "status"),
+        Index("ix_connector_configs_company_id", "company_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

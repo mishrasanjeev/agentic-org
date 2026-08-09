@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from sqlalchemy import ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, Index, Numeric, String, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,26 @@ from core.models.base import BaseModel, TenantMixin, TimestampMixin
 
 class ABMAccount(BaseModel, TenantMixin, TimestampMixin):
     __tablename__ = "abm_accounts"
+    __table_args__ = (
+        Index("ix_abm_accounts_tenant_intent", "tenant_id", text("intent_score DESC")),
+        Index(
+            "ix_abm_accounts_tenant_tier_intent",
+            "tenant_id",
+            "tier",
+            text("intent_score DESC"),
+        ),
+        Index(
+            "ix_abm_accounts_tenant_industry_intent",
+            "tenant_id",
+            text("lower(industry)"),
+            text("intent_score DESC"),
+        ),
+        Index(
+            "ix_abm_accounts_tenant_domain_lower",
+            "tenant_id",
+            text("lower(domain)"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(200), nullable=False)

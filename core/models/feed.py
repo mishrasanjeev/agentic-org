@@ -16,7 +16,6 @@ class FeedEvent(BaseModel):
     __tablename__ = "feed_events"
     __table_args__ = (
         UniqueConstraint("tenant_id", "sequence", name="uq_feed_events_tenant_sequence"),
-        Index("ix_feed_events_tenant_sequence", "tenant_id", "sequence"),
         Index("ix_feed_events_tenant_created", "tenant_id", "created_at"),
     )
 

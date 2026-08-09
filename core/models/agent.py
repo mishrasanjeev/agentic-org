@@ -31,8 +31,26 @@ class Agent(BaseModel):
     __tablename__ = "agents"
     __table_args__ = (
         UniqueConstraint("tenant_id", "agent_type", "employee_name", "version"),
-        Index("idx_agents_tenant_domain", "tenant_id", "domain"),
         Index("idx_agents_routing", "tenant_id", "agent_type", "status"),
+        Index("ix_agents_tenant_created", "tenant_id", text("created_at DESC")),
+        Index(
+            "ix_agents_tenant_status_created",
+            "tenant_id",
+            "status",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_agents_tenant_domain_created",
+            "tenant_id",
+            "domain",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_agents_tenant_company_created",
+            "tenant_id",
+            "company_id",
+            text("created_at DESC"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -144,7 +162,10 @@ class Agent(BaseModel):
 
 class AgentVersion(BaseModel):
     __tablename__ = "agent_versions"
-    __table_args__ = (UniqueConstraint("agent_id", "version"),)
+    __table_args__ = (
+        UniqueConstraint("agent_id", "version"),
+        Index("ix_agent_versions_agent_created", "agent_id", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -174,6 +195,14 @@ class AgentVersion(BaseModel):
 
 class AgentLifecycleEvent(BaseModel):
     __tablename__ = "agent_lifecycle_events"
+    __table_args__ = (
+        Index(
+            "ix_agent_lifecycle_agent_status_created",
+            "agent_id",
+            "to_status",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -201,7 +230,10 @@ class AgentLifecycleEvent(BaseModel):
 
 class AgentTeam(BaseModel):
     __tablename__ = "agent_teams"
-    __table_args__ = (UniqueConstraint("tenant_id", "name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name"),
+        Index("ix_agent_teams_tenant_created", "tenant_id", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

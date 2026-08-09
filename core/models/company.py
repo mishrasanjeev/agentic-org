@@ -17,6 +17,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -33,6 +34,8 @@ class Company(BaseModel):
     __tablename__ = "companies"
     __table_args__ = (
         UniqueConstraint("tenant_id", "gstin", name="uq_company_tenant_gstin"),
+        Index("ix_companies_tenant_name", "tenant_id", "name"),
+        Index("ix_companies_tenant_active_name", "tenant_id", "is_active", "name"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

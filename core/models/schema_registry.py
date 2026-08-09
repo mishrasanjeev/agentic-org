@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import TIMESTAMP, Boolean, ForeignKey, Index, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,7 +14,10 @@ from core.models.base import BaseModel
 
 class SchemaRegistry(BaseModel):
     __tablename__ = "schema_registry"
-    __table_args__ = (UniqueConstraint("tenant_id", "name", "version"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", "version"),
+        Index("ix_schema_registry_tenant_created", "tenant_id", text("created_at DESC")),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
