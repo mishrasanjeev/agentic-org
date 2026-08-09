@@ -71,7 +71,7 @@
     "autoprefixer": "^10.5.4",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.7.0",
+    "globals": "^17.9.0",
     "jsdom": "^30.0.1",
     "picomatch": "^4.0.5",
     "postcss": "^8.5.25",
