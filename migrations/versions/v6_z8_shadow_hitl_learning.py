@@ -17,6 +17,33 @@ def upgrade() -> None:
     # The migration wrapper bootstraps legacy databases with current ORM
     # metadata before stamping the baseline. Keep every schema operation
     # idempotent so that path and normal version-to-version upgrades both work.
+    # Some long-lived production databases were stamped past the original
+    # v4 migration without receiving this table. Repair that legacy drift
+    # before adding the shadow-learning columns.
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS agent_feedback (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            agent_id UUID NOT NULL REFERENCES agents(id),
+            tenant_id UUID NOT NULL REFERENCES tenants(id),
+            run_id VARCHAR(200) NOT NULL,
+            feedback_type VARCHAR(30) NOT NULL,
+            feedback_text TEXT,
+            original_output JSONB,
+            corrected_output JSONB,
+            applied_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+        """
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_agent_feedback_agent_id "
+        "ON agent_feedback (agent_id)"
+    )
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_agent_feedback_tenant_id "
+        "ON agent_feedback (tenant_id)"
+    )
     op.execute(
         "ALTER TABLE agents ADD COLUMN IF NOT EXISTS "
         "shadow_model_confidence_current NUMERIC(4, 3)"
