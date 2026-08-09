@@ -367,6 +367,7 @@ async def decide(
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
     tid = _uuid.UUID(tenant_id)
+    learning_result: dict = {}
 
     # P2.1: capture decision_by from authenticated user (always required)
     user_id_str = user_claims.get("sub") or user_claims.get("agenticorg:user_id") or ""
@@ -578,6 +579,23 @@ async def decide(
             item.status = "decided"
             workflow_run_id = item.workflow_run_id
 
+        # Capture every human action in the same transaction as the approval.
+        # Terminal shadow decisions also recalibrate the promotion confidence.
+        from core.feedback.shadow_learning import capture_hitl_feedback
+
+        learning_result = await capture_hitl_feedback(
+            session,
+            item=item,
+            decision=body.decision or "defer",
+            notes=body.notes or "",
+            actor_id=user_id_str,
+            actor_role=user_role,
+            actor_name=user_name,
+            policy_action=policy_action,
+            policy_state=policy_state if policy is not None else None,
+            delegated_from=delegated_from,
+        )
+
         # Audit log entry — captures who approved/rejected what
         audit = AuditLog(
             tenant_id=tid,
@@ -599,6 +617,7 @@ async def decide(
                 "policy_action": policy_action,
                 "policy_state": policy_state if policy is not None else None,
                 "delegated_from": delegated_from,
+                "feedback_learning": learning_result,
             },
         )
         session.add(audit)
@@ -627,6 +646,15 @@ async def decide(
             str(engine_run_id_hint or "") or None,
         )
 
+    if learning_result.get("ran_in_shadow") and policy_action in {"advance", "reject"}:
+        from core.feedback.analyzer import analyze_and_apply_feedback
+
+        background_tasks.add_task(
+            analyze_and_apply_feedback,
+            str(item.agent_id),
+            tenant_id,
+        )
+
     return {
         "hitl_id": str(hitl_id),
         "decision": body.decision,
@@ -635,4 +663,5 @@ async def decide(
         "decided_at": item.decision_at.isoformat() if item.decision_at else None,
         "policy_action": policy_action,
         "policy_state": policy_state if policy_state else None,
+        "feedback_learning": learning_result,
     }

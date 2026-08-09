@@ -84,10 +84,10 @@ dependencies = [
     "langchain-google-genai>=4.3.1",
     "langchain-anthropic>=1.5.2",
     "langchain-openai>=1.4.0",
-    "langgraph-checkpoint-postgres>=3.1.0",
+    "langgraph-checkpoint-postgres>=3.1.1",
     "grantex>=0.3.14",
     "langsmith>=0.10.11",
-    "pypdf>=6.14.2",
+    "pypdf>=6.15.0",
     # S0-06 multimodal RAG (PR-3 2026-04-24): Word document ingestion.
     # Image OCR (pytesseract) and audio transcription (openai-whisper)
     # ship behind feature flags in a follow-up — they need system-level

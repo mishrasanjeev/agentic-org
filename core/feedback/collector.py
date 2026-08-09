@@ -7,6 +7,7 @@ in-memory storage.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -18,7 +19,15 @@ logger = structlog.get_logger()
 # In-memory fallback when DB is not available
 _in_memory_store: dict[str, list[dict[str, Any]]] = {}
 
-VALID_FEEDBACK_TYPES = {"thumbs_up", "thumbs_down", "correction", "hitl_reject"}
+VALID_FEEDBACK_TYPES = {
+    "thumbs_up",
+    "thumbs_down",
+    "correction",
+    "hitl_approve",
+    "hitl_reject",
+    "hitl_override",
+    "hitl_vote",
+}
 
 
 async def submit_feedback(
@@ -28,6 +37,12 @@ async def submit_feedback(
     text: str = "",
     corrected_output: dict[str, Any] | None = None,
     tenant_id: str = "",
+    original_output: dict[str, Any] | None = None,
+    source: str = "manual",
+    source_event_id: str | None = None,
+    actor_id: str | None = None,
+    decision: str | None = None,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Submit feedback for an agent run.
 
@@ -56,8 +71,14 @@ async def submit_feedback(
         "run_id": run_id,
         "feedback_type": feedback_type,
         "text": text,
+        "original_output": original_output,
         "corrected_output": corrected_output,
         "tenant_id": tenant_id,
+        "source": source,
+        "source_event_id": source_event_id,
+        "actor_id": actor_id,
+        "decision": decision,
+        "context": context or {},
         "created_at": datetime.now(UTC).isoformat(),
     }
 
@@ -74,17 +95,27 @@ async def submit_feedback(
                 await session.execute(
                     sql_text(
                         "INSERT INTO agent_feedback "
-                        "(id, agent_id, run_id, feedback_type, text, corrected_output, tenant_id, created_at) "
-                        "VALUES (:id, :agent_id, :run_id, :feedback_type, :text, :corrected_output, :tenant_id, NOW())"
+                        "(id, agent_id, run_id, feedback_type, feedback_text, original_output, "
+                        "corrected_output, tenant_id, source, source_event_id, actor_id, decision, "
+                        "context, created_at) VALUES (:id, :agent_id, :run_id, :feedback_type, "
+                        ":feedback_text, CAST(:original_output AS JSONB), "
+                        "CAST(:corrected_output AS JSONB), :tenant_id, :source, :source_event_id, "
+                        ":actor_id, :decision, CAST(:context AS JSONB), NOW()) ON CONFLICT DO NOTHING"
                     ),
                     {
                         "id": feedback_id,
                         "agent_id": agent_id,
                         "run_id": run_id,
                         "feedback_type": feedback_type,
-                        "text": text,
-                        "corrected_output": str(corrected_output) if corrected_output else None,
+                        "feedback_text": text,
+                        "original_output": json.dumps(original_output) if original_output else None,
+                        "corrected_output": json.dumps(corrected_output) if corrected_output else None,
                         "tenant_id": tenant_id,
+                        "source": source,
+                        "source_event_id": source_event_id,
+                        "actor_id": actor_id,
+                        "decision": decision,
+                        "context": json.dumps(context or {}),
                     },
                 )
                 stored_in_db = True
@@ -135,8 +166,9 @@ async def list_feedback(
 
                 result = await session.execute(
                     sql_text(
-                        "SELECT id, agent_id, run_id, feedback_type, text, "
-                        "corrected_output, tenant_id, created_at "
+                        "SELECT id, agent_id, run_id, feedback_type, feedback_text, "
+                        "corrected_output, tenant_id, created_at, original_output, source, "
+                        "source_event_id, actor_id, decision, context "
                         "FROM agent_feedback "
                         "WHERE agent_id = :agent_id AND tenant_id = :tenant_id "
                         "ORDER BY created_at DESC LIMIT :limit OFFSET :offset"
@@ -159,6 +191,12 @@ async def list_feedback(
                         "corrected_output": r[5],
                         "tenant_id": str(r[6]),
                         "created_at": str(r[7]),
+                        "original_output": r[8],
+                        "source": r[9],
+                        "source_event_id": r[10],
+                        "actor_id": r[11],
+                        "decision": r[12],
+                        "context": r[13],
                     }
                     for r in rows
                 ]

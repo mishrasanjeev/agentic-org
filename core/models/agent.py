@@ -91,6 +91,13 @@ class Agent(BaseModel):
     )
     shadow_sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     shadow_accuracy_current: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
+    shadow_model_confidence_current: Mapped[Decimal | None] = mapped_column(
+        Numeric(4, 3), nullable=True
+    )
+    shadow_human_confidence_current: Mapped[Decimal | None] = mapped_column(
+        Numeric(4, 3), nullable=True
+    )
+    shadow_feedback_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cost_controls: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     scaling: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     tags: Mapped[list] = mapped_column(ARRAY(String(50)), nullable=False, default=list)

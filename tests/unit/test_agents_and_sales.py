@@ -69,6 +69,13 @@ def make_mock_agent(**overrides):
     agent.shadow_sample_count = overrides.get("shadow_sample_count", 0)
     agent.shadow_min_samples = overrides.get("shadow_min_samples", 10)
     agent.shadow_accuracy_current = overrides.get("shadow_accuracy_current", None)
+    agent.shadow_model_confidence_current = overrides.get(
+        "shadow_model_confidence_current", None
+    )
+    agent.shadow_human_confidence_current = overrides.get(
+        "shadow_human_confidence_current", None
+    )
+    agent.shadow_feedback_count = overrides.get("shadow_feedback_count", 0)
     agent.shadow_accuracy_floor = overrides.get(
         "shadow_accuracy_floor", Decimal("0.950")
     )
@@ -191,6 +198,8 @@ class TestAgentToDict:
             "parent_agent_id", "shadow_comparison_agent_id",
             "shadow_min_samples", "shadow_accuracy_floor",
             "shadow_sample_count", "shadow_accuracy_current",
+            "shadow_model_confidence_current", "shadow_human_confidence_current",
+            "shadow_feedback_count",
             "cost_controls", "scaling", "tags", "ttl_hours",
             "expires_at", "created_at", "updated_at",
             "employee_name", "avatar_url", "designation",

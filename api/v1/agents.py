@@ -441,6 +441,13 @@ def _agent_to_dict(agent: Agent) -> dict:
         "shadow_accuracy_current": float(agent.shadow_accuracy_current)
         if agent.shadow_accuracy_current is not None
         else None,
+        "shadow_model_confidence_current": float(agent.shadow_model_confidence_current)
+        if agent.shadow_model_confidence_current is not None
+        else None,
+        "shadow_human_confidence_current": float(agent.shadow_human_confidence_current)
+        if agent.shadow_human_confidence_current is not None
+        else None,
+        "shadow_feedback_count": agent.shadow_feedback_count,
         "cost_controls": agent.cost_controls,
         "scaling": agent.scaling,
         "tags": agent.tags,
@@ -3018,7 +3025,9 @@ async def run_agent(
                 },
                 context={
                     "correlation_id": correlation_id,
+                    "run_id": msg_id,
                     "agent_type": agent_config["agent_type"],
+                    "agent_status": agent_config.get("status"),
                     "confidence": task_confidence,
                     "reasoning_trace": task_trace,
                     "trigger": hitl_trigger,
@@ -3059,9 +3068,17 @@ async def run_agent(
                     sql_text(
                         "UPDATE agents SET "
                         "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1, "
+                        "shadow_model_confidence_current = ROUND(CAST("
+                        "  (COALESCE(shadow_model_confidence_current, shadow_accuracy_current, 0) "
+                        "   * COALESCE(shadow_sample_count, 0) + :confidence) "
+                        "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3), "
                         "shadow_accuracy_current = ROUND(CAST("
-                        "  (COALESCE(shadow_accuracy_current, 0) * COALESCE(shadow_sample_count, 0) + :confidence)"
-                        "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3) "
+                        "  ((COALESCE(shadow_model_confidence_current, shadow_accuracy_current, 0) "
+                        "    * COALESCE(shadow_sample_count, 0)) + :confidence + "
+                        "   (COALESCE(shadow_human_confidence_current, 0) "
+                        "    * COALESCE(shadow_feedback_count, 0) * 3)) / "
+                        "  (COALESCE(shadow_sample_count, 0) + 1 + "
+                        "   COALESCE(shadow_feedback_count, 0) * 3) AS NUMERIC), 3) "
                         "WHERE id = :agent_id AND tenant_id = :tenant_id"
                     ),
                     {"confidence": task_confidence, "agent_id": str(agent_id), "tenant_id": tenant_id},
@@ -3490,6 +3507,9 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
         agent.shadow_sample_count = 0
         agent.shadow_accuracy_current = None
+        agent.shadow_model_confidence_current = None
+        agent.shadow_human_confidence_current = None
+        agent.shadow_feedback_count = 0
 
         event = AgentLifecycleEvent(
             tenant_id=tid,

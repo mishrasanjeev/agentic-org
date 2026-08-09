@@ -119,6 +119,9 @@ class AgentResponse(BaseModel):
     confidence_floor: float
     shadow_sample_count: int = 0
     shadow_accuracy_current: float | None = None
+    shadow_model_confidence_current: float | None = None
+    shadow_human_confidence_current: float | None = None
+    shadow_feedback_count: int = 0
     company_id: UUID | None = None
     created_at: datetime
 
