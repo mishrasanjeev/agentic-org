@@ -32,15 +32,11 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 try:
     from presidio_analyzer import AnalyzerEngine
-    from presidio_anonymizer import AnonymizerEngine
-    from presidio_anonymizer.entities import OperatorConfig
 
     _PRESIDIO_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _PRESIDIO_AVAILABLE = False
     AnalyzerEngine = None  # type: ignore[assignment,misc]
-    AnonymizerEngine = None  # type: ignore[assignment,misc]
-    OperatorConfig = None  # type: ignore[assignment,misc]
 
 # ---------------------------------------------------------------------------
 # Redaction mode
@@ -195,7 +191,11 @@ class PIIRedactor:
                     }
                 ).create_engine()
                 self._analyzer = AnalyzerEngine(nlp_engine=nlp_engine)
-                self._anonymizer = AnonymizerEngine()
+                # Redaction is performed below with deterministic tokens.
+                # Presidio Anonymizer is deliberately not required: it was
+                # unused here and its cryptography upper bound prevented us
+                # from installing patched cryptography releases.
+                self._anonymizer = None
             except (OSError, SystemExit) as exc:
                 if _strict_runtime():
                     raise RuntimeError(

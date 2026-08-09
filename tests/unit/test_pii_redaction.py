@@ -27,7 +27,6 @@ import pytest
 _PRESIDIO_INSTALLED = False
 try:
     import presidio_analyzer  # noqa: F401
-    import presidio_anonymizer  # noqa: F401
 
     _PRESIDIO_INSTALLED = True
 except ImportError:

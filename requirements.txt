@@ -43,6 +43,7 @@ pydantic-settings==2.14.2
 jsonschema==4.26.0
 
 # ─── Authentication & Security ───────────────────────────────────────────────
+cryptography>=50.0.0
 PyJWT[crypto]==2.13.0
 passlib[bcrypt]==1.7.4
 grantex==0.3.14
