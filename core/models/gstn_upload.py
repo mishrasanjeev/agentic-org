@@ -14,8 +14,10 @@ from sqlalchemy import (
     TIMESTAMP,
     BigInteger,
     ForeignKey,
+    Index,
     String,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,6 +27,14 @@ from core.models.base import BaseModel
 
 class GSTNUpload(BaseModel):
     __tablename__ = "gstn_uploads"
+    __table_args__ = (
+        Index(
+            "ix_gstn_uploads_scope_created",
+            "tenant_id",
+            "company_id",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

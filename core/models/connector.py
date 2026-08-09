@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,7 +14,15 @@ from core.models.base import BaseModel
 
 class Connector(BaseModel):
     __tablename__ = "connectors"
-    __table_args__ = (UniqueConstraint("tenant_id", "name"),)
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name"),
+        Index(
+            "ix_connectors_tenant_category_live",
+            "tenant_id",
+            "category",
+            postgresql_where=text("COALESCE(status, 'active') <> 'deleted'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

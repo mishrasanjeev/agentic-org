@@ -15,6 +15,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     func,
@@ -33,6 +34,12 @@ class ComplianceDeadline(BaseModel):
             "deadline_type",
             "filing_period",
             name="uq_deadline_company_type_period",
+        ),
+        Index(
+            "ix_compliance_deadlines_scope_due",
+            "tenant_id",
+            "company_id",
+            "due_date",
         ),
     )
 

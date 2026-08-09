@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, String, Text, func
+from sqlalchemy import TIMESTAMP, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,36 @@ from core.models.base import BaseModel
 
 class AuditLog(BaseModel):
     __tablename__ = "audit_log"
+    __table_args__ = (
+        Index("ix_audit_log_tenant_created", "tenant_id", text("created_at DESC")),
+        Index(
+            "ix_audit_log_tenant_agent_created",
+            "tenant_id",
+            "agent_id",
+            text("created_at DESC"),
+        ),
+        Index(
+            "ix_audit_log_tenant_company_created",
+            "tenant_id",
+            "company_id",
+            text("created_at DESC"),
+        ),
+        Index("ix_audit_log_tenant_actor", "tenant_id", "actor_id"),
+        Index(
+            "ix_audit_log_tool_outcome_created",
+            "tenant_id",
+            "outcome",
+            text("created_at DESC"),
+            postgresql_where=text("resource_type = 'tool_call'"),
+        ),
+        Index(
+            "ix_audit_log_tool_connector_created",
+            "tenant_id",
+            text("(details->>'connector')"),
+            text("created_at DESC"),
+            postgresql_where=text("resource_type = 'tool_call'"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)

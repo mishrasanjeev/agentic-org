@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, String, Text, func
+from sqlalchemy import TIMESTAMP, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,14 @@ from core.models.base import BaseModel
 
 class HITLQueue(BaseModel):
     __tablename__ = "hitl_queue"
+    __table_args__ = (
+        Index(
+            "ix_hitl_queue_tenant_status_created",
+            "tenant_id",
+            "status",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(

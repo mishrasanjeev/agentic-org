@@ -98,9 +98,22 @@ def _assert_required_runtime_tables(engine) -> None:
         )
 
 
+def _assert_database_index_health() -> None:
+    """Reject a rollout when the effective PostgreSQL catalog is unhealthy."""
+    from scripts.check_database_indexes import audit_database  # noqa: PLC0415
+
+    failures = audit_database(settings.db_url)
+    if failures:
+        raise RuntimeError(
+            "Database index verification failed after Alembic upgrade:\n\n"
+            + "\n\n".join(failures)
+        )
+
+
 def _upgrade_head_and_verify(cfg: Config, engine, complete_message: str) -> None:
     command.upgrade(cfg, "head")
     _assert_required_runtime_tables(engine)
+    _assert_database_index_health()
     logger.info(complete_message)
 
 

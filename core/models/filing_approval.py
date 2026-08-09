@@ -14,6 +14,7 @@ from sqlalchemy import (
     TIMESTAMP,
     Boolean,
     ForeignKey,
+    Index,
     String,
     Text,
     func,
@@ -27,6 +28,14 @@ from core.models.base import BaseModel
 
 class FilingApproval(BaseModel):
     __tablename__ = "filing_approvals"
+    __table_args__ = (
+        Index(
+            "ix_filing_approvals_scope_created",
+            "tenant_id",
+            "company_id",
+            text("created_at DESC"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
