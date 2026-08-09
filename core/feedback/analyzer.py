@@ -48,7 +48,12 @@ async def analyze_feedback(
     # Filter to negative / actionable feedback only
     negative = [
         e for e in entries
-        if e.get("feedback_type") in ("thumbs_down", "correction", "hitl_reject")
+        if e.get("feedback_type") in (
+            "thumbs_down",
+            "correction",
+            "hitl_reject",
+            "hitl_override",
+        )
     ]
 
     if len(entries) < MIN_FEEDBACK_FOR_ANALYSIS:
@@ -157,3 +162,70 @@ def format_amendments_for_prompt(amendments: list[str]) -> str:
         return ""
     lines = "\n".join(f"- {a}" for a in amendments)
     return f"IMPORTANT LEARNED RULES:\n{lines}\n\n"
+
+
+async def analyze_and_apply_feedback(
+    agent_id: str,
+    tenant_id: str,
+) -> dict[str, Any]:
+    """Analyze accumulated feedback and apply a learned rule in shadow mode.
+
+    Active agents never self-modify. Shadow agents may receive a deduplicated,
+    bounded learned-rule set, so the next sample evaluates the improvement.
+    """
+    analysis = await analyze_feedback(agent_id, tenant_id)
+    amendment = str(analysis.get("amendment") or "").strip()
+    if not amendment:
+        return {**analysis, "applied": False}
+
+    import uuid
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+    from sqlalchemy import text as sql_text
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+
+    tid = uuid.UUID(tenant_id)
+    aid = uuid.UUID(agent_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent)
+            .where(Agent.id == aid, Agent.tenant_id == tid)
+            .with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if agent is None:
+            return {**analysis, "applied": False, "reason": "Agent not found."}
+        if agent.status != "shadow":
+            return {
+                **analysis,
+                "applied": False,
+                "reason": "Learned rules auto-apply only while the agent is in shadow mode.",
+            }
+
+        amendments = [str(value) for value in (agent.prompt_amendments or [])]
+        if amendment not in amendments:
+            agent.prompt_amendments = [*amendments[-9:], amendment]
+        await session.execute(
+            sql_text(
+                "UPDATE agent_feedback SET applied_at = :applied_at "
+                "WHERE tenant_id = :tenant_id AND agent_id = :agent_id "
+                "AND applied_at IS NULL AND feedback_type IN "
+                "('thumbs_down', 'correction', 'hitl_reject', 'hitl_override')"
+            ),
+            {
+                "applied_at": datetime.now(UTC),
+                "tenant_id": tenant_id,
+                "agent_id": agent_id,
+            },
+        )
+
+    logger.info(
+        "feedback_amendment_applied",
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        confidence=analysis.get("confidence"),
+    )
+    return {**analysis, "applied": True}

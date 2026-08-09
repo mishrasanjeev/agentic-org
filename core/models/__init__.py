@@ -65,6 +65,7 @@ from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.feature_flag import FeatureFlag as FeatureFlag
 from core.models.feed import FeedEvent as FeedEvent
+from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.governance_config import GovernanceConfig as GovernanceConfig
 from core.models.gstn_credential import GSTNCredential as GSTNCredential

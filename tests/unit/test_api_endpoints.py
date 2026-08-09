@@ -778,13 +778,22 @@ class TestApprovalsEndpoints:
         from core.schemas.api import HITLDecision
 
         item = _make_hitl(status="pending")
-        # decide() now runs 2 queries: HITL item, then Agent.domain.
-        # Side effect handles both.
+        # decide() reads the HITL item and domain, then captures feedback
+        # idempotently and locks the agent row for confidence calibration.
         agent_domain_result = MagicMock()
         agent_domain_result.scalar_one_or_none.return_value = "finance"
+        existing_feedback_result = MagicMock()
+        existing_feedback_result.scalar_one_or_none.return_value = None
+        learning_agent = MagicMock()
+        learning_agent.status = "active"
+        learning_agent.shadow_accuracy_current = None
+        learning_agent_result = MagicMock()
+        learning_agent_result.scalar_one.return_value = learning_agent
         mock_session.execute = AsyncMock(side_effect=[
             _make_result(scalar_one=item),
             agent_domain_result,
+            existing_feedback_result,
+            learning_agent_result,
         ])
 
         body = HITLDecision(decision="approve", notes="Looks good")
