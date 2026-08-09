@@ -497,6 +497,48 @@ def test_legacy_db_gets_stamped_at_baseline():
     _assert_database_index_health()
 
 
+def test_stamped_legacy_db_repairs_missing_agent_feedback_table():
+    """A stamped production DB may still lack the historical feedback table.
+
+    Reproduce the production v6z7 shape exactly: keep the managed Alembic
+    revision but remove ``agent_feedback`` before upgrading to head.
+    """
+    _reset_schema()
+    _run_migrate_wrapper()
+    command.downgrade(_alembic_cfg(), "v6z7_readiness_security")
+
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE agent_feedback"))
+    engine.dispose()
+
+    result = _run_migrate_wrapper()
+    assert result.returncode == 0
+    assert "alembic_version present" in result.stderr
+    assert "agent_feedback" in _table_names()
+
+    engine = create_engine(_SYNC_URL)
+    with engine.connect() as conn:
+        columns = {column["name"] for column in inspect(conn).get_columns("agent_feedback")}
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+    engine.dispose()
+
+    assert {
+        "id",
+        "tenant_id",
+        "agent_id",
+        "run_id",
+        "feedback_type",
+        "source",
+        "source_event_id",
+        "context",
+        "learning_weight",
+        "created_at",
+    } <= columns
+    assert version == _current_head()
+    _assert_database_index_health()
+
+
 def test_already_managed_db_is_noop():
     """A DB that already has alembic_version must take the ``upgrade
     head`` branch, complete cleanly, and exit 0."""
