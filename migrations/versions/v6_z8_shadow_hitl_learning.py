@@ -5,9 +5,6 @@ Revises: v6z7_readiness_security
 Create Date: 2026-08-09
 """
 
-import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import JSONB
-
 from alembic import op
 
 revision = "v6z8_shadow_hitl"
@@ -17,40 +14,59 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("agents", sa.Column("shadow_model_confidence_current", sa.Numeric(4, 3)))
-    op.add_column("agents", sa.Column("shadow_human_confidence_current", sa.Numeric(4, 3)))
-    op.add_column(
-        "agents",
-        sa.Column("shadow_feedback_count", sa.Integer(), nullable=False, server_default="0"),
+    # The migration wrapper bootstraps legacy databases with current ORM
+    # metadata before stamping the baseline. Keep every schema operation
+    # idempotent so that path and normal version-to-version upgrades both work.
+    op.execute(
+        "ALTER TABLE agents ADD COLUMN IF NOT EXISTS "
+        "shadow_model_confidence_current NUMERIC(4, 3)"
+    )
+    op.execute(
+        "ALTER TABLE agents ADD COLUMN IF NOT EXISTS "
+        "shadow_human_confidence_current NUMERIC(4, 3)"
+    )
+    op.execute(
+        "ALTER TABLE agents ADD COLUMN IF NOT EXISTS "
+        "shadow_feedback_count INTEGER NOT NULL DEFAULT 0"
     )
     op.execute(
         "UPDATE agents SET shadow_model_confidence_current = shadow_accuracy_current "
         "WHERE shadow_accuracy_current IS NOT NULL"
     )
 
-    op.add_column(
-        "agent_feedback",
-        sa.Column("source", sa.String(30), nullable=False, server_default="manual"),
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS "
+        "source VARCHAR(30) NOT NULL DEFAULT 'manual'"
     )
-    op.add_column("agent_feedback", sa.Column("source_event_id", sa.String(200)))
-    op.add_column("agent_feedback", sa.Column("actor_id", sa.String(255)))
-    op.add_column("agent_feedback", sa.Column("decision", sa.String(100)))
-    op.add_column(
-        "agent_feedback",
-        sa.Column("context", JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS source_event_id VARCHAR(200)"
     )
-    op.add_column("agent_feedback", sa.Column("confidence_before", sa.Numeric(4, 3)))
-    op.add_column("agent_feedback", sa.Column("confidence_after", sa.Numeric(4, 3)))
-    op.add_column(
-        "agent_feedback",
-        sa.Column("learning_weight", sa.Numeric(5, 2), nullable=False, server_default="1.00"),
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS actor_id VARCHAR(255)"
     )
-    op.create_unique_constraint(
-        "uq_agent_feedback_tenant_source_event",
-        "agent_feedback",
-        ["tenant_id", "source_event_id"],
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS decision VARCHAR(100)"
+    )
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS "
+        "context JSONB NOT NULL DEFAULT '{}'::jsonb"
+    )
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS confidence_before NUMERIC(4, 3)"
+    )
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS confidence_after NUMERIC(4, 3)"
+    )
+    op.execute(
+        "ALTER TABLE agent_feedback ADD COLUMN IF NOT EXISTS "
+        "learning_weight NUMERIC(5, 2) NOT NULL DEFAULT 1.00"
+    )
+    op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_feedback_tenant_source_event "
+        "ON agent_feedback (tenant_id, source_event_id)"
     )
     op.execute("ALTER TABLE agent_feedback ENABLE ROW LEVEL SECURITY")
+    op.execute("ALTER TABLE agent_feedback FORCE ROW LEVEL SECURITY")
     op.execute("DROP POLICY IF EXISTS agent_feedback_tenant_isolation ON agent_feedback")
     op.execute("""
         CREATE POLICY agent_feedback_tenant_isolation ON agent_feedback
@@ -61,10 +77,13 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP POLICY IF EXISTS agent_feedback_tenant_isolation ON agent_feedback")
+    op.execute("ALTER TABLE agent_feedback NO FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE agent_feedback DISABLE ROW LEVEL SECURITY")
-    op.drop_constraint(
-        "uq_agent_feedback_tenant_source_event", "agent_feedback", type_="unique"
+    op.execute(
+        "ALTER TABLE agent_feedback DROP CONSTRAINT IF EXISTS "
+        "uq_agent_feedback_tenant_source_event"
     )
+    op.execute("DROP INDEX IF EXISTS uq_agent_feedback_tenant_source_event")
     for column in (
         "learning_weight",
         "confidence_after",
@@ -75,7 +94,7 @@ def downgrade() -> None:
         "source_event_id",
         "source",
     ):
-        op.drop_column("agent_feedback", column)
-    op.drop_column("agents", "shadow_feedback_count")
-    op.drop_column("agents", "shadow_human_confidence_current")
-    op.drop_column("agents", "shadow_model_confidence_current")
+        op.execute(f'ALTER TABLE agent_feedback DROP COLUMN IF EXISTS "{column}"')
+    op.execute("ALTER TABLE agents DROP COLUMN IF EXISTS shadow_feedback_count")
+    op.execute("ALTER TABLE agents DROP COLUMN IF EXISTS shadow_human_confidence_current")
+    op.execute("ALTER TABLE agents DROP COLUMN IF EXISTS shadow_model_confidence_current")

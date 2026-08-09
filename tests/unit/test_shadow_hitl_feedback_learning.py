@@ -127,3 +127,16 @@ def test_collector_uses_the_deployed_feedback_schema() -> None:
     assert "feedback_text" in source
     assert "CAST(:corrected_output AS JSONB)" in source
     assert "(id, agent_id, run_id, feedback_type, text," not in source
+
+
+def test_shadow_learning_migration_supports_legacy_orm_bootstrap() -> None:
+    migration = (
+        __import__("pathlib").Path(__file__).parents[2]
+        / "migrations"
+        / "versions"
+        / "v6_z8_shadow_hitl_learning.py"
+    ).read_text(encoding="utf-8")
+
+    assert migration.count("ADD COLUMN IF NOT EXISTS") == 11
+    assert "CREATE UNIQUE INDEX IF NOT EXISTS" in migration
+    assert "FORCE ROW LEVEL SECURITY" in migration
