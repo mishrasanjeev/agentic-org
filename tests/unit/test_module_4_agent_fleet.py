@@ -241,13 +241,12 @@ def test_tc_agt_009_promote_map_only_shadow_to_active() -> None:
 
 def test_tc_agt_009_promote_validates_min_samples() -> None:
     """Foundation #8 false-green prevention: promote MUST refuse
-    with 409 when shadow_sample_count < shadow_min_samples.
-    Without this, an agent with 0 samples could go straight
+    with 409 when scored shadow evidence is below shadow_min_samples.
+    Without this, unscored runs could send an agent straight
     to active."""
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    assert (
-        "if agent.shadow_sample_count < agent.shadow_min_samples:" in src
-    )
+    assert "if scored_samples < agent.shadow_min_samples:" in src
+    assert "scored_shadow_sample_count(agent)" in src
     assert "cannot promote until minimum is met" in src
 
 

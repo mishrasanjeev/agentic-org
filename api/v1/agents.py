@@ -411,7 +411,7 @@ _MIN_PRODUCTION_SHADOW_ACCURACY = Decimal("0.600")
 
 def _agent_to_dict(agent: Agent) -> dict:
     """Convert an Agent ORM instance to a JSON-serialisable dict."""
-    return {
+    payload = {
         "id": str(agent.id),
         "company_id": str(agent.company_id) if getattr(agent, "company_id", None) else None,
         "name": agent.name,
@@ -438,6 +438,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "shadow_min_samples": agent.shadow_min_samples,
         "shadow_accuracy_floor": float(agent.shadow_accuracy_floor),
         "shadow_sample_count": agent.shadow_sample_count,
+        "shadow_scored_sample_count": agent.shadow_scored_sample_count,
         "shadow_accuracy_current": float(agent.shadow_accuracy_current)
         if agent.shadow_accuracy_current is not None
         else None,
@@ -477,6 +478,10 @@ def _agent_to_dict(agent: Agent) -> dict:
         # but no Gmail connector linked" before the agent crashes at runtime.
         "connector_ids": getattr(agent, "connector_ids", None) or [],
     }
+    from core.feedback.shadow_learning import learned_review_policy
+
+    payload["review_learning"] = learned_review_policy(agent)
+    return payload
 
 
 def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
@@ -2530,6 +2535,7 @@ async def run_agent(
             )
 
         agent_config = _agent_to_dict(agent_row)
+        review_learning = agent_config["review_learning"]
         dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
 
     # 2. Prepare execution config
@@ -2926,8 +2932,12 @@ async def run_agent(
                     "context": payload.get("context", {}),
                 },
                 llm_model=agent_config.get("llm_model", ""),
-                confidence_floor=float(agent_config.get("confidence_floor", 0.88)),
-                hitl_condition=agent_config.get("hitl_condition", ""),
+                confidence_floor=float(review_learning["effective_confidence_floor"]),
+                hitl_condition=(
+                    ""
+                    if review_learning["confidence_condition_suppressed"]
+                    else agent_config.get("hitl_condition", "")
+                ),
                 grant_token=grant_token,
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
@@ -3016,7 +3026,11 @@ async def run_agent(
                 agent_id=agent_id,
                 workflow_run_id=None,
                 title=f"HITL: {agent_config['agent_type']} — {hitl_trigger}",
-                trigger_type="confidence_below_floor",
+                trigger_type=(
+                    "confidence_below_floor"
+                    if str(hitl_trigger).startswith("confidence ")
+                    else "policy_condition"
+                ),
                 priority="high" if task_confidence < 0.7 else "normal",
                 assignee_role=agent_config.get("domain", "admin"),
                 decision_options={
@@ -3068,16 +3082,17 @@ async def run_agent(
                     sql_text(
                         "UPDATE agents SET "
                         "shadow_sample_count = COALESCE(shadow_sample_count, 0) + 1, "
+                        "shadow_scored_sample_count = COALESCE(shadow_scored_sample_count, 0) + 1, "
                         "shadow_model_confidence_current = ROUND(CAST("
                         "  (COALESCE(shadow_model_confidence_current, shadow_accuracy_current, 0) "
-                        "   * COALESCE(shadow_sample_count, 0) + :confidence) "
-                        "  / (COALESCE(shadow_sample_count, 0) + 1) AS NUMERIC), 3), "
+                        "   * COALESCE(shadow_scored_sample_count, 0) + :confidence) "
+                        "  / (COALESCE(shadow_scored_sample_count, 0) + 1) AS NUMERIC), 3), "
                         "shadow_accuracy_current = ROUND(CAST("
                         "  ((COALESCE(shadow_model_confidence_current, shadow_accuracy_current, 0) "
-                        "    * COALESCE(shadow_sample_count, 0)) + :confidence + "
+                        "    * COALESCE(shadow_scored_sample_count, 0)) + :confidence + "
                         "   (COALESCE(shadow_human_confidence_current, 0) "
                         "    * COALESCE(shadow_feedback_count, 0) * 3)) / "
-                        "  (COALESCE(shadow_sample_count, 0) + 1 + "
+                        "  (COALESCE(shadow_scored_sample_count, 0) + 1 + "
                         "   COALESCE(shadow_feedback_count, 0) * 3) AS NUMERIC), 3) "
                         "WHERE id = :agent_id AND tenant_id = :tenant_id"
                     ),
@@ -3159,6 +3174,7 @@ async def run_agent(
         },
         "hitl_trigger": hitl_trigger or None,
         "error": task_error or None,
+        "review_learning": review_learning,
     }
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
@@ -3339,11 +3355,14 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
         # For shadow->active, validate minimum shadow samples met
         # Skip validation entirely when shadow_min_samples=0 (opt-out)
         if agent.status == "shadow" and agent.shadow_min_samples > 0:
-            if agent.shadow_sample_count < agent.shadow_min_samples:
+            from core.feedback.shadow_learning import scored_shadow_sample_count
+
+            scored_samples = scored_shadow_sample_count(agent)
+            if scored_samples < agent.shadow_min_samples:
                 raise HTTPException(
                     409,
-                    f"Shadow agent has {agent.shadow_sample_count}/{agent.shadow_min_samples} samples; "
-                    f"cannot promote until minimum is met",
+                    f"Shadow agent has {scored_samples}/{agent.shadow_min_samples} scored samples "
+                    f"({agent.shadow_sample_count} total); cannot promote until minimum is met",
                 )
             if agent.shadow_accuracy_current is None:
                 raise HTTPException(
@@ -3506,6 +3525,7 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
         old_accuracy = float(agent.shadow_accuracy_current) if agent.shadow_accuracy_current is not None else None
 
         agent.shadow_sample_count = 0
+        agent.shadow_scored_sample_count = 0
         agent.shadow_accuracy_current = None
         agent.shadow_model_confidence_current = None
         agent.shadow_human_confidence_current = None

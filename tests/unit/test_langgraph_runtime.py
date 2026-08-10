@@ -253,6 +253,17 @@ class TestAgentGraph:
         trigger = _check_hitl_trigger(0.95, 0.88, "amount > 500000", {"amount": 1000000})
         assert "condition matched" in trigger
 
+    def test_explicit_condition_survives_learned_confidence_floor(self):
+        from core.langgraph.agent_graph import _check_hitl_trigger
+
+        trigger = _check_hitl_trigger(
+            0.95,
+            0.60,
+            "amount > 500000",
+            {"amount": 1000000},
+        )
+        assert "condition matched" in trigger
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Runner
