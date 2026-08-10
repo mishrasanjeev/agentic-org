@@ -36,6 +36,15 @@ RUN useradd -m agenticorg
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+# The runtime does not install packages. Validate the copied environment, then
+# remove pip and its vendored SBOM: Trivy otherwise treats build-only entries
+# in pip/_vendor/bom.cdx.json as installed runtime dependencies. Remove the
+# paths explicitly because copying site-packages over the runtime base can
+# overlay two pip versions that a normal uninstall does not fully clean up.
+RUN python -m pip check \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip \
+        /usr/local/lib/python3.14/site-packages/pip-*.dist-info \
+        /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.14
 COPY . .
 USER agenticorg
 EXPOSE 8000
