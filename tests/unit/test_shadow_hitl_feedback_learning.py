@@ -233,6 +233,21 @@ def test_only_simple_confidence_conditions_can_be_suppressed() -> None:
     assert is_confidence_only_condition("") is False
 
 
+def test_non_numeric_or_non_finite_metrics_fail_closed() -> None:
+    for invalid in (object(), "not-a-number", float("nan"), Decimal("Infinity")):
+        agent = _agent()
+        agent.shadow_sample_count = 10
+        agent.shadow_scored_sample_count = 10
+        agent.shadow_feedback_count = 3
+        agent.shadow_accuracy_current = invalid
+        agent.shadow_human_confidence_current = Decimal("1.000")
+
+        policy = learned_review_policy(agent)
+
+        assert policy["autonomy_eligible"] is False
+        assert policy["reason"] == "combined_confidence_below_floor"
+
+
 def test_collector_uses_the_deployed_feedback_schema() -> None:
     source = (
         __import__("pathlib").Path(__file__).parents[2]

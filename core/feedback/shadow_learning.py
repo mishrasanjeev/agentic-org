@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from sqlalchemy import select
@@ -49,6 +49,23 @@ def _integer_metric(agent: Any, name: str, fallback: int = 0) -> int:
     return max(int(fallback or 0), 0)
 
 
+def _decimal_metric(
+    agent: Any,
+    name: str,
+    fallback: Decimal | None = None,
+) -> Decimal | None:
+    value = getattr(agent, name, None)
+    if isinstance(value, bool) or not isinstance(value, (Decimal, int, float, str)):
+        return fallback
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return fallback
+    if not parsed.is_finite():
+        return fallback
+    return _q(parsed)
+
+
 def scored_shadow_sample_count(agent: Any) -> int:
     """Return count of samples that actually contributed model confidence.
 
@@ -75,18 +92,25 @@ def learned_review_policy(agent: Any) -> dict[str, Any]:
     per-run floor also remains in place so an anomalously uncertain run still
     reaches a human even after the agent has earned routine autonomy.
     """
-    configured_floor = _q(Decimal(str(getattr(agent, "confidence_floor", 0) or 0)))
+    configured_floor = _decimal_metric(
+        agent,
+        "confidence_floor",
+        Decimal("0"),
+    ) or Decimal("0")
     accuracy_floor = max(
-        _q(Decimal(str(getattr(agent, "shadow_accuracy_floor", 0) or 0))),
+        _decimal_metric(
+            agent,
+            "shadow_accuracy_floor",
+            Decimal("0"),
+        )
+        or Decimal("0"),
         LEARNED_ROUTINE_CONFIDENCE_FLOOR,
     )
     required_samples = _integer_metric(agent, "shadow_min_samples")
     scored_samples = scored_shadow_sample_count(agent)
     human_reviews = _integer_metric(agent, "shadow_feedback_count")
-    combined_raw = getattr(agent, "shadow_accuracy_current", None)
-    human_raw = getattr(agent, "shadow_human_confidence_current", None)
-    combined = _q(Decimal(str(combined_raw))) if combined_raw is not None else None
-    human = _q(Decimal(str(human_raw))) if human_raw is not None else None
+    combined = _decimal_metric(agent, "shadow_accuracy_current")
+    human = _decimal_metric(agent, "shadow_human_confidence_current")
     status = str(getattr(agent, "status", "") or "")
 
     reason = "learned_routine_autonomy_enabled"
