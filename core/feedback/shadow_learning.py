@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -13,7 +14,13 @@ from core.models.feedback import AgentFeedback
 from core.models.hitl import HITLQueue
 
 HUMAN_EVIDENCE_WEIGHT = Decimal("3.00")
+MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY = 3
+LEARNED_ROUTINE_CONFIDENCE_FLOOR = Decimal("0.600")
 _MILLI = Decimal("0.001")
+_CONFIDENCE_ONLY_CONDITION = re.compile(
+    r"^\s*confidence\s*(?:<|<=)\s*(?:0(?:\.\d+)?|1(?:\.0+)?)\s*$",
+    re.IGNORECASE,
+)
 
 
 def _q(value: Decimal) -> Decimal:
@@ -33,6 +40,89 @@ def _decision_signal(decision: str, terminal: bool) -> tuple[str, Decimal | None
     if normalized in {"override", "correct", "correction", "edit"}:
         return "hitl_override", Decimal("0.25")
     return "hitl_vote", None
+
+
+def _integer_metric(agent: Any, name: str, fallback: int = 0) -> int:
+    value = getattr(agent, name, None)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return max(value, 0)
+    return max(int(fallback or 0), 0)
+
+
+def scored_shadow_sample_count(agent: Any) -> int:
+    """Return count of samples that actually contributed model confidence.
+
+    The fallback preserves compatibility with rows/mocks created before the
+    dedicated counter existed. Migrated databases backfill the same value.
+    """
+    return _integer_metric(
+        agent,
+        "shadow_scored_sample_count",
+        _integer_metric(agent, "shadow_sample_count"),
+    )
+
+
+def is_confidence_only_condition(condition: str | None) -> bool:
+    """Whether a HITL expression merely duplicates the confidence gate."""
+    return bool(_CONFIDENCE_ONLY_CONDITION.fullmatch(str(condition or "")))
+
+
+def learned_review_policy(agent: Any) -> dict[str, Any]:
+    """Compute the evidence-gated confidence floor for routine review.
+
+    Learning may relax only the generic confidence gate. Explicit amount,
+    policy, workflow, and action-risk approvals remain untouched. A hard 0.60
+    per-run floor also remains in place so an anomalously uncertain run still
+    reaches a human even after the agent has earned routine autonomy.
+    """
+    configured_floor = _q(Decimal(str(getattr(agent, "confidence_floor", 0) or 0)))
+    accuracy_floor = max(
+        _q(Decimal(str(getattr(agent, "shadow_accuracy_floor", 0) or 0))),
+        LEARNED_ROUTINE_CONFIDENCE_FLOOR,
+    )
+    required_samples = _integer_metric(agent, "shadow_min_samples")
+    scored_samples = scored_shadow_sample_count(agent)
+    human_reviews = _integer_metric(agent, "shadow_feedback_count")
+    combined_raw = getattr(agent, "shadow_accuracy_current", None)
+    human_raw = getattr(agent, "shadow_human_confidence_current", None)
+    combined = _q(Decimal(str(combined_raw))) if combined_raw is not None else None
+    human = _q(Decimal(str(human_raw))) if human_raw is not None else None
+    status = str(getattr(agent, "status", "") or "")
+
+    reason = "learned_routine_autonomy_enabled"
+    eligible = True
+    if status not in {"shadow", "active"}:
+        eligible, reason = False, "agent_status_not_learning"
+    elif required_samples <= 0:
+        eligible, reason = False, "shadow_learning_disabled"
+    elif scored_samples < required_samples:
+        eligible, reason = False, "insufficient_scored_samples"
+    elif human_reviews < MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY:
+        eligible, reason = False, "insufficient_human_reviews"
+    elif combined is None or combined < accuracy_floor:
+        eligible, reason = False, "combined_confidence_below_floor"
+    elif human is None or human < accuracy_floor:
+        eligible, reason = False, "human_confidence_below_floor"
+
+    effective_floor = (
+        LEARNED_ROUTINE_CONFIDENCE_FLOOR if eligible else configured_floor
+    )
+    confidence_condition_suppressed = eligible and is_confidence_only_condition(
+        getattr(agent, "hitl_condition", "")
+    )
+    return {
+        "autonomy_eligible": eligible,
+        "reason": reason,
+        "configured_confidence_floor": float(configured_floor),
+        "effective_confidence_floor": float(effective_floor),
+        "required_scored_samples": required_samples,
+        "scored_samples": scored_samples,
+        "required_human_reviews": MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY,
+        "human_reviews": human_reviews,
+        "combined_confidence": float(combined) if combined is not None else None,
+        "human_confidence": float(human) if human is not None else None,
+        "confidence_condition_suppressed": confidence_condition_suppressed,
+    }
 
 
 async def capture_hitl_feedback(
@@ -81,7 +171,7 @@ async def capture_hitl_feedback(
     after = before
 
     if ran_in_shadow and human_signal is not None:
-        model_count = int(agent.shadow_sample_count or 0)
+        model_count = scored_shadow_sample_count(agent)
         model_average = agent.shadow_model_confidence_current
         if model_average is None:
             model_average = agent.shadow_accuracy_current

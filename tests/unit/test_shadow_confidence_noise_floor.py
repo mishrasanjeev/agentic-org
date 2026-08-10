@@ -68,6 +68,25 @@ def test_mixed_window_is_not_dragged_by_zero_confidence_samples() -> None:
     assert new_avg == pytest.approx(0.80, abs=0.001)
 
 
+def test_unscored_samples_do_not_dilute_the_next_model_average() -> None:
+    """Ten operational samples with only one trustworthy score stay at 0.8.
+
+    The old SQL divided by total sample count and produced 0.08 here.
+    """
+    total_samples = 10
+    scored_samples = 0
+    old_model_average = Decimal("0")
+    incoming = Decimal("0.800")
+
+    corrected = (
+        (old_model_average * scored_samples) + incoming
+    ) / (scored_samples + 1)
+    buggy = ((old_model_average * total_samples) + incoming) / (total_samples + 1)
+
+    assert corrected == Decimal("0.800")
+    assert buggy < Decimal("0.100")
+
+
 class TestShadowFloorDefault:
     def test_orm_default_is_080_not_095(self) -> None:
         """BUG-012: default floor was 0.95 which was unreachable for
@@ -90,3 +109,8 @@ class TestShadowFloorDefault:
             AgentCreate.model_fields["shadow_accuracy_floor"].default
             == 0.80
         )
+
+    def test_sample_target_default_matches_orm(self) -> None:
+        from core.schemas.api import AgentCreate
+
+        assert AgentCreate.model_fields["shadow_min_samples"].default == 10

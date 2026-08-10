@@ -108,6 +108,13 @@ class Agent(BaseModel):
         Numeric(4, 3), nullable=False, default=Decimal("0.800")
     )
     shadow_sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Total samples and scored samples are deliberately separate. A completed
+    # shadow run can be useful operational evidence while still lacking a
+    # trustworthy confidence signal. Mixing those rows into the model-average
+    # denominator made the next scored run look artificially close to zero.
+    shadow_scored_sample_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     shadow_accuracy_current: Mapped[Decimal | None] = mapped_column(Numeric(4, 3), nullable=True)
     shadow_model_confidence_current: Mapped[Decimal | None] = mapped_column(
         Numeric(4, 3), nullable=True

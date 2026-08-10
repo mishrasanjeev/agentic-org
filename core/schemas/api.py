@@ -59,7 +59,7 @@ class AgentCreate(BaseModel):
     output_schema: str | None = None
     initial_status: str = "shadow"
     shadow_comparison_agent: str | None = None
-    shadow_min_samples: int = 20
+    shadow_min_samples: int = 10
     # BUG-012 (Ramesh 2026-04-20): aligned with the ORM default —
     # 0.95 was unrealistic for LLM-driven agents; see
     # core/models/agent.py for the full rationale.
@@ -118,10 +118,12 @@ class AgentResponse(BaseModel):
     version: str
     confidence_floor: float
     shadow_sample_count: int = 0
+    shadow_scored_sample_count: int = 0
     shadow_accuracy_current: float | None = None
     shadow_model_confidence_current: float | None = None
     shadow_human_confidence_current: float | None = None
     shadow_feedback_count: int = 0
+    review_learning: dict[str, Any] = Field(default_factory=dict)
     company_id: UUID | None = None
     created_at: datetime
 

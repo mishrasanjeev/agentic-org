@@ -67,6 +67,9 @@ def make_mock_agent(**overrides):
     agent.version = overrides.get("version", "1.0.0")
     agent.confidence_floor = overrides.get("confidence_floor", Decimal("0.880"))
     agent.shadow_sample_count = overrides.get("shadow_sample_count", 0)
+    agent.shadow_scored_sample_count = overrides.get(
+        "shadow_scored_sample_count", agent.shadow_sample_count
+    )
     agent.shadow_min_samples = overrides.get("shadow_min_samples", 10)
     agent.shadow_accuracy_current = overrides.get("shadow_accuracy_current", None)
     agent.shadow_model_confidence_current = overrides.get(
@@ -197,7 +200,7 @@ class TestAgentToDict:
             "retry_backoff", "authorized_tools", "output_schema",
             "parent_agent_id", "shadow_comparison_agent_id",
             "shadow_min_samples", "shadow_accuracy_floor",
-            "shadow_sample_count", "shadow_accuracy_current",
+            "shadow_sample_count", "shadow_scored_sample_count", "shadow_accuracy_current",
             "shadow_model_confidence_current", "shadow_human_confidence_current",
             "shadow_feedback_count",
             "cost_controls", "scaling", "tags", "ttl_hours",
@@ -206,6 +209,7 @@ class TestAgentToDict:
             "specialization", "routing_filter", "is_builtin",
             "system_prompt_text", "reporting_to", "org_level",
             "prompt_amendments", "config",
+            "review_learning",
             # v4.6.0: added so the UI can show GA/BETA badges and
             # cost-center attribution.
             "maturity", "cost_center_id",

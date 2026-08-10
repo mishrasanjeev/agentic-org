@@ -370,14 +370,19 @@ async def decide(
     learning_result: dict = {}
 
     # P2.1: capture decision_by from authenticated user (always required)
-    user_id_str = user_claims.get("sub") or user_claims.get("agenticorg:user_id") or ""
+    # Prefer the canonical local user UUID. OIDC ``sub`` is commonly an email
+    # or provider-specific opaque string and cannot populate decision_by's UUID
+    # foreign key, which previously left authenticated decisions unattributed.
+    user_id_str = user_claims.get("agenticorg:user_id") or user_claims.get("sub") or ""
     user_name = user_claims.get("name") or user_claims.get("email") or "unknown"
     if not user_id_str:
         raise HTTPException(401, "Cannot identify user — missing 'sub' claim")
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(HITLQueue).where(HITLQueue.id == hitl_id, HITLQueue.tenant_id == tid)
+            select(HITLQueue)
+            .where(HITLQueue.id == hitl_id, HITLQueue.tenant_id == tid)
+            .with_for_update()
         )
         item = result.scalar_one_or_none()
         if not item:
@@ -528,12 +533,24 @@ async def decide(
                 step = step_res.scalar_one_or_none()
 
             if step is not None:
+                duplicate_vote = any(
+                    str(vote.get("user_id") or "") == user_id_str
+                    and int(vote.get("sequence") or current_seq) == int(step.sequence)
+                    for vote in approvals_history
+                    if isinstance(vote, dict)
+                )
+                if duplicate_vote:
+                    raise HTTPException(
+                        409,
+                        "This reviewer has already voted on the current approval step",
+                    )
                 pdec = apply_decision(step, approvals_collected, body.decision or "approve")
                 policy_action = pdec.action
                 approvals_history.append(
                     {
                         "user_id": user_id_str,
                         "decision": body.decision,
+                        "sequence": step.sequence,
                         "at": datetime.now(UTC).isoformat(),
                     }
                 )
