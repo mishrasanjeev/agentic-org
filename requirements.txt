@@ -30,7 +30,7 @@ websockets==15.0.1
 # ─── Database & ORM ──────────────────────────────────────────────────────────
 sqlalchemy[asyncio]==2.0.51
 asyncpg==0.31.0
-alembic==1.18.5
+alembic==1.19.0
 pgvector==0.5.0
 
 # ─── Cache, Task Queue & Message Broker ──────────────────────────────────────
