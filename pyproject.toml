@@ -87,7 +87,7 @@ dependencies = [
     "langchain-openai>=1.4.1",
     "langgraph-checkpoint-postgres>=3.1.1",
     "grantex>=0.3.14",
-    "langsmith>=0.10.11",
+    "langsmith>=0.10.16",
     "pypdf>=6.15.0",
     # S0-06 multimodal RAG (PR-3 2026-04-24): Word document ingestion.
     # Image OCR (pytesseract) and audio transcription (openai-whisper)
