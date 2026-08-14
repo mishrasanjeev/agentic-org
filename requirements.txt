@@ -95,4 +95,4 @@ fpdf2==2.8.7
 openpyxl==3.1.5
 
 # ─── Push Notifications ─────────────────────────────────────────────────────
-pywebpush==2.3.0
+pywebpush==2.4.0
