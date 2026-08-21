@@ -22,7 +22,7 @@
 
 # ─── Web Framework ───────────────────────────────────────────────────────────
 fastapi==0.141.1
-uvicorn[standard]==0.52.1
+uvicorn[standard]==0.52.3
 # starlette pulled by fastapi (>=0.49.1 required for CVE-2025-54121, CVE-2025-62727)
 python-multipart==0.0.32
 websockets==15.0.1
@@ -63,12 +63,12 @@ openai==2.53.0
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
 langgraph==1.2.11
 langchain==1.3.14
-langchain-core==1.5.3
+langchain-core==1.5.4
 langchain-google-genai==4.3.3
 langchain-anthropic==1.5.4
 langchain-openai==1.5.0
 langgraph-checkpoint-postgres==3.1.2
-langsmith==0.10.17
+langsmith==0.11.0
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0
