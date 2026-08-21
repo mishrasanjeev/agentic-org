@@ -1,8 +1,8 @@
 {
   "schema_version": "agenticorg.claim-registry.v1",
-  "registry_version": "2026-07-28.1",
+  "registry_version": "2026-08-21.1",
   "product_version": "4.8.0",
-  "generated_at": "2026-07-28T00:00:00Z",
+  "generated_at": "2026-08-21T00:00:00Z",
   "capabilities": [
     {
       "capability_id": "PLAT-C12",
@@ -13,7 +13,7 @@
       "public_availability": "Preview",
       "claim_treatment": "Illustrative",
       "owner": "PLAT-O (unassigned; W0-05)",
-      "expires_at": "2026-08-27T00:00:00Z",
+      "expires_at": "2026-09-30T00:00:00Z",
       "evidence_ids": [],
       "permitted_claim_ids": ["PLAT-CLAIM-CONTROL-PREVIEW"],
       "limitations": ["Seed control record only; no production-readiness claim is authorized."]
@@ -33,7 +33,7 @@
       "owner": "PLAT-O (unassigned; W0-05)",
       "approver": "Unassigned pending W0-05",
       "product_version": "4.8.0",
-      "expires_at": "2026-08-27T00:00:00Z",
+      "expires_at": "2026-09-30T00:00:00Z",
       "surfaces": ["README.md"],
       "inventory_source": null,
       "limitations": ["Must be visibly labeled illustrative; it is not evidence-backed."]
@@ -50,7 +50,7 @@
       "owner": "PLAT-O (unassigned; W0-05)",
       "approver": "Unassigned pending W0-05",
       "product_version": "4.8.0",
-      "expires_at": "2026-08-27T00:00:00Z",
+      "expires_at": "2026-09-30T00:00:00Z",
       "surfaces": ["README.md", "ui/src/pages/Landing.*", "ui/src/pages/Pricing.*"],
       "inventory_source": "api/v1/product_facts.py:/api/v1/product-facts",
       "limitations": ["Counts must be fetched or build-pinned from the canonical endpoint."]
@@ -74,7 +74,7 @@
       "owner": "Billing catalog contract",
       "approver": "Automated billing catalog release gate",
       "product_version": "4.8.0",
-      "expires_at": "2026-08-15T00:00:00Z",
+      "expires_at": "2026-09-30T00:00:00Z",
       "surfaces": ["README.md", "ui/public/llms*.txt", "ui/dist/llms*.txt"],
       "inventory_source": "core/billing/catalog.py:PUBLIC_PLAN_CATALOG",
       "limitations": ["Prices and limits are list-offer facts; checkout availability is reported separately by the billing API."]
