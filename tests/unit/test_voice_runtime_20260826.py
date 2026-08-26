@@ -26,8 +26,8 @@ def _signature(url: str, params: dict[str, str], token: str) -> str:
     # protocol compatibility; it is not password hashing or key derivation.
     digest = hmac.new(
         token.encode(),
-        canonical.encode(),
-        hashlib.sha1,  # lgtm[py/weak-sensitive-data-hashing]
+        canonical.encode(),  # lgtm[py/weak-sensitive-data-hashing]
+        hashlib.sha1,
     ).digest()
     return base64.b64encode(digest).decode()
 
