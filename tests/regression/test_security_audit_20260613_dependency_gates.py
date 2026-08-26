@@ -56,8 +56,8 @@ def test_vulnerable_jwt_stack_is_not_in_production_dependencies() -> None:
 
 def test_bge_m3_loader_is_explicit_extra_only() -> None:
     extras = _pyproject()["project"]["optional-dependencies"]
-    assert "FlagEmbedding>=1.4.0" in extras["bge-m3"]
-    assert "FlagEmbedding>=1.4.0" not in extras["v4"]
+    assert "flagembedding" in _dependency_names(extras["bge-m3"])
+    assert "flagembedding" not in _dependency_names(extras["v4"])
 
 
 def test_requirements_v4_stays_installable_without_unsafe_optional_sdks() -> None:
