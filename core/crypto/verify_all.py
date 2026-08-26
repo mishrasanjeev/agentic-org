@@ -145,6 +145,24 @@ def parse_jsonb_credentials(value: dict | str | None) -> KeyRef | None:
     return None
 
 
+def parse_encrypted_container(value: dict | str | None) -> KeyRef | None:
+    """Parse a JSONB ``{"_encrypted": ...}`` encrypted-column value."""
+
+    if isinstance(value, dict):
+        value = value.get("_encrypted")
+    elif isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, dict) and "_encrypted" in decoded:
+            value = decoded.get("_encrypted")
+
+    if isinstance(value, str) and value.startswith("env1:"):
+        value = value.removeprefix("env1:")
+    return parse_ciphertext(value)
+
+
 # ── Scanner ──────────────────────────────────────────────────────────
 
 
@@ -162,6 +180,10 @@ _SCANNERS: list[tuple[str, str]] = [
     (
         "tenant_ai_credentials.credentials_encrypted",
         "core.models.tenant_ai_credential:TenantAICredential:credentials_encrypted",
+    ),
+    (
+        "voice_calls.transcript_encrypted",
+        "core.models.voice_call:VoiceCall:transcript_encrypted",
     ),
 ]
 
@@ -295,7 +317,7 @@ def _collect_key_refs(
     values: Iterable,
 ) -> None:
     for raw in values:
-        kr = parse_jsonb_credentials(raw) if label.endswith("credentials_encrypted") else parse_ciphertext(raw)
+        kr = parse_encrypted_container(raw) if label.endswith("_encrypted") else parse_ciphertext(raw)
         if kr is not None:
             refs.setdefault(label, set()).add(kr)
 

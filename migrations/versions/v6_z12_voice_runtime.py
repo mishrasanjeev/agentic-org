@@ -7,6 +7,8 @@ Create Date: 2026-08-26
 
 from alembic import op
 
+from core.crypto.migration_helpers import encrypted_migration
+
 revision = "v6z12_voice_runtime"
 down_revision = "v6z11_shadow_scored"
 branch_labels = None
@@ -46,30 +48,50 @@ def upgrade() -> None:
             )
         );
     """)
-    op.execute("""
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_voice_calls_tenant_provider_ref
-        ON voice_calls (tenant_id, provider, provider_call_id);
-    """)
-    op.execute("""
-        CREATE INDEX IF NOT EXISTS ix_voice_calls_agent_id
-        ON voice_calls (agent_id);
-    """)
-    op.execute("""
-        CREATE INDEX IF NOT EXISTS ix_voice_calls_tenant_agent_created
-        ON voice_calls (tenant_id, agent_id, created_at DESC);
-    """)
-    op.execute("""
-        CREATE INDEX IF NOT EXISTS ix_voice_calls_tenant_status
-        ON voice_calls (tenant_id, status);
-    """)
-    op.execute("ALTER TABLE voice_calls ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE voice_calls FORCE ROW LEVEL SECURITY;")
-    op.execute("DROP POLICY IF EXISTS voice_calls_tenant_isolation ON voice_calls;")
-    op.execute("""
-        CREATE POLICY voice_calls_tenant_isolation ON voice_calls
-        USING (tenant_id::text = current_setting('agenticorg.tenant_id', true))
-        WITH CHECK (tenant_id::text = current_setting('agenticorg.tenant_id', true));
-    """)
+    with encrypted_migration(
+        revision=revision,
+        table="voice_calls",
+        columns=["transcript_encrypted"],
+        rollback_doc=(
+            "Drop voice_calls before application traffic is enabled. The table "
+            "is new in this revision, so rollback does not transform or discard "
+            "pre-existing ciphertext."
+        ),
+    ) as ctx:
+        pre_count = ctx.snapshot_row_count()
+        ctx.dry_run_decrypt_sample(n=50)
+        # Initialize resumability/audit state even though a newly created table
+        # has no rows to transform.
+        for _offset in ctx.iter_resumable_batches(batch=500):
+            raise RuntimeError("new voice_calls table unexpectedly contained rows")
+
+        op.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS uq_voice_calls_tenant_provider_ref
+            ON voice_calls (tenant_id, provider, provider_call_id);
+        """)
+        op.execute("""
+            CREATE INDEX IF NOT EXISTS ix_voice_calls_agent_id
+            ON voice_calls (agent_id);
+        """)
+        op.execute("""
+            CREATE INDEX IF NOT EXISTS ix_voice_calls_tenant_agent_created
+            ON voice_calls (tenant_id, agent_id, created_at DESC);
+        """)
+        op.execute("""
+            CREATE INDEX IF NOT EXISTS ix_voice_calls_tenant_status
+            ON voice_calls (tenant_id, status);
+        """)
+        op.execute("ALTER TABLE voice_calls ENABLE ROW LEVEL SECURITY;")
+        op.execute("ALTER TABLE voice_calls FORCE ROW LEVEL SECURITY;")
+        op.execute("DROP POLICY IF EXISTS voice_calls_tenant_isolation ON voice_calls;")
+        op.execute("""
+            CREATE POLICY voice_calls_tenant_isolation ON voice_calls
+            USING (tenant_id::text = current_setting('agenticorg.tenant_id', true))
+            WITH CHECK (tenant_id::text = current_setting('agenticorg.tenant_id', true));
+        """)
+
+        ctx.assert_decrypt_after(n=50)
+        ctx.record_audit({"pre_count": pre_count, "post_count": ctx.snapshot_row_count()})
 
 
 def downgrade() -> None:

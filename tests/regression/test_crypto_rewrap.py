@@ -434,6 +434,14 @@ def test_tenant_ai_credentials_is_in_scanners() -> None:
     assert "tenant_ai_credentials.credentials_encrypted" in labels
 
 
+def test_voice_transcript_is_in_scanners() -> None:
+    """Voice transcript key references must participate in retirement checks."""
+    from core.crypto.verify_all import _SCANNERS
+
+    labels = {label for label, _dotted in _SCANNERS}
+    assert "voice_calls.transcript_encrypted" in labels
+
+
 def test_fire_cache_invalidators_calls_registered_callable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

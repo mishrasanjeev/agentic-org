@@ -22,7 +22,11 @@ REPO = Path(__file__).resolve().parents[2]
 
 def _signature(url: str, params: dict[str, str], token: str) -> str:
     canonical = url + "".join(f"{key}{params[key]}" for key in sorted(params))
-    digest = hmac.new(token.encode(), canonical.encode(), hashlib.sha1).digest()
+    # Twilio's webhook protocol mandates HMAC-SHA1. This helper verifies
+    # protocol compatibility; it is not password hashing or key derivation.
+    digest = hmac.new(  # lgtm[py/weak-sensitive-data-hashing]
+        token.encode(), canonical.encode(), hashlib.sha1
+    ).digest()
     return base64.b64encode(digest).decode()
 
 
@@ -124,3 +128,10 @@ def test_voice_call_migration_is_tenant_scoped_and_encrypted() -> None:
     assert "encrypt_for_tenant" in runtime
     assert 'audio_stored": False' in runtime
     assert "transcript" not in runtime.split("class VoiceCallOut", 1)[1].split("def _masked_number", 1)[0]
+
+
+def test_voice_transcript_is_registered_for_key_lifecycle_scanning() -> None:
+    verifier = (REPO / "core/crypto/verify_all.py").read_text(encoding="utf-8")
+
+    assert "voice_calls.transcript_encrypted" in verifier
+    assert "core.models.voice_call:VoiceCall:transcript_encrypted" in verifier
