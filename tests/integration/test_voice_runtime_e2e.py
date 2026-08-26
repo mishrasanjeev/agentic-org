@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import json
 import uuid
 from types import SimpleNamespace
@@ -15,18 +12,7 @@ from sqlalchemy import select, text
 from core.crypto.tenant_secrets import decrypt_for_tenant
 from core.models.agent import Agent
 from core.models.voice_call import VoiceCall
-
-
-def _twilio_signature(url: str, params: dict[str, str], token: str) -> str:
-    canonical = url + "".join(f"{key}{params[key]}" for key in sorted(params))
-    # Twilio's webhook protocol mandates HMAC-SHA1. This helper verifies
-    # protocol compatibility; it is not password hashing or key derivation.
-    digest = hmac.new(
-        token.encode(),
-        canonical.encode(),  # lgtm[py/weak-sensitive-data-hashing]
-        hashlib.sha1,
-    ).digest()
-    return base64.b64encode(digest).decode()
+from core.voice.runtime import build_twilio_signature
 
 
 @pytest.mark.asyncio
@@ -125,7 +111,13 @@ async def test_signed_voice_runtime_persists_encrypted_tenant_safe_calls(
     webhook_response = await client.post(
         incoming_url.replace("https://testserver", ""),
         data=params,
-        headers={"X-Twilio-Signature": _twilio_signature(incoming_url, params, auth_token)},
+        headers={
+            "X-Twilio-Signature": build_twilio_signature(
+                url=incoming_url,
+                params=params,
+                auth_token=auth_token,
+            )
+        },
     )
     assert webhook_response.status_code == 200, webhook_response.text
     assert "Your order is ready for pickup." in webhook_response.text
@@ -150,7 +142,13 @@ async def test_signed_voice_runtime_persists_encrypted_tenant_safe_calls(
     status_response = await client.post(
         status_url.replace("https://testserver", ""),
         data=status_params,
-        headers={"X-Twilio-Signature": _twilio_signature(status_url, status_params, auth_token)},
+        headers={
+            "X-Twilio-Signature": build_twilio_signature(
+                url=status_url,
+                params=status_params,
+                auth_token=auth_token,
+            )
+        },
     )
     assert status_response.status_code == 204, status_response.text
 

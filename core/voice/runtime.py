@@ -13,13 +13,18 @@ import httpx
 TERMINAL_CALL_STATUSES = frozenset({"completed", "busy", "failed", "no_answer", "cancelled"})
 
 
+def build_twilio_signature(*, url: str, params: dict[str, str], auth_token: str) -> str:
+    """Build the HMAC-SHA1 signature required by Twilio's webhook protocol."""
+    canonical = url + "".join(f"{key}{params[key]}" for key in sorted(params))
+    digest = hmac.new(auth_token.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha1).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
 def verify_twilio_signature(*, url: str, params: dict[str, str], signature: str, auth_token: str) -> bool:
     """Verify Twilio's HMAC-SHA1 webhook signature without an SDK dependency."""
     if not signature or not auth_token or not url.startswith("https://"):
         return False
-    canonical = url + "".join(f"{key}{params[key]}" for key in sorted(params))
-    digest = hmac.new(auth_token.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha1).digest()
-    expected = base64.b64encode(digest).decode("ascii")
+    expected = build_twilio_signature(url=url, params=params, auth_token=auth_token)
     return hmac.compare_digest(expected, signature.strip())
 
 

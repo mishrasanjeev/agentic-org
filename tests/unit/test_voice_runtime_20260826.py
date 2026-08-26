@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -13,6 +10,7 @@ import pytest
 
 from core.voice.runtime import (
     build_conversation_twiml,
+    build_twilio_signature,
     create_twilio_call,
     verify_twilio_signature,
 )
@@ -20,23 +18,13 @@ from core.voice.runtime import (
 REPO = Path(__file__).resolve().parents[2]
 
 
-def _signature(url: str, params: dict[str, str], token: str) -> str:
-    canonical = url + "".join(f"{key}{params[key]}" for key in sorted(params))
-    # Twilio's webhook protocol mandates HMAC-SHA1. This helper verifies
-    # protocol compatibility; it is not password hashing or key derivation.
-    digest = hmac.new(
-        token.encode(),
-        canonical.encode(),  # lgtm[py/weak-sensitive-data-hashing]
-        hashlib.sha1,
-    ).digest()
-    return base64.b64encode(digest).decode()
-
-
 def test_twilio_webhook_signature_verification() -> None:
     url = "https://api.agenticorg.ai/api/v1/voice/webhooks/twilio/t/a/incoming"
     params = {"CallSid": "CA123", "SpeechResult": "show my balance"}
     token = "test-auth-token"
-    signature = _signature(url, params, token)
+    signature = build_twilio_signature(url=url, params=params, auth_token=token)
+
+    assert signature == "g4nuiqRQpOsYrEJB8MbrifdjX6E="
 
     assert verify_twilio_signature(url=url, params=params, signature=signature, auth_token=token)
     assert not verify_twilio_signature(url=url, params=params, signature="tampered", auth_token=token)
