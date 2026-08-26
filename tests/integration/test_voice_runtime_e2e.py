@@ -22,8 +22,8 @@ async def test_signed_voice_runtime_persists_encrypted_tenant_safe_calls(
     tenant_id,
     monkeypatch,
 ) -> None:
-    import core.database as db_mod
     import core.crypto.tenant_secrets as tenant_secrets
+    import core.database as db_mod
     from api.v1 import voice_runtime
 
     # The shared integration client swaps core.database to a NullPool engine.
