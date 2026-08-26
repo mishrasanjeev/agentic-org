@@ -89,12 +89,13 @@ dependencies = [
     "grantex>=0.3.14",
     "langsmith>=0.11.1",
     "pypdf>=6.16.2",
-    # S0-06 multimodal RAG (PR-3 2026-04-24): Word document ingestion.
-    # Image OCR (pytesseract) and audio transcription (openai-whisper)
-    # ship behind feature flags in a follow-up — they need system-level
-    # deps (Tesseract binary + ffmpeg) so they can't land until the
-    # deploy image updates.
+    # Canonical document extraction. The production image below ships the
+    # matching Tesseract, Poppler, and LibreOffice system dependencies.
     "python-docx>=1.2.0",
+    "python-pptx>=1.0.2",
+    "pytesseract>=0.3.13",
+    "pdf2image>=1.17.0",
+    "striprtf>=0.0.29",
     # SEC-2026-05-15: python-docx pulls lxml transitively. Pin the
     # patched floor for CVE-2026-41066 so resolver drift cannot
     # reinstall vulnerable lxml 6.0.x in CI or production images.

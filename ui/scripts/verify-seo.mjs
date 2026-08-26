@@ -283,10 +283,11 @@ export function verifySeo(root = UI_ROOT) {
 
   for (const configName of ["nginx.conf", "nginx.cloudrun.conf.template"]) {
     const config = readFileSync(join(root, configName), "utf8");
+    const normalizedConfig = config.replaceAll("\r\n", "\n");
     if (countMatches(config, /^\s*add_header Content-Security-Policy\b.*$/gm) !== 1) {
       fail(configName + " must contain one active Content-Security-Policy header");
     }
-    const configLines = config.replaceAll("\r\n", "\n").split("\n");
+    const configLines = normalizedConfig.split("\n");
     if (configLines.some((line) => Buffer.byteLength(line, "utf8") >= 4096)) {
       fail(configName + " contains an nginx parameter line of 4096+ characters");
     }
@@ -380,7 +381,7 @@ export function verifySeo(root = UI_ROOT) {
       }
     }
     for (const alias of ["/contact", "/privacy-policy", "/terms-of-service", "/refund-policy", "/cancellation"]) {
-      if (!config.includes("location = " + alias + " {")) {
+      if (!normalizedConfig.includes("location = " + alias + " {")) {
         fail(configName + " is missing canonical redirect for " + alias);
       }
     }
@@ -393,7 +394,7 @@ export function verifySeo(root = UI_ROOT) {
     };
     for (const [legacyPath, targetPath] of Object.entries(legacyBlogRedirects)) {
       const expectedRedirect = `location = ${legacyPath} {\n        return 301 https://agenticorg.ai${targetPath};`;
-      if (!config.includes(expectedRedirect)) {
+      if (!normalizedConfig.includes(expectedRedirect)) {
         fail(configName + " is missing legacy blog redirect for " + legacyPath);
       }
     }

@@ -177,13 +177,15 @@ async def test_voice_status_does_not_load_or_decrypt_credentials(
     assert "credential" not in result.model_dump()
 
 
-def test_agent_voice_tab_has_no_fabricated_call_history() -> None:
+def test_agent_voice_tab_uses_real_runtime_and_call_history() -> None:
     source = (REPO / "ui/src/pages/AgentDetail.tsx").read_text(encoding="utf-8")
 
     assert "Mock call log data" not in source
     assert 'api.get("/voice/config"' not in source
     assert '.get("/voice/status"' in source
-    assert "Call history will appear only after" in source
+    assert '.get("/voice/runtime/health"' in source
+    assert '.get("/voice/calls"' in source
+    assert '.post("/voice/calls/outbound"' in source
 
 
 @pytest.mark.asyncio

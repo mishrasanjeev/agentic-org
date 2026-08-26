@@ -1,12 +1,12 @@
-"""LiveKit voice agent bridge — connects LiveKit agent events to AgenticOrg agents.
+"""Channel-neutral voice bridge into the AgenticOrg agent runner.
 
 This module provides a ``VoiceAgentWorker`` that:
-1. Receives transcribed text (STT output) from a LiveKit voice session.
+1. Receives transcribed text from a provider webhook or optional worker.
 2. Dispatches it to the AgenticOrg LangGraph agent runner.
 3. Returns the agent's text response for TTS synthesis.
 
-All LiveKit imports are guarded so the module can be imported without
-``livekit-agents`` installed.  Install with ``pip install agenticorg[v4]``.
+The supported Twilio webhook runtime does not require LiveKit. Optional
+LiveKit imports remain guarded so this module is safe without that SDK.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 # Guarded LiveKit imports
 # ---------------------------------------------------------------------------
 try:
-    from livekit.agents import (  # type: ignore[import-untyped]
+    from livekit.agents import (  # type: ignore[import-not-found]
         AutoSubscribe,
         JobContext,
         WorkerOptions,
@@ -41,7 +41,7 @@ except ImportError:
 # VoiceAgentWorker
 # ---------------------------------------------------------------------------
 class VoiceAgentWorker:
-    """Bridge between LiveKit voice sessions and AgenticOrg agent execution.
+    """Bridge between voice sessions and AgenticOrg agent execution.
 
     Parameters
     ----------
@@ -52,10 +52,15 @@ class VoiceAgentWorker:
         Grantex JWT for scope enforcement on tool calls.
     """
 
-    def __init__(self, agent_config: dict[str, Any], grant_token: str = "") -> None:
+    def __init__(
+        self,
+        agent_config: dict[str, Any],
+        grant_token: str = "",
+        thread_id: str | None = None,
+    ) -> None:
         self.agent_config = agent_config
         self.grant_token = grant_token
-        self._thread_id: str | None = None
+        self._thread_id = thread_id
 
     async def handle_call(
         self,
@@ -70,7 +75,7 @@ class VoiceAgentWorker:
         Parameters
         ----------
         session : Any
-            The LiveKit session object (or mock for testing).
+            A provider call/session identifier or optional worker session.
         user_text : str
             Transcribed speech from the caller.
 

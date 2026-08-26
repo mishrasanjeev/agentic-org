@@ -7,6 +7,7 @@ with basic keyword search (no vector embeddings).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid
 from datetime import UTC, datetime
@@ -157,6 +158,9 @@ class DocumentOut(BaseModel):
     # `created_at` is retained for back-compat with SDK consumers.
     uploaded_at: str
     deleted: bool = False
+    extraction_method: str | None = None
+    ocr_applied: bool = False
+    ocr_confidence: float | None = None
 
 
 class DocumentListResponse(BaseModel):
@@ -184,7 +188,10 @@ class DuplicateDocumentError(Exception):
 # RAGFlow proxy helpers
 # ---------------------------------------------------------------------------
 async def _ragflow_upload(
-    tenant_id: str, filename: str, content: bytes, content_type: str | None,
+    tenant_id: str,
+    filename: str,
+    content: bytes,
+    content_type: str | None,
 ) -> dict[str, Any]:
     """Upload a document to the tenant's private RAGFlow dataset."""
     dataset_id = _dataset_for(tenant_id)
@@ -284,17 +291,11 @@ async def _ragflow_dataset_stats(tenant_id: str) -> dict[str, int] | None:
     if not isinstance(datasets, list) or not datasets:
         return None
     ds = next(
-        (
-            d for d in datasets
-            if d.get("name") == dataset_id or d.get("id") == dataset_id
-        ),
+        (d for d in datasets if d.get("name") == dataset_id or d.get("id") == dataset_id),
         datasets[0],
     )
     chunk_count = int(
-        ds.get("chunk_count")
-        or ds.get("chunk_num")
-        or ds.get("chunks_count")
-        or 0,
+        ds.get("chunk_count") or ds.get("chunk_num") or ds.get("chunks_count") or 0,
     )
     # Prefer a field explicitly labelled as bytes. Otherwise fall back
     # to the token count and convert with a 4-bytes-per-token average,
@@ -349,13 +350,15 @@ async def _db_chunk_count(tenant_id: str) -> int:
             from core.embeddings import rag_embedding_column
 
             ecol = rag_embedding_column()
-            legacy_row = (await session.execute(
-                _sqtext(
-                    "SELECT COUNT(*) FROM knowledge_documents "  # nosec B608 — `ecol` is a module-level constant name, not user input
-                    f"WHERE tenant_id = :tid AND {ecol} IS NOT NULL"
-                ),
-                {"tid": str(tid)},
-            )).fetchone()
+            legacy_row = (
+                await session.execute(
+                    _sqtext(
+                        "SELECT COUNT(*) FROM knowledge_documents "  # nosec B608 — `ecol` is a module-level constant name, not user input
+                        f"WHERE tenant_id = :tid AND {ecol} IS NOT NULL"
+                    ),
+                    {"tid": str(tid)},
+                )
+            ).fetchone()
             total += int(legacy_row[0] or 0) if legacy_row else 0
 
             # Upload-path documents — estimate chunks per file.
@@ -381,7 +384,8 @@ async def _db_chunk_count(tenant_id: str) -> int:
 # PostgreSQL fallback — document metadata persistence
 # ---------------------------------------------------------------------------
 async def _db_find_existing_by_filename(
-    tenant_id: str, filename: str,
+    tenant_id: str,
+    filename: str,
 ) -> dict[str, Any] | None:
     """Return the first non-deleted document with the given filename for
     this tenant, or None. Used to block duplicate uploads (TC_011)."""
@@ -395,11 +399,13 @@ async def _db_find_existing_by_filename(
     tid = _UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(Document).where(
+            select(Document)
+            .where(
                 Document.tenant_id == tid,
                 Document.filename == filename,
                 Document.status != "deleted",
-            ).limit(1)
+            )
+            .limit(1)
         )
         row = result.scalar_one_or_none()
         if row is None:
@@ -454,10 +460,12 @@ async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
     tid = _UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(Document).where(
+            select(Document)
+            .where(
                 Document.tenant_id == tid,
                 Document.status != "deleted",
-            ).order_by(Document.created_at.desc())
+            )
+            .order_by(Document.created_at.desc())
         )
         docs = result.scalars().all()
         return [
@@ -467,6 +475,7 @@ async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
                 "content_type": d.content_type,
                 "size_bytes": d.size_bytes,
                 "status": d.status,
+                "metadata": d.metadata_ or {},
                 "created_at": d.created_at.isoformat() if d.created_at else "",
             }
             for d in docs
@@ -476,6 +485,32 @@ async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+@router.get("/knowledge/supported-types")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.upload.types.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="knowledge.upload.types",
+)
+async def supported_document_types() -> dict[str, Any]:
+    """Return the exact upload/extraction capability advertised to clients."""
+    from core.file_ingestion.limits import ALLOWED_EXTENSIONS, MAX_UPLOAD_BYTES
+    from core.rag.extractors import MAX_IMAGE_PIXELS, MAX_OCR_PAGES, MAX_PDF_PAGES
+
+    return {
+        "extensions": sorted(ALLOWED_EXTENSIONS),
+        "ocr_extensions": [".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"],
+        "legacy_office_requires_conversion": [".doc", ".xls", ".ppt", ".odt", ".ods", ".odp"],
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
+        "max_pdf_pages": MAX_PDF_PAGES,
+        "max_ocr_pages": MAX_OCR_PAGES,
+        "max_image_pixels_per_page": MAX_IMAGE_PIXELS,
+        "audio_video_supported": False,
+    }
+
+
 @router.post("/knowledge/upload", response_model=DocumentOut, status_code=201)
 @route_meta(
     auth_required=True,
@@ -542,6 +577,40 @@ async def upload_document(
                 ),
             },
         )
+
+    # Extract before any replacement mutation. A corrupt, unsupported, or
+    # unreadable replacement must never delete the currently indexed copy.
+    from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+    from core.rag.extractors import UnsupportedMimeType, extract
+
+    upload_path, _content_size = await stream_to_tempfile(file)
+    try:
+        content = upload_path.read_bytes()
+        try:
+            extracted_content = await asyncio.to_thread(
+                extract,
+                content,
+                mime_type=(file.content_type or ""),
+                filename=filename,
+            )
+        except UnsupportedMimeType as exc:
+            raise HTTPException(
+                status_code=415,
+                detail={
+                    "error": "document_extraction_unsupported",
+                    "message": str(exc),
+                },
+            ) from exc
+        if not extracted_content.spans or extracted_content.total_chars < 2:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "document_has_no_extractable_text",
+                    "message": "No usable text was found after native extraction and OCR.",
+                },
+            )
+    finally:
+        cleanup_tempfile(upload_path)
 
     # Filename-level dedup. Caller can opt out with
     # ?allow_duplicate=true (adds a second copy) or ?replace=true
@@ -654,58 +723,22 @@ async def upload_document(
                     },
                 ) from exc
 
-    # SEC-2026-05-P1-005 (PR-D): stream the upload to a tempfile in
-    # 64 KiB chunks rather than ``await file.read()`` which loads the
-    # entire body into memory. Aborts with HTTPException(413) the
-    # moment the running total exceeds MAX_UPLOAD_BYTES, so a 1 GiB
-    # upload can't OOM the worker before being rejected.
-    from core.file_ingestion.limits import (  # noqa: PLC0415
-        cleanup_tempfile,
-        read_text_bounded,
-        stream_to_tempfile,
-    )
-
-    upload_path, content_size = await stream_to_tempfile(file)
-    try:
-        # Read the bytes back for the RAGFlow upload. We still need
-        # the raw bytes downstream — but the tempfile means RSS
-        # tracks the worker's chunk buffer, not the full file × N
-        # concurrent uploads.
-        with upload_path.open("rb") as _f:
-            content = _f.read()
-        doc_id = str(uuid.uuid4())
-
-        # Codex 2026-04-22 release-signoff residual: KB search fallback was
-        # filename-only because ``documents`` had no extracted text column.
-        # We can't add a column without a migration, but we can store the
-        # extracted content in the existing ``metadata`` JSONB so the
-        # search fallback has something real to match against. Scope is
-        # intentionally narrow — plain text / markdown / JSON / CSV only.
-        # PDF + XLSX extraction requires heavier deps and lives in the
-        # enhancement backlog.
-        extracted_text = ""
-        ctype = (file.content_type or "").lower()
-        is_textual = (
-            ctype.startswith("text/")
-            or ctype in {"application/json", "application/xml", "application/yaml"}
-            or filename.lower().endswith(
-                (".txt", ".md", ".markdown", ".csv", ".json", ".yaml", ".yml")
-            )
-        )
-        if is_textual:
-            # Bounded text read — caps at 256 KiB at the FS layer
-            # so a 1 GiB log file doesn't materialise in RAM here
-            # either.
-            extracted_text = read_text_bounded(upload_path)
-    finally:
-        cleanup_tempfile(upload_path)
+    doc_id = str(uuid.uuid4())
+    extracted_text = extracted_content.full_text()
 
     doc_metadata: dict[str, Any] = {}
     if extracted_text:
-        # Keep only the first 8 KB in the search-indexable slot — the
-        # fallback is supposed to hit top-of-document signals, not
-        # re-host the full corpus.
-        doc_metadata["content_text"] = extracted_text[:8 * 1024]
+        from core.file_ingestion.limits import MAX_EXTRACTED_TEXT_BYTES
+
+        encoded = extracted_text.encode("utf-8")[:MAX_EXTRACTED_TEXT_BYTES]
+        doc_metadata["content_text"] = encoded.decode("utf-8", errors="ignore")
+    doc_metadata.update(
+        {
+            "extraction_method": extracted_content.extraction_method,
+            "extracted_characters": extracted_content.total_chars,
+            "extraction_details": extracted_content.extra,
+        }
+    )
 
     doc: dict[str, Any] = {
         "document_id": doc_id,
@@ -720,7 +753,10 @@ async def upload_document(
     if _ragflow_available():
         try:
             rf_result = await _ragflow_upload(
-                tenant_id, doc["filename"], content, doc["content_type"],
+                tenant_id,
+                doc["filename"],
+                content,
+                doc["content_type"],
             )
             # RAGFlow returns its own document ID
             rf_doc_id = rf_result.get("data", {}).get("id", doc_id)
@@ -754,11 +790,9 @@ async def upload_document(
             },
         ) from exc
 
-    # S0-06 (PR-3 2026-04-24): also run the multimodal ingestion service
-    # so native pgvector search covers user-uploaded PDFs / DOCX / XLSX
-    # / CSV even when RAGFlow is down. Extraction errors surface as 415;
-    # embed/persist errors are logged and NOT fatal because the upload
-    # row already landed in `documents`.
+    # Run the canonical pgvector ingestion with the text already extracted
+    # above, so every accepted format follows one provenance-aware path and
+    # OCR is never repeated.
     ingestion_status = "not_attempted"
     ingestion_error: str | None = None
     try:
@@ -773,6 +807,7 @@ async def upload_document(
             source=f"upload://{filename}",
             source_object_id=doc["document_id"],
             source_object_type="upload",
+            extracted_content=extracted_content,
         )
         logger.info(
             "kb_ingest_multimodal",
@@ -782,11 +817,9 @@ async def upload_document(
         )
         ingestion_status = "indexed"
     except UnsupportedMimeType as exc:
-        # The body was accepted (row is in `documents`) but we can't
-        # populate knowledge_documents for it. 415 would be wrong now —
-        # the resource was created. Return the DocumentOut and log so
-        # operators see the gap. Future: front-end guards unsupported
-        # types before upload and falls through to this path.
+        # Defensive fallback. Extraction preflight above should make this
+        # unreachable, but keep a truthful partial-index result if an
+        # extractor contract changes between phases.
         logger.info(
             "kb_ingest_unsupported_mime",
             doc_id=doc["document_id"],
@@ -819,6 +852,9 @@ async def upload_document(
         ingestion_error=ingestion_error,
         created_at=doc["created_at"],
         uploaded_at=doc["created_at"],
+        extraction_method=extracted_content.extraction_method,
+        ocr_applied=bool(extracted_content.extra.get("ocr_pages")),
+        ocr_confidence=extracted_content.extra.get("ocr_mean_confidence"),
     )
 
 
@@ -886,14 +922,16 @@ async def list_documents(
                 {"tid": str(tid)},
             )
             for row in kd_result.fetchall():
-                docs.append({
-                    "document_id": str(row[0]),
-                    "filename": row[1],
-                    "content_type": row[3] or "text",
-                    "size_bytes": (row[4] or 0) * 4,
-                    "status": "ready",
-                    "created_at": row[5].isoformat() if row[5] else "",
-                })
+                docs.append(
+                    {
+                        "document_id": str(row[0]),
+                        "filename": row[1],
+                        "content_type": row[3] or "text",
+                        "size_bytes": (row[4] or 0) * 4,
+                        "status": "ready",
+                        "created_at": row[5].isoformat() if row[5] else "",
+                    }
+                )
     except _DB_READ_ERRORS:
         logger.debug("knowledge_documents_query_skipped")
 
@@ -910,6 +948,9 @@ async def list_documents(
             status=_normalize_status(d.get("status")),
             created_at=d.get("created_at", ""),
             uploaded_at=d.get("uploaded_at") or d.get("created_at", ""),
+            extraction_method=(d.get("metadata") or {}).get("extraction_method"),
+            ocr_applied=bool((d.get("metadata") or {}).get("extraction_details", {}).get("ocr_pages")),
+            ocr_confidence=(d.get("metadata") or {}).get("extraction_details", {}).get("ocr_mean_confidence"),
         )
         for d in page_items
     ]
@@ -949,9 +990,7 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
         document_uuid = _UUID(doc_id)
         async with get_tenant_session(tid) as session:
             result = await session.execute(
-                update(Document)
-                .where(Document.id == document_uuid, Document.tenant_id == tid)
-                .values(status="deleted")
+                update(Document).where(Document.id == document_uuid, Document.tenant_id == tid).values(status="deleted")
             )
             if result.rowcount == 0:
                 raise HTTPException(
@@ -979,7 +1018,9 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
 
 
 async def _native_semantic_search(
-    tenant_id: str, query: str, top_k: int,
+    tenant_id: str,
+    query: str,
+    top_k: int,
 ) -> list[SearchResult]:
     """Semantic search over knowledge_documents using pgvector + BGE.
 
@@ -1004,17 +1045,19 @@ async def _native_semantic_search(
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         col = rag_embedding_column()
         async with get_tenant_session(tid) as session:
-            rows = (await session.execute(
-                _sqtext(
-                    "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
-                    f"1 - ({col} <=> CAST(:q AS vector)) AS score "
-                    "FROM knowledge_documents "
-                    f"WHERE tenant_id = :tid AND {col} IS NOT NULL "
-                    f"ORDER BY {col} <=> CAST(:q AS vector) "
-                    "LIMIT :k"
-                ),
-                {"q": vector_literal, "tid": str(tid), "k": top_k},
-            )).fetchall()
+            rows = (
+                await session.execute(
+                    _sqtext(
+                        "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
+                        f"1 - ({col} <=> CAST(:q AS vector)) AS score "
+                        "FROM knowledge_documents "
+                        f"WHERE tenant_id = :tid AND {col} IS NOT NULL "
+                        f"ORDER BY {col} <=> CAST(:q AS vector) "
+                        "LIMIT :k"
+                    ),
+                    {"q": vector_literal, "tid": str(tid), "k": top_k},
+                )
+            ).fetchall()
         if rows:
             return [
                 SearchResult(
@@ -1031,15 +1074,17 @@ async def _native_semantic_search(
     # unavailable (e.g. fastembed cache missing in a restricted CI env).
     try:
         async with get_tenant_session(tid) as session:
-            rows = (await session.execute(
-                _sqtext(
-                    "SELECT title, content FROM knowledge_documents "
-                    "WHERE tenant_id = :tid AND "
-                    "(title ILIKE :like OR content ILIKE :like) "
-                    "LIMIT :k"
-                ),
-                {"tid": str(tid), "like": f"%{query}%", "k": top_k},
-            )).fetchall()
+            rows = (
+                await session.execute(
+                    _sqtext(
+                        "SELECT title, content FROM knowledge_documents "
+                        "WHERE tenant_id = :tid AND "
+                        "(title ILIKE :like OR content ILIKE :like) "
+                        "LIMIT :k"
+                    ),
+                    {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+                )
+            ).fetchall()
         results = [
             SearchResult(
                 chunk_text=(r[1] or "")[:300],
@@ -1059,19 +1104,21 @@ async def _native_semantic_search(
     # filename last-resort so text files actually retrieve on content.
     try:
         async with get_tenant_session(tid) as session:
-            rows = (await session.execute(
-                _sqtext(
-                    "SELECT filename, "
-                    "       COALESCE(metadata->>'content_text', '') AS content_text "
-                    "FROM documents "
-                    "WHERE tenant_id = :tid "
-                    "  AND status != 'deleted' "
-                    "  AND metadata->>'content_text' IS NOT NULL "
-                    "  AND metadata->>'content_text' ILIKE :like "
-                    "LIMIT :k"
-                ),
-                {"tid": str(tid), "like": f"%{query}%", "k": top_k},
-            )).fetchall()
+            rows = (
+                await session.execute(
+                    _sqtext(
+                        "SELECT filename, "
+                        "       COALESCE(metadata->>'content_text', '') AS content_text "
+                        "FROM documents "
+                        "WHERE tenant_id = :tid "
+                        "  AND status != 'deleted' "
+                        "  AND metadata->>'content_text' IS NOT NULL "
+                        "  AND metadata->>'content_text' ILIKE :like "
+                        "LIMIT :k"
+                    ),
+                    {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+                )
+            ).fetchall()
         results = [
             SearchResult(
                 chunk_text=(r[1] or "")[:300],
@@ -1098,13 +1145,21 @@ async def _native_semantic_search(
         from core.models.document import Document
 
         async with get_tenant_session(tid) as session:
-            match_rows = (await session.execute(
-                _select(Document).where(
-                    Document.tenant_id == tid,
-                    Document.status != "deleted",
-                    Document.filename.ilike(f"%{query}%"),
-                ).limit(top_k)
-            )).scalars().all()
+            match_rows = (
+                (
+                    await session.execute(
+                        _select(Document)
+                        .where(
+                            Document.tenant_id == tid,
+                            Document.status != "deleted",
+                            Document.filename.ilike(f"%{query}%"),
+                        )
+                        .limit(top_k)
+                    )
+                )
+                .scalars()
+                .all()
+            )
             return [
                 SearchResult(
                     chunk_text=(
@@ -1203,9 +1258,7 @@ async def knowledge_health():
     ragflow_configured = bool(_RAGFLOW_URL)
     ragflow_reachable = False
     if not ragflow_configured:
-        notes.append(
-            "Set RAGFLOW_API_URL and RAGFLOW_API_KEY to enable semantic search."
-        )
+        notes.append("Set RAGFLOW_API_URL and RAGFLOW_API_KEY to enable semantic search.")
     elif _httpx is None:
         notes.append("httpx package missing — install to enable the RAGFlow probe.")
     else:
@@ -1264,9 +1317,7 @@ async def knowledge_health():
         from pathlib import Path as _Path
 
         _default_eval_path = "/tmp/rag_eval_latest.json"  # noqa: S108  # nosec B108 — admin-configurable via AGENTICORG_RAG_EVAL_REPORT
-        eval_path = _Path(
-            _os.environ.get("AGENTICORG_RAG_EVAL_REPORT", _default_eval_path)
-        )
+        eval_path = _Path(_os.environ.get("AGENTICORG_RAG_EVAL_REPORT", _default_eval_path))
         if eval_path.exists():
             with eval_path.open("r", encoding="utf-8") as fh:
                 data = _json.load(fh)
@@ -1354,9 +1405,7 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     # zero, explicitly labelled as "file bytes, not index bytes" in the
     # log trail.
     if index_size_bytes == 0:
-        index_size_bytes = sum(
-            d.get("size_bytes", d.get("size", 0)) for d in docs
-        )
+        index_size_bytes = sum(d.get("size_bytes", d.get("size", 0)) for d in docs)
 
     logger.debug(
         "knowledge_stats",

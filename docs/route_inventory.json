@@ -4119,7 +4119,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 834,
+    "source_line": 870,
     "tenant_required": true
   },
   {
@@ -4137,7 +4137,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 928,
+    "source_line": 969,
     "tenant_required": true
   },
   {
@@ -4155,7 +4155,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1191,
+    "source_line": 1246,
     "tenant_required": false
   },
   {
@@ -4173,7 +4173,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1133,
+    "source_line": 1188,
     "tenant_required": true
   },
   {
@@ -4191,7 +4191,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1308,
+    "source_line": 1359,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.upload.types",
+    "auth_required": true,
+    "function": "supported_document_types",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/supported-types api/v1/knowledge.py:supported_document_types",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/supported-types",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "knowledge.upload.types.read",
+    "source_line": 497,
     "tenant_required": true
   },
   {
@@ -4209,7 +4227,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 488,
+    "source_line": 523,
     "tenant_required": true
   },
   {
@@ -5217,7 +5235,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-read",
     "scope": "rpa_schedules.sensitive.list",
-    "source_line": 245,
+    "source_line": 326,
     "tenant_required": true
   },
   {
@@ -5235,7 +5253,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "rpa_schedules.write",
-    "source_line": 280,
+    "source_line": 361,
     "tenant_required": true
   },
   {
@@ -5253,7 +5271,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-read",
     "scope": "rpa_schedules.registry.sensitive.list",
-    "source_line": 204,
+    "source_line": 285,
     "tenant_required": true
   },
   {
@@ -5271,7 +5289,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "rpa_schedules.write",
-    "source_line": 425,
+    "source_line": 506,
     "tenant_required": true
   },
   {
@@ -5289,7 +5307,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-read",
     "scope": "rpa_schedules.sensitive.read",
-    "source_line": 337,
+    "source_line": 418,
     "tenant_required": true
   },
   {
@@ -5307,7 +5325,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "rpa_schedules.write",
-    "source_line": 369,
+    "source_line": 450,
     "tenant_required": true
   },
   {
@@ -5325,7 +5343,7 @@
     "public_exempt_reason": null,
     "rate_limit": "manual-rpa-trigger",
     "scope": "rpa_schedules.external_action.run",
-    "source_line": 457,
+    "source_line": 538,
     "tenant_required": true
   },
   {
@@ -5991,7 +6009,7 @@
     "public_exempt_reason": null,
     "rate_limit": "voice-config-read",
     "scope": "voice.config.secret_control_plane.read",
-    "source_line": 517,
+    "source_line": 682,
     "tenant_required": true
   },
   {
@@ -6009,7 +6027,25 @@
     "public_exempt_reason": null,
     "rate_limit": "voice-config-write",
     "scope": "voice.config.secret_control_plane.write",
-    "source_line": 472,
+    "source_line": 591,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "voice.config.status",
+    "auth_required": true,
+    "function": "get_voice_status",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/voice/status api/v1/voice.py:get_voice_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/voice.py",
+    "path": "/api/v1/voice/status",
+    "public_exempt_reason": null,
+    "rate_limit": "voice-config-read",
+    "scope": "voice.config.status.read",
+    "source_line": 630,
     "tenant_required": true
   },
   {
@@ -6027,7 +6063,7 @@
     "public_exempt_reason": null,
     "rate_limit": "voice-test-connection",
     "scope": "voice.external_probe.sensitive.write",
-    "source_line": 221,
+    "source_line": 245,
     "tenant_required": true
   },
   {

@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 # Guarded Playwright import
 # ---------------------------------------------------------------------------
 try:
-    from playwright.async_api import async_playwright  # type: ignore[import-untyped]
+    from playwright.async_api import async_playwright  # type: ignore[import-not-found]
 
     _PLAYWRIGHT_AVAILABLE = True
 except ImportError:
@@ -62,8 +62,7 @@ async def _capture_screenshot(
             screenshots.append(str(target))
         else:
             screenshots.append(base64.b64encode(image).decode("ascii"))
-    # enterprise-gate: broad-except-ok reason=rpa-audit-screenshot-is-best-effort
-    except Exception:
+    except Exception:  # enterprise-gate: broad-except-ok reason=screenshot-failure-does-not-change-run-result
         return
 
 
@@ -224,8 +223,7 @@ async def execute_rpa_script(
             "elapsed_ms": elapsed_ms,
             "error": f"RPA script exceeded the {timeout_s}s execution timeout",
         }
-    # enterprise-gate: broad-except-ok reason=rpa-script-failure-returns-success-false
-    except Exception as exc:
+    except Exception as exc:  # enterprise-gate: broad-except-ok reason=rpa-script-failure-returns-success-false
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         logger.error(
             "rpa_script_failed",

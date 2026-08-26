@@ -41,6 +41,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     EXEMPT_PREFIXES = (
         "/api/v1/evals",
         "/api/v1/billing/webhook/",  # Plural & Stripe webhooks
+        "/api/v1/voice/webhooks/twilio/",  # Twilio HMAC signature is verified by the route
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (no prior session)
     )
 

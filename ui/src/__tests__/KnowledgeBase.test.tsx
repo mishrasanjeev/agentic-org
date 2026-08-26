@@ -31,6 +31,9 @@ const THREE_DOCS = [
     size_bytes: 12345,
     created_at: "2026-04-20T09:15:00Z",
     uploaded_at: "2026-04-20T09:15:00Z",
+    extraction_method: "pypdf+ocr",
+    ocr_applied: true,
+    ocr_confidence: 96.4,
   },
   {
     document_id: "doc-b",
@@ -93,6 +96,15 @@ describe("KnowledgeBase", () => {
     const uploadedCell = cells[3]; // Filename, Status, Size, Uploaded, Actions
     expect(uploadedCell.textContent).not.toBe("-");
     expect(uploadedCell.textContent).toMatch(/\d/);
+  });
+
+  it("shows the real extraction method and OCR confidence", async () => {
+    armFetches();
+    render(<KnowledgeBase />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/pypdf\+ocr \| OCR 96%/)).toBeInTheDocument();
+    });
   });
 
   it("deletes only the targeted row and does NOT wipe the list (TC_005)", async () => {

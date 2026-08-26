@@ -82,11 +82,24 @@ def test_allowed_extensions_excludes_dangerous_types() -> None:
     """Forbid types that are popular DoS / RCE vectors. Pin the
     block so a future contributor can't widen the allowlist
     without explicitly removing this test."""
-    for ext in (".exe", ".sh", ".bat", ".dll", ".so", ".bin", ".js", ".html"):
+    for ext in (".exe", ".sh", ".bat", ".dll", ".so", ".bin", ".js"):
         assert ext not in ALLOWED_EXTENSIONS, (
             f"{ext!r} is in ALLOWED_EXTENSIONS — that's a security regression. "
             "Either remove it (preferred) or update this test with a justification."
         )
+
+
+def test_html_is_extract_only_not_executable() -> None:
+    """HTML is accepted as a document, but its extractor drops scripts."""
+    from core.rag.extractors import extract
+
+    assert ".html" in ALLOWED_EXTENSIONS
+    result = extract(
+        b"<script>alert(1)</script><p>merchant policy</p>",
+        "text/html",
+        "policy.html",
+    )
+    assert result.full_text() == "merchant policy"
 
 
 def test_allowed_mime_prefixes_covers_office_and_text() -> None:
@@ -217,10 +230,7 @@ async def test_stream_cleans_up_tempfile_on_413() -> None:
     # but we can pin the source so the unlink-on-rejection contract
     # can't silently regress. The implementation's try/except in
     # stream_to_tempfile guarantees unlink.
-    src = (
-        Path(__file__).resolve().parents[2]
-        / "core" / "file_ingestion" / "limits.py"
-    ).read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[2] / "core" / "file_ingestion" / "limits.py").read_text(encoding="utf-8")
     assert "tmp_path.unlink(missing_ok=True)" in src
 
 

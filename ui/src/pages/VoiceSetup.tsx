@@ -10,13 +10,14 @@ import api from "@/lib/api";
 /* ------------------------------------------------------------------ */
 
 type SipProvider = "twilio" | "vonage" | "custom" | "";
-type SttEngine = "whisper_local" | "deepgram";
-type TtsEngine = "piper_local" | "azure";
+type SttEngine = "provider_managed" | "whisper_local" | "deepgram";
+type TtsEngine = "provider_managed" | "piper_local" | "azure";
 
 interface VoiceConfig {
   sip_provider: SipProvider;
   credentials: { account_sid: string; auth_token: string; custom_url: string };
   phone_number: string;
+  language: string;
   stt_engine: SttEngine;
   tts_engine: TtsEngine;
   stt_api_key: string;
@@ -60,8 +61,9 @@ export default function VoiceSetup() {
     sip_provider: "",
     credentials: { ...EMPTY_CREDS },
     phone_number: "",
-    stt_engine: "whisper_local",
-    tts_engine: "piper_local",
+    language: "en-IN",
+    stt_engine: "provider_managed",
+    tts_engine: "provider_managed",
     stt_api_key: "",
     tts_api_key: "",
   });
@@ -76,7 +78,13 @@ export default function VoiceSetup() {
   // provider's inputs start empty and stale tokens cannot leak across
   // providers. Also reset the Test Connection state.
   const selectProvider = (id: SipProvider) => {
-    setConfig((c) => ({ ...c, sip_provider: id, credentials: { ...EMPTY_CREDS } }));
+    setConfig((c) => ({
+      ...c,
+      sip_provider: id,
+      credentials: { ...EMPTY_CREDS },
+      stt_engine: id === "twilio" ? "provider_managed" : "whisper_local",
+      tts_engine: id === "twilio" ? "provider_managed" : "piper_local",
+    }));
     setTestResult(null);
     setFieldErrors({});
   };
@@ -178,6 +186,7 @@ export default function VoiceSetup() {
         sip_provider: config.sip_provider,
         credentials: config.credentials,
         phone_number: trimmedPhone,
+        language: config.language,
         stt_engine: config.stt_engine,
         tts_engine: config.tts_engine,
         stt_api_key: config.stt_api_key || null,
@@ -348,10 +357,24 @@ export default function VoiceSetup() {
 
           {/* Step 4: STT & TTS */}
           {step === 3 && (
-            <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-medium mb-1">Call language</label>
+                <select
+                  value={config.language}
+                  onChange={(event) => setConfig((current) => ({ ...current, language: event.target.value }))}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                >
+                  <option value="en-IN">English (India)</option>
+                  <option value="hi-IN">Hindi (India)</option>
+                  <option value="en-US">English (United States)</option>
+                  <option value="en-GB">English (United Kingdom)</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium mb-2">Speech-to-Text (STT)</label>
-                {(["whisper_local", "deepgram"] as const).map((engine) => (
+                {(["provider_managed", "whisper_local", "deepgram"] as const).map((engine) => (
                   <label key={engine} className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input
                       type="radio"
@@ -360,9 +383,13 @@ export default function VoiceSetup() {
                       onChange={() => setConfig((c) => ({ ...c, stt_engine: engine }))}
                     />
                     <span className="text-sm">
-                      {engine === "whisper_local" ? "Whisper Local (default)" : "Deepgram (cloud)"}
+                      {engine === "provider_managed"
+                        ? "Provider speech recognition (production)"
+                        : engine === "whisper_local"
+                          ? "Whisper Local (requires worker image)"
+                          : "Deepgram (cloud)"}
                     </span>
-                    {engine === "whisper_local" && <Badge variant="success">Open Source</Badge>}
+                    {engine === "provider_managed" && <Badge variant="success">Ready</Badge>}
                   </label>
                 ))}
                 {config.stt_engine === "deepgram" && (
@@ -383,7 +410,7 @@ export default function VoiceSetup() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Text-to-Speech (TTS)</label>
-                {(["piper_local", "azure"] as const).map((engine) => (
+                {(["provider_managed", "piper_local", "azure"] as const).map((engine) => (
                   <label key={engine} className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input
                       type="radio"
@@ -392,9 +419,13 @@ export default function VoiceSetup() {
                       onChange={() => setConfig((c) => ({ ...c, tts_engine: engine }))}
                     />
                     <span className="text-sm">
-                      {engine === "piper_local" ? "Piper Local (default)" : "Azure Speech TTS (cloud)"}
+                      {engine === "provider_managed"
+                        ? "Provider text-to-speech (production)"
+                        : engine === "piper_local"
+                          ? "Piper Local (requires worker image)"
+                          : "Azure Speech TTS (cloud)"}
                     </span>
-                    {engine === "piper_local" && <Badge variant="success">Open Source</Badge>}
+                    {engine === "provider_managed" && <Badge variant="success">Ready</Badge>}
                   </label>
                 ))}
                 {config.tts_engine === "azure" && (
@@ -413,6 +444,7 @@ export default function VoiceSetup() {
                   </div>
                 )}
               </div>
+              </div>
             </div>
           )}
 
@@ -429,12 +461,20 @@ export default function VoiceSetup() {
                   <span className="font-medium">{trimmedPhone || "â€”"}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span className="text-muted-foreground">Language</span>
+                  <span className="font-medium">{config.language}</span>
+                </div>
+                <div className="flex justify-between">
                   <span className="text-muted-foreground">STT Engine</span>
-                  <span className="font-medium">{config.stt_engine === "whisper_local" ? "Whisper Local" : "Deepgram"}</span>
+                  <span className="font-medium">
+                    {config.stt_engine === "provider_managed" ? "Provider speech recognition" : config.stt_engine === "whisper_local" ? "Whisper Local" : "Deepgram"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">TTS Engine</span>
-                  <span className="font-medium">{config.tts_engine === "piper_local" ? "Piper Local" : "Azure Speech TTS"}</span>
+                  <span className="font-medium">
+                    {config.tts_engine === "provider_managed" ? "Provider text-to-speech" : config.tts_engine === "piper_local" ? "Piper Local" : "Azure Speech TTS"}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Test Connection</span>
@@ -452,7 +492,7 @@ export default function VoiceSetup() {
                 <div className="space-y-2">
                   <Badge variant="success">Configuration saved</Badge>
                   <p className="text-sm text-muted-foreground">
-                    Credentials are stored securely. Live call handling remains unavailable until a voice worker and provider webhook are connected.
+                    Credentials are stored securely. Twilio setup connects signed inbound webhooks, speech recognition, text-to-speech, and outbound calls.
                   </p>
                 </div>
               ) : (

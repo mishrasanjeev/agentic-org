@@ -77,6 +77,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
     EXEMPT_PREFIXES = (
         "/api/v1/evals",
         "/api/v1/webhooks/",
+        "/api/v1/voice/webhooks/twilio/",  # Twilio HMAC signature is verified by the route
         "/api/v1/aa/consent/callback",
         "/api/v1/billing/webhook/",  # Plural & Stripe server-to-server webhooks
         "/api/v1/client-portal/public/",  # Signed client portal invite/access tokens

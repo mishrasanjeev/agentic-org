@@ -87,17 +87,19 @@ class TestBillingHealthEndpoint:
 
 
 class TestKbContentExtractionPersisted:
-    """I6 — text/markdown uploads persist extracted content into
-    metadata, and the search fallback matches against it."""
+    """I6 - accepted documents persist canonical extracted content."""
 
-    def test_upload_extracts_text_for_textual_types(self) -> None:
+    def test_upload_extracts_all_allowed_types_before_mutation(self) -> None:
         from api.v1 import knowledge
 
         src = inspect.getsource(knowledge.upload_document)
         assert "content_text" in src
         assert "extracted_text" in src
-        # Guarded to textual types — PDF/XLSX are tracked as enhancement.
-        assert "is_textual" in src
+        assert "extracted_content = await asyncio.to_thread" in src
+        assert src.index("extracted_content = await asyncio.to_thread") < src.index(
+            "if not allow_duplicate and not replace"
+        )
+        assert "document_has_no_extractable_text" in src
 
     def test_search_fallback_scans_content_text(self) -> None:
         from api.v1 import knowledge

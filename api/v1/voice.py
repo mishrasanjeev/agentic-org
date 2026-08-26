@@ -105,6 +105,7 @@ def _mask_voice_config(data: dict) -> dict:
         masked["stt_api_key"] = _mask_secret(masked["stt_api_key"])
     return masked
 
+
 # ---------------------------------------------------------------------------
 # Validation constants
 # ---------------------------------------------------------------------------
@@ -117,10 +118,10 @@ _PHONE_E164_RE = re.compile(r"^\+?\d{1,15}$")
 # Rejects bare words like "invalid_sip_url" (TC-007) and the `<>`/space
 # characters that some misconfigured clients emit (TC-009).
 _SIP_URI_RE = re.compile(
-    r"^sips?:"                      # scheme
-    r"(?:[A-Za-z0-9._!~*'()&=+$,;?/%-]+@)?"   # optional userinfo
-    r"[A-Za-z0-9.-]+"               # host
-    r"(?::\d+)?"                    # optional port
+    r"^sips?:"  # scheme
+    r"(?:[A-Za-z0-9._!~*'()&=+$,;?/%-]+@)?"  # optional userinfo
+    r"[A-Za-z0-9.-]+"  # host
+    r"(?::\d+)?"  # optional port
     r"(?:[;?][A-Za-z0-9._!~*'()&=+$,;?/%-]*)?$"  # optional params/headers
 )
 
@@ -155,13 +156,14 @@ class VoiceConfig(BaseModel):
     sip_provider: Literal["twilio", "vonage", "custom"]
     credentials: VoiceCredentials
     phone_number: str = Field(..., min_length=1, max_length=16)
-    stt_engine: Literal["whisper_local", "deepgram"]
-    tts_engine: Literal["piper_local", "azure"]
+    language: str = Field(default="en-IN", pattern=r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
+    stt_engine: Literal["provider_managed", "whisper_local", "deepgram"]
+    tts_engine: Literal["provider_managed", "piper_local", "azure"]
     # Azure TTS / Deepgram STT require their own API key. Carried
     # separately so the UI can show a password-style field for each.
     tts_api_key: str | None = None
     stt_api_key: str | None = None
-    runtime_status: Literal["configuration_only"] = "configuration_only"
+    runtime_status: Literal["ready", "configuration_only"] = "configuration_only"
 
 
 class VoiceStatus(BaseModel):
@@ -169,9 +171,10 @@ class VoiceStatus(BaseModel):
     agent_id: str | None = None
     sip_provider: str | None = None
     phone_number: str | None = None
+    language: str | None = None
     stt_engine: str | None = None
     tts_engine: str | None = None
-    runtime_status: Literal["not_configured", "configuration_only"]
+    runtime_status: Literal["not_configured", "ready", "configuration_only"]
 
 
 # ---------------------------------------------------------------------------
@@ -196,10 +199,7 @@ def _validate_provider_credentials(provider: str, creds: VoiceCredentials) -> tu
 def _validate_phone_number(phone: str) -> tuple[bool, str]:
     trimmed = phone.strip().replace(" ", "")
     if not _PHONE_E164_RE.match(trimmed):
-        return False, (
-            "Invalid phone number format — use E.164 (digits only, "
-            "optional leading '+', 1-15 digits)"
-        )
+        return False, ("Invalid phone number format — use E.164 (digits only, optional leading '+', 1-15 digits)")
     return True, "Phone number accepted"
 
 
@@ -391,9 +391,7 @@ def _voice_config_key(agent_id: str | None) -> str:
 
 def _voice_config_record(body: VoiceConfig, credentials_ciphertext: str) -> dict:
     """Build the durable record without retaining plaintext credentials."""
-    record = body.model_dump(
-        exclude={"credentials", "stt_api_key", "tts_api_key"}
-    )
+    record = body.model_dump(exclude={"credentials", "stt_api_key", "tts_api_key"})
     record["credentials_encrypted"] = {"_encrypted": credentials_ciphertext}
     return record
 
@@ -655,9 +653,16 @@ async def get_voice_status(
         agent_id=agent_id,
         sip_provider=str(record.get("sip_provider") or "") or None,
         phone_number=str(record.get("phone_number") or "") or None,
+        language=str(record.get("language") or "en-IN"),
         stt_engine=str(record.get("stt_engine") or "") or None,
         tts_engine=str(record.get("tts_engine") or "") or None,
-        runtime_status="configuration_only",
+        runtime_status=(
+            "ready"
+            if record.get("sip_provider") == "twilio"
+            and record.get("stt_engine") == "provider_managed"
+            and record.get("tts_engine") == "provider_managed"
+            else "configuration_only"
+        ),
     )
 
 
@@ -701,14 +706,8 @@ async def get_voice_config(
     # "sk-…abcd" without ever seeing the real body.
     stt_provider = _STT_ENGINE_TO_PROVIDER.get(data.get("stt_engine", ""))
     tts_provider = _TTS_ENGINE_TO_PROVIDER.get(data.get("tts_engine", ""))
-    stt_key_display = (
-        await _voice_key_display(tenant_uuid, stt_provider, "stt")
-        if stt_provider else None
-    )
-    tts_key_display = (
-        await _voice_key_display(tenant_uuid, tts_provider, "tts")
-        if tts_provider else None
-    )
+    stt_key_display = await _voice_key_display(tenant_uuid, stt_provider, "stt") if stt_provider else None
+    tts_key_display = await _voice_key_display(tenant_uuid, tts_provider, "tts") if tts_provider else None
 
     merged = _mask_voice_config(data)
     merged["stt_api_key"] = stt_key_display
