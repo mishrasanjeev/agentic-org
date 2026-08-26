@@ -23,7 +23,13 @@ async def test_signed_voice_runtime_persists_encrypted_tenant_safe_calls(
     monkeypatch,
 ) -> None:
     import core.database as db_mod
+    import core.crypto.tenant_secrets as tenant_secrets
     from api.v1 import voice_runtime
+
+    # The shared integration client swaps core.database to a NullPool engine.
+    # This crypto module imports the session factory by value, so point that
+    # binding at the same per-test engine instead of the process-global pool.
+    monkeypatch.setattr(tenant_secrets, "async_session_factory", db_mod.async_session_factory)
 
     agent_id = uuid.uuid4()
     auth_token = "local-twilio-signature-token"
