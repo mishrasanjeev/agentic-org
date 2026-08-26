@@ -5995,6 +5995,42 @@
     "tenant_required": false
   },
   {
+    "audit_event": "voice.calls.list",
+    "auth_required": true,
+    "function": "list_voice_calls",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/voice/calls api/v1/voice_runtime.py:list_voice_calls",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/voice_runtime.py",
+    "path": "/api/v1/voice/calls",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "voice.calls.read",
+    "source_line": 380,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "voice.call.outbound.create",
+    "auth_required": true,
+    "function": "create_outbound_call",
+    "idempotency": "provider-call-sid",
+    "key": "POST /api/v1/voice/calls/outbound api/v1/voice_runtime.py:create_outbound_call",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/voice_runtime.py",
+    "path": "/api/v1/voice/calls/outbound",
+    "public_exempt_reason": null,
+    "rate_limit": "voice-call-create",
+    "scope": "voice.calls.outbound.create",
+    "source_line": 342,
+    "tenant_required": true
+  },
+  {
     "audit_event": "voice.config.read",
     "auth_required": true,
     "function": "get_voice_config",
@@ -6028,6 +6064,24 @@
     "rate_limit": "voice-config-write",
     "scope": "voice.config.secret_control_plane.write",
     "source_line": 591,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "voice.runtime.health",
+    "auth_required": true,
+    "function": "voice_runtime_health",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/voice/runtime/health api/v1/voice_runtime.py:voice_runtime_health",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/voice_runtime.py",
+    "path": "/api/v1/voice/runtime/health",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "voice.runtime.health.read",
+    "source_line": 407,
     "tenant_required": true
   },
   {
@@ -6065,6 +6119,42 @@
     "scope": "voice.external_probe.sensitive.write",
     "source_line": 245,
     "tenant_required": true
+  },
+  {
+    "audit_event": "voice.call.turn",
+    "auth_required": false,
+    "function": "twilio_incoming",
+    "idempotency": "provider-call-sid",
+    "key": "POST /api/v1/voice/webhooks/twilio/{tenant_id}/{agent_id}/incoming api/v1/voice_runtime.py:twilio_incoming",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/voice_runtime.py",
+    "path": "/api/v1/voice/webhooks/twilio/{tenant_id}/{agent_id}/incoming",
+    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
+    "rate_limit": "provider-webhook",
+    "scope": "voice.provider.twilio.webhook",
+    "source_line": 246,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "voice.call.status",
+    "auth_required": false,
+    "function": "twilio_status",
+    "idempotency": "provider-call-sid-status",
+    "key": "POST /api/v1/voice/webhooks/twilio/{tenant_id}/{agent_id}/status api/v1/voice_runtime.py:twilio_status",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/voice_runtime.py",
+    "path": "/api/v1/voice/webhooks/twilio/{tenant_id}/{agent_id}/status",
+    "public_exempt_reason": "webhook-or-callback-signature/state-protected",
+    "rate_limit": "provider-webhook",
+    "scope": "voice.provider.twilio.status_webhook",
+    "source_line": 308,
+    "tenant_required": false
   },
   {
     "audit_event": "webhooks.discovery.list",
