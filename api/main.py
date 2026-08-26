@@ -66,6 +66,7 @@ from api.v1 import (
     tenant_ai_credentials,
     tenant_ai_settings,
     voice,
+    voice_runtime,
     webhooks,
     workflow_variants,
     workflows,
@@ -250,5 +251,6 @@ app.include_router(status_mod.public_router, prefix="/api/v1", tags=["Status"])
 app.include_router(sso.public_router, prefix="/api/v1", tags=["SSO"])
 app.include_router(sso.admin_router, prefix="/api/v1", tags=["SSO"])
 app.include_router(voice.router, prefix="/api/v1", tags=["Voice"])
+app.include_router(voice_runtime.router, prefix="/api/v1", tags=["Voice Runtime"])
 app.include_router(ws_feed_router, prefix="/api/v1", tags=["WebSocket"])
 app.include_router(ws_bridge_router, prefix="/api/v1", tags=["WebSocket"])

@@ -17,6 +17,7 @@ give the user a fast pass/fail answer.
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 import socket
 from typing import Literal
@@ -93,12 +94,17 @@ def _mask_voice_config(data: dict) -> dict:
     creds = dict(masked.get("credentials") or {})
     creds["account_sid"] = _mask_secret(creds.get("account_sid", ""))
     creds["auth_token"] = _mask_secret(creds.get("auth_token", ""))
+    if creds.get("custom_url"):
+        # SIP URIs can contain userinfo and secret-like URI parameters. The
+        # configuration response only needs to show that a value is present.
+        creds["custom_url"] = "***"
     masked["credentials"] = creds
     if masked.get("tts_api_key"):
         masked["tts_api_key"] = _mask_secret(masked["tts_api_key"])
     if masked.get("stt_api_key"):
         masked["stt_api_key"] = _mask_secret(masked["stt_api_key"])
     return masked
+
 
 # ---------------------------------------------------------------------------
 # Validation constants
@@ -112,15 +118,15 @@ _PHONE_E164_RE = re.compile(r"^\+?\d{1,15}$")
 # Rejects bare words like "invalid_sip_url" (TC-007) and the `<>`/space
 # characters that some misconfigured clients emit (TC-009).
 _SIP_URI_RE = re.compile(
-    r"^sips?:"                      # scheme
-    r"(?:[A-Za-z0-9._!~*'()&=+$,;?/%-]+@)?"   # optional userinfo
-    r"[A-Za-z0-9.-]+"               # host
-    r"(?::\d+)?"                    # optional port
+    r"^sips?:"  # scheme
+    r"(?:[A-Za-z0-9._!~*'()&=+$,;?/%-]+@)?"  # optional userinfo
+    r"[A-Za-z0-9.-]+"  # host
+    r"(?::\d+)?"  # optional port
     r"(?:[;?][A-Za-z0-9._!~*'()&=+$,;?/%-]*)?$"  # optional params/headers
 )
 
-# TC-011 — Google TTS needs explicit credentials. Empty/None is invalid.
-_CLOUD_TTS_ENGINES = {"google"}
+# Cloud speech engines need explicit credentials. Empty/None is invalid.
+_CLOUD_TTS_ENGINES = {"azure"}
 _CLOUD_STT_ENGINES = {"deepgram"}
 
 
@@ -146,15 +152,29 @@ class VoiceTestResponse(BaseModel):
 
 
 class VoiceConfig(BaseModel):
+    agent_id: str | None = None
     sip_provider: Literal["twilio", "vonage", "custom"]
     credentials: VoiceCredentials
     phone_number: str = Field(..., min_length=1, max_length=16)
-    stt_engine: Literal["whisper_local", "deepgram"]
-    tts_engine: Literal["piper_local", "google"]
-    # TC-011 — Google TTS / Deepgram STT require their own API key. Carried
+    language: str = Field(default="en-IN", pattern=r"^[a-z]{2,3}(?:-[A-Z]{2})?$")
+    stt_engine: Literal["provider_managed", "whisper_local", "deepgram"]
+    tts_engine: Literal["provider_managed", "piper_local", "azure"]
+    # Azure TTS / Deepgram STT require their own API key. Carried
     # separately so the UI can show a password-style field for each.
     tts_api_key: str | None = None
     stt_api_key: str | None = None
+    runtime_status: Literal["ready", "configuration_only"] = "configuration_only"
+
+
+class VoiceStatus(BaseModel):
+    configured: bool
+    agent_id: str | None = None
+    sip_provider: str | None = None
+    phone_number: str | None = None
+    language: str | None = None
+    stt_engine: str | None = None
+    tts_engine: str | None = None
+    runtime_status: Literal["not_configured", "ready", "configuration_only"]
 
 
 # ---------------------------------------------------------------------------
@@ -179,14 +199,18 @@ def _validate_provider_credentials(provider: str, creds: VoiceCredentials) -> tu
 def _validate_phone_number(phone: str) -> tuple[bool, str]:
     trimmed = phone.strip().replace(" ", "")
     if not _PHONE_E164_RE.match(trimmed):
-        return False, (
-            "Invalid phone number format — use E.164 (digits only, "
-            "optional leading '+', 1-15 digits)"
-        )
+        return False, ("Invalid phone number format — use E.164 (digits only, optional leading '+', 1-15 digits)")
     return True, "Phone number accepted"
 
 
 def _validate_voice_config(cfg: VoiceConfig) -> None:
+    if cfg.agent_id:
+        import uuid as _uuid
+
+        try:
+            _uuid.UUID(cfg.agent_id)
+        except ValueError as exc:
+            raise HTTPException(422, "agent_id must be a valid UUID") from exc
     ok, msg = _validate_provider_credentials(cfg.sip_provider, cfg.credentials)
     if not ok:
         raise HTTPException(422, msg)
@@ -252,29 +276,38 @@ async def test_connection(
                 status="network_error",
                 message=f"Twilio returned HTTP {resp.status_code}",
             )
-        except httpx.ConnectError:
+        except httpx.RequestError:
             return VoiceTestResponse(
                 status="network_error",
                 message="Could not reach Twilio — check egress/DNS",
             )
 
-    # Vonage — GET /account/get-balance with signed query. Kept thin: we
-    # only verify the credentials aren't empty and that api.vonage.com is
-    # reachable. The real connector does the signed call.
+    # Vonage — verify the supplied key and secret with the balance API.
     if body.provider == "vonage":
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get("https://rest.nexmo.com/account/get-balance")
-            if resp.status_code in (200, 401, 403):
+                resp = await client.get(
+                    "https://rest.nexmo.com/account/get-balance",
+                    params={
+                        "api_key": body.credentials.account_sid,
+                        "api_secret": body.credentials.auth_token,
+                    },
+                )
+            if resp.status_code == 200:
                 return VoiceTestResponse(
                     status="ok",
-                    message="Vonage endpoint reachable — credentials will be verified on first call",
+                    message="Vonage credentials verified",
+                )
+            if resp.status_code in (401, 403):
+                return VoiceTestResponse(
+                    status="invalid_credentials",
+                    message="Vonage rejected the credentials (HTTP 401/403)",
                 )
             return VoiceTestResponse(
                 status="network_error",
                 message=f"Vonage returned HTTP {resp.status_code}",
             )
-        except httpx.ConnectError:
+        except httpx.RequestError:
             return VoiceTestResponse(
                 status="network_error",
                 message="Could not reach Vonage — check egress/DNS",
@@ -317,7 +350,8 @@ async def test_connection(
     loop = _asyncio.get_event_loop()
 
     def _probe_tcp() -> str:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        family = socket.AF_INET6 if ipaddress.ip_address(safe_addr).version == 6 else socket.AF_INET
+        with socket.socket(family, socket.SOCK_STREAM) as s:
             s.settimeout(5)
             s.connect((safe_addr, port))
         return "ok"
@@ -340,28 +374,113 @@ async def test_connection(
         )
 
 
-# In-memory per-tenant config store.
-#
-# S0-09 (PR-1 2026-04-24): the STT/TTS api_key fields used to be
-# stored here in plaintext — Codex flagged the dict as "partial BYO
-# token". Now the non-secret fields (sip_provider, phone_number,
-# stt_engine, tts_engine, etc.) still live in this process-local dict
-# because they're not secrets and rebooting re-loads them from the UI.
-# The api_key fields are persisted through the encrypted
-# ``tenant_ai_credentials`` vault instead — see _save_voice_keys /
-# _load_voice_key below.
-_VOICE_CONFIG: dict[str, dict] = {}
+_VOICE_CONFIGS_KEY = "voice_configs"
+_TENANT_DEFAULT_VOICE_CONFIG = "tenant_default"
 
 
 # Mapping between the voice engine choice and the AI-credentials
 # provider slug. Keep in sync with
 # ``core.models.tenant_ai_credential.PROVIDER_ALLOWLIST``.
 _STT_ENGINE_TO_PROVIDER: dict[str, str] = {"deepgram": "stt_deepgram"}
-_TTS_ENGINE_TO_PROVIDER: dict[str, str] = {"google": "tts_azure"}
-# Note: the UI currently exposes "google" TTS but the production
-# path uses Azure Speech under the hood. When a true Google TTS
-# provider is added, register it separately in the allowlist and
-# map it here.
+_TTS_ENGINE_TO_PROVIDER: dict[str, str] = {"azure": "tts_azure"}
+
+
+def _voice_config_key(agent_id: str | None) -> str:
+    return agent_id or _TENANT_DEFAULT_VOICE_CONFIG
+
+
+def _voice_config_record(body: VoiceConfig, credentials_ciphertext: str) -> dict:
+    """Build the durable record without retaining plaintext credentials."""
+    record = body.model_dump(exclude={"credentials", "stt_api_key", "tts_api_key"})
+    record["credentials_encrypted"] = {"_encrypted": credentials_ciphertext}
+    return record
+
+
+async def _save_voice_settings(tenant_uuid, body: VoiceConfig) -> None:
+    """Persist agent-scoped voice settings and encrypted SIP credentials."""
+    from sqlalchemy import select
+
+    from core.crypto.tenant_secrets import encrypt_for_tenant
+    from core.database import get_tenant_session
+    from core.models.tenant import Tenant
+
+    plaintext = json.dumps(body.credentials.model_dump(), separators=(",", ":"))
+    ciphertext = await encrypt_for_tenant(plaintext, tenant_uuid)
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(select(Tenant).where(Tenant.id == tenant_uuid))
+        tenant = result.scalar_one_or_none()
+        if tenant is None:
+            raise HTTPException(404, "Tenant not found")
+        settings = dict(tenant.settings or {})
+        configs = dict(settings.get(_VOICE_CONFIGS_KEY) or {})
+        configs[_voice_config_key(body.agent_id)] = _voice_config_record(body, ciphertext)
+        settings[_VOICE_CONFIGS_KEY] = configs
+        tenant.settings = settings
+
+
+def _uuid_from_string(value: str):
+    import uuid as _uuid
+
+    return _uuid.UUID(value)
+
+
+async def _load_voice_record(tenant_uuid, agent_id: str | None) -> dict | None:
+    """Load one durable voice record without decrypting credentials."""
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.tenant import Tenant
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(select(Tenant.settings).where(Tenant.id == tenant_uuid))
+        settings = result.scalar_one_or_none()
+    if not isinstance(settings, dict):
+        return None
+    configs = settings.get(_VOICE_CONFIGS_KEY)
+    if not isinstance(configs, dict):
+        return None
+    record = configs.get(_voice_config_key(agent_id))
+    return record if isinstance(record, dict) else None
+
+
+async def _load_voice_settings(tenant_uuid, agent_id: str | None) -> dict | None:
+    """Load and decrypt one tenant/agent voice configuration."""
+    from core.crypto.tenant_secrets import decrypt_for_tenant
+
+    record = await _load_voice_record(tenant_uuid, agent_id)
+    if record is None:
+        return None
+    encrypted = record.get("credentials_encrypted")
+    ciphertext = encrypted.get("_encrypted") if isinstance(encrypted, dict) else None
+    if not ciphertext:
+        raise HTTPException(503, "Stored voice credentials are unavailable")
+    try:
+        credentials = json.loads(decrypt_for_tenant(ciphertext))
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(503, "Stored voice credentials could not be decrypted") from exc
+    data = {key: value for key, value in record.items() if key != "credentials_encrypted"}
+    data["credentials"] = credentials
+    return data
+
+
+async def _ensure_voice_agent(tenant_uuid, agent_id: str | None) -> None:
+    """Reject cross-tenant or missing agent bindings before storing secrets."""
+    if not agent_id:
+        return
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+
+    async with get_tenant_session(tenant_uuid) as session:
+        result = await session.execute(
+            select(Agent.id).where(
+                Agent.id == _uuid_from_string(agent_id),
+                Agent.tenant_id == tenant_uuid,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(404, "Agent not found for this tenant")
 
 
 async def _save_voice_keys(tenant_uuid, body: VoiceConfig) -> None:
@@ -489,16 +608,62 @@ async def save_voice_config(
     except ValueError as exc:
         raise HTTPException(400, "Invalid tenant_id") from exc
 
-    # Persist secret material in the encrypted vault
-    await _save_voice_keys(tenant_uuid, body)
+    await _ensure_voice_agent(tenant_uuid, body.agent_id)
 
-    # Store only the non-secret fields in the process-local dict
-    non_secret = body.model_dump()
-    non_secret.pop("stt_api_key", None)
-    non_secret.pop("tts_api_key", None)
-    _VOICE_CONFIG[str(tenant_id)] = non_secret
+    # Persist STT/TTS keys in the provider vault and the SIP credential
+    # bundle in tenant settings as envelope ciphertext.
+    await _save_voice_keys(tenant_uuid, body)
+    await _save_voice_settings(tenant_uuid, body)
 
     return VoiceConfig(**_mask_voice_config(body.model_dump()))
+
+
+@router.get("/voice/status", response_model=VoiceStatus)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="voice.config.status.read",
+    rate_limit="voice-config-read",
+    idempotency="read-only",
+    audit_event="voice.config.status",
+)
+async def get_voice_status(
+    agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> VoiceStatus:
+    """Return tenant-safe setup state without loading any credentials."""
+    import uuid as _uuid
+
+    try:
+        tenant_uuid = _uuid.UUID(tenant_id)
+        if agent_id:
+            _uuid.UUID(agent_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid tenant_id or agent_id") from exc
+
+    record = await _load_voice_record(tenant_uuid, agent_id)
+    if record is None:
+        return VoiceStatus(
+            configured=False,
+            agent_id=agent_id,
+            runtime_status="not_configured",
+        )
+    return VoiceStatus(
+        configured=True,
+        agent_id=agent_id,
+        sip_provider=str(record.get("sip_provider") or "") or None,
+        phone_number=str(record.get("phone_number") or "") or None,
+        language=str(record.get("language") or "en-IN"),
+        stt_engine=str(record.get("stt_engine") or "") or None,
+        tts_engine=str(record.get("tts_engine") or "") or None,
+        runtime_status=(
+            "ready"
+            if record.get("sip_provider") == "twilio"
+            and record.get("stt_engine") == "provider_managed"
+            and record.get("tts_engine") == "provider_managed"
+            else "configuration_only"
+        ),
+    )
 
 
 @router.get(
@@ -514,39 +679,37 @@ async def save_voice_config(
     idempotency="read-only",
     audit_event="voice.config.read",
 )
-async def get_voice_config(tenant_id: str = Depends(get_current_tenant)):
+async def get_voice_config(
+    agent_id: str | None = None,
+    tenant_id: str = Depends(get_current_tenant),
+):
     """Return the saved tenant voice config with credentials masked.
 
-    HIGH-05 fix — pre-fix any authenticated tenant user could read the
-    full credentials. Now admin-only, secrets are masked on return,
-    and the secret bodies live in the encrypted vault — this endpoint
-    never touches raw cipher material.
+    Admin-only: the encrypted SIP bundle is decrypted server-side only
+    long enough to produce masked identifiers. Raw values are never
+    returned to the client.
     """
     import uuid as _uuid
 
-    data = _VOICE_CONFIG.get(str(tenant_id))
-    if not data:
-        return None
-
     try:
         tenant_uuid = _uuid.UUID(tenant_id)
-    except ValueError:
-        return VoiceConfig(**_mask_voice_config(data))
+        if agent_id:
+            _uuid.UUID(agent_id)
+    except ValueError as exc:
+        raise HTTPException(400, "Invalid tenant_id or agent_id") from exc
+
+    data = await _load_voice_settings(tenant_uuid, agent_id)
+    if not data:
+        return None
 
     # Overlay masked key displays from the vault so the UI can show
     # "sk-…abcd" without ever seeing the real body.
     stt_provider = _STT_ENGINE_TO_PROVIDER.get(data.get("stt_engine", ""))
     tts_provider = _TTS_ENGINE_TO_PROVIDER.get(data.get("tts_engine", ""))
-    stt_key_display = (
-        await _voice_key_display(tenant_uuid, stt_provider, "stt")
-        if stt_provider else None
-    )
-    tts_key_display = (
-        await _voice_key_display(tenant_uuid, tts_provider, "tts")
-        if tts_provider else None
-    )
+    stt_key_display = await _voice_key_display(tenant_uuid, stt_provider, "stt") if stt_provider else None
+    tts_key_display = await _voice_key_display(tenant_uuid, tts_provider, "tts") if tts_provider else None
 
-    merged = dict(data)
+    merged = _mask_voice_config(data)
     merged["stt_api_key"] = stt_key_display
     merged["tts_api_key"] = tts_key_display
-    return VoiceConfig(**_mask_voice_config(merged))
+    return VoiceConfig(**merged)

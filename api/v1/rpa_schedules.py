@@ -25,8 +25,8 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import select
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import get_current_tenant, require_tenant_admin
@@ -50,6 +50,77 @@ _CRON_PRESETS = {
     "monthly",
 }
 _CRON_FIELD_RE = re.compile(r"^[\d*/,\-]+$")
+_SENSITIVE_PARAM_NAMES = frozenset(
+    {
+        "password",
+        "passcode",
+        "secret",
+        "token",
+        "api_key",
+        "auth_token",
+        "credential",
+        "credentials",
+    }
+)
+
+
+def _is_sensitive_param_key(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    return normalized in _SENSITIVE_PARAM_NAMES or any(
+        normalized.endswith(f"_{suffix}")
+        for suffix in _SENSITIVE_PARAM_NAMES
+    )
+
+
+def _find_inline_secret(value: Any, path: str = "") -> str | None:
+    """Return the first plaintext-secret path in a schedule payload."""
+    if isinstance(value, dict):
+        for key, child in value.items():
+            key_text = str(key)
+            child_path = f"{path}.{key_text}" if path else key_text
+            is_reference = key_text.lower().endswith(("_ref", "_reference"))
+            if (
+                not is_reference
+                and _is_sensitive_param_key(key_text)
+                and child not in (None, "", {}, [])
+            ):
+                return child_path
+            nested = _find_inline_secret(child, child_path)
+            if nested:
+                return nested
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            nested = _find_inline_secret(child, f"{path}[{index}]")
+            if nested:
+                return nested
+    return None
+
+
+def _reject_inline_schedule_secrets(params: dict[str, Any], config: dict[str, Any]) -> None:
+    secret_path = _find_inline_secret({"params": params, "config": config})
+    if secret_path:
+        raise ValueError(
+            f"plaintext secret-like value at {secret_path}; scheduled secret inputs "
+            "are disabled until a vault-backed credential resolver is configured"
+        )
+
+
+def _redact_sensitive_values(value: Any) -> Any:
+    """Redact legacy secret-like fields before returning schedule data."""
+    if isinstance(value, dict):
+        output: dict[str, Any] = {}
+        for key, child in value.items():
+            key_text = str(key)
+            if _is_sensitive_param_key(key_text) and not key_text.lower().endswith(
+                ("_ref", "_reference")
+            ):
+                output[key_text] = "***" if child not in (None, "", {}, []) else child
+            else:
+                output[key_text] = _redact_sensitive_values(child)
+        return output
+    if isinstance(value, list):
+        return [_redact_sensitive_values(child) for child in value]
+    return value
 
 
 def _is_valid_cron(expr: str) -> bool:
@@ -126,6 +197,11 @@ class RPAScheduleCreate(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def _reject_plaintext_secrets(self) -> RPAScheduleCreate:
+        _reject_inline_schedule_secrets(self.params, self.config)
+        return self
+
 
 class RPAScheduleUpdate(BaseModel):
     name: str | None = Field(None, min_length=1, max_length=255)
@@ -147,6 +223,11 @@ class RPAScheduleUpdate(BaseModel):
                 "cron expression"
             )
         return v
+
+    @model_validator(mode="after")
+    def _reject_plaintext_secrets(self) -> RPAScheduleUpdate:
+        _reject_inline_schedule_secrets(self.params or {}, self.config or {})
+        return self
 
 
 class RPAScheduleOut(BaseModel):
@@ -176,8 +257,8 @@ def _to_out(row: RPASchedule) -> RPAScheduleOut:
         cron_expression=row.cron_expression,
         enabled=row.enabled,
         company_id=str(row.company_id) if row.company_id else None,
-        params=row.params or {},
-        config=row.config or {},
+        params=_redact_sensitive_values(row.params or {}),
+        config=_redact_sensitive_values(row.config or {}),
         last_run_at=row.last_run_at.isoformat() if row.last_run_at else None,
         next_run_at=row.next_run_at.isoformat() if row.next_run_at else None,
         last_run_status=row.last_run_status,
@@ -525,6 +606,31 @@ async def due_schedule_ids(now: datetime | None = None) -> list[tuple[str, str]]
                 RPASchedule.next_run_at.is_not(None),
                 RPASchedule.next_run_at <= cutoff,
             )
+        )
+        rows = result.all()
+    return [(str(tid), str(sid)) for tid, sid in rows]
+
+
+async def claim_due_schedule_ids(
+    now: datetime | None = None,
+    *,
+    lease_minutes: int = 15,
+) -> list[tuple[str, str]]:
+    """Atomically lease due schedules before the dispatcher enqueues them."""
+    from core.database import async_session_factory
+
+    cutoff = now or datetime.now(UTC)
+    lease_until = cutoff + timedelta(minutes=max(1, lease_minutes))
+    async with async_session_factory() as session:
+        result = await session.execute(
+            update(RPASchedule)
+            .where(
+                RPASchedule.enabled.is_(True),
+                RPASchedule.next_run_at.is_not(None),
+                RPASchedule.next_run_at <= cutoff,
+            )
+            .values(next_run_at=lease_until)
+            .returning(RPASchedule.tenant_id, RPASchedule.id)
         )
         rows = result.all()
     return [(str(tid), str(sid)) for tid, sid in rows]

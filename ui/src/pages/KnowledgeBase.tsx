@@ -22,6 +22,9 @@ interface KBDocument {
   // `doc.uploaded_at` (undefined) → "-". Backend now sends both fields;
   // we read the user-facing name.
   uploaded_at: string;
+  extraction_method?: string | null;
+  ocr_applied?: boolean;
+  ocr_confidence?: number | null;
   created_at?: string;
 }
 
@@ -185,6 +188,9 @@ export default function KnowledgeBase() {
             d.uploaded_at ?? d.created_at ?? "",
           ),
           created_at: typeof d.created_at === "string" ? d.created_at : undefined,
+          extraction_method: typeof d.extraction_method === "string" ? d.extraction_method : null,
+          ocr_applied: d.ocr_applied === true,
+          ocr_confidence: typeof d.ocr_confidence === "number" ? d.ocr_confidence : null,
         }),
       );
       const s = statsRes.status === "fulfilled" ? statsRes.value.data : null;
@@ -398,12 +404,14 @@ export default function KnowledgeBase() {
           <p className="text-sm text-muted-foreground">
             {uploading ? "Uploading..." : "Drag & drop files here, or click to browse"}
           </p>
-          <p className="text-xs text-muted-foreground">Supported: PDF, Word, Excel, TXT</p>
+          <p className="text-xs text-muted-foreground">
+            PDF and scanned images with OCR, Word, Excel, PowerPoint, OpenDocument, RTF, email, HTML, and text data
+          </p>
           <label className="mt-2">
             <input
               type="file"
               multiple
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.txt,.md,.markdown,.csv,.tsv,.json,.jsonl,.yaml,.yml,.xml,.html,.htm,.eml,.log,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
               className="hidden"
               onChange={(e) => handleUpload(e.target.files)}
             />
@@ -468,7 +476,13 @@ export default function KnowledgeBase() {
                     <Badge variant={STATUS_BADGE[doc.status] || "secondary"}>{doc.status}</Badge>
                   </td>
                   <td className="p-3">{formatBytes(doc.size_bytes ?? 0)}</td>
-                  <td className="p-3">{formatUploadedDate(doc.uploaded_at)}</td>
+                  <td className="p-3">
+                    <div>{formatUploadedDate(doc.uploaded_at)}</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {doc.extraction_method || "Extraction pending"}
+                      {doc.ocr_applied ? ` | OCR${doc.ocr_confidence != null ? ` ${Math.round(doc.ocr_confidence)}%` : ""}` : ""}
+                    </div>
+                  </td>
                   <td className="p-3">
                     <Button
                       variant="destructive"

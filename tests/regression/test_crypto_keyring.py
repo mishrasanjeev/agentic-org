@@ -205,6 +205,7 @@ def test_case3_reject_delete_old_key_while_referenced(
         KeyStillReferencedError,
         assert_key_unreferenced,
         parse_ciphertext,
+        parse_encrypted_container,
         parse_jsonb_credentials,
     )
 
@@ -228,6 +229,10 @@ def test_case3_reject_delete_old_key_while_referenced(
     assert parse_jsonb_credentials({"_encrypted": "agko_vv2$abc"}) == KeyRef("vault", "v2")
     assert parse_jsonb_credentials(None) is None
     assert parse_jsonb_credentials({}) is None
+    assert parse_encrypted_container({"_encrypted": "agko_vv2$abc"}) == KeyRef("vault", "v2")
+    assert parse_encrypted_container({"_encrypted": f"env1:{envelope_blob}"}) == KeyRef(
+        "envelope", "projects/p/locations/l/keyRings/r/cryptoKeys/v1"
+    )
 
     # ── Lifecycle gate: assert_key_unreferenced ──
     # Retirement always consumes the complete exact-scope scan.  The optional

@@ -18,10 +18,8 @@ Three classes of defense:
    with a byte ceiling so text-extraction paths can't pull a 1 GiB
    log file into a JSONB column.
 
-Heavy parser bounds (PDF page count, DOCX paragraph cap, XLSX
-sheet/row cap) are tracked in a follow-up PR — the underlying
-parsers aren't fully wired up yet (see knowledge.py:604-605 inline
-comment).
+Parser-specific page and archive-expansion bounds are enforced by the
+canonical extractors after the bounded stream lands in a temporary file.
 """
 
 from __future__ import annotations
@@ -39,9 +37,7 @@ from fastapi import HTTPException, UploadFile
 # 50 MiB — generous for typical document upload (large PDFs are
 # usually 5-20 MiB, multi-sheet XLSX rarely above 30 MiB), tight
 # enough that a single request can't OOM a 2 GiB worker.
-MAX_UPLOAD_BYTES: Final[int] = int(
-    os.getenv("AGENTICORG_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024))
-)
+MAX_UPLOAD_BYTES: Final[int] = int(os.getenv("AGENTICORG_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))
 
 # 256 KiB cap on extracted text. Existing code already trimmed to
 # 256 KB before slicing further to 8 KiB for the search slot —
@@ -55,28 +51,48 @@ MAX_EXTRACTED_TEXT_BYTES: Final[int] = 256 * 1024
 _STREAM_CHUNK_BYTES: Final[int] = 64 * 1024
 
 # Extension allowlist. Anything not in this set returns 415.
-# Match the existing knowledge upload path's supported types
-# (line 608-611 of api/v1/knowledge.py) plus PDF/DOCX/XLSX which
-# are accepted by RAGFlow's chunker.
-ALLOWED_EXTENSIONS: Final[frozenset[str]] = frozenset({
-    # Plain text family
-    ".txt",
-    ".md",
-    ".markdown",
-    ".csv",
-    ".tsv",
-    ".json",
-    ".yaml",
-    ".yml",
-    ".xml",
-    # Office documents
-    ".pdf",
-    ".docx",
-    ".xlsx",
-    ".pptx",
-    # Source-friendly
-    ".log",
-})
+# Keep this list aligned with ``core.rag.extractors`` and the supported-types
+# API. An allowed upload must have a real extraction path.
+ALLOWED_EXTENSIONS: Final[frozenset[str]] = frozenset(
+    {
+        # Plain text family
+        ".txt",
+        ".md",
+        ".markdown",
+        ".csv",
+        ".tsv",
+        ".json",
+        ".jsonl",
+        ".yaml",
+        ".yml",
+        ".xml",
+        # Office documents
+        ".pdf",
+        ".docx",
+        ".xlsx",
+        ".pptx",
+        ".doc",
+        ".xls",
+        ".ppt",
+        ".odt",
+        ".ods",
+        ".odp",
+        ".rtf",
+        ".html",
+        ".htm",
+        ".eml",
+        # Scanned/image documents
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".tif",
+        ".tiff",
+        ".bmp",
+        ".webp",
+        # Source-friendly
+        ".log",
+    }
+)
 
 # MIME prefix allowlist. Browsers + curl set Content-Type — we
 # trust it as a hint, not a security boundary (the extension
@@ -91,6 +107,10 @@ ALLOWED_MIME_PREFIXES: Final[tuple[str, ...]] = (
     "application/vnd.openxmlformats-officedocument.",  # docx, xlsx, pptx
     "application/msword",
     "application/vnd.ms-",
+    "application/vnd.oasis.opendocument.",
+    "application/rtf",
+    "message/rfc822",
+    "image/",
     "application/octet-stream",  # some clients fall back to this
 )
 
@@ -126,17 +146,14 @@ def validate_upload(file: UploadFile) -> None:
             detail={
                 "error": "unsupported_extension",
                 "message": (
-                    f"File extension {ext!r} is not in the upload allowlist. "
-                    f"Allowed: {sorted(ALLOWED_EXTENSIONS)}"
+                    f"File extension {ext!r} is not in the upload allowlist. Allowed: {sorted(ALLOWED_EXTENSIONS)}"
                 ),
                 "extension": ext,
             },
         )
 
     content_type = (file.content_type or "").lower()
-    if content_type and not any(
-        content_type.startswith(prefix) for prefix in ALLOWED_MIME_PREFIXES
-    ):
+    if content_type and not any(content_type.startswith(prefix) for prefix in ALLOWED_MIME_PREFIXES):
         raise HTTPException(
             status_code=415,
             detail={
@@ -160,10 +177,7 @@ def validate_upload(file: UploadFile) -> None:
             status_code=413,
             detail={
                 "error": "upload_too_large",
-                "message": (
-                    f"Declared upload size {declared_size} bytes exceeds the "
-                    f"{MAX_UPLOAD_BYTES} byte cap."
-                ),
+                "message": (f"Declared upload size {declared_size} bytes exceeds the {MAX_UPLOAD_BYTES} byte cap."),
                 "max_bytes": MAX_UPLOAD_BYTES,
                 "declared_bytes": declared_size,
             },
@@ -173,9 +187,7 @@ def validate_upload(file: UploadFile) -> None:
 # ── Streaming ────────────────────────────────────────────────────
 
 
-async def stream_to_tempfile(
-    file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES, suffix: str = ""
-) -> tuple[Path, int]:
+async def stream_to_tempfile(file: UploadFile, max_bytes: int = MAX_UPLOAD_BYTES, suffix: str = "") -> tuple[Path, int]:
     """Copy the upload to a NamedTemporaryFile in chunks; abort if
     the running total exceeds ``max_bytes``.
 
@@ -206,10 +218,7 @@ async def stream_to_tempfile(
                         status_code=413,
                         detail={
                             "error": "upload_too_large",
-                            "message": (
-                                f"Upload exceeded the {max_bytes} byte cap "
-                                "during streaming."
-                            ),
+                            "message": (f"Upload exceeded the {max_bytes} byte cap during streaming."),
                             "max_bytes": max_bytes,
                             "bytes_seen": total,
                         },
@@ -233,9 +242,7 @@ async def stream_to_tempfile(
         raise
 
 
-def read_text_bounded(
-    path: Path, max_bytes: int = MAX_EXTRACTED_TEXT_BYTES
-) -> str:
+def read_text_bounded(path: Path, max_bytes: int = MAX_EXTRACTED_TEXT_BYTES) -> str:
     """Read up to ``max_bytes`` from ``path`` as UTF-8 (errors='ignore').
 
     Replaces the historical pattern ``content[:256*1024].decode(...)``

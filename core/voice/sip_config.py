@@ -1,9 +1,8 @@
 """SIP trunk configuration for voice agents.
 
-Supports Twilio, Vonage, and custom SIP providers.  Credentials are
+Supports Twilio, Vonage, and custom SIP providers. Credentials are
 encrypted at rest using Fernet symmetric encryption (key derived from
-AGENTICORG_SECRET_KEY).  Falls back to base64 encoding if the
-``cryptography`` package is not installed.
+AGENTICORG_SECRET_KEY). Missing encryption support fails closed.
 """
 
 from __future__ import annotations
@@ -15,6 +14,10 @@ from typing import Any
 import structlog
 
 logger = structlog.get_logger()
+
+
+class VoiceCredentialEncryptionError(RuntimeError):
+    """Raised when voice credentials cannot be encrypted or decrypted safely."""
 
 # ---------------------------------------------------------------------------
 # Provider constants
@@ -74,7 +77,7 @@ def encrypt_credentials(credentials: dict) -> dict:
     """Encrypt sensitive credential values before storage.
 
     Uses Fernet symmetric encryption with key from AGENTICORG_SECRET_KEY.
-    Falls back to base64 encoding if cryptography not available.
+    Fails closed if the encryption key or cryptography dependency is unavailable.
     """
     try:
         import base64
@@ -85,7 +88,9 @@ def encrypt_credentials(credentials: dict) -> dict:
 
         secret = os.getenv("AGENTICORG_SECRET_KEY", "")
         if not secret:
-            return credentials  # no key = no encryption
+            raise VoiceCredentialEncryptionError(
+                "AGENTICORG_SECRET_KEY is required to encrypt voice credentials"
+            )
         # Derive Fernet key from secret
         key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
         f = Fernet(key)
@@ -96,8 +101,10 @@ def encrypt_credentials(credentials: dict) -> dict:
             else:
                 encrypted[k] = v
         return encrypted
-    except ImportError:
-        return credentials  # cryptography not installed
+    except ImportError as exc:
+        raise VoiceCredentialEncryptionError(
+            "cryptography is required to encrypt voice credentials"
+        ) from exc
 
 
 def decrypt_credentials(credentials: dict) -> dict:
@@ -111,7 +118,9 @@ def decrypt_credentials(credentials: dict) -> dict:
 
         secret = os.getenv("AGENTICORG_SECRET_KEY", "")
         if not secret:
-            return credentials
+            raise VoiceCredentialEncryptionError(
+                "AGENTICORG_SECRET_KEY is required to decrypt voice credentials"
+            )
         key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
         f = Fernet(key)
         decrypted: dict[str, Any] = {}
@@ -124,8 +133,10 @@ def decrypt_credentials(credentials: dict) -> dict:
             else:
                 decrypted[k] = v
         return decrypted
-    except ImportError:
-        return credentials
+    except ImportError as exc:
+        raise VoiceCredentialEncryptionError(
+            "cryptography is required to decrypt voice credentials"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -268,7 +279,7 @@ async def _test_custom(config: SIPConfig) -> dict[str, Any]:
             "message": "No sip_uri provided for custom provider",
             "details": {},
         }
-    # For custom SIP, we just validate the URI format
+    # URI shape alone is not a connectivity or authentication check.
     if not sip_uri.startswith("sip:"):
         return {
             "success": False,
@@ -276,7 +287,7 @@ async def _test_custom(config: SIPConfig) -> dict[str, Any]:
             "details": {},
         }
     return {
-        "success": True,
-        "message": f"Custom SIP URI '{sip_uri}' format is valid (connectivity not tested — requires SIP INVITE)",
-        "details": {"format_valid": True, "sip_uri": sip_uri},
+        "success": False,
+        "message": "Custom SIP URI format is valid, but connectivity was not verified",
+        "details": {"format_valid": True, "connectivity_verified": False},
     }

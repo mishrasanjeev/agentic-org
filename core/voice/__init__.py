@@ -1,1 +1,1 @@
-"""Voice agent foundation — LiveKit integration, SIP config, and STT/TTS pipeline."""
+"""Voice runtime, provider integration, and optional speech-worker foundations."""

@@ -1789,28 +1789,106 @@ function enforcementEntries(agent: Agent): EnforcementEntry[] {
 }
 
 /* â”€â”€â”€ Voice Tab â”€â”€â”€ */
+type VoiceRuntimeHealth = {
+  ready: boolean;
+  provider?: string | null;
+  stt?: string | null;
+  tts?: string | null;
+  phone_number?: string | null;
+  audio_stored?: boolean;
+  transcript_encrypted?: boolean;
+};
+
+type VoiceCallRecord = {
+  id: string;
+  direction: "inbound" | "outbound";
+  status: string;
+  from_number?: string | null;
+  to_number?: string | null;
+  turn_count: number;
+  duration_seconds?: number | null;
+  created_at: string;
+};
+
 function VoiceTab({ agent }: { agent: Agent }) {
-  // Mock: check if voice is configured (use agent config or a flag)
-  const voiceConfigured = !!(agent as any).voice_config;
-
-  // Mock call log data
-  const callLog = [
-    { timestamp: "2026-04-04T10:30:00Z", duration: "2m 15s", status: "completed" },
-    { timestamp: "2026-04-04T09:45:00Z", duration: "1m 42s", status: "completed" },
-    { timestamp: "2026-04-04T08:20:00Z", duration: "0m 38s", status: "missed" },
-    { timestamp: "2026-04-03T16:10:00Z", duration: "3m 05s", status: "completed" },
-    { timestamp: "2026-04-03T14:55:00Z", duration: "0m 12s", status: "failed" },
-  ];
-
   const voiceNavigate = useNavigate();
+  const [voiceConfig, setVoiceConfig] = useState<Record<string, unknown> | null>(null);
+  const [runtime, setRuntime] = useState<VoiceRuntimeHealth | null>(null);
+  const [calls, setCalls] = useState<VoiceCallRecord[]>([]);
+  const [voiceLoading, setVoiceLoading] = useState(true);
+  const [voiceError, setVoiceError] = useState("");
+  const [toNumber, setToNumber] = useState("");
+  const [calling, setCalling] = useState(false);
 
-  if (!voiceConfigured) {
+  const loadVoice = async () => {
+    const [statusResponse, runtimeResponse, callsResponse] = await Promise.all([
+      api.get("/voice/status", { params: { agent_id: agent.id } }),
+      api.get("/voice/runtime/health", { params: { agent_id: agent.id } }),
+      api.get("/voice/calls", { params: { agent_id: agent.id } }),
+    ]);
+    setVoiceConfig(statusResponse.data?.configured ? statusResponse.data : null);
+    setRuntime(runtimeResponse.data || null);
+    setCalls(Array.isArray(callsResponse.data) ? callsResponse.data : []);
+  };
+
+  useEffect(() => {
+    let active = true;
+    setVoiceLoading(true);
+    setVoiceError("");
+    Promise.all([
+      api.get("/voice/status", { params: { agent_id: agent.id } }),
+      api.get("/voice/runtime/health", { params: { agent_id: agent.id } }),
+      api.get("/voice/calls", { params: { agent_id: agent.id } }),
+    ])
+      .then(([statusResponse, runtimeResponse, callsResponse]) => {
+        if (!active) return;
+        setVoiceConfig(statusResponse.data?.configured ? statusResponse.data : null);
+        setRuntime(runtimeResponse.data || null);
+        setCalls(Array.isArray(callsResponse.data) ? callsResponse.data : []);
+      })
+      .catch((error: unknown) => {
+        if (active) setVoiceError(errorDetailToMessage(error, "Could not load voice configuration."));
+      })
+      .finally(() => {
+        if (active) setVoiceLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [agent.id]);
+
+  const startOutboundCall = async () => {
+    setVoiceError("");
+    setCalling(true);
+    try {
+      await api.post("/voice/calls/outbound", {
+        agent_id: agent.id,
+        to_number: toNumber.trim(),
+      });
+      setToNumber("");
+      await loadVoice();
+    } catch (error: unknown) {
+      setVoiceError(errorDetailToMessage(error, "Could not start the call."));
+    } finally {
+      setCalling(false);
+    }
+  };
+
+  const setupPath = `/dashboard/voice-setup?agent_id=${encodeURIComponent(agent.id)}`;
+
+  if (voiceLoading) {
+    return <p className="text-sm text-muted-foreground">Loading voice configuration...</p>;
+  }
+
+  if (!voiceConfig) {
     return (
       <Card>
         <CardContent className="pt-6 text-center space-y-4">
-          <p className="text-muted-foreground">Voice not enabled for this agent.</p>
+          <p className="text-muted-foreground">
+            {voiceError || "Voice is not configured for this agent."}
+          </p>
           <div className="flex justify-center gap-3">
-            <Button onClick={() => voiceNavigate("/dashboard/voice-setup")} className="relative z-10">
+            <Button onClick={() => voiceNavigate(setupPath)} className="relative z-10">
               Set up Voice
             </Button>
             <Button variant="outline" onClick={() => voiceNavigate(-1 as any)} className="relative z-10">
@@ -1827,9 +1905,9 @@ function VoiceTab({ agent }: { agent: Agent }) {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-sm font-semibold">Voice Call Log</CardTitle>
+            <CardTitle className="text-sm font-semibold">Voice Configuration</CardTitle>
             <button
-              onClick={() => voiceNavigate("/dashboard/voice-setup")}
+              onClick={() => voiceNavigate(setupPath)}
               className="text-xs text-primary hover:underline relative z-10 cursor-pointer"
             >
               Voice Setup
@@ -1837,34 +1915,102 @@ function VoiceTab({ agent }: { agent: Agent }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Provider</span>
+              <span className="font-medium capitalize">{String(voiceConfig.sip_provider || "-")}</span>
+            </div>
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Phone number</span>
+              <span className="font-medium">{String(voiceConfig.phone_number || "-")}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Call runtime</span>
+              <Badge variant={runtime?.ready ? "success" : "warning"}>
+                {runtime?.ready ? "Ready" : "Configuration only"}
+              </Badge>
+            </div>
+            {runtime?.ready && (
+              <>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Speech</span>
+                  <span className="font-medium">{runtime.stt} / {runtime.tts}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Privacy</span>
+                  <span className="font-medium">No audio stored; transcript encrypted</span>
+                </div>
+              </>
+            )}
+            {!runtime?.ready && (
+              <p className="text-xs text-muted-foreground">
+                Complete Twilio setup with provider-managed speech to activate signed inbound webhooks and outbound calls.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {runtime?.ready && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">Start outbound call</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="+919876543210"
+                value={toNumber}
+                onChange={(event) => setToNumber(event.target.value)}
+                className="min-w-0 flex-1 border rounded px-3 py-2 text-sm"
+              />
+              <Button
+                onClick={startOutboundCall}
+                disabled={calling || !/^\+[1-9]\d{6,14}$/.test(toNumber.trim())}
+              >
+                {calling ? "Calling..." : "Call"}
+              </Button>
+            </div>
+            {voiceError && <p className="mt-2 text-sm text-red-600">{voiceError}</p>}
+          </CardContent>
+        </Card>
+      )}
+
+      <div>
+        <h3 className="mb-2 text-sm font-semibold">Call history</h3>
+        {calls.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No calls have been recorded for this agent.</p>
+        ) : (
+          <div className="overflow-x-auto border rounded">
+            <table className="w-full min-w-[680px] text-sm">
               <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
-                  <th className="pb-2 pr-4">Timestamp</th>
-                  <th className="pb-2 pr-4">Duration</th>
-                  <th className="pb-2">Status</th>
+                <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="p-3">Started</th>
+                  <th className="p-3">Direction</th>
+                  <th className="p-3">Number</th>
+                  <th className="p-3">Status</th>
+                  <th className="p-3">Turns</th>
+                  <th className="p-3">Duration</th>
                 </tr>
               </thead>
               <tbody>
-                {callLog.map((entry, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4">{entry.duration}</td>
-                    <td className="py-2">
-                      <Badge variant={entry.status === "completed" ? "success" : entry.status === "missed" ? "warning" : "destructive"} className="text-[10px]">
-                        {entry.status}
-                      </Badge>
-                    </td>
+                {calls.map((call) => (
+                  <tr key={call.id} className="border-b last:border-0">
+                    <td className="p-3">{new Date(call.created_at).toLocaleString()}</td>
+                    <td className="p-3 capitalize">{call.direction}</td>
+                    <td className="p-3">{call.direction === "inbound" ? call.from_number : call.to_number}</td>
+                    <td className="p-3"><Badge variant={call.status === "completed" ? "success" : "secondary"}>{call.status.replace(/_/g, " ")}</Badge></td>
+                    <td className="p-3">{call.turn_count}</td>
+                    <td className="p-3">{call.duration_seconds == null ? "-" : `${call.duration_seconds}s`}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
     </div>
   );
 }

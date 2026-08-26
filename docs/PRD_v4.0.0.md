@@ -20,7 +20,7 @@ v4.0.0 is a major platform upgrade that closes every gap between AgenticOrg and 
 - Workflows: 15 → 20+ (NL-generated + adaptive)
 - LLM routing: Single model → Smart multi-model (RouteLLM, 85% cost savings)
 - Knowledge: No RAG → Full document ingestion + retrieval (RAGFlow)
-- Voice: None → Realtime voice agents (LiveKit + Pipecat)
+- Voice: None → Signed Twilio telephony with provider-managed STT/TTS
 - PII: Log masking only → Pre-LLM redaction (Microsoft Presidio)
 - RPA: None → Browser automation for legacy portals (Playwright)
 - Languages: English only → Hindi, Tamil, Telugu, Kannada
@@ -37,8 +37,8 @@ Every dependency MUST be MIT, Apache 2.0, or BSD-2-Clause. No AGPL, no ELv2, no 
 | LLM routing | RouteLLM (lm-sys) | Apache 2.0 | 3.5K+ | latest | Smart model selection, 85% cost savings |
 | PII redaction | Microsoft Presidio | MIT | 3.5K+ | latest | 50+ PII recognizers, pre-LLM anonymization |
 | RAG engine | RAGFlow (infiniflow) | Apache 2.0 | 73K+ | latest | Document ingestion, chunking, retrieval |
-| Voice agents | LiveKit Agents | Apache 2.0 | 9.9K | latest | Realtime voice AI + telephony |
-| Voice framework | Pipecat | BSD-2-Clause | 8K+ | latest | Voice + multimodal conversational AI |
+| Voice telephony | Twilio Programmable Voice | External provider API | -- | current | Signed call webhooks plus provider-managed STT/TTS |
+| Optional voice workers | LiveKit Agents / Pipecat | Apache 2.0 / BSD-2-Clause | -- | future | Not part of the supported Twilio runtime |
 | Browser RPA | Playwright | Apache 2.0 | 70K+ | latest | Browser automation for legacy portals |
 | Local LLM (simple) | Ollama | MIT | 130K+ | latest | Local model serving, small deployments |
 | Local LLM (enterprise) | vLLM | Apache 2.0 | 45K+ | latest | GPU-optimized inference at scale |
@@ -554,75 +554,68 @@ When a workflow step fails, instead of just retrying or failing, the engine pass
 
 ---
 
-## Section 10: Voice Agents (LiveKit + Pipecat)
+## Section 10: Voice Agents
 
 ### Problem
 
-No voice capability. Enterprise customer support needs phone-based agents. Ema has voice agents for insurance/support. Zero voice = losing entire call center market.
+Enterprise customer support needs phone-based agents that use the same AgenticOrg agent runtime, tenant boundaries, and tool policy as web sessions.
 
 ### Solution
 
-Integrate LiveKit Agents (Apache 2.0) for realtime voice AI + telephony. Pipecat (BSD-2) for voice pipeline orchestration.
+The shipped first production path uses signed Twilio speech webhooks for telephony, provider-managed STT/TTS, and the existing AgenticOrg agent runtime. LiveKit/Pipecat and local speech engines remain future worker options, not production-readiness claims.
 
 ### Architecture
 
-**Dependencies**: Section 1 (Composio) must be implemented first — voice agents may use Composio tools (e.g., Shopify order lookup) during calls.
+**Dependencies**: an active AgenticOrg agent, encrypted tenant voice credentials, a Twilio phone number, and a public HTTPS API URL.
 
-- LiveKit Agents server runs as a sidecar service
-- SIP trunking: configurable provider (Twilio, Vonage, or any SIP provider — user brings their own account)
-- SIP security: All SIP connections MUST use TLS (SIPS/SRTP). Unencrypted SIP connections rejected. LiveKit enforces DTLS-SRTP for all WebRTC media streams. Voice Setup Wizard validates TLS capability during 'Test Connection' step.
-- Voice pipeline: Phone call → SIP (TLS) → LiveKit → STT (Whisper local, default) → Presidio PII scrub → AgenticOrg Agent (LLM + tools) → TTS (Piper local, default) → LiveKit → SIP (TLS) → Phone
-- Default STT: OpenAI Whisper running locally (Apache 2.0) — audio never leaves the server. External STT (Deepgram) available as opt-in with explicit user consent in Voice Setup Wizard.
-- Default TTS: Piper TTS (MIT, local) for air-gapped; Google Cloud TTS as opt-in for higher quality.
-- PII scrubbing: Audio transcripts pass through Presidio (Section 7) before reaching the LLM. Raw audio is never sent to the LLM.
+- Supported runtime: Twilio Programmable Voice with signed HTTPS form webhooks.
+- Twilio owns telephony media, speech recognition, and text-to-speech for the supported path.
+- Other SIP providers, LiveKit/Pipecat, Deepgram/Azure, and local Whisper/Piper are configuration or future-worker choices only; selecting them does not report runtime readiness.
+- Voice pipeline: Phone call -> Twilio -> signed AgenticOrg webhook -> provider-managed STT -> AgenticOrg agent (LLM + tools) -> escaped TwiML -> provider-managed TTS -> phone.
+- The current runtime stores no audio. Encrypted bounded transcripts support call continuity and audit while list APIs expose neither transcript text nor full phone numbers.
 - Each voice agent maps to an AgenticOrg agent — same prompt, same tools, same Grantex scopes
-- Voice agent config: `voice_config: {enabled: true, sip_provider: "twilio", sip_credentials: {account_sid, auth_token, phone_number}, stt_provider: "deepgram", tts_provider: "google", language: "en-IN"}`
-- Recording: optional call recording stored in S3 (consent-based)
-- Recording encryption: All S3 recordings encrypted at rest (AES-256, SSE-S3). Access restricted via IAM policies to tenant-scoped prefixes. Recordings auto-deleted after configurable retention period (default: 90 days).
-- Transcription: real-time transcript logged in agent run history
-- DTMF support: "Press 1 for sales, 2 for support" routing
+- Voice agent config: `voice_config: {agent_id, sip_provider: "twilio", credentials: {account_sid, auth_token}, phone_number, stt_engine: "provider_managed", tts_engine: "provider_managed", language: "en-IN"}`
+- Credentials are encrypted before durable storage. Full phone numbers and transcript text are not exposed by call-list APIs.
+- Recording, DTMF routing, alternative provider workers, and local STT/TTS are not part of the currently supported production path.
 
 ### Files Changed
 
 - NEW: `core/voice/__init__.py`
-- NEW: `core/voice/livekit_agent.py` — LiveKit agent worker that bridges to AgenticOrg agent
-- NEW: `core/voice/sip_config.py` — SIP provider abstraction (Twilio, Vonage, generic SIP)
-- NEW: `core/voice/pipeline.py` — Pipecat pipeline definition (STT → LLM → TTS)
-- NEW: `docker-compose.voice.yml` — LiveKit server + agent worker
-- EDIT: `api/v1/agents.py` — accept voice_config in agent create/update
-- EDIT: `ui/src/pages/AgentCreate.tsx` — Step 4: "Enable Voice" toggle with SIP provider config
-- EDIT: `ui/src/pages/AgentDetail.tsx` — "Voice" tab showing call log, recordings, transcripts
-- NEW: `ui/src/pages/VoiceSetup.tsx` — guided SIP provider setup wizard (Twilio account SID, auth token, phone number — all stored encrypted)
-- EDIT: `pyproject.toml` — add `livekit-agents>=1.0.0`, `pipecat-ai>=0.5.0`
+- NEW: `api/v1/voice_runtime.py` — signed inbound/status webhooks, outbound call creation, runtime health, and masked call history
+- NEW: `core/models/voice_call.py` and migration — tenant-scoped durable call metadata and encrypted bounded transcripts
+- NEW: `core/voice/runtime.py` — Twilio signature, TwiML, and outbound provider helpers
+- EDIT: `core/voice/livekit_agent.py` — channel-neutral bridge into the existing AgenticOrg agent runner with call continuity
+- EDIT: `ui/src/pages/AgentDetail.tsx` — Voice tab showing real masked call history, runtime health, and outbound dialer; no recordings or transcript disclosure
+- NEW: `ui/src/pages/VoiceSetup.tsx` — guided Twilio setup wizard (account SID, auth token, phone number — all stored encrypted)
 - EDIT: `.env.example` — add voice config vars
 
 ### UI — Voice Setup Wizard
 
 Must be frictionless:
 
-- Step 1: Choose SIP provider (Twilio / Vonage / Custom SIP) with logos
-- Step 2: Enter credentials (masked input fields, "Test Connection" button)
-- Step 3: Choose phone number (list from provider API or manual entry)
-- Step 4: Choose STT provider (Deepgram / Whisper / Google) and TTS provider
-- Step 5: Test call — "Call this agent now" button, rings user's phone
-- All credentials encrypted via Secret Manager before storage
+- Step 1: Choose Twilio for a production-ready path; other choices remain visibly configuration-only.
+- Step 2: Enter credentials in masked fields and validate their shape.
+- Step 3: Enter the assigned E.164 phone number and language.
+- Step 4: Keep STT/TTS on provider-managed for runtime-ready status.
+- Step 5: Use the agent Voice tab to place an authenticated administrator-initiated outbound call.
+- All credentials are envelope-encrypted before durable storage and never returned in plaintext.
 
 ### Test Cases
 
 | ID | Test Case | Expected Result |
 |-----|-----------|-----------------|
 | TC-VOI-01 | Voice config saved on agent with SIP credentials encrypted | Config saved, credentials encrypted |
-| TC-VOI-02 | LiveKit agent worker starts and connects to LiveKit server | Worker connected |
+| TC-VOI-02 | Unsigned or incorrectly signed webhook is received | Request rejected before agent execution |
 | TC-VOI-03 | Inbound call → STT → Agent processes → TTS → response spoken | End-to-end voice flow works |
-| TC-VOI-04 | Agent uses tools during voice call (e.g., looks up order status) | Tool invoked during call |
-| TC-VOI-05 | Call recording stored in S3 when enabled | Recording file in S3 |
-| TC-VOI-06 | Real-time transcript logged in agent run history | Transcript in run history |
-| TC-VOI-07 | DTMF routing works ("Press 1 for sales") | Call routed to correct agent |
-| TC-VOI-08 | Voice Setup Wizard "Test Connection" validates SIP credentials | Validation succeeds/fails correctly |
+| TC-VOI-04 | Multi-turn call reuses its call thread | Conversation context is preserved |
+| TC-VOI-05 | Call metadata is listed | Numbers are masked and transcript/audio are absent |
+| TC-VOI-06 | Speech turn is persisted | Transcript is encrypted and bounded at rest |
+| TC-VOI-07 | Outbound call is requested by an administrator | Twilio call is created and durable metadata is stored |
+| TC-VOI-08 | Runtime health is checked | Ready only for complete Twilio/provider-managed configuration |
 | TC-VOI-09 | Grantex scopes enforced on voice agent tool calls | Unauthorized tool call blocked |
-| TC-VOI-10 | Multi-language voice (en-IN, hi-IN) works with configured TTS | Correct language spoken |
+| TC-VOI-10 | Configured BCP-style language is passed to Twilio | Provider speech recognition and TTS use that language |
 
-**Acceptance Criteria**: Customer calls phone number, voice agent answers, looks up order in Shopify via Composio, reads back status, all in under 5 seconds first response.
+**Acceptance Criteria**: A customer calls a configured Twilio number, signed webhooks reach the mapped active AgenticOrg agent, provider-managed STT/TTS completes multiple turns, calls are tenant-scoped, and only masked metadata is visible in the UI.
 
 ---
 
@@ -1407,7 +1400,7 @@ Add webhook receivers + polling-based CDC for connected systems. When data chang
 ### New Tabs in Existing Pages
 
 - **AgentDetail** (`/dashboard/agents/{id}`):
-  - "Voice" tab — voice agent config, call history, recordings (Section 10)
+  - "Voice" tab — runtime health, masked call history, and administrator outbound dialer; no recordings (Section 10)
   - "Learning" tab — feedback history, learning progress, adaptation logs (Section 8)
   - "Explain" tab — decision explanation panel with reasoning trace summaries (Section 6)
 
@@ -1509,7 +1502,7 @@ Add to sidebar navigation in `ui/src/components/Layout.tsx`:
 
 2. **"1000+ Integrations" section**: Replace current 54-connector grid with new hero section showing Composio partnership: "1000+ Integrations via Composio" with category icons (CRM, HR, Finance, Dev, Support), search bar for tool lookup, and "Powered by Composio (MIT)" badge
 
-3. **"Voice Agents" showcase section**: New section with phone icon, waveform animation, headline "Talk to Your AI Employees", description of real-time voice capabilities, embedded phone demo placeholder (click-to-call), mention of LiveKit + Pipecat
+3. **"Voice Agents" showcase section**: Describe the signed Twilio/provider-managed STT/TTS path accurately. Do not advertise a click-to-call demo, recording, LiveKit/Pipecat, or alternate speech engines unless that deployment is separately enabled and verified.
 
 4. **"Knowledge Base" section**: Visual flow diagram: Upload Documents → AI Processes → Agent Answers. Supported formats (PDF, Word, Excel, CSV). "Your agents learn your business" tagline
 
@@ -1641,7 +1634,7 @@ Add JSON-LD `SoftwareApplication` schema to all new pages:
 |------|-----------------|
 | Landing | "AgenticOrg: Open-source AI agent platform with 1000+ integrations, voice agents, RAG knowledge base, and industry packs. Free forever, self-hosted." |
 | Knowledge Base | "Upload documents and let AI agents learn your business. PDF, Word, Excel support. Powered by RAGFlow." |
-| Voice Setup | "Deploy voice AI agents that answer phones, handle IVR, and talk to customers in real-time. Powered by LiveKit." |
+| Voice Setup | "Configure signed Twilio voice calls with provider-managed speech recognition and text-to-speech for AgenticOrg agents." |
 | RPA | "Automate legacy web portals with AI-powered browser automation. No API needed. Powered by Playwright." |
 | Industry Packs | "Pre-built AI agent bundles for Healthcare, Legal, Insurance, and Manufacturing. Install in 60 seconds." |
 | Billing | "Simple pricing: Free forever for self-hosted. Hosted plans starting at $49/month." |
@@ -1665,7 +1658,7 @@ Add JSON-LD `SoftwareApplication` schema to all new pages:
 7.  Pre-LLM PII redaction — Microsoft Presidio anonymization with 50+ recognizers (Section 7)
 8.  Self-Improving Agents — feedback loop with automatic prompt refinement (Section 8)
 9.  Dynamic Workflow Re-planning — runtime re-planning based on intermediate results (Section 9)
-10. Voice agents — LiveKit + Pipecat real-time voice with telephony (Section 10)
+10. Voice agents — signed Twilio telephony with provider-managed STT/TTS (Section 10)
 11. Browser RPA — Playwright-based legacy portal automation (Section 11)
 12. Multi-language support — Hindi, Tamil, Telugu, Kannada (Section 12)
 13. Content safety framework — PII + toxicity + duplicate detection (Section 13)

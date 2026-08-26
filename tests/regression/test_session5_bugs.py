@@ -105,6 +105,7 @@ class TestVoiceRouter:
 
         paths = {(r.path, tuple(sorted(r.methods or []))) for r in router.routes}
         assert ("/voice/test-connection", ("POST",)) in paths
+        assert ("/voice/status", ("GET",)) in paths
         assert ("/voice/config", ("POST",)) in paths
         assert ("/voice/config", ("GET",)) in paths
 
@@ -171,7 +172,7 @@ class TestVoiceValidation:
 # ---------------------------------------------------------------------------
 
 
-class TestGoogleTtsRequiresKey:
+class TestAzureTtsRequiresKey:
     def test_save_without_tts_key_raises_422(self):
         from fastapi import HTTPException
 
@@ -182,7 +183,7 @@ class TestGoogleTtsRequiresKey:
             credentials=VoiceCredentials(account_sid="a" * 10, auth_token="b" * 10),
             phone_number="+919876543210",
             stt_engine="whisper_local",
-            tts_engine="google",
+            tts_engine="azure",
             tts_api_key=None,
         )
         with pytest.raises(HTTPException) as ei:
@@ -198,7 +199,7 @@ class TestGoogleTtsRequiresKey:
             credentials=VoiceCredentials(account_sid="a" * 10, auth_token="b" * 10),
             phone_number="+919876543210",
             stt_engine="whisper_local",
-            tts_engine="google",
+            tts_engine="azure",
             tts_api_key="AIza" + "x" * 20,
         )
         _validate_voice_config(cfg)  # no raise

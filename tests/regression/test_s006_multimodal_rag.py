@@ -70,15 +70,11 @@ def test_unknown_mime_raises_unsupported() -> None:
         extract(b"\x00\xff\x00binary" * 100, mime_type="application/octet-stream", filename="blob.bin")
 
 
-def test_image_modality_refused_with_clear_hint() -> None:
-    import pytest
-
-    from core.rag.extractors import UnsupportedMimeType, extract
-
-    with pytest.raises(UnsupportedMimeType) as exc_info:
-        extract(b"\x89PNG\r\n\x1a\n" + b"x" * 20, mime_type="image/png", filename="scan.png")
-    # The message must point at the feature flag operators need to flip
-    assert "AGENTICORG_RAG_OCR_ENABLED" in str(exc_info.value)
+def test_image_modality_has_real_ocr_path() -> None:
+    src = _read("core/rag/extractors.py")
+    assert "_extract_image_ocr" in src
+    assert "pytesseract.image_to_data" in src
+    assert "tesseract-ocr" in src
 
 
 def test_audio_modality_refused_with_clear_hint() -> None:
@@ -101,12 +97,15 @@ def test_pdf_extractor_is_wired() -> None:
     assert "PdfReader" in src
 
 
-def test_docx_and_xlsx_extractors_registered() -> None:
+def test_office_extractors_registered() -> None:
     src = _read("core/rag/extractors.py")
     assert "_extract_docx" in src
     assert "python-docx" in src
     assert "_extract_xlsx" in src
     assert "openpyxl" in src
+    assert "_extract_pptx" in src
+    assert "Presentation" in src
+    assert "_extract_legacy_office" in src
 
 
 # ── Chunker ──────────────────────────────────────────────────────────

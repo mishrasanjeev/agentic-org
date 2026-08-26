@@ -138,9 +138,7 @@ async def _resolve_embedding_profile(
     )
 
 
-def _embed_chunks(
-    texts: list[str], model: str | None = None
-) -> list[list[float]]:
+def _embed_chunks(texts: list[str], model: str | None = None) -> list[list[float]]:
     """Batch-embed via ``core.embeddings``.
 
     PR-3 uses the platform BGE model regardless of which cloud embedding
@@ -185,6 +183,7 @@ async def ingest_document(
     source_object_id: str | None = None,
     source_object_type: str | None = None,
     metadata: dict[str, Any] | None = None,
+    extracted_content: ExtractedContent | None = None,
 ) -> IngestResult:
     """Ingest one artifact end-to-end.
 
@@ -218,7 +217,7 @@ async def ingest_document(
     metadata = metadata or {}
 
     # 1. Extract
-    content: ExtractedContent = extract(stream, mime_type=mime_type, filename=filename)
+    content = extracted_content or extract(stream, mime_type=mime_type, filename=filename)
     if not content.spans:
         return IngestResult(
             document_id="",

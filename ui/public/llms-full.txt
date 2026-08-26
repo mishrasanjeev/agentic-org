@@ -33,7 +33,7 @@ Billing limits and list prices come from [core/billing/catalog.py](https://githu
 | Workflows | Workflow definitions, runs, schedules, conditions, approvals, and audit events |
 | Governance | Tenant and role boundaries, scoped tools, human-in-the-loop queues, shadow evaluation, policy checks, and kill-switch patterns |
 | Integrations | Native connector registry plus optional integration gateways; actual availability depends on credentials, scopes, provider access, and tenant configuration |
-| Knowledge and channels | Knowledge ingestion/search, reports, notifications, voice, RPA, and other channel features behind their required services and configuration |
+| Knowledge and channels | Native and OCR document ingestion/search, reports, notifications, signed Twilio voice calls, RPA, and other configured channels |
 | Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces |
 | Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
@@ -60,7 +60,9 @@ A source definition is not evidence that a specific tenant has connected the pro
 - LLM calls require a configured supported model provider or a local model runtime.
 - Each connector requires provider credentials, tenant authorization, and the relevant scopes.
 - Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
-- RAG, voice, browser automation, outbound notifications, and local-model profiles require their supporting services.
+- Document OCR ships with Tesseract, Poppler, and LibreOffice in the production image. See [Knowledge ingestion](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/knowledge-ingestion.md).
+- The production voice path uses signed Twilio webhooks with provider-managed STT/TTS and encrypted transcript storage. See [Voice runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md).
+- Browser automation, outbound notifications, and local-model profiles require their supporting services.
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.

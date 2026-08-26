@@ -46,6 +46,14 @@ from core.tasks.celery_app import app
 logger = logging.getLogger(__name__)
 
 
+def _script_payload(raw_result: dict[str, Any], *, http_only: bool) -> dict[str, Any]:
+    """Normalize direct HTTP and Playwright executor result shapes."""
+    if http_only:
+        return raw_result
+    data = raw_result.get("data")
+    return data if isinstance(data, dict) else {}
+
+
 # ---------------------------------------------------------------------------
 # run_rpa_schedule — per-schedule execution
 # ---------------------------------------------------------------------------
@@ -121,7 +129,8 @@ async def _execute_schedule(tenant_id: str, schedule_id: str) -> dict[str, Any]:
         await _record_failure(tid, sid, detail, 0, 0, None)
         return {"ok": False, "error": detail}
 
-    chunks = raw_result.get("chunks") or []
+    payload = _script_payload(raw_result, http_only=http_only)
+    chunks = payload.get("chunks") or []
     if not chunks:
         await _record_success(tid, sid, 0, 0, None)
         return {"ok": True, "published": 0, "rejected": 0, "avg_quality": None}
@@ -182,18 +191,24 @@ async def _record_success(
         row.last_quality_avg = (
             Decimal(str(avg_quality)) if avg_quality is not None else None
         )
-        # Advance next_run_at by the cron cadence — same helper the API uses.
-        from api.v1.rpa_schedules import _compute_next_run
+        _advance_next_run(row)
 
-        if row.enabled:
-            try:
-                row.next_run_at = _compute_next_run(row.cron_expression)
-            # enterprise-gate: broad-except-ok reason=rpa-next-run-compute-failure-does-not-mark-run-success
-            except Exception as exc:
-                logger.info(
-                    "rpa_schedule_next_run_compute_failed schedule_id=%s err=%s",
-                    row.id, exc,
-                )
+
+def _advance_next_run(row: Any) -> None:
+    """Move an enabled schedule forward after either success or failure."""
+    if not row.enabled:
+        return
+    from api.v1.rpa_schedules import _compute_next_run
+
+    try:
+        row.next_run_at = _compute_next_run(row.cron_expression)
+    # enterprise-gate: broad-except-ok reason=rpa-next-run-compute-failure-keeps-current-claim-window
+    except Exception as exc:
+        logger.info(
+            "rpa_schedule_next_run_compute_failed schedule_id=%s err=%s",
+            row.id,
+            exc,
+        )
 
 
 async def _record_failure(
@@ -223,6 +238,9 @@ async def _record_failure(
         row.last_quality_avg = (
             Decimal(str(avg_quality)) if avg_quality is not None else None
         )
+        # A failed due run must not remain due forever. Advancing here
+        # prevents the five-minute dispatcher from creating a retry storm.
+        _advance_next_run(row)
 
 
 def _source_hash(chunk: dict[str, Any]) -> str:
@@ -327,9 +345,9 @@ def run_rpa_schedule(self, tenant_id: str, schedule_id: str) -> dict[str, Any]:
 
 
 async def _dispatch_async() -> dict[str, Any]:
-    from api.v1.rpa_schedules import due_schedule_ids
+    from api.v1.rpa_schedules import claim_due_schedule_ids
 
-    pairs = await due_schedule_ids()
+    pairs = await claim_due_schedule_ids()
     enqueued = 0
     for tenant_id, schedule_id in pairs:
         run_rpa_schedule.delay(tenant_id, schedule_id)

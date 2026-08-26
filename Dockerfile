@@ -30,6 +30,12 @@ RUN python -m spacy download en_core_web_sm
 FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
+    tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd \
+    tesseract-ocr-hin tesseract-ocr-ben tesseract-ocr-guj tesseract-ocr-kan \
+    tesseract-ocr-mal tesseract-ocr-mar tesseract-ocr-pan tesseract-ocr-tam \
+    tesseract-ocr-tel tesseract-ocr-urd poppler-utils \
+    libreoffice-core libreoffice-writer libreoffice-calc libreoffice-impress \
+    fonts-dejavu-core \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd -m agenticorg
