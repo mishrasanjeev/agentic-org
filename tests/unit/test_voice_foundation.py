@@ -193,4 +193,6 @@ class TestSIPConnection:
             phone_number="+919876543210",
         )
         result = await sip_connection_test(config)
-        assert result["success"] is True
+        assert result["success"] is False
+        assert result["details"]["format_valid"] is True
+        assert result["details"]["connectivity_verified"] is False

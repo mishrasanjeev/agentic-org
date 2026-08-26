@@ -223,15 +223,13 @@ def test_admin_router_never_returns_raw_token() -> None:
 
 def test_voice_keys_persist_through_vault_not_memory() -> None:
     src = _read("api/v1/voice.py")
-    # The in-memory dict still exists for non-secret fields, but the
-    # api_key fields must be written through encrypt_for_tenant.
+    # API keys use the provider vault; SIP credentials use envelope
+    # encryption in durable tenant settings. No process-local config.
     assert "_save_voice_keys" in src
+    assert "_save_voice_settings" in src
     assert "encrypt_for_tenant" in src
-    # Legacy behaviour was: _VOICE_CONFIG[...] = body.model_dump()
-    # where the dump included the plaintext api_key. The new code MUST
-    # strip those fields before writing to the dict.
-    assert "pop(\"stt_api_key\", None)" in src
-    assert "pop(\"tts_api_key\", None)" in src
+    assert "_VOICE_CONFIG:" not in src
+    assert 'exclude={"credentials", "stt_api_key", "tts_api_key"}' in src
 
 
 def test_voice_engine_to_provider_mapping_matches_allowlist() -> None:

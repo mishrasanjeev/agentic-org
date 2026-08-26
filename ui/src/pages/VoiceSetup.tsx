@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +11,7 @@ import api from "@/lib/api";
 
 type SipProvider = "twilio" | "vonage" | "custom" | "";
 type SttEngine = "whisper_local" | "deepgram";
-type TtsEngine = "piper_local" | "google";
+type TtsEngine = "piper_local" | "azure";
 
 interface VoiceConfig {
   sip_provider: SipProvider;
@@ -53,6 +53,8 @@ const PHONE_E164_RE = /^\+?\d{1,15}$/;
 
 export default function VoiceSetup() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const agentId = searchParams.get("agent_id") || null;
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<VoiceConfig>({
     sip_provider: "",
@@ -103,9 +105,8 @@ export default function VoiceSetup() {
         errs.phone_number = "Invalid phone number â€” use E.164 (digits only, optional leading +)";
     }
     if (s === 3) {
-      // TC-011: Google TTS / Deepgram STT need their own API key.
-      if (config.tts_engine === "google" && !config.tts_api_key.trim()) {
-        errs.tts_api_key = "Google TTS requires an API key";
+      if (config.tts_engine === "azure" && !config.tts_api_key.trim()) {
+        errs.tts_api_key = "Azure Speech TTS requires an API key";
       }
       if (config.stt_engine === "deepgram" && !config.stt_api_key.trim()) {
         errs.stt_api_key = "Deepgram STT requires an API key";
@@ -173,6 +174,7 @@ export default function VoiceSetup() {
     setSaving(true);
     try {
       await api.post("/voice/config", {
+        agent_id: agentId,
         sip_provider: config.sip_provider,
         credentials: config.credentials,
         phone_number: trimmedPhone,
@@ -181,6 +183,12 @@ export default function VoiceSetup() {
         stt_api_key: config.stt_api_key || null,
         tts_api_key: config.tts_api_key || null,
       });
+      setConfig((current) => ({
+        ...current,
+        credentials: { ...EMPTY_CREDS },
+        stt_api_key: "",
+        tts_api_key: "",
+      }));
       setSaved(true);
     } catch (e: unknown) {
       const resp = (e as { response?: { data?: { detail?: string } } })?.response;
@@ -268,10 +276,12 @@ export default function VoiceSetup() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Account SID</label>
+                    <label className="block text-sm font-medium mb-1">
+                      {config.sip_provider === "vonage" ? "API Key" : "Account SID"}
+                    </label>
                     <input
                       type="password"
-                      placeholder="Enter Account SID"
+                      placeholder={config.sip_provider === "vonage" ? "Enter API key" : "Enter Account SID"}
                       value={config.credentials.account_sid}
                       onChange={(e) =>
                         setConfig((c) => ({ ...c, credentials: { ...c.credentials, account_sid: e.target.value } }))
@@ -283,10 +293,12 @@ export default function VoiceSetup() {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Auth Token</label>
+                    <label className="block text-sm font-medium mb-1">
+                      {config.sip_provider === "vonage" ? "API Secret" : "Auth Token"}
+                    </label>
                     <input
                       type="password"
-                      placeholder="Enter Auth Token"
+                      placeholder={config.sip_provider === "vonage" ? "Enter API secret" : "Enter Auth Token"}
                       value={config.credentials.auth_token}
                       onChange={(e) =>
                         setConfig((c) => ({ ...c, credentials: { ...c.credentials, auth_token: e.target.value } }))
@@ -371,7 +383,7 @@ export default function VoiceSetup() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Text-to-Speech (TTS)</label>
-                {(["piper_local", "google"] as const).map((engine) => (
+                {(["piper_local", "azure"] as const).map((engine) => (
                   <label key={engine} className="flex items-center gap-2 mb-2 cursor-pointer">
                     <input
                       type="radio"
@@ -380,18 +392,17 @@ export default function VoiceSetup() {
                       onChange={() => setConfig((c) => ({ ...c, tts_engine: engine }))}
                     />
                     <span className="text-sm">
-                      {engine === "piper_local" ? "Piper Local (default)" : "Google TTS (cloud)"}
+                      {engine === "piper_local" ? "Piper Local (default)" : "Azure Speech TTS (cloud)"}
                     </span>
                     {engine === "piper_local" && <Badge variant="success">Open Source</Badge>}
                   </label>
                 ))}
-                {/* TC-011: Google TTS requires an API key field. */}
-                {config.tts_engine === "google" && (
+                {config.tts_engine === "azure" && (
                   <div className="mt-3">
-                    <label className="block text-sm font-medium mb-1">Google TTS API Key</label>
+                    <label className="block text-sm font-medium mb-1">Azure Speech API Key</label>
                     <input
                       type="password"
-                      placeholder="Enter Google Cloud API key"
+                      placeholder="Enter Azure Speech API key"
                       value={config.tts_api_key}
                       onChange={(e) => setConfig((c) => ({ ...c, tts_api_key: e.target.value }))}
                       className={fieldClass("tts_api_key")}
@@ -423,7 +434,7 @@ export default function VoiceSetup() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">TTS Engine</span>
-                  <span className="font-medium">{config.tts_engine === "piper_local" ? "Piper Local" : "Google TTS"}</span>
+                  <span className="font-medium">{config.tts_engine === "piper_local" ? "Piper Local" : "Azure Speech TTS"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Test Connection</span>
@@ -438,7 +449,12 @@ export default function VoiceSetup() {
                 </div>
               )}
               {saved ? (
-                <Badge variant="success">Configuration saved</Badge>
+                <div className="space-y-2">
+                  <Badge variant="success">Configuration saved</Badge>
+                  <p className="text-sm text-muted-foreground">
+                    Credentials are stored securely. Live call handling remains unavailable until a voice worker and provider webhook are connected.
+                  </p>
+                </div>
               ) : (
                 <Button onClick={handleSave} disabled={saving || !testResult?.ok}>
                   {saving ? "Saving..." : "Save Configuration"}

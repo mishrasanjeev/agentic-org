@@ -1790,27 +1790,46 @@ function enforcementEntries(agent: Agent): EnforcementEntry[] {
 
 /* â”€â”€â”€ Voice Tab â”€â”€â”€ */
 function VoiceTab({ agent }: { agent: Agent }) {
-  // Mock: check if voice is configured (use agent config or a flag)
-  const voiceConfigured = !!(agent as any).voice_config;
-
-  // Mock call log data
-  const callLog = [
-    { timestamp: "2026-04-04T10:30:00Z", duration: "2m 15s", status: "completed" },
-    { timestamp: "2026-04-04T09:45:00Z", duration: "1m 42s", status: "completed" },
-    { timestamp: "2026-04-04T08:20:00Z", duration: "0m 38s", status: "missed" },
-    { timestamp: "2026-04-03T16:10:00Z", duration: "3m 05s", status: "completed" },
-    { timestamp: "2026-04-03T14:55:00Z", duration: "0m 12s", status: "failed" },
-  ];
-
   const voiceNavigate = useNavigate();
+  const [voiceConfig, setVoiceConfig] = useState<Record<string, unknown> | null>(null);
+  const [voiceLoading, setVoiceLoading] = useState(true);
+  const [voiceError, setVoiceError] = useState("");
 
-  if (!voiceConfigured) {
+  useEffect(() => {
+    let active = true;
+    setVoiceLoading(true);
+    setVoiceError("");
+    api
+      .get("/voice/status", { params: { agent_id: agent.id } })
+      .then((response) => {
+        if (active) setVoiceConfig(response.data?.configured ? response.data : null);
+      })
+      .catch((error: unknown) => {
+        if (active) setVoiceError(errorDetailToMessage(error, "Could not load voice configuration."));
+      })
+      .finally(() => {
+        if (active) setVoiceLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [agent.id]);
+
+  const setupPath = `/dashboard/voice-setup?agent_id=${encodeURIComponent(agent.id)}`;
+
+  if (voiceLoading) {
+    return <p className="text-sm text-muted-foreground">Loading voice configuration...</p>;
+  }
+
+  if (!voiceConfig) {
     return (
       <Card>
         <CardContent className="pt-6 text-center space-y-4">
-          <p className="text-muted-foreground">Voice not enabled for this agent.</p>
+          <p className="text-muted-foreground">
+            {voiceError || "Voice is not configured for this agent."}
+          </p>
           <div className="flex justify-center gap-3">
-            <Button onClick={() => voiceNavigate("/dashboard/voice-setup")} className="relative z-10">
+            <Button onClick={() => voiceNavigate(setupPath)} className="relative z-10">
               Set up Voice
             </Button>
             <Button variant="outline" onClick={() => voiceNavigate(-1 as any)} className="relative z-10">
@@ -1827,9 +1846,9 @@ function VoiceTab({ agent }: { agent: Agent }) {
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-sm font-semibold">Voice Call Log</CardTitle>
+            <CardTitle className="text-sm font-semibold">Voice Configuration</CardTitle>
             <button
-              onClick={() => voiceNavigate("/dashboard/voice-setup")}
+              onClick={() => voiceNavigate(setupPath)}
               className="text-xs text-primary hover:underline relative z-10 cursor-pointer"
             >
               Voice Setup
@@ -1837,31 +1856,22 @@ function VoiceTab({ agent }: { agent: Agent }) {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-left text-xs text-muted-foreground uppercase tracking-wide">
-                  <th className="pb-2 pr-4">Timestamp</th>
-                  <th className="pb-2 pr-4">Duration</th>
-                  <th className="pb-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {callLog.map((entry, idx) => (
-                  <tr key={idx} className="border-b last:border-0">
-                    <td className="py-2 pr-4 text-xs text-muted-foreground font-mono">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-2 pr-4">{entry.duration}</td>
-                    <td className="py-2">
-                      <Badge variant={entry.status === "completed" ? "success" : entry.status === "missed" ? "warning" : "destructive"} className="text-[10px]">
-                        {entry.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Provider</span>
+              <span className="font-medium capitalize">{String(voiceConfig.sip_provider || "-")}</span>
+            </div>
+            <div className="flex items-center justify-between border-b pb-2">
+              <span className="text-muted-foreground">Phone number</span>
+              <span className="font-medium">{String(voiceConfig.phone_number || "-")}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Call runtime</span>
+              <Badge variant="warning">Not connected</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Setup is stored for this agent, but no inbound webhook, outbound dialer, or LiveKit worker is connected. Call history will appear only after those runtime paths exist.
+            </p>
           </div>
         </CardContent>
       </Card>

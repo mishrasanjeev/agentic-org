@@ -9,6 +9,9 @@ All Playwright imports are guarded so the module can be imported without
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import contextlib
 import importlib
 import time
 from pathlib import Path
@@ -36,6 +39,42 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "rpa" / "scripts"
 
 # Default execution timeout (seconds)
 DEFAULT_TIMEOUT_S = 60
+MAX_NAVIGATION_SCREENSHOTS = 10
+
+
+async def _capture_screenshot(
+    page: Any,
+    screenshots: list[str],
+    *,
+    screenshot_dir: str | None,
+    label: str,
+) -> None:
+    """Capture a bounded audit screenshot to disk or memory."""
+    if len(screenshots) >= MAX_NAVIGATION_SCREENSHOTS:
+        return
+    try:
+        image = await page.screenshot(type="png")
+        if screenshot_dir:
+            directory = Path(screenshot_dir).expanduser().resolve()
+            directory.mkdir(parents=True, exist_ok=True)
+            target = directory / f"{label}-{len(screenshots) + 1:02d}.png"
+            target.write_bytes(image)
+            screenshots.append(str(target))
+        else:
+            screenshots.append(base64.b64encode(image).decode("ascii"))
+    # enterprise-gate: broad-except-ok reason=rpa-audit-screenshot-is-best-effort
+    except Exception:
+        return
+
+
+def _result_error(result_data: Any) -> str:
+    """Interpret explicit script-level failures instead of reporting success."""
+    if not isinstance(result_data, dict):
+        return ""
+    if result_data.get("success") is False:
+        return str(result_data.get("error") or "script reported failure")
+    error = result_data.get("error")
+    return str(error) if error else ""
 
 
 async def execute_rpa_script(
@@ -78,7 +117,15 @@ async def execute_rpa_script(
     module_path = f"rpa.scripts.{script_name}"
     try:
         script_module = importlib.import_module(module_path)
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as exc:
+        if exc.name != module_path:
+            return {
+                "success": False,
+                "data": None,
+                "screenshots": [],
+                "elapsed_ms": 0,
+                "error": f"RPA script dependency {exc.name!r} is not installed",
+            }
         return {
             "success": False,
             "data": None,
@@ -99,53 +146,61 @@ async def execute_rpa_script(
     start = time.perf_counter()
     screenshots: list[str] = []
 
-    async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=True)
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 720},
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
-            ),
-        )
-        context.set_default_timeout(timeout_s * 1000)
+    browser: Any = None
+    context: Any = None
+    navigation_tasks: set[asyncio.Task[None]] = set()
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            context = await browser.new_context(
+                viewport={"width": 1280, "height": 720},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+            context.set_default_timeout(timeout_s * 1000)
+            page = await context.new_page()
 
-        page = await context.new_page()
+            def _on_navigation(frame: Any) -> None:
+                if getattr(frame, "parent_frame", None) is not None:
+                    return
+                task = asyncio.create_task(
+                    _capture_screenshot(
+                        page,
+                        screenshots,
+                        screenshot_dir=screenshot_dir,
+                        label="navigation",
+                    )
+                )
+                navigation_tasks.add(task)
+                task.add_done_callback(navigation_tasks.discard)
 
-        # Capture screenshot on every navigation
-        async def _on_navigation(response: Any) -> None:
-            try:
-                screenshot_bytes = await page.screenshot(type="png")
-                import base64
+            page.on("framenavigated", _on_navigation)
+            result_data = await asyncio.wait_for(
+                script_module.run(page, params),
+                timeout=max(1, timeout_s),
+            )
+            if navigation_tasks:
+                await asyncio.gather(*tuple(navigation_tasks), return_exceptions=True)
+            await _capture_screenshot(
+                page,
+                screenshots,
+                screenshot_dir=screenshot_dir,
+                label="final",
+            )
 
-                screenshots.append(base64.b64encode(screenshot_bytes).decode("ascii"))
-            # enterprise-gate: broad-except-ok reason=rpa-navigation-screenshot-failure-is-cleanup-only
-            except Exception:  # noqa: S110
-                pass  # navigation screenshot is best-effort
-
-        page.on("load", lambda _: None)  # placeholder for type
-        # Use framenavigated for post-navigation screenshots
-        page.on(
-            "framenavigated",
-            lambda frame: _schedule_screenshot(frame, page, screenshots),
-        )
-
-        try:
-            result_data = await script_module.run(page, params)
+            explicit_error = _result_error(result_data)
             elapsed_ms = int((time.perf_counter() - start) * 1000)
-
-            # Final screenshot
-            try:
-                import base64
-
-                final_ss = await page.screenshot(type="png")
-                screenshots.append(base64.b64encode(final_ss).decode("ascii"))
-            # enterprise-gate: broad-except-ok reason=rpa-final-screenshot-failure-is-cleanup-only
-            except Exception:  # noqa: S110
-                pass
-
-            await browser.close()
+            if explicit_error:
+                return {
+                    "success": False,
+                    "data": result_data,
+                    "screenshots": screenshots,
+                    "elapsed_ms": elapsed_ms,
+                    "error": explicit_error,
+                }
 
             logger.info(
                 "rpa_script_completed",
@@ -153,7 +208,6 @@ async def execute_rpa_script(
                 elapsed_ms=elapsed_ms,
                 screenshots=len(screenshots),
             )
-
             return {
                 "success": True,
                 "data": result_data,
@@ -161,49 +215,40 @@ async def execute_rpa_script(
                 "elapsed_ms": elapsed_ms,
                 "error": "",
             }
-
-        # enterprise-gate: broad-except-ok reason=rpa-script-failure-returns-success-false
-        except Exception as exc:
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
-            await browser.close()
-
-            logger.error(
-                "rpa_script_failed",
-                script=script_name,
-                elapsed_ms=elapsed_ms,
-                error=str(exc),
-            )
-
-            return {
-                "success": False,
-                "data": None,
-                "screenshots": screenshots,
-                "elapsed_ms": elapsed_ms,
-                "error": str(exc),
-            }
-
-
-def _schedule_screenshot(
-    frame: Any,
-    page: Any,
-    screenshots: list[str],
-) -> None:
-    """Schedule an async screenshot capture (fire-and-forget)."""
-    import asyncio
-
-    async def _capture() -> None:
-        try:
-            import base64
-
-            ss = await page.screenshot(type="png")
-            screenshots.append(base64.b64encode(ss).decode("ascii"))
-        # enterprise-gate: broad-except-ok reason=rpa-async-screenshot-failure-is-cleanup-only
-        except Exception:  # noqa: S110
-            pass
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.create_task(_capture())
-    except RuntimeError:
-        pass
+    except TimeoutError:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        return {
+            "success": False,
+            "data": None,
+            "screenshots": screenshots,
+            "elapsed_ms": elapsed_ms,
+            "error": f"RPA script exceeded the {timeout_s}s execution timeout",
+        }
+    # enterprise-gate: broad-except-ok reason=rpa-script-failure-returns-success-false
+    except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        logger.error(
+            "rpa_script_failed",
+            script=script_name,
+            elapsed_ms=elapsed_ms,
+            error=str(exc),
+        )
+        return {
+            "success": False,
+            "data": None,
+            "screenshots": screenshots,
+            "elapsed_ms": elapsed_ms,
+            "error": str(exc),
+        }
+    finally:
+        for task in navigation_tasks:
+            task.cancel()
+        if navigation_tasks:
+            with contextlib.suppress(Exception):
+                await asyncio.gather(*tuple(navigation_tasks), return_exceptions=True)
+        if context is not None:
+            with contextlib.suppress(Exception):
+                await context.close()
+        if browser is not None:
+            with contextlib.suppress(Exception):
+                await browser.close()

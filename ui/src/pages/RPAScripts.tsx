@@ -55,9 +55,14 @@ export default function RPAScripts() {
   const [dialogScript, setDialogScript] = useState<RPAScript | null>(null);
   const [paramValues, setParamValues] = useState<Record<string, string>>({});
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const [runError, setRunError] = useState("");
+  const [runMessage, setRunMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
     try {
       const [scriptsRes, historyRes] = await Promise.allSettled([
         api.get("/rpa/scripts"),
@@ -78,9 +83,13 @@ export default function RPAScripts() {
 
       setScripts(s);
       setHistory(h);
+      if (scriptsRes.status === "rejected" || historyRes.status === "rejected") {
+        setLoadError("Some RPA data could not be loaded. Refresh to try again.");
+      }
     } catch {
       setScripts([]);
       setHistory([]);
+      setLoadError("RPA scripts could not be loaded.");
     } finally {
       setLoading(false);
     }
@@ -97,18 +106,44 @@ export default function RPAScripts() {
       defaults[key] = "";
     });
     setParamValues(defaults);
+    setFieldErrors({});
+    setRunError("");
+    setRunMessage("");
   };
 
   const handleRun = async () => {
     if (!dialogScript) return;
+    const errors: Record<string, string> = {};
+    Object.entries(dialogScript.params_schema || {}).forEach(([key, schema]) => {
+      if (schema.required && !(paramValues[key] || "").trim()) {
+        errors[key] = `${schema.label || key} is required`;
+      }
+    });
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setRunningId(dialogScript.id);
-    setDialogScript(null);
+    setRunError("");
+    setRunMessage("");
     try {
-      await api.post(`/rpa/scripts/${dialogScript.id}/run`, { params: paramValues });
+      const response = await api.post(`/rpa/scripts/${dialogScript.id}/run`, { params: paramValues });
+      if (response.data?.success) {
+        setRunMessage(`${dialogScript.name} completed successfully.`);
+        setDialogScript(null);
+      } else {
+        setRunError(response.data?.error || `${dialogScript.name} failed.`);
+      }
       await fetchData();
-    } catch {
+    } catch (error: unknown) {
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setRunError(detail || "The RPA run could not be started.");
       await fetchData();
     } finally {
+      const cleared: Record<string, string> = {};
+      Object.entries(dialogScript.params_schema || {}).forEach(([key, schema]) => {
+        cleared[key] = schema.type === "password" ? "" : (paramValues[key] || "");
+      });
+      setParamValues(cleared);
       setRunningId(null);
     }
   };
@@ -129,6 +164,22 @@ export default function RPAScripts() {
           Refresh
         </Button>
       </div>
+
+      {loadError && (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+      {runMessage && (
+        <div className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+          {runMessage}
+        </div>
+      )}
+      {runError && !dialogScript && (
+        <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {runError}
+        </div>
+      )}
 
       {/* Script cards */}
       {scripts.length === 0 ? (
@@ -213,17 +264,27 @@ export default function RPAScripts() {
                           [key]: e.target.value,
                         }))
                       }
-                      className="w-full border rounded px-3 py-2 text-sm"
+                      className={`w-full border rounded px-3 py-2 text-sm ${fieldErrors[key] ? "border-red-500" : ""}`}
                     />
+                    {fieldErrors[key] && (
+                      <p className="mt-1 text-xs text-red-600">{fieldErrors[key]}</p>
+                    )}
                   </div>
                 )
               )}
             </div>
+            {runError && (
+              <div className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {runError}
+              </div>
+            )}
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="outline" onClick={() => setDialogScript(null)}>
+              <Button variant="outline" onClick={() => setDialogScript(null)} disabled={runningId === dialogScript.id}>
                 Cancel
               </Button>
-              <Button onClick={handleRun}>Run Script</Button>
+              <Button onClick={handleRun} disabled={runningId === dialogScript.id}>
+                {runningId === dialogScript.id ? "Running..." : "Run Script"}
+              </Button>
             </div>
           </div>
         </div>

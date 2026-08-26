@@ -144,6 +144,15 @@ async def run(page: Any, params: dict[str, Any]) -> dict[str, Any]:
         return {"logged_in": False, "error": "portal_url is required"}
     if not username or not password:
         return {"logged_in": False, "error": "username and password are required"}
+    if action not in {"screenshot", "extract", "download"}:
+        return {
+            "logged_in": False,
+            "error": "action must be one of: screenshot, extract, download",
+        }
+    if action == "extract" and not extract_selector:
+        return {"logged_in": False, "error": "extract_selector is required for extract"}
+    if action == "download" and not download_link:
+        return {"logged_in": False, "error": "download_link is required for download"}
 
     # SEC-2026-05-P1-006 (PR-E): validate every caller-supplied URL
     # against the egress guard BEFORE the browser ever navigates. The
@@ -247,6 +256,20 @@ async def run(page: Any, params: dict[str, Any]) -> dict[str, Any]:
                     return result
             except Exception:  # noqa: S112, BLE001
                 continue  # error selector not found — try next
+
+        # Same-URL login flows are common, but success must be proven by
+        # disappearance of the credential controls. If either field remains,
+        # do not silently report a successful login.
+        user_still_visible = await page.locator(user_sel).count() > 0
+        password_still_visible = await page.locator(pass_sel).count() > 0
+        if user_still_visible or password_still_visible:
+            result["error"] = (
+                "Login could not be confirmed: credential fields remain visible. "
+                "Configure wait_for with a post-login selector for this portal."
+            )
+            result["page_title"] = await page.title()
+            result["current_url"] = current_url
+            return result
 
     result["logged_in"] = True
     result["page_title"] = await page.title()
