@@ -95,7 +95,7 @@ dependencies = [
     "python-pptx>=1.0.2",
     "pytesseract>=0.3.13",
     "pdf2image>=1.17.0",
-    "striprtf>=0.0.29",
+    "striprtf>=0.0.33",
     # SEC-2026-05-15: python-docx pulls lxml transitively. Pin the
     # patched floor for CVE-2026-41066 so resolver drift cannot
     # reinstall vulnerable lxml 6.0.x in CI or production images.
