@@ -20,6 +20,38 @@ export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 export const E2E_TOKEN = process.env.E2E_TOKEN || "";
 export const canAuth = !!E2E_TOKEN;
 
+export const DEMO_USER_CREDENTIALS = {
+  email: process.env.AGENTICORG_DEMO_USER_EMAIL || "demo@cafirm.agenticorg.ai",
+  password: process.env.AGENTICORG_DEMO_USER_PASSWORD || "local-e2e-demo-123!",
+} as const;
+
+export const DEMO_ROLE_CREDENTIALS = {
+  ceo: {
+    email: process.env.AGENTICORG_DEMO_CEO_EMAIL || "ceo@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_CEO_PASSWORD || "local-e2e-ceo-123!",
+  },
+  cfo: {
+    email: process.env.AGENTICORG_DEMO_CFO_EMAIL || "cfo@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_CFO_PASSWORD || "local-e2e-cfo-123!",
+  },
+  chro: {
+    email: process.env.AGENTICORG_DEMO_CHRO_EMAIL || "chro@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_CHRO_PASSWORD || "local-e2e-chro-123!",
+  },
+  cmo: {
+    email: process.env.AGENTICORG_DEMO_CMO_EMAIL || "cmo@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_CMO_PASSWORD || "local-e2e-cmo-123!",
+  },
+  coo: {
+    email: process.env.AGENTICORG_DEMO_COO_EMAIL || "coo@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_COO_PASSWORD || "local-e2e-coo-123!",
+  },
+  auditor: {
+    email: process.env.AGENTICORG_DEMO_AUDITOR_EMAIL || "auditor@agenticorg.local",
+    password: process.env.AGENTICORG_DEMO_AUDITOR_PASSWORD || "local-e2e-auditor-123!",
+  },
+} as const;
+
 /**
  * Assert that the suite has authentication available. Throws if not.
  *

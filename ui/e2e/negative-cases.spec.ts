@@ -47,13 +47,7 @@ test.describe("AUTH: Login errors", () => {
 
     // Should show error, NOT navigate to dashboard
     expect(page.url()).toContain("/login");
-    const bodyText = await page.textContent("body");
-    const hasError =
-      bodyText?.includes("Invalid") ||
-      bodyText?.includes("failed") ||
-      bodyText?.includes("error") ||
-      bodyText?.includes("incorrect");
-    expect(hasError).toBeTruthy();
+    await expect(page.getByText(/invalid email or password/i)).toBeVisible();
   });
 
   test("Empty form submission is prevented", async ({ page, baseURL }) => {

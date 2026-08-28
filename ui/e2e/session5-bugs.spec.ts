@@ -72,7 +72,7 @@ test.describe("Voice Setup regression", () => {
     await expect(nextBtn).toBeDisabled();
   });
 
-  test("TC-011 Google TTS shows an API key field on selection", async ({ page }) => {
+  test("TC-011 Azure TTS shows a protected API key field on selection", async ({ page }) => {
     // Walk to Step 4.
     await page.locator("button").filter({ hasText: "Twilio" }).first().click();
     await page.getByRole("button", { name: "Next" }).click();
@@ -82,10 +82,11 @@ test.describe("Voice Setup regression", () => {
     await page.locator('input[type="tel"]').fill("+919876543210");
     await page.getByRole("button", { name: "Next" }).click();
 
-    // Google TTS radio → API key field must appear.
-    await page.locator("text=Google TTS (cloud)").first().click();
+    // Azure cloud TTS requires a tenant-provided secret; the provider-managed
+    // production option remains available without exposing a tenant key.
+    await page.getByText("Azure Speech TTS (cloud)", { exact: true }).click();
     await expect(
-      page.getByPlaceholder("Enter Google Cloud API key"),
+      page.getByPlaceholder("Enter Azure Speech API key"),
     ).toBeVisible({ timeout: 5000 });
   });
 

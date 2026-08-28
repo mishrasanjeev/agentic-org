@@ -10,7 +10,11 @@
  * NO page.route() mocking -- all responses are real.
  */
 import { test, expect, Page } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import {
+  DEMO_ROLE_CREDENTIALS,
+  DEMO_USER_CREDENTIALS,
+  setSessionToken,
+} from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
@@ -706,13 +710,11 @@ test.describe("Proactive Regression - Similar Issues", () => {
   test("all 7 demo accounts return valid JWT", async ({ request }) => {
     test.setTimeout(120_000); // 7 accounts × up to 3 retries × up to 10s
     const accounts = [
-      { email: "demo@cafirm.agenticorg.ai", pw: "demo123!" },
-      { email: "ceo@agenticorg.local", pw: "ceo123!" },
-      { email: "cfo@agenticorg.local", pw: "cfo123!" },
-      { email: "cmo@agenticorg.local", pw: "cmo123!" },
-      { email: "coo@agenticorg.local", pw: "coo123!" },
-      { email: "chro@agenticorg.local", pw: "chro123!" },
-      { email: "auditor@agenticorg.local", pw: "audit123!" },
+      { email: DEMO_USER_CREDENTIALS.email, pw: DEMO_USER_CREDENTIALS.password },
+      ...Object.values(DEMO_ROLE_CREDENTIALS).map(({ email, password }) => ({
+        email,
+        pw: password,
+      })),
     ];
     for (const [i, a] of accounts.entries()) {
       if (i > 0) await new Promise((r) => setTimeout(r, 1500));

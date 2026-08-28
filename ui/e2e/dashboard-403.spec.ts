@@ -13,13 +13,13 @@
  *     user what was blocked and why.
  */
 import { expect, test } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { DEMO_ROLE_CREDENTIALS, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 const ROLE_CREDS: Record<string, { email: string; password: string }> = {
-  cfo: { email: "cfo@agenticorg.local", password: "cfo123!" },
+  cfo: DEMO_ROLE_CREDENTIALS.cfo,
 };
 
 function requireAuth(): void {

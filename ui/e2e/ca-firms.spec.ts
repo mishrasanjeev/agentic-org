@@ -91,7 +91,7 @@ test.describe("CA Firms Solution Page", () => {
 
     // CTA buttons
     await expect(
-      page.getByRole("button", { name: /Request Evaluation/i }).first()
+      page.getByRole("button", { name: /Request CA Pack Evaluation/i }).first()
     ).toBeVisible({ timeout: 10000 });
 
     await expect(
@@ -120,8 +120,9 @@ test.describe("CA Firms Solution Page", () => {
       page.getByText("CA Pack Evaluation").first()
     ).toBeVisible({ timeout: 10000 });
 
+    await page.getByRole("button", { name: /Request CA Pack Evaluation/i }).first().click();
     await expect(
-      page.getByText(/Commercial terms and plan limits are confirmed/)
+      page.getByText(/current plan limits, provider configuration, and signed terms/)
     ).toBeVisible({ timeout: 10000 });
 
     const body = (await page.locator("body").textContent()) || "";
@@ -470,46 +471,20 @@ test.describe("Landing Page -- CA Firms Section", () => {
 // ==========================================================================
 
 test.describe("CA Demo Login Flow", () => {
-  test("demo login page shows CA Partner option", async ({ page }) => {
+  test("login page does not expose demo role controls", async ({ page }) => {
     await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // Look for "Try the demo instead" or a demo section toggle
-    const demoToggle = page.getByText(/Try the demo|Demo|demo/i).first();
-    if (await demoToggle.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await demoToggle.click();
-    }
-
-    // Verify "CA Partner" demo button exists
-    const caPartnerBtn = page.getByText(/CA Partner|CA Firm|Chartered Accountant/i).first();
-    const visible = await caPartnerBtn.isVisible({ timeout: 5000 }).catch(() => false);
-    // The login page should mention CA somewhere (either in demo buttons or text)
-    const body = (await page.locator("body").textContent()) || "";
-    expect(visible || body.includes("CA") || body.includes("demo")).toBeTruthy();
+    await expect(page.getByText(/Try the demo instead/i)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /CA Partner/i })).toHaveCount(0);
   });
 
-  test("CA demo credentials auto-fill on click", async ({ page }) => {
+  test("login credentials are never prefilled", async ({ page }) => {
     await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    // Expand demo section if collapsed
-    const demoToggle = page.getByText(/Try the demo|Demo|demo/i).first();
-    if (await demoToggle.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await demoToggle.click();
-    }
-
-    // Click CA Partner button if visible
-    const caPartnerBtn = page.getByText(/CA Partner/i).first();
-    if (await caPartnerBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await caPartnerBtn.click();
-
-      // Verify email field is filled with demo CA email
-      const emailInput = page.locator('input[type="email"], input[name="email"], input[placeholder*="email"]').first();
-      if (await emailInput.isVisible({ timeout: 3000 }).catch(() => false)) {
-        const emailValue = await emailInput.inputValue();
-        expect(emailValue).toBe("demo@cafirm.agenticorg.ai");
-      }
-    }
+    await expect(page.locator('input[type="email"]').first()).toHaveValue("");
+    await expect(page.locator('input[type="password"]').first()).toHaveValue("");
   });
 });
 

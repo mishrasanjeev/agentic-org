@@ -371,14 +371,15 @@ test.describe("v4 — Billing", () => {
 //  Landing Page — v4 Updates
 // ═══════════════════════════════════════════════════════════════════════════
 
-test.describe("v4 — Landing Page Updates", () => {
-  test("landing_shows_v4_banner", async ({ page }) => {
+test.describe("Landing Page Product Signals", () => {
+  test("landing_shows_current_governed_oacp_banner", async ({ page }) => {
     await page.goto(MARKETING, { waitUntil: "domcontentloaded" });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    const body = (await page.textContent("body")) || "";
-    const hasV4 = /v4\.0\.0|project apex|1000\+/i.test(body);
-    expect(hasV4).toBeTruthy();
+    await expect(page.getByTestId("landing-version-badge")).toContainText(
+      "Governed agents with OACP trust boundaries",
+    );
+    await expect(page.getByText("Open Agentic Commerce Protocol", { exact: true }).first()).toBeVisible();
   });
 
   test("landing_shows_updated_stats", async ({ page, request }) => {

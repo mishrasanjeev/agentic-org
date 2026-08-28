@@ -125,7 +125,7 @@ test("CA firms evaluation request posts firm metadata and reports confirmation e
   });
 
   await page.goto("/solutions/ca-firms");
-  await page.getByRole("button", { name: /request evaluation/i }).first().click();
+  await page.getByRole("button", { name: /request ca pack evaluation/i }).first().click();
   await page.getByRole("textbox", { name: /^Name \*/ }).fill("Aishwarya");
   await page.getByLabel(/Work Email/).fill("aishwarya@agenticorg.ai");
   await page.getByLabel(/Firm Name/).fill("Aishwarya CA LLP");
