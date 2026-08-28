@@ -19,19 +19,12 @@
  * All other TCs use the demo accounts seeded by the platform.
  */
 import { expect, test } from "@playwright/test";
-import { clearSession, setSessionToken } from "./helpers/auth";
+import { DEMO_ROLE_CREDENTIALS, clearSession, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
 
-const DEMO = {
-  ceo:     { email: "ceo@agenticorg.local",     password: "ceo123!"   },
-  cfo:     { email: "cfo@agenticorg.local",     password: "cfo123!"   },
-  chro:    { email: "chro@agenticorg.local",    password: "chro123!"  },
-  cmo:     { email: "cmo@agenticorg.local",     password: "cmo123!"   },
-  coo:     { email: "coo@agenticorg.local",     password: "coo123!"   },
-  auditor: { email: "auditor@agenticorg.local", password: "audit123!" },
-} as const;
+const DEMO = DEMO_ROLE_CREDENTIALS;
 
 // ---------------------------------------------------------------------------
 // TC-AUTH-001: Login with demo CEO credentials

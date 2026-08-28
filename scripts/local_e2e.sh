@@ -58,12 +58,25 @@ LOCAL_UI_MODE="${LOCAL_UI_MODE:-preview}"
 API_URL="http://localhost:${LOCAL_API_PORT}"
 SPEC_ARGS=("$@")
 
-# Demo creds match core/seed_ca_demo.py DEMO_USER_EMAIL / DEMO_USER_PASSWORD.
-# The CA-firms seeder is what runs in our bootstrap step below. It creates
-# this primary demo partner plus the documented CxO role accounts used by
-# the wider regression suite.
-DEMO_EMAIL="demo@cafirm.agenticorg.ai"
-DEMO_PASSWORD="demo123!"
+# Local-only demo credentials consumed by core/seed_ca_demo.py and the
+# Playwright role-authorization regressions. Every password satisfies the
+# seeder's minimum length and can be overridden by the caller.
+DEMO_EMAIL="${AGENTICORG_DEMO_USER_EMAIL:-demo@cafirm.agenticorg.ai}"
+DEMO_PASSWORD="${AGENTICORG_DEMO_USER_PASSWORD:-local-e2e-demo-123!}"
+export AGENTICORG_DEMO_USER_EMAIL="${DEMO_EMAIL}"
+export AGENTICORG_DEMO_USER_PASSWORD="${DEMO_PASSWORD}"
+export AGENTICORG_DEMO_CEO_EMAIL="${AGENTICORG_DEMO_CEO_EMAIL:-ceo@agenticorg.local}"
+export AGENTICORG_DEMO_CEO_PASSWORD="${AGENTICORG_DEMO_CEO_PASSWORD:-local-e2e-ceo-123!}"
+export AGENTICORG_DEMO_CFO_EMAIL="${AGENTICORG_DEMO_CFO_EMAIL:-cfo@agenticorg.local}"
+export AGENTICORG_DEMO_CFO_PASSWORD="${AGENTICORG_DEMO_CFO_PASSWORD:-local-e2e-cfo-123!}"
+export AGENTICORG_DEMO_CHRO_EMAIL="${AGENTICORG_DEMO_CHRO_EMAIL:-chro@agenticorg.local}"
+export AGENTICORG_DEMO_CHRO_PASSWORD="${AGENTICORG_DEMO_CHRO_PASSWORD:-local-e2e-chro-123!}"
+export AGENTICORG_DEMO_CMO_EMAIL="${AGENTICORG_DEMO_CMO_EMAIL:-cmo@agenticorg.local}"
+export AGENTICORG_DEMO_CMO_PASSWORD="${AGENTICORG_DEMO_CMO_PASSWORD:-local-e2e-cmo-123!}"
+export AGENTICORG_DEMO_COO_EMAIL="${AGENTICORG_DEMO_COO_EMAIL:-coo@agenticorg.local}"
+export AGENTICORG_DEMO_COO_PASSWORD="${AGENTICORG_DEMO_COO_PASSWORD:-local-e2e-coo-123!}"
+export AGENTICORG_DEMO_AUDITOR_EMAIL="${AGENTICORG_DEMO_AUDITOR_EMAIL:-auditor@agenticorg.local}"
+export AGENTICORG_DEMO_AUDITOR_PASSWORD="${AGENTICORG_DEMO_AUDITOR_PASSWORD:-local-e2e-auditor-123!}"
 
 RED='\033[0;31m'
 GRN='\033[0;32m'
@@ -496,6 +509,36 @@ log "Running Playwright (BASE_URL=${UI_URL}, workers=${LOCAL_E2E_WORKERS}${SPEC_
   E2E_TOKEN="${TOKEN}" \
   MARKETING_URL="${UI_URL}" \
   npx playwright test "${PLAYWRIGHT_ARGS[@]}"
-)
+) &
+PLAYWRIGHT_PID=$!
+
+# A dead preview/API process otherwise turns one infrastructure failure into
+# hundreds of misleading browser-test failures. Abort after three consecutive
+# failed health probes and retain the service logs for diagnosis.
+health_failures=0
+while kill -0 "$PLAYWRIGHT_PID" 2>/dev/null; do
+  if curl -fsS "${UI_URL}" >/dev/null 2>&1 && curl -fsS "${API_URL}/api/v1/health" >/dev/null 2>&1; then
+    health_failures=0
+  else
+    health_failures=$((health_failures + 1))
+    if (( health_failures >= 3 )); then
+      fail "UI/API became unavailable during Playwright. Aborting the invalid run."
+      tail -n 30 "${UI_LOG}" || true
+      tail -n 30 "${API_LOG}" || true
+      stop_pid "$PLAYWRIGHT_PID" "Playwright"
+      wait "$PLAYWRIGHT_PID" 2>/dev/null || true
+      exit 7
+    fi
+  fi
+  sleep 5
+done
+
+set +e
+wait "$PLAYWRIGHT_PID"
+PLAYWRIGHT_STATUS=$?
+set -e
+if (( PLAYWRIGHT_STATUS != 0 )); then
+  exit "$PLAYWRIGHT_STATUS"
+fi
 
 ok "Playwright run finished"

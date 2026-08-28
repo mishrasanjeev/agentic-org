@@ -153,7 +153,7 @@ test.describe("CA Firms May 03 reopen fixes", () => {
     await expect(main).not.toContainText("No CA pack agents are provisioned");
   });
 
-  test("GST auto-file is locked until GSTN credentials exist", async ({ page }) => {
+  test("GST auto-file stays disabled until verified GSTN credentials exist", async ({ page }) => {
     await mockApi(page);
     await page.goto(`${APP}/dashboard/companies/${COMPANY_ID}`, {
       waitUntil: "domcontentloaded",
@@ -162,7 +162,9 @@ test.describe("CA Firms May 03 reopen fixes", () => {
     await page.getByRole("button", { name: "Settings" }).click();
 
     const main = page.locator("main");
-    await expect(main).toContainText("GST auto-file is locked");
+    await expect(main).toContainText(
+      "GST auto-file cannot be enabled until an active GSTN portal credential is saved and verified below.",
+    );
     await expect(page.getByLabel("Enable GST auto-file")).toBeDisabled();
     await expect(main).toContainText("No GSTN credentials stored for this company");
   });

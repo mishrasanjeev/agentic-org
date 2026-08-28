@@ -10,7 +10,7 @@
  *
  *   curl -X POST https://app.agenticorg.ai/api/v1/auth/login \
  *     -H "Content-Type: application/json" \
- *     -d '{"email":"ceo@agenticorg.local","password":"ceo123!"}' \
+ *     -d "{\"email\":\"${AGENTICORG_DEMO_CEO_EMAIL}\",\"password\":\"${AGENTICORG_DEMO_CEO_PASSWORD}\"}" \
  *     | jq -r .access_token
  *
  * TC-CONN-004 (register) is gated behind QA_ALLOW_PROD_WRITES=1

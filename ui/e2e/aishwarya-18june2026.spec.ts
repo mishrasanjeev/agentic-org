@@ -1,6 +1,9 @@
 import { expect, Page, test } from "@playwright/test";
+import { E2E_TOKEN, requireAuth, setSessionToken } from "./helpers/auth";
 
 async function installCommonRoutes(page: Page) {
+  requireAuth();
+  await setSessionToken(page, E2E_TOKEN);
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
       json: {
