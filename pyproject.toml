@@ -135,7 +135,7 @@ v4 = [
 bge-m3 = [
     # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out
     # of the production API image; production should use AGENTICORG_TEI_URL.
-    "FlagEmbedding>=1.4.1",
+    "FlagEmbedding>=1.4.2",
 ]
 dev = [
     "pytest>=8.4.2",
