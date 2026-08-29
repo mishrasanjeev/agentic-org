@@ -1,10 +1,14 @@
 # Terms of Service
 
-**AgenticOrg by Agentic Org**
+**AgenticOrg by Orchestrum Technologies LLP**
+
+AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
+**Sanjeev Kumar**. Contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
 **Effective Date:** March 21, 2026
 **Last Updated:** March 21, 2026
 
-These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Agentic Org ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
+These Terms of Service ("Terms") govern your access to and use of the AgenticOrg platform at agenticorg.ai (the "Service") provided by Orchestrum Technologies LLP ("we", "us", "our"). By accessing or using the Service, you agree to be bound by these Terms.
 
 ---
 
@@ -47,7 +51,7 @@ You are responsible for:
 - Managing user access and permissions within your organization.
 
 ### 3.3 Account Security
-You must immediately notify us at sanjeev@agenticorg.ai if you become aware of any unauthorized access to or use of your account.
+You must immediately notify us at sanjeev@orchestrum.in if you become aware of any unauthorized access to or use of your account.
 
 ---
 
@@ -95,7 +99,7 @@ Upon account termination, we will delete Your Data within 90 days, except for au
 The AgenticOrg software is licensed under Apache 2.0. Your rights to the software are governed by that license.
 
 ### 6.2 Service Trademarks
-"AgenticOrg", "Agentic Org", and associated logos are trademarks of Agentic Org. You may not use these trademarks without our prior written consent.
+"AgenticOrg" and associated logos are identified as marks of Orchestrum Technologies LLP. You may not use these marks without our prior written consent.
 
 ### 6.3 Feedback
 If you provide feedback or suggestions about the Service, we may use them without restriction or obligation to you.
@@ -118,7 +122,7 @@ You acknowledge that AI agent outputs may be incorrect and that reliance on such
 
 ## 8. Indemnification
 
-You agree to indemnify, defend, and hold harmless Agentic Org and its officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising out of or in connection with:
+You agree to indemnify, defend, and hold harmless Orchestrum Technologies LLP and its partners, officers, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable legal fees) arising out of or in connection with:
 
 - Your use of the Service.
 - Your violation of these Terms.
@@ -140,7 +144,7 @@ We reserve the right to modify, suspend, or discontinue the Service (or any part
 ## 10. Termination
 
 ### 10.1 By You
-You may terminate your account at any time through the platform settings or by contacting sanjeev@agenticorg.ai.
+You may terminate your account at any time through the platform settings or by contacting sanjeev@orchestrum.in.
 
 ### 10.2 By Us
 We may suspend or terminate your access if you breach these Terms, subject to reasonable notice where practicable.
@@ -166,7 +170,7 @@ Subject to the arbitration clause above, the courts of Bengaluru, India shall ha
 ## 12. General Provisions
 
 ### 12.1 Entire Agreement
-These Terms, together with the Privacy Policy, constitute the entire agreement between you and Agentic Org regarding the Service.
+These Terms, together with the Privacy Policy, constitute the entire agreement between you and Orchestrum Technologies LLP regarding the Service.
 
 ### 12.2 Severability
 If any provision of these Terms is found to be unenforceable, the remaining provisions shall continue in full force and effect.
@@ -178,7 +182,7 @@ Our failure to enforce any right or provision of these Terms shall not constitut
 You may not assign your rights under these Terms without our prior written consent. We may assign our rights without restriction.
 
 ### 12.5 Notices
-Notices to you will be sent to the email address associated with your account. Notices to us should be sent to sanjeev@agenticorg.ai.
+Notices to you will be sent to the email address associated with your account. Notices to us should be sent to sanjeev@orchestrum.in, with mishra.sanjeev@gmail.com available as an alternate contact.
 
 ---
 
@@ -186,9 +190,10 @@ Notices to you will be sent to the email address associated with your account. N
 
 For questions about these Terms of Service:
 
-- **Email:** sanjeev@agenticorg.ai
-- **Security issues:** sanjeev@agenticorg.ai
-- **Address:** Agentic Org, India
+- **Primary email:** sanjeev@orchestrum.in
+- **Alternate email:** mishra.sanjeev@gmail.com
+- **Security issues:** sanjeev@orchestrum.in
+- **Address:** Orchestrum Technologies LLP, India
 
 ---
 

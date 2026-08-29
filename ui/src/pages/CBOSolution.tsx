@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
 /*  useInView â€” Intersection Observer hook for scroll animations       */
@@ -286,7 +287,7 @@ export default function CBOSolution() {
                 Request a Demo
               </button>
               <a
-                href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"
+                href="mailto:sanjeev@orchestrum.in?subject=CBO%20Solution%20Demo"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
               >
                 Book a Demo
@@ -462,7 +463,7 @@ export default function CBOSolution() {
                   Request a Demo
                 </button>
                 <a
-                  href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"
+                  href="mailto:sanjeev@orchestrum.in?subject=CBO%20Solution%20Demo"
                   className="inline-flex items-center justify-center border border-slate-300 text-slate-700 px-10 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-100 transition-all"
                 >
                   Book a Demo
@@ -528,7 +529,7 @@ export default function CBOSolution() {
                 Request a Demo
               </button>
               <a
-                href="mailto:sanjeev@agenticorg.ai?subject=CBO%20Solution%20Demo"
+                href="mailto:sanjeev@orchestrum.in?subject=CBO%20Solution%20Demo"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 border border-slate-600 text-slate-300 px-8 py-3.5 rounded-xl text-base font-semibold hover:bg-slate-800 hover:text-white transition-all"
               >
                 Book a Demo
@@ -571,14 +572,14 @@ export default function CBOSolution() {
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
-                <li><a href="mailto:sanjeev@agenticorg.ai" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
-                <li><span className="text-slate-400 text-sm">AgenticOrg</span></li>
+                <li><a href="mailto:sanjeev@orchestrum.in" className="text-slate-400 hover:text-white text-sm transition-colors">Contact</a></li>
+                <li><span className="text-slate-400 text-sm">Orchestrum Technologies LLP</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg. All rights reserved.</p>
+            <ProductOwnership compact />
             <div className="flex items-center gap-6">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>
               <a href="/terms" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Terms</a>

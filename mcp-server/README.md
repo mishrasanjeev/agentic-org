@@ -1,5 +1,10 @@
 # agenticorg-mcp-server
 
+> AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
+> **Sanjeev Kumar**. Contact [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+> or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). See
+> [Ownership and contact](../docs/OWNERSHIP.md).
+
 Repository MCP adapter for AgenticOrg API surfaces. The server exposes records
 and actions returned by a configured AgenticOrg endpoint; tool presence is not
 evidence that an agent, connector, provider, or external action is available in

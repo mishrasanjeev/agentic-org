@@ -7,6 +7,10 @@ shipped runtime behavior from tenant configuration and external-provider
 availability. Live version and registry totals remain available from
 [`GET /api/v1/product-facts`](https://app.agenticorg.ai/api/v1/product-facts).
 
+AgenticOrg is owned by **Orchestrum Technologies LLP**. The inventor / owner is
+**Sanjeev Kumar**. Current ownership and contact details are maintained in
+[OWNERSHIP.md](OWNERSHIP.md).
+
 ## Production Baseline
 
 - Managed production runs separate API and UI services on Google Cloud Run.

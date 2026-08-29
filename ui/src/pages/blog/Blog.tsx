@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { Helmet } from "react-helmet-async";
+import ProductOwnership from "../../components/ProductOwnership";
 import { BLOG_POSTS } from "./blogData";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -87,6 +88,11 @@ export default function Blog() {
           </div>
         </div>
       </section>
+      <footer className="border-t border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ProductOwnership tone="light" compact />
+        </div>
+      </footer>
     </div>
   );
 }

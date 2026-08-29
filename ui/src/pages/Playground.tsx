@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Link } from "react-router";
 import api, { extractApiError } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
+import ProductOwnership from "@/components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -811,6 +812,12 @@ export default function Playground() {
           </section>
         )}
       </main>
+
+      <footer className="border-t border-slate-800 bg-slate-950">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ProductOwnership compact />
+        </div>
+      </footer>
 
       {/* Inline animation keyframe */}
       <style>{`

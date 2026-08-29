@@ -1,5 +1,6 @@
 import { Link, Navigate, useParams } from "react-router";
 import { Helmet } from "react-helmet-async";
+import ProductOwnership from "../../components/ProductOwnership";
 import { BLOG_POSTS } from "./blogData";
 
 const SITE_URL = "https://agenticorg.ai";
@@ -224,6 +225,11 @@ export default function BlogPost() {
           </div>
         </div>
       </article>
+      <footer className="mt-12 border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+          <ProductOwnership tone="light" compact />
+        </div>
+      </footer>
     </div>
   );
 }

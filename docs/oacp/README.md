@@ -1,5 +1,11 @@
 # AgenticOrg OACP Runtime Docs
 
+> OACP work in AgenticOrg is owned as part of AgenticOrg by
+> **Orchestrum Technologies LLP**. Inventor / Owner: **Sanjeev Kumar**. Contact
+> [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) or
+> [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). See
+> [AgenticOrg ownership and contact](../OWNERSHIP.md).
+
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closure source of truth: [OACP Runtime Launch Closure PRD](runtime-launch-closure-prd.md).
 
 Current cross-product capability status: [AgenticOrg product status](../PRODUCT_STATUS.md).

@@ -1,13 +1,16 @@
 {
   "site": {
     "name": "AgenticOrg",
+    "legalName": "Orchestrum Technologies LLP",
+    "inventorOwner": "Sanjeev Kumar",
     "url": "https://agenticorg.ai",
     "appUrl": "https://app.agenticorg.ai",
     "language": "en-IN",
     "locale": "en_IN",
     "defaultImage": "https://agenticorg.ai/og-image.png",
     "logo": "https://agenticorg.ai/favicon-512x512.png",
-    "email": "sanjeev@agenticorg.ai",
+    "email": "sanjeev@orchestrum.in",
+    "secondaryEmail": "mishra.sanjeev@gmail.com",
     "github": "https://github.com/mishrasanjeev/agentic-org",
     "description": "AgenticOrg is an open-source platform for building, deploying, and governing enterprise AI agents with scoped tools, human approvals, audit evidence, and protocol-based integration."
   },

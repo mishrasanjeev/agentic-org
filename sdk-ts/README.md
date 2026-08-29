@@ -1,5 +1,10 @@
 # agenticorg-sdk
 
+> AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
+> **Sanjeev Kumar**. Contact [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+> or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). See
+> [Ownership and contact](../docs/OWNERSHIP.md).
+
 TypeScript SDK for AgenticOrg - run AI agents, generate agents from plain
 English or SOPs, discover A2A/MCP tools, search knowledge, and create/run
 workflows.

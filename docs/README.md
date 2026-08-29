@@ -4,6 +4,12 @@ This directory contains current product guides, operator runbooks, design
 documents, historical reviews, and retained release evidence. Start here rather
 than treating every file in `docs/` as a description of the current product.
 
+AgenticOrg is owned by **Orchestrum Technologies LLP**. The inventor / owner is
+**Sanjeev Kumar**. Contact
+[sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) or
+[mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). See the canonical
+[ownership statement](OWNERSHIP.md).
+
 ## Current Sources Of Truth
 
 Use these documents in this order:
@@ -29,6 +35,7 @@ Service health comes from
 | Need | Start here |
 | --- | --- |
 | Understand the platform | [Current product status](PRODUCT_STATUS.md), [why AgenticOrg](why-agenticorg.md) |
+| Verify ownership and contact | [Ownership and contact](OWNERSHIP.md), [repository notice](../NOTICE) |
 | Build and govern agents | [Agents](agents.md), [agent workflows](agent-workflows.md), [testing](TEST_PLAN.md) |
 | Upload documents and scans | [Knowledge ingestion and OCR](knowledge-ingestion.md) |
 | Configure voice agents | [Voice runtime](voice-runtime.md) |

@@ -3,6 +3,16 @@
   "version": "4.0.5",
   "mcpName": "io.github.mishrasanjeev/agenticorg",
   "description": "Repository MCP adapter for company-scoped AgenticOrg workflow candidates and read-only discovery",
+  "author": {
+    "name": "Sanjeev Kumar",
+    "email": "sanjeev@orchestrum.in"
+  },
+  "maintainers": [
+    {
+      "name": "Orchestrum Technologies LLP",
+      "email": "sanjeev@orchestrum.in"
+    }
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

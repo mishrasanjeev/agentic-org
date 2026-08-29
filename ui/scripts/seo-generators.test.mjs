@@ -18,10 +18,14 @@ import {
 const manifest = {
   site: {
     name: "AgenticOrg",
+    legalName: "Orchestrum Technologies LLP",
+    inventorOwner: "Sanjeev Kumar",
     url: "https://agenticorg.ai",
     language: "en-IN",
     description: "A governed enterprise AI agent platform.",
     defaultImage: "https://agenticorg.ai/og-image.png",
+    email: "sanjeev@orchestrum.in",
+    secondaryEmail: "mishra.sanjeev@gmail.com",
   },
   landingFaqs: [
     { question: "What is AgenticOrg?", answer: "A governed AI agent platform." },
@@ -100,6 +104,11 @@ test("landing shell replaces inherited metadata and owns the only FAQ graph", ()
   assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
   assert.match(html, /https:\/\/agenticorg\.ai\/"/);
   assert.match(html, /"@type":"FAQPage"/);
+  assert.match(html, /"name":"Orchestrum Technologies LLP"/);
+  assert.match(html, /"alternateName":"AgenticOrg"/);
+  assert.match(html, /"name":"Sanjeev Kumar"/);
+  assert.match(html, /sanjeev@orchestrum\.in/);
+  assert.match(html, /mishra\.sanjeev@gmail\.com/);
   assert.doesNotMatch(html, /AggregateRating/);
   assert.match(html, /data-static-seo="true"/);
 });

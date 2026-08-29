@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../../components/ProductOwnership";
 
 interface AdsPageProps {
   keyword: string;
@@ -245,6 +246,11 @@ export default function AdsLanding() {
           </div>
         </div>
       </section>
+      <footer className="border-t border-slate-800 bg-slate-950">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ProductOwnership compact />
+        </div>
+      </footer>
     </div>
   );
 }

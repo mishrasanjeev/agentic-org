@@ -61,7 +61,7 @@ _DEFAULT_BRANDING = BrandingOut(
     favicon_url=None,
     primary_color="#7c3aed",
     accent_color="#1e293b",
-    support_email="sanjeev@agenticorg.ai",
+    support_email="sanjeev@orchestrum.in",
     footer_text=None,
     custom_domain=None,
 )

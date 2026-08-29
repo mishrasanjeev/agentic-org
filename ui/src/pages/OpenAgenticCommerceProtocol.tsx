@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import ProductOwnership from "../components/ProductOwnership";
 
 const FLOW_NODES = [
   {
@@ -360,6 +361,11 @@ export default function OpenAgenticCommerceProtocol() {
           </div>
         </section>
       </main>
+      <footer className="border-t border-slate-800 bg-slate-950">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ProductOwnership compact />
+        </div>
+      </footer>
     </div>
   );
 }

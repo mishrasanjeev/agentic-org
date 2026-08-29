@@ -185,7 +185,7 @@ def _render_pdf(
     story.append(Spacer(1, 0.6 * cm))
     story.append(
         Paragraph(
-            "Payment is due within 30 days. Contact sanjeev@agenticorg.ai with any questions.",
+            "Payment is due within 30 days. Contact sanjeev@orchestrum.in with any questions.",
             styles["Normal"],
         )
     )

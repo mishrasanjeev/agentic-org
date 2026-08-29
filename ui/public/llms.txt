@@ -7,6 +7,9 @@
 - Website: https://agenticorg.ai
 - Application and API: https://app.agenticorg.ai
 - Repository: https://github.com/mishrasanjeev/agentic-org
+- Product owner: Orchestrum Technologies LLP
+- Inventor / Owner: Sanjeev Kumar
+- Contacts: sanjeev@orchestrum.in and mishra.sanjeev@gmail.com
 - Source version: 4.8.0 from pyproject.toml
 - Runtime requirement: Python >=3.12
 - Web application: React 19

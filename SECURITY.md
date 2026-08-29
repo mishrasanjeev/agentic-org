@@ -3,7 +3,8 @@
 ## Report a vulnerability
 
 Do not open a public issue for a suspected vulnerability. Email
-**sanjeev@agenticorg.ai** with a description, reproducible steps, affected
+**sanjeev@orchestrum.in** or **mishra.sanjeev@gmail.com** with a description,
+reproducible steps, affected
 version or commit, and any impact you observed. Avoid including live secrets or
 unnecessary personal data.
 

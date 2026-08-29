@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
 /*  useInView â€” Intersection Observer hook for scroll animations       */
@@ -883,7 +884,7 @@ export default function HowGrantexWorks() {
 
         {/* â”€â”€â”€ Footer â”€â”€â”€ */}
         <footer className="bg-slate-900 border-t border-slate-800 py-8">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid gap-5 sm:grid-cols-[auto_1fr] sm:items-center">
             <div className="flex items-center gap-2 text-slate-400 text-sm">
               <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-[10px] font-black text-white">
                 A
@@ -896,6 +897,7 @@ export default function HowGrantexWorks() {
               <Link to="/blog" className="hover:text-slate-300 transition-colors">Blog</Link>
               <Link to="/resources" className="hover:text-slate-300 transition-colors">Resources</Link>
             </div>
+            <ProductOwnership compact className="sm:col-span-2" />
           </div>
         </footer>
       </div>

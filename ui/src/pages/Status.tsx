@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import ProductOwnership from "@/components/ProductOwnership";
 
 interface ServiceStatus {
   name: string;
@@ -174,6 +175,7 @@ export default function StatusPage() {
           <footer className="text-xs text-muted-foreground">
             Last updated: {new Date(data.last_updated).toLocaleString()} — page
             auto-refreshes every 60 seconds.
+            <ProductOwnership tone="light" compact className="mt-6 border-t border-slate-200 pt-4" />
           </footer>
         </>
       )}
