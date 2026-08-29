@@ -446,7 +446,8 @@ async def subscribe_india(
 # ── Plural Callback (Redirect Return) ───────────────────────────────
 
 
-@router.api_route("/callback", methods=["GET", "POST"])
+@router.get("/callback", operation_id="plural_callback_get")
+@router.post("/callback", operation_id="plural_callback_post")
 @route_meta(
     auth_required=False,
     tenant_required=True,

@@ -6,14 +6,14 @@ credentials, should not live in CI without a release-gating flow).
 
 ## Current release targets
 
-- Python SDK + CLI: `agenticorg==0.3.0` on PyPI. The root
+- Python SDK + CLI release target: `agenticorg==0.4.0`. The root
   AgenticOrg package also includes `sdk/agenticorg` and exposes the
   direct `agenticorg` CLI so `pip install agenticorg` works for shell
   users, Claude Code, Codex, Gemini CLI, VS Code tasks, CI, and runbooks.
   PyPI `agenticorg` remains the lightweight SDK+CLI artifact built from
   `sdk/`; do not upload the root/full-platform wheel to PyPI under the same
   package name.
-- TypeScript SDK: `agenticorg-sdk@0.3.0` on npm. The scoped package
+- TypeScript SDK release target: `agenticorg-sdk@0.4.0`. The scoped package
   `@agenticorg/sdk` is not currently published.
 - MCP server npm package: `agenticorg-mcp-server@4.0.5`.
 - MCP registry server: `io.github.mishrasanjeev/agenticorg@4.0.5`.
@@ -146,8 +146,9 @@ sweep fails if any drifts.
 - Patch bump for bugfix-only changes.
 
 SDK versions track the server's wire contract, not the app version.
-A main app at `4.8.0` is fine with SDKs at `0.3.0` — what matters is
-that the SDK can parse what the server emits.
+Release `0.4.0` adds the current knowledge/OCR, voice, RPA, local bridge,
+and commerce runtime resources without changing the existing agent APIs.
+What matters is that the SDK can parse what the deployed server emits.
 
 ## Drift guard
 

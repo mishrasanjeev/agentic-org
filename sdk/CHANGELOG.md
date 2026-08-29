@@ -1,5 +1,27 @@
 # AgenticOrg Python SDK changelog
 
+## 0.4.0 - 2026-08-29
+
+Runtime surface release.
+
+### Added
+- Knowledge/OCR supported-type discovery, multipart upload, document listing,
+  deletion, health, and statistics.
+- Voice configuration/status, runtime health, call history, and explicitly
+  named outbound-call support.
+- RPA catalog, history, and explicit script execution.
+- Local bridge registration, status, routing, and deregistration.
+- Seller onboarding, Shopify sync, Grantex artifact handoff, cached buyer
+  questions, protocol adapters, mandate-capability verification, purchase
+  preparation, and offline POS handoffs through `client.commerce`.
+- Connector health/test and workflow-run cancellation helpers.
+
+### Fixed
+- SDK coverage now follows the production runtime rather than stopping at the
+  June 2026 agent/workflow subset.
+- Generated OpenAPI clients no longer encounter a duplicate Plural callback
+  operation ID.
+
 ## 0.3.0 - 2026-06-14
 
 Commerce, A2A/MCP, workflow, knowledge, and CLI release.

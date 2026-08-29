@@ -19,7 +19,7 @@ def test_python_sdk_release_version_matches_cli_package_metadata() -> None:
 
     assert match
     assert pyproject["project"]["name"] == "agenticorg"
-    assert pyproject["project"]["version"] == "0.3.0"
+    assert pyproject["project"]["version"] == "0.4.0"
     assert match.group(1) == pyproject["project"]["version"]
     assert pyproject["project"]["scripts"]["agenticorg"] == "agenticorg.cli:main"
 
@@ -42,7 +42,7 @@ def test_typescript_sdk_release_metadata_uses_published_package_name() -> None:
     source = (ROOT / "sdk-ts" / "src" / "index.ts").read_text(encoding="utf-8")
 
     assert package_json["name"] == "agenticorg-sdk"
-    assert package_json["version"] == "0.3.0"
+    assert package_json["version"] == "0.4.0"
     assert package_lock["version"] == package_json["version"]
     assert package_lock["packages"][""]["version"] == package_json["version"]
     assert 'from "agenticorg-sdk"' in source
