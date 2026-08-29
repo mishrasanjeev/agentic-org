@@ -2,6 +2,16 @@
   "name": "agenticorg-sdk",
   "version": "0.4.0",
   "description": "TypeScript SDK for AgenticOrg agents, knowledge/OCR, voice, RPA, bridges, and commerce runtime",
+  "author": {
+    "name": "Sanjeev Kumar",
+    "email": "sanjeev@orchestrum.in"
+  },
+  "maintainers": [
+    {
+      "name": "Orchestrum Technologies LLP",
+      "email": "sanjeev@orchestrum.in"
+    }
+  ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "Apache-2.0",

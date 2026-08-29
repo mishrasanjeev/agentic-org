@@ -322,6 +322,9 @@ function summary(data) {
     "- Website: " + SITE,
     "- Application and API: " + APP,
     "- Repository: " + REPO,
+    "- Product owner: Orchestrum Technologies LLP",
+    "- Inventor / Owner: Sanjeev Kumar",
+    "- Contacts: sanjeev@orchestrum.in and mishra.sanjeev@gmail.com",
     "- Source version: " + data.meta.version + " from pyproject.toml",
     "- Runtime requirement: Python " + data.meta.python,
     "- Web application: React " + data.meta.reactMajor,
@@ -406,7 +409,7 @@ function summary(data) {
 function absoluteReadme() {
   let source = normalized(text(join(REPO_ROOT, "README.md")));
   source = source.replace(
-    /\]\((?!https?:\/\/|#)([^)]+)\)/g,
+    /\]\((?![a-z][a-z0-9+.-]*:|#)([^)]+)\)/gi,
     (match, target) => {
       const cleanTarget = target.replace(/^\.\//, "");
       const directory =

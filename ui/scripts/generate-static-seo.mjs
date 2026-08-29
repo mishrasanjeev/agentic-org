@@ -297,10 +297,23 @@ function buildJsonLd(route, manifest) {
     {
       "@type": "Organization",
       "@id": organizationId,
-      name: site.name,
+      name: site.legalName || site.name,
+      alternateName: site.name,
       url: site.url,
       logo: site.logo ? { "@type": "ImageObject", url: site.logo } : undefined,
       email: site.email || undefined,
+      founder: site.inventorOwner ? {
+        "@type": "Person",
+        name: site.inventorOwner,
+        email: site.email || undefined,
+      } : undefined,
+      contactPoint: [site.email, site.secondaryEmail]
+        .filter(Boolean)
+        .map((email) => ({
+          "@type": "ContactPoint",
+          contactType: "product and support",
+          email,
+        })),
       sameAs: site.github ? [site.github] : undefined,
     },
     {
@@ -346,7 +359,10 @@ function buildJsonLd(route, manifest) {
       mainEntityOfPage: { "@id": pageId },
       datePublished: route.datePublished || undefined,
       dateModified: route.datePublished || undefined,
-      author: { "@type": "Organization", name: route.author || site.name },
+      author: {
+        "@type": "Organization",
+        name: route.author || site.legalName || site.name,
+      },
       publisher: { "@id": organizationId },
       image: site.defaultImage || undefined,
       keywords: route.keywords && route.keywords.length

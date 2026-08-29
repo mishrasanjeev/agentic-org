@@ -21,7 +21,8 @@ We as members, contributors, and leaders pledge to make participation in our com
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to: **sanjeev@agenticorg.ai**
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to
+**sanjeev@orchestrum.in** or **mishra.sanjeev@gmail.com**.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

@@ -2,6 +2,14 @@
 
 AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases.
 
+> **Ownership:** AgenticOrg is owned by **Orchestrum Technologies LLP**.
+>
+> **Inventor / Owner:** **Sanjeev Kumar**
+>
+> **Contact:** [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) | [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com)
+>
+> See the canonical [ownership and contact statement](docs/OWNERSHIP.md) and [NOTICE](NOTICE).
+
 [Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](docs/README.md) | [Current product status](docs/PRODUCT_STATUS.md) | [Security policy](SECURITY.md)
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)

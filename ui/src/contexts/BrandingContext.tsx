@@ -32,7 +32,7 @@ const DEFAULT_BRANDING: Branding = {
   faviconUrl: null,
   primaryColor: "#7c3aed",
   accentColor: "#1e293b",
-  supportEmail: "sanjeev@agenticorg.ai",
+  supportEmail: "sanjeev@orchestrum.in",
   footerText: null,
 };
 

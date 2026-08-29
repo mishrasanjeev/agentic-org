@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../components/ProductOwnership";
 
 import {
   formatPlanPrice,
@@ -299,10 +300,10 @@ export default function Pricing() {
       </main>
 
       <footer className="border-t border-slate-800 bg-slate-900 px-4 py-10">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 md:flex-row">
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-5 md:flex-row md:items-center">
           <span className="text-sm text-slate-400">AgenticOrg</span>
           <div className="flex items-center gap-6"><Link to="/" className="text-sm text-slate-400 hover:text-white">Home</Link><Link to="/evals" className="text-sm text-slate-400 hover:text-white">Evals</Link><Link to="/login" className="text-sm text-slate-400 hover:text-white">Sign In</Link></div>
-          <p className="text-xs text-slate-500">&copy; {new Date().getFullYear()} AgenticOrg.</p>
+          <ProductOwnership compact />
         </div>
       </footer>
     </div>

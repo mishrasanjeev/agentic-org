@@ -1,5 +1,6 @@
 import { Helmet } from "react-helmet-async";
 import { Link } from "react-router";
+import ProductOwnership, { PRIMARY_CONTACT_EMAIL } from "../../components/ProductOwnership";
 
 export default function Support() {
   return (
@@ -26,8 +27,8 @@ export default function Support() {
           <h2 className="mb-3 text-2xl font-semibold text-slate-900">Request support</h2>
           <p className="leading-relaxed text-slate-700">
             Email{" "}
-            <a className="text-blue-600 hover:underline" href="mailto:sanjeev@agenticorg.ai">
-              sanjeev@agenticorg.ai
+            <a className="text-blue-600 hover:underline" href={`mailto:${PRIMARY_CONTACT_EMAIL}`}>
+              {PRIMARY_CONTACT_EMAIL}
             </a>{" "}
             with the workspace identifier, a concise description, observed timestamps, and safe
             reproduction details. Do not send passwords, private keys, access tokens, or unrelated
@@ -54,6 +55,7 @@ export default function Support() {
             and the signed data-processing terms.
           </p>
         </section>
+        <ProductOwnership tone="light" className="mt-10 border-t border-slate-200 pt-6" />
       </main>
     </div>
   );

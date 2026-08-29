@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../components/ProductOwnership";
 
 /* â”€â”€ Step data for the workflow â”€â”€ */
 const WORKFLOW_STEPS = [
@@ -323,8 +324,8 @@ export default function IntegrationWorkflow() {
 
       {/* Footer */}
       <footer className="bg-slate-950 border-t border-slate-800 py-8">
-        <div className="max-w-7xl mx-auto px-4 text-center">
-          <p className="text-sm text-slate-500">&copy; 2026 AgenticOrg. All rights reserved.</p>
+        <div className="max-w-7xl mx-auto px-4">
+          <ProductOwnership compact />
         </div>
       </footer>
     </div>

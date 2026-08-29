@@ -1,10 +1,14 @@
 # Privacy Policy
 
-**AgenticOrg by Agentic Org**
+**AgenticOrg by Orchestrum Technologies LLP**
+
+AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
+**Sanjeev Kumar**. Contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com).
 **Effective Date:** March 21, 2026
 **Last Updated:** March 21, 2026
 
-This Privacy Policy describes how Agentic Org ("we", "us", "our") collects, uses, and protects personal data when you use the AgenticOrg platform at agenticorg.ai (the "Service").
+This Privacy Policy describes how Orchestrum Technologies LLP ("we", "us", "our") collects, uses, and protects personal data when you use the AgenticOrg platform at agenticorg.ai (the "Service").
 
 ---
 
@@ -87,7 +91,7 @@ If you are located in the European Economic Area (EEA), the following rights and
 When personal data is transferred outside the EEA, we rely on Standard Contractual Clauses (SCCs) approved by the European Commission, or other lawful transfer mechanisms.
 
 ### 5.4 Data Protection Officer
-For GDPR-related inquiries, contact our Data Protection Officer at sanjeev@agenticorg.ai.
+For GDPR-related inquiries, contact our Data Protection Officer at sanjeev@orchestrum.in.
 
 ---
 
@@ -111,8 +115,8 @@ Where processing is based on consent, we obtain your clear, informed, and specif
 Data belonging to Indian data principals is stored in data centers located in India (region: asia-south1) unless explicitly configured otherwise by the organization administrator.
 
 ### 6.5 Grievance Officer
-Name: Grievance Officer, Agentic Org
-Email: sanjeev@agenticorg.ai
+Name: Grievance Officer, Orchestrum Technologies LLP
+Email: sanjeev@orchestrum.in (alternate: mishra.sanjeev@gmail.com)
 Response time: Within 30 days of receiving your request.
 
 ---
@@ -121,7 +125,7 @@ Response time: Within 30 days of receiving your request.
 
 To exercise any of your rights under GDPR, the DPDP Act, or other applicable laws:
 
-1. **Email:** Send a request to sanjeev@agenticorg.ai with the subject line "Data Subject Request".
+1. **Email:** Send a request to sanjeev@orchestrum.in with the subject line "Data Subject Request".
 2. **In-platform:** Navigate to Settings > Privacy > Data Requests in the AgenticOrg dashboard.
 3. **Verification:** We will verify your identity before processing any request.
 4. **Response time:** We aim to respond within 30 days. For complex requests, we may extend this by an additional 60 days with prior notice.
@@ -168,8 +172,9 @@ We may update this Privacy Policy from time to time. Material changes will be co
 
 For questions or concerns about this Privacy Policy:
 
-- **Email:** sanjeev@agenticorg.ai
-- **Address:** Agentic Org, India
+- **Primary email:** sanjeev@orchestrum.in
+- **Alternate email:** mishra.sanjeev@gmail.com
+- **Address:** Orchestrum Technologies LLP, India
 
 ---
 

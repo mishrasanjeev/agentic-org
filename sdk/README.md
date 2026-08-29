@@ -1,5 +1,10 @@
 # AgenticOrg Python SDK
 
+> AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner:
+> **Sanjeev Kumar**. Contact [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in)
+> or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). See
+> [Ownership and contact](../docs/OWNERSHIP.md).
+
 Repository client for selected AgenticOrg HTTP APIs. Method availability and
 response shape depend on the installed SDK version, configured endpoint,
 authentication, tenant/company access, grants, and backend deployment. Examples

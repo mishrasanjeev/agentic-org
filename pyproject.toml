@@ -38,7 +38,8 @@ description = "Repository for evaluating tenant-scoped AI workflow candidates, a
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.12"
-authors = [{ name = "AgenticOrg Contributors" }]
+authors = [{ name = "Sanjeev Kumar", email = "sanjeev@orchestrum.in" }]
+maintainers = [{ name = "Orchestrum Technologies LLP", email = "sanjeev@orchestrum.in" }]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Framework :: FastAPI",

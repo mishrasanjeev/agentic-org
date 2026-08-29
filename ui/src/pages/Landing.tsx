@@ -5,6 +5,7 @@ import AgentActivityTicker from "../components/AgentActivityTicker";
 import AgentsInAction from "../components/AgentsInAction";
 import WorkflowAnimation from "../components/WorkflowAnimation";
 import InteractiveDemo from "../components/InteractiveDemo";
+import ProductOwnership from "../components/ProductOwnership";
 import { useProductFacts } from "@/lib/productFacts";
 
 /* ------------------------------------------------------------------ */
@@ -1799,7 +1800,7 @@ $ agenticorg sop deploy \\
       {/* ============================================================ */}
       <footer className="bg-slate-950 border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-8 mb-12">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-7 gap-8 mb-12">
             {/* Brand */}
             <div className="lg:col-span-1">
               <div className="flex items-center gap-2 mb-4">
@@ -1868,19 +1869,19 @@ $ agenticorg sop deploy \\
             </div>
 
             {/* Company */}
-            <div>
+            <div className="lg:col-span-2">
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wider">Company</h4>
               <ul className="space-y-2">
                 <li><Link to="/support" className="text-slate-400 hover:text-white text-sm transition-colors">Support and contact</Link></li>
-                <li><span className="text-slate-400 text-sm">AgenticOrg</span></li>
                 <li><span className="text-slate-400 text-sm">Bengaluru, India</span></li>
               </ul>
+              <ProductOwnership compact className="mt-4" />
             </div>
           </div>
 
           <div className="border-t border-slate-800 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-500">
-              &copy; 2026 AgenticOrg. All rights reserved.
+              &copy; 2026 Orchestrum Technologies LLP. AgenticOrg source is Apache-2.0 licensed.
             </p>
             <div className="flex items-center gap-6">
               <a href="/privacy" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">Privacy</a>

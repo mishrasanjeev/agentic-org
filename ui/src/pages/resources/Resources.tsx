@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router";
+import ProductOwnership from "../../components/ProductOwnership";
 import { CONTENT_PAGES, CLUSTERS } from "./contentData";
 
 export default function Resources() {
@@ -71,6 +72,11 @@ export default function Resources() {
           </div>
         </div>
       </main>
+      <footer className="mt-12 border-t border-slate-200 bg-slate-50">
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <ProductOwnership tone="light" compact />
+        </div>
+      </footer>
     </div>
   );
 }

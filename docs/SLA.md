@@ -48,7 +48,8 @@ Credits must be requested within 30 days of the incident.
 
 ## 4. Support channels & hours
 
-- **Email:** `sanjeev@agenticorg.ai`
+- **Primary email:** `sanjeev@orchestrum.in`
+- **Alternate email:** `mishra.sanjeev@gmail.com`
 - **Slack Connect:** available for Enterprise customers on request
 - **Phone:** +91-80-XXXXXXXX (Enterprise SEV-1 only, 24×7)
 - **Status page:** `https://status.agenticorg.ai` (external Statuspage
@@ -91,4 +92,4 @@ least 30 days in advance via the status page and in-app banner.
 
 ## Contact
 
-Questions: `sanjeev@agenticorg.ai` or your account manager.
+Questions: `sanjeev@orchestrum.in`, `mishra.sanjeev@gmail.com`, or your account manager.

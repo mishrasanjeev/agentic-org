@@ -155,6 +155,17 @@ test.describe("Landing Page — Sections", () => {
     await expect(footer.getByText("Agents").first()).toBeVisible();
     await expect(footer.getByText("Pricing").first()).toBeVisible();
     await expect(footer.getByText("agenticorg.ai").first()).toBeVisible();
+    const ownership = footer.getByTestId("product-ownership");
+    await expect(ownership).toContainText("AgenticOrg is owned by Orchestrum Technologies LLP.");
+    await expect(ownership).toContainText("Inventor / Owner: Sanjeev Kumar");
+    await expect(ownership.getByRole("link", { name: "sanjeev@orchestrum.in" })).toHaveAttribute(
+      "href",
+      "mailto:sanjeev@orchestrum.in",
+    );
+    await expect(ownership.getByRole("link", { name: "mishra.sanjeev@gmail.com" })).toHaveAttribute(
+      "href",
+      "mailto:mishra.sanjeev@gmail.com",
+    );
   });
 });
 

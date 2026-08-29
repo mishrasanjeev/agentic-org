@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, Cell, LabelList,
 } from "recharts";
+import ProductOwnership from "../components/ProductOwnership";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -569,14 +570,14 @@ export default function Evals() {
 
       {/* ---- Footer ---- */}
       <footer className="bg-slate-900 text-slate-400 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 text-sm">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-[10px]">
               AO
             </div>
             <span>AgenticOrg Evaluation Matrix</span>
           </div>
-          <p>&copy; {new Date().getFullYear()} AgenticOrg. All rights reserved.</p>
+          <ProductOwnership compact />
         </div>
       </footer>
     </div>
