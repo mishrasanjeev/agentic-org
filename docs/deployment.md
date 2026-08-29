@@ -1,5 +1,8 @@
 # Deployment Guide
 
+Current product and release boundary: [Current Product Status](PRODUCT_STATUS.md).
+Post-deploy verification: [Production Smoke Readiness Runbook](runbooks/production_smoke.md).
+
 > **Current limitation (2026-07-15):** The Cloud Run helper covers API/UI release mechanics only. The repository production workflow remains disabled, worker/beat rollout is not covered by the helper, and no command in this guide substitutes for green required CI, migration evidence, release-manifest/image-digest retention, post-deploy checks, rollback proof, or an approved change owner. Lower Helm/GKE and raw-SQL sections are historical reference material.
 
 > **2026-06-13 status:** production runs on Cloud Run. The default production

@@ -2,7 +2,7 @@
 
 AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases.
 
-[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](docs/) | [Security policy](SECURITY.md)
+[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](docs/README.md) | [Current product status](docs/PRODUCT_STATUS.md) | [Security policy](SECURITY.md)
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
@@ -17,6 +17,20 @@ Live product totals and the deployed product version are published by the public
 The response contains version, agent_count, connector_count, and tool_count. Do not copy those values into documentation, page copy, or tests: they are computed from runtime registries and can change independently of a documentation release. The version declared for source builds is in [pyproject.toml](pyproject.toml).
 
 Billing limits and list prices come from [core/billing/catalog.py](core/billing/catalog.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](scripts/deploy_cloud_run.sh).
+
+## Current release at a glance
+
+The production platform currently includes governed agent/workflow execution,
+document ingestion with scanned-document OCR, signed Twilio voice with
+provider-managed STT/TTS, tenant-scoped browser RPA, Python and TypeScript SDKs,
+MCP/A2A surfaces, and the bounded Shopify-to-OACP commerce runtime. See the
+[current product status](docs/PRODUCT_STATUS.md) for the exact shipped,
+configuration-dependent, and not-shipped boundaries.
+
+External actions remain explicit. A voice provider, connector, browser script,
+buyer channel, payment rail, merchant system, or POS path is usable only when
+the target tenant has the required credentials, scopes, configuration, and
+provider approval.
 
 ## What is in this repository
 
@@ -56,7 +70,10 @@ A source definition is not evidence that a specific tenant has connected the pro
 - Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
 - Document OCR ships with Tesseract, Poppler, and LibreOffice in the production image. See [Knowledge ingestion](docs/knowledge-ingestion.md).
 - The production voice path uses signed Twilio webhooks with provider-managed STT/TTS and encrypted transcript storage. See [Voice runtime](docs/voice-runtime.md).
-- Browser automation, outbound notifications, and local-model profiles require their supporting services.
+- Browser automation includes tenant-scoped scripts, schedules, durable history,
+  and approved-domain egress controls. A run remains an explicit external
+  action. See [RPA runtime](docs/rpa-runtime.md).
+- Outbound notifications and local-model profiles require their supporting services.
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
@@ -307,29 +324,27 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 ## Documentation
 
-- [Product requirements](docs/PRD.md)
+- [Documentation home](docs/README.md)
+- [Current product status](docs/PRODUCT_STATUS.md)
 - [Architecture](docs/architecture.md)
 - [API reference](docs/api-reference.md)
 - [Deployment](docs/deployment.md)
-- [Product readiness program](docs/readiness/README.md)
-- [Gap analysis](docs/readiness/GAP_ANALYSIS.md)
-- [Domain readiness standard](docs/readiness/DOMAIN_READINESS_STANDARD.md)
-- [Capability Readiness Register](docs/readiness/CAPABILITY_READINESS_REGISTER.md)
-- [Readiness build roadmap](docs/readiness/BUILD_ROADMAP.md)
-- [Landing and documentation blueprint](docs/readiness/LANDING_AND_DOCUMENTATION_BLUEPRINT.md)
-- [Testing guide](docs/TEST_PLAN.md)
+- [Knowledge ingestion and OCR](docs/knowledge-ingestion.md)
+- [Voice runtime](docs/voice-runtime.md)
+- [RPA runtime](docs/rpa-runtime.md)
 - [OACP runtime documentation](docs/oacp/README.md)
+- [Production smoke runbook](docs/runbooks/production_smoke.md)
+- [Testing guide](docs/TEST_PLAN.md)
 - [Python SDK](sdk/README.md)
 - [TypeScript SDK](sdk-ts/README.md)
 - [MCP server](mcp-server/README.md)
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 
-Some older reports describe prior architecture or point-in-time validation. Prefer current code, canonical runbooks, and live product facts when a historical document conflicts with the running system.
-
-### Readiness Boundary (2026-07-13)
-
-The current workflow, gaps, acceptance gates, and staged delivery sequence are defined by the readiness documents above. The Capability Readiness Register is the canonical promotion ledger: a capability may be described as available only when its required evidence and review state permit that claim. Automated production deployment remains hard-disabled in the workflow source, so production rollout follows the reviewed Cloud Run runbook until that automation is explicitly enabled.
+The [documentation home](docs/README.md) labels current, configuration-dependent,
+historical, and target-design material. Dated audits, old PRDs, and incremental
+implementation reports remain useful history, but they do not override current
+code, OpenAPI, runbooks, retained release evidence, or live product facts.
 
 ## Contributing
 

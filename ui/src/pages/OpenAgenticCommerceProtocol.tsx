@@ -4,7 +4,7 @@ const FLOW_NODES = [
   {
     title: "Merchant systems",
     eyebrow: "Source of record",
-    copy: "Shopify, future WooCommerce/ERP sources, catalog, inventory, policy, OMS, support, POS, and payment status systems keep operational truth.",
+    copy: "Shopify and future approved WooCommerce/ERP sources, catalog, inventory, policy, OMS, support, POS, and payment status systems keep operational truth.",
     tone: "border-cyan-300/40 bg-cyan-300/10 text-cyan-50",
   },
   {
@@ -118,6 +118,27 @@ const NON_GOALS = [
   "No production commerce readiness claim from this page",
 ];
 
+const RUNTIME_STATUS = [
+  {
+    label: "Deployed runtime",
+    title: "Shopify evidence to buyer-safe answers",
+    copy: "Merchant config, encrypted Shopify credential custody, read-only Admin GraphQL sync, Grantex authority requests, durable OACP cache, protocol payloads, buyer answers, purchase preparation, and Offline POS handoff/reconciliation are implemented.",
+    tone: "border-emerald-300 bg-emerald-50 text-emerald-950",
+  },
+  {
+    label: "Tenant and partner setup",
+    title: "Credentials and approvals still matter",
+    copy: "Public catalogs, WhatsApp, Telegram, Grantex tenant authority, Pine/Plural capability checks, external AI clients, and real POS/provider callbacks require environment-specific credentials, scopes, and approval.",
+    tone: "border-amber-300 bg-amber-50 text-amber-950",
+  },
+  {
+    label: "Not a universal claim",
+    title: "Adapters are not external certification",
+    copy: "WooCommerce/ERP runtime sync, channel marketplace listing, live payment/order execution, and public OACP certification or standardization are not implied by protocol payload generation.",
+    tone: "border-rose-300 bg-rose-50 text-rose-950",
+  },
+];
+
 function NodeCard({
   title,
   eyebrow,
@@ -149,6 +170,7 @@ export default function OpenAgenticCommerceProtocol() {
             AgenticOrg
           </Link>
           <div className="flex items-center gap-4">
+            <a href="#status" className="hidden sm:inline text-sm text-slate-300 hover:text-white">Status</a>
             <a href="#flow" className="hidden sm:inline text-sm text-slate-300 hover:text-white">Flow</a>
             <a href="#boundaries" className="hidden sm:inline text-sm text-slate-300 hover:text-white">Boundaries</a>
             <Link to="/integration-workflow" className="text-sm text-slate-300 hover:text-white">MCP example</Link>
@@ -169,7 +191,7 @@ export default function OpenAgenticCommerceProtocol() {
                 Buyer and seller AI agents need commerce facts they can trust.
               </h1>
               <p className="mt-6 max-w-2xl break-words text-lg text-slate-300 leading-relaxed">
-                AgenticOrg runs merchant self-service config, Seller Commerce Agent onboarding, Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/search/WhatsApp/Telegram bridges, OACP cache, and provider-owned capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
+                AgenticOrg runs merchant self-service config, deployed Shopify read-only sync, buyer sessions, web/MCP/OpenAPI/A2A/search/WhatsApp/Telegram bridge contracts, OACP cache, and provider-owned capability verification. Grantex remains the protocol, trust, policy, and artifact authority.
               </p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <a href="#flow" className="inline-flex justify-center rounded-lg bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-300 transition-colors">
@@ -197,6 +219,30 @@ export default function OpenAgenticCommerceProtocol() {
                 </p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section id="status" className="scroll-mt-20 border-b border-slate-200 bg-white py-16">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-700">Current implementation status</p>
+              <h2 className="mt-3 text-3xl font-bold text-slate-950 sm:text-4xl">One flow, three truths.</h2>
+              <p className="mt-4 text-lg leading-relaxed text-slate-600">
+                The runtime is real, but every external ecosystem and transaction rail still has its own setup and authority boundary.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-6 lg:grid-cols-3">
+              {RUNTIME_STATUS.map((item) => (
+                <div key={item.label} className={`min-w-0 border-l-4 p-6 ${item.tone}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] opacity-75">{item.label}</p>
+                  <h3 className="mt-3 text-xl font-bold">{item.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed opacity-80">{item.copy}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mt-8 text-sm text-slate-500">
+              Full evidence and boundaries: <a className="font-semibold text-cyan-700 hover:underline" href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md">current product status</a> and <a className="font-semibold text-cyan-700 hover:underline" href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/end-user-flow.md">canonical end-user flow</a>.
+            </p>
           </div>
         </section>
 

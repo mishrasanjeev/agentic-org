@@ -45,12 +45,12 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 
 ## Key public pages
 
-- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent platform for designing workflows, connecting business systems, applying approval and policy controls, evaluating behavior, and retaining evidence of agent actions.
+- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.
 - [Pricing](https://agenticorg.ai/pricing): AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.
 - [Agent Playground](https://agenticorg.ai/playground): The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.
 - [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
 - [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
-- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): OACP separates commerce discovery evidence from execution authority. AgenticOrg can cache scoped artifacts and prepare a handoff, but cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.
+- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): AgenticOrg ships the bounded Shopify-to-OACP runtime while separating merchant facts, Grantex artifact authority, buyer-agent behavior, and provider/POS execution authority.
 - [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.

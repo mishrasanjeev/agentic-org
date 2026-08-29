@@ -144,8 +144,8 @@ const OACP_SECTION_POINTS = [
   },
   {
     label: "Sources",
-    title: "Shopify Repository Path, Adapter-Gated Sources",
-    desc: "Shopify has a repository code path that still requires target-environment validation. WooCommerce, ERP, PIM, OMS, WMS, and custom API entries remain configuration-only until their adapters are implemented and validated.",
+    title: "Shopify Runtime, Adapter-Gated Sources",
+    desc: "Shopify read-only Admin GraphQL sync is deployed and validated for configured merchants. WooCommerce, ERP, PIM, OMS, WMS, and custom API entries remain configuration-only until their adapters are implemented and validated.",
   },
   {
     label: "Cache",
@@ -161,6 +161,39 @@ const OACP_SECTION_POINTS = [
     label: "Provider",
     title: "Provider-Owned Payment Rails",
     desc: "AgenticOrg verifies Plural/Pine capability metadata today and records bank/fintech/custom provider refs as provider-owned, non-executing config until approved adapters exist.",
+  },
+];
+
+const SHIPPED_RUNTIME = [
+  {
+    title: "Knowledge + OCR",
+    status: "Shipped",
+    copy: "Native document extraction plus scanned PDF and image OCR, provenance, confidence, and tenant-scoped retrieval.",
+    href: "https://github.com/mishrasanjeev/agentic-org/blob/main/docs/knowledge-ingestion.md",
+  },
+  {
+    title: "Voice STT/TTS",
+    status: "Shipped / configured",
+    copy: "Signed Twilio calls with provider speech recognition and synthesis, encrypted turns, and masked call history.",
+    href: "https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md",
+  },
+  {
+    title: "Browser RPA",
+    status: "Shipped / explicit action",
+    copy: "Tenant-scoped scripts and schedules with durable history, timeout handling, and approved-domain egress controls.",
+    href: "https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md",
+  },
+  {
+    title: "SDK + protocols",
+    status: "SDK 0.4.0",
+    copy: "Python, TypeScript, REST, OpenAPI, MCP, and A2A surfaces for governed access to current runtime resources.",
+    href: "https://github.com/mishrasanjeev/agentic-org/blob/main/docs/release-sdks.md",
+  },
+  {
+    title: "Shopify to OACP",
+    status: "Shipped / bounded",
+    copy: "Read-only sync, Grantex authority, durable artifacts, buyer-safe answers, and prepared provider or POS handoffs.",
+    href: "/open-agentic-commerce-protocol",
   },
 ];
 
@@ -464,7 +497,7 @@ export default function Landing() {
             <div className="inline-flex items-center gap-2 bg-slate-800/80 border border-slate-700 rounded-full px-4 py-1.5 mb-6">
               <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
               <span className="text-slate-300 text-sm" data-testid="landing-version-badge">
-                {versionText ? `${versionText} â€” ` : ""}Governed agents with OACP trust boundaries
+                {versionText ? `${versionText} - ` : ""}Governed agents with OACP trust boundaries
               </span>
             </div>
 
@@ -476,8 +509,8 @@ export default function Landing() {
             </h1>
 
             <p className="mt-6 text-lg text-slate-400 max-w-xl leading-relaxed">
-              Build agents around defined workflows, connect only the tools they need, evaluate them before promotion,
-              and require human approval wherever policy or risk demands it.
+              Build agents around defined workflows, connect only the tools they need, ground them in documents and
+              business systems, and govern voice, browser, API, and commerce actions from one runtime.
             </p>
 
             {/* CTAs */}
@@ -673,6 +706,47 @@ export default function Landing() {
                 <p className="text-sm text-slate-500 mt-1">{fact.label}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============================================================ */}
+      {/* 3b. SHIPPED RUNTIME GUIDE                                     */}
+      {/* ============================================================ */}
+      <section className="border-b border-slate-200 bg-slate-950 py-16" aria-labelledby="shipped-runtime-heading" data-testid="runtime-capability-band">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-cyan-300">Current product boundary</p>
+              <h2 id="shipped-runtime-heading" className="mt-3 text-3xl font-bold text-white sm:text-4xl">What the deployed runtime does today.</h2>
+              <p className="mt-4 text-base leading-relaxed text-slate-300">
+                Shipped means the code path and release surface exist. Provider credentials, tenant scopes, approved destinations, and external-channel access are still required where noted.
+              </p>
+            </div>
+            <a
+              href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md"
+              className="inline-flex w-fit items-center justify-center rounded-lg border border-cyan-300/40 px-5 py-2.5 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10"
+            >
+              Read current product status
+            </a>
+          </div>
+
+          <div className="mt-10 grid border-y border-white/15 sm:grid-cols-2 lg:grid-cols-5">
+            {SHIPPED_RUNTIME.map((capability) => {
+              const content = (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-300">{capability.status}</p>
+                  <h3 className="mt-3 text-lg font-bold text-white">{capability.title}</h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-400">{capability.copy}</p>
+                </>
+              );
+              const className = "block min-w-0 border-b border-white/15 px-4 py-6 transition-colors hover:bg-white/5 sm:border-r lg:border-b-0";
+              return capability.href.startsWith("/") ? (
+                <Link key={capability.title} to={capability.href} className={className}>{content}</Link>
+              ) : (
+                <a key={capability.title} href={capability.href} className={className}>{content}</a>
+              );
+            })}
           </div>
         </div>
       </section>

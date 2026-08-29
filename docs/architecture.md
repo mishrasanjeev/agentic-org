@@ -1,6 +1,6 @@
 # Architecture Guide
 
-> **Historical architecture warning (2026-07-15):** Layer, table, span, metric, alert, connector, agent, WORM, and retention descriptions in this page are a design snapshot, not current operating evidence. For release decisions use the [readiness program](readiness/README.md), runtime inventories, current migrations, and retained CI/deployment evidence. Registration and diagrams do not establish integration, sandbox proof, or production readiness.
+> **Historical architecture warning (2026-07-15):** Layer, table, span, metric, alert, connector, agent, WORM, and retention descriptions in this page are a design snapshot, not current operating evidence. For current capability truth use [Current Product Status](PRODUCT_STATUS.md), runtime OpenAPI, current migrations, and retained CI/deployment evidence. Registration and diagrams do not establish integration, sandbox proof, or production readiness.
 
 ## System Overview
 

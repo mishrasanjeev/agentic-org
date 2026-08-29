@@ -138,6 +138,15 @@ test.describe("Landing Page — Sections", () => {
     ).toBeVisible();
   });
 
+  test("current runtime capability band distinguishes shipped boundaries", async ({ page }) => {
+    const runtimeBand = page.getByTestId("runtime-capability-band");
+    await expect(runtimeBand).toBeVisible({ timeout: 10000 });
+    await expect(runtimeBand.getByRole("heading", { name: "What the deployed runtime does today." })).toBeVisible();
+    for (const capability of ["Knowledge + OCR", "Voice STT/TTS", "Browser RPA", "SDK + protocols", "Shopify to OACP"]) {
+      await expect(runtimeBand.getByText(capability, { exact: true })).toBeVisible();
+    }
+  });
+
   test("Footer renders with key sections", async ({ page }) => {
     const footer = page.locator("footer");
     await expect(footer).toBeVisible();

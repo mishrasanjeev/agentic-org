@@ -1,5 +1,9 @@
 # Voice agent runtime
 
+Status: shipped for the signed Twilio path with provider-managed speech-to-text
+and text-to-speech. Tenant provider setup and real call verification remain
+configuration-dependent. See [current product status](PRODUCT_STATUS.md).
+
 AgenticOrg voice agents use the same agent prompt, tools, tenant boundary, and
 approval controls as web sessions. The first production runtime is a signed
 Twilio webhook loop with provider-managed speech recognition and speech
