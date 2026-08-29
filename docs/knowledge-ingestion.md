@@ -1,5 +1,9 @@
 # Knowledge base document ingestion and OCR
 
+Status: shipped runtime. Exact limits and extensions are advertised by the
+authenticated `GET /api/v1/knowledge/supported-types` endpoint. See
+[current product status](PRODUCT_STATUS.md) for the production boundary.
+
 The Knowledge Base accepts business documents only when AgenticOrg can extract
 usable text before changing durable state. Accepted uploads pass through one
 canonical extraction, chunking, provenance, embedding, and tenant-scoped search
@@ -60,3 +64,8 @@ Run the focused extractor tests and then build the production Docker image. The
 image check must create an actual scanned image/PDF, execute Tesseract and
 Poppler in the container, and assert the expected phrase is extracted. Mocked
 OCR tests are useful for edge cases but are not sufficient release evidence.
+
+Production validation should use an approved smoke tenant and a synthetic,
+non-sensitive document. A successful supported-types response proves the
+capability matrix is deployed; it does not by itself prove extraction quality
+for every language, layout, handwriting style, or damaged scan.

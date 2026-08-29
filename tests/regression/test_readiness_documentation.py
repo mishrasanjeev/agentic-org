@@ -16,6 +16,15 @@ CANONICAL_FILES = (
     READINESS / "BUILD_ROADMAP.md",
     READINESS / "LANDING_AND_DOCUMENTATION_BLUEPRINT.md",
 )
+CURRENT_PRODUCT_FILES = (
+    ROOT / "docs" / "README.md",
+    ROOT / "docs" / "PRODUCT_STATUS.md",
+    ROOT / "docs" / "knowledge-ingestion.md",
+    ROOT / "docs" / "voice-runtime.md",
+    ROOT / "docs" / "rpa-runtime.md",
+    ROOT / "docs" / "oacp" / "README.md",
+    ROOT / "docs" / "oacp" / "end-user-flow.md",
+)
 
 
 def _read(path: Path) -> str:
@@ -27,6 +36,7 @@ def test_canonical_readiness_package_exists_and_is_linked() -> None:
         assert path.is_file(), f"missing canonical readiness document: {path}"
 
     root_readme = _read(ROOT / "README.md")
+    docs_home = _read(ROOT / "docs" / "README.md")
     hub = _read(READINESS / "README.md")
     for name in (
         "GAP_ANALYSIS.md",
@@ -36,7 +46,7 @@ def test_canonical_readiness_package_exists_and_is_linked() -> None:
         "LANDING_AND_DOCUMENTATION_BLUEPRINT.md",
         "PROGRAM_MEMORY.md",
     ):
-        assert name in root_readme or name == "PROGRAM_MEMORY.md"
+        assert name in root_readme or name in docs_home
         assert name in hub
 
 
@@ -44,7 +54,7 @@ def test_local_markdown_links_resolve() -> None:
     link_pattern = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
     failures: list[str] = []
 
-    for path in (*CANONICAL_FILES, ROOT / "README.md", ROOT / "ROADMAP.md"):
+    for path in (*CANONICAL_FILES, *CURRENT_PRODUCT_FILES, ROOT / "README.md", ROOT / "ROADMAP.md"):
         for raw_target in link_pattern.findall(_read(path)):
             target = raw_target.strip().strip("<>").split("#", 1)[0]
             if not target or target.startswith(("#", "http://", "https://", "mailto:")):
@@ -163,12 +173,45 @@ def test_root_readme_does_not_restore_known_blanket_claims() -> None:
         assert phrase not in readme
 
     for phrase in (
-        "Readiness Boundary (2026-07-13)",
-        "Capability Readiness Register",
-        "current workflow",
-        "hard-disabled",
+        "Current release at a glance",
+        "Current product status",
+        "Knowledge ingestion and OCR",
+        "RPA runtime",
+        "OACP runtime documentation",
     ):
         assert phrase in readme
+
+
+def test_current_product_docs_define_shipped_and_external_boundaries() -> None:
+    for path in CURRENT_PRODUCT_FILES:
+        assert path.is_file(), f"missing current product document: {path}"
+
+    hub = _read(ROOT / "docs" / "README.md")
+    status = _read(ROOT / "docs" / "PRODUCT_STATUS.md")
+    oacp = _read(ROOT / "docs" / "oacp" / "README.md")
+
+    for phrase in (
+        "Current Sources Of Truth",
+        "Documentation Status Labels",
+        "Knowledge ingestion and OCR",
+        "Voice runtime",
+        "RPA runtime",
+        "OACP documentation",
+    ):
+        assert phrase in hub
+
+    for phrase in (
+        "Capability Matrix",
+        "signed Twilio",
+        "Playwright",
+        "Shopify read-only Admin GraphQL sync",
+        "Not Universal Or Not Shipped",
+        "Public OACP standardization",
+    ):
+        assert phrase in status
+
+    assert "Shopify is the shipped read-only runtime source connector" in oacp
+    assert "Protocol adapter payloads" in oacp
 
 
 def test_program_memory_preserves_scope_and_next_checkpoint() -> None:

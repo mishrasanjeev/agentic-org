@@ -1,6 +1,6 @@
 # API Reference
 
-> **Historical reference warning (2026-07-15):** This hand-maintained page is illustrative and may lag the runtime. Generated OpenAPI and route metadata are authoritative for paths, schemas, and current authentication requirements. Do not infer that every endpoint below is enabled, tenant-safe, or production-proven; verify the capability register and a retained test/release artifact. The request-flow diagram is a target model, not evidence that every route traverses every shown control.
+> **Historical reference warning (2026-07-15):** This hand-maintained page is illustrative and may lag the runtime. Generated OpenAPI and route metadata are authoritative for paths, schemas, and current authentication requirements. Use [Current Product Status](PRODUCT_STATUS.md) for shipped/configuration-dependent boundaries. Do not infer that every endpoint below is enabled, tenant-safe, or production-proven; verify a retained test/release artifact. The request-flow diagram is a target model, not evidence that every route traverses every shown control.
 
 Base URL: `http://localhost:8000`
 OpenAPI docs: `http://localhost:8000/docs`

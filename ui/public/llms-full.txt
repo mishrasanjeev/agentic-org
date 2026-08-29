@@ -8,7 +8,7 @@ Source version: 4.8.0. Python: >=3.12. Web application: React 19. Managed produc
 
 AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, and governing agent workflows across finance, HR, marketing, operations, back office, communications, and bounded agentic-commerce use cases.
 
-[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](https://github.com/mishrasanjeev/agentic-org/tree/main/docs/) | [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)
+[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md) | [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md) | [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
@@ -23,6 +23,20 @@ Live product totals and the deployed product version are published by the public
 The response contains version, agent_count, connector_count, and tool_count. Do not copy those values into documentation, page copy, or tests: they are computed from runtime registries and can change independently of a documentation release. The version declared for source builds is in [pyproject.toml](https://github.com/mishrasanjeev/agentic-org/blob/main/pyproject.toml).
 
 Billing limits and list prices come from [core/billing/catalog.py](https://github.com/mishrasanjeev/agentic-org/blob/main/core/billing/catalog.py). Production deployment behavior comes from [scripts/deploy_cloud_run.sh](https://github.com/mishrasanjeev/agentic-org/blob/main/scripts/deploy_cloud_run.sh).
+
+## Current release at a glance
+
+The production platform currently includes governed agent/workflow execution,
+document ingestion with scanned-document OCR, signed Twilio voice with
+provider-managed STT/TTS, tenant-scoped browser RPA, Python and TypeScript SDKs,
+MCP/A2A surfaces, and the bounded Shopify-to-OACP commerce runtime. See the
+[current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md) for the exact shipped,
+configuration-dependent, and not-shipped boundaries.
+
+External actions remain explicit. A voice provider, connector, browser script,
+buyer channel, payment rail, merchant system, or POS path is usable only when
+the target tenant has the required credentials, scopes, configuration, and
+provider approval.
 
 ## What is in this repository
 
@@ -62,7 +76,10 @@ A source definition is not evidence that a specific tenant has connected the pro
 - Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
 - Document OCR ships with Tesseract, Poppler, and LibreOffice in the production image. See [Knowledge ingestion](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/knowledge-ingestion.md).
 - The production voice path uses signed Twilio webhooks with provider-managed STT/TTS and encrypted transcript storage. See [Voice runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md).
-- Browser automation, outbound notifications, and local-model profiles require their supporting services.
+- Browser automation includes tenant-scoped scripts, schedules, durable history,
+  and approved-domain egress controls. A run remains an explicit external
+  action. See [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md).
+- Outbound notifications and local-model profiles require their supporting services.
 - SSO, SCIM, enterprise support, and custom SLAs depend on plan and deployment configuration.
 - WhatsApp, Telegram, payment-provider, bank, POS, and merchant-system flows require provider setup and verified callbacks or adapters.
 - WooCommerce, ERP, PIM, OMS, WMS, custom commerce APIs, and additional payment rails can be recorded as adapter-ready configuration but are not represented as active execution paths until an approved adapter exists.
@@ -313,29 +330,27 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 ## Documentation
 
-- [Product requirements](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRD.md)
+- [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
+- [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
 - [Architecture](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md)
 - [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
 - [Deployment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md)
-- [Product readiness program](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/README.md)
-- [Gap analysis](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/GAP_ANALYSIS.md)
-- [Domain readiness standard](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/DOMAIN_READINESS_STANDARD.md)
-- [Capability Readiness Register](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/CAPABILITY_READINESS_REGISTER.md)
-- [Readiness build roadmap](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/BUILD_ROADMAP.md)
-- [Landing and documentation blueprint](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/readiness/LANDING_AND_DOCUMENTATION_BLUEPRINT.md)
-- [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
+- [Knowledge ingestion and OCR](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/knowledge-ingestion.md)
+- [Voice runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md)
+- [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md)
 - [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
+- [Production smoke runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/production_smoke.md)
+- [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
 - [Python SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md)
 - [TypeScript SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk-ts/README.md)
 - [MCP server](https://github.com/mishrasanjeev/agentic-org/blob/main/mcp-server/README.md)
 - [Changelog](https://github.com/mishrasanjeev/agentic-org/blob/main/CHANGELOG.md)
 - [Roadmap](https://github.com/mishrasanjeev/agentic-org/blob/main/ROADMAP.md)
 
-Some older reports describe prior architecture or point-in-time validation. Prefer current code, canonical runbooks, and live product facts when a historical document conflicts with the running system.
-
-### Readiness Boundary (2026-07-13)
-
-The current workflow, gaps, acceptance gates, and staged delivery sequence are defined by the readiness documents above. The Capability Readiness Register is the canonical promotion ledger: a capability may be described as available only when its required evidence and review state permit that claim. Automated production deployment remains hard-disabled in the workflow source, so production rollout follows the reviewed Cloud Run runbook until that automation is explicitly enabled.
+The [documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md) labels current, configuration-dependent,
+historical, and target-design material. Dated audits, old PRDs, and incremental
+implementation reports remain useful history, but they do not override current
+code, OpenAPI, runbooks, retained release evidence, or live product facts.
 
 ## Contributing
 
@@ -480,12 +495,12 @@ These names are parsed from connectors. A listing does not prove credentials, su
 
 ## Complete canonical public-page index
 
-- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent platform for designing workflows, connecting business systems, applying approval and policy controls, evaluating behavior, and retaining evidence of agent actions.
+- [AgenticOrg](https://agenticorg.ai): AgenticOrg is an open-source enterprise agent runtime for workflows, knowledge and OCR, signed voice, browser RPA, business-system integration, governed actions, and buyer/seller commerce agents.
 - [Pricing](https://agenticorg.ai/pricing): AgenticOrg offers Free, Pro, and Enterprise tiers. Published limits and prices are generated from the same plan definitions used by the billing service.
 - [Agent Playground](https://agenticorg.ai/playground): The public playground demonstrates representative agent interactions with sample data. Its outputs are examples, not production decisions or performance guarantees.
 - [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
 - [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
-- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): OACP separates commerce discovery evidence from execution authority. AgenticOrg can cache scoped artifacts and prepare a handoff, but cached evidence does not create an order, payment, mandate, inventory hold, refund, or paid state.
+- [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): AgenticOrg ships the bounded Shopify-to-OACP runtime while separating merchant facts, Grantex artifact authority, buyer-agent behavior, and provider/POS execution authority.
 - [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
