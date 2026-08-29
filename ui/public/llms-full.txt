@@ -177,13 +177,21 @@ See [sdk/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/R
     agenticorg agents list
     agenticorg a2a card
 
-The SDK supports authenticated platform operations exposed by its client. Server features may require a newer deployment than the installed client, so consumers should check package and server release notes.
+SDK `0.4.0` covers agents, workflows, connector diagnostics, knowledge/OCR,
+voice, RPA, local bridges, and the seller-commerce runtime. External-action
+methods such as outbound calls, RPA runs, connector sync, and bridge routing
+remain explicit calls and still require tenant authorization. Server features
+may require a newer deployment than the installed client, so consumers should
+check package and server release notes.
 
 ### TypeScript SDK
 
 See [sdk-ts/README.md](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk-ts/README.md).
 
     npm install agenticorg-sdk
+
+The TypeScript `0.4.0` resource surface mirrors the Python runtime coverage,
+including knowledge/OCR, voice, RPA, bridges, and commerce preparation APIs.
 
 ### MCP server
 
