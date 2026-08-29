@@ -1,5 +1,22 @@
 # agenticorg-sdk changelog
 
+## 0.4.0 - 2026-08-29
+
+Runtime surface release.
+
+### Added
+- Knowledge/OCR upload and lifecycle, voice, RPA, local bridges, and the
+  seller/buyer commerce runtime as first-class client resources.
+- Connector health/test and workflow-run cancellation helpers.
+- Multipart upload support that preserves authorization without forcing an
+  invalid JSON content type.
+
+### Fixed
+- SDK coverage now follows the production runtime rather than stopping at the
+  June 2026 agent/workflow subset.
+- Generated OpenAPI clients no longer encounter a duplicate Plural callback
+  operation ID.
+
 ## 0.3.0 - 2026-06-14
 
 Commerce, A2A/MCP, workflow, and knowledge release.

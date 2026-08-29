@@ -12,9 +12,7 @@ from tests.connector_harness.conftest import get_all_connector_names, make_conne
 ALL_NAMES = get_all_connector_names()
 VALID_CONNECTOR_CATEGORIES = {"finance", "hr", "comms", "marketing", "ops", "commerce"}
 
-pytestmark = pytest.mark.asyncio
-
-
+@pytest.mark.asyncio
 @pytest.mark.parametrize("connector_name", ALL_NAMES)
 class TestConnectorToolExecution:
     """Test every tool on every connector returns valid JSON."""

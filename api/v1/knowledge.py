@@ -354,7 +354,7 @@ async def _db_chunk_count(tenant_id: str) -> int:
                 await session.execute(
                     _sqtext(
                         "SELECT COUNT(*) FROM knowledge_documents "  # nosec B608 — `ecol` is a module-level constant name, not user input
-                        f"WHERE tenant_id = :tid AND {ecol} IS NOT NULL"
+                        f"WHERE tenant_id = :tid AND status = 'ready' AND {ecol} IS NOT NULL"
                     ),
                     {"tid": str(tid)},
                 )
@@ -968,18 +968,20 @@ async def list_documents(
 )
 async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant)):
     """Delete a document from the knowledge base."""
+    ragflow_deleted = False
     if _ragflow_available():
         try:
-            deleted = await _ragflow_delete(tenant_id, doc_id)
-            if deleted:
-                return {"ok": True, "document_id": doc_id, "status": "deleted"}
+            ragflow_deleted = await _ragflow_delete(tenant_id, doc_id)
         except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_delete_failed", error=str(exc))
 
-    # Fallback: mark as deleted in DB
+    # Always retire both the document record and any native fallback chunks.
+    # RAGFlow and Postgres are independent indexes, so success in one must not
+    # leave the other searchable.
     try:
         from uuid import UUID as _UUID
 
+        from sqlalchemy import text as _sqtext
         from sqlalchemy import update
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -992,7 +994,14 @@ async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tena
             result = await session.execute(
                 update(Document).where(Document.id == document_uuid, Document.tenant_id == tid).values(status="deleted")
             )
-            if result.rowcount == 0:
+            await session.execute(
+                _sqtext(
+                    "UPDATE knowledge_documents SET status = 'deleted' "
+                    "WHERE tenant_id = :tid AND source_object_id = :doc_id"
+                ),
+                {"tid": str(tid), "doc_id": str(document_uuid)},
+            )
+            if result.rowcount == 0 and not ragflow_deleted:
                 raise HTTPException(
                     status_code=404,
                     detail={"error": "document_not_found", "document_id": doc_id},
@@ -1051,7 +1060,7 @@ async def _native_semantic_search(
                         "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
                         f"1 - ({col} <=> CAST(:q AS vector)) AS score "
                         "FROM knowledge_documents "
-                        f"WHERE tenant_id = :tid AND {col} IS NOT NULL "
+                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL "
                         f"ORDER BY {col} <=> CAST(:q AS vector) "
                         "LIMIT :k"
                     ),
@@ -1078,7 +1087,7 @@ async def _native_semantic_search(
                 await session.execute(
                     _sqtext(
                         "SELECT title, content FROM knowledge_documents "
-                        "WHERE tenant_id = :tid AND "
+                        "WHERE tenant_id = :tid AND status = 'ready' AND "
                         "(title ILIKE :like OR content ILIKE :like) "
                         "LIMIT :k"
                     ),

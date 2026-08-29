@@ -104,8 +104,7 @@ class AgenticOrg:
 
         if not self._api_key and not self._grantex_token:
             raise ValueError(
-                "Provide api_key or grantex_token, or set "
-                "AGENTICORG_API_KEY / AGENTICORG_GRANTEX_TOKEN env var."
+                "Provide api_key or grantex_token, or set AGENTICORG_API_KEY / AGENTICORG_GRANTEX_TOKEN env var."
             )
 
         self._http = httpx.Client(
@@ -121,6 +120,10 @@ class AgenticOrg:
         self.mcp = _MCPResource(self._http)
         self.workflows = _WorkflowsResource(self._http)
         self.knowledge = _KnowledgeResource(self._http)
+        self.voice = _VoiceResource(self._http)
+        self.rpa = _RPAResource(self._http)
+        self.bridges = _BridgesResource(self._http)
+        self.commerce = _CommerceResource(self._http)
 
     def _build_headers(self) -> dict[str, str]:
         # Let httpx select the content type for each request. A client-level
@@ -199,10 +202,13 @@ class _AgentsResource:
             resp = self._http.post(f"/api/v1/agents/{agent_id_or_type}/run", json=payload)
         else:
             # Use A2A task endpoint for agent type
-            resp = self._http.post("/api/v1/a2a/tasks", json={
-                "agent_type": agent_id_or_type,
-                **payload,
-            })
+            resp = self._http.post(
+                "/api/v1/a2a/tasks",
+                json={
+                    "agent_type": agent_id_or_type,
+                    **payload,
+                },
+            )
 
         resp.raise_for_status()
         return _to_agent_run_result(resp.json())
@@ -251,6 +257,18 @@ class _ConnectorsResource:
         resp.raise_for_status()
         return resp.json()
 
+    def health(self, connector_id: str) -> dict[str, Any]:
+        """Read the connector's tenant-scoped health state."""
+        resp = self._http.get(f"/api/v1/connectors/{connector_id}/health")
+        resp.raise_for_status()
+        return resp.json()
+
+    def test(self, connector_id: str) -> dict[str, Any]:
+        """Run the backend's explicit connector connection test."""
+        resp = self._http.post(f"/api/v1/connectors/{connector_id}/test")
+        resp.raise_for_status()
+        return resp.json()
+
 
 class _SOPResource:
     def __init__(self, http: httpx.Client):
@@ -263,11 +281,14 @@ class _SOPResource:
         llm_model: str = "",
     ) -> dict[str, Any]:
         """Parse SOP text and return draft agent config."""
-        resp = self._http.post("/api/v1/sop/parse-text", json={
-            "text": text,
-            "domain_hint": domain_hint,
-            "llm_model": llm_model,
-        })
+        resp = self._http.post(
+            "/api/v1/sop/parse-text",
+            json={
+                "text": text,
+                "domain_hint": domain_hint,
+                "llm_model": llm_model,
+            },
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -322,10 +343,13 @@ class _MCPResource:
 
     def call(self, tool_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Call an MCP tool."""
-        resp = self._http.post("/api/v1/mcp/call", json={
-            "name": tool_name,
-            "arguments": arguments or {},
-        })
+        resp = self._http.post(
+            "/api/v1/mcp/call",
+            json={
+                "name": tool_name,
+                "arguments": arguments or {},
+            },
+        )
         resp.raise_for_status()
         return resp.json()
 
@@ -424,6 +448,12 @@ class _WorkflowsResource:
         resp.raise_for_status()
         return resp.json()
 
+    def cancel_run(self, run_id: str) -> dict[str, Any]:
+        """Request cancellation of a workflow run."""
+        resp = self._http.post(f"/api/v1/workflows/runs/{run_id}/cancel")
+        resp.raise_for_status()
+        return resp.json()
+
 
 class _KnowledgeResource:
     def __init__(self, http: httpx.Client):
@@ -438,3 +468,289 @@ class _KnowledgeResource:
         resp.raise_for_status()
         data = resp.json()
         return data.get("results", data) if isinstance(data, dict) else data
+
+    def supported_types(self) -> dict[str, Any]:
+        """Return accepted document, image, audio, video, and OCR formats."""
+        resp = self._http.get("/api/v1/knowledge/supported-types")
+        resp.raise_for_status()
+        return resp.json()
+
+    def upload(self, file_path: str, *, duplicate_policy: str = "reject") -> dict[str, Any]:
+        """Upload a knowledge document using a real multipart request."""
+        if duplicate_policy not in {"reject", "replace", "allow_duplicate"}:
+            raise ValueError("duplicate_policy must be reject, replace, or allow_duplicate")
+        params = {
+            "replace": str(duplicate_policy == "replace").lower(),
+            "allow_duplicate": str(duplicate_policy == "allow_duplicate").lower(),
+        }
+        with open(file_path, "rb") as file_handle:
+            resp = self._http.post(
+                "/api/v1/knowledge/upload",
+                params=params,
+                files={"file": file_handle},
+            )
+        resp.raise_for_status()
+        return resp.json()
+
+    def documents(self, *, page: int = 1, per_page: int = 20) -> dict[str, Any]:
+        """List tenant knowledge documents and extraction state."""
+        resp = self._http.get(
+            "/api/v1/knowledge/documents",
+            params={"page": page, "per_page": per_page},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def delete(self, document_id: str) -> dict[str, Any]:
+        """Delete one tenant knowledge document."""
+        resp = self._http.delete(f"/api/v1/knowledge/documents/{document_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def health(self) -> dict[str, Any]:
+        """Read the public retrieval/OCR backend health summary."""
+        resp = self._http.get("/api/v1/knowledge/health")
+        resp.raise_for_status()
+        return resp.json()
+
+    def stats(self) -> dict[str, Any]:
+        """Read tenant knowledge indexing statistics."""
+        resp = self._http.get("/api/v1/knowledge/stats")
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _VoiceResource:
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def status(self, *, agent_id: str | None = None) -> dict[str, Any]:
+        params = {"agent_id": agent_id} if agent_id else None
+        resp = self._http.get("/api/v1/voice/status", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def save_config(self, config: dict[str, Any]) -> dict[str, Any]:
+        """Store an admin-reviewed voice configuration; secrets are masked on return."""
+        resp = self._http.post("/api/v1/voice/config", json=config)
+        resp.raise_for_status()
+        return resp.json()
+
+    def test_connection(self, provider: str, credentials: dict[str, Any]) -> dict[str, Any]:
+        """Explicitly probe provider credentials without persisting them."""
+        resp = self._http.post(
+            "/api/v1/voice/test-connection",
+            json={"provider": provider, "credentials": credentials},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def runtime_health(self, agent_id: str) -> dict[str, Any]:
+        resp = self._http.get("/api/v1/voice/runtime/health", params={"agent_id": agent_id})
+        resp.raise_for_status()
+        return resp.json()
+
+    def calls(self, agent_id: str, *, limit: int = 25) -> list[dict[str, Any]]:
+        resp = self._http.get(
+            "/api/v1/voice/calls",
+            params={"agent_id": agent_id, "limit": limit},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def place_outbound_call(self, *, agent_id: str, to_number: str) -> dict[str, Any]:
+        """Place a real outbound call. This can incur provider charges."""
+        resp = self._http.post(
+            "/api/v1/voice/calls/outbound",
+            json={"agent_id": agent_id, "to_number": to_number},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _RPAResource:
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def scripts(self) -> list[dict[str, Any]]:
+        resp = self._http.get("/api/v1/rpa/scripts")
+        resp.raise_for_status()
+        return resp.json()
+
+    def history(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        resp = self._http.get("/api/v1/rpa/history", params={"limit": limit})
+        resp.raise_for_status()
+        return resp.json()
+
+    def run(self, script_id: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Run an RPA script. The selected script may perform external actions."""
+        resp = self._http.post(
+            f"/api/v1/rpa/scripts/{script_id}/run",
+            json={"params": params or {}},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _BridgesResource:
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def list(self) -> list[dict[str, Any]]:
+        resp = self._http.get("/api/v1/bridge/list")
+        resp.raise_for_status()
+        return resp.json()
+
+    def register(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post("/api/v1/bridge/register", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def status(self, bridge_id: str) -> dict[str, Any]:
+        resp = self._http.get(f"/api/v1/bridge/{bridge_id}/status")
+        resp.raise_for_status()
+        return resp.json()
+
+    def deregister(self, bridge_id: str) -> dict[str, Any]:
+        resp = self._http.delete(f"/api/v1/bridge/{bridge_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def route(self, connector_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Route an explicit request to a registered local bridge."""
+        resp = self._http.post(f"/api/v1/bridge/route/{connector_type}", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _CommerceResource:
+    _PREFIX = "/api/v1/commerce/runtime"
+
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def create_onboarding_packet(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/seller-agents/onboarding-packets", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def onboarding_packet(self, packet_id: str) -> dict[str, Any]:
+        resp = self._http.get(f"{self._PREFIX}/seller-agents/onboarding-packets/{packet_id}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def configure_shopify(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Store Shopify credentials through the server's encrypted connector vault."""
+        resp = self._http.post(f"{self._PREFIX}/seller-agents/connectors/shopify/credentials", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def shopify_status(self, merchant_id: str) -> dict[str, Any]:
+        resp = self._http.get(
+            f"{self._PREFIX}/seller-agents/connectors/shopify/status",
+            params={"merchant_id": merchant_id},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def sync_shopify(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Initiate a real read-only Shopify catalog sync."""
+        resp = self._http.post(f"{self._PREFIX}/seller-agents/shopify/sync", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def request_grantex_authority(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/authority/grantex/request", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def cache_artifacts(self, artifacts: list[dict[str, Any]], *, buyer_agent_id: str | None = None) -> dict[str, Any]:
+        resp = self._http.post(
+            f"{self._PREFIX}/artifacts/cache",
+            json={"artifacts": artifacts, "buyer_agent_id": buyer_agent_id},
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def ask(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/buyer-sessions/ask", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def products(
+        self, *, merchant_id: str, seller_agent_id: str | None = None, query: str | None = None
+    ) -> dict[str, Any]:
+        params = {"merchant_id": merchant_id}
+        if seller_agent_id:
+            params["seller_agent_id"] = seller_agent_id
+        if query:
+            params["q"] = query
+        resp = self._http.get(f"{self._PREFIX}/products", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def protocol_adapters(
+        self,
+        *,
+        merchant_id: str,
+        seller_agent_id: str,
+        buyer_agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"merchant_id": merchant_id, "seller_agent_id": seller_agent_id}
+        if buyer_agent_id:
+            params["buyer_agent_id"] = buyer_agent_id
+        resp = self._http.get(f"{self._PREFIX}/protocol-adapters", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def protocol_adapter(
+        self,
+        surface: str,
+        *,
+        merchant_id: str,
+        seller_agent_id: str,
+        buyer_agent_id: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"merchant_id": merchant_id, "seller_agent_id": seller_agent_id}
+        if buyer_agent_id:
+            params["buyer_agent_id"] = buyer_agent_id
+        resp = self._http.get(f"{self._PREFIX}/protocol-adapters/{surface}", params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+    def bridge_surfaces(self) -> dict[str, Any]:
+        resp = self._http.get(f"{self._PREFIX}/bridges/surfaces")
+        resp.raise_for_status()
+        return resp.json()
+
+    def verify_mandate_capability(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Verify provider-owned mandate capability without executing payment."""
+        resp = self._http.post(f"{self._PREFIX}/providers/plural-pine/mandate-capability/verify", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def prepare_purchase(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Prepare a non-executing purchase handoff."""
+        resp = self._http.post(f"{self._PREFIX}/purchase/prepare", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def offline_pos_readiness(self) -> dict[str, Any]:
+        resp = self._http.get(f"{self._PREFIX}/pos/offline/readiness")
+        resp.raise_for_status()
+        return resp.json()
+
+    def create_offline_pos_handoff(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/pos/offline/handoffs", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def confirm_offline_pos_handoff(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/pos/offline/confirmations", json=data)
+        resp.raise_for_status()
+        return resp.json()
+
+    def simulate_offline_pos_confirmation(self, data: dict[str, Any]) -> dict[str, Any]:
+        resp = self._http.post(f"{self._PREFIX}/pos/offline/simulator/confirm", json=data)
+        resp.raise_for_status()
+        return resp.json()

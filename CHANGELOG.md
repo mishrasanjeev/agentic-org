@@ -2,6 +2,23 @@
 
 All notable changes to AgenticOrg are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] - 2026-08-29
+
+### Added
+- Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
+  local bridges, connector diagnostics, workflow cancellation, and the
+  seller/buyer commerce runtime.
+- An idempotent migration that repairs the native `knowledge_documents` index
+  on both legacy and ORM-bootstrap installations.
+
+### Fixed
+- Knowledge deletion now retires native vector chunks as well as RAGFlow and
+  document records, preventing deleted content from remaining searchable.
+- Plural billing callback OpenAPI operations now have unique GET/POST IDs for
+  generated SDK clients.
+- Connector harness and voice integration fixtures no longer emit avoidable
+  async/Pydantic deprecation warnings.
+
 ## [4.0.0] — 2026-04-05
 
 ### Added — Project Apex (22 Features)

@@ -97,7 +97,30 @@ new AgenticOrg();
 | `client.a2a` | `agentCard()`, `agents()` |
 | `client.mcp` | `tools()`, `call(name, args?)` |
 | `client.workflows` | `templates()`, `list()`, `generate(description)`, `create(opts)`, `get(id)`, `run(id, opts?)`, `getRun(id)` |
-| `client.knowledge` | `search(query, { topK })` |
+| `client.knowledge` | `search()`, `supportedTypes()`, `upload()`, `documents()`, `delete()`, `health()`, `stats()` |
+| `client.voice` | `status()`, `saveConfig()`, `testConnection()`, `runtimeHealth()`, `calls()`, `placeOutboundCall()` |
+| `client.rpa` | `scripts()`, `history()`, `run()` |
+| `client.bridges` | `register()`, `list()`, `status()`, `route()`, `deregister()` |
+| `client.commerce` | seller onboarding, Shopify sync, artifact cache, buyer ask, protocol adapters, mandate evidence, purchase/POS preparation |
+
+```typescript
+const types = await client.knowledge.supportedTypes();
+const document = await client.knowledge.upload(
+  new Blob([scannedDocumentBytes]),
+  "scanned-invoice.pdf",
+);
+const products = await client.commerce.products("merchant-123");
+const answer = await client.commerce.ask({
+  merchant_id: "merchant-123",
+  question: "Which variants are fresh and in stock?",
+});
+const voiceRuntime = await client.voice.runtimeHealth("agent-uuid");
+```
+
+`placeOutboundCall`, `rpa.run`, `bridges.route`, Shopify sync, and provider
+verification are intentionally explicit because they may contact external
+systems or incur charges. Purchase/POS helpers prepare handoffs; provider and
+POS systems remain transaction authorities.
 
 ## License
 

@@ -187,6 +187,33 @@ class HttpClient {
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
     return resp.json();
   }
+
+  async delete(path: string): Promise<unknown> {
+    const resp = await fetch(new URL(path, this.baseUrl).toString(), {
+      method: "DELETE",
+      headers: this.headers,
+      signal: AbortSignal.timeout(this.timeout),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    return resp.json();
+  }
+
+  async upload(path: string, form: FormData, params?: Record<string, string>): Promise<unknown> {
+    const headers = { ...this.headers };
+    delete headers["Content-Type"];
+    const url = new URL(path, this.baseUrl);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => url.searchParams.set(key, value));
+    }
+    const resp = await fetch(url.toString(), {
+      method: "POST",
+      headers,
+      body: form,
+      signal: AbortSignal.timeout(this.timeout),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    return resp.json();
+  }
 }
 
 class AgentsResource {
@@ -252,6 +279,14 @@ class ConnectorsResource {
 
   async get(connectorId: string): Promise<Record<string, unknown>> {
     return (await this.http.get(`/api/v1/connectors/${connectorId}`)) as Record<string, unknown>;
+  }
+
+  async health(connectorId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`/api/v1/connectors/${connectorId}/health`)) as Record<string, unknown>;
+  }
+
+  async test(connectorId: string): Promise<Record<string, unknown>> {
+    return (await this.http.post(`/api/v1/connectors/${connectorId}/test`)) as Record<string, unknown>;
   }
 }
 
@@ -352,6 +387,10 @@ class WorkflowsResource {
   async getRun(runId: string): Promise<Record<string, unknown>> {
     return (await this.http.get(`/api/v1/workflows/runs/${runId}`)) as Record<string, unknown>;
   }
+
+  async cancelRun(runId: string): Promise<Record<string, unknown>> {
+    return (await this.http.post(`/api/v1/workflows/runs/${runId}/cancel`)) as Record<string, unknown>;
+  }
 }
 
 class KnowledgeResource {
@@ -364,6 +403,239 @@ class KnowledgeResource {
     })) as any;
     return data.results ?? data;
   }
+
+  async supportedTypes(): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/knowledge/supported-types")) as Record<string, unknown>;
+  }
+
+  async upload(
+    file: Blob,
+    filename: string,
+    options: { duplicatePolicy?: "reject" | "replace" | "allow_duplicate" } = {},
+  ): Promise<Record<string, unknown>> {
+    const form = new FormData();
+    form.append("file", file, filename);
+    const policy = options.duplicatePolicy ?? "reject";
+    return (await this.http.upload("/api/v1/knowledge/upload", form, {
+      replace: String(policy === "replace"),
+      allow_duplicate: String(policy === "allow_duplicate"),
+    })) as Record<string, unknown>;
+  }
+
+  async documents(options: { page?: number; perPage?: number } = {}): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/knowledge/documents", {
+      page: String(options.page ?? 1),
+      per_page: String(options.perPage ?? 20),
+    })) as Record<string, unknown>;
+  }
+
+  async delete(documentId: string): Promise<Record<string, unknown>> {
+    return (await this.http.delete(`/api/v1/knowledge/documents/${documentId}`)) as Record<string, unknown>;
+  }
+
+  async health(): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/knowledge/health")) as Record<string, unknown>;
+  }
+
+  async stats(): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/knowledge/stats")) as Record<string, unknown>;
+  }
+}
+
+class VoiceResource {
+  constructor(private http: HttpClient) {}
+
+  async status(agentId?: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(
+      "/api/v1/voice/status",
+      agentId ? { agent_id: agentId } : undefined,
+    )) as Record<string, unknown>;
+  }
+
+  async saveConfig(config: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/voice/config", config)) as Record<string, unknown>;
+  }
+
+  async testConnection(provider: string, credentials: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/voice/test-connection", {
+      provider,
+      credentials,
+    })) as Record<string, unknown>;
+  }
+
+  async runtimeHealth(agentId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/voice/runtime/health", {
+      agent_id: agentId,
+    })) as Record<string, unknown>;
+  }
+
+  async calls(agentId: string, limit = 25): Promise<Record<string, unknown>[]> {
+    return (await this.http.get("/api/v1/voice/calls", {
+      agent_id: agentId,
+      limit: String(limit),
+    })) as Record<string, unknown>[];
+  }
+
+  /** Place a real outbound call. This can incur provider charges. */
+  async placeOutboundCall(agentId: string, toNumber: string): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/voice/calls/outbound", {
+      agent_id: agentId,
+      to_number: toNumber,
+    })) as Record<string, unknown>;
+  }
+}
+
+class RPAResource {
+  constructor(private http: HttpClient) {}
+
+  async scripts(): Promise<Record<string, unknown>[]> {
+    return (await this.http.get("/api/v1/rpa/scripts")) as Record<string, unknown>[];
+  }
+
+  async history(limit = 50): Promise<Record<string, unknown>[]> {
+    return (await this.http.get("/api/v1/rpa/history", { limit: String(limit) })) as Record<string, unknown>[];
+  }
+
+  /** Run an RPA script. The selected script may perform external actions. */
+  async run(scriptId: string, params: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
+    return (await this.http.post(`/api/v1/rpa/scripts/${scriptId}/run`, { params })) as Record<string, unknown>;
+  }
+}
+
+class BridgesResource {
+  constructor(private http: HttpClient) {}
+
+  async list(): Promise<Record<string, unknown>[]> {
+    return (await this.http.get("/api/v1/bridge/list")) as Record<string, unknown>[];
+  }
+
+  async register(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/bridge/register", data)) as Record<string, unknown>;
+  }
+
+  async status(bridgeId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`/api/v1/bridge/${bridgeId}/status`)) as Record<string, unknown>;
+  }
+
+  async deregister(bridgeId: string): Promise<Record<string, unknown>> {
+    return (await this.http.delete(`/api/v1/bridge/${bridgeId}`)) as Record<string, unknown>;
+  }
+
+  async route(connectorType: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`/api/v1/bridge/route/${connectorType}`, payload)) as Record<string, unknown>;
+  }
+}
+
+class CommerceResource {
+  private prefix = "/api/v1/commerce/runtime";
+
+  constructor(private http: HttpClient) {}
+
+  async createOnboardingPacket(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/seller-agents/onboarding-packets`, data)) as Record<string, unknown>;
+  }
+
+  async onboardingPacket(packetId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`${this.prefix}/seller-agents/onboarding-packets/${packetId}`)) as Record<string, unknown>;
+  }
+
+  async configureShopify(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/seller-agents/connectors/shopify/credentials`, data)) as Record<string, unknown>;
+  }
+
+  async shopifyStatus(merchantId: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(`${this.prefix}/seller-agents/connectors/shopify/status`, {
+      merchant_id: merchantId,
+    })) as Record<string, unknown>;
+  }
+
+  async syncShopify(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/seller-agents/shopify/sync`, data)) as Record<string, unknown>;
+  }
+
+  async requestGrantexAuthority(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/authority/grantex/request`, data)) as Record<string, unknown>;
+  }
+
+  async cacheArtifacts(artifacts: Record<string, unknown>[], buyerAgentId?: string): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/artifacts/cache`, {
+      artifacts,
+      buyer_agent_id: buyerAgentId,
+    })) as Record<string, unknown>;
+  }
+
+  async ask(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/buyer-sessions/ask`, data)) as Record<string, unknown>;
+  }
+
+  async products(
+    merchantId: string,
+    options: { sellerAgentId?: string; query?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    const params: Record<string, string> = { merchant_id: merchantId };
+    if (options.sellerAgentId) params.seller_agent_id = options.sellerAgentId;
+    if (options.query) params.q = options.query;
+    return (await this.http.get(`${this.prefix}/products`, params)) as Record<string, unknown>;
+  }
+
+  async protocolAdapters(
+    merchantId: string,
+    sellerAgentId: string,
+    buyerAgentId?: string,
+  ): Promise<Record<string, unknown>> {
+    const params: Record<string, string> = {
+      merchant_id: merchantId,
+      seller_agent_id: sellerAgentId,
+    };
+    if (buyerAgentId) params.buyer_agent_id = buyerAgentId;
+    return (await this.http.get(`${this.prefix}/protocol-adapters`, params)) as Record<string, unknown>;
+  }
+
+  async protocolAdapter(
+    surface: string,
+    merchantId: string,
+    sellerAgentId: string,
+    buyerAgentId?: string,
+  ): Promise<Record<string, unknown>> {
+    const params: Record<string, string> = {
+      merchant_id: merchantId,
+      seller_agent_id: sellerAgentId,
+    };
+    if (buyerAgentId) params.buyer_agent_id = buyerAgentId;
+    return (await this.http.get(`${this.prefix}/protocol-adapters/${surface}`, params)) as Record<string, unknown>;
+  }
+
+  async bridgeSurfaces(): Promise<Record<string, unknown>> {
+    return (await this.http.get(`${this.prefix}/bridges/surfaces`)) as Record<string, unknown>;
+  }
+
+  async verifyMandateCapability(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(
+      `${this.prefix}/providers/plural-pine/mandate-capability/verify`,
+      data,
+    )) as Record<string, unknown>;
+  }
+
+  /** Prepare a non-executing purchase handoff. */
+  async preparePurchase(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/purchase/prepare`, data)) as Record<string, unknown>;
+  }
+
+  async offlinePosReadiness(): Promise<Record<string, unknown>> {
+    return (await this.http.get(`${this.prefix}/pos/offline/readiness`)) as Record<string, unknown>;
+  }
+
+  async createOfflinePosHandoff(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/pos/offline/handoffs`, data)) as Record<string, unknown>;
+  }
+
+  async confirmOfflinePosHandoff(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/pos/offline/confirmations`, data)) as Record<string, unknown>;
+  }
+
+  async simulateOfflinePosConfirmation(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.prefix}/pos/offline/simulator/confirm`, data)) as Record<string, unknown>;
+  }
 }
 
 export class AgenticOrg {
@@ -374,6 +646,10 @@ export class AgenticOrg {
   public mcp: MCPResource;
   public workflows: WorkflowsResource;
   public knowledge: KnowledgeResource;
+  public voice: VoiceResource;
+  public rpa: RPAResource;
+  public bridges: BridgesResource;
+  public commerce: CommerceResource;
 
   constructor(config: AgenticOrgConfig = {}) {
     const apiKey = config.apiKey ?? process.env.AGENTICORG_API_KEY ?? "";
@@ -402,5 +678,9 @@ export class AgenticOrg {
     this.mcp = new MCPResource(http);
     this.workflows = new WorkflowsResource(http);
     this.knowledge = new KnowledgeResource(http);
+    this.voice = new VoiceResource(http);
+    this.rpa = new RPAResource(http);
+    this.bridges = new BridgesResource(http);
+    this.commerce = new CommerceResource(http);
   }
 }
