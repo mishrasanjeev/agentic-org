@@ -1192,10 +1192,27 @@
     "auth_required": false,
     "function": "plural_callback",
     "idempotency": "gateway-order-status-verification",
-    "key": "GET,POST /api/v1/billing/callback api/v1/billing.py:plural_callback",
+    "key": "GET /api/v1/billing/callback api/v1/billing.py:plural_callback",
     "metadata_present": true,
     "methods": [
-      "GET",
+      "GET"
+    ],
+    "module": "api/v1/billing.py",
+    "path": "/api/v1/billing/callback",
+    "public_exempt_reason": "gateway-redirect-server-side-verification",
+    "rate_limit": "gateway-callback",
+    "scope": "public:billing.callback.plural",
+    "source_line": 460,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "billing.callback.plural",
+    "auth_required": false,
+    "function": "plural_callback",
+    "idempotency": "gateway-order-status-verification",
+    "key": "POST /api/v1/billing/callback api/v1/billing.py:plural_callback",
+    "metadata_present": true,
+    "methods": [
       "POST"
     ],
     "module": "api/v1/billing.py",
@@ -1203,7 +1220,7 @@
     "public_exempt_reason": "gateway-redirect-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.plural",
-    "source_line": 459,
+    "source_line": 460,
     "tenant_required": true
   },
   {
@@ -1221,7 +1238,7 @@
     "public_exempt_reason": "stripe-hosted-checkout-server-side-verification",
     "rate_limit": "gateway-callback",
     "scope": "public:billing.callback.stripe",
-    "source_line": 573,
+    "source_line": 574,
     "tenant_required": true
   },
   {
@@ -1239,7 +1256,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.subscription.cancel",
-    "source_line": 729,
+    "source_line": 730,
     "tenant_required": true
   },
   {
@@ -1329,7 +1346,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-status",
     "scope": "billing.order_status.read",
-    "source_line": 677,
+    "source_line": 678,
     "tenant_required": true
   },
   {
@@ -1365,7 +1382,7 @@
     "public_exempt_reason": null,
     "rate_limit": "billing-mutating",
     "scope": "billing.portal.create",
-    "source_line": 640,
+    "source_line": 641,
     "tenant_required": true
   },
   {
@@ -1455,7 +1472,7 @@
     "public_exempt_reason": "plural-hmac-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.plural",
-    "source_line": 828,
+    "source_line": 829,
     "tenant_required": true
   },
   {
@@ -1473,7 +1490,7 @@
     "public_exempt_reason": "stripe-signature-required",
     "rate_limit": "gateway-webhook",
     "scope": "public:billing.webhook.stripe",
-    "source_line": 796,
+    "source_line": 797,
     "tenant_required": true
   },
   {
@@ -4155,7 +4172,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1246,
+    "source_line": 1255,
     "tenant_required": false
   },
   {
@@ -4173,7 +4190,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1188,
+    "source_line": 1197,
     "tenant_required": true
   },
   {
@@ -4191,7 +4208,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1359,
+    "source_line": 1368,
     "tenant_required": true
   },
   {
