@@ -2,7 +2,7 @@
 # reproducible. Refresh via scripts/refresh_image_digests.sh after a
 # Renovate/Dependabot bump confirms upstream is safe.
 # python:3.14-slim @ 2026-05-01
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4 AS builder
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5 AS builder
 WORKDIR /app
 # Build deps for patched Pillow (required by fastembed) and other C extensions
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +27,7 @@ RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 # smallest English model into the image so PII redaction actually runs.
 RUN python -m spacy download en_core_web_sm
 
-FROM python:3.14-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
+FROM python:3.14-slim@sha256:cae66f2ef0ec51a9891263eeee7f987dacf0a9879e8aa9353d5606e0530619a5
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libjpeg62-turbo zlib1g \
     tesseract-ocr tesseract-ocr-eng tesseract-ocr-osd \
