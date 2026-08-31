@@ -149,7 +149,7 @@ dev = [
     # supported redis transport requires redis<6.5.
     "testcontainers[postgres]>=4.15.0,<4.16.0",
     "factory-boy>=3.3.3",
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.6.2",
