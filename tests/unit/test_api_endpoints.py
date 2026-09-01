@@ -64,6 +64,14 @@ def _make_result(scalar_one=None, scalars_list=None, scalar_value=None):
 
 class TestHealthEndpoints:
 
+    @pytest.fixture(autouse=True)
+    def _reset_health_runtime_state(self, monkeypatch: pytest.MonkeyPatch):
+        from api.v1 import health
+
+        monkeypatch.setattr(health, "_health_dependency_cache", None)
+        monkeypatch.setattr(health, "_health_dependency_lock", None)
+        monkeypatch.setattr(health, "_health_redis_client", None)
+
     @pytest.mark.asyncio
     async def test_liveness_returns_alive(self):
         from api.v1.health import liveness
@@ -97,6 +105,8 @@ class TestHealthEndpoints:
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_settings.db_pool_size = 5
+            mock_settings.db_max_overflow = 5
             mock_registry.all_names.return_value = []
 
             resp = await health_check()
@@ -122,6 +132,8 @@ class TestHealthEndpoints:
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_settings.db_pool_size = 5
+            mock_settings.db_max_overflow = 5
             mock_registry.all_names.return_value = []
 
             resp = await health_check()
@@ -148,6 +160,8 @@ class TestHealthEndpoints:
             mock_aioredis.from_url.return_value = mock_redis
             mock_settings.redis_url = "redis://localhost"
             mock_settings.env = "test"
+            mock_settings.db_pool_size = 5
+            mock_settings.db_max_overflow = 5
             mock_registry.all_names.return_value = []
 
             resp = await health_check()

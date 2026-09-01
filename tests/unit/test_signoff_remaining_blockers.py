@@ -95,8 +95,8 @@ class TestKbContentExtractionPersisted:
         src = inspect.getsource(knowledge.upload_document)
         assert "content_text" in src
         assert "extracted_text" in src
-        assert "extracted_content = await asyncio.to_thread" in src
-        assert src.index("extracted_content = await asyncio.to_thread") < src.index(
+        assert "extracted_content = await _DOCUMENT_EXTRACTION_CAPACITY.run_blocking" in src
+        assert src.index("extracted_content = await _DOCUMENT_EXTRACTION_CAPACITY.run_blocking") < src.index(
             "if not allow_duplicate and not replace"
         )
         assert "document_has_no_extractable_text" in src

@@ -52,7 +52,9 @@ reported a configured limit of two and a measured maximum of two active jobs.
 
 Focused regression validation after these review fixes passed 59 tests,
 including capacity cancellation, RPA API/scheduler propagation, health,
-history durability, RPA execution, and voice/RPA handling.
+history durability, RPA execution, and voice/RPA handling. The expanded
+affected-area pack passed 190 tests after updating legacy health-cache and
+extraction source-pin tests for the new runtime contract.
 
 ## Exact-commit reproducibility rerun
 
