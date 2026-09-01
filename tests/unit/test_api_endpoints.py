@@ -96,7 +96,7 @@ class TestHealthEndpoints:
         mock_redis.ping = AsyncMock()
         mock_redis.close = AsyncMock()
 
-        with patch("api.v1.health.async_session_factory") as mock_sf, \
+        with patch("api.v1.health.database.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
              patch("api.v1.health.settings") as mock_settings, \
              patch("api.v1.health.ConnectorRegistry") as mock_registry:
@@ -123,7 +123,7 @@ class TestHealthEndpoints:
         mock_redis.ping = AsyncMock()
         mock_redis.close = AsyncMock()
 
-        with patch("api.v1.health.async_session_factory") as mock_sf, \
+        with patch("api.v1.health.database.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
              patch("api.v1.health.settings") as mock_settings, \
              patch("api.v1.health.ConnectorRegistry") as mock_registry:
@@ -151,7 +151,7 @@ class TestHealthEndpoints:
         mock_redis = AsyncMock()
         mock_redis.ping = AsyncMock(side_effect=ConnectionError("refused"))
 
-        with patch("api.v1.health.async_session_factory") as mock_sf, \
+        with patch("api.v1.health.database.async_session_factory") as mock_sf, \
              patch("api.v1.health.aioredis") as mock_aioredis, \
              patch("api.v1.health.settings") as mock_settings, \
              patch("api.v1.health.ConnectorRegistry") as mock_registry:

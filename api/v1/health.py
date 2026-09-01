@@ -12,11 +12,11 @@ import structlog
 from fastapi import APIRouter
 from sqlalchemy import text
 
+import core.database as database
 from api.deps import require_scope
 from api.route_metadata import route_meta
 from connectors.registry import ConnectorRegistry
 from core.config import redis_socket_timeout_kwargs, settings
-from core.database import async_session_factory
 
 logger = structlog.get_logger()
 
@@ -78,7 +78,7 @@ async def close_health_resources() -> None:
 
 async def _db_health_status() -> str:
     try:
-        async with async_session_factory() as session:
+        async with database.async_session_factory() as session:
             await asyncio.wait_for(
                 session.execute(text("SELECT 1")),
                 timeout=_DEPENDENCY_HC_TIMEOUT,
@@ -223,7 +223,7 @@ async def _fetch_history(hours: int) -> list[dict]:
     snapshot in those cases.
     """
     try:
-        async with async_session_factory() as session:
+        async with database.async_session_factory() as session:
             result = await session.execute(
                 text(
                     "SELECT recorded_at, status, checks, version, commit "

@@ -24,6 +24,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+import core.database as database
 from core.crypto.credential_vault import (
     decrypt_credential as _legacy_decrypt,
 )
@@ -31,7 +32,6 @@ from core.crypto.credential_vault import (
     encrypt_credential as _legacy_encrypt,
 )
 from core.crypto.envelope import decrypt_from_string, encrypt_to_string
-from core.database import async_session_factory
 from core.models.tenant import Tenant
 
 logger = structlog.get_logger()
@@ -48,7 +48,7 @@ async def _resolve_kek(tenant_id: uuid.UUID) -> str:
       3. Empty string → caller falls back to legacy Fernet
     """
     try:
-        async with async_session_factory() as session:
+        async with database.async_session_factory() as session:
             result = await session.execute(
                 select(Tenant.byok_kek_resource).where(Tenant.id == tenant_id)
             )

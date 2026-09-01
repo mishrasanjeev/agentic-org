@@ -56,6 +56,24 @@ history durability, RPA execution, and voice/RPA handling. The expanded
 affected-area pack passed 190 tests after updating legacy health-cache and
 extraction source-pin tests for the new runtime contract.
 
+## PR CI lifecycle hardening
+
+The first full PR integration run exposed two cross-event-loop failures in
+credentialed connector registration. Readiness and tenant secret resolution
+had imported the process database session factory by value. The integration
+harness swaps that factory for a per-loop `NullPool` engine, but the stale
+bindings bypassed the swap and could reuse an asyncpg connection owned by a
+closed loop. Both helpers now resolve the active factory from
+`core.database` when called. Production still uses the same configured
+factory; tests and any controlled runtime factory replacement no longer retain
+stale pooled connections.
+
+The exact CI failure sequence was reproduced against fresh local Docker
+PostgreSQL and Redis: two readiness requests followed by two credentialed
+connector registrations on separate test event loops. All four requests
+passed after the fix. The complete API integration lifecycle plus the signed
+voice runtime then passed 44 tests on the same fresh Docker dependencies.
+
 ## Exact-commit reproducibility rerun
 
 After the fixes were committed, the complete local gate was repeated from a
