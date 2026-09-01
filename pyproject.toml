@@ -23,6 +23,7 @@ packages = [
     "auth",
     "bridge",
     "connectors",
+    "rpa",
     "workflows",
     "scaling",
     "observability",
@@ -132,6 +133,9 @@ v4 = [
     # latest package can install everywhere.
     "presidio-analyzer>=2.2.364,<2.2.365; python_version >= '3.14'",
     "presidio-analyzer>=2.2.362; python_version < '3.14'",
+    # Browser RPA is a shipped runtime. Keep the Python driver in the
+    # production extra; Dockerfile installs the matching Chromium binary.
+    "playwright>=1.62.0,<2",
 ]
 bge-m3 = [
     # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out

@@ -69,3 +69,8 @@ Production validation should use an approved smoke tenant and a synthetic,
 non-sensitive document. A successful supported-types response proves the
 capability matrix is deployed; it does not by itself prove extraction quality
 for every language, layout, handwriting style, or damaged scan.
+
+Run the [local multichannel simulation](local-multichannel-simulation.md) for a
+real synthetic-image OCR proof alongside voice, email, and RPA checks. Its JSON
+evidence records extraction method, confidence, and page count without storing
+a customer document.

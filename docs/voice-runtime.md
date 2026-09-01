@@ -71,3 +71,9 @@ Deployment is complete only after migrations run, API and UI health checks pass,
 the runtime-health endpoint reports `ready`, a signed inbound test call completes,
 an outbound test call completes, and call history shows the real provider status.
 Never use an unsigned webhook or synthetic call row as production evidence.
+
+Before a provider canary, run the [local multichannel simulation](local-multichannel-simulation.md).
+It executes the signed webhook lifecycle, STT text intake, TwiML TTS response,
+encrypted persistence, masking, and tenant isolation against fresh PostgreSQL.
+It intentionally does not place a paid call; PSTN/audio quality still needs one
+explicitly approved test number and calling window.

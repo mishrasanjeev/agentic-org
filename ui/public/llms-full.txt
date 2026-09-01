@@ -46,6 +46,11 @@ buyer channel, payment rail, merchant system, or POS path is usable only when
 the target tenant has the required credentials, scopes, configuration, and
 provider approval.
 
+Voice, email, OCR, and browser RPA can be exercised together before release
+with the Docker-backed [local multichannel simulation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/local-multichannel-simulation.md).
+It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
+real Playwright Chromium while keeping paid calls and production mutations off.
+
 ## What is in this repository
 
 | Area | Current implementation |
@@ -344,6 +349,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [API reference](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md)
 - [Deployment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md)
 - [Knowledge ingestion and OCR](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/knowledge-ingestion.md)
+- [Local voice, email, RPA, and OCR simulation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/local-multichannel-simulation.md)
 - [Voice runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md)
 - [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md)
 - [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
