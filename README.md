@@ -40,6 +40,11 @@ buyer channel, payment rail, merchant system, or POS path is usable only when
 the target tenant has the required credentials, scopes, configuration, and
 provider approval.
 
+Voice, email, OCR, and browser RPA can be exercised together before release
+with the Docker-backed [local multichannel simulation](docs/local-multichannel-simulation.md).
+It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
+real Playwright Chromium while keeping paid calls and production mutations off.
+
 ## What is in this repository
 
 | Area | Current implementation |
@@ -338,6 +343,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [API reference](docs/api-reference.md)
 - [Deployment](docs/deployment.md)
 - [Knowledge ingestion and OCR](docs/knowledge-ingestion.md)
+- [Local voice, email, RPA, and OCR simulation](docs/local-multichannel-simulation.md)
 - [Voice runtime](docs/voice-runtime.md)
 - [RPA runtime](docs/rpa-runtime.md)
 - [OACP runtime documentation](docs/oacp/README.md)

@@ -40,6 +40,7 @@ Service health comes from
 | Upload documents and scans | [Knowledge ingestion and OCR](knowledge-ingestion.md) |
 | Configure voice agents | [Voice runtime](voice-runtime.md) |
 | Run browser automation | [RPA runtime](rpa-runtime.md) |
+| Simulate voice, email, OCR, and RPA locally | [Local multichannel simulation](local-multichannel-simulation.md) |
 | Integrate through APIs | [API reference](api-reference.md), generated OpenAPI, [Python SDK](../sdk/README.md), [TypeScript SDK](../sdk-ts/README.md) |
 | Connect an MCP client | [MCP server](../mcp-server/README.md) |
 | Implement agentic commerce | [OACP documentation](oacp/README.md) |

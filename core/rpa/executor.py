@@ -4,7 +4,8 @@ Each script is a Python module in ``rpa/scripts/`` that exposes an
 ``async def run(page, params) -> dict`` function.
 
 All Playwright imports are guarded so the module can be imported without
-``playwright`` installed.  Install with ``pip install agenticorg[v4]``.
+``playwright`` installed. Install with ``pip install agenticorg[v4]`` and run
+``playwright install chromium`` outside the production container image.
 """
 
 from __future__ import annotations

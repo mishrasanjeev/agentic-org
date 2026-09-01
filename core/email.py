@@ -1,10 +1,13 @@
-"""Email utility — Gmail SMTP for notifications with domain validation."""
+"""Email utility with domain validation and fail-closed SMTP transport."""
 import logging
 import os
 import smtplib
+import ssl
 from email.mime.text import MIMEText
 
 import dns.resolver
+
+from core.config import is_relaxed_env
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +52,12 @@ def validate_email_domain(email: str) -> tuple[bool, str]:
 
 
 def send_email(to: str, subject: str, html: str) -> bool:
-    """Send HTML email via Gmail SMTP. Validates domain before sending.
+    """Send HTML email through the configured SMTP transport.
 
-    Uses AGENTICORG_SMTP_LOGIN for SMTP authentication (Gmail account)
-    and AGENTICORG_DEMO_SENDER for the display From address.
+    Gmail over implicit TLS remains the default. Passwordless plaintext SMTP is
+    accepted only for a loopback capture service in an explicitly relaxed
+    environment, which lets the real delivery path be tested with Mailpit
+    without weakening production transport requirements.
     """
     # Validate email domain BEFORE the fake-mail seam so tests
     # asserting "invalid domain → no send" stay accurate even when
@@ -74,10 +79,31 @@ def send_email(to: str, subject: str, html: str) -> bool:
         logger.info("[fake_mail] captured email to=%s subject=%r", to, subject)
         return True
 
+    host = os.getenv("AGENTICORG_SMTP_HOST", "smtp.gmail.com").strip()
+    security = os.getenv("AGENTICORG_SMTP_SECURITY", "ssl").strip().lower()
+    try:
+        port = int(os.getenv("AGENTICORG_SMTP_PORT", "465"))
+    except ValueError:
+        logger.warning("Invalid AGENTICORG_SMTP_PORT; refusing email delivery")
+        return False
+    if not host or not 1 <= port <= 65535:
+        logger.warning("Invalid SMTP host or port; refusing email delivery")
+        return False
+    if security not in {"ssl", "starttls", "plain"}:
+        logger.warning("Unsupported SMTP security mode; refusing email delivery")
+        return False
+
+    runtime_env = os.getenv("AGENTICORG_ENV", "development")
+    loopback_capture = host.lower() in {"localhost", "127.0.0.1", "::1"}
+    local_plain_capture = security == "plain" and loopback_capture and is_relaxed_env(runtime_env)
+    if security == "plain" and not local_plain_capture:
+        logger.warning("Plain SMTP is restricted to loopback local/test capture services")
+        return False
+
     password = os.getenv("AGENTICORG_GMAIL_APP_PASSWORD", "")
     smtp_login = os.getenv("AGENTICORG_SMTP_LOGIN", os.getenv("AGENTICORG_DEMO_SENDER", ""))
     display_sender = os.getenv("AGENTICORG_DEMO_SENDER", "sanjeev@agenticorg.ai")
-    if not password or not smtp_login:
+    if not local_plain_capture and (not password or not smtp_login):
         logger.warning("AGENTICORG_GMAIL_APP_PASSWORD or SMTP_LOGIN not set - skipping email")
         return False
     msg = MIMEText(html, "html")
@@ -86,10 +112,21 @@ def send_email(to: str, subject: str, html: str) -> bool:
     msg["Reply-To"] = display_sender
     msg["To"] = to
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-            smtp.login(smtp_login, password)
+        tls_context = ssl.create_default_context()
+        connection = (
+            smtplib.SMTP_SSL(host, port, timeout=15, context=tls_context)
+            if security == "ssl"
+            else smtplib.SMTP(host, port, timeout=15)
+        )
+        with connection as smtp:
+            if security == "starttls":
+                smtp.ehlo()
+                smtp.starttls(context=tls_context)
+                smtp.ehlo()
+            if smtp_login and password:
+                smtp.login(smtp_login, password)
             smtp.send_message(msg)
-        logger.info("Email sent to %s from %s (via %s)", to, display_sender, smtp_login)
+        logger.info("Email sent to %s from %s via SMTP host %s", to, display_sender, host)
         return True
     # enterprise-gate: broad-except-ok reason=smtp-send-failure-returns-false-no-delivery-success
     except Exception:

@@ -21,6 +21,11 @@ COPY schemas/ schemas/
 COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 
+# Browser RPA executes with Playwright's version-matched Chromium. Download it
+# in the builder and copy the immutable browser bundle into the runtime image.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN python -m playwright install chromium
+
 # Presidio (installed via the [v4] extra) uses spaCy for NER-based PII
 # detection. Without a language model the AnalyzerEngine constructor raises
 # OSError and every agent run 500s with "util.py:531 (OSError)". Bake the
@@ -42,6 +47,12 @@ RUN useradd -m agenticorg
 WORKDIR /app
 COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+COPY --from=builder /opt/playwright-browsers /opt/playwright-browsers
+# Install only the OS libraries required by the bundled Chromium. Playwright's
+# installer owns this compatibility list for the pinned Python package.
+RUN python -m playwright install-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 # The runtime does not install packages. Validate the copied environment, then
 # remove pip and its vendored SBOM: Trivy otherwise treats build-only entries
 # in pip/_vendor/bom.cdx.json as installed runtime dependencies. Remove the

@@ -28,6 +28,9 @@
 # Python 3.12/3.13 environments.
 presidio-analyzer==2.2.359; python_version >= "3.14"
 presidio-analyzer==2.2.364; python_version < "3.14"
+# Browser RPA runtime. Dockerfile installs the matching Chromium browser and
+# OS dependencies; local operators must also run `playwright install chromium`.
+playwright==1.62.0
 # Redaction uses analyzer spans plus deterministic local tokens. The unused
 # presidio-anonymizer package is intentionally excluded because its strict
 # cryptography upper bound blocks security upgrades.

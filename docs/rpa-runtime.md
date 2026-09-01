@@ -69,3 +69,15 @@ current SDK version.
 
 See [current product status](PRODUCT_STATUS.md), generated OpenAPI, and the
 security guidance in [SECURITY.md](../SECURITY.md).
+
+## Local browser proof
+
+The production image includes the Python Playwright driver, its
+version-matched Chromium bundle, and required OS libraries. Local source
+environments install `.[v4]` and then run `python -m playwright install
+chromium` once.
+
+The [local multichannel simulation](local-multichannel-simulation.md) can run a
+real browser login/extraction against an operator-approved public test portal.
+This opt-in proof preserves the normal egress guard and captures bounded
+screenshots. It is not permission to automate a merchant production account.
