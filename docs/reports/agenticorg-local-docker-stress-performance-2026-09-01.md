@@ -8,6 +8,8 @@ Base commit: `2af012775be7ce3269c76340a93691eb59db1640`
 
 Branch: `codex/stress-performance-20260901`
 
+Implementation commit tested: `3fda4cbc747b6b5a96cb4885324065d04c760515`
+
 ## Executive result
 
 The production API image, fresh migrations, dependency services, HTTP probes,
@@ -24,6 +26,78 @@ all jobs successful and a maximum of two expensive jobs active at once.
 This is regression evidence from one workstation. It is not a production SLA,
 Cloud Run capacity claim, or proof of external LLM, telephony, payment, or
 merchant-system capacity.
+
+## Exact-commit reproducibility rerun
+
+After the fixes were committed, the complete local gate was repeated from a
+new production image and a new isolated Compose project. The image was built
+from implementation commit `3fda4cbc747b6b5a96cb4885324065d04c760515`
+and had image ID
+`sha256:5f764daf254180ca1136ad3ba09f289a4086225ce7132dadb8cd6df4e66969cd`.
+PostgreSQL, Redis, MinIO, Mailpit, application data, and the voice-integration
+database were fresh for this rerun.
+
+### Repeated HTTP result
+
+| Phase | Requests / concurrency | Throughput | p50 | p95 | p99 | Max | Errors |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Liveness steady | 3,000 / 50 | 210.67 rps | 146.36 ms | 742.43 ms | 1,189.77 ms | 2,615.19 ms | 0 |
+| Coalesced readiness | 1,500 / 50 | 188.84 rps | 160.57 ms | 773.18 ms | 1,311.33 ms | 2,779.75 ms | 0 |
+| Liveness burst | 5,000 / 150 | 170.51 rps | 517.15 ms | 2,877.65 ms | 4,889.91 ms | 8,148.80 ms | 0 |
+
+All 9,500 responses were HTTP 200. Readiness remained below the 1,000 ms
+local p95 gate. The burst maximum shows substantial tail latency on this
+shared workstation, so the result is a correctness and overload-safety gate,
+not a latency objective.
+
+### Repeated resource result
+
+| Workload | Jobs | Limit / max active | Elapsed | Result |
+|---|---:|---:|---:|---|
+| Tesseract OCR | 12 | 2 / 2 | 72.815 s | 12 passed |
+| Playwright Chromium | 8 | 2 / 2 | 4.508 s | 8 passed |
+
+Sampled peak usage across the repeated resource run was 1,092.84% CPU,
+319.8 MiB memory, and 164 PIDs. The CPU value is Docker's aggregate across
+cores, not utilization of a single core. The gate held at two active jobs and
+the container completed without an OOM or restart.
+
+### Repeated dependency result
+
+- PostgreSQL `pgbench`, scale 10, 20 clients, 4 threads, 15 seconds: 8,232
+  transactions, zero failures, 36.380 ms average latency, and 546.07 TPS.
+- Redis, 100,000 requests per operation with 50 clients: PING inline
+  24,271.85 rps, PING multibulk 15,576.32 rps, SET 13,260.84 rps, and GET
+  28,579.59 rps. Operation p50 was 0.455-1.087 ms.
+
+These repeated dependency numbers are much lower than the quiet first-pass
+baseline because unrelated Docker workloads were active. They are retained
+as honest shared-host evidence. Both services remained correct and returned
+zero benchmark failures; a quiet-host benchmark is still required for a
+stable capacity baseline.
+
+### Repeated end-to-end and regression gate
+
+| Check | Repeated result |
+|---|---|
+| Production image build and `pip check` | Passed |
+| Empty-database ORM bootstrap and Alembic migration to head | Passed twice, including dedicated voice database |
+| HTTP stress | 9,500 passed, zero errors and zero non-200 responses |
+| OCR, RPA, voice, and multichannel focused pack | 36 passed |
+| Auth, email, sales, budget, and security pack | 302 passed; 42 existing test/deprecation warnings |
+| Signed voice runtime with encrypted durable PostgreSQL state | 1 passed |
+| Local Mailpit SMTP transport and capture | Passed; one local-only message captured |
+| Tenant signup, JWT issuance, and authenticated agent listing | Passed; 20 seeded agents returned |
+| Ruff on all changed Python files | Passed |
+| Focused mypy check | Passed with third-party missing imports ignored |
+| Compose rendering and `git diff --check` | Passed |
+| API process stability | Zero restarts, no OOM, no traceback or HTTP 5xx log match |
+
+The email transport used Mailpit on the workstation and did not deliver
+externally. The signed voice test mocked provider transport and did not place
+a paid call. The browser used synthetic in-memory HTML and made no external
+navigation. No new runtime defect reproduced during this exact-commit rerun,
+so no additional code change was made after the performance fixes.
 
 ## Test host and isolation
 
