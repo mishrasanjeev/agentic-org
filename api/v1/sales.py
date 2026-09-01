@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import uuid as _uuid
@@ -428,13 +429,15 @@ async def _run_sales_agent_on_lead(
                 session.add(email_record)
                 try:
                     from core.email import send_email
-                    send_email(
-                        to=email_data["to"],
-                        subject=email_data.get("subject", "AgenticOrg"),
-                        html=email_data.get("body_html", ""),
+                    sent = await asyncio.to_thread(
+                        send_email,
+                        email_data["to"],
+                        email_data.get("subject", "AgenticOrg"),
+                        email_data.get("body_html", ""),
                     )
-                    email_record.status = "sent"
-                    email_record.sent_at = datetime.now(UTC)
+                    if sent:
+                        email_record.status = "sent"
+                        email_record.sent_at = datetime.now(UTC)
                 # enterprise-gate: broad-except-ok reason=sales-email-sidecar-failure-leaves-email-pending
                 except Exception as e:
                     logger.warning("sales_email_failed", lead_id=lead_id, error=str(e))

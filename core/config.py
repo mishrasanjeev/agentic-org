@@ -135,6 +135,13 @@ class Settings(BaseSettings):
     default_confidence_floor: float = 0.88
     max_agent_retries: int = 3
 
+    # Resource-intensive local runtimes. These per-worker caps prevent one API
+    # process from spawning unbounded Tesseract and Chromium processes.
+    document_extraction_max_concurrency: int = Field(default=2, ge=1, le=32)
+    document_extraction_queue_timeout_seconds: float = Field(default=30.0, ge=0.1, le=300.0)
+    rpa_max_concurrency: int = Field(default=2, ge=1, le=16)
+    rpa_queue_timeout_seconds: float = Field(default=5.0, ge=0.1, le=120.0)
+
     # SEC-012: every environment except local / dev / test is treated
     # as strict. Staging is internet-accessible, used for demos, pilots,
     # and enterprise security review — weak staging secrets become real

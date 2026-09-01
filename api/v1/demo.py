@@ -1,6 +1,7 @@
 """Demo request endpoint — stores in DB, creates lead, triggers sales agent, emails notification."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid as _uuid
 from html import escape
@@ -182,12 +183,12 @@ async def submit_demo_request(body: DemoRequest):
     internal_notification_sent = False
     requester_confirmation_sent = False
     try:
-        internal_notification_sent = _send_email_notification(body)
+        internal_notification_sent = await asyncio.to_thread(_send_email_notification, body)
     # enterprise-gate: broad-except-ok reason=demo-internal-email-sidecar-records-false-flag
     except Exception:
         logger.exception("Email send failed but request was saved")
     try:
-        requester_confirmation_sent = _send_trial_confirmation(body)
+        requester_confirmation_sent = await asyncio.to_thread(_send_trial_confirmation, body)
     # enterprise-gate: broad-except-ok reason=demo-confirmation-email-sidecar-records-false-flag
     except Exception:
         logger.exception("Requester confirmation email failed but request was saved")

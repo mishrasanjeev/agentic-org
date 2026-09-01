@@ -1,0 +1,26 @@
+# Production-like local performance override. Use with docker-compose.yml,
+# docker-compose.local-e2e.yml, and docker-compose.simulation.yml.
+services:
+  api:
+    image: ${AGENTICORG_PERF_IMAGE:-agenticorg-performance:local}
+    ports: !override
+      - "8000"
+    volumes: !override []
+    environment:
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
+      AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
+      AGENTICORG_PII_MASKING: "true"
+      AGENTICORG_LOG_LEVEL: WARNING
+      AGENTICORG_DB_POOL_SIZE: ${AGENTICORG_PERF_DB_POOL_SIZE:-5}
+      AGENTICORG_DB_MAX_OVERFLOW: ${AGENTICORG_PERF_DB_MAX_OVERFLOW:-5}
+      AGENTICORG_DOCUMENT_EXTRACTION_MAX_CONCURRENCY: ${AGENTICORG_PERF_OCR_CONCURRENCY:-2}
+      AGENTICORG_DOCUMENT_EXTRACTION_QUEUE_TIMEOUT_SECONDS: "30"
+      AGENTICORG_RPA_MAX_CONCURRENCY: ${AGENTICORG_PERF_RPA_CONCURRENCY:-2}
+      AGENTICORG_RPA_QUEUE_TIMEOUT_SECONDS: "5"
+    command: >-
+      uvicorn api.main:app --host 0.0.0.0 --port 8000
+      --timeout-graceful-shutdown 20

@@ -125,8 +125,10 @@ async def lifespan(app: FastAPI):
         pass  # Expected to fail - we only care about the JWKS fetch side effect
 
     yield
+    from api.v1.health import close_health_resources
     from core.database import close_db
 
+    await close_health_resources()
     await close_db()
 
 

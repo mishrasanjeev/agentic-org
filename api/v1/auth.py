@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -214,7 +215,12 @@ async def signup(body: SignupRequest, request: Request, response: Response):
 
     # Send welcome email (non-blocking)
     try:
-        send_welcome_email(body.admin_email, body.org_name, body.admin_name)
+        await asyncio.to_thread(
+            send_welcome_email,
+            body.admin_email,
+            body.org_name,
+            body.admin_name,
+        )
     # enterprise-gate: broad-except-ok reason=welcome-email-sidecar-failure-does-not-affect-auth-token
     except Exception:
         logger.exception("Welcome email failed but signup succeeded")
@@ -599,7 +605,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
         app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
         reset_link = f"{app_url}/reset-password?code={code}"
         try:
-            send_password_reset_email(user.email, reset_link)
+            await asyncio.to_thread(send_password_reset_email, user.email, reset_link)
         # enterprise-gate: broad-except-ok reason=password-reset-email-failure-keeps-enumeration-safe-response
         except Exception:
             logger.exception("Password reset email failed for user")
