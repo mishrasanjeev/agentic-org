@@ -23,6 +23,7 @@ packages = [
     "auth",
     "bridge",
     "connectors",
+    "rpa",
     "workflows",
     "scaling",
     "observability",

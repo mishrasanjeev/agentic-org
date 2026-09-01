@@ -184,8 +184,8 @@ def main() -> int:
         "paid_phone_call": False,
         "flows": {},
     }
-    _run(_compose("up", "-d", "--wait", "postgres", "mailpit"))
     try:
+        _run(_compose("up", "-d", "--wait", "postgres", "mailpit"))
         db_port = _mapped_port("postgres", 5432)
         smtp_port = _mapped_port("mailpit", 1025)
         mailpit_api_port = _mapped_port("mailpit", 8025)
@@ -228,7 +228,12 @@ def main() -> int:
         report_path = evidence_dir / "simulation-report.json"
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
         print(json.dumps(report, indent=2, sort_keys=True))
-        _run(_compose("down", "--volumes", "--remove-orphans"))
+        try:
+            _run(_compose("down", "--volumes", "--remove-orphans"))
+        except Exception as cleanup_exc:  # enterprise-gate: broad-except-ok reason=preserve-primary-simulation-result
+            print(f"Simulation cleanup failed: {cleanup_exc}", file=sys.stderr)
+            if return_code == 0:
+                return_code = 1
     return return_code
 
 

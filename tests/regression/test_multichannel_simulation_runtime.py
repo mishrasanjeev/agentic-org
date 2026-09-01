@@ -129,9 +129,18 @@ def test_production_image_packages_playwright_and_chromium() -> None:
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
 
     assert '"playwright>=1.62.0,<2"' in pyproject
+    assert '"rpa",' in pyproject
     assert "python -m playwright install chromium" in dockerfile
     assert "python -m playwright install-deps chromium" in dockerfile
     assert "PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers" in dockerfile
+
+
+def test_simulation_guards_partial_compose_startup_with_cleanup() -> None:
+    script = (REPO / "scripts/local_multichannel_simulation.py").read_text(encoding="utf-8")
+
+    try_position = script.index("    try:\n        _run(_compose(\"up\"")
+    cleanup_position = script.index('_run(_compose("down", "--volumes", "--remove-orphans"))')
+    assert try_position < cleanup_position
 
 
 def test_mailpit_simulation_image_is_digest_pinned() -> None:
