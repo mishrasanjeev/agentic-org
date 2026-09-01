@@ -338,7 +338,7 @@
     "public_exempt_reason": null,
     "rate_limit": "demo-seed",
     "scope": "demo.seed.control_plane.write",
-    "source_line": 59,
+    "source_line": 60,
     "tenant_required": true
   },
   {
@@ -1004,7 +1004,7 @@
     "public_exempt_reason": "auth-bootstrap-config-no-tenant-data",
     "rate_limit": "public-read",
     "scope": "public:auth.config",
-    "source_line": 768,
+    "source_line": 774,
     "tenant_required": false
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": "password-reset-bootstrap-rate-limited",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.request",
-    "source_line": 566,
+    "source_line": 572,
     "tenant_required": false
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": "google-id-token-verification",
     "rate_limit": "auth-login",
     "scope": "public:auth.google",
-    "source_line": 442,
+    "source_line": 448,
     "tenant_required": false
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-credentials",
     "rate_limit": "auth-login",
     "scope": "public:auth.login",
-    "source_line": 358,
+    "source_line": 364,
     "tenant_required": false
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "auth-mutating",
     "scope": "auth.session.logout",
-    "source_line": 673,
+    "source_line": 679,
     "tenant_required": true
   },
   {
@@ -1094,7 +1094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "auth.session.read",
-    "source_line": 699,
+    "source_line": 705,
     "tenant_required": true
   },
   {
@@ -1112,7 +1112,7 @@
     "public_exempt_reason": "one-time-reset-code-validated",
     "rate_limit": "auth-password-reset",
     "scope": "public:auth.password_reset.consume",
-    "source_line": 620,
+    "source_line": 626,
     "tenant_required": false
   },
   {
@@ -1130,7 +1130,7 @@
     "public_exempt_reason": "auth-bootstrap-rate-limited-password-policy",
     "rate_limit": "auth-signup",
     "scope": "public:auth.signup",
-    "source_line": 138,
+    "source_line": 139,
     "tenant_required": false
   },
   {
@@ -3740,7 +3740,7 @@
     "public_exempt_reason": "public-lead-capture-email-and-sales-agent-trigger",
     "rate_limit": "demo-request-public",
     "scope": "public:demo_request.external_input.write",
-    "source_line": 112,
+    "source_line": 113,
     "tenant_required": false
   },
   {
@@ -4028,7 +4028,7 @@
     "public_exempt_reason": "public-readiness-probe-limited-db-redis-status",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.readiness.dependency_status",
-    "source_line": 78,
+    "source_line": 162,
     "tenant_required": false
   },
   {
@@ -4046,7 +4046,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 196,
+    "source_line": 263,
     "tenant_required": false
   },
   {
@@ -4064,7 +4064,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-diagnostics-read",
     "scope": "health.diagnostics.admin.sensitive.read",
-    "source_line": 311,
+    "source_line": 378,
     "tenant_required": false
   },
   {
@@ -4082,7 +4082,7 @@
     "public_exempt_reason": "public-liveness-probe-no-dependency-detail",
     "rate_limit": "infra-health-probe",
     "scope": "public:health.liveness",
-    "source_line": 123,
+    "source_line": 190,
     "tenant_required": false
   },
   {
@@ -4100,7 +4100,7 @@
     "public_exempt_reason": null,
     "rate_limit": "health-sla-read",
     "scope": "health.sla.sensitive.read",
-    "source_line": 246,
+    "source_line": 313,
     "tenant_required": false
   },
   {
@@ -4136,7 +4136,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 870,
+    "source_line": 890,
     "tenant_required": true
   },
   {
@@ -4154,7 +4154,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 969,
+    "source_line": 989,
     "tenant_required": true
   },
   {
@@ -4172,7 +4172,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1255,
+    "source_line": 1275,
     "tenant_required": false
   },
   {
@@ -4190,7 +4190,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1197,
+    "source_line": 1217,
     "tenant_required": true
   },
   {
@@ -4208,7 +4208,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1368,
+    "source_line": 1388,
     "tenant_required": true
   },
   {
@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 497,
+    "source_line": 505,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 523,
+    "source_line": 531,
     "tenant_required": true
   },
   {
@@ -4424,7 +4424,7 @@
     "public_exempt_reason": "one-time-invite-code-validated",
     "rate_limit": "auth-invite",
     "scope": "public:org.invite.accept",
-    "source_line": 295,
+    "source_line": 303,
     "tenant_required": false
   },
   {
@@ -4496,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.members.invite.admin",
-    "source_line": 165,
+    "source_line": 166,
     "tenant_required": true
   },
   {
@@ -4514,7 +4514,7 @@
     "public_exempt_reason": "one-time-invite-code-preview",
     "rate_limit": "auth-invite",
     "scope": "public:org.invite.preview",
-    "source_line": 248,
+    "source_line": 256,
     "tenant_required": false
   },
   {
@@ -4532,7 +4532,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "org.members.read.admin",
-    "source_line": 131,
+    "source_line": 132,
     "tenant_required": true
   },
   {
@@ -4550,7 +4550,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.members.delete.admin",
-    "source_line": 404,
+    "source_line": 412,
     "tenant_required": true
   },
   {
@@ -4568,7 +4568,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "org.onboarding.update.admin",
-    "source_line": 367,
+    "source_line": 375,
     "tenant_required": true
   },
   {
@@ -4586,7 +4586,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "org.profile.read.admin",
-    "source_line": 101,
+    "source_line": 102,
     "tenant_required": true
   },
   {
@@ -5432,7 +5432,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "sales.pipeline.sensitive.bulk_import",
-    "source_line": 572,
+    "source_line": 575,
     "tenant_required": true
   },
   {
@@ -5450,7 +5450,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "sales.metrics.sensitive.read",
-    "source_line": 492,
+    "source_line": 495,
     "tenant_required": true
   },
   {
@@ -5468,7 +5468,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.list",
-    "source_line": 142,
+    "source_line": 143,
     "tenant_required": true
   },
   {
@@ -5486,7 +5486,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.followups",
-    "source_line": 181,
+    "source_line": 182,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.write",
-    "source_line": 109,
+    "source_line": 110,
     "tenant_required": true
   },
   {
@@ -5522,7 +5522,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.process",
-    "source_line": 205,
+    "source_line": 206,
     "tenant_required": true
   },
   {
@@ -5540,7 +5540,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-read",
     "scope": "sales.pipeline.sensitive.read",
-    "source_line": 244,
+    "source_line": 245,
     "tenant_required": true
   },
   {
@@ -5558,7 +5558,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.write",
-    "source_line": 288,
+    "source_line": 289,
     "tenant_required": true
   },
   {
@@ -5576,7 +5576,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-inbox-sync",
     "scope": "sales.pipeline.external_action.process_inbox",
-    "source_line": 924,
+    "source_line": 927,
     "tenant_required": true
   },
   {
@@ -5594,7 +5594,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-agent-trigger",
     "scope": "sales.pipeline.external_action.run_followups",
-    "source_line": 730,
+    "source_line": 733,
     "tenant_required": true
   },
   {
@@ -5612,7 +5612,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sales-write",
     "scope": "sales.pipeline.sensitive.seed_demo",
-    "source_line": 846,
+    "source_line": 849,
     "tenant_required": true
   },
   {
