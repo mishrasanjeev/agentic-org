@@ -152,6 +152,8 @@ class RPAExecutionOut(BaseModel):
     elapsed_ms: int = 0
     success: bool = False
     error: str | None = None
+    error_class: str | None = None
+    retryable: bool = False
 
 
 # ── Endpoints ────────���───────────────────────────────────────────────
@@ -306,6 +308,8 @@ async def run_script(
         execution.success = result.get("success", False)
         execution.elapsed_ms = result.get("elapsed_ms", 0)
         execution.error = result.get("error")
+        execution.error_class = result.get("error_class")
+        execution.retryable = result.get("retryable", False)
         execution.completed_at = datetime.now(UTC).isoformat()
 
     # enterprise-gate: broad-except-ok reason=rpa-execution-failure-records-failed-result

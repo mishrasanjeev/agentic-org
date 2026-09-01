@@ -67,12 +67,24 @@ def test_tc_api_001_liveness_endpoint_is_lightweight() -> None:
 def test_tc_api_002_readiness_checks_db_and_redis() -> None:
     """Readiness must probe BOTH DB and Redis — Cloud Run / K8s
     keys off this to decide whether to send traffic."""
-    src = (REPO / "api" / "v1" / "health.py").read_text(encoding="utf-8")
-    block = src.split('@router.get("/health")', 1)[1].split(
-        '@router.get(', 1
-    )[0]
-    assert "session.execute(text" in block
-    assert "aioredis.from_url" in block
+    import inspect
+
+    from api.v1.health import (
+        _critical_dependency_checks,
+        _db_health_status,
+        _get_health_redis_client,
+        _redis_health_status,
+        health_readiness,
+    )
+
+    block = inspect.getsource(health_readiness)
+    assert "_critical_dependency_checks" in block
+    assert "session.execute(text" in inspect.getsource(_db_health_status)
+    assert "_get_health_redis_client().ping" in inspect.getsource(_redis_health_status)
+    assert "aioredis.from_url" in inspect.getsource(_get_health_redis_client)
+    dependency_block = inspect.getsource(_critical_dependency_checks)
+    assert "_db_health_status" in dependency_block
+    assert "_redis_health_status" in dependency_block
     # Returns the per-check status so dashboards can show which
     # subsystem broke.
     assert '"checks":' in block

@@ -4136,7 +4136,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 890,
+    "source_line": 888,
     "tenant_required": true
   },
   {
@@ -4154,7 +4154,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 989,
+    "source_line": 987,
     "tenant_required": true
   },
   {
@@ -4172,7 +4172,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1275,
+    "source_line": 1273,
     "tenant_required": false
   },
   {
@@ -4190,7 +4190,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1217,
+    "source_line": 1215,
     "tenant_required": true
   },
   {
@@ -4208,7 +4208,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1388,
+    "source_line": 1386,
     "tenant_required": true
   },
   {
@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 505,
+    "source_line": 504,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 531,
+    "source_line": 530,
     "tenant_required": true
   },
   {
@@ -5378,7 +5378,7 @@
     "public_exempt_reason": null,
     "rate_limit": "rpa-read",
     "scope": "rpa.execution.sensitive.history",
-    "source_line": 213,
+    "source_line": 215,
     "tenant_required": true
   },
   {
@@ -5396,7 +5396,7 @@
     "public_exempt_reason": null,
     "rate_limit": "rpa-read",
     "scope": "rpa.catalog.sensitive.list",
-    "source_line": 169,
+    "source_line": 171,
     "tenant_required": true
   },
   {
@@ -5414,7 +5414,7 @@
     "public_exempt_reason": null,
     "rate_limit": "rpa-execution",
     "scope": "rpa.execution.external_action.run",
-    "source_line": 240,
+    "source_line": 242,
     "tenant_required": true
   },
   {

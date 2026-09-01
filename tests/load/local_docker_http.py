@@ -38,6 +38,28 @@ def _percentile(values: list[float], percentile: float) -> float:
     return round(ordered[index], 2)
 
 
+def _readiness_body_errors(response: httpx.Response) -> list[str]:
+    """Reject HTTP 200 readiness responses whose dependency body is unhealthy."""
+    try:
+        payload = response.json()
+    except ValueError:
+        return ["readiness_invalid_json"]
+    if not isinstance(payload, dict):
+        return ["readiness_invalid_payload"]
+
+    failures: list[str] = []
+    if payload.get("status") != "healthy":
+        failures.append("readiness_status_unhealthy")
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        failures.append("readiness_checks_missing")
+        return failures
+    for dependency in ("db", "redis"):
+        if checks.get(dependency) != "healthy":
+            failures.append(f"readiness_{dependency}_unhealthy")
+    return failures
+
+
 async def _run_phase(
     client: httpx.AsyncClient,
     *,
@@ -57,6 +79,8 @@ async def _run_phase(
             try:
                 response = await client.get(path)
                 statuses[str(response.status_code)] += 1
+                if path == "/api/v1/health" and response.status_code == 200:
+                    errors.update(_readiness_body_errors(response))
             except Exception as exc:  # enterprise-gate: broad-except-ok reason=load-harness-aggregates-client-errors
                 errors[type(exc).__name__] += 1
             finally:

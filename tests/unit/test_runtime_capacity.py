@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -53,6 +54,35 @@ async def test_capacity_gate_rejects_when_queue_deadline_expires() -> None:
 
 
 @pytest.mark.asyncio
+async def test_blocking_capacity_stays_occupied_after_caller_cancellation() -> None:
+    gate = AsyncCapacityGate("blocking test", limit=1, queue_timeout_seconds=0.01)
+    started = threading.Event()
+    release = threading.Event()
+
+    def blocking_work() -> None:
+        started.set()
+        assert release.wait(timeout=2)
+
+    task = asyncio.create_task(gate.run_blocking(blocking_work))
+    assert await asyncio.to_thread(started.wait, 1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert gate.snapshot.active == 1
+    with pytest.raises(CapacityLimitError):
+        async with gate.slot():
+            pytest.fail("cancelled thread must retain its production permit")
+
+    release.set()
+    for _ in range(100):
+        if gate.snapshot.active == 0:
+            break
+        await asyncio.sleep(0.01)
+    assert gate.snapshot.active == 0
+
+
+@pytest.mark.asyncio
 async def test_rpa_wrapper_returns_retryable_capacity_error(monkeypatch: pytest.MonkeyPatch) -> None:
     from core.rpa import executor
 
@@ -75,6 +105,61 @@ async def test_rpa_wrapper_returns_retryable_capacity_error(monkeypatch: pytest.
     assert refused["success"] is False
     assert refused["error_class"] == "rpa_capacity_exhausted"
     assert refused["retryable"] is True
+
+
+def test_rpa_api_contract_preserves_retryable_capacity_fields() -> None:
+    from api.v1.rpa import RPAExecutionOut
+
+    result = RPAExecutionOut(
+        id="execution-1",
+        script_key="test",
+        script_name="Test",
+        status="failed",
+        started_at="2026-09-01T00:00:00Z",
+        error_class="rpa_capacity_exhausted",
+        retryable=True,
+    )
+
+    assert result.error_class == "rpa_capacity_exhausted"
+    assert result.retryable is True
+
+
+def test_rpa_scheduler_escalates_retryable_result_without_recording_failure() -> None:
+    from core.tasks.rpa_tasks import (
+        RetryableRPAExecutionError,
+        _raise_for_retryable_execution_failure,
+    )
+
+    with pytest.raises(RetryableRPAExecutionError, match="capacity is busy"):
+        _raise_for_retryable_execution_failure(
+            {
+                "success": False,
+                "error": "RPA browser execution capacity is busy",
+                "error_class": "rpa_capacity_exhausted",
+                "retryable": True,
+            }
+        )
+
+
+def test_http_stress_readiness_validation_rejects_unhealthy_200() -> None:
+    import httpx
+
+    from tests.load.local_docker_http import _readiness_body_errors
+
+    unhealthy = httpx.Response(
+        200,
+        json={"status": "unhealthy", "checks": {"db": "healthy", "redis": "unhealthy: TimeoutError"}},
+    )
+    healthy = httpx.Response(
+        200,
+        json={"status": "healthy", "checks": {"db": "healthy", "redis": "healthy"}},
+    )
+
+    assert _readiness_body_errors(unhealthy) == [
+        "readiness_status_unhealthy",
+        "readiness_redis_unhealthy",
+    ]
+    assert _readiness_body_errors(healthy) == []
 
 
 @pytest.mark.asyncio

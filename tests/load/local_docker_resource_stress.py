@@ -6,6 +6,7 @@ import argparse
 import asyncio
 import io
 import json
+import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -14,8 +15,9 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 from playwright.async_api import async_playwright
 
+from api.v1.knowledge import _DOCUMENT_EXTRACTION_CAPACITY
 from core.rag.extractors import extract
-from core.runtime_capacity import AsyncCapacityGate
+from core.rpa.executor import _RPA_CAPACITY
 
 
 @dataclass(frozen=True)
@@ -44,26 +46,34 @@ def _ocr_fixture() -> bytes:
 
 
 async def _run_ocr(jobs: int, concurrency: int) -> ResourceResult:
-    gate = AsyncCapacityGate("OCR stress", limit=concurrency, queue_timeout_seconds=120)
+    if concurrency != _DOCUMENT_EXTRACTION_CAPACITY.limit:
+        raise ValueError(
+            "--ocr-concurrency must match "
+            f"AGENTICORG_DOCUMENT_EXTRACTION_MAX_CONCURRENCY={_DOCUMENT_EXTRACTION_CAPACITY.limit}"
+        )
     fixture = _ocr_fixture()
     active = 0
     maximum_active = 0
+    active_lock = threading.Lock()
 
     async def run_one(index: int) -> bool:
-        nonlocal active, maximum_active
-        async with gate.slot():
-            active += 1
-            maximum_active = max(maximum_active, active)
+        def extract_one() -> bool:
+            nonlocal active, maximum_active
+            with active_lock:
+                active += 1
+                maximum_active = max(maximum_active, active)
             try:
-                result = await asyncio.to_thread(
-                    extract,
+                result = extract(
                     fixture,
-                    "image/png",
-                    f"synthetic-stress-{index}.png",
+                    mime_type="image/png",
+                    filename=f"synthetic-stress-{index}.png",
                 )
                 return "AgenticOrg" in result.full_text()
             finally:
-                active -= 1
+                with active_lock:
+                    active -= 1
+
+        return await _DOCUMENT_EXTRACTION_CAPACITY.run_blocking(extract_one)
 
     started = time.perf_counter()
     results = await asyncio.gather(*(run_one(index) for index in range(jobs)))
@@ -81,7 +91,11 @@ async def _run_ocr(jobs: int, concurrency: int) -> ResourceResult:
 
 
 async def _run_browser(jobs: int, concurrency: int) -> ResourceResult:
-    gate = AsyncCapacityGate("browser stress", limit=concurrency, queue_timeout_seconds=120)
+    if concurrency != _RPA_CAPACITY.limit:
+        raise ValueError(
+            "--browser-concurrency must match "
+            f"AGENTICORG_RPA_MAX_CONCURRENCY={_RPA_CAPACITY.limit}"
+        )
     active = 0
     maximum_active = 0
 
@@ -89,22 +103,28 @@ async def _run_browser(jobs: int, concurrency: int) -> ResourceResult:
 
         async def run_one(index: int) -> bool:
             nonlocal active, maximum_active
-            async with gate.slot():
+
+            async def run_browser_job() -> bool:
+                nonlocal active, maximum_active
                 active += 1
                 maximum_active = max(maximum_active, active)
-                browser = await playwright.chromium.launch(headless=True)
                 try:
-                    page = await browser.new_page()
-                    await page.set_content(
-                        f"<main><h1>AgenticOrg RPA stress {index}</h1>"
-                        "<button id='submit'>Submit</button></main>"
-                    )
-                    await page.click("#submit")
-                    screenshot = await page.screenshot()
-                    return len(screenshot) > 100
+                    browser = await playwright.chromium.launch(headless=True)
+                    try:
+                        page = await browser.new_page()
+                        await page.set_content(
+                            f"<main><h1>AgenticOrg RPA stress {index}</h1>"
+                            "<button id='submit'>Submit</button></main>"
+                        )
+                        await page.click("#submit")
+                        screenshot = await page.screenshot()
+                        return len(screenshot) > 100
+                    finally:
+                        await browser.close()
                 finally:
-                    await browser.close()
                     active -= 1
+
+            return await _RPA_CAPACITY.run(run_browser_job)
 
         started = time.perf_counter()
         results = await asyncio.gather(*(run_one(index) for index in range(jobs)))

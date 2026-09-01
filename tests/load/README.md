@@ -7,7 +7,8 @@ Locust connector test.
 
 `local_docker_http.py` exercises liveness, dependency readiness, and a burst
 phase. It emits JSON and returns non-zero for client errors, non-200 responses,
-or a readiness p95 above the configured limit.
+unhealthy DB/Redis state in an HTTP 200 readiness body, or a readiness p95
+above the configured limit.
 
 ```powershell
 python tests/load/local_docker_http.py `
@@ -16,11 +17,13 @@ python tests/load/local_docker_http.py `
 ```
 
 `local_docker_resource_stress.py` runs real Tesseract OCR and Playwright
+through the same production capacity gates used by knowledge ingestion and RPA
 Chromium against synthetic local data. It checks that expensive work stays
 inside configured concurrency bounds without contacting an external site.
 
 ```powershell
 docker run --rm --network none `
+  -e PYTHONPATH=/work `
   --mount "type=bind,source=$PWD,target=/work,readonly" `
   -w /work agenticorg-performance:local `
   python tests/load/local_docker_resource_stress.py

@@ -78,6 +78,7 @@ synthetic local content and performs no external action:
 
 ```powershell
 docker run --rm --network none `
+  -e PYTHONPATH=/work `
   --mount "type=bind,source=$PWD,target=/work,readonly" `
   -w /work agenticorg-performance:local `
   python tests/load/local_docker_resource_stress.py

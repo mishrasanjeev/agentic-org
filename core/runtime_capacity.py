@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
+from typing import Any, TypeVar
+
+_T = TypeVar("_T")
 
 
 class CapacityLimitError(RuntimeError):
@@ -40,14 +43,13 @@ class AsyncCapacityGate:
         self._semaphore = asyncio.Semaphore(limit)
         self._active = 0
         self._waiting = 0
+        self._draining_tasks: set[asyncio.Task[None]] = set()
 
     @property
     def snapshot(self) -> CapacitySnapshot:
         return CapacitySnapshot(limit=self.limit, active=self._active, waiting=self._waiting)
 
-    @asynccontextmanager
-    async def slot(self) -> AsyncIterator[None]:
-        """Acquire one execution slot or fail without starting the workload."""
+    async def _acquire(self) -> None:
         self._waiting += 1
         try:
             try:
@@ -62,10 +64,56 @@ class AsyncCapacityGate:
                 ) from exc
         finally:
             self._waiting -= 1
-
         self._active += 1
+
+    def _release(self) -> None:
+        self._active -= 1
+        self._semaphore.release()
+
+    @asynccontextmanager
+    async def slot(self) -> AsyncIterator[None]:
+        """Acquire one execution slot or fail without starting the workload."""
+        await self._acquire()
         try:
             yield
         finally:
-            self._active -= 1
-            self._semaphore.release()
+            self._release()
+
+    async def run(self, operation: Callable[[], Awaitable[_T]]) -> _T:
+        """Run one async operation under this production capacity gate."""
+        async with self.slot():
+            return await operation()
+
+    async def _release_when_done(self, task: asyncio.Task[Any]) -> None:
+        with suppress(BaseException):
+            await task
+        self._release()
+
+    async def run_blocking(
+        self,
+        operation: Callable[..., _T],
+        /,
+        *args: Any,
+        **kwargs: Any,
+    ) -> _T:
+        """Run blocking work without releasing capacity on request cancellation.
+
+        Cancelling ``asyncio.to_thread`` only cancels the awaiter, not the worker
+        thread. When a caller disconnects, keep the permit until that underlying
+        thread exits so replacement requests cannot oversubscribe the process.
+        """
+        await self._acquire()
+        task = asyncio.create_task(asyncio.to_thread(operation, *args, **kwargs))
+        release_here = True
+        try:
+            return await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if not task.done():
+                release_here = False
+                draining = asyncio.create_task(self._release_when_done(task))
+                self._draining_tasks.add(draining)
+                draining.add_done_callback(self._draining_tasks.discard)
+            raise
+        finally:
+            if release_here:
+                self._release()

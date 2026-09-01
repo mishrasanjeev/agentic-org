@@ -7,7 +7,6 @@ with basic keyword search (no vector embeddings).
 
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid
 from datetime import UTC, datetime
@@ -596,13 +595,12 @@ async def upload_document(
         content = upload_path.read_bytes()
         try:
             try:
-                async with _DOCUMENT_EXTRACTION_CAPACITY.slot():
-                    extracted_content = await asyncio.to_thread(
-                        extract,
-                        content,
-                        mime_type=(file.content_type or ""),
-                        filename=filename,
-                    )
+                extracted_content = await _DOCUMENT_EXTRACTION_CAPACITY.run_blocking(
+                    extract,
+                    content,
+                    mime_type=(file.content_type or ""),
+                    filename=filename,
+                )
             except CapacityLimitError as exc:
                 raise HTTPException(
                     status_code=503,

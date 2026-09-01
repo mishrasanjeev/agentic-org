@@ -46,6 +46,17 @@ from core.tasks.celery_app import app
 logger = logging.getLogger(__name__)
 
 
+class RetryableRPAExecutionError(RuntimeError):
+    """Transient RPA admission failure that must be retried by Celery."""
+
+
+def _raise_for_retryable_execution_failure(raw_result: dict[str, Any]) -> None:
+    if raw_result.get("success", False) or raw_result.get("retryable") is not True:
+        return
+    detail = str(raw_result.get("error") or "retryable RPA execution failure")[:200]
+    raise RetryableRPAExecutionError(detail)
+
+
 def _script_payload(raw_result: dict[str, Any], *, http_only: bool) -> dict[str, Any]:
     """Normalize direct HTTP and Playwright executor result shapes."""
     if http_only:
@@ -124,6 +135,7 @@ async def _execute_schedule(tenant_id: str, schedule_id: str) -> dict[str, Any]:
         await _record_failure(tid, sid, f"script_error: {type(exc).__name__}", 0, 0, None)
         return {"ok": False, "error": str(exc)}
 
+    _raise_for_retryable_execution_failure(raw_result)
     if not raw_result.get("success", False):
         detail = str(raw_result.get("error") or "script reported failure")[:200]
         await _record_failure(tid, sid, detail, 0, 0, None)

@@ -270,13 +270,14 @@ async def execute_rpa_script(
 ) -> dict[str, Any]:
     """Execute one browser job within the per-container capacity budget."""
     try:
-        async with _RPA_CAPACITY.slot():
-            return await _execute_rpa_script(
+        return await _RPA_CAPACITY.run(
+            lambda: _execute_rpa_script(
                 script_name=script_name,
                 params=params,
                 timeout_s=timeout_s,
                 screenshot_dir=screenshot_dir,
             )
+        )
     except CapacityLimitError as exc:
         logger.warning(
             "rpa_capacity_exhausted",

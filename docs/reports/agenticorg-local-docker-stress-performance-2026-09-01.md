@@ -27,6 +27,33 @@ This is regression evidence from one workstation. It is not a production SLA,
 Cloud Run capacity claim, or proof of external LLM, telephony, payment, or
 merchant-system capacity.
 
+## PR review hardening rerun
+
+PR review identified four ways the first evidence pass could be stronger. The
+runtime and harnesses were corrected before merge:
+
+1. Cancelled upload requests retain their extraction permit until the worker
+   thread actually exits; cancellation can no longer oversubscribe OCR.
+2. RPA capacity exhaustion remains retryable in the API response and causes a
+   scheduled Celery run to retry without recording a permanent failure or
+   advancing its schedule.
+3. HTTP stress now rejects an HTTP 200 readiness response when its body says
+   DB or Redis is unhealthy.
+4. OCR and Chromium stress use the production AgenticOrg capacity gates. The
+   harness no longer creates private semaphores that could mask missing runtime
+   protection.
+
+The corrected harnesses were rerun from `agenticorg-stress:optimized` with the
+PR worktree mounted as `PYTHONPATH=/work`. The Docker-network HTTP result was
+9,500 of 9,500 successful responses, zero client/status/readiness-body errors,
+and 337.72 ms readiness p95. The resource result was 12 of 12 OCR jobs in
+12.866 seconds and 8 of 8 Chromium jobs in 2.419 seconds. Both production gates
+reported a configured limit of two and a measured maximum of two active jobs.
+
+Focused regression validation after these review fixes passed 59 tests,
+including capacity cancellation, RPA API/scheduler propagation, health,
+history durability, RPA execution, and voice/RPA handling.
+
 ## Exact-commit reproducibility rerun
 
 After the fixes were committed, the complete local gate was repeated from a
