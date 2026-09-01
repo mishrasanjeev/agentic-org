@@ -7,7 +7,6 @@ with basic keyword search (no vector embeddings).
 
 from __future__ import annotations
 
-import asyncio
 import os
 import uuid
 from datetime import UTC, datetime
@@ -20,6 +19,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core.config import settings
+from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
 
 logger = structlog.get_logger()
 
@@ -51,6 +52,12 @@ _NATIVE_VECTOR_ERRORS = (
 ) + ((_httpx.HTTPError,) if _httpx else ())
 _DB_READ_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
 _DB_WRITE_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError)
+
+_DOCUMENT_EXTRACTION_CAPACITY = AsyncCapacityGate(
+    "document extraction",
+    limit=settings.document_extraction_max_concurrency,
+    queue_timeout_seconds=settings.document_extraction_queue_timeout_seconds,
+)
 
 
 def _now_iso() -> str:
@@ -587,12 +594,23 @@ async def upload_document(
     try:
         content = upload_path.read_bytes()
         try:
-            extracted_content = await asyncio.to_thread(
-                extract,
-                content,
-                mime_type=(file.content_type or ""),
-                filename=filename,
-            )
+            try:
+                extracted_content = await _DOCUMENT_EXTRACTION_CAPACITY.run_blocking(
+                    extract,
+                    content,
+                    mime_type=(file.content_type or ""),
+                    filename=filename,
+                )
+            except CapacityLimitError as exc:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "error": "document_extraction_capacity_exhausted",
+                        "message": str(exc),
+                        "retryable": True,
+                    },
+                    headers={"Retry-After": str(max(1, int(exc.timeout_seconds)))},
+                ) from exc
         except UnsupportedMimeType as exc:
             raise HTTPException(
                 status_code=415,

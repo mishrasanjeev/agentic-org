@@ -20,6 +20,9 @@ from typing import Any
 
 import structlog
 
+from core.config import settings
+from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
+
 logger = structlog.get_logger()
 
 # ---------------------------------------------------------------------------
@@ -41,6 +44,12 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "rpa" / "scripts"
 # Default execution timeout (seconds)
 DEFAULT_TIMEOUT_S = 60
 MAX_NAVIGATION_SCREENSHOTS = 10
+
+_RPA_CAPACITY = AsyncCapacityGate(
+    "RPA browser execution",
+    limit=settings.rpa_max_concurrency,
+    queue_timeout_seconds=settings.rpa_queue_timeout_seconds,
+)
 
 
 async def _capture_screenshot(
@@ -77,7 +86,7 @@ def _result_error(result_data: Any) -> str:
     return str(error) if error else ""
 
 
-async def execute_rpa_script(
+async def _execute_rpa_script(
     script_name: str,
     params: dict[str, Any],
     timeout_s: int = DEFAULT_TIMEOUT_S,
@@ -251,3 +260,37 @@ async def execute_rpa_script(
         if browser is not None:
             with contextlib.suppress(Exception):
                 await browser.close()
+
+
+async def execute_rpa_script(
+    script_name: str,
+    params: dict[str, Any],
+    timeout_s: int = DEFAULT_TIMEOUT_S,
+    screenshot_dir: str | None = None,
+) -> dict[str, Any]:
+    """Execute one browser job within the per-container capacity budget."""
+    try:
+        return await _RPA_CAPACITY.run(
+            lambda: _execute_rpa_script(
+                script_name=script_name,
+                params=params,
+                timeout_s=timeout_s,
+                screenshot_dir=screenshot_dir,
+            )
+        )
+    except CapacityLimitError as exc:
+        logger.warning(
+            "rpa_capacity_exhausted",
+            limit=_RPA_CAPACITY.limit,
+            waiting=_RPA_CAPACITY.snapshot.waiting,
+            queue_timeout_seconds=exc.timeout_seconds,
+        )
+        return {
+            "success": False,
+            "data": None,
+            "screenshots": [],
+            "elapsed_ms": 0,
+            "error": str(exc),
+            "error_class": "rpa_capacity_exhausted",
+            "retryable": True,
+        }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -222,7 +223,14 @@ async def invite_member(body: InviteRequest, request: Request):
     invite_link = f"{app_url}/accept-invite?code={code}"
 
     try:
-        send_invite_email(body.email, tenant.name, inviter_email, body.role, invite_link)
+        await asyncio.to_thread(
+            send_invite_email,
+            body.email,
+            tenant.name,
+            inviter_email,
+            body.role,
+            invite_link,
+        )
     # enterprise-gate: broad-except-ok reason=invite-email-sidecar-failure-keeps-user-created
     except Exception:
         logger.exception("Invite email failed but user was created")

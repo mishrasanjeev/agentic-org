@@ -156,7 +156,7 @@ class TestTenantSecretsRouting:
         tagged = _ENVELOPE_PREFIX + envelope_payload
         assert decrypt_for_tenant(tagged) == "new-pw"
 
-    @patch("core.crypto.tenant_secrets.async_session_factory")
+    @patch("core.crypto.tenant_secrets.database.async_session_factory")
     def test_encrypt_for_tenant_falls_back_to_fernet_when_no_kek(
         self, mock_session_factory, monkeypatch
     ):
@@ -188,7 +188,7 @@ class TestTenantSecretsRouting:
         # And it round-trips through fernet_decrypt
         assert fernet_decrypt(result) == "plaintext"
 
-    @patch("core.crypto.tenant_secrets.async_session_factory")
+    @patch("core.crypto.tenant_secrets.database.async_session_factory")
     def test_encrypt_for_tenant_uses_byok_when_set(
         self, mock_session_factory, stub_kms
     ):
@@ -217,7 +217,7 @@ class TestTenantSecretsRouting:
         # Round-trip
         assert decrypt_for_tenant(result) == "byok-secret"
 
-    @patch("core.crypto.tenant_secrets.async_session_factory")
+    @patch("core.crypto.tenant_secrets.database.async_session_factory")
     @patch("core.crypto.tenant_secrets.encrypt_to_string")
     def test_encrypt_for_tenant_configured_kek_failure_does_not_downgrade_to_legacy(
         self, mock_encrypt_to_string, mock_session_factory, monkeypatch

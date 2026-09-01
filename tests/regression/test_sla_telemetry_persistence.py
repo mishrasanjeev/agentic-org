@@ -257,7 +257,7 @@ async def test_fetch_history_returns_empty_on_query_error(monkeypatch) -> None:
     def _factory():
         return _BoomSession()
 
-    monkeypatch.setattr(health_module, "async_session_factory", _factory)
+    monkeypatch.setattr(health_module.database, "async_session_factory", _factory)
 
     rows = await health_module._fetch_history(24)
     assert rows == []

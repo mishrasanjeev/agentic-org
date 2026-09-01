@@ -15,6 +15,7 @@ can be set as a comma-separated list.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -102,10 +103,11 @@ async def _send_notification(
                     f"<h2>{subject}</h2>"
                     f"<p>{body}</p>"
                 )
-                send_email(
-                    to="sanjeev@agenticorg.ai",
-                    subject=subject,
-                    html=html_body,
+                await asyncio.to_thread(
+                    send_email,
+                    "sanjeev@agenticorg.ai",
+                    subject,
+                    html_body,
                 )
             elif channel == "slack":
                 import os

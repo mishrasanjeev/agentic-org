@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
@@ -11,11 +12,11 @@ import structlog
 from fastapi import APIRouter
 from sqlalchemy import text
 
+import core.database as database
 from api.deps import require_scope
 from api.route_metadata import route_meta
 from connectors.registry import ConnectorRegistry
-from core.config import settings
-from core.database import async_session_factory
+from core.config import redis_socket_timeout_kwargs, settings
 
 logger = structlog.get_logger()
 
@@ -45,6 +46,89 @@ def _deployed_commit() -> str:
 
 # Timeout for individual connector health checks (seconds)
 _CONNECTOR_HC_TIMEOUT = 5.0
+_DEPENDENCY_HC_TIMEOUT = 3.0
+_DEPENDENCY_HC_CACHE_TTL_SECONDS = 1.0
+_health_redis_client: aioredis.Redis | None = None
+_health_dependency_cache: tuple[float, dict[str, str]] | None = None
+_health_dependency_lock: asyncio.Lock | None = None
+
+
+def _get_health_redis_client() -> aioredis.Redis:
+    """Reuse one bounded Redis pool instead of creating a client per probe."""
+    global _health_redis_client
+    if _health_redis_client is None:
+        _health_redis_client = aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            max_connections=max(10, settings.db_pool_size + settings.db_max_overflow),
+            **redis_socket_timeout_kwargs(),
+        )
+    return _health_redis_client
+
+
+async def close_health_resources() -> None:
+    """Close the shared health-check pool during application shutdown."""
+    global _health_dependency_cache, _health_dependency_lock, _health_redis_client
+    client, _health_redis_client = _health_redis_client, None
+    _health_dependency_cache = None
+    _health_dependency_lock = None
+    if client is not None:
+        await client.aclose()
+
+
+async def _db_health_status() -> str:
+    try:
+        async with database.async_session_factory() as session:
+            await asyncio.wait_for(
+                session.execute(text("SELECT 1")),
+                timeout=_DEPENDENCY_HC_TIMEOUT,
+            )
+        return "healthy"
+    # enterprise-gate: broad-except-ok reason=readiness-db-probe-fails-closed-unhealthy
+    except Exception as exc:
+        return f"unhealthy: {type(exc).__name__}"
+
+
+async def _redis_health_status() -> str:
+    try:
+        await asyncio.wait_for(
+            _get_health_redis_client().ping(),
+            timeout=_DEPENDENCY_HC_TIMEOUT,
+        )
+        return "healthy"
+    # enterprise-gate: broad-except-ok reason=readiness-redis-probe-fails-closed-unhealthy
+    except Exception as exc:
+        return f"unhealthy: {type(exc).__name__}"
+
+
+async def _critical_dependency_checks() -> dict[str, str]:
+    """Return coalesced DB/Redis health without amplifying probe bursts."""
+    global _health_dependency_cache, _health_dependency_lock
+    now = time.monotonic()
+    if (
+        _health_dependency_cache is not None
+        and now - _health_dependency_cache[0] <= _DEPENDENCY_HC_CACHE_TTL_SECONDS
+    ):
+        return dict(_health_dependency_cache[1])
+
+    if _health_dependency_lock is None:
+        _health_dependency_lock = asyncio.Lock()
+
+    async with _health_dependency_lock:
+        now = time.monotonic()
+        if (
+            _health_dependency_cache is not None
+            and now - _health_dependency_cache[0] <= _DEPENDENCY_HC_CACHE_TTL_SECONDS
+        ):
+            return dict(_health_dependency_cache[1])
+
+        db_status, redis_status = await asyncio.gather(
+            _db_health_status(),
+            _redis_health_status(),
+        )
+        checks = {"db": db_status, "redis": redis_status}
+        _health_dependency_cache = (time.monotonic(), checks)
+        return dict(checks)
 
 
 async def _check_connector(connector_name: str) -> dict:
@@ -82,24 +166,7 @@ async def health_readiness():
     K8s readiness probes should point here so external outages don't
     flap pods.
     """
-    checks: dict[str, str] = {"db": "unknown", "redis": "unknown"}
-
-    try:
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
-        checks["db"] = "healthy"
-    # enterprise-gate: broad-except-ok reason=readiness-db-probe-fails-closed-unhealthy
-    except Exception as e:
-        checks["db"] = f"unhealthy: {type(e).__name__}"
-
-    try:
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
-        await r.ping()
-        await r.close()
-        checks["redis"] = "healthy"
-    # enterprise-gate: broad-except-ok reason=readiness-redis-probe-fails-closed-unhealthy
-    except Exception as e:
-        checks["redis"] = f"unhealthy: {type(e).__name__}"
+    checks = await _critical_dependency_checks()
 
     core_healthy = checks["db"] == "healthy" and checks["redis"] == "healthy"
     return {
@@ -156,7 +223,7 @@ async def _fetch_history(hours: int) -> list[dict]:
     snapshot in those cases.
     """
     try:
-        async with async_session_factory() as session:
+        async with database.async_session_factory() as session:
             result = await session.execute(
                 text(
                     "SELECT recorded_at, status, checks, version, commit "
@@ -313,24 +380,8 @@ async def diagnostics():
 
     Not used by K8s probes. Called by the SRE dashboard.
     """
-    checks: dict[str, str | dict] = {"db": "unknown", "redis": "unknown"}
-
-    try:
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
-        checks["db"] = "healthy"
-    # enterprise-gate: broad-except-ok reason=diagnostics-db-probe-fails-closed-unhealthy
-    except Exception as e:
-        checks["db"] = f"unhealthy: {type(e).__name__}"
-
-    try:
-        r = aioredis.from_url(settings.redis_url, decode_responses=True)
-        await r.ping()
-        await r.close()
-        checks["redis"] = "healthy"
-    # enterprise-gate: broad-except-ok reason=diagnostics-redis-probe-fails-closed-unhealthy
-    except Exception as e:
-        checks["redis"] = f"unhealthy: {type(e).__name__}"
+    dependency_checks = await _critical_dependency_checks()
+    checks: dict[str, str | dict] = dict(dependency_checks)
 
     connector_names = ConnectorRegistry.all_names()
     connector_checks: dict[str, dict] = {}

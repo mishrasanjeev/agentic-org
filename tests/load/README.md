@@ -1,6 +1,38 @@
 # Load test harness
 
-This directory holds Locust load tests for the AgenticOrg API.
+This directory holds repeatable local Docker stress tools and the staging-only
+Locust connector test.
+
+## Local Docker runtime tests
+
+`local_docker_http.py` exercises liveness, dependency readiness, and a burst
+phase. It emits JSON and returns non-zero for client errors, non-200 responses,
+unhealthy DB/Redis state in an HTTP 200 readiness body, or a readiness p95
+above the configured limit.
+
+```powershell
+python tests/load/local_docker_http.py `
+  --base-url http://127.0.0.1:<mapped-port> `
+  --output codex-pytest-artifacts/local-docker-http.json
+```
+
+`local_docker_resource_stress.py` runs real Tesseract OCR and Playwright
+through the same production capacity gates used by knowledge ingestion and RPA
+Chromium against synthetic local data. It checks that expensive work stays
+inside configured concurrency bounds without contacting an external site.
+
+```powershell
+docker run --rm --network none `
+  -e PYTHONPATH=/work `
+  --mount "type=bind,source=$PWD,target=/work,readonly" `
+  -w /work agenticorg-performance:local `
+  python tests/load/local_docker_resource_stress.py
+```
+
+See [Performance and Load Testing](../../docs/PERFORMANCE.md) for the complete
+production-style Compose command and interpretation rules.
+
+## Connector rate-limit test
 
 ## Why Locust
 
@@ -14,7 +46,7 @@ This directory holds Locust load tests for the AgenticOrg API.
   in `core.tool_gateway.rate_limiter.RateLimiter` actually clamps at
   the published RPM. Run against a staging API (never production).
 
-## Running locally against a dev API
+### Running locally against a dev API
 
 ```
 pip install locust
@@ -26,7 +58,7 @@ locust -f tests/load/locustfile_connectors.py \
   --headless --csv tests/load/results/local
 ```
 
-## Running in CI
+### Running in CI
 
 Locust is *not* part of the default `pytest` run because it needs a
 live API to talk to. The intended CI flow is:
@@ -41,7 +73,7 @@ live API to talk to. The intended CI flow is:
 This nightly job is not yet wired — it's a P2 item tracked in
 `docs/ENTERPRISE_V4_8_0_SUMMARY.md`.
 
-## Interpreting the output
+### Interpreting the output
 
 | Connector | Published RPM | Expected 429 rate when running at 50% | When running at 110% |
 |-----------|---------------|--------------------------------------|----------------------|

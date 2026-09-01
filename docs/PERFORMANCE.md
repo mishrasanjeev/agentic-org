@@ -1,88 +1,109 @@
-# Performance Baselines
+# Performance and Load Testing
 
-This document captures the performance numbers customers can expect
-from AgenticOrg. All measurements are from the production deployment
-at `app.agenticorg.ai` running on GKE with the resource allocation
-documented in `docs/SCALING.md`.
+AgenticOrg performance claims must come from a reproducible result. This page
+defines the supported local Docker checks and the boundary between measured
+evidence and production capacity planning.
 
-## How we measure
+## Current evidence
 
-- **Source of truth**: Grafana dashboards backed by Prometheus.
-- **Load generator**: Python E2E smoke tests run every hour from a
-  dedicated worker in the same GCP region. End-to-end measurements
-  include TLS handshake and service-side processing.
-- **Window**: percentiles are computed over a trailing 24-hour
-  window.
+The latest checked-in workstation run is:
 
-Raw numbers live in the dashboard at `/d/perf-baseline` (Grafana).
+- [Local Docker stress and performance report](reports/agenticorg-local-docker-stress-performance-2026-09-01.md)
 
-## API latency (public endpoints)
+That report measures one Docker Desktop host. It is useful for regression and
+resource-safety decisions, but it is not a Cloud Run SLA or a claim about
+tenant, LLM, telephony, payment-provider, or third-party connector capacity.
 
-| Endpoint                                    | p50   | p95   | p99    |
-|---------------------------------------------|-------|-------|--------|
-| `GET  /api/v1/health`                       |  8 ms |  20 ms|  40 ms |
-| `GET  /api/v1/agents`                       | 35 ms | 90 ms | 140 ms |
-| `POST /api/v1/agents/{id}/run` (LLM path)   | 1.8 s | 6.0 s | 12 s   |
-| `POST /api/v1/workflows/{id}/trigger`       | 60 ms | 180 ms| 320 ms |
-| `POST /api/v1/approvals/{id}/decide`        | 45 ms | 140 ms| 260 ms |
-| `GET  /api/v1/kpis/{domain}`                | 120 ms| 350 ms| 600 ms |
-| `POST /api/v1/billing/subscribe/india`      | 300 ms| 900 ms| 1.5 s  |
+## Runtime protections
 
-The LLM path dominates the tail — 95% of latency > 1 s is time spent
-waiting on Anthropic/Gemini. The non-LLM p99 target is 500 ms across
-all endpoints.
+AgenticOrg applies bounded admission control to the two most expensive local
+runtime paths:
 
-## Throughput
+| Workload | Default concurrency per worker | Queue deadline | Saturation behavior |
+|---|---:|---:|---|
+| Document extraction and OCR | 2 | 30 seconds | HTTP 503 with a retryable capacity error |
+| Browser RPA | 2 | 5 seconds | Structured retryable failure; the browser is not launched |
 
-- **Sustained**: 120 req/s per API pod (p95 < 200 ms).
-- **Burst**: 400 req/s per pod for up to 30 seconds before HPA kicks in.
-- **At 20 pods**: ~2400 req/s sustained.
+Tune these only after measuring the target container CPU and memory:
 
-## Workflow execution
-
-| Scenario                              | p50   | p95    |
-|---------------------------------------|-------|--------|
-| Sequential workflow, 5 steps, no LLM  | 1.2 s | 2.8 s  |
-| Sequential workflow, 5 steps, 1 LLM   | 4.8 s | 12 s   |
-| Parallel workflow, 10 branches        | 6.2 s | 14 s   |
-| Workflow with HITL (excluding wait)   | 250 ms| 700 ms |
-
-Max workflow duration is capped at 30 minutes. Workflows exceeding
-this are auto-cancelled and the caller sees a `workflow_timeout`
-error.
-
-## Database
-
-- p95 query latency: 3 ms (read), 12 ms (write).
-- Connection pool size: 20 per API pod, 30 per worker.
-- Vacuum runs automatically; long running queries are killed after 60 s.
-
-## Known cliffs
-
-1. **> 1000 rows in a single KPI response**: pagination recommended;
-   the response body becomes the bottleneck.
-2. **Workflow with > 100 parallel steps**: the LangGraph checkpointer
-   serializes on a single DB row for the run state. Keep fan-out below
-   100 or split into sub-workflows.
-3. **Search over > 1M documents in the knowledge base**: RAGFlow is
-   tuned for 500K docs. Above that, shard the index.
-
-## Load test methodology
-
-Run locally with:
-```
-cd tests/load
-python locustfile.py --users 500 --spawn-rate 20 --host https://app.agenticorg.ai
+```text
+AGENTICORG_DOCUMENT_EXTRACTION_MAX_CONCURRENCY
+AGENTICORG_DOCUMENT_EXTRACTION_QUEUE_TIMEOUT_SECONDS
+AGENTICORG_RPA_MAX_CONCURRENCY
+AGENTICORG_RPA_QUEUE_TIMEOUT_SECONDS
 ```
 
-Load tests run weekly on a staging cluster; results are attached to
-the Monday release review.
+Readiness checks reuse a bounded Redis pool, probe DB and Redis concurrently,
+and coalesce concurrent probes into a one-second cache. Liveness remains a
+dependency-free process check.
 
-## History
+The Docker image defaults to one Uvicorn worker. Operators may set
+`WEB_CONCURRENCY` when the service has enough CPU and its total DB connection
+budget has been calculated. Capacity gates are process-local, so effective
+container concurrency is `WEB_CONCURRENCY` multiplied by each configured
+limit. More workers are not automatically faster for a CPU-saturated OCR/RPA
+container.
 
-| Version | Date       | p95 /agents/run | Notes                       |
-|---------|------------|-----------------|------------------------------|
-| v3.0.0  | 2026-01-10 | 9.2 s           | Baseline                    |
-| v4.0.0  | 2026-02-14 | 7.1 s           | Prompt caching              |
-| v4.3.0  | 2026-03-08 | 6.5 s           | Gemini fallback for simple  |
-| v4.6.0  | 2026-04-11 | 6.0 s           | Current                     |
+## Reproduce locally
+
+Build and start a production-style API with isolated dependencies:
+
+```powershell
+docker build -t agenticorg-performance:local .
+$env:AGENTICORG_PERF_IMAGE = "agenticorg-performance:local"
+docker compose -p agenticorg_perf `
+  -f docker-compose.yml `
+  -f docker-compose.local-e2e.yml `
+  -f docker-compose.simulation.yml `
+  -f docker-compose.performance.yml `
+  up -d --wait postgres redis minio mailpit api
+docker compose -p agenticorg_perf `
+  -f docker-compose.yml `
+  -f docker-compose.local-e2e.yml `
+  -f docker-compose.simulation.yml `
+  -f docker-compose.performance.yml `
+  port api 8000
+```
+
+Run the HTTP harness against the mapped API port:
+
+```powershell
+python tests/load/local_docker_http.py `
+  --base-url http://127.0.0.1:<mapped-port> `
+  --output codex-pytest-artifacts/local-docker-http.json
+```
+
+Run real OCR and Chromium stress inside the built container. The workload uses
+synthetic local content and performs no external action:
+
+```powershell
+docker run --rm --network none `
+  -e PYTHONPATH=/work `
+  --mount "type=bind,source=$PWD,target=/work,readonly" `
+  -w /work agenticorg-performance:local `
+  python tests/load/local_docker_resource_stress.py
+```
+
+Remove the isolated stack when finished:
+
+```powershell
+docker compose -p agenticorg_perf `
+  -f docker-compose.yml `
+  -f docker-compose.local-e2e.yml `
+  -f docker-compose.simulation.yml `
+  -f docker-compose.performance.yml `
+  down --volumes --remove-orphans
+```
+
+## Production release gate
+
+Before raising production concurrency or instance limits, run a staging soak
+with production-equivalent Cloud Run CPU, memory, DB pool, Redis tier, and
+autoscaling settings. Include authenticated API mixes, tenant isolation,
+large-document OCR, browser RPA, websocket/voice control traffic, and failure
+injection. Record p50/p95/p99, error rate, queue wait, CPU, memory, DB pool
+wait, Redis latency, and external-provider latency.
+
+Do not load-test paid telephony, payment rails, merchant systems, or other
+third-party services without written approval, dedicated test credentials,
+spend caps, and provider-safe test destinations.
