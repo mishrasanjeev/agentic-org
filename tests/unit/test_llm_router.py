@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -39,6 +39,39 @@ def _make_router(
 
         router = SmartLLMRouter()
     return router
+
+
+@pytest.mark.asyncio
+async def test_claude_call_uses_current_messages_contract(monkeypatch):
+    """Anthropic 1.x no longer accepts the legacy temperature argument."""
+    import anthropic
+
+    from core.llm import router as router_module
+
+    router = router_module.LLMRouter()
+    create = AsyncMock()
+    response = MagicMock()
+    response.content = [MagicMock(text="ok")]
+    response.usage.input_tokens = 2
+    response.usage.output_tokens = 3
+    response.model_dump.return_value = {"id": "synthetic-response"}
+    create.return_value = response
+    client = MagicMock()
+    client.messages.create = create
+
+    monkeypatch.setattr(router_module.external_keys, "anthropic_api_key", "test-key")
+    monkeypatch.setattr(anthropic, "AsyncAnthropic", lambda **_kwargs: client)
+
+    result = await router._call_claude(
+        "claude-sonnet-4-6",
+        [{"role": "user", "content": "hello"}],
+        0.2,
+        64,
+        0.0,
+    )
+
+    assert result.content == "ok"
+    assert "temperature" not in create.await_args.kwargs
 
 
 # ===================================================================

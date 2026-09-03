@@ -571,8 +571,8 @@ class LLMRouter:
             raw={"candidates": str(response.candidates)},
         )
 
-    async def _call_claude(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
-        """Call Anthropic Claude API."""
+    async def _call_claude(self, model, messages, _temperature, max_tokens, start) -> LLMResponse:
+        """Call Anthropic Claude API using the current Messages contract."""
         import anthropic
 
         if not external_keys.anthropic_api_key:
@@ -591,7 +591,6 @@ class LLMRouter:
         response = await client.messages.create(
             model=model,
             max_tokens=max_tokens,
-            temperature=temperature,
             system=system_msg,
             messages=user_msgs,
         )
