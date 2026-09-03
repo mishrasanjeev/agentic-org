@@ -1285,18 +1285,10 @@ test.describe("CompanyDetail Tab Content", () => {
     });
     await page.waitForLoadState("networkidle").catch(() => {});
 
-    const auditTab = page.getByText("Audit Log", { exact: true }).first();
+    const auditTab = page.getByRole("button", { name: "Audit Log", exact: true });
     if (await auditTab.isVisible({ timeout: 5000 }).catch(() => false)) {
       await auditTab.click();
-
-      const body = (await page.locator("body").textContent()) || "";
-      const hasAuditContent =
-        body.includes("Audit") ||
-        body.includes("Action") ||
-        body.includes("User") ||
-        body.includes("Date") ||
-        body.includes("Log");
-      expect(hasAuditContent).toBeTruthy();
+      await expect(page.getByPlaceholder("Filter by action, actor, or outcome")).toBeVisible();
     }
   });
 

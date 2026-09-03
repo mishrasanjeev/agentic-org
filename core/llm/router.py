@@ -33,6 +33,7 @@ Hard cap (``AGENTICORG_GEMINI_DAILY_USD_CAP``, default ``10.0``):
 
 from __future__ import annotations
 
+import inspect
 import os
 import time
 from dataclasses import dataclass, field
@@ -572,7 +573,7 @@ class LLMRouter:
         )
 
     async def _call_claude(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
-        """Call Anthropic Claude API."""
+        """Call Anthropic Claude API using the current Messages contract."""
         import anthropic
 
         if not external_keys.anthropic_api_key:
@@ -588,13 +589,24 @@ class LLMRouter:
             else:
                 user_msgs.append(m)
 
-        response = await client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system_msg,
-            messages=user_msgs,
-        )
+        request: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "system": system_msg,
+            "messages": user_msgs,
+        }
+        # Anthropic 0.x accepts temperature directly; 1.x removed that keyword.
+        # Preserve caller control when the installed SDK advertises support.
+        try:
+            supports_temperature = "temperature" in inspect.signature(
+                client.messages.create
+            ).parameters
+        except (TypeError, ValueError):
+            supports_temperature = False
+        if supports_temperature:
+            request["temperature"] = temperature
+
+        response = await client.messages.create(**request)
         latency = int((time.monotonic() - start) * 1000)
         tokens = response.usage.input_tokens + response.usage.output_tokens
         cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1_000_000
