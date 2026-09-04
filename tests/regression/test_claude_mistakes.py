@@ -366,6 +366,7 @@ def test_self_visible_to_pytest() -> None:
             "pytest",
             "--collect-only",
             "-q",
+            "--no-cov",
             str(Path(__file__).relative_to(REPO).as_posix()),
         ],
         cwd=REPO,
