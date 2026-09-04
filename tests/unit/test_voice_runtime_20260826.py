@@ -36,6 +36,14 @@ def test_twilio_webhook_signature_verification() -> None:
     )
 
 
+def test_twilio_signature_validation_fails_closed_for_missing_inputs() -> None:
+    url = "https://api.agenticorg.ai/api/v1/voice/webhooks/twilio/t/a/incoming"
+    params = {"CallSid": "CA123"}
+
+    assert not verify_twilio_signature(url=url, params=params, signature="", auth_token="token")
+    assert not verify_twilio_signature(url=url, params=params, signature="signature", auth_token="")
+
+
 def test_twilio_webhooks_reach_signature_boundary_without_jwt() -> None:
     from auth.grantex_middleware import GrantexAuthMiddleware
     from auth.middleware import AuthMiddleware

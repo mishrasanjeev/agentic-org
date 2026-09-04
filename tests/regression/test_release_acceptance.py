@@ -272,6 +272,7 @@ def test_check_registry_is_complete() -> None:
 @pytest.mark.parametrize(
     "key", ["skips", "coverage", "qa_matrix", "crypto", "tsc", "npm_build", "vitest", "playwright", "artefacts"]
 )
+@pytest.mark.timeout(180)
 def test_each_check_returns_a_checkresult(key) -> None:
     """Smoke: every check function returns a CheckResult, never
     raises uncaught. Some legitimately fail in the test env (no
