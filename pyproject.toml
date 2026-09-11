@@ -70,7 +70,8 @@ dependencies = [
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
     "stripe>=15.6.1",
-    "google-genai>=1.75.0",
+    # langchain-google-genai 4.4.x requires the google-genai 2.x API line.
+    "google-genai>=2.23.0",
     "anthropic>=0.125.0",
     "openai>=2.54.0",
     "google-cloud-storage>=2.18.0",
@@ -87,7 +88,7 @@ dependencies = [
     "prometheus-client>=0.26.0",
     "langgraph>=1.2.11",
     "langchain>=1.4.0",
-    "langchain-google-genai>=4.3.7",
+    "langchain-google-genai>=4.4.0",
     "langchain-anthropic>=1.7.1",
     "langchain-openai>=1.6.0",
     "langgraph-checkpoint-postgres>=3.1.2",
