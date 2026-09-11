@@ -59,7 +59,7 @@ twilio==9.11.0
 stripe==15.6.0
 
 # ─── LLM Providers ──────────────────────────────────────────────────────────
-google-genai==1.75.0
+google-genai==2.23.0
 anthropic==0.125.0
 openai==2.54.0
 
