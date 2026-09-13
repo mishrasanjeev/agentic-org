@@ -4,8 +4,9 @@ SEC-013 (2026-05-01): the baseline fallback is now flagged with a
 top-level ``data_quality: "demo"`` field AND an ``X-Data-Quality:
 demo`` response header so customer dashboards (and enterprise security
 reviewers) can distinguish optimistic baseline numbers from actual
-measured benchmark output. Real scorecards are flagged
-``data_quality: "measured"``.
+measured benchmark output. Scorecards produced by the runner's default
+simulation are ``data_quality: "simulated"``; only live-executed
+scorecards (``execution_mode: "live"``) are ``"measured"``.
 """
 
 from __future__ import annotations
@@ -97,8 +98,9 @@ def _load_scorecard() -> tuple[dict, str]:
     try:
         with open(_SCORECARD_PATH, encoding="utf-8") as f:
             scorecard = json.load(f)
-        scorecard["data_quality"] = "measured"
-        return scorecard, "measured"
+        quality = _data_quality_for(scorecard)
+        scorecard["data_quality"] = quality
+        return scorecard, quality
     except (OSError, json.JSONDecodeError):
         # If the on-disk file is corrupt, still don't blank the page. Keep
         # exception details in server logs because this endpoint is public.
@@ -107,6 +109,18 @@ def _load_scorecard() -> tuple[dict, str]:
         baseline["served_at"] = datetime.now(UTC).isoformat()
         baseline["data_quality"] = "demo"
         return baseline, "demo"
+
+
+def _data_quality_for(scorecard: dict) -> str:
+    """Map the runner's ``execution_mode`` to the public data-quality label.
+
+    Only a scorecard produced by running real agents (``execution_mode ==
+    "live"``) may be called "measured". Scorecards from the default runner
+    are perturbed golden outputs and are labelled "simulated"; a file with
+    no mode was produced before the label existed and was always simulated.
+    """
+    mode = str(scorecard.get("execution_mode") or "simulated")
+    return "measured" if mode == "live" else "simulated"
 
 
 def _require_scorecard() -> dict:
@@ -168,10 +182,11 @@ async def get_agent_evals(agent_type: str, response: Response):
 
     case_results = [c for c in scorecard.get("case_results", []) if c["agent_type"] == agent_type]
 
-    response.headers["X-Data-Quality"] = "measured"
+    quality = _data_quality_for(scorecard)
+    response.headers["X-Data-Quality"] = quality
     return {
         "agent_type": agent_type,
         "aggregate": agent_agg,
         "cases": case_results,
-        "data_quality": "measured",
+        "data_quality": quality,
     }

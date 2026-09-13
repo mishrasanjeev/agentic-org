@@ -126,6 +126,20 @@ DB_IP=$(gcloud sql instances describe "${DB_INSTANCE}" \
   --project="${PROJECT_ID}" \
   --format="value(ipAddresses[0].ipAddress)" 2>/dev/null || echo "pending")
 
+# AGENTICORG_SECRET_KEY doubles as the credential-vault key fallback. Re-running
+# this script must NOT mint a new one (that would orphan encrypted connector
+# secrets) -- reuse the existing value if the secret already exists.
+# Rotation goes through core/crypto/rewrap.py, never a blind regenerate.
+EXISTING_SECRET_KEY=$(kubectl get secret agenticorg-secrets -n "${NAMESPACE}" \
+  -o jsonpath='{.data.AGENTICORG_SECRET_KEY}' 2>/dev/null | base64 -d 2>/dev/null || true)
+if [ -n "${EXISTING_SECRET_KEY}" ]; then
+  echo "  Reusing existing AGENTICORG_SECRET_KEY"
+  SECRET_KEY="${EXISTING_SECRET_KEY}"
+else
+  echo "  Generating new AGENTICORG_SECRET_KEY"
+  SECRET_KEY="$(openssl rand -hex 32)"
+fi
+
 cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Secret
@@ -136,7 +150,7 @@ type: Opaque
 stringData:
   AGENTICORG_DB_URL: "postgresql+asyncpg://postgres:${DB_PASSWORD}@${DB_IP}:5432/agenticorg"
   AGENTICORG_REDIS_URL: "redis://agenticorg-redis:6379/0"
-  AGENTICORG_SECRET_KEY: "$(openssl rand -hex 32)"
+  AGENTICORG_SECRET_KEY: "${SECRET_KEY}"
   AGENTICORG_STORAGE_BUCKET: "${BUCKET_NAME}"
   AGENTICORG_STORAGE_REGION: "${REGION}"
   GOOGLE_GEMINI_API_KEY: "${GOOGLE_GEMINI_API_KEY:-set-me}"

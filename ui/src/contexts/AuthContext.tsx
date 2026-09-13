@@ -42,9 +42,10 @@ interface AuthContextType {
   /** @deprecated Always null in browser sessions. Use ``isAuthenticated``. */
   token: null;
   user: AuthUser | null;
-  login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: (credential: string) => Promise<void>;
-  loginWithToken: (token?: string) => Promise<void>;
+  /** Resolve with the hydrated session user so callers can route by role. */
+  login: (email: string, password: string) => Promise<AuthUser>;
+  loginWithGoogle: (credential: string) => Promise<AuthUser>;
+  loginWithToken: (token?: string) => Promise<AuthUser>;
   signup: (orgName: string, name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
@@ -54,6 +55,15 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+/** Where a freshly signed-in user should land. ``/dashboard`` is gated to
+ *  the CxO/admin/auditor roles (see App.tsx); a merchant operator only has
+ *  access to the commerce runtime, so sending them to ``/dashboard`` produced
+ *  an Access Denied page on every login. */
+export function defaultLandingForRole(role: string | null | undefined): string {
+  if (role === "merchant") return "/dashboard/commerce-runtime";
+  return "/dashboard";
+}
 
 export function shouldHydrateSessionForPath(pathname: string) {
   return (
@@ -87,6 +97,17 @@ function _purgeLegacyTokenStorage() {
     localStorage.removeItem("user");
   } catch {
     // ignore â€” private browsing or cookies-disabled paths
+  }
+}
+
+function _clearPerSessionSelections() {
+  // The selected company is tenant-scoped state; it must not survive a
+  // logout, otherwise the next user on this browser inherits a company id
+  // from another tenant and every scoped fetch returns an empty set.
+  try {
+    localStorage.removeItem("company_id");
+  } catch {
+    // ignore
   }
 }
 
@@ -155,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }).catch(() => {});
     }
+    return sessionUser;
   }, [_hydrateFromCookie]);
 
   const signup = useCallback(async (orgName: string, name: string, email: string, password: string) => {
@@ -185,6 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const sessionUser = await _hydrateFromCookie();
     if (!sessionUser) throw new Error("Google login succeeded but the session could not be verified");
+    return sessionUser;
   }, [_hydrateFromCookie]);
 
   const loginWithToken = useCallback(async (_legacyToken?: string) => {
@@ -193,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // URLs and is never persisted or used as browser authentication.
     const sessionUser = await _hydrateFromCookie();
     if (!sessionUser) throw new Error("Could not verify the SSO session");
+    return sessionUser;
   }, [_hydrateFromCookie]);
 
   const logout = useCallback(async () => {
@@ -214,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setIsAuthenticated(false);
     _purgeLegacyTokenStorage();
+    _clearPerSessionSelections();
   }, []);
 
   return (

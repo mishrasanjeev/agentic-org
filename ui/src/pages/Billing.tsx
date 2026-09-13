@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 import {
   formatPlanPrice,
   isPublicPlanCatalog,
@@ -61,29 +61,58 @@ export default function Billing() {
   // and the Plural client remain in place, just unreachable from the UI.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set when /billing/subscription itself failed. While this is set we do
+  // not know the tenant's real plan, so plan actions are blocked instead of
+  // rendering the tenant as "free" with live Subscribe/Upgrade buttons.
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const currentPlan = subscription?.plan || "free";
+  const subscriptionUnknown = subscriptionError !== null;
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setSubscriptionError(null);
+    setUsageError(null);
     Promise.all([
       api.get("/billing/plans").then((response) => response.data),
-      api.get("/billing/subscription").then((r) => r.data).catch(() => null),
-      api.get("/billing/usage").then((r) => r.data).catch(() => null),
+      api
+        .get("/billing/subscription")
+        .then((r) => ({ ok: true as const, data: r.data }))
+        .catch((e: unknown) => ({ ok: false as const, err: extractApiError(e, "Subscription lookup failed") })),
+      api
+        .get("/billing/usage")
+        .then((r) => ({ ok: true as const, data: r.data }))
+        .catch((e: unknown) => ({ ok: false as const, err: extractApiError(e, "Usage lookup failed") })),
     ])
       .then(([p, sub, u]) => {
         if (!isPublicPlanCatalog(p)) throw new Error("Incomplete billing catalog");
         setPlans(orderedPlans(p));
-        setSubscription(sub);
-        setUsage(u);
+        if (sub.ok) {
+          setSubscription(sub.data);
+        } else {
+          setSubscription(null);
+          setSubscriptionError(sub.err);
+        }
+        if (u.ok) {
+          setUsage(u.data);
+        } else {
+          setUsage(null);
+          setUsageError(u.err);
+        }
       })
-      .catch(() => setError("Failed to load billing data"))
+      .catch((e: unknown) => setError(extractApiError(e, "Failed to load billing data")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadKey]);
 
   const handleSubscribe = async (plan: string) => {
+    if (subscriptionUnknown) {
+      setError("Your current subscription could not be verified. Reload before changing plans.");
+      return;
+    }
     setActionLoading(plan);
     setError(null);
     try {
@@ -107,6 +136,10 @@ export default function Billing() {
 
   const handleCancel = async () => {
     if (!confirm("Are you sure you want to cancel your subscription? You'll be downgraded to the Free plan.")) {
+      return;
+    }
+    if (subscriptionUnknown) {
+      setError("Your current subscription could not be verified. Reload before changing plans.");
       return;
     }
     setActionLoading("cancel");
@@ -156,13 +189,42 @@ export default function Billing() {
         </div>
       )}
 
+      {subscriptionError && (
+        <div
+          className="rounded border border-amber-500 bg-amber-50 p-3 text-sm text-amber-900 flex items-center justify-between gap-3"
+          role="alert"
+          data-testid="billing-subscription-error"
+        >
+          <span>
+            Could not verify your current subscription ({subscriptionError}). Plan changes are disabled until
+            billing data loads.
+          </span>
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="px-3 py-1 rounded border border-amber-700 text-amber-900 text-sm hover:bg-amber-100"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {usageError && !subscriptionError && (
+        <div className="rounded border border-amber-500 bg-amber-50 p-3 text-sm text-amber-900" role="alert">
+          Usage figures are unavailable right now ({usageError}).
+        </div>
+      )}
+
       {/* Current plan + usage */}
       <section className="border rounded-lg p-6" data-testid="billing-usage">
         <div className="flex flex-col items-start justify-between gap-3 mb-4 md:flex-row md:items-center">
           <div>
             <h2 className="text-lg font-semibold">
               Current Plan:{" "}
-              <span className="capitalize text-primary">{currentPlan}</span>
+              {subscriptionUnknown ? (
+                <span className="text-amber-700">unknown</span>
+              ) : (
+                <span className="capitalize text-primary">{currentPlan}</span>
+              )}
               {subscription?.is_paid && (
                 <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
                   Active
@@ -206,7 +268,7 @@ export default function Billing() {
         <h2 className="text-lg font-semibold mb-4">Available Plans</h2>
         <div className="grid md:grid-cols-3 gap-4">
           {plans.map((p) => {
-            const isCurrent = p.plan_id === currentPlan;
+            const isCurrent = !subscriptionUnknown && p.plan_id === currentPlan;
             const targetRank = p.display_order;
             const isUpgrade = targetRank > currentRank;
             const usdPrice = p.prices.find((price) => price.currency === "USD");
@@ -264,7 +326,7 @@ export default function Billing() {
                 ) : (
                   <button
                     onClick={() => handleSubscribe(p.plan_id)}
-                    disabled={actionLoading === p.plan_id}
+                    disabled={actionLoading === p.plan_id || subscriptionUnknown}
                     className={`w-full py-2 rounded text-sm font-medium disabled:opacity-50 ${
                       isUpgrade
                         ? "bg-primary text-primary-foreground hover:opacity-90"

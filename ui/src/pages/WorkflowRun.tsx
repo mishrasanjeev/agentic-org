@@ -97,6 +97,8 @@ export default function WorkflowRun() {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Non-fatal: a background poll failed but we still hold the last good run.
+  const [pollWarning, setPollWarning] = useState<string | null>(null);
   const [cancelInFlight, setCancelInFlight] = useState(false);
 
   useEffect(() => {
@@ -111,22 +113,32 @@ export default function WorkflowRun() {
   }, [run?.status]);
 
   async function fetchRun(options: { showLoading?: boolean } = {}) {
-    if (options.showLoading !== false) setLoading(true);
+    const isBackgroundPoll = options.showLoading === false;
+    if (!isBackgroundPoll) setLoading(true);
     setError(null);
     try {
       const { data } = await api.get(`/workflows/runs/${runId}`);
       setRun(data?.run_id ? { ...data, id: data.run_id } : data?.id ? data : null);
+      setPollWarning(null);
     } catch (e: any) {
-      setRun(null);
       const status = e?.response?.status;
       const detail = e?.response?.data?.detail || e?.response?.data?.message;
-      setError(
+      const message =
         status === 404
           ? "Run not found â€” it may have been deleted, or the URL is wrong."
           : status
             ? `Failed to load workflow run (HTTP ${status})${detail ? `: ${detail}` : ""}`
-            : `Failed to load workflow run: ${e?.message || "network error"}`
-      );
+            : `Failed to load workflow run: ${e?.message || "network error"}`;
+      // A transient failure during a background poll must not wipe the run we
+      // already rendered (which also stopped polling, since the poll effect
+      // keys off run.status). Keep the last good state and surface a warning;
+      // only a genuine 404 or an initial load failure replaces the view.
+      if (isBackgroundPoll && status !== 404) {
+        setPollWarning(message);
+      } else {
+        setRun(null);
+        setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -217,6 +229,15 @@ export default function WorkflowRun() {
         >
           <span className="font-medium text-destructive shrink-0">Error:</span>
           <span className="flex-1">{error}</span>
+        </div>
+      )}
+      {pollWarning && (
+        <div
+          role="status"
+          data-testid="workflow-run-poll-warning"
+          className="rounded border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900"
+        >
+          Live refresh failed ({pollWarning}). Showing the last loaded state; retrying automatically.
         </div>
       )}
 

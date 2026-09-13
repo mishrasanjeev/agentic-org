@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -21,6 +22,7 @@ from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
+from core import auth_state
 from core.config import (
     is_strict_runtime_env,
     redis_socket_timeout_kwargs,
@@ -208,7 +210,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -250,8 +252,15 @@ _throttle_redis = None
 
 
 def _auth_state_strict() -> bool:
-    """Is strict multi-replica auth-state enforcement enabled?"""
-    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    """Is strict multi-replica auth-state enforcement enabled?
+
+    Mirrors ``core.auth_state._strict``: the env override OR a strict runtime
+    env (production/staging) — so prod never silently degrades to in-memory.
+    """
+    env_override = os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return env_override or is_strict_runtime_env(runtime_env)
 
 
 async def _get_throttle_redis():
@@ -413,7 +422,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -524,7 +533,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -553,9 +562,11 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
-# Rate limiting for password reset (max 3 per email per hour)
-_reset_attempts: dict[str, list[float]] = defaultdict(list)
+# Rate limiting for password reset: max 3 per email per hour AND a per-IP
+# ceiling, both Redis-backed via core.auth_state (in-memory only in relaxed
+# env, strict env fails closed with 503 like login throttling).
 _RESET_MAX = 3
+_RESET_IP_MAX = 20
 _RESET_WINDOW = 3600  # 1 hour
 
 
@@ -573,13 +584,19 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
     """Send a password reset link if the email is registered."""
     email = body.email.strip().lower()
 
-    # Rate-limit per email
-    now = time.time()
-    _reset_attempts[email] = [t for t in _reset_attempts[email] if now - t < _RESET_WINDOW]
-    if len(_reset_attempts[email]) >= _RESET_MAX:
+    # Rate-limit per IP and per email (cross-replica).
+    client_ip = request.client.host if request.client else "unknown"
+    try:
+        ip_blocked = await auth_state.check_window_rate("reset_ip", client_ip, _RESET_IP_MAX, _RESET_WINDOW)
+        email_blocked = await auth_state.check_window_rate(
+            "reset_email", hashlib.sha256(email.encode()).hexdigest(), _RESET_MAX, _RESET_WINDOW
+        )
+    except RuntimeError as exc:
+        logger.error("Password reset throttle unavailable in strict mode: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    if ip_blocked or email_blocked:
         # Still return success to avoid email enumeration
         return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
-    _reset_attempts[email].append(now)
 
     async with async_session_factory() as session:
         result = await session.execute(
@@ -683,6 +700,14 @@ async def logout(request: Request, response: Response):
     token = getattr(request.state, "auth_token", "")
     if not isinstance(token, str) or not token:
         raise HTTPException(status_code=401, detail="Missing session cookie or Authorization header")
+    # API keys (ao_sk_...) are long-lived credentials, not sessions: the JWT
+    # blacklist never consults them, so reporting "logged_out" would be a lie.
+    # Revoke via DELETE /api-keys/{id} instead.
+    if token.startswith("ao_sk_") or getattr(request.state, "auth_mode", "") == "api_key":
+        raise HTTPException(
+            status_code=400,
+            detail="Logout applies to session tokens only; revoke API keys via the API key management endpoint",
+        )
     try:
         await blacklist_token(token)
     # enterprise-gate: broad-except-ok reason=logout-must-map-any-revocation-store-failure-to-retryable-503

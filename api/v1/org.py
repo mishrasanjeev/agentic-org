@@ -345,7 +345,7 @@ async def accept_invite(body: AcceptInviteRequest):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )

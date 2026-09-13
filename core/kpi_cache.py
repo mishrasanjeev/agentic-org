@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
@@ -21,16 +21,30 @@ from core.database import async_session_factory
 
 logger = logging.getLogger(__name__)
 
-# Redis key pattern: kpi:{tenant_id}:{role}:{metric_name}
+# Redis key pattern: kpi:{tenant_id}:{company_id|-}:{role}:{metric_name}
+# The company segment is "-" for tenant-wide metrics so a company-scoped
+# metric can never alias a tenant-wide one (or another company's).
 _KEY_PREFIX = "kpi"
 
 
-def _redis_key(tenant_id: str, role: str, metric_name: str) -> str:
-    return f"{_KEY_PREFIX}:{tenant_id}:{role}:{metric_name}"
+def _company_segment(company_id: str | None) -> str:
+    return str(company_id) if company_id else "-"
 
 
-def _role_pattern(tenant_id: str, role: str) -> str:
-    return f"{_KEY_PREFIX}:{tenant_id}:{role}:*"
+def _redis_key(tenant_id: str, role: str, metric_name: str, company_id: str | None = None) -> str:
+    return f"{_KEY_PREFIX}:{tenant_id}:{_company_segment(company_id)}:{role}:{metric_name}"
+
+
+def _role_pattern(tenant_id: str, role: str, company_id: str | None = None) -> str:
+    return f"{_KEY_PREFIX}:{tenant_id}:{_company_segment(company_id)}:{role}:*"
+
+
+def _company_param(company_id: str | None) -> str | None:
+    return str(company_id) if company_id else None
+
+
+# PG queries filter with ``company_id IS NOT DISTINCT FROM :cid`` so NULL
+# (tenant-wide) rows and company rows never bleed into each other's scope.
 
 
 async def _get_redis():
@@ -55,7 +69,7 @@ class KPICache:
     """Redis-backed KPI cache with PostgreSQL fallback."""
 
     async def get(
-        self, tenant_id: str, role: str, metric_name: str
+        self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> dict | None:
         """Get a single cached KPI metric.
 
@@ -64,7 +78,7 @@ class KPICache:
         redis = await _get_redis()
         if redis:
             try:
-                raw = await redis.get(_redis_key(tenant_id, role, metric_name))
+                raw = await redis.get(_redis_key(tenant_id, role, metric_name, company_id))
                 if raw:
                     return json.loads(raw)
             # enterprise-gate: broad-except-ok reason=kpi-redis-get-failure-degrades-to-postgres-cache
@@ -74,7 +88,7 @@ class KPICache:
                 await redis.aclose()
 
         # PostgreSQL fallback
-        return await self._pg_get(tenant_id, role, metric_name)
+        return await self._pg_get(tenant_id, role, metric_name, company_id)
 
     async def set(
         self,
@@ -84,6 +98,7 @@ class KPICache:
         value: dict,
         ttl: int = 3600,
         source: str = "agent",
+        company_id: str | None = None,
     ) -> None:
         """Store a KPI metric in Redis + PostgreSQL.
 
@@ -95,7 +110,7 @@ class KPICache:
             ttl: Time-to-live in seconds (Redis only).
             source: Where the metric originated (agent, connector, manual).
         """
-        now = datetime.now(datetime.UTC).isoformat()
+        now = datetime.now(UTC).isoformat()
         envelope = {
             "value": value,
             "source": source,
@@ -109,7 +124,7 @@ class KPICache:
         if redis:
             try:
                 await redis.set(
-                    _redis_key(tenant_id, role, metric_name),
+                    _redis_key(tenant_id, role, metric_name, company_id),
                     json.dumps(envelope),
                     ex=ttl,
                 )
@@ -120,10 +135,10 @@ class KPICache:
                 await redis.aclose()
 
         # Always write to PostgreSQL for historical record
-        await self._pg_upsert(tenant_id, role, metric_name, value, ttl, source)
+        await self._pg_upsert(tenant_id, role, metric_name, value, ttl, source, company_id)
 
     async def get_all_for_role(
-        self, tenant_id: str, role: str
+        self, tenant_id: str, role: str, company_id: str | None = None
     ) -> dict[str, dict]:
         """Get all cached KPI metrics for a given role.
 
@@ -136,7 +151,7 @@ class KPICache:
             try:
                 keys = []
                 async for key in redis.scan_iter(
-                    match=_role_pattern(tenant_id, role), count=100
+                    match=_role_pattern(tenant_id, role, company_id), count=100
                 ):
                     keys.append(key)
                 if keys:
@@ -155,10 +170,14 @@ class KPICache:
                 await redis.aclose()
 
         # PostgreSQL fallback
-        return await self._pg_get_all_for_role(tenant_id, role)
+        return await self._pg_get_all_for_role(tenant_id, role, company_id)
 
     async def invalidate(
-        self, tenant_id: str, role: str, metric_name: str | None = None
+        self,
+        tenant_id: str,
+        role: str,
+        metric_name: str | None = None,
+        company_id: str | None = None,
     ) -> None:
         """Invalidate cached KPI metrics.
 
@@ -169,12 +188,12 @@ class KPICache:
             try:
                 if metric_name:
                     await redis.delete(
-                        _redis_key(tenant_id, role, metric_name)
+                        _redis_key(tenant_id, role, metric_name, company_id)
                     )
                 else:
                     keys = []
                     async for key in redis.scan_iter(
-                        match=_role_pattern(tenant_id, role), count=100
+                        match=_role_pattern(tenant_id, role, company_id), count=100
                     ):
                         keys.append(key)
                     if keys:
@@ -186,17 +205,17 @@ class KPICache:
                 await redis.aclose()
 
         # Mark as stale in PostgreSQL
-        await self._pg_mark_stale(tenant_id, role, metric_name)
+        await self._pg_mark_stale(tenant_id, role, metric_name, company_id)
 
     async def is_stale(
-        self, tenant_id: str, role: str, metric_name: str
+        self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> bool:
         """Check if a KPI metric is stale (expired TTL or marked stale)."""
         redis = await _get_redis()
         if redis:
             try:
                 ttl_remaining = await redis.ttl(
-                    _redis_key(tenant_id, role, metric_name)
+                    _redis_key(tenant_id, role, metric_name, company_id)
                 )
                 if ttl_remaining > 0:
                     return False
@@ -210,12 +229,12 @@ class KPICache:
                 await redis.aclose()
 
         # Check PostgreSQL
-        return await self._pg_is_stale(tenant_id, role, metric_name)
+        return await self._pg_is_stale(tenant_id, role, metric_name, company_id)
 
     # ── PostgreSQL helpers ─────────────────────────────────────────────
 
     async def _pg_get(
-        self, tenant_id: str, role: str, metric_name: str
+        self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> dict | None:
         async with async_session_factory() as session:
             row = (
@@ -225,12 +244,14 @@ class KPICache:
                         "FROM kpi_cache "
                         "WHERE tenant_id = :tid AND role = :role "
                         "  AND metric_name = :metric "
+                        "  AND company_id IS NOT DISTINCT FROM CAST(:cid AS uuid) "
                         "ORDER BY computed_at DESC LIMIT 1"
                     ),
                     {
                         "tid": tenant_id,
                         "role": role,
                         "metric": metric_name,
+                        "cid": _company_param(company_id),
                     },
                 )
             ).first()
@@ -248,7 +269,7 @@ class KPICache:
             }
 
     async def _pg_get_all_for_role(
-        self, tenant_id: str, role: str
+        self, tenant_id: str, role: str, company_id: str | None = None
     ) -> dict[str, dict]:
         async with async_session_factory() as session:
             rows = (
@@ -259,9 +280,10 @@ class KPICache:
                         "  ttl_seconds, stale "
                         "FROM kpi_cache "
                         "WHERE tenant_id = :tid AND role = :role "
+                        "  AND company_id IS NOT DISTINCT FROM CAST(:cid AS uuid) "
                         "ORDER BY metric_name, computed_at DESC"
                     ),
-                    {"tid": tenant_id, "role": role},
+                    {"tid": tenant_id, "role": role, "cid": _company_param(company_id)},
                 )
             ).all()
             result: dict[str, dict] = {}
@@ -286,18 +308,20 @@ class KPICache:
         value: dict,
         ttl: int,
         source: str,
+        company_id: str | None = None,
     ) -> None:
         async with async_session_factory() as session:
             await session.execute(
                 text(
                     "INSERT INTO kpi_cache "
-                    "  (tenant_id, role, metric_name, metric_value, source, "
+                    "  (tenant_id, company_id, role, metric_name, metric_value, source, "
                     "   ttl_seconds, stale, computed_at) "
-                    "VALUES (:tid, :role, :metric, :val::jsonb, :source, "
+                    "VALUES (:tid, CAST(:cid AS uuid), :role, :metric, :val::jsonb, :source, "
                     "        :ttl, FALSE, NOW())"
                 ),
                 {
                     "tid": tenant_id,
+                    "cid": _company_param(company_id),
                     "role": role,
                     "metric": metric_name,
                     "val": json.dumps(value),
@@ -308,7 +332,11 @@ class KPICache:
             await session.commit()
 
     async def _pg_mark_stale(
-        self, tenant_id: str, role: str, metric_name: str | None
+        self,
+        tenant_id: str,
+        role: str,
+        metric_name: str | None,
+        company_id: str | None = None,
     ) -> None:
         async with async_session_factory() as session:
             if metric_name:
@@ -316,26 +344,29 @@ class KPICache:
                     text(
                         "UPDATE kpi_cache SET stale = TRUE "
                         "WHERE tenant_id = :tid AND role = :role "
-                        "  AND metric_name = :metric"
+                        "  AND metric_name = :metric "
+                        "  AND company_id IS NOT DISTINCT FROM CAST(:cid AS uuid) "
                     ),
                     {
                         "tid": tenant_id,
                         "role": role,
                         "metric": metric_name,
+                        "cid": _company_param(company_id),
                     },
                 )
             else:
                 await session.execute(
                     text(
                         "UPDATE kpi_cache SET stale = TRUE "
-                        "WHERE tenant_id = :tid AND role = :role"
+                        "WHERE tenant_id = :tid AND role = :role "
+                        "  AND company_id IS NOT DISTINCT FROM CAST(:cid AS uuid) "
                     ),
-                    {"tid": tenant_id, "role": role},
+                    {"tid": tenant_id, "role": role, "cid": _company_param(company_id)},
                 )
             await session.commit()
 
     async def _pg_is_stale(
-        self, tenant_id: str, role: str, metric_name: str
+        self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> bool:
         async with async_session_factory() as session:
             row = (
@@ -345,12 +376,14 @@ class KPICache:
                         "FROM kpi_cache "
                         "WHERE tenant_id = :tid AND role = :role "
                         "  AND metric_name = :metric "
+                        "  AND company_id IS NOT DISTINCT FROM CAST(:cid AS uuid) "
                         "ORDER BY computed_at DESC LIMIT 1"
                     ),
                     {
                         "tid": tenant_id,
                         "role": role,
                         "metric": metric_name,
+                        "cid": _company_param(company_id),
                     },
                 )
             ).first()
@@ -359,8 +392,8 @@ class KPICache:
             if row.stale:
                 return True
             # Check if TTL has expired
-            now = datetime.now(datetime.UTC)
+            now = datetime.now(UTC)
             computed = row.computed_at
             if computed.tzinfo is None:
-                computed = computed.replace(tzinfo=datetime.UTC)
+                computed = computed.replace(tzinfo=UTC)
             return now > computed + timedelta(seconds=row.ttl_seconds)

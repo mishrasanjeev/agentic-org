@@ -238,7 +238,7 @@ async def sso_callback(
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
             "auth_method": "sso_oidc",
             "sso_provider": provider_key,
         },

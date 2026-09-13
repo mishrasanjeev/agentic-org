@@ -114,6 +114,7 @@ def test_daily_cap_zero_disables_check(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncio
 
     monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "0")
+    monkeypatch.setenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP", "0")
     from core.llm.router import assert_under_gemini_cap
 
     # Must not raise even with no DB / no spend lookup.
@@ -128,7 +129,7 @@ def test_assert_under_gemini_cap_raises_when_over(
 
     monkeypatch.setenv("AGENTICORG_GEMINI_DAILY_USD_CAP", "5.0")
 
-    async def _fake_spent() -> float:
+    async def _fake_spent(tenant_id=None) -> float:
         return 5.0
 
     with patch("core.llm.router._todays_gemini_spend_usd", new=_fake_spent):

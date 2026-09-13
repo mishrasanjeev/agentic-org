@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
@@ -186,14 +186,9 @@ async def _resume_workflow_bg(
     engine_run_id_hint: str | None = None,
 ) -> None:
     """Resume a workflow after HITL decision and sync remaining results to DB."""
-    from api.v1.workflows import (
-        TERMINAL_WORKFLOW_STATUSES,
-        _run_steps_completed,
-        _run_steps_total,
-        _upsert_step_execution,
-    )
     from core.models.workflow import WorkflowDefinition, WorkflowRun
     from workflows.engine import WorkflowEngine
+    from workflows.run_sync import sync_engine_state_to_workflow_run
     from workflows.state_store import WorkflowStateStore
 
     # Load engine_run_id and workflow definition
@@ -264,68 +259,13 @@ async def _resume_workflow_bg(
                     db_run.completed_at = datetime.now(UTC)
             return
 
-        steps_def = {s["id"]: s for s in definition.get("steps", [])}
-
-        async with get_tenant_session(tenant_id) as session:
-            db_run = (
-                await session.execute(
-                    select(WorkflowRun).where(WorkflowRun.id == workflow_run_id)
-                )
-            ).scalar_one()
-
-            for step_id, step_result in state.get("step_results", {}).items():
-                step_def = steps_def.get(step_id, {})
-                step_row, created = await _upsert_step_execution(
-                    session,
-                    tenant_id=tenant_id,
-                    workflow_run_id=workflow_run_id,
-                    step_id=step_id,
-                    step_result=step_result,
-                    step_def=step_def,
-                )
-
-                if created and step_row.status == "waiting_hitl":
-                    timeout_h = step_def.get("timeout_hours", 4)
-                    hitl_agent_id = step_row.agent_id
-                    if not hitl_agent_id:
-                        hitl_agent_id = (
-                            await session.execute(
-                                select(Agent.id).where(Agent.tenant_id == tenant_id).limit(1)
-                            )
-                        ).scalar_one_or_none()
-                    if hitl_agent_id:
-                        session.add(
-                            HITLQueue(
-                                tenant_id=tenant_id,
-                                workflow_run_id=workflow_run_id,
-                                agent_id=hitl_agent_id,
-                                title=f"Approval required: {step_def.get('title', step_id)}",
-                                trigger_type="workflow_step",
-                                priority=step_def.get("priority", "normal"),
-                                assignee_role=step_result.get(
-                                    "assignee_role",
-                                    step_def.get("assignee_role", "admin"),
-                                ),
-                                decision_options=step_def.get(
-                                    "decision_options",
-                                    {"options": ["approve", "reject"]},
-                                ),
-                                context={
-                                    "workflow_run_id": str(workflow_run_id),
-                                    "step_id": step_id,
-                                    "engine_run_id": engine_run_id,
-                                },
-                                expires_at=datetime.now(UTC) + timedelta(hours=timeout_h),
-                            )
-                        )
-
-            db_run.steps_completed = _run_steps_completed(state)
-            db_run.steps_total = _run_steps_total(state, db_run.steps_total)
-            db_run.status = state.get("status", "running")
-            if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
-                db_run.completed_at = datetime.now(UTC)
-            if state.get("status") == "completed":
-                db_run.result = state.get("step_results")
+        await sync_engine_state_to_workflow_run(
+            tenant_id=tenant_id,
+            workflow_run_id=workflow_run_id,
+            engine_run_id=engine_run_id,
+            state=state,
+            definition=definition,
+        )
 
     # enterprise-gate: broad-except-ok reason=approval-resume-background-marks-workflow-failed
     except Exception as exc:

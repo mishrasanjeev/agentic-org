@@ -18,7 +18,11 @@ class Tenant(BaseModel):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    plan: Mapped[str] = mapped_column(String(50), nullable=False, default="enterprise")
+    # Billing never wrote this column; a paid default caused every tenant to
+    # be invoiced the enterprise base fee. New tenants start on "free".
+    plan: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="free", server_default=text("'free'")
+    )
     data_region: Mapped[str] = mapped_column(String(10), nullable=False, default="IN")
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     # v4.7.0: BYOK/CMEK — customer-owned KMS key resource name. When set,

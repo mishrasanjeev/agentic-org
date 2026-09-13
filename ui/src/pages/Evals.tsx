@@ -36,10 +36,14 @@ interface PlatformSummary {
   uptimeSla: number;
 }
 
+type DataQuality = "measured" | "simulated" | "demo" | "unknown";
+
 interface ScorecardMeta {
   evaluatedAt: string;
   goldenTestCases: number;
   version: string;
+  /** Provenance flag from the backend: measured | simulated | demo. */
+  dataQuality: DataQuality;
 }
 
 interface EvalsData {
@@ -109,6 +113,29 @@ function metricTextColor(v: number): string {
   if (pct >= 80) return "text-yellow-700";
   return "text-red-700";
 }
+
+function parseDataQuality(raw: any): DataQuality {
+  const v = typeof raw?.data_quality === "string" ? raw.data_quality.toLowerCase() : "";
+  if (v === "measured" || v === "simulated" || v === "demo") return v;
+  // Legacy baseline payloads only carried ``_is_baseline``.
+  if (raw?._is_baseline === true) return "demo";
+  return "unknown";
+}
+
+const DATA_QUALITY_BANNER: Record<Exclude<DataQuality, "measured">, { title: string; body: string }> = {
+  demo: {
+    title: "Baseline placeholder \u2014 no measurements",
+    body: "The evaluation runner has not produced a scorecard for this environment. The numbers below are a static baseline placeholder, not measured results.",
+  },
+  simulated: {
+    title: "Simulated scorecard \u2014 not from live agent runs",
+    body: "These scores come from a simulated evaluation pass, not from live agent runs. Treat them as illustrative only.",
+  },
+  unknown: {
+    title: "Data provenance not reported",
+    body: "The evaluation API did not report whether these numbers are measured. Do not treat them as verified results.",
+  },
+};
 
 function formatDate(iso: string): string {
   try {
@@ -195,6 +222,7 @@ export default function Evals() {
             evaluatedAt: raw.generated_at || "",
             goldenTestCases: pm.total_cases || 0,
             version: raw.version || "not reported",
+            dataQuality: parseDataQuality(raw),
           },
           platform: {
             stpRate: pm.stp_rate ?? 0,
@@ -317,6 +345,20 @@ export default function Evals() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-14">
+        {data.meta.dataQuality !== "measured" && (
+          <section
+            role="alert"
+            data-testid={`evals-data-quality-${data.meta.dataQuality}`}
+            className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-6"
+          >
+            <h2 className="text-lg font-bold text-amber-900">
+              {DATA_QUALITY_BANNER[data.meta.dataQuality].title}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-amber-900">
+              {DATA_QUALITY_BANNER[data.meta.dataQuality].body}
+            </p>
+          </section>
+        )}
         <section className="rounded-2xl border border-blue-200 bg-blue-50 p-6">
           <h2 className="text-lg font-bold text-slate-900">How to interpret this scorecard</h2>
           <p className="mt-2 text-sm leading-relaxed text-slate-700">

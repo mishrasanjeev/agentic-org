@@ -211,6 +211,7 @@ class WorkflowEngine:
                     # dependency checks pass if needed; the main loop will reach the
                     # target in topological order.  We also mark skipped branches.
                     state["step_results"][step_id]["branch_target"] = branch_target
+                self._skip_branch_not_taken(step, branch_target, state)
 
             # ---- handle HITL pause ----
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
@@ -364,6 +365,7 @@ class WorkflowEngine:
                 branch_target = self._resolve_condition_branch(step, result, context)
                 if branch_target:
                     state["step_results"][step_id]["branch_target"] = branch_target
+                self._skip_branch_not_taken(step, branch_target, state)
 
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
                 state["status"] = "waiting_hitl"
@@ -430,6 +432,32 @@ class WorkflowEngine:
         waiting_step_id = state.get("waiting_step_id")
         if not waiting_step_id:
             return {"error": "No waiting step recorded"}
+
+        if self._is_rejection(decision):
+            # A rejection is terminal: record it on the HITL step, fail the
+            # run, and never execute dependent steps.
+            state["step_results"][waiting_step_id] = {
+                "output": decision,
+                "status": "rejected",
+                "confidence": decision.get("confidence"),
+                "error": {"code": "hitl_rejected", "message": "Rejected by human reviewer"},
+            }
+            state["steps_completed"] = len(state["step_results"])
+            state["status"] = "failed"
+            state["error"] = {
+                "code": "hitl_rejected",
+                "message": f"Step '{waiting_step_id}' was rejected by a human reviewer",
+            }
+            state["completed_at"] = datetime.now(UTC).isoformat()
+            state.pop("waiting_step_id", None)
+            await self.state_store.save(
+                state,
+                actor="workflow_engine.hitl_resume",
+                step_id=waiting_step_id,
+                metadata={"event": "hitl_rejected"},
+            )
+            logger.info("workflow_hitl_rejected", run_id=run_id, step_id=waiting_step_id)
+            return {"status": "failed", "step_results": state["step_results"]}
 
         # Record the HITL decision as the step's completed output.
         state["step_results"][waiting_step_id] = {
@@ -679,6 +707,30 @@ class WorkflowEngine:
         return state_result
 
     @staticmethod
+    def _is_rejection(decision: dict[str, Any]) -> bool:
+        raw = decision.get("decision") if isinstance(decision, dict) else None
+        return str(raw or "").strip().lower() in {"reject", "rejected", "deny", "denied"}
+
+    @staticmethod
+    def _skip_branch_not_taken(step: dict, branch_target: str | None, state: dict) -> None:
+        """Mark the condition path that was not selected as skipped.
+
+        Downstream steps that depend on the skipped path are then skipped by
+        ``_check_dependencies`` (a skipped dependency is not ``completed``).
+        """
+        for path_key in ("true_path", "false_path"):
+            other = step.get(path_key)
+            if not other or other == branch_target or other in state["step_results"]:
+                continue
+            state["step_results"][other] = {
+                "output": None,
+                "status": "skipped",
+                "confidence": None,
+                "reason": "branch_not_taken",
+            }
+        state["steps_completed"] = len(state["step_results"])
+
+    @staticmethod
     def _step_allows_failure(step: dict) -> bool:
         on_failure = str(step.get("on_failure", "")).strip().lower()
         return bool(
@@ -756,6 +808,8 @@ class WorkflowEngine:
             dep_result = step_results.get(dep_id)
             if dep_result is None:
                 return f"Dependency '{dep_id}' has not been executed"
+            if dep_result.get("status") == "skipped" and dep_result.get("reason") == "branch_not_taken":
+                return "branch_not_taken"
             if dep_result.get("status") not in ("completed",):
                 return f"Dependency '{dep_id}' did not complete successfully (status={dep_result.get('status')})"
         return None

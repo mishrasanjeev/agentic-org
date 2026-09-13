@@ -1,4 +1,5 @@
 """Email utility with domain validation and fail-closed SMTP transport."""
+import html as _html
 import logging
 import os
 import smtplib
@@ -134,17 +135,26 @@ def send_email(to: str, subject: str, html: str) -> bool:
         return False
 
 
+def _esc(value: object) -> str:
+    """HTML-escape user-controlled text before it is interpolated into a
+    template. Org names, inviter names and roles come from signup/invite
+    input and must render as text, never as markup."""
+    return _html.escape(str(value or ""), quote=True)
+
+
 def send_welcome_email(to: str, org_name: str, name: str) -> None:
     app_url = os.getenv("AGENTICORG_APP_URL", "https://app.agenticorg.ai")
+    safe_name, safe_org, safe_url = _esc(name), _esc(org_name), _esc(app_url)
     html = (
-        f"<h2>Welcome, {name}!</h2>"
-        f"<p>Your organization <b>{org_name}</b> is ready on AgenticOrg.</p>"
-        f"<p><a href='{app_url}/dashboard'>Go to Dashboard</a></p>"
+        f"<h2>Welcome, {safe_name}!</h2>"
+        f"<p>Your organization <b>{safe_org}</b> is ready on AgenticOrg.</p>"
+        f"<p><a href='{safe_url}/dashboard'>Go to Dashboard</a></p>"
     )
     send_email(to, f"Welcome to AgenticOrg — {org_name}", html)
 
 
 def send_password_reset_email(to: str, reset_link: str) -> None:
+    reset_link = _esc(reset_link)
     html = (
         "<h2>Reset Your Password</h2>"
         "<p>We received a request to reset your AgenticOrg password.</p>"
@@ -157,9 +167,14 @@ def send_password_reset_email(to: str, reset_link: str) -> None:
 def send_invite_email(
     to: str, org_name: str, inviter: str, role: str, invite_link: str,
 ) -> None:
+    # Escape before templating: these values are user-controlled text.
+    subject = f"You're invited to {org_name} on AgenticOrg"
+    org_name, inviter, role, invite_link = (
+        _esc(org_name), _esc(inviter), _esc(role), _esc(invite_link)
+    )
     html = (
         f"<h2>Join {org_name} on AgenticOrg</h2>"
         f"<p><b>{inviter}</b> invited you as <b>{role}</b>.</p>"
         f"<p><a href='{invite_link}'>Accept Invitation</a></p>"
     )
-    send_email(to, f"You're invited to {org_name} on AgenticOrg", html)
+    send_email(to, subject, html)

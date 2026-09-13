@@ -84,9 +84,10 @@ class TestCDCTenantIsolation:
                 "resource_type": "contact",
                 "resource_id": "c-42",
             }
+            # Signature is bound to tenant + connector (cross-tenant replay fix).
             sig = hmac.new(
                 b"sec-key",
-                json.dumps(payload, sort_keys=True).encode(),
+                b"tenant-a\ntestconn\n" + json.dumps(payload, sort_keys=True).encode(),
                 hashlib.sha256,
             ).hexdigest()
 

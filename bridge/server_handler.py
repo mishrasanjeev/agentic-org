@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import secrets
@@ -71,6 +72,24 @@ class BridgeConnection:
             "last_heartbeat": self.last_heartbeat.isoformat(),
             "tally_healthy": self.tally_healthy,
         }
+
+
+def _bridge_token_matches(metadata: dict[str, Any], presented: str) -> bool:
+    """Constant-time check of a presented bridge token against the registration.
+
+    Registrations store ``bridge_token_sha256``; rows minted before hashing
+    landed still carry plaintext ``bridge_token`` and are accepted for one
+    release so existing bridge agents keep connecting (remove the legacy
+    branch after those rows are re-registered).
+    """
+    digest = str(metadata.get("bridge_token_sha256") or "")
+    if digest:
+        presented_digest = hashlib.sha256(presented.encode()).hexdigest()
+        return secrets.compare_digest(presented_digest, digest)
+    legacy = str(metadata.get("bridge_token") or "")
+    if legacy:
+        return secrets.compare_digest(presented, legacy)
+    return False
 
 
 async def _get_bridge_registration(bridge_id: str) -> BridgeRegistration | None:
@@ -154,12 +173,10 @@ async def bridge_ws(websocket: WebSocket, bridge_id: str) -> None:
         return
 
     registration = await _get_bridge_registration(bridge_id)
-    expected_token = ((registration.metadata_ or {}) if registration else {}).get("bridge_token", "")
     if (
         registration is None
         or registration.status != "active"
-        or not expected_token
-        or not secrets.compare_digest(token, expected_token)
+        or not _bridge_token_matches(registration.metadata_ or {}, token)
     ):
         await websocket.send_text(json.dumps({
             "type": "auth_error",

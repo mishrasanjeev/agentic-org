@@ -21,6 +21,8 @@ export interface RunOptions {
   action?: string;
   inputs?: Record<string, unknown>;
   context?: Record<string, unknown>;
+  /** Company UUID the run executes under. Required for agent-type runs (POST /a2a/tasks). */
+  companyId?: string;
 }
 
 export interface GenerateAgentOptions {
@@ -230,11 +232,14 @@ class AgentsResource {
   }
 
   async run(agentIdOrType: string, options: RunOptions = {}): Promise<AgentRunResult> {
-    const payload = {
+    const payload: Record<string, unknown> = {
       action: options.action ?? "process",
       inputs: options.inputs ?? {},
       context: options.context ?? {},
     };
+    if (options.companyId) {
+      payload.company_id = options.companyId;
+    }
 
     let raw: Record<string, unknown>;
     if (agentIdOrType.includes("-") && agentIdOrType.length > 30) {
@@ -243,6 +248,12 @@ class AgentsResource {
         payload,
       )) as Record<string, unknown>;
     } else {
+      // The server requires company_id on /a2a/tasks (400 otherwise).
+      if (!options.companyId) {
+        throw new Error(
+          "companyId is required when running an agent by type (POST /a2a/tasks)",
+        );
+      }
       raw = (await this.http.post("/api/v1/a2a/tasks", {
         agent_type: agentIdOrType,
         ...payload,

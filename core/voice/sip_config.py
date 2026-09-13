@@ -128,8 +128,13 @@ def decrypt_credentials(credentials: dict) -> dict:
             if isinstance(v, str) and v:
                 try:
                     decrypted[k] = f.decrypt(v.encode()).decode()
-                except InvalidToken:
-                    decrypted[k] = v  # not encrypted, return as-is
+                except InvalidToken as exc:
+                    # Never hand back the stored value: a wrong/rotated key or
+                    # tampered ciphertext must fail closed, not be used as a
+                    # SIP password.
+                    raise VoiceCredentialEncryptionError(
+                        f"voice credential '{k}' could not be decrypted (invalid token or key)"
+                    ) from exc
             else:
                 decrypted[k] = v
         return decrypted

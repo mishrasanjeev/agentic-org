@@ -348,3 +348,18 @@ class PromptEditHistoryResponse(BaseModel):
     prompt_after: str
     change_reason: str | None
     created_at: datetime
+
+
+class AgentFeedbackSubmit(BaseModel):
+    """Body for POST /agents/{id}/feedback.
+
+    Validated at the boundary so free text cannot exceed a sane size (it can
+    end up inside an LLM analysis prompt) and corrected/original outputs are
+    real JSON objects.
+    """
+
+    run_id: str = Field(..., min_length=1, max_length=200)
+    feedback_type: str = Field(..., min_length=1, max_length=30)
+    text: str = Field(default="", max_length=4000)
+    corrected_output: dict | None = None
+    original_output: dict | None = None

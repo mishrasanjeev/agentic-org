@@ -88,10 +88,11 @@ class TaskRouter:
         if routing_context:
             for agent in candidates:
                 if agent.routing_filter:
-                    if all(
-                        agent.routing_filter.get(k) == v
-                        for k, v in routing_context.items()
-                        if k in agent.routing_filter
+                    overlap = [k for k in routing_context if k in agent.routing_filter]
+                    # Require at least one shared key: `all()` over an empty
+                    # overlap is vacuously true and would match every agent.
+                    if overlap and all(
+                        agent.routing_filter.get(k) == routing_context[k] for k in overlap
                     ):
                         return agent.id
 

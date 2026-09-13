@@ -46,7 +46,20 @@ _TOXIC_KEYWORDS: set[str] = {
 # ---------------------------------------------------------------------------
 # Near-duplicate detection — rolling window of recent output hashes
 # ---------------------------------------------------------------------------
-_RECENT_HASHES: deque[str] = deque(maxlen=100)
+# Keyed by "{tenant_id}:{agent_id}" so one tenant's outputs never count as
+# duplicates of another tenant's. Bounded to avoid unbounded growth.
+_RECENT_HASHES: dict[str, deque[str]] = {}
+_RECENT_HASHES_MAX_SCOPES = 1000
+
+
+def _recent_hashes_for(scope: str) -> deque[str]:
+    window = _RECENT_HASHES.get(scope)
+    if window is None:
+        if len(_RECENT_HASHES) >= _RECENT_HASHES_MAX_SCOPES:
+            _RECENT_HASHES.pop(next(iter(_RECENT_HASHES)))
+        window = deque(maxlen=100)
+        _RECENT_HASHES[scope] = window
+    return window
 
 
 def _text_hash(text: str) -> str:
@@ -179,17 +192,20 @@ def _check_toxicity(text: str, threshold: float = 0.7) -> tuple[float, list[dict
 # ---------------------------------------------------------------------------
 # Near-duplicate check
 # ---------------------------------------------------------------------------
-def _check_duplicate(text: str, threshold: float = 0.85) -> tuple[float, list[dict[str, str]]]:
-    """Check if text is a near-duplicate of a recent output.
+def _check_duplicate(
+    text: str, threshold: float = 0.85, *, scope: str
+) -> tuple[float, list[dict[str, str]]]:
+    """Check if text is a near-duplicate of a recent output within *scope*.
 
     Uses exact hash match first, then Jaccard similarity as fallback.
     Returns (score, issues).
     """
     current_hash = _text_hash(text)
+    recent = _recent_hashes_for(scope)
 
     # Exact duplicate
-    if current_hash in _RECENT_HASHES:
-        _RECENT_HASHES.append(current_hash)
+    if current_hash in recent:
+        recent.append(current_hash)
         return 1.0, [
             {"type": "duplicate", "detail": "Exact duplicate of a recent output", "severity": "medium"}
         ]
@@ -197,7 +213,7 @@ def _check_duplicate(text: str, threshold: float = 0.85) -> tuple[float, list[di
     # Jaccard similarity against recent hashes is not meaningful (hashes lose info),
     # so we keep a small text window for similarity checking.
     # For efficiency, just do exact hash for now and log the hash.
-    _RECENT_HASHES.append(current_hash)
+    recent.append(current_hash)
     return 0.0, []
 
 
@@ -227,7 +243,9 @@ async def check_content_safety(
     config : dict | None
         Override default check configuration.  Keys:
         ``check_pii``, ``check_toxicity``, ``check_duplicates``,
-        ``toxicity_threshold``.
+        ``toxicity_threshold``, ``tenant_id`` and optional ``agent_id``
+        (duplicate detection is scoped per tenant/agent and skipped
+        when no ``tenant_id`` is supplied).
 
     Returns
     -------
@@ -257,11 +275,17 @@ async def check_content_safety(
         scores["toxicity"] = tox_score
         issues.extend(tox_issues)
 
-    # Duplicate check
+    # Duplicate check — the recent-output window is per tenant (and agent).
+    # Without a tenant id there is no safe scope, so no cross-call dedupe.
     if cfg.get("check_duplicates", True):
-        dup_score, dup_issues = _check_duplicate(text)
-        scores["duplicate"] = dup_score
-        issues.extend(dup_issues)
+        tenant_id = cfg.get("tenant_id")
+        if tenant_id:
+            scope = f"{tenant_id}:{cfg.get('agent_id') or ''}"
+            dup_score, dup_issues = _check_duplicate(text, scope=scope)
+            scores["duplicate"] = dup_score
+            issues.extend(dup_issues)
+        else:
+            logger.debug("content_safety_duplicate_check_unscoped_skipped")
 
     safe = len(issues) == 0
 

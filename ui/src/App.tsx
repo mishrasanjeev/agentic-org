@@ -373,7 +373,7 @@ export default function App() {
       <Route
         path="/dashboard/enforce-audit"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <EnforceAuditLog />
             </Layout>

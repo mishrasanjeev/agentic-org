@@ -69,6 +69,34 @@ def _best_effort_clean_event_wait_keys(run_id: str, step_id: str) -> None:
         )
 
 
+async def _drive_engine_and_sync(store: WorkflowStateStore, run_id: str, step_id: str, log: Any) -> dict:
+    """Re-drive the engine after a durable state flip and sync the DB run.
+
+    Without this the run is left at ``status=running`` with nobody executing
+    the remaining steps (stranded run).
+    """
+    from workflows.engine import WorkflowEngine
+    from workflows.run_sync import sync_engine_state_to_workflow_run
+
+    engine = WorkflowEngine(store)
+    engine_result = await engine.execute(run_id)
+    state = await store.load(run_id) or {}
+    tenant_id = state.get("tenant_id")
+    workflow_run_id = state.get("workflow_run_id")
+    if tenant_id and workflow_run_id:
+        import uuid
+
+        await sync_engine_state_to_workflow_run(
+            tenant_id=uuid.UUID(str(tenant_id)),
+            workflow_run_id=uuid.UUID(str(workflow_run_id)),
+            engine_run_id=run_id,
+            state=state,
+        )
+    else:
+        log.warning("workflow_run_sync_skipped_missing_context", step_id=step_id)
+    return engine_result if isinstance(engine_result, dict) else {}
+
+
 async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
     log = logger.bind(run_id=run_id, step_id=step_id)
     store = _state_store()
@@ -115,10 +143,12 @@ async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
         )
 
         log.info("workflow_wait_resumed")
+        engine_result = await _drive_engine_and_sync(store, run_id, step_id, log)
         return {
             "status": "resumed",
             "run_id": run_id,
             "step_id": step_id,
+            "engine_status": engine_result.get("status"),
         }
     finally:
         await store.close()
@@ -196,10 +226,12 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
         )
 
         log.info("workflow_event_timed_out")
+        engine_result = await _drive_engine_and_sync(state_store, run_id, step_id, log)
         return {
             "status": "timed_out",
             "run_id": run_id,
             "step_id": step_id,
+            "engine_status": engine_result.get("status"),
         }
     finally:
         await state_store.close()

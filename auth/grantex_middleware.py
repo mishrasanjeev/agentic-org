@@ -283,13 +283,10 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         request.state.user_sub = claims.get("sub", "")
         request.state.auth_mode = "legacy"
 
-        # Tenant mismatch check
-        path_tenant = request.path_params.get("tenant_id")
-        if path_tenant and path_tenant != tenant_id:
-            return JSONResponse(
-                status_code=403,
-                content={"error": {"code": "E4004", "message": "Tenant mismatch"}},
-            )
+        # NOTE: ``request.path_params`` is always ``{}`` inside
+        # BaseHTTPMiddleware (routing has not run yet), so a "tenant
+        # mismatch" check here can never fire. Tenant binding is enforced
+        # per-route via ``api.deps.get_current_tenant`` / tenant sessions.
 
         await clear_auth_failures(client_ip)
         return await call_next(request)

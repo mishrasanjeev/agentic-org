@@ -718,8 +718,10 @@ async def _execute_workflow_bg(
         # ── A/B variant outcome tracking ───────────────────────────────
         # If this run was routed via a variant, increment the variant's
         # success/failure counters so the operator can pick a winner.
+        # Only terminal runs count; a paused (HITL/wait) run is recorded
+        # by the resume path once it actually finishes.
         try:
-            from core.workflow_ab import record_outcome
+            from workflows.run_sync import record_ab_outcome_if_terminal
 
             async with get_tenant_session(tenant_id) as session:
                 db_run = (
@@ -727,14 +729,7 @@ async def _execute_workflow_bg(
                         select(WorkflowRun).where(WorkflowRun.id == run_id)
                     )
                 ).scalar_one_or_none()
-                if db_run is not None:
-                    ab = (db_run.context or {}).get("ab") or {}
-                    variant_id = ab.get("variant_id")
-                    if variant_id:
-                        await record_outcome(
-                            _uuid.UUID(variant_id),
-                            success=db_run.status == "completed",
-                        )
+                await record_ab_outcome_if_terminal(db_run)
         # enterprise-gate: broad-except-ok reason=ab-outcome-recording-is-best-effort-after-run-terminal
         except Exception:
             _log.debug("workflow_ab_record_outcome_skipped", run_id=str(run_id))

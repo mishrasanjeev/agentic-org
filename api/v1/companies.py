@@ -1648,11 +1648,13 @@ async def approve_filing(
 
         # Fetch approval
         ap_result = await session.execute(
-            select(FilingApproval).where(
+            select(FilingApproval)
+            .where(
                 FilingApproval.id == aid,
                 FilingApproval.company_id == cid,
                 FilingApproval.tenant_id == tid,
             )
+            .with_for_update()
         )
         approval = ap_result.scalar_one_or_none()
         if not approval:
@@ -1735,11 +1737,13 @@ async def reject_filing(
 
         # Fetch approval
         ap_result = await session.execute(
-            select(FilingApproval).where(
+            select(FilingApproval)
+            .where(
                 FilingApproval.id == aid,
                 FilingApproval.company_id == cid,
                 FilingApproval.tenant_id == tid,
             )
+            .with_for_update()
         )
         approval = ap_result.scalar_one_or_none()
         if not approval:
@@ -2992,6 +2996,7 @@ async def generate_company_bridge(
     a raw 500 with the "E1001 INTERNAL_ERROR" payload. Guard each
     failure point and return a structured error the UI can render.
     """
+    import hashlib
     import secrets
 
     from core.models.bridge import BridgeRegistration
@@ -3011,6 +3016,9 @@ async def generate_company_bridge(
 
     bridge_id = str(_uuid.uuid4())
     bridge_token = secrets.token_urlsafe(48)
+    # Only the SHA-256 digest is persisted (see api/v1/bridge.py and
+    # bridge/server_handler.py); the plaintext is returned exactly once.
+    bridge_token_sha256 = hashlib.sha256(bridge_token.encode()).hexdigest()
     ws_url = f"wss://app.agenticorg.ai/api/v1/ws/bridge/{bridge_id}"
 
     try:
@@ -3034,7 +3042,7 @@ async def generate_company_bridge(
                 url=ws_url,
                 status="active",
                 metadata_={
-                    "bridge_token": bridge_token,
+                    "bridge_token_sha256": bridge_token_sha256,
                     "company_id": str(cid),
                     "label": company.name or "",
                 },

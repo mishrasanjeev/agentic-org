@@ -134,6 +134,7 @@ def test_python_sdk_can_launch_agents_discover_mcp_use_kb_and_workflows(monkeypa
                 },
             )
         if method == "POST" and path == "/api/v1/a2a/tasks":
+            assert body["company_id"] == "11111111-1111-4111-8111-111111111111"
             return httpx.Response(
                 200,
                 json={
@@ -212,10 +213,13 @@ def test_python_sdk_can_launch_agents_discover_mcp_use_kb_and_workflows(monkeypa
         )
         assert generated_agent["deployed"]["status"] == "shadow"
 
+        with pytest.raises(ValueError, match="company_id is required"):
+            client.agents.run("commerce_sales_agent", action="discover")
         commerce_run = client.agents.run(
             "commerce_sales_agent",
             action="discover",
             inputs={"merchant_id": "mch_C6W3", "buyer_agent_id": "buyer_C6W3"},
+            company_id="11111111-1111-4111-8111-111111111111",
         )
         assert commerce_run.status == "completed"
         assert commerce_run.agent_type == "commerce_sales_agent"
@@ -319,8 +323,15 @@ def test_python_cli_launch_generation_knowledge_and_workflow_commands(
         def close(self) -> None:
             self.calls.append(("close", {}))
 
-        def _agents_run(self, agent_type: str, *, action: str, inputs: dict[str, Any]) -> dict[str, Any]:
-            call = {"agent_type": agent_type, "action": action, "inputs": inputs}
+        def _agents_run(
+            self,
+            agent_type: str,
+            *,
+            action: str,
+            inputs: dict[str, Any],
+            company_id: str | None = None,
+        ) -> dict[str, Any]:
+            call = {"agent_type": agent_type, "action": action, "inputs": inputs, "company_id": company_id}
             self.calls.append(("agents.run", call))
             return call
 
@@ -362,11 +373,14 @@ def test_python_cli_launch_generation_knowledge_and_workflow_commands(
             "buyer_discovery_preview",
             "--input",
             '{"merchant_id":"merchant_demo"}',
+            "--company-id",
+            "11111111-1111-4111-8111-111111111111",
         ]
     )
     assert output["agent_type"] == "commerce_sales_agent"
     assert output["action"] == "buyer_discovery_preview"
     assert output["inputs"] == {"merchant_id": "merchant_demo"}
+    assert output["company_id"] == "11111111-1111-4111-8111-111111111111"
     assert ("agents.run", output) in client.calls
 
     output, _ = run_cli(["agents", "generate", "Create contract intelligence agent", "--deploy"])

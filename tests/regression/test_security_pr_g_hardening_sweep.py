@@ -250,6 +250,8 @@ def test_sec_013_evals_measured_marks_data_quality_measured(
         json.dumps(
             {
                 "version": "v1",
+                # Only live-executed scorecards are served as "measured".
+                "execution_mode": "live",
                 "platform_metrics": {"stp_rate": 0.9},
                 "agent_aggregates": {},
                 "case_results": [],

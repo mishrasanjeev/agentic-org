@@ -90,8 +90,23 @@ describe("CompanySwitcher", () => {
     expect(companyText.tagName.toLowerCase()).toBe("span");
   });
 
-  it("shows 'No Company' when single company has no match", async () => {
+  it("resets a stale stored company_id to the first real company", async () => {
+    // A stale id (deleted company, or another tenant's id left on a shared
+    // browser) must not leave the app scoped to nothing. Audit finding #11.
     mockGet.mockResolvedValue({ data: SINGLE_COMPANY });
+    localStorage.setItem("company_id", "nonexistent-id");
+
+    render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
+
+    await waitFor(() => {
+      expect(screen.getByText("AgenticOrg")).toBeInTheDocument();
+    });
+    expect(localStorage.getItem("company_id")).toBe("comp-001");
+    expect(screen.queryByText("No Company")).not.toBeInTheDocument();
+  });
+
+  it("clears a stale stored company_id when the tenant has no companies", async () => {
+    mockGet.mockResolvedValue({ data: { items: [], total: 0 } });
     localStorage.setItem("company_id", "nonexistent-id");
 
     render(<MemoryRouter><CompanySwitcher /></MemoryRouter>);
@@ -99,6 +114,7 @@ describe("CompanySwitcher", () => {
     await waitFor(() => {
       expect(screen.getByText("No Company")).toBeInTheDocument();
     });
+    expect(localStorage.getItem("company_id")).toBeNull();
   });
 
   // â”€â”€ Multiple Companies: Dropdown â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

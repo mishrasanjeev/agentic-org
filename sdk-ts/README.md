@@ -22,9 +22,10 @@ import { AgenticOrg } from "agenticorg-sdk";
 
 const client = new AgenticOrg({ apiKey: "your-key" });
 
-// Run an agent
+// Run an agent by type (companyId is required for agent-type runs)
 const result = await client.agents.run("ap_processor", {
   inputs: { invoice_id: "INV-001", vendor_id: "V-100" },
+  companyId: "<company-uuid>",
 });
 console.log(result.status);     // "completed"
 console.log(result.confidence); // 0.95
@@ -37,6 +38,7 @@ const commerce = await client.agents.run("commerce_sales_agent", {
     merchant_id: "merchant_demo",
     query: "Show available laptop stands under Rs 3000",
   },
+  companyId: "<company-uuid>",
 });
 
 // Generate any launchable AI-template agent from skills/tools/connectors context

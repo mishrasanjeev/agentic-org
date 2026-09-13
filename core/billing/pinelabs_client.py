@@ -105,11 +105,22 @@ def _redis_client():
 
 def store_order_mapping(
     merchant_ref: str, order_id: str, tenant_id: str = "", plan: str = "",
+    amount: int = 0, currency: str = "INR",
 ) -> None:
-    """Store merchant_ref → order details mapping in Redis (with in-memory fallback)."""
+    """Store merchant_ref → order details mapping in Redis (with in-memory fallback).
+
+    ``amount``/``currency`` record what the server charged for this order so
+    ``handle_webhook`` can refuse activation when the paid amount differs.
+    """
     import json as _json
 
-    entry = {"order_id": order_id, "tenant_id": tenant_id, "plan": plan}
+    entry = {
+        "order_id": order_id,
+        "tenant_id": tenant_id,
+        "plan": plan,
+        "amount": int(amount or 0),
+        "currency": currency,
+    }
     order_id_entry = {**entry, "merchant_order_reference": merchant_ref}
 
     redis = _redis_client()
@@ -269,11 +280,9 @@ def _auth_headers() -> dict[str, str]:
 # ── Create Order (Hosted Checkout / Redirect) ──────────────────────
 
 
-@retry_http(max_attempts=3)
 def create_payment_order(
     tenant_id: str,
     plan: str,
-    amount_inr: int | None = None,
     customer_email: str = "",
     customer_name: str = "",
     customer_phone: str = "",
@@ -284,14 +293,18 @@ def create_payment_order(
     Plural handles the payment page with all enabled methods (Cards, UPI,
     Net Banking, Wallets, EMI).
 
+    Not wrapped in ``retry_http``: order creation is not idempotent at the
+    provider (each attempt mints a new order), so a retry after an ambiguous
+    failure could create duplicate payable orders. Token fetch and status
+    GET keep their retries.
+
     Parameters
     ----------
     tenant_id : str
         Tenant initiating the payment.
     plan : str
-        Plan name — ``pro`` or ``enterprise``.
-    amount_inr : int | None
-        Override amount in paise.  Falls back to PLAN_AMOUNT_INR.
+        Plan name — ``pro`` or ``enterprise``.  The charged amount is always
+        the server-owned ``PLAN_AMOUNT_INR[plan]``; callers cannot override it.
     customer_email, customer_name, customer_phone : str
         Optional customer details for the checkout page.
 
@@ -300,7 +313,7 @@ def create_payment_order(
     dict with order_id, challenge_url, amount, currency, status.
     """
     http = _get_http()
-    amount = amount_inr or PLAN_AMOUNT_INR.get(plan, 0)
+    amount = PLAN_AMOUNT_INR.get(plan, 0)
     if not amount:
         raise ValueError(f"Unknown plan or zero amount: {plan}")
 
@@ -352,7 +365,7 @@ def create_payment_order(
 
     # Store mapping so the callback endpoint can look up the order
     if order_id:
-        store_order_mapping(merchant_ref, order_id, tenant_id, plan)
+        store_order_mapping(merchant_ref, order_id, tenant_id, plan, amount, "INR")
 
     logger.info(
         "plural_order_created",
@@ -501,6 +514,8 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
         raise ValueError("Invalid Plural webhook signature")
 
     payload = json.loads(raw_body)
+    if isinstance(payload.get("data"), dict):
+        payload = payload["data"]
     order_id = payload.get("order_id", "")
     status = payload.get("status", "").upper()
     merchant_ref = payload.get("merchant_order_reference", "")
@@ -530,6 +545,7 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
             raise PluralWebhookProcessingError(
                 "Plural order mapping missing for successful payment"
             )
+        _verify_paid_amount(payload, stored, plan, order_id, merchant_ref, webhook_id)
         try:
             _activate_subscription(tenant_id, plan, order_id)
         # enterprise-gate: broad-except-ok reason=plural-webhook-side-effect-failure-raises-not-success
@@ -554,6 +570,64 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
 
     logger.info("plural_webhook_processed", **result)
     return result
+
+
+def _verify_paid_amount(
+    payload: dict[str, Any],
+    stored: dict[str, Any],
+    plan: str,
+    order_id: str,
+    merchant_ref: str,
+    webhook_id: str,
+) -> None:
+    """Refuse activation unless the provider-reported paid amount matches.
+
+    Expected amount/currency come from the server-side order mapping written
+    by ``create_payment_order`` (falling back to ``PLAN_AMOUNT_INR[plan]`` for
+    mappings written before the amount was recorded). Paid amount comes from
+    the webhook ``order_amount``; if the event omits it, the order is fetched
+    from Plural. Any mismatch or missing value fails closed.
+    """
+    expected_amount = int(stored.get("amount") or 0) or PLAN_AMOUNT_INR.get(plan, 0)
+    expected_currency = str(stored.get("currency") or "INR").upper()
+
+    paid = payload.get("order_amount")
+    if not isinstance(paid, dict) or paid.get("value") is None:
+        paid = get_order_status(order_id).get("order_amount")
+    if not isinstance(paid, dict) or paid.get("value") is None:
+        logger.error(
+            "plural_webhook_amount_unverifiable",
+            order_id=order_id, merchant_ref=merchant_ref, webhook_id=webhook_id,
+            audit=True,
+        )
+        raise PluralWebhookProcessingError("Plural paid amount unavailable for verification")
+
+    try:
+        paid_amount = int(paid.get("value"))
+    except (TypeError, ValueError) as exc:
+        raise PluralWebhookProcessingError("Plural paid amount malformed") from exc
+    paid_currency = str(paid.get("currency") or "").upper()
+
+    if (
+        not expected_amount
+        or paid_amount != expected_amount
+        or paid_currency != expected_currency
+    ):
+        logger.error(
+            "plural_webhook_amount_mismatch_rejected",
+            order_id=order_id,
+            merchant_ref=merchant_ref,
+            webhook_id=webhook_id,
+            plan=plan,
+            expected_amount=expected_amount,
+            expected_currency=expected_currency,
+            paid_amount=paid_amount,
+            paid_currency=paid_currency,
+            audit=True,
+        )
+        raise PluralWebhookProcessingError(
+            "Plural paid amount does not match the plan price; activation refused"
+        )
 
 
 def _activate_subscription(tenant_id: str, plan: str, order_id: str) -> None:

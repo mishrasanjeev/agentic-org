@@ -9,12 +9,13 @@
 #
 # The goal is to catch before push every class of CI failure we've hit:
 #   - ruff (whole tree, not just touched files)
-#   - bandit on api/auth/core
+#   - bandit on api/auth/core/connectors (same invocation as CI)
 #   - alembic revision-id length (varchar(32) cap)
 #   - accidental `verify=False` / `# noqa: S501` that ruff misses
-#   - targeted pytest (regression + fast unit), no-cov so locked coverage
-#     files don't make us guess whether a real test broke
-#   - ui: tsc --noEmit + build
+#   - pytest over the same suites the CI unit-tests job runs
+#     (regression + unit + connector_harness + security) with the CI
+#     global coverage floor
+#   - ui: eslint + tsc --noEmit + vitest + build (the CI frontend jobs)
 #
 # Exits non-zero on the first failing gate. Print a short summary at the
 # end so the reviewer sees what ran.
@@ -111,16 +112,18 @@ mypy_check() {
 }
 
 # ---------------------------------------------------------------------------
-# 3. Bandit — high severity anywhere under api/auth/core.
+# 3. Bandit — mirror the CI security-scan job exactly:
+#    ``bandit -r core/ connectors/ api/ auth/ -ll`` (medium+ severity at ANY
+#    confidence, connectors/ included). The old local invocation used
+#    ``-iii`` and skipped connectors/, so medium-confidence hits passed
+#    preflight and then failed CI.
 # ---------------------------------------------------------------------------
 bandit_check() {
   if [[ "$SKIP_BANDIT" == "1" ]]; then
     echo "[preflight] skipped (SKIP_BANDIT=1)"
     return 0
   fi
-  # Only flag actual errors (HIGH severity, HIGH confidence).  Warnings
-  # about #nosec-without-test are noise.
-  python -m bandit -r api auth core -x migrations,tests -ll -iii -q
+  python -m bandit -r core/ connectors/ api/ auth/ -ll -q
 }
 
 # ---------------------------------------------------------------------------
@@ -167,33 +170,51 @@ enterprise_stability_gate() {
 }
 
 # ---------------------------------------------------------------------------
-# 7. Pytest — regression suite + targeted unit tests. Fast: ~30s.
+# 7. Pytest — the same suites and coverage floor as the CI unit-tests job:
+#    tests/unit/ tests/connector_harness/ tests/security/ tests/regression/
+#    with --cov-fail-under=55. Runs with coverage so the module-coverage
+#    check below has .coverage to read; SKIP_MODULE_COV=1 opts back into the
+#    --no-cov fast path.
 # ---------------------------------------------------------------------------
+PYTEST_SUITES=(tests/unit/ tests/connector_harness/ tests/security/ tests/regression/)
 pytest_check() {
   if [[ "$SKIP_PYTEST" == "1" ]]; then
     echo "[preflight] skipped (SKIP_PYTEST=1)"
     return 0
   fi
-  # regression/ is cheap and exhaustive; unit/ has the model-key-set guards
-  # that trip us when serializers change. Runs with the addopts coverage
-  # config so the following module-coverage check has .coverage to read;
-  # set SKIP_MODULE_COV=1 to opt back into the old --no-cov fast path.
   if [[ "$SKIP_MODULE_COV" == "1" ]]; then
-    python -m pytest tests/regression/ tests/unit/ -q --no-cov
+    python -m pytest "${PYTEST_SUITES[@]}" -q --no-cov
   else
-    python -m pytest tests/regression/ tests/unit/ -q
+    python -m pytest "${PYTEST_SUITES[@]}" -q --cov=. --cov-report=xml --cov-fail-under=55
   fi
 }
 
 # ---------------------------------------------------------------------------
-# 7. UI — type check + build. Skip with SKIP_UI=1 when working on backend only.
+# 7. UI — the CI frontend-validation job in order: lint, typecheck, vitest,
+#    build. Skip with SKIP_UI=1 when working on backend only.
 # ---------------------------------------------------------------------------
+ui_lint() {
+  if [[ "$SKIP_UI" == "1" || ! -d "$REPO_ROOT/ui" ]]; then
+    echo "[preflight] skipped (SKIP_UI=1 or no ui/)"
+    return 0
+  fi
+  (cd ui && npm run lint --silent)
+}
+
 ui_check() {
   if [[ "$SKIP_UI" == "1" || ! -d "$REPO_ROOT/ui" ]]; then
     echo "[preflight] skipped (SKIP_UI=1 or no ui/)"
     return 0
   fi
   (cd ui && npx tsc --noEmit)
+}
+
+ui_test() {
+  if [[ "$SKIP_UI" == "1" || "$FAST" == "1" || ! -d "$REPO_ROOT/ui" ]]; then
+    echo "[preflight] skipped (SKIP_UI=1 or --fast)"
+    return 0
+  fi
+  (cd ui && npm test --silent)
 }
 
 ui_build() {
@@ -252,8 +273,10 @@ run_step "bandit (api/auth/core)" bandit_check
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
 run_step "enterprise stability"   enterprise_stability_gate
-run_step "pytest regression+unit" pytest_check
+run_step "pytest (CI unit suites)" pytest_check
+run_step "ui eslint"              ui_lint
 run_step "ui tsc"                 ui_check
+run_step "ui vitest"              ui_test
 run_step "ui build"               ui_build
 run_step "consistency sweep"      consistency_sweep
 run_step "module coverage floor"  module_coverage_check

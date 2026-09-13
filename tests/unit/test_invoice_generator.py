@@ -163,3 +163,88 @@ class TestRenderPDF:
         assert "Acme Inc" in text
         assert "Pro plan" in text
         assert "14.50" in text
+
+
+# ── Effective plan / provider-billed handling ───────────────────────
+
+
+class _Tenant:
+    def __init__(self, plan="enterprise", region="IN"):
+        import uuid
+
+        self.id = uuid.uuid4()
+        self.plan = plan
+        self.data_region = region
+
+
+class _FakeRedis:
+    def __init__(self, data):
+        self._data = data
+
+    async def get(self, key):
+        return self._data.get(key)
+
+
+class TestEffectivePlanAndProviderBilling:
+    def test_provider_billed_skips_base_fee(self):
+        items, subtotal = _build_line_items(
+            "enterprise", task_count=0, currency="USD", provider_billed=True
+        )
+        assert items == []
+        assert subtotal == Decimal("0.00")
+
+    def test_provider_billed_still_invoices_usd_overage(self):
+        items, subtotal = _build_line_items(
+            "pro", task_count=12_000, currency="USD", provider_billed=True
+        )
+        assert len(items) == 1
+        assert "overage" in items[0]["description"].lower()
+        assert subtotal == Decimal("5.00")
+
+    def test_inr_base_fee_uses_catalog_not_usd_list_price(self):
+        from core.billing.catalog import plan_price_minor
+
+        items, subtotal = _build_line_items("pro", task_count=0, currency="INR")
+        assert subtotal == Decimal(plan_price_minor("pro", "INR")) / Decimal(100)
+        assert items[0]["amount"] == str(subtotal)
+
+    @pytest.mark.asyncio
+    async def test_resolve_billing_state_prefers_provider_record(self, monkeypatch):
+        from core.billing import invoice_generator as ig
+
+        tenant = _Tenant(plan="enterprise")
+        fake = _FakeRedis(
+            {
+                f"tenant:{tenant.id}:plan": b"pro",
+                f"tenant:{tenant.id}:billing_provider": b"plural",
+            }
+        )
+
+        async def _get_redis():
+            return fake
+
+        monkeypatch.setattr("core.async_redis.get_async_redis", _get_redis)
+        plan, provider = await ig._resolve_billing_state(tenant)
+        assert (plan, provider) == ("pro", "plural")
+        assert ig._tenant_currency(tenant, provider) == "INR"
+
+    @pytest.mark.asyncio
+    async def test_resolve_billing_state_falls_back_to_tenant_row(self, monkeypatch):
+        from core.billing import invoice_generator as ig
+
+        tenant = _Tenant(plan="free", region="US")
+
+        async def _get_redis():
+            return _FakeRedis({})
+
+        monkeypatch.setattr("core.async_redis.get_async_redis", _get_redis)
+        plan, provider = await ig._resolve_billing_state(tenant)
+        assert (plan, provider) == ("free", "")
+        assert ig._tenant_currency(tenant, provider) == "USD"
+
+    def test_tenant_model_default_plan_is_free(self):
+        from core.models.tenant import Tenant
+
+        col = Tenant.__table__.c.plan
+        assert col.default.arg == "free"
+        assert "free" in str(col.server_default.arg)

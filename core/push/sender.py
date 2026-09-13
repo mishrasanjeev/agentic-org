@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -187,7 +188,10 @@ async def send_push_notification(
 
     for sub in subscriptions:
         try:
-            webpush(
+            # pywebpush is synchronous (requests + VAPID signing); run it off
+            # the event loop so a slow push service cannot stall the API.
+            await asyncio.to_thread(
+                webpush,
                 subscription_info=sub,
                 data=payload,
                 vapid_private_key=private_key,

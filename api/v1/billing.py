@@ -37,6 +37,16 @@ def _is_module_installed(module_name: str) -> bool:
     return importlib.util.find_spec(module_name) is not None
 
 
+def _plural_configured() -> bool:
+    """True when the Plural client has the credentials it actually reads.
+
+    core.billing.pinelabs_client authenticates with PLURAL_CLIENT_ID /
+    PLURAL_CLIENT_SECRET (OAuth client-credentials); the legacy
+    PINELABS_API_KEY / PLURAL_API_KEY names were never read by the client.
+    """
+    return bool(os.getenv("PLURAL_CLIENT_ID") and os.getenv("PLURAL_CLIENT_SECRET"))
+
+
 def _allowed_redirect_hosts() -> set[str]:
     """First-party domains that may receive billing redirects.
 
@@ -104,7 +114,7 @@ class SubscribeRequest(BaseModel):
 
 class IndiaSubscribeRequest(BaseModel):
     plan: str  # pro | enterprise
-    amount_inr: int | None = None
+    # NOTE: no client-supplied amount — the charge is always PLAN_AMOUNT_INR[plan].
     customer_email: str = ""
     customer_name: str = ""
     customer_phone: str = ""
@@ -246,9 +256,7 @@ async def billing_health() -> dict[str, Any]:
     stripe_configured = (
         stripe_secret_configured and stripe_prices_configured and stripe_sdk_installed
     )
-    pinelabs_configured = bool(
-        _os.getenv("PINELABS_API_KEY") or _os.getenv("PLURAL_API_KEY")
-    )
+    pinelabs_configured = _plural_configured()
 
     if stripe_configured and pinelabs_configured:
         recommended = "both — Stripe for USD, Pine Labs for INR"
@@ -270,7 +278,7 @@ async def billing_health() -> dict[str, Any]:
     else:
         recommended = (
             "NONE — no gateway is configured. Set STRIPE_SECRET_KEY and/or "
-            "PINELABS_API_KEY (or PLURAL_API_KEY) on the server to enable "
+            "PLURAL_CLIENT_ID + PLURAL_CLIENT_SECRET on the server to enable "
             "checkouts. Until then, /billing/subscribe and "
             "/billing/subscribe/india return a 503 with an actionable message."
         )
@@ -405,16 +413,14 @@ async def subscribe_india(
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, Any]:
     """Create a Plural payment order and return the hosted checkout URL."""
-    import os as _os
-
     from core.billing.pinelabs_client import create_payment_order
 
-    if not _os.getenv("PINELABS_API_KEY") and not _os.getenv("PLURAL_API_KEY"):
+    if not _plural_configured():
         raise HTTPException(
             status_code=503,
             detail=(
                 "Plural / Pine Labs is not configured in this environment. "
-                "Set PINELABS_API_KEY (or PLURAL_API_KEY) on the server to "
+                "Set PLURAL_CLIENT_ID and PLURAL_CLIENT_SECRET on the server to "
                 "enable INR checkouts. Admin can contact support for the "
                 "staging sandbox keys."
             ),
@@ -429,7 +435,6 @@ async def subscribe_india(
             create_payment_order,
             tenant_id=tenant_id,
             plan=body.plan,
-            amount_inr=body.amount_inr,
             customer_email=body.customer_email,
             customer_name=body.customer_name,
             customer_phone=body.customer_phone,

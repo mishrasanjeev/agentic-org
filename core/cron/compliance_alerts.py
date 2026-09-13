@@ -11,10 +11,12 @@ based on Indian tax filing rules (GST, TDS, PF, ESI).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from core.database import async_session_factory
 from core.models.company import Company
@@ -148,10 +150,58 @@ async def generate_deadlines_for_company(
     return count
 
 
+_DEADLINE_LABELS = {
+    "gstr1": "GSTR-1",
+    "gstr3b": "GSTR-3B",
+    "pf_ecr": "PF ECR",
+    "esi_return": "ESI return",
+    "tds_26q": "TDS 26Q",
+    "tds_24q": "TDS 24Q",
+    "gstr9": "GSTR-9",
+}
+
+# Distinct advisory-lock key for this job (arbitrary constant, bigint).
+_CRON_LOCK_KEY = 7_204_301_001
+
+
+async def _alert_recipient(session, company_id: Any, cache: dict[str, str | None]) -> str | None:
+    """Resolve the company's compliance alert email (cached per run)."""
+    key = str(company_id)
+    if key not in cache:
+        row = await session.execute(
+            select(Company.compliance_alerts_email).where(Company.id == company_id)
+        )
+        cache[key] = (row.scalar_one_or_none() or "").strip() or None
+    return cache[key]
+
+
+async def _send_deadline_alert(deadline: ComplianceDeadline, to: str, urgent: bool) -> bool:
+    """Deliver one alert email. Returns True only when the transport accepted it."""
+    from html import escape
+
+    from core.email import send_email
+
+    label = _DEADLINE_LABELS.get(deadline.deadline_type, deadline.deadline_type.upper())
+    when = "tomorrow" if urgent else "in 7 days"
+    subject = f"{'URGENT: ' if urgent else ''}{label} for {deadline.filing_period} due {when}"
+    body = (
+        f"<h2>{'Urgent filing reminder' if urgent else 'Filing reminder'}</h2>"
+        f"<p><b>{escape(label)}</b> for period <b>{escape(str(deadline.filing_period))}</b> "
+        f"is due on <b>{deadline.due_date.isoformat()}</b> ({when}).</p>"
+        "<p>Mark the filing as complete in AgenticOrg once submitted.</p>"
+    )
+    # send_email is synchronous SMTP; keep the event loop free.
+    return bool(await asyncio.to_thread(send_email, to, subject, body))
+
+
 async def send_alerts_for_due_deadlines(session, today: date | None = None) -> dict:
     """Check all unfiled deadlines and send alerts.
 
-    Returns summary: {alerts_7d: N, alerts_1d: N, overdue: N}
+    Returns summary: {alerts_7d: N, alerts_1d: N, overdue: N, skipped_no_recipient: N, failed: N}
+
+    ``alert_7d_sent`` / ``alert_1d_sent`` are set ONLY after ``send_email``
+    reports success, so a delivery failure is retried on the next run instead
+    of being silently recorded as sent.
     """
     if today is None:
         today = datetime.now(UTC).date()
@@ -159,7 +209,40 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
     seven_days = today + timedelta(days=7)
     one_day = today + timedelta(days=1)
 
-    summary = {"alerts_7d": 0, "alerts_1d": 0, "overdue": 0}
+    summary = {"alerts_7d": 0, "alerts_1d": 0, "overdue": 0, "skipped_no_recipient": 0, "failed": 0}
+    recipients: dict[str, str | None] = {}
+
+    async def _process(deadlines, *, urgent: bool, counter: str) -> None:
+        for deadline in deadlines:
+            to = await _alert_recipient(session, deadline.company_id, recipients)
+            if not to:
+                summary["skipped_no_recipient"] += 1
+                logger.warning(
+                    "compliance_alert_no_recipient deadline_type=%s period=%s company=%s",
+                    deadline.deadline_type, deadline.filing_period, deadline.company_id,
+                )
+                continue
+            try:
+                sent = await _send_deadline_alert(deadline, to, urgent)
+            # enterprise-gate: broad-except-ok reason=alert-delivery-failure-leaves-flag-unset-for-retry
+            except Exception as exc:  # noqa: BLE001
+                sent = False
+                logger.error("compliance_alert_send_error company=%s error=%s", deadline.company_id, exc)
+            if not sent:
+                summary["failed"] += 1
+                continue
+            logger.info(
+                "%s alert sent: %s %s due %s for company %s",
+                "1-day URGENT" if urgent else "7-day",
+                deadline.deadline_type, deadline.filing_period, deadline.due_date, deadline.company_id,
+            )
+            if urgent:
+                deadline.alert_1d_sent = True
+            else:
+                deadline.alert_7d_sent = True
+            deadline.updated_at = datetime.now(UTC)
+            session.add(deadline)
+            summary[counter] += 1
 
     # 7-day alerts: due in exactly 7 days, not yet sent
     result = await session.execute(
@@ -169,19 +252,7 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
             ComplianceDeadline.due_date == seven_days,
         )
     )
-    for deadline in result.scalars().all():
-        # In production: send email via SendGrid to company.compliance_alerts_email
-        logger.info(
-            "7-day alert: %s %s due %s for company %s",
-            deadline.deadline_type,
-            deadline.filing_period,
-            deadline.due_date,
-            deadline.company_id,
-        )
-        deadline.alert_7d_sent = True
-        deadline.updated_at = datetime.now(UTC)
-        session.add(deadline)
-        summary["alerts_7d"] += 1
+    await _process(result.scalars().all(), urgent=False, counter="alerts_7d")
 
     # 1-day alerts: due tomorrow, not yet sent
     result = await session.execute(
@@ -191,18 +262,7 @@ async def send_alerts_for_due_deadlines(session, today: date | None = None) -> d
             ComplianceDeadline.due_date == one_day,
         )
     )
-    for deadline in result.scalars().all():
-        logger.info(
-            "1-day URGENT alert: %s %s due %s for company %s",
-            deadline.deadline_type,
-            deadline.filing_period,
-            deadline.due_date,
-            deadline.company_id,
-        )
-        deadline.alert_1d_sent = True
-        deadline.updated_at = datetime.now(UTC)
-        session.add(deadline)
-        summary["alerts_1d"] += 1
+    await _process(result.scalars().all(), urgent=True, counter="alerts_1d")
 
     # Count overdue
     result = await session.execute(
@@ -228,6 +288,16 @@ async def run_compliance_alert_cron() -> dict:
     alert_summary = {"alerts_7d": 0, "alerts_1d": 0, "overdue": 0}
 
     async with async_session_factory() as session:
+        # Beat and the /cron/compliance-alerts endpoint can overlap; only one
+        # run may generate deadlines + send alerts at a time (the lock is
+        # released with the transaction).
+        locked = (
+            await session.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": _CRON_LOCK_KEY})
+        ).scalar_one()
+        if not locked:
+            logger.info("Compliance cron skipped: another run holds the lock")
+            return {"new_deadlines": 0, **alert_summary, "skipped": "locked"}
+
         # Get all active companies
         result = await session.execute(
             select(Company).where(Company.is_active == True)  # noqa: E712

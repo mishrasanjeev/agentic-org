@@ -201,10 +201,14 @@ class TestAgentGraph:
         Shadow-run regression trace_id=ecc5d00364a0."""
         from core.langgraph.agent_graph import _check_hitl_trigger
 
-        # confidence above floor + non-dict output: no trigger, no crash
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", None) == ""
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", [1, 2]) == ""
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", "str") == ""
+        # confidence above floor + non-dict output: no crash. The condition
+        # references a field that is absent, so the evaluator fails closed
+        # and triggers HITL (previously it silently returned "").
+        for bad_output in (None, [1, 2], "str"):
+            trigger = _check_hitl_trigger(0.95, 0.88, "amount > 100", bad_output)
+            assert isinstance(trigger, str) and "fail closed" in trigger
+        # A condition that does not reference output fields still evaluates.
+        assert _check_hitl_trigger(0.95, 0.88, "confidence < 0.5", None) == ""
         # Below floor still triggers regardless of output type
         trigger = _check_hitl_trigger(0.5, 0.88, "", None)
         assert "confidence" in trigger

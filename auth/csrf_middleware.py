@@ -50,7 +50,8 @@ _EXEMPT_PREFIXES: Final[tuple[str, ...]] = (
 
 # Exact path EXEMPTIONS — auth bootstrap endpoints with no prior session.
 #
-# These MUST stay aligned with ``auth.middleware.AuthMiddleware.EXEMPT_PATHS``
+# These MUST stay aligned with ``auth.grantex_middleware.GrantexAuthMiddleware.EXEMPT_PATHS``
+# (the mounted auth middleware; ``auth.middleware.AuthMiddleware`` is unmounted legacy)
 # for every auth-bootstrap route. The two middlewares are independent — a
 # route that skips auth but is still CSRF-checked will reject a fresh
 # browser whose only crime is having a stale session cookie from a prior

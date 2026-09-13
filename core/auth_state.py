@@ -276,3 +276,40 @@ async def check_signup_rate(ip: str) -> bool:
         return True
     _mem_signup[ip].append(now)
     return False
+
+
+# ---------------------------------------------------------------------------
+# Generic fixed-window counters (password reset, public demo requests, ...)
+# ---------------------------------------------------------------------------
+
+_mem_window: dict[str, list[float]] = defaultdict(list)
+
+
+async def check_window_rate(namespace: str, key: str, limit: int, window: int) -> bool:
+    """Increment ``auth:<namespace>:<key>`` and return True if it should be BLOCKED.
+
+    Redis-backed (cross-replica); in strict runtime env a Redis failure raises
+    RuntimeError so callers fail closed. In relaxed env falls back to memory.
+    """
+    r = await _get_redis()
+    if r:
+        try:
+            redis_key = f"auth:{namespace}:{key}"
+            count = await r.incr(redis_key)
+            if count == 1:
+                await r.expire(redis_key, window)
+            return count > limit
+        # enterprise-gate: broad-except-ok reason=window-rate-limit-fails-closed-in-strict-runtime
+        except Exception as exc:
+            _raise_if_strict(f"check_window_rate:{namespace}", exc)
+            logger.warning("auth_state: Redis window rate check failed, using memory (%s)", exc)
+    else:
+        _raise_if_strict(f"check_window_rate:{namespace}")
+    # In-memory fallback (non-strict only)
+    now = time.time()
+    mem_key = f"{namespace}:{key}"
+    _mem_window[mem_key] = [t for t in _mem_window[mem_key] if now - t < window]
+    if len(_mem_window[mem_key]) >= limit:
+        return True
+    _mem_window[mem_key].append(now)
+    return False

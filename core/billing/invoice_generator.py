@@ -39,6 +39,46 @@ PLAN_MONTHLY_FEE = {
 USAGE_RATE_PER_1K_TASKS = Decimal("2.50")  # $2.50 per 1000 tasks above plan allowance
 PLAN_TASK_ALLOWANCE = {"free": 1_000, "pro": 10_000, "enterprise": 100_000}
 
+# Subscriptions billed by a payment provider already collect the base fee
+# there; the monthly invoice must not bill it a second time.
+PROVIDER_BILLED = {"stripe", "plural"}
+
+
+async def _resolve_billing_state(tenant: Tenant) -> tuple[str, str]:
+    """Return ``(effective_plan, billing_provider)`` for a tenant.
+
+    Billing's source of truth is Redis: ``tenant:{id}:plan`` and
+    ``tenant:{id}:billing_provider`` are written by the Stripe/Plural
+    activation paths (``_activate_subscription``) and by cancel. ``Tenant.plan``
+    is never updated by billing, so it is only a fallback when Redis has no
+    record. Provider is "" when the tenant is not provider-billed.
+    """
+    from core.async_redis import get_async_redis
+
+    plan = ""
+    provider = ""
+    try:
+        redis = await get_async_redis()
+        if redis is not None:
+            raw_plan = await redis.get(f"tenant:{tenant.id}:plan")
+            raw_provider = await redis.get(f"tenant:{tenant.id}:billing_provider")
+            plan = raw_plan.decode() if isinstance(raw_plan, bytes) else (raw_plan or "")
+            provider = (
+                raw_provider.decode() if isinstance(raw_provider, bytes) else (raw_provider or "")
+            )
+    # enterprise-gate: broad-except-ok reason=billing-state-lookup-failure-falls-back-to-tenant-row
+    except Exception:
+        logger.warning("invoice_billing_state_lookup_failed", tenant_id=str(tenant.id))
+    return (plan or tenant.plan or "free"), provider
+
+
+def _tenant_currency(tenant: Tenant, provider: str) -> str:
+    if provider == "plural":
+        return "INR"
+    if provider == "stripe":
+        return "USD"
+    return "INR" if (tenant.data_region or "").upper() == "IN" else "USD"
+
 
 def _month_window(ref: datetime) -> tuple[datetime, datetime]:
     """Return (start, end) of the calendar month containing `ref`."""
@@ -64,26 +104,54 @@ async def _count_tasks(
         return int(result.scalar_one() or 0)
 
 
+def _plan_base_fee(plan: str, currency: str) -> Decimal:
+    if currency == "USD":
+        return PLAN_MONTHLY_FEE.get(plan, Decimal("0"))
+    from core.billing.catalog import plan_price_minor
+
+    try:
+        return (Decimal(plan_price_minor(plan, currency)) / Decimal(100)).quantize(  # type: ignore[arg-type]
+            Decimal("0.01")
+        )
+    except (KeyError, ValueError):
+        return Decimal("0")
+
+
 def _build_line_items(
-    plan: str, task_count: int
+    plan: str,
+    task_count: int,
+    currency: str = "USD",
+    provider_billed: bool = False,
 ) -> tuple[list[dict[str, Any]], Decimal]:
-    """Return (line_items, subtotal)."""
+    """Return (line_items, subtotal).
+
+    ``provider_billed``: the base subscription fee is collected by Stripe /
+    Plural, so it is omitted here (only usage overage is invoiced).
+    """
     items: list[dict[str, Any]] = []
     subtotal = Decimal("0.00")
 
-    base = PLAN_MONTHLY_FEE.get(plan, Decimal("0"))
-    items.append(
-        {
-            "description": f"{plan.title()} plan — monthly subscription",
-            "qty": 1,
-            "unit_price": str(base),
-            "amount": str(base),
-        }
-    )
-    subtotal += base
+    if not provider_billed:
+        base = _plan_base_fee(plan, currency)
+        items.append(
+            {
+                "description": f"{plan.title()} plan — monthly subscription",
+                "qty": 1,
+                "unit_price": str(base),
+                "amount": str(base),
+            }
+        )
+        subtotal += base
 
     allowance = PLAN_TASK_ALLOWANCE.get(plan, 0)
     overage = max(0, task_count - allowance)
+    if overage > 0 and currency != "USD":
+        # USAGE_RATE_PER_1K_TASKS is a USD list price; there is no catalog
+        # overage rate for other currencies, so do not invent one.
+        logger.warning(
+            "invoice_overage_unpriced_for_currency", currency=currency, overage=overage
+        )
+        overage = 0
     if overage > 0:
         units = Decimal(overage) / Decimal(1000)
         overage_amount = (units * USAGE_RATE_PER_1K_TASKS).quantize(Decimal("0.01"))
@@ -274,11 +342,17 @@ async def generate_invoices_for_period(
                     continue
 
             task_count = await _count_tasks(tenant.id, start, end)
-            line_items, subtotal = _build_line_items(tenant.plan, task_count)
+            plan, provider = await _resolve_billing_state(tenant)
+            currency = _tenant_currency(tenant, provider)
+            line_items, subtotal = _build_line_items(
+                plan,
+                task_count,
+                currency=currency,
+                provider_billed=provider in PROVIDER_BILLED,
+            )
 
             tax = Decimal("0.00")  # tax handling is per-region; out of scope here
             total = subtotal + tax
-            currency = "USD"
 
             if subtotal == 0:
                 skipped += 1
@@ -312,7 +386,7 @@ async def generate_invoices_for_period(
                     status="draft",
                     line_items=line_items,
                     pdf_url=pdf_url,
-                    payment_provider="stripe" if currency == "USD" else "plural",
+                    payment_provider=provider or ("stripe" if currency == "USD" else "plural"),
                 )
                 write_session.add(inv)
                 await write_session.commit()

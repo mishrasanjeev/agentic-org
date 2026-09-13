@@ -379,3 +379,37 @@ async def test_tenant_mismatch_cannot_route_other_tenant_bridge(bridge_state) ->
 
     assert exc.value.code == "tenant_mismatch"
     assert await repo.get_request("req-cross-tenant") is None
+
+
+# ── Bridge token hashing ─────────────────────────────────────────────────
+
+
+def test_bridge_token_verified_by_sha256_digest_with_legacy_plaintext_fallback() -> None:
+    import hashlib
+
+    from bridge.server_handler import _bridge_token_matches
+
+    token = "unit-bridge-token-xyz"
+    hashed_row = {"bridge_token_sha256": hashlib.sha256(token.encode()).hexdigest()}
+    assert _bridge_token_matches(hashed_row, token) is True
+    assert _bridge_token_matches(hashed_row, token + "x") is False
+    # A digest in the row must never be accepted as the presented token.
+    assert _bridge_token_matches(hashed_row, hashed_row["bridge_token_sha256"]) is False
+
+    legacy_row = {"bridge_token": token}  # pre-hash registration, one release
+    assert _bridge_token_matches(legacy_row, token) is True
+    assert _bridge_token_matches(legacy_row, "nope") is False
+
+    assert _bridge_token_matches({}, token) is False
+    assert _bridge_token_matches({"bridge_token_sha256": ""}, "") is False
+
+
+def test_register_bridge_persists_only_token_digest() -> None:
+    """api/v1/bridge.register_bridge must not write the plaintext token."""
+    import inspect
+
+    from api.v1 import bridge as bridge_api
+
+    src = inspect.getsource(bridge_api.register_bridge)
+    assert '"bridge_token_sha256": bridge_token_sha256' in src
+    assert '"bridge_token": bridge_token,' not in src

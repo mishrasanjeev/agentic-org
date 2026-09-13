@@ -623,30 +623,13 @@ def _check_hitl_trigger(
     if not isinstance(output, dict):
         output = {}
 
-    if hitl_condition and output:
-        # Evaluate simple threshold expressions like "amount > 500000"
-        try:
-            import ast
-            import operator
+    if hitl_condition:
+        # Shared fail-closed evaluator: BoolOp/Compare/in on str, num, bool.
+        # Parse failure or a missing referenced field triggers HITL.
+        from core.langgraph.hitl_condition import evaluate_hitl_condition
 
-            ops = {
-                ast.Gt: operator.gt,
-                ast.Lt: operator.lt,
-                ast.GtE: operator.ge,
-                ast.LtE: operator.le,
-                ast.Eq: operator.eq,
-                ast.NotEq: operator.ne,
-            }
-            tree = ast.parse(hitl_condition, mode="eval")
-            if isinstance(tree.body, ast.Compare) and len(tree.body.comparators) == 1:
-                left_name = getattr(tree.body.left, "id", "")
-                left_val = output.get(left_name, 0)
-                right_node = tree.body.comparators[0]
-                right_val = getattr(right_node, "value", getattr(right_node, "n", 0))
-                op_fn = ops.get(type(tree.body.ops[0]))
-                if op_fn and op_fn(float(left_val), float(right_val)):
-                    return f"condition matched: {hitl_condition}"
-        except (AttributeError, KeyError, SyntaxError, TypeError, ValueError):  # noqa: S110
-            pass  # HITL condition eval is best-effort; silent failure is intentional
+        triggered, reason = evaluate_hitl_condition(hitl_condition, output, confidence)
+        if triggered:
+            return reason
 
     return ""

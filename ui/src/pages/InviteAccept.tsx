@@ -1,4 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
+import { defaultLandingForRole } from "@/contexts/AuthContext";
 import { useSearchParams } from "react-router";
 
 export default function InviteAccept() {
@@ -62,9 +63,11 @@ export default function InviteAccept() {
       }
       // SEC-002 (PR-F): backend has set the HttpOnly session cookie.
       // We do NOT persist the access_token in localStorage. A full
-      // page reload to /dashboard re-runs AuthProvider hydration via
-      // /auth/me, which then knows about the new session.
-      window.location.assign("/dashboard");
+      // page reload re-runs AuthProvider hydration via /auth/me, which
+      // then knows about the new session. Land by role so a merchant
+      // invitee is not bounced to Access Denied.
+      const accepted = await res.json().catch(() => ({}));
+      window.location.assign(defaultLandingForRole(accepted?.user?.role));
     } catch (err: any) {
       setError(err.message || "Failed to accept invite");
     } finally {

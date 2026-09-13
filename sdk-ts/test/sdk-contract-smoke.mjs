@@ -46,6 +46,7 @@ globalThis.fetch = async (url, init = {}) => {
     });
   }
   if (parsed.pathname === "/api/v1/a2a/tasks") {
+    assert.equal(body.company_id, "11111111-1111-4111-8111-111111111111", "a2a/tasks must carry company_id");
     return json({
       run_id: "a2a_ts_1",
       status: "completed",
@@ -168,9 +169,14 @@ assert.equal((await client.mcp.tools())[0].name, "agenticorg_commerce_sales_agen
 const generatedAgent = await client.agents.generate("Create a contract intelligence agent.", { deploy: true });
 assert.equal(generatedAgent.deployed.status, "shadow");
 
+await assert.rejects(
+  client.agents.run("commerce_sales_agent", { action: "discover" }),
+  /companyId is required/,
+);
 const commerceRun = await client.agents.run("commerce_sales_agent", {
   action: "discover",
   inputs: { merchant_id: "mch_C6W3" },
+  companyId: "11111111-1111-4111-8111-111111111111",
 });
 assert.equal(commerceRun.status, "completed");
 assert.equal(commerceRun.agent_type, "commerce_sales_agent");

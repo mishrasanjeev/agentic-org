@@ -5,6 +5,7 @@ Persisted to PostgreSQL via the BridgeRegistration ORM model.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid as _uuid
 from typing import Any
@@ -71,6 +72,8 @@ async def register_bridge(
 
     bridge_id = str(_uuid.uuid4())
     bridge_token = secrets.token_urlsafe(48)
+    # Only the SHA-256 digest is persisted; the plaintext is returned once.
+    bridge_token_sha256 = hashlib.sha256(bridge_token.encode()).hexdigest()
     ws_url = f"wss://app.agenticorg.ai/api/v1/ws/bridge/{bridge_id}"
     tid = _uuid.UUID(tenant_id)
 
@@ -82,7 +85,7 @@ async def register_bridge(
             url=ws_url,
             status="active",
             metadata_={
-                "bridge_token": bridge_token,
+                "bridge_token_sha256": bridge_token_sha256,
                 "tally_port": req.tally_port,
                 "label": req.label,
             },

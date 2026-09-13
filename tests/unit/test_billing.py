@@ -415,6 +415,49 @@ class TestPluralCreateOrder:
         assert customer["mobile_number"] == "9876543210"
         assert customer["country_code"] == "91"
 
+    @patch("core.billing.pinelabs_client._get_access_token", return_value="tok")
+    @patch("core.billing.pinelabs_client._get_http")
+    def test_create_order_ignores_client_amount_and_records_expected(self, mock_http, mock_token):
+        """Audit #1: amount is always PLAN_AMOUNT_INR[plan]; expected amount stored in mapping."""
+        from core.billing.pinelabs_client import (
+            PLAN_AMOUNT_INR,
+            create_payment_order,
+            lookup_order_details,
+        )
+
+        resp = MagicMock()
+        resp.json.return_value = {"order_id": "v1-amt-1", "redirect_url": "https://x/checkout"}
+        resp.raise_for_status = MagicMock()
+        mock_http.return_value.post.return_value = resp
+
+        with pytest.raises(TypeError):
+            create_payment_order(tenant_id="t1", plan="pro", amount_inr=1)  # type: ignore[call-arg]
+
+        result = create_payment_order(tenant_id="t1", plan="pro")
+        sent = mock_http.return_value.post.call_args.kwargs["json"]
+        assert sent["order_amount"] == {"value": PLAN_AMOUNT_INR["pro"], "currency": "INR"}
+        stored = lookup_order_details(result["merchant_order_reference"])
+        assert stored["amount"] == PLAN_AMOUNT_INR["pro"]
+        assert stored["currency"] == "INR"
+
+    def test_india_subscribe_request_has_no_client_amount(self):
+        from api.v1.billing import IndiaSubscribeRequest
+
+        assert "amount_inr" not in IndiaSubscribeRequest.model_fields
+
+    @patch("core.billing.pinelabs_client._get_access_token", return_value="tok")
+    @patch("core.billing.pinelabs_client._get_http")
+    def test_create_order_is_not_retried(self, mock_http, mock_token):
+        """Audit #2: order creation is non-idempotent — a transient failure must not re-POST."""
+        import httpx
+
+        from core.billing.pinelabs_client import create_payment_order
+
+        mock_http.return_value.post.side_effect = httpx.ConnectError("boom")
+        with pytest.raises(httpx.ConnectError):
+            create_payment_order(tenant_id="t1", plan="pro")
+        assert mock_http.return_value.post.call_count == 1
+
     def test_create_order_rejects_unknown_plan(self):
         from core.billing.pinelabs_client import create_payment_order
 
@@ -526,6 +569,7 @@ class TestPluralWebhookHandler:
             "order_id": "v1-order-42",
             "status": "PROCESSED",
             "merchant_order_reference": "aoabc123",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         body = json.dumps(payload).encode()
 
@@ -598,6 +642,7 @@ class TestPluralWebhookHandler:
             "order_id": "v1-order-fail",
             "status": "PROCESSED",
             "merchant_order_reference": "activation-fails-ref",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         body = json.dumps(payload).encode()
 
@@ -617,6 +662,95 @@ class TestPluralWebhookHandler:
         ):
             with pytest.raises(PluralWebhookProcessingError, match="activation failed"):
                 handle_webhook(body, headers)
+
+    @staticmethod
+    def _signed(payload: dict, secret_raw: bytes, webhook_id: str):
+        secret = base64.b64encode(secret_raw).decode()
+        webhook_ts = str(int(time.time()))
+        body = json.dumps(payload).encode()
+        signed_content = f"{webhook_id}.{webhook_ts}.".encode() + body
+        sig = base64.b64encode(
+            hmac.new(secret_raw, signed_content, hashlib.sha256).digest()
+        ).decode()
+        headers = {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_ts,
+            "webhook-signature": f"v1,{sig}",
+        }
+        return secret, body, headers
+
+    @pytest.mark.parametrize(
+        "paid",
+        [
+            {"value": 1_00, "currency": "INR"},  # underpaid
+            {"value": 9_999_00, "currency": "USD"},  # wrong currency
+            {"value": 49_999_00, "currency": "INR"},  # different plan's price
+        ],
+    )
+    def test_handle_webhook_refuses_activation_on_amount_mismatch(self, paid):
+        """Audit #1: a verified webhook whose paid amount != plan price must not activate."""
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+            store_order_mapping,
+        )
+
+        store_order_mapping("amt-mismatch-ref", "v1-order-amt", "tenant-amt", "pro", 9_999_00, "INR")
+        secret, body, headers = self._signed(
+            {
+                "order_id": "v1-order-amt",
+                "status": "PROCESSED",
+                "merchant_order_reference": "amt-mismatch-ref",
+                "order_amount": paid,
+            },
+            b"webhook_key_amt",
+            "evt_amt_mismatch",
+        )
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate:
+            with pytest.raises(PluralWebhookProcessingError, match="does not match"):
+                handle_webhook(body, headers)
+        activate.assert_not_called()
+
+    def test_handle_webhook_without_amount_falls_back_to_provider_status(self):
+        """If the event omits order_amount, verify against GET order status; refuse on mismatch."""
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+            store_order_mapping,
+        )
+
+        store_order_mapping("amt-noamt-ref", "v1-order-noamt", "tenant-noamt", "pro", 9_999_00, "INR")
+        secret, body, headers = self._signed(
+            {
+                "order_id": "v1-order-noamt",
+                "status": "PROCESSED",
+                "merchant_order_reference": "amt-noamt-ref",
+            },
+            b"webhook_key_noamt",
+            "evt_noamt",
+        )
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate, patch(
+            "core.billing.pinelabs_client.get_order_status",
+            return_value={"order_amount": {"value": 1_00, "currency": "INR"}},
+        ):
+            with pytest.raises(PluralWebhookProcessingError, match="does not match"):
+                handle_webhook(body, headers)
+        activate.assert_not_called()
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate, patch(
+            "core.billing.pinelabs_client.get_order_status",
+            return_value={"order_amount": {"value": 9_999_00, "currency": "INR"}},
+        ):
+            assert handle_webhook(body, headers)["processed"] is True
+        activate.assert_called_once_with("tenant-noamt", "pro", "v1-order-noamt")
 
     def test_handle_webhook_rejects_old_timestamp(self):
         from core.billing.pinelabs_client import handle_webhook
@@ -718,6 +852,7 @@ class TestPluralE2ERedirectFlow:
             "order_id": "v1-e2e-order-001",
             "status": "PROCESSED",
             "merchant_order_reference": "aoe2etest",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         webhook_body = json.dumps(webhook_payload).encode()
 

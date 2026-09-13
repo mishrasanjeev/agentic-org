@@ -31,49 +31,16 @@ _REPORTS_DIR = Path(os.getenv("AGENTICORG_REPORTS_DIR", "/tmp/agenticorg_reports
 _REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# In-memory schedule store (replaced by DB in production)
-# ---------------------------------------------------------------------------
-# Populated at import-time by the API layer — see api/v1/report_schedules.py.
-# Each entry: {id, report_type, cron_expression, delivery_channels, recipients,
-#              format, is_active, tenant_id, company_id, last_run_at, next_run_at, ...}
-_schedule_store: dict[str, dict[str, Any]] = {}
-
-
-def get_schedule_store() -> dict[str, dict[str, Any]]:
-    """Return the global in-memory schedule store (shared with API layer)."""
-    return _schedule_store
-
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _is_schedule_due(schedule: dict[str, Any]) -> bool:
-    """Return True when a schedule's *next_run_at* is in the past or now."""
-    if not schedule.get("is_active", True):
-        return False
-    next_run = schedule.get("next_run_at")
-    if next_run is None:
-        return True  # never run -> run immediately
-    if isinstance(next_run, str):
-        next_run = datetime.fromisoformat(next_run)
-    now = datetime.now(UTC)
-    if next_run.tzinfo is None:
-        next_run = next_run.replace(tzinfo=UTC)
-    return now >= next_run
-
-
-def _advance_next_run(schedule: dict[str, Any]) -> None:
+def _next_run_after(cron: str, now: datetime | None = None) -> datetime:
     """Compute the next run time from the cron expression (simplified).
 
-    Full cron parsing would use ``croniter``; we ship a lightweight
-    approximation that handles daily / weekly / monthly keywords and
-    simple cron-like strings so the system works out-of-the-box without
-    an extra dependency.
+    Handles the interval keywords the API accepts and real cron strings via
+    ``croniter`` when installed; unrecognised expressions fall back to daily.
     """
-    cron = schedule.get("cron_expression", "daily")
-    now = datetime.now(UTC)
-
+    now = now or datetime.now(UTC)
     interval_map: dict[str, timedelta] = {
         "every_5_minutes": timedelta(minutes=5),
         "hourly": timedelta(hours=1),
@@ -81,23 +48,86 @@ def _advance_next_run(schedule: dict[str, Any]) -> None:
         "weekly": timedelta(weeks=1),
         "monthly": timedelta(days=30),
     }
-
-    delta = interval_map.get(cron)
+    delta = interval_map.get(cron or "daily")
     if delta is not None:
-        schedule["next_run_at"] = (now + delta).isoformat()
-        return
-
-    # Attempt croniter if available (optional dependency).
+        return now + delta
     try:
         from croniter import croniter  # type: ignore[import-untyped]
 
-        base = now
-        cron_iter = croniter(cron, base)
-        schedule["next_run_at"] = cron_iter.get_next(datetime).isoformat()
+        return croniter(cron, now).get_next(datetime)
     # enterprise-gate: broad-except-ok reason=optional-cron-parser-fallbacks-to-daily
     except Exception:
-        # Fall back to daily if cron expression is unrecognised.
-        schedule["next_run_at"] = (now + timedelta(days=1)).isoformat()
+        return now + timedelta(days=1)
+
+
+def _advance_next_run(schedule: dict[str, Any]) -> None:
+    """Dict-shaped compatibility wrapper around ``_next_run_after``."""
+    schedule["next_run_at"] = _next_run_after(schedule.get("cron_expression", "daily")).isoformat()
+
+
+def _is_demo_or_fallback(content_data: dict[str, Any]) -> bool:
+    """True when the generator could not produce measured data."""
+    if not isinstance(content_data, dict):
+        return True
+    if content_data.get("demo") is True:
+        return True
+    return str(content_data.get("source") or "") == "report_generator_fallback"
+
+
+def _schedule_report_config(row: Any) -> dict[str, Any]:
+    """Build the ``generate_report`` payload from a ``ReportSchedule`` row.
+
+    Mirrors ``api/v1/report_schedules.py`` manual-run so both entry points
+    produce the same report for the same schedule.
+    """
+    config = row.config or {}
+    company_id = row.company_id or config.get("company_id")
+    return {
+        "report_type": row.report_type,
+        "params": config.get("params", {}),
+        "company_id": str(company_id) if company_id else "default",
+        "tenant_id": str(row.tenant_id),
+        "delivery_channels": list(row.recipients or []),
+        "format": row.format or "pdf",
+        "schedule_id": str(row.id),
+    }
+
+
+async def _claim_due_schedules() -> list[dict[str, Any]]:
+    """Claim due ``report_schedules`` rows and advance ``next_run_at``.
+
+    ``FOR UPDATE SKIP LOCKED`` makes concurrent beat/worker sweeps safe: a row
+    is claimed by exactly one sweeper, and ``last_run_at``/``next_run_at`` are
+    advanced in the same transaction as the claim, so a crash between claim
+    and enqueue re-runs at most that one schedule on the next sweep rather
+    than double-firing it.
+    """
+    from sqlalchemy import select
+
+    from core.database import async_session_factory
+    from core.models.report_schedule import ReportSchedule
+
+    now = datetime.now(UTC)
+    claimed: list[dict[str, Any]] = []
+    async with async_session_factory() as session:
+        async with session.begin():
+            rows = (
+                await session.execute(
+                    select(ReportSchedule)
+                    .where(
+                        ReportSchedule.enabled.is_(True),
+                        (ReportSchedule.next_run_at.is_(None)) | (ReportSchedule.next_run_at <= now),
+                    )
+                    .order_by(ReportSchedule.next_run_at.asc().nullsfirst())
+                    .limit(500)
+                    .with_for_update(skip_locked=True)
+                )
+            ).scalars().all()
+            for row in rows:
+                row.last_run_at = now
+                row.next_run_at = _next_run_after(row.cron_expression, now)
+                claimed.append(_schedule_report_config(row))
+    return claimed
 
 
 # ---------------------------------------------------------------------------
@@ -106,42 +136,41 @@ def _advance_next_run(schedule: dict[str, Any]) -> None:
 
 @app.task(name="core.tasks.report_tasks.generate_scheduled_reports", bind=True, max_retries=2)
 def generate_scheduled_reports(self: Any) -> dict[str, Any]:
-    """Poll all report schedules and fan out generation for those that are due."""
+    """Poll ``report_schedules`` (the table the API writes) and fan out
+    ``generate_report`` for every due, enabled schedule.
+
+    Pre-fix this iterated a module-level dict the API never populated, so
+    beat reported ``checked: 0`` forever and no scheduled report was ever
+    generated.
+    """
+    from core.tasks.async_runner import run_async
+
     fired: list[str] = []
     errors: list[str] = []
 
-    for schedule_id, schedule in _schedule_store.items():
+    try:
+        due = run_async(_claim_due_schedules())
+    # enterprise-gate: broad-except-ok reason=report-schedule-poller-returns-structured-error-for-retry
+    except Exception as exc:
+        log.error("report_schedule_claim_failed", error=str(exc))
+        raise self.retry(exc=exc, countdown=60) from exc
+
+    for report_config in due:
+        schedule_id = report_config["schedule_id"]
         try:
-            if not _is_schedule_due(schedule):
-                continue
-
-            report_config: dict[str, Any] = {
-                "report_type": schedule["report_type"],
-                "params": schedule.get("params", {}),
-                "company_id": schedule.get("company_id", "default"),
-                "tenant_id": schedule.get("tenant_id", "default"),
-                "delivery_channels": schedule.get("delivery_channels", []),
-                "format": schedule.get("format", "pdf"),
-                "schedule_id": schedule_id,
-            }
-
             generate_report.delay(report_config)
-
-            schedule["last_run_at"] = datetime.now(UTC).isoformat()
-            _advance_next_run(schedule)
             fired.append(schedule_id)
-
             log.info(
                 "report_schedule_fired",
                 schedule_id=schedule_id,
-                report_type=schedule["report_type"],
+                report_type=report_config["report_type"],
             )
         # enterprise-gate: broad-except-ok reason=report-schedule-poller-isolates-per-schedule-failures
         except Exception as exc:
             errors.append(f"{schedule_id}: {exc!s}")
             log.error("report_schedule_error", schedule_id=schedule_id, error=str(exc))
 
-    return {"fired": fired, "errors": errors, "checked": len(_schedule_store)}
+    return {"fired": fired, "errors": errors, "checked": len(due)}
 
 
 @app.task(name="core.tasks.report_tasks.generate_report", bind=True, max_retries=3)
@@ -205,6 +234,30 @@ def generate_report(self: Any, report_config: dict[str, Any]) -> dict[str, Any]:
                     "next_action_cta": gate.get("next_action_cta", "review_report_quality"),
                     "blocked_reasons": gate.get("blocked_reasons", []),
                 }
+
+        # 1b. Never deliver demo / fallback content to customers. The
+        # generator marks data it could not measure with ``demo: True`` or
+        # ``source: report_generator_fallback`` (KPI compute failed, no
+        # tenant scope). Pre-fix that all-zero report was rendered and
+        # emailed as if it were real.
+        if channels and _is_demo_or_fallback(output.content_data):
+            reason = "report_content_is_demo_or_fallback"
+            log.error(
+                "report_delivery_blocked_demo_content",
+                report_id=report_id,
+                report_type=report_type,
+                tenant_id=tenant_id,
+                source=output.content_data.get("source"),
+            )
+            return {
+                "report_id": report_id,
+                "report_type": report_type,
+                "paths": [],
+                "elapsed_sec": round(time.monotonic() - start_ts, 2),
+                "status": "failed",
+                "reason": reason,
+                "source": output.content_data.get("source"),
+            }
 
         # 2. Render to requested format(s)
         from core.reports.renderer import render_excel, render_pdf

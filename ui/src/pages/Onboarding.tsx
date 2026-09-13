@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
-import api from "../lib/api";
+import api, { extractApiError } from "../lib/api";
 
 /* â”€â”€ Milestone Tracker Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface MilestoneTask {
@@ -81,6 +81,15 @@ interface InviteRow {
   email: string;
 }
 
+/* The server only accepts {admin, domain_lead, analyst, auditor, developer}
+   as invite roles; persona labels map to a domain lead for that domain. */
+const PERSONA_INVITE: Record<string, { role: string; domain: string }> = {
+  CFO: { role: "domain_lead", domain: "finance" },
+  CHRO: { role: "domain_lead", domain: "hr" },
+  CMO: { role: "domain_lead", domain: "marketing" },
+  COO: { role: "domain_lead", domain: "ops" },
+};
+
 export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -134,16 +143,21 @@ export default function Onboarding() {
     try {
       const filled = invites.filter((r) => r.email.trim());
       for (const invite of filled) {
+        const mapped = PERSONA_INVITE[invite.role];
+        if (!mapped) {
+          throw new Error(`Unknown invite persona: ${invite.role}`);
+        }
         await api.post("/org/invite", {
-          role: invite.role.toLowerCase(),
+          role: mapped.role,
+          domain: mapped.domain,
           name: invite.name,
           email: invite.email,
         });
       }
       setInviteSuccess(true);
       setStep(3);
-    } catch (err: any) {
-      setInviteError(err.message || "Failed to send invites");
+    } catch (err: unknown) {
+      setInviteError(extractApiError(err, (err as Error)?.message || "Failed to send invites"));
     } finally {
       setInviteLoading(false);
     }

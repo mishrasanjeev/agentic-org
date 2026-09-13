@@ -215,7 +215,9 @@ class BaseAgent:
         ]
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
-        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override, tenant_id=self.tenant_id
+        )
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
         # Strip markdown code blocks (```json ... ```) that Gemini often wraps
@@ -272,6 +274,31 @@ class BaseAgent:
                 ),
                 assignee=HITLAssignee(role="domain_lead"),
             )
+        if self.hitl_condition:
+            # Same fail-closed evaluator as the LangGraph runtime.
+            from core.langgraph.hitl_condition import evaluate_hitl_condition
+
+            triggered, reason = evaluate_hitl_condition(self.hitl_condition, output, confidence)
+            if triggered:
+                return HITLRequest(
+                    hitl_id=f"hitl_{uuid.uuid4().hex[:12]}",
+                    trigger_condition=reason,
+                    trigger_type="condition_matched",
+                    decision_required=DecisionRequired(
+                        question=f"Agent HITL condition triggered ({reason}). Review required.",
+                        options=[
+                            DecisionOption(id="approve", label="Approve output", action="proceed"),
+                            DecisionOption(id="reject", label="Reject and retry", action="retry"),
+                            DecisionOption(id="defer", label="Defer", action="defer"),
+                        ],
+                    ),
+                    context=HITLContext(
+                        summary=f"Agent {self.agent_type} HITL condition triggered",
+                        recommendation="review",
+                        agent_confidence=confidence,
+                    ),
+                    assignee=HITLAssignee(role="domain_lead"),
+                )
         return None
 
     def _build_tool_descriptions(self) -> list[dict[str, Any]] | None:
@@ -402,7 +429,9 @@ class BaseAgent:
             },
         ]
         model_override = self._resolve_llm_model()
-        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override, tenant_id=self.tenant_id
+        )
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 
         content = response.content.strip()

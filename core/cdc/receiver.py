@@ -109,16 +109,32 @@ def _compute_fingerprint(
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _signed_material(tenant_id: str, connector: str, body: bytes) -> bytes:
+    """Canonical string a CDC provider must sign.
+
+    ``HMAC_SHA256(secret, "<tenant_id>\\n<connector>\\n" + body)`` where
+    ``body`` is the raw request body (or the sort_keys canonical JSON of the
+    payload). Binding tenant and connector into the signature stops a valid
+    event captured for tenant A from being replayed to
+    ``/webhooks/cdc/<tenant-B>/<connector>`` — the previous body-only scheme
+    let the URL path choose the tenant unauthenticated.
+    """
+    return f"{tenant_id}\n{connector}\n".encode() + body
+
+
 def _validate_signature(
     payload_bytes: bytes,
     signature: str,
     connector: str,
     *,
+    tenant_id: str,
     alternate_payload_bytes: bytes | None = None,
 ) -> bool:
     """Validate HMAC-SHA256 signature using per-connector secret.
 
-    Fails closed when no connector secret is configured.
+    Fails closed when no connector secret is configured. The signed material
+    is ``_signed_material(tenant_id, connector, body)``; a signature over the
+    bare body is rejected.
     """
     secret = os.getenv(f"CDC_WEBHOOK_SECRET_{connector.upper()}", "")
     if not secret:
@@ -131,9 +147,12 @@ def _validate_signature(
     candidates = [payload_bytes]
     if alternate_payload_bytes is not None and alternate_payload_bytes != payload_bytes:
         candidates.append(alternate_payload_bytes)
+    provided = str(signature or "").strip().lower()
     for candidate in candidates:
-        expected = hmac.new(secret.encode(), candidate, hashlib.sha256).hexdigest()
-        if hmac.compare_digest(expected, signature or ""):
+        expected = hmac.new(
+            secret.encode(), _signed_material(tenant_id, connector, candidate), hashlib.sha256
+        ).hexdigest()
+        if hmac.compare_digest(expected, provided):
             return True
     return False
 
@@ -652,6 +671,7 @@ async def handle_cdc_webhook(
         canonical_bytes,
         signature,
         connector,
+        tenant_id=str(tenant_id),
         alternate_payload_bytes=raw_body,
     ):
         return {"status": "rejected", "reason": "invalid_signature", "http_status": 403}

@@ -2,12 +2,13 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({
+vi.mock("@/contexts/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/contexts/AuthContext")>();
+  return { ...actual, useAuth: () => ({
     login: vi.fn(),
     loginWithGoogle: vi.fn(),
-  }),
-}));
+  }) };
+});
 
 vi.mock("@/contexts/BrandingContext", () => ({
   useBranding: () => ({ productName: "AgenticOrg", logoUrl: null }),

@@ -33,10 +33,16 @@ def _run(coro):
     return asyncio.run(coro)
 
 
-def _sign(payload: dict, secret: str = "test-secret") -> str:  # noqa: S107
-    """Compute HMAC-SHA256 signature for a CDC payload."""
+def _sign(
+    payload: dict,
+    secret: str = "test-secret",  # noqa: S107
+    tenant_id: str = "tenant-a",
+    connector: str = "xero",
+) -> str:
+    """Compute HMAC-SHA256 over the canonical ``tenant\nconnector\nbody`` material."""
     payload_bytes = json.dumps(payload, sort_keys=True).encode()
-    return hmac_mod.new(secret.encode(), payload_bytes, hashlib.sha256).hexdigest()
+    material = f"{tenant_id}\n{connector}\n".encode() + payload_bytes
+    return hmac_mod.new(secret.encode(), material, hashlib.sha256).hexdigest()
 
 
 # ── tests ────────────────────────────────────────────────────────────────────
@@ -51,7 +57,7 @@ async def test_webhook_stores_event():
         "data": {"name": "Acme Corp"},
     }
     result = await handle_cdc_webhook(
-        "tenant-a", "salesforce", payload, signature=_sign(payload),
+        "tenant-a", "salesforce", payload, signature=_sign(payload, connector="salesforce"),
     )
     assert result["status"] == "accepted"
     events = get_stored_events(tenant_id="tenant-a")
@@ -119,7 +125,7 @@ async def test_duplicate_event_skipped():
     # A DIFFERENT tenant sending the same fingerprint must NOT dedupe —
     # the per-tenant dedup scope fixes a previous cross-tenant collision
     # where tenant-b would see tenant-a's event count as "duplicate".
-    third = await handle_cdc_webhook("tenant-b", "xero", payload, signature=_sign(payload))
+    third = await handle_cdc_webhook("tenant-b", "xero", payload, signature=_sign(payload, tenant_id="tenant-b"))
     assert third["status"] == "accepted"
     assert len(get_stored_events(tenant_id="tenant-b")) == 1
 

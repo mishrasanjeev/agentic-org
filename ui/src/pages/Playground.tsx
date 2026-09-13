@@ -14,7 +14,13 @@ interface UseCase {
   title: string;
   domain: string;
   domainLabel: string;
-  agentId: string;
+  /** Direct agent UUID (tenant agents picked in "Your Agents"). */
+  agentId?: string;
+  /** Agent type to resolve against the signed-in tenant's fleet. The
+   *  canned use-cases below carry a type, never a hard-coded UUID: agent
+   *  ids are tenant-scoped, so a fixed UUID only ever worked for the one
+   *  demo tenant it was seeded in. */
+  agentType?: string;
   agentName: string;
   input: Record<string, unknown>;
 }
@@ -42,7 +48,7 @@ const USE_CASES: UseCase[] = [
     title: "Review Sample Invoice",
     domain: "finance",
     domainLabel: "Finance (CFO)",
-    agentId: "a0000001-0000-0000-0001-000000000001",
+    agentType: "ap_processor",
     agentName: "AP Processor",
     input: {
       action: "process_invoice",
@@ -72,7 +78,7 @@ const USE_CASES: UseCase[] = [
     title: "Propose Sample Bank Matches",
     domain: "finance",
     domainLabel: "Finance (CFO)",
-    agentId: "a0000001-0000-0000-0001-000000000003",
+    agentType: "recon_agent",
     agentName: "Recon Agent",
     input: {
       action: "daily_reconciliation",
@@ -97,7 +103,7 @@ const USE_CASES: UseCase[] = [
     title: "Summarize Sample Resume Against a Rubric",
     domain: "hr",
     domainLabel: "HR (CHRO)",
-    agentId: "a0000001-0000-0000-0002-000000000003",
+    agentType: "talent_acquisition",
     agentName: "Talent Acquisition",
     input: {
       action: "screen_resume",
@@ -119,7 +125,7 @@ const USE_CASES: UseCase[] = [
     title: "Draft Sample Payroll Calculation",
     domain: "hr",
     domainLabel: "HR (CHRO)",
-    agentId: "a0000001-0000-0000-0002-000000000002",
+    agentType: "payroll_engine",
     agentName: "Payroll Engine",
     input: {
       action: "compute_payroll",
@@ -141,7 +147,7 @@ const USE_CASES: UseCase[] = [
     title: "Score Sample Lead",
     domain: "marketing",
     domainLabel: "Marketing (CMO)",
-    agentId: "a0000001-0000-0000-0003-000000000004",
+    agentType: "crm_intelligence",
     agentName: "CRM Intelligence",
     input: {
       action: "score_lead",
@@ -163,7 +169,7 @@ const USE_CASES: UseCase[] = [
     title: "Analyze Sample Brand Sentiment",
     domain: "marketing",
     domainLabel: "Marketing (CMO)",
-    agentId: "a0000001-0000-0000-0003-000000000005",
+    agentType: "brand_monitor",
     agentName: "Brand Monitor",
     input: {
       action: "analyze_sentiment",
@@ -186,7 +192,7 @@ const USE_CASES: UseCase[] = [
     title: "Classify Sample Support Ticket",
     domain: "operations",
     domainLabel: "Operations (COO)",
-    agentId: "a0000001-0000-0000-0004-000000000001",
+    agentType: "support_triage",
     agentName: "Support Triage",
     input: {
       action: "classify_ticket",
@@ -205,7 +211,7 @@ const USE_CASES: UseCase[] = [
     title: "Draft a Sample P1 Incident Response",
     domain: "operations",
     domainLabel: "Operations (COO)",
-    agentId: "a0000001-0000-0000-0004-000000000002",
+    agentType: "it_operations",
     agentName: "IT Operations",
     input: {
       action: "incident_response",
@@ -503,6 +509,44 @@ export default function Playground() {
   const [signInRequired, setSignInRequired] = useState(false);
   const terminalRef = useRef<HTMLDivElement>(null);
   const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // agent_type -> resolved tenant agent id (per session).
+  const resolvedAgentIds = useRef<Map<string, string>>(new Map());
+
+  /* Resolve a canned use-case's agent type to one of the tenant's agents.
+   * Returns ``{ status: 401 }`` when the visitor is not signed in, a
+   * ``notFound`` marker when the tenant has no agent of that type, or the id. */
+  const resolveAgentId = useCallback(async (uc: UseCase): Promise<
+    { kind: "id"; id: string } | { kind: "unauthorized" } | { kind: "notFound" }
+  > => {
+    if (uc.agentId) return { kind: "id", id: uc.agentId };
+    const agentType = uc.agentType;
+    if (!agentType) return { kind: "notFound" };
+    const cached = resolvedAgentIds.current.get(agentType);
+    if (cached) return { kind: "id", id: cached };
+
+    const domainParam = uc.domain === "operations" ? "ops" : uc.domain;
+    let page = 1;
+    let pages: number;
+    do {
+      const response = await api.get("/agents", {
+        params: { domain: domainParam, page, per_page: 100 },
+        validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
+      });
+      if (response.status === 401) return { kind: "unauthorized" };
+      const data = response.data;
+      const items: any[] = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+      const candidates = items.filter((a) => a?.agent_type === agentType && a?.id);
+      // Prefer a live agent; fall back to any agent of that type.
+      const match = candidates.find((a) => a.status === "active") ?? candidates[0];
+      if (match) {
+        resolvedAgentIds.current.set(agentType, String(match.id));
+        return { kind: "id", id: String(match.id) };
+      }
+      pages = Number(data?.pages || page);
+      page += 1;
+    } while (page <= pages);
+    return { kind: "notFound" };
+  }, []);
 
   /* Auto-scroll terminal */
   useEffect(() => {
@@ -542,7 +586,22 @@ export default function Playground() {
     const startTime = performance.now();
 
     try {
-      const response = await api.post(`/agents/${uc.agentId}/run`, uc.input, {
+      const resolved = await resolveAgentId(uc);
+      if (resolved.kind !== "id") {
+        const message =
+          resolved.kind === "unauthorized"
+            ? "Sign in to run agents in the playground."
+            : `No ${uc.agentName} agent (type "${uc.agentType}") is deployed in your organisation. Create one under Agents to run this sample.`;
+        setSignInRequired(resolved.kind === "unauthorized");
+        setError(message);
+        setAllLines([
+          { text: `> Agent "${uc.agentName}" starting...`, color: "gray" },
+          { text: `Error: ${message}`, color: "red" },
+        ]);
+        setRunning(false);
+        return;
+      }
+      const response = await api.post(`/agents/${resolved.id}/run`, uc.input, {
         // A public page needs to render a clear sign-in CTA instead of the
         // shared client's normal full-page redirect on 401.
         validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
@@ -582,7 +641,7 @@ export default function Playground() {
       ]);
       setRunning(false);
     }
-  }, []);
+  }, [resolveAgentId]);
 
   /* Group use cases by domain */
   const domains = ["finance", "hr", "marketing", "operations"] as const;
@@ -710,7 +769,7 @@ export default function Playground() {
             {selectedUseCase && (
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-3">
                 <p className="text-xs text-slate-500 mb-1 font-mono">
-                  POST /api/v1/agents/{selectedUseCase.agentId}/run
+                  POST /api/v1/agents/{selectedUseCase.agentId ?? `{${selectedUseCase.agentType}}`}/run
                 </p>
                 <pre className="text-xs text-slate-300 overflow-x-auto font-mono leading-relaxed">
                   {JSON.stringify(selectedUseCase.input, null, 2)}

@@ -176,6 +176,8 @@ class TestHealthEndpoints:
 # ============================================================================
 
 _SAMPLE_SCORECARD = {
+    # Live-executed scorecards are the only ones served as "measured".
+    "execution_mode": "live",
     "agent_aggregates": {
         "finance": {"accuracy": 0.95},
         "hr": {"accuracy": 0.88},
@@ -2398,12 +2400,13 @@ class TestLoadScorecard:
         from api.v1.evals import _load_scorecard
 
         scorecard_file = tmp_path / "scorecard.json"
-        scorecard_file.write_text(json.dumps({"test": True}))
+        # Only a live-executed scorecard may be served as "measured".
+        scorecard_file.write_text(json.dumps({"test": True, "execution_mode": "live"}))
 
         with patch("api.v1.evals._SCORECARD_PATH", scorecard_file):
             data, quality = _load_scorecard()
 
-        assert data == {"test": True, "data_quality": "measured"}
+        assert data == {"test": True, "execution_mode": "live", "data_quality": "measured"}
         assert quality == "measured"
 
     def test_load_scorecard_missing_file_returns_baseline(self, tmp_path):

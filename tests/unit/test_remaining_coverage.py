@@ -2293,7 +2293,8 @@ class TestRBAC:
     def test_get_allowed_domains_unknown(self):
         from core.rbac import get_allowed_domains
 
-        assert get_allowed_domains("unknown") is None
+        # Fail closed: unmapped roles get no domains, never "all" (None).
+        assert get_allowed_domains("unknown") == []
 
     def test_get_scopes_for_role_cfo(self):
         from core.rbac import get_scopes_for_role

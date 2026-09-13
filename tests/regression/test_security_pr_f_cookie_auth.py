@@ -118,7 +118,7 @@ def test_sec_002_onboarding_uses_cookie_api_client_not_context_token() -> None:
     """Onboarding must not send ``Authorization: Bearer null`` after
     AuthContext made browser ``token`` intentionally null."""
     onboarding = (UI_SRC / "pages" / "Onboarding.tsx").read_text(encoding="utf-8")
-    assert "import api from" in onboarding
+    assert 'import api, { extractApiError } from "../lib/api"' in onboarding or "import api from" in onboarding
     assert "const { user, token } = useAuth()" not in onboarding
     assert "Authorization: `Bearer ${token}`" not in onboarding
     assert 'api.post("/org/invite"' in onboarding

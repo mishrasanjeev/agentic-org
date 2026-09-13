@@ -19,7 +19,7 @@ import uuid
 from dataclasses import dataclass
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from core.database import async_session_factory
 from core.models.workflow_variant import WorkflowVariant
@@ -89,16 +89,15 @@ async def pick_variant(
 
 async def record_outcome(variant_id: uuid.UUID, success: bool) -> None:
     """Increment run/success/failure counters after a run completes."""
+    # Atomic SQL increment: concurrent runs must not lose counts to a
+    # read-modify-write race.
+    counter = WorkflowVariant.success_count if success else WorkflowVariant.failure_count
+    values = {
+        "run_count": WorkflowVariant.run_count + 1,
+        counter.key: counter + 1,
+    }
     async with async_session_factory() as session:
-        result = await session.execute(
-            select(WorkflowVariant).where(WorkflowVariant.id == variant_id)
+        await session.execute(
+            update(WorkflowVariant).where(WorkflowVariant.id == variant_id).values(**values)
         )
-        variant = result.scalar_one_or_none()
-        if variant is None:
-            return
-        variant.run_count += 1
-        if success:
-            variant.success_count += 1
-        else:
-            variant.failure_count += 1
         await session.commit()
