@@ -58,7 +58,10 @@ class TestClientIp:
         from api import client_ip as mod
 
         with patch.object(mod, "settings", SimpleNamespace(trust_proxy_headers=True)):
-            assert mod.client_ip(_request("10.0.0.9", " 203.0.113.5 , 10.0.0.1")) == "203.0.113.5"
+            # Cloud Run appends the peer it saw; the rightmost hop is the only
+            # trustworthy one (a client-supplied first hop must not win).
+            assert mod.client_ip(_request("10.0.0.9", " 203.0.113.5 , 10.0.0.1")) == "10.0.0.1"
+            assert mod.client_ip(_request("10.0.0.9", "10.0.0.1")) == "10.0.0.1"
             # No header -> peer address, never "unknown".
             assert mod.client_ip(_request("10.0.0.9")) == "10.0.0.9"
             assert mod.client_ip(_request("10.0.0.9", "   ")) == "10.0.0.9"
