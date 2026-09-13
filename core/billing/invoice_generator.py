@@ -7,9 +7,11 @@ For each active tenant we:
   4. Upload the PDF to GCS.
   5. Insert an Invoice row and email a link to the billing contact.
 
-This runs monthly on the 1st at 01:00 IST via Celery Beat. Invoices
-are idempotent per (tenant, period) via the invoice_number uniqueness
-constraint.
+This runs monthly on the 1st at 06:30 IST (01:00 UTC) via Celery Beat.
+Invoices are idempotent per (tenant, period) via the invoice_number
+uniqueness constraint, so the generator refuses to run before the billed
+month has closed in UTC (``_count_tasks`` windows are UTC) — an early run
+would freeze a partial-month invoice that can never be regenerated.
 """
 
 from __future__ import annotations
@@ -33,11 +35,44 @@ logger = structlog.get_logger()
 # Plan pricing — aligned with core.billing.catalog.PUBLIC_PLAN_CATALOG
 PLAN_MONTHLY_FEE = {
     "free": Decimal("0"),
-    "pro": Decimal("2.00"),
+    "pro": Decimal("99.00"),
     "enterprise": Decimal("499.00"),
 }
 USAGE_RATE_PER_1K_TASKS = Decimal("2.50")  # $2.50 per 1000 tasks above plan allowance
 PLAN_TASK_ALLOWANCE = {"free": 1_000, "pro": 10_000, "enterprise": 100_000}
+
+# Subscriptions billed by a payment provider already collect the base fee
+# there; the monthly invoice must not bill it a second time.
+PROVIDER_BILLED = {"stripe", "plural"}
+
+
+async def _resolve_billing_state(tenant: Tenant) -> tuple[str, str]:
+    """Return ``(effective_plan, billing_provider)`` for a tenant.
+
+    Billing's source of truth is the ``billing_subscriptions`` row
+    (``core.billing.subscriptions``); Redis is only its cache. ``Tenant.plan``
+    is never updated by billing, so it is only a fallback when the tenant has
+    no subscription row. Provider is "" when the tenant is not provider-billed.
+    """
+    from core.billing.subscriptions import get_subscription
+
+    try:
+        sub = await get_subscription(str(tenant.id))
+    # enterprise-gate: broad-except-ok reason=billing-state-lookup-failure-falls-back-to-tenant-row
+    except Exception:
+        logger.warning("invoice_billing_state_lookup_failed", tenant_id=str(tenant.id))
+        return (tenant.plan or "free"), ""
+    if sub["is_paid"]:
+        return sub["plan"], sub["provider"]
+    return (tenant.plan or "free"), ""
+
+
+def _tenant_currency(tenant: Tenant, provider: str) -> str:
+    if provider == "plural":
+        return "INR"
+    if provider == "stripe":
+        return "USD"
+    return "INR" if (tenant.data_region or "").upper() == "IN" else "USD"
 
 
 def _month_window(ref: datetime) -> tuple[datetime, datetime]:
@@ -64,26 +99,54 @@ async def _count_tasks(
         return int(result.scalar_one() or 0)
 
 
+def _plan_base_fee(plan: str, currency: str) -> Decimal:
+    if currency == "USD":
+        return PLAN_MONTHLY_FEE.get(plan, Decimal("0"))
+    from core.billing.catalog import plan_price_minor
+
+    try:
+        return (Decimal(plan_price_minor(plan, currency)) / Decimal(100)).quantize(  # type: ignore[arg-type]
+            Decimal("0.01")
+        )
+    except (KeyError, ValueError):
+        return Decimal("0")
+
+
 def _build_line_items(
-    plan: str, task_count: int
+    plan: str,
+    task_count: int,
+    currency: str = "USD",
+    provider_billed: bool = False,
 ) -> tuple[list[dict[str, Any]], Decimal]:
-    """Return (line_items, subtotal)."""
+    """Return (line_items, subtotal).
+
+    ``provider_billed``: the base subscription fee is collected by Stripe /
+    Plural, so it is omitted here (only usage overage is invoiced).
+    """
     items: list[dict[str, Any]] = []
     subtotal = Decimal("0.00")
 
-    base = PLAN_MONTHLY_FEE.get(plan, Decimal("0"))
-    items.append(
-        {
-            "description": f"{plan.title()} plan — monthly subscription",
-            "qty": 1,
-            "unit_price": str(base),
-            "amount": str(base),
-        }
-    )
-    subtotal += base
+    if not provider_billed:
+        base = _plan_base_fee(plan, currency)
+        items.append(
+            {
+                "description": f"{plan.title()} plan — monthly subscription",
+                "qty": 1,
+                "unit_price": str(base),
+                "amount": str(base),
+            }
+        )
+        subtotal += base
 
     allowance = PLAN_TASK_ALLOWANCE.get(plan, 0)
     overage = max(0, task_count - allowance)
+    if overage > 0 and currency != "USD":
+        # USAGE_RATE_PER_1K_TASKS is a USD list price; there is no catalog
+        # overage rate for other currencies, so do not invent one.
+        logger.warning(
+            "invoice_overage_unpriced_for_currency", currency=currency, overage=overage
+        )
+        overage = 0
     if overage > 0:
         units = Decimal(overage) / Decimal(1000)
         overage_amount = (units * USAGE_RATE_PER_1K_TASKS).quantize(Decimal("0.01"))
@@ -250,7 +313,27 @@ async def generate_invoices_for_period(
     created = 0
     skipped = 0
 
+    if now < end:
+        # The month is not closed yet (e.g. beat fired in a timezone ahead
+        # of UTC). Generating now would miss late tasks and the uniqueness
+        # constraint would block a corrected invoice forever.
+        logger.warning(
+            "invoice_period_not_closed",
+            now=now.isoformat(),
+            period_end=end.isoformat(),
+        )
+        return {
+            "created": 0,
+            "skipped": 0,
+            "period_start": start.isoformat(),
+            "period_end": end.isoformat(),
+            "skipped_reason": "period_not_closed",
+        }
+
     async with async_session_factory() as session:
+        # Tenant enumeration for a cross-tenant beat job: fail loudly if the
+        # role cannot bypass RLS rather than silently invoicing nobody.
+        await session.execute(text("SET LOCAL row_security = off"))
         stmt = select(Tenant).where(Tenant.deleted_at.is_(None))
         if tenant_filter is not None:
             stmt = stmt.where(Tenant.id == tenant_filter)
@@ -261,8 +344,10 @@ async def generate_invoices_for_period(
         try:
             invoice_number = f"AO-{tenant.id.hex[:6].upper()}-{start.strftime('%Y%m')}"
 
-            # Idempotency — skip if this invoice already exists
-            async with async_session_factory() as check_session:
+            # Idempotency — skip if this invoice already exists. ``invoices``
+            # is FORCE-RLS: the check must run in the tenant's session or it
+            # sees no rows and re-inserts (which then fails WITH CHECK).
+            async with get_tenant_session(tenant.id) as check_session:
                 result = await check_session.execute(
                     select(Invoice).where(
                         Invoice.tenant_id == tenant.id,
@@ -274,11 +359,17 @@ async def generate_invoices_for_period(
                     continue
 
             task_count = await _count_tasks(tenant.id, start, end)
-            line_items, subtotal = _build_line_items(tenant.plan, task_count)
+            plan, provider = await _resolve_billing_state(tenant)
+            currency = _tenant_currency(tenant, provider)
+            line_items, subtotal = _build_line_items(
+                plan,
+                task_count,
+                currency=currency,
+                provider_billed=provider in PROVIDER_BILLED,
+            )
 
             tax = Decimal("0.00")  # tax handling is per-region; out of scope here
             total = subtotal + tax
-            currency = "USD"
 
             if subtotal == 0:
                 skipped += 1
@@ -297,7 +388,7 @@ async def generate_invoices_for_period(
             )
             pdf_url = await _upload_pdf(tenant.id, invoice_number, pdf_bytes)
 
-            async with async_session_factory() as write_session:
+            async with get_tenant_session(tenant.id) as write_session:
                 inv = Invoice(
                     tenant_id=tenant.id,
                     invoice_number=invoice_number,
@@ -312,10 +403,10 @@ async def generate_invoices_for_period(
                     status="draft",
                     line_items=line_items,
                     pdf_url=pdf_url,
-                    payment_provider="stripe" if currency == "USD" else "plural",
+                    payment_provider=provider or ("stripe" if currency == "USD" else "plural"),
                 )
                 write_session.add(inv)
-                await write_session.commit()
+                # get_tenant_session commits on exit (tenant GUC still bound).
 
             created += 1
             logger.info(

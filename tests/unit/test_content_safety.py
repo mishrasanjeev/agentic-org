@@ -185,12 +185,12 @@ class TestDuplicateDetection:
         _RECENT_HASHES.clear()
 
         # First call — not duplicate
-        score1, issues1 = _check_duplicate("Hello world, this is a test.")
+        score1, issues1 = _check_duplicate("Hello world, this is a test.", scope="tenant-a:")
         assert score1 == 0.0
         assert issues1 == []
 
         # Second call — exact duplicate
-        score2, issues2 = _check_duplicate("Hello world, this is a test.")
+        score2, issues2 = _check_duplicate("Hello world, this is a test.", scope="tenant-a:")
         assert score2 == 1.0
         assert len(issues2) == 1
         assert issues2[0]["type"] == "duplicate"
@@ -199,7 +199,7 @@ class TestDuplicateDetection:
         """Different text is not flagged as duplicate."""
         _RECENT_HASHES.clear()
 
-        _check_duplicate("First unique sentence about finance.")
-        score, issues = _check_duplicate("Completely different sentence about marketing.")
+        _check_duplicate("First unique sentence about finance.", scope="tenant-a:")
+        score, issues = _check_duplicate("Completely different sentence about marketing.", scope="tenant-a:")
         assert score == 0.0
         assert issues == []

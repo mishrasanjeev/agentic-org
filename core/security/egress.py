@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import os
 import socket
@@ -55,7 +56,10 @@ class PinnedDnsAsyncNetworkBackend:
         local_address: str | None = None,
         socket_options: Iterable[Any] | None = None,
     ) -> Any:
-        targets = resolve_public_hostname_addresses(host, require_dns=self._require_dns)
+        # Resolve with the event loop's resolver: this runs per connection on
+        # the request path, so a blocking ``socket.getaddrinfo`` here stalls
+        # every other request while an upstream DNS answer is slow.
+        targets = await resolve_public_hostname_addresses_async(host, require_dns=self._require_dns)
         last_exc: Exception | None = None
         for target in targets:
             try:
@@ -247,6 +251,27 @@ def resolve_public_hostname_addresses(
     return tuple(str(address) for address in addresses)
 
 
+async def resolve_public_hostname_addresses_async(
+    hostname: str,
+    *,
+    require_dns: bool | None = None,
+) -> tuple[str, ...]:
+    """Async twin of ``resolve_public_hostname_addresses`` (``loop.getaddrinfo``)."""
+
+    host = validate_public_hostname(hostname, require_dns=False)
+    if require_dns is None:
+        require_dns = egress_dns_validation_required()
+    if not require_dns:
+        return (host,)
+    addresses = await _resolve_host_async(host)
+    if not addresses:
+        raise EgressValidationError("unresolvable", host)
+    for address in addresses:
+        if _is_blocked_ip(address):
+            raise EgressValidationError("blocked_ip", f"{host} resolved to {address}")
+    return tuple(str(address) for address in addresses)
+
+
 def build_pinned_async_transport(*, require_dns: bool = True) -> Any:
     """Build an httpx transport that pins DNS to validated public answers."""
 
@@ -258,7 +283,23 @@ def _resolve_host(hostname: str) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6
         infos = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
     except (socket.gaierror, OSError):
         return ()
+    return _addresses_from_addrinfo(infos)
 
+
+async def _resolve_host_async(
+    hostname: str,
+) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:
+    loop = asyncio.get_running_loop()
+    try:
+        infos = await loop.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except (socket.gaierror, OSError):
+        return ()
+    return _addresses_from_addrinfo(infos)
+
+
+def _addresses_from_addrinfo(
+    infos: Iterable[Any],
+) -> tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...]:
     addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for info in infos:
         ip_text = str(info[4][0])

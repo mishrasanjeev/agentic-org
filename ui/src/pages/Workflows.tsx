@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 import type { Workflow } from "@/types";
 
 /**
@@ -24,11 +24,19 @@ interface WorkflowTemplate {
 
 type WorkflowsTab = "my-workflows" | "templates";
 
+// Server caps per_page at 100; default (20) silently hid everything past
+// the first page.
+const WORKFLOWS_PER_PAGE = 50;
+
 export default function Workflows() {
   const navigate = useNavigate();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<WorkflowsTab>("my-workflows");
 
   // PR-C3: template catalog now sourced from GET /workflows/templates.
@@ -36,18 +44,29 @@ export default function Workflows() {
   const [templatesLoading, setTemplatesLoading] = useState(true);
 
   useEffect(() => {
-    fetchWorkflows();
     fetchTemplates();
   }, []);
 
-  async function fetchWorkflows() {
+  useEffect(() => {
+    fetchWorkflows(page);
+  }, [page]);
+
+  async function fetchWorkflows(pageNum: number) {
     setLoading(true);
+    setListError(null);
     try {
-      const { data } = await api.get("/workflows");
-      const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+      const { data } = await api.get("/workflows", {
+        params: { page: pageNum, per_page: WORKFLOWS_PER_PAGE },
+      });
+      const items: Workflow[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setWorkflows(items);
-    } catch {
+      setTotal(typeof data?.total === "number" ? data.total : items.length);
+      setPages(typeof data?.pages === "number" && data.pages > 0 ? data.pages : 1);
+    } catch (e: unknown) {
       setWorkflows([]);
+      setTotal(0);
+      setPages(1);
+      setListError(extractApiError(e, "Failed to load workflows"));
     } finally {
       setLoading(false);
     }
@@ -133,6 +152,14 @@ export default function Workflows() {
         <>
           {loading ? (
             <p className="text-muted-foreground">Loading workflows...</p>
+          ) : listError ? (
+            <div
+              className="rounded-lg bg-red-50 text-red-800 border border-red-200 px-4 py-3 text-sm flex items-center justify-between"
+              data-testid="workflows-error"
+            >
+              <span>Failed to load workflows: {listError}</span>
+              <Button variant="outline" size="sm" onClick={() => fetchWorkflows(page)}>Retry</Button>
+            </div>
           ) : workflows.length === 0 ? (
             <p className="text-muted-foreground">No workflows configured yet.</p>
           ) : (
@@ -162,6 +189,19 @@ export default function Workflows() {
                   </CardContent>
                 </Card>
               ))}
+            </div>
+          )}
+          {!loading && !listError && pages > 1 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground" data-testid="workflows-pagination">
+              <span>Showing {workflows.length} of {total} on page {page} of {pages}</span>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                  Previous
+                </Button>
+                <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </div>
             </div>
           )}
         </>

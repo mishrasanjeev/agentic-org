@@ -44,8 +44,12 @@ async def _resolve_kek(tenant_id: uuid.UUID) -> str:
 
     Order:
       1. ``tenants.byok_kek_resource`` if set (customer-managed)
-      2. ``AGENTICORG_PLATFORM_KEK`` env var (platform-managed)
+      2. ``AGENTICORG_PLATFORM_KEK`` env var (platform-managed) — only when
+         the tenant row exists and has no BYOK key
       3. Empty string → caller falls back to legacy Fernet
+
+    Fails closed: a database error or a missing tenant row raises instead
+    of silently encrypting a BYOK tenant's secret under the platform KEK.
     """
     try:
         async with database.async_session_factory() as session:
@@ -53,10 +57,15 @@ async def _resolve_kek(tenant_id: uuid.UUID) -> str:
                 select(Tenant.byok_kek_resource).where(Tenant.id == tenant_id)
             )
             row = result.scalar_one_or_none()
-            if row:
-                return row
-    except SQLAlchemyError:
-        logger.debug("tenant_kek_lookup_failed", tenant_id=str(tenant_id))
+    except SQLAlchemyError as exc:
+        logger.error("tenant_kek_lookup_failed", tenant_id=str(tenant_id))
+        raise RuntimeError(
+            "tenant KEK lookup failed; refusing to fall back to the platform KEK"
+        ) from exc
+    if row is None:
+        raise LookupError(f"tenant {tenant_id} not found; cannot resolve its KEK")
+    if row:
+        return row
     return os.getenv("AGENTICORG_PLATFORM_KEK", "")
 
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -197,9 +197,16 @@ export default function AgentCreate() {
   // can do. We also depend on ``availableTools`` so the fallback re-runs
   // once the connector tools have loaded, instead of showing an empty list
   // forever on slow networks.
+  // Set by applyGeneratedConfig so the next run of this effect (triggered by
+  // the type/domain it just changed) does not clobber the AI-suggested tools.
+  const keepSuggestedToolsRef = useRef(false);
   useEffect(() => {
     const type = useCustomType ? customType : agentType;
     if (!type) return;
+    if (keepSuggestedToolsRef.current) {
+      keepSuggestedToolsRef.current = false;
+      return;
+    }
     const params: Record<string, string> = {};
     if (domain) params.domain = domain;
     if (connectorIds.length > 0) params.connector_ids = connectorIds.join(",");
@@ -310,6 +317,7 @@ export default function AgentCreate() {
     setConfidenceFloor(s.confidence_floor || 0.88);
     setHitlCondition(s.hitl_condition || "confidence < 0.88");
     if (s.suggested_tools && s.suggested_tools.length > 0) {
+      keepSuggestedToolsRef.current = true;
       setAuthorizedTools(s.suggested_tools);
     }
 

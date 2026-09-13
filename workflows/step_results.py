@@ -94,6 +94,18 @@ class NotifySideEffectNotConfiguredError(WorkflowStepError):
         )
 
 
+class NotifyActionContainedError(WorkflowStepError):
+    def __init__(self, *, step_id: str, connector: str, reason: str, governance: dict[str, Any] | None = None) -> None:
+        details: dict[str, Any] = {"step_id": step_id, "connector": connector, "reason": reason}
+        if governance:
+            details["governance"] = governance
+        super().__init__(
+            "notify_action_contained",
+            "Notify side effect was contained by the action policy.",
+            details,
+        )
+
+
 class ConnectorToolConfigError(WorkflowStepError):
     def __init__(self, *, step_id: str, connector: str | None, tool: str | None) -> None:
         super().__init__(

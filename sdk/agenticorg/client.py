@@ -173,6 +173,7 @@ class _AgentsResource:
         action: str = "process",
         inputs: dict[str, Any] | None = None,
         context: dict[str, Any] | None = None,
+        company_id: str | None = None,
     ) -> AgentRunResult:
         """Run an agent and return the canonical :class:`AgentRunResult`.
 
@@ -184,6 +185,9 @@ class _AgentsResource:
             action: Action to perform (default ``"process"``).
             inputs: Task input data.
             context: Additional context.
+            company_id: Company UUID the run executes under. Required by the
+                server for agent-type runs (``POST /a2a/tasks`` returns 400
+                without it); optional for UUID runs.
 
         Returns:
             Canonical :class:`AgentRunResult` — see
@@ -197,11 +201,20 @@ class _AgentsResource:
             "context": context or {},
         }
 
+        if company_id:
+            payload["company_id"] = company_id
+
         # If it looks like a UUID, use the direct agent run endpoint
         if "-" in agent_id_or_type and len(agent_id_or_type) > 30:
             resp = self._http.post(f"/api/v1/agents/{agent_id_or_type}/run", json=payload)
         else:
-            # Use A2A task endpoint for agent type
+            # Use A2A task endpoint for agent type. The server requires
+            # company_id here (400 otherwise); fail fast client-side.
+            if not company_id:
+                raise ValueError(
+                    "company_id is required when running an agent by type "
+                    "(POST /a2a/tasks); pass company_id=<company UUID>."
+                )
             resp = self._http.post(
                 "/api/v1/a2a/tasks",
                 json={

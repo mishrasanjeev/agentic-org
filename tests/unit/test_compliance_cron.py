@@ -13,7 +13,9 @@ Tests cover:
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -182,14 +184,12 @@ class TestComputeQuarterlyDeadlines:
             assert r["due_date"] == date(2027, 1, 31)
 
     def test_q4_due_after_march(self):
-        """Q4 (Jan-Mar) TDS due in April (30th, since Apr has 30 days)."""
+        """Q4 (Jan-Mar) TDS 24Q/26Q are due 31 May (Rule 31A), not 30 April."""
         results = self._compute(date(2026, 4, 8))
         q4 = [r for r in results if r["filing_period"] == "2026-Q4"]
         assert len(q4) == 2
         for r in q4:
-            # Q4 end month = March (3), next month = April
-            assert r["due_date"].month == 4
-            assert r["due_date"].day == 30
+            assert r["due_date"] == date(2027, 5, 31)
 
     def test_fy_detection_pre_april(self):
         """When today is Jan-Mar, FY year is previous calendar year."""
@@ -272,3 +272,115 @@ class TestCronConstants:
         assert QUARTER_ENDS[2] == 9   # Q2 = Jul-Sep
         assert QUARTER_ENDS[3] == 12  # Q3 = Oct-Dec
         assert QUARTER_ENDS[4] == 3   # Q4 = Jan-Mar
+
+
+# ── Delivery behaviour: flags only set after a successful send ─────────────
+
+
+class _ScalarResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._rows
+
+    def scalar_one_or_none(self):
+        return self._rows
+
+    def scalar_one(self):
+        return self._rows
+
+
+class _AlertSession:
+    """Serves 7-day rows, then 1-day rows, then overdue rows; recipient lookups
+    return the configured email."""
+
+    def __init__(self, seven, one, email):
+        self._queue = [seven, one, []]
+        self.email = email
+        self.added = []
+
+    async def execute(self, stmt, params=None):
+        if "compliance_alerts_email" in str(stmt):
+            return _ScalarResult(self.email)
+        return _ScalarResult(self._queue.pop(0))
+
+    def add(self, obj):
+        self.added.append(obj)
+
+    async def flush(self):
+        return None
+
+
+def _deadline(dtype="gstr3b", due=None):
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        company_id=uuid.uuid4(),
+        deadline_type=dtype,
+        filing_period="2026-09",
+        due_date=due or (datetime.now(UTC).date() + timedelta(days=7)),
+        alert_7d_sent=False,
+        alert_1d_sent=False,
+        updated_at=None,
+    )
+
+
+class TestAlertDelivery:
+    @pytest.mark.asyncio
+    async def test_flag_set_only_when_email_accepted(self, monkeypatch):
+        from core.cron import compliance_alerts as ca
+
+        sent = []
+        monkeypatch.setattr("core.email.send_email", lambda to, subject, html: sent.append((to, subject, html)) or True)
+        d7, d1 = _deadline("gstr3b"), _deadline("tds_26q")
+        session = _AlertSession([d7], [d1], "cfo@corp.in")
+
+        summary = await ca.send_alerts_for_due_deadlines(session, today=d7.due_date - timedelta(days=7))
+
+        assert summary["alerts_7d"] == 1 and summary["alerts_1d"] == 1 and summary["failed"] == 0
+        assert d7.alert_7d_sent is True and d1.alert_1d_sent is True
+        assert d7.alert_1d_sent is False
+        assert [s[0] for s in sent] == ["cfo@corp.in", "cfo@corp.in"]
+        assert "GSTR-3B" in sent[0][1] and sent[1][1].startswith("URGENT")
+
+    @pytest.mark.asyncio
+    async def test_flag_not_set_when_send_fails(self, monkeypatch):
+        from core.cron import compliance_alerts as ca
+
+        monkeypatch.setattr("core.email.send_email", lambda to, subject, html: False)
+        d7 = _deadline()
+        session = _AlertSession([d7], [], "cfo@corp.in")
+
+        summary = await ca.send_alerts_for_due_deadlines(session, today=d7.due_date - timedelta(days=7))
+
+        assert summary["alerts_7d"] == 0 and summary["failed"] == 1
+        assert d7.alert_7d_sent is False
+        assert session.added == []
+
+    @pytest.mark.asyncio
+    async def test_no_recipient_is_skipped_not_marked(self, monkeypatch):
+        from core.cron import compliance_alerts as ca
+
+        called = []
+        monkeypatch.setattr("core.email.send_email", lambda *a: called.append(a) or True)
+        d7 = _deadline()
+        session = _AlertSession([d7], [], None)
+
+        summary = await ca.send_alerts_for_due_deadlines(session, today=d7.due_date - timedelta(days=7))
+
+        assert summary["skipped_no_recipient"] == 1 and called == []
+        assert d7.alert_7d_sent is False
+
+    def test_cron_entry_takes_advisory_lock(self):
+        import inspect
+
+        from core.cron.compliance_alerts import run_compliance_alert_cron
+
+        src = inspect.getsource(run_compliance_alert_cron)
+        assert "pg_try_advisory_xact_lock" in src
+        assert '"skipped": "locked"' in src

@@ -1,4 +1,4 @@
-"""Celery tasks for workflow wait step and event-based resumption.
+"""Celery tasks for workflow wait, event and HITL deadline handling.
 
 Workflow run state is durable in PostgreSQL via ``WorkflowStateStore``.
 Redis is still used for best-effort event-listener cache cleanup, but these
@@ -18,6 +18,27 @@ from workflows.event_waits import WorkflowEventWaitStore
 from workflows.state_store import WorkflowStateStore
 
 logger = structlog.get_logger()
+
+
+# Resume/timeout tasks used to swallow every exception into a return dict,
+# which permanently stranded the run. They now re-raise so Celery retries
+# with backoff; structured returns are reserved for terminal not-found/noop.
+def _task_retry_options() -> dict[str, Any]:
+    # Fresh dicts per task: Celery's autoretry mutates ``retry_kwargs`` in
+    # place (countdown/max_retries), so sharing one would leak state across tasks.
+    return {
+        "bind": True,
+        "autoretry_for": (Exception,),
+        "retry_backoff": True,
+        "retry_kwargs": {"max_retries": 5},
+    }
+
+
+# A wait/event step schedules its resume/timeout *before* the engine persists
+# ``waiting_*``. If the task lands in that gap the run is still ``running``
+# with no ``waiting_step_id``; retry shortly instead of a permanent noop.
+_CHECKPOINT_RETRY_COUNTDOWN_SECONDS = 2
+_CHECKPOINT_RETRY_MAX = 10
 
 
 def _state_store() -> WorkflowStateStore:
@@ -69,6 +90,34 @@ def _best_effort_clean_event_wait_keys(run_id: str, step_id: str) -> None:
         )
 
 
+async def _drive_engine_and_sync(store: WorkflowStateStore, run_id: str, step_id: str, log: Any) -> dict:
+    """Re-drive the engine after a durable state flip and sync the DB run.
+
+    Without this the run is left at ``status=running`` with nobody executing
+    the remaining steps (stranded run).
+    """
+    from workflows.engine import WorkflowEngine
+    from workflows.run_sync import sync_engine_state_to_workflow_run
+
+    engine = WorkflowEngine(store)
+    engine_result = await engine.execute(run_id)
+    state = await store.load(run_id) or {}
+    tenant_id = state.get("tenant_id")
+    workflow_run_id = state.get("workflow_run_id")
+    if tenant_id and workflow_run_id:
+        import uuid
+
+        await sync_engine_state_to_workflow_run(
+            tenant_id=uuid.UUID(str(tenant_id)),
+            workflow_run_id=uuid.UUID(str(workflow_run_id)),
+            engine_run_id=run_id,
+            state=state,
+        )
+    else:
+        log.warning("workflow_run_sync_skipped_missing_context", step_id=step_id)
+    return engine_result if isinstance(engine_result, dict) else {}
+
+
 async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
     log = logger.bind(run_id=run_id, step_id=step_id)
     store = _state_store()
@@ -80,6 +129,13 @@ async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
             return {"status": "error", "reason": "workflow_state_not_found"}
 
         current_status = state.get("status")
+        if (
+            current_status == "running"
+            and not state.get("waiting_step_id")
+            and step_id not in (state.get("step_results") or {})
+        ):
+            log.info("workflow_wait_checkpoint_pending")
+            return {"status": "retry", "reason": "waiting checkpoint not yet persisted"}
         if current_status not in ("waiting_delay", "waiting_event"):
             log.info("workflow_not_waiting", status=current_status)
             return {"status": "noop", "reason": f"current status is {current_status}"}
@@ -115,32 +171,36 @@ async def _resume_workflow_wait_async(run_id: str, step_id: str) -> dict:
         )
 
         log.info("workflow_wait_resumed")
+        engine_result = await _drive_engine_and_sync(store, run_id, step_id, log)
         return {
             "status": "resumed",
             "run_id": run_id,
             "step_id": step_id,
+            "engine_status": engine_result.get("status"),
         }
     finally:
         await store.close()
 
 
-@app.task(name="resume_workflow_wait")
-def resume_workflow_wait(run_id: str, step_id: str) -> dict:
+@app.task(name="resume_workflow_wait", **_task_retry_options())
+def resume_workflow_wait(self, run_id: str, step_id: str) -> dict:
     """Resume a workflow paused at a wait_delay or wait_for_event step."""
     try:
         result = run_async(_resume_workflow_wait_async(run_id, step_id))
-        if result.get("status") in {"resumed", "noop"}:
-            _best_effort_clean_event_wait_keys(run_id, step_id)
-        return result
-    # enterprise-gate: broad-except-ok reason=celery-boundary-returns-structured-workflow-error
-    except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
+    # enterprise-gate: broad-except-ok reason=celery-boundary-logs-then-reraises-for-autoretry
+    except Exception as exc:  # noqa: BLE001 - re-raised so Celery autoretry runs.
         logger.error(
             "resume_workflow_wait_failed",
             run_id=run_id,
             step_id=step_id,
             error=str(exc),
         )
-        return {"status": "error", "reason": str(exc)}
+        raise
+    if result.get("status") == "retry":
+        raise self.retry(countdown=_CHECKPOINT_RETRY_COUNTDOWN_SECONDS, max_retries=_CHECKPOINT_RETRY_MAX)
+    if result.get("status") in {"resumed", "noop"}:
+        _best_effort_clean_event_wait_keys(run_id, step_id)
+    return result
 
 
 async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
@@ -173,6 +233,10 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
             log.info("event_already_received_before_timeout")
             return {"status": "already_completed"}
 
+        if state.get("status") == "running" and not state.get("waiting_step_id"):
+            log.info("workflow_event_checkpoint_pending")
+            return {"status": "retry", "reason": "waiting checkpoint not yet persisted"}
+
         if state.get("waiting_step_id") != step_id:
             log.info("step_no_longer_waiting")
             return {"status": "noop"}
@@ -196,29 +260,184 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
         )
 
         log.info("workflow_event_timed_out")
+        engine_result = await _drive_engine_and_sync(state_store, run_id, step_id, log)
         return {
             "status": "timed_out",
             "run_id": run_id,
             "step_id": step_id,
+            "engine_status": engine_result.get("status"),
         }
     finally:
         await state_store.close()
 
 
-@app.task(name="timeout_workflow_event")
-def timeout_workflow_event(run_id: str, step_id: str) -> dict:
+@app.task(name="timeout_workflow_event", **_task_retry_options())
+def timeout_workflow_event(self, run_id: str, step_id: str) -> dict:
     """Mark an event wait as timed_out and let the engine continue later."""
     try:
         result = run_async(_timeout_workflow_event_async(run_id, step_id))
-        if result.get("status") in {"timed_out", "already_completed", "noop"}:
-            _best_effort_clean_event_wait_keys(run_id, step_id)
-        return result
-    # enterprise-gate: broad-except-ok reason=celery-boundary-returns-structured-workflow-error
-    except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
+    # enterprise-gate: broad-except-ok reason=celery-boundary-logs-then-reraises-for-autoretry
+    except Exception as exc:  # noqa: BLE001 - re-raised so Celery autoretry runs.
         logger.error(
             "timeout_workflow_event_failed",
             run_id=run_id,
             step_id=step_id,
             error=str(exc),
         )
-        return {"status": "error", "reason": str(exc)}
+        raise
+    if result.get("status") == "retry":
+        raise self.retry(countdown=_CHECKPOINT_RETRY_COUNTDOWN_SECONDS, max_retries=_CHECKPOINT_RETRY_MAX)
+    if result.get("status") in {"timed_out", "already_completed", "noop"}:
+        _best_effort_clean_event_wait_keys(run_id, step_id)
+    return result
+
+
+async def _timeout_workflow_hitl_async(run_id: str, step_id: str) -> dict:
+    """Enforce the HITL deadline for ``step_id`` of engine run ``run_id``.
+
+    If the run is still waiting on this step:
+
+    * with an ``approval_timeout_policy`` whose outcome is ``auto_escalate``
+      (see ``core.marketing.approval_timeouts``) the step is escalated once —
+      the pending HITL rows are reassigned to ``escalation_role``, the
+      deadline is extended by the policy SLA and a new timeout is queued;
+    * otherwise the step becomes ``timed_out``, the run fails with
+      ``error.code=hitl_timeout``, the HITL rows flip to ``expired`` and the
+      DB run is synced.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from workflows.run_sync import (
+        expire_pending_hitl_items,
+        schedule_hitl_timeout,
+        sync_engine_state_to_workflow_run,
+    )
+
+    log = logger.bind(run_id=run_id, step_id=step_id)
+    store = _state_store()
+    await store.init()
+    try:
+        state = await store.load(run_id)
+        if not state:
+            log.warning("workflow_state_not_found")
+            return {"status": "error", "reason": "workflow_state_not_found"}
+        if state.get("status") != "waiting_hitl" or state.get("waiting_step_id") != step_id:
+            log.info("hitl_step_no_longer_waiting", status=state.get("status"))
+            return {"status": "noop", "reason": f"current status is {state.get('status')}"}
+
+        step_results = state.setdefault("step_results", {})
+        step_result = step_results.get(step_id) or {}
+        output = dict(step_result.get("output") or {}) if isinstance(step_result.get("output"), dict) else {}
+        now = datetime.now(UTC)
+
+        tenant_id = state.get("tenant_id")
+        workflow_run_id = state.get("workflow_run_id")
+        tenant_uuid = workflow_run_uuid = None
+        if tenant_id and workflow_run_id:
+            import uuid
+
+            tenant_uuid = uuid.UUID(str(tenant_id))
+            workflow_run_uuid = uuid.UUID(str(workflow_run_id))
+
+        policy = output.get("approval_timeout_policy")
+        escalation_role = str(policy.get("escalation_role") or "") if isinstance(policy, dict) else ""
+        if (
+            isinstance(policy, dict)
+            and policy.get("timeout_outcome") == "auto_escalate"
+            and escalation_role
+            and not output.get("hitl_escalated")
+        ):
+            sla_hours = float(policy.get("default_sla_hours") or output.get("timeout_hours") or 4)
+            new_expires_at = now + timedelta(hours=sla_hours)
+            output.update(
+                {
+                    "hitl_escalated": True,
+                    "hitl_escalated_at": now.isoformat(),
+                    "assignee_role": escalation_role,
+                    "escalated_from_role": step_result.get("output", {}).get("assignee_role"),
+                }
+            )
+            step_results[step_id] = {**step_result, "output": output}
+            await store.save(
+                state,
+                actor="celery.timeout_workflow_hitl",
+                step_id=step_id,
+                idempotency_key=f"timeout_workflow_hitl:escalate:{run_id}:{step_id}",
+                metadata={"task": "timeout_workflow_hitl", "event": "hitl_escalated"},
+            )
+            if tenant_uuid and workflow_run_uuid:
+                await expire_pending_hitl_items(
+                    tenant_id=tenant_uuid,
+                    workflow_run_id=workflow_run_uuid,
+                    step_id=step_id,
+                    new_status="pending",
+                    assignee_role=escalation_role,
+                    expires_at=new_expires_at,
+                )
+            schedule_hitl_timeout(run_id, step_id, new_expires_at)
+            log.info("workflow_hitl_escalated", escalation_role=escalation_role)
+            return {
+                "status": "escalated",
+                "run_id": run_id,
+                "step_id": step_id,
+                "escalation_role": escalation_role,
+                "expires_at": new_expires_at.isoformat(),
+            }
+
+        error = {
+            "code": "hitl_timeout",
+            "message": f"Step '{step_id}' timed out waiting for a human decision",
+        }
+        step_results[step_id] = {
+            **step_result,
+            "status": "timed_out",
+            "error": error,
+            "completed_by": "timeout_workflow_hitl",
+        }
+        state["steps_completed"] = len(step_results)
+        state["status"] = "failed"
+        state["error"] = error
+        state["completed_at"] = now.isoformat()
+        state.pop("waiting_step_id", None)
+        await store.save(
+            state,
+            actor="celery.timeout_workflow_hitl",
+            step_id=step_id,
+            idempotency_key=f"timeout_workflow_hitl:{run_id}:{step_id}",
+            metadata={"task": "timeout_workflow_hitl", "event": "hitl_timed_out"},
+        )
+        log.info("workflow_hitl_timed_out")
+
+        if tenant_uuid and workflow_run_uuid:
+            await expire_pending_hitl_items(
+                tenant_id=tenant_uuid,
+                workflow_run_id=workflow_run_uuid,
+                step_id=step_id,
+            )
+            await sync_engine_state_to_workflow_run(
+                tenant_id=tenant_uuid,
+                workflow_run_id=workflow_run_uuid,
+                engine_run_id=run_id,
+                state=state,
+            )
+        else:
+            log.warning("workflow_run_sync_skipped_missing_context")
+        return {"status": "timed_out", "run_id": run_id, "step_id": step_id}
+    finally:
+        await store.close()
+
+
+@app.task(name="timeout_workflow_hitl", **_task_retry_options())
+def timeout_workflow_hitl(self, run_id: str, step_id: str) -> dict:
+    """Fail (or escalate) a workflow whose HITL step passed its deadline."""
+    try:
+        return run_async(_timeout_workflow_hitl_async(run_id, step_id))
+    # enterprise-gate: broad-except-ok reason=celery-boundary-logs-then-reraises-for-autoretry
+    except Exception as exc:  # noqa: BLE001 - re-raised so Celery autoretry runs.
+        logger.error(
+            "timeout_workflow_hitl_failed",
+            run_id=run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
+        raise

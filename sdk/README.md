@@ -59,7 +59,7 @@ result = client.agents.run(
     candidate["agent_id"],
     action="review_draft",
     inputs={"document_ref": "sample-document"},
-    context={"company_id": company_id},
+    company_id=company_id,  # required when running by agent type
 )
 
 print(result.status)

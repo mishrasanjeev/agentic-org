@@ -310,6 +310,9 @@ async def test_promote_agent_passes_required_subset_to_gate() -> None:
     agent.shadow_sample_count = 10  # tester generated 10 samples
     agent.shadow_accuracy_current = 0.97
     agent.shadow_accuracy_floor = 0.60
+    # Promotion now also requires terminal human review evidence.
+    agent.shadow_feedback_count = 3
+    agent.shadow_human_confidence_current = 0.95
     agent.company_id = COMPANY_ID
 
     # session.execute: 1) select(Agent) -> agent, then AgentVersion probes -> None

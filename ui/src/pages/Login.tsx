@@ -1,7 +1,7 @@
 import { useState, useEffect, FormEvent } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router";
 import { GoogleLogin, GoogleOAuthProvider } from "@react-oauth/google";
-import { useAuth } from "../contexts/AuthContext";
+import { useAuth, defaultLandingForRole } from "@/contexts/AuthContext";
 import { useBranding } from "../contexts/BrandingContext";
 
 export default function Login() {
@@ -11,10 +11,12 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   // Honor a ?next=/some/path query so flows like the billing callback
   // can re-route the user back to where they were after re-auth.
+  // ``null`` means "no explicit next" -> route by role after sign-in.
   const nextPath = (() => {
-    const raw = searchParams.get("next") || "/dashboard";
+    const raw = searchParams.get("next");
+    if (!raw) return null;
     // Allow relative app paths only â€” never an absolute URL.
-    return raw.startsWith("/") && !raw.startsWith("//") ? raw : "/dashboard";
+    return raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
   })();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,8 +41,8 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      await login(email, password);
-      navigate(nextPath);
+      const sessionUser = await login(email, password);
+      navigate(nextPath ?? defaultLandingForRole(sessionUser?.role));
     } catch (err: any) {
       setError(err.message || "Login failed");
     } finally {
@@ -52,8 +54,8 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      await loginWithGoogle(credentialResponse.credential);
-      navigate(nextPath);
+      const sessionUser = await loginWithGoogle(credentialResponse.credential);
+      navigate(nextPath ?? defaultLandingForRole(sessionUser?.role));
     } catch (err: any) {
       setError(err.message || "Google login failed");
     } finally {

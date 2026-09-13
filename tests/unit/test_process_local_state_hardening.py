@@ -62,18 +62,27 @@ def test_pinelabs_order_mapping_relaxed_runtime_uses_memory_fallback(monkeypatch
     monkeypatch.setattr(pinelabs_client.settings, "env", "development")
     monkeypatch.setattr(pinelabs_client, "_redis_client", lambda: None)
 
-    pinelabs_client.store_order_mapping("merchant-2", "order-2", "tenant-2", "enterprise")
+    pinelabs_client.store_order_mapping("merchant-2", "order-2", "tenant-2", "enterprise", 4999900, "INR")
 
-    assert pinelabs_client.lookup_order_details("merchant-2") == {
+    by_ref = pinelabs_client.lookup_order_details("merchant-2")
+    # created_at (audit 2026-09-13) lets activation ignore stale/replayed orders.
+    assert isinstance(by_ref.pop("created_at", None), str)
+    assert by_ref == {
         "order_id": "order-2",
         "tenant_id": "tenant-2",
         "plan": "enterprise",
+        "amount": 4999900,
+        "currency": "INR",
     }
-    assert pinelabs_client.lookup_order_details_by_order_id("order-2") == {
+    by_id = pinelabs_client.lookup_order_details_by_order_id("order-2")
+    by_id.pop("created_at", None)
+    assert by_id == {
         "merchant_order_reference": "merchant-2",
         "order_id": "order-2",
         "tenant_id": "tenant-2",
         "plan": "enterprise",
+        "amount": 4999900,
+        "currency": "INR",
     }
     pinelabs_client._order_map.clear()
     pinelabs_client._order_id_map.clear()

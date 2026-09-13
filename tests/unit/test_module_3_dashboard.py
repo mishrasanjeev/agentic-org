@@ -96,7 +96,14 @@ def test_tc_dash_001_metric_derivations_pinned() -> None:
     assert "const totalAgents = agents.length;" in src
     assert 'const activeAgents = agents.filter((a) => a.status === "active").length;' in src
     assert 'const shadowAgents = agents.filter((a) => a.status === "shadow").length;' in src
-    assert 'const pendingApprovals = approvals.filter((a) => a.status === "pending").length;' in src
+    # Approvals: GET /approvals (no status) returns only undecided items, so
+    # pending/resolved are taken from server ``total`` counts, not from
+    # filtering the first page (audit 2026-09-13).
+    assert 'typeof approvalsResp.value.data?.total === "number"' in src
+    assert 'status: "approved"' in src
+    assert 'status: "rejected"' in src
+    assert "const pendingApprovals =" in src
+    assert 'approvalTotals.pending ?? approvals.filter((a) => a.status === "pending").length;' in src
 
 
 # ─────────────────────────────────────────────────────────────────

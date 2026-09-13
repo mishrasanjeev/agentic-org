@@ -57,6 +57,19 @@ function intentLabel(score: number): string {
   return "Low";
 }
 
+/**
+ * Accounts created via CSV/manual add get a deterministic tier-band
+ * placeholder score (api/v1/abm.py _seed_intent_score) and ``intent_data``
+ * stays null until a real intent provider has been queried. Those rows
+ * must not be presented as genuine Hot/Warm signals.
+ */
+export function isSeededIntent(acct: { intent_data: Record<string, unknown> | null }): boolean {
+  if (!acct.intent_data) return true;
+  return acct.intent_data.source === "seeded";
+}
+
+export const SEEDED_INTENT_TITLE = "Placeholder until intent connectors are configured";
+
 // TC_016: backend stores tier as "1"/"2"/"3" but the product docs
 // (and the QA plan) expect the semantic labels the sales team actually
 // uses: Strategic / Enterprise / Growth. Mapping at the display layer
@@ -119,6 +132,13 @@ export default function ABMDashboard() {
   const { t } = useTranslation();
   void t;
   const [accounts, setAccounts] = useState<ABMAccount[]>([]);
+  // /abm/accounts is server-paginated (per_page default 50, max 200) and
+  // returns {accounts, total, page, pages}; without paging the table
+  // silently stopped at 50 rows.
+  const [page, setPage] = useState(1);
+  const [totalAccounts, setTotalAccounts] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const ACCOUNTS_PER_PAGE = 50;
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -161,10 +181,12 @@ export default function ABMDashboard() {
       // dashboard endpoint so the cards always describe the visible
       // account set.
       const [acctRes, dashRes] = await Promise.all([
-        abmApi.listAccounts(params),
+        abmApi.listAccounts({ ...params, page: String(page), per_page: String(ACCOUNTS_PER_PAGE) }),
         abmApi.dashboard(params),
       ]);
       setAccounts(acctRes.data.accounts || []);
+      setTotalAccounts(typeof acctRes.data.total === "number" ? acctRes.data.total : (acctRes.data.accounts || []).length);
+      setTotalPages(typeof acctRes.data.pages === "number" && acctRes.data.pages > 0 ? acctRes.data.pages : 1);
       setSummary(dashRes.data);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail || "Failed to load ABM data";
@@ -172,7 +194,7 @@ export default function ABMDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [filterTier, filterIndustry, filterMinIntent]);
+  }, [filterTier, filterIndustry, filterMinIntent, page]);
 
   useEffect(() => {
     fetchData();
@@ -382,12 +404,16 @@ export default function ABMDashboard() {
           <MetricCard
             label="Avg Intent Score"
             value={summary.avg_intent_score}
-            sub="0-100 composite"
+            sub={
+              accounts.length > 0 && accounts.every(isSeededIntent)
+                ? "seeded placeholders — configure intent connectors"
+                : "0-100 composite"
+            }
           />
           <MetricCard
-            label="Pipeline Influenced"
+            label="Campaign Spend"
             value={`$${summary.pipeline_influenced_usd.toLocaleString()}`}
-            sub={`${summary.total_campaigns} campaigns`}
+            sub="spend tracking not yet connected"
           />
         </div>
       )}
@@ -439,7 +465,10 @@ export default function ABMDashboard() {
           </div>
 
           <button
-            onClick={fetchData}
+            onClick={() => {
+              if (page !== 1) setPage(1);
+              else void fetchData();
+            }}
             className="w-full px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
           >
             Apply Filters
@@ -500,14 +529,25 @@ export default function ABMDashboard() {
                         {acct.industry || "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${intentColor(acct.intent_score)}`}
-                        >
-                          {acct.intent_score}
-                          <span className="text-[10px] font-normal">
-                            {intentLabel(acct.intent_score)}
+                        {isSeededIntent(acct) ? (
+                          <span
+                            title={SEEDED_INTENT_TITLE}
+                            data-testid="intent-seeded"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap bg-gray-100 text-gray-600 border-gray-300"
+                          >
+                            {acct.intent_score}
+                            <span className="text-[10px] font-normal">Seeded</span>
                           </span>
-                        </span>
+                        ) : (
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border whitespace-nowrap ${intentColor(acct.intent_score)}`}
+                          >
+                            {acct.intent_score}
+                            <span className="text-[10px] font-normal">
+                              {intentLabel(acct.intent_score)}
+                            </span>
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
                         {formatActivityDate(acct.updated_at)}
@@ -535,6 +575,32 @@ export default function ABMDashboard() {
                   ))}
                 </tbody>
               </table>
+              <div className="flex items-center justify-between px-4 py-2 border-t text-xs text-muted-foreground" data-testid="abm-pager">
+                <span>
+                  Showing {accounts.length} of {totalAccounts} accounts
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="px-2 py-1 rounded border disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <span>
+                    Page {page} of {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="px-2 py-1 rounded border disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

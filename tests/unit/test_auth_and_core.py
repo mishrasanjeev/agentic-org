@@ -836,7 +836,11 @@ class TestAuthMiddleware:
             call_next.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_tenant_mismatch_returns_403(self):
+    async def test_path_param_tenant_is_not_consulted_in_middleware(self):
+        """``request.path_params`` is always empty inside BaseHTTPMiddleware,
+        so the former "tenant mismatch" branch was dead code implying a
+        protection that never fired. Tenant binding is enforced per-route;
+        the middleware must simply pass the authenticated request through."""
         from auth.middleware import AuthMiddleware
         from core.auth_state import _mem_blocked, _mem_failures
         _mem_failures.clear()
@@ -855,8 +859,9 @@ class TestAuthMiddleware:
         call_next = AsyncMock()
 
         with patch("auth.middleware.validate_token", new_callable=AsyncMock, return_value=mock_claims):
-            response = await middleware.dispatch(request, call_next)
-            assert response.status_code == 403
+            await middleware.dispatch(request, call_next)
+            call_next.assert_called_once()
+            assert request.state.tenant_id == TENANT_ID
 
 
 # ===================================================================

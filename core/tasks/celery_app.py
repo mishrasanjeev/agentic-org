@@ -28,6 +28,7 @@ app = Celery(
     broker=_redis_url,
     backend=_redis_url,
     include=[
+        "core.cron.tasks",
         "core.tasks.budget_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
@@ -64,6 +65,7 @@ app.conf.update(
         # Redis remain executable during rolling deploys.
         "resume_workflow_wait": {"queue": "workflows"},
         "timeout_workflow_event": {"queue": "workflows"},
+        "timeout_workflow_hitl": {"queue": "workflows"},
         # RPA scheduler (feat/rpa-framework-rbi): runs go to a
         # dedicated queue so long scrapes don't starve the short
         # report jobs.
@@ -88,14 +90,28 @@ app.conf.beat_schedule = {
         "schedule": 300.0,  # every 5 minutes
         "options": {"queue": "maintenance"},
     },
+    "expire-plural-subscriptions": {
+        # Plural hosted checkout is a one-time order, not a mandate: each
+        # payment buys a fixed period recorded on billing_subscriptions.
+        # Downgrade rows whose period has ended so entitlement expires.
+        "task": "core.tasks.budget_tasks.expire_plural_subscriptions",
+        "schedule": 3600.0,  # hourly
+        "options": {"queue": "maintenance"},
+    },
     "refresh-expiring-tokens": {
         "task": "core.tasks.token_refresh.refresh_expiring_tokens",
         "schedule": 900.0,  # every 15 minutes
         "options": {"queue": "maintenance"},
     },
     "generate-monthly-invoices": {
+        # Beat crontabs are evaluated in the app timezone (Asia/Kolkata).
+        # 06:30 IST on the 1st == 01:00 UTC on the 1st, i.e. AFTER the
+        # billed month has closed in UTC (the generator's task-count
+        # window is UTC). The previous 01:00 IST slot was 19:30 UTC on
+        # the LAST day of the month: late tasks were missed and the
+        # invoice_number uniqueness constraint blocked regeneration.
         "task": "core.tasks.invoice_tasks.generate_monthly_invoices",
-        "schedule": crontab(hour=1, minute=0, day_of_month="1"),
+        "schedule": crontab(hour=6, minute=30, day_of_month="1"),
         "options": {"queue": "maintenance"},
     },
     "dispatch-due-rpa-schedules": {
@@ -113,6 +129,12 @@ app.conf.beat_schedule = {
         # live probe. See core/tasks/health_snapshot.py.
         "task": "core.tasks.health_snapshot.record_health_snapshot",
         "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "compliance-alerts-daily": {
+        # Moved from the dead core.cron.celery_beat app (nothing ran it).
+        "task": "core.cron.tasks.run_compliance_alerts",
+        "schedule": crontab(hour=6, minute=0),  # 6:00 AM IST daily
         "options": {"queue": "maintenance"},
     },
     "shadow-reconciliation-report": {

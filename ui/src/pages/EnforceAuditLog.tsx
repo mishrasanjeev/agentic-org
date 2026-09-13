@@ -33,19 +33,30 @@ export default function EnforceAuditLog() {
   const [agentFilter, setAgentFilter] = useState("All");
   const [connectorFilter, setConnectorFilter] = useState("All");
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState<number | null>(null);
   const perPage = 50;
 
+  // /audit/enforce is server-paginated (caps per_page at 100 and returns
+  // {items, total, page, pages}); fetch the requested page instead of
+  // slicing the first 50 rows client-side. ``result`` and ``connector`` are
+  // server filters too, so they apply across the whole tenant history.
   useEffect(() => {
     fetchEntries();
-  }, []);
+  }, [page, resultFilter, connectorFilter]);
 
   async function fetchEntries() {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.get("/audit/enforce");
+      const params: Record<string, string | number> = { page, per_page: perPage };
+      if (resultFilter !== "All") params.result = resultFilter;
+      if (connectorFilter !== "All") params.connector = connectorFilter;
+      const { data } = await api.get("/audit/enforce", { params });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setEntries(items);
+      setTotalPages(typeof data?.pages === "number" && data.pages > 0 ? data.pages : 1);
+      setTotal(typeof data?.total === "number" ? data.total : null);
     } catch (e: any) {
       // 2026-04-30 enterprise gap fix: never silently render an empty
       // table when the backend call fails — operators can't tell
@@ -87,13 +98,14 @@ export default function EnforceAuditLog() {
     });
   }, [entries, resultFilter, agentFilter, connectorFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
+  // Server-paginated: ``filtered`` is the current page narrowed by the
+  // client-only agent filter (the API filters by agent_id, not name).
+  const paginated = filtered;
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when server-side filters change
   useEffect(() => {
     setPage(1);
-  }, [resultFilter, agentFilter, connectorFilter]);
+  }, [resultFilter, connectorFilter]);
 
   /* ---- CSV Export ---- */
 
@@ -242,7 +254,7 @@ export default function EnforceAuditLog() {
           Previous
         </Button>
         <span className="text-sm text-muted-foreground">
-          Page {page} of {totalPages}
+          Page {page} of {totalPages}{total != null ? ` (${total} events)` : ""}
         </span>
         <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
           Next

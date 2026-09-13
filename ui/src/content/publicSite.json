@@ -431,7 +431,7 @@
     {
       "id": "pro",
       "name": "Pro",
-      "priceUsd": 2,
+      "priceUsd": 99,
       "priceInr": 9999,
       "agents": "15",
       "runs": "10,000 per month",

@@ -10,7 +10,6 @@ Soft warning at 80%, hard block at 100%.
 
 from __future__ import annotations
 
-import os
 from typing import NamedTuple
 
 import structlog
@@ -81,28 +80,24 @@ class LimitResult(NamedTuple):
     warning: bool  # True if usage >= 80% but < 100%
 
 
-def _get_tenant_tier(tenant_id: str) -> str:
-    """Look up tenant tier from Redis or DB.
+async def _get_tenant_tier(tenant_id: str) -> str:
+    """Resolve the tenant tier from the ``billing_subscriptions`` row.
 
-    Falls back to 'free' if not found.
+    Falls back to 'free' when the tenant has no active paid subscription or
+    when the lookup fails (fail closed: never grant a paid limit by accident).
     """
-    try:
-        import redis
+    from core.billing.subscriptions import get_subscription
 
-        r = redis.from_url(
-            os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1"),
-            decode_responses=True,
-        )
-        tier = r.get(f"tenant_tier:{tenant_id}")
-        if tier and tier in TIERS:
-            return tier
+    try:
+        tier = (await get_subscription(tenant_id)).get("tier", "free")
     # enterprise-gate: broad-except-ok reason=tier-lookup-failure-defaults-to-free-fail-closed
     except Exception:
         logger.debug("tier_lookup_failed", tenant_id=tenant_id)
-    return "free"
+        return "free"
+    return tier if tier in TIERS else "free"
 
 
-def check_limit(tenant_id: str, metric: str) -> LimitResult:
+async def check_limit(tenant_id: str, metric: str) -> LimitResult:
     """Check whether a tenant is within their tier limit for a given metric.
 
     Parameters
@@ -120,18 +115,16 @@ def check_limit(tenant_id: str, metric: str) -> LimitResult:
     """
     from core.billing.usage_tracker import get_usage
 
-    tier = _get_tenant_tier(tenant_id)
+    tier = await _get_tenant_tier(tenant_id)
     limits = TIERS.get(tier, TIERS["free"])
     limit_val = limits.get(metric, 0)
 
+    usage_data = await get_usage(tenant_id, include_agent_count=(metric == "agent_count"))
+    current = usage_data.get(metric, 0)
+
     # Unlimited tier
     if limit_val == -1:
-        usage_data = get_usage(tenant_id)
-        current = usage_data.get(metric, 0)
         return LimitResult(allowed=True, usage=current, limit=-1, warning=False)
-
-    usage_data = get_usage(tenant_id)
-    current = usage_data.get(metric, 0)
 
     if limit_val == 0:
         return LimitResult(allowed=False, usage=current, limit=0, warning=False)

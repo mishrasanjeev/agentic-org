@@ -11,9 +11,10 @@ Implements the full RBI NBFC-AA consent flow for Finvu:
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 import httpx
 import structlog
@@ -30,6 +31,101 @@ from core.security.egress import EgressValidationError, validate_public_url
 logger = structlog.get_logger()
 _AA_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 
+# Consent handles outlive the API process that created them: the AA provider
+# calls back minutes to days later, possibly to another replica. Records are
+# therefore persisted (Redis, tenant-scoped, TTL) instead of a per-process dict.
+CONSENT_RECORD_TTL_SECONDS = 7 * 24 * 3600
+
+
+class ConsentStore(Protocol):
+    """Durable consent-handle state, keyed by the provider's consent handle."""
+
+    async def get(self, consent_handle: str) -> dict[str, Any] | None: ...
+
+    async def put(self, consent_handle: str, record: dict[str, Any]) -> None: ...
+
+    async def handles_for_consent_id(self, consent_id: str) -> list[str]: ...
+
+
+class MemoryConsentStore(dict):
+    """Process-local store — tests and single-process dev only."""
+
+    async def get(self, consent_handle: str) -> dict[str, Any] | None:  # type: ignore[override]
+        return dict.get(self, consent_handle)
+
+    async def put(self, consent_handle: str, record: dict[str, Any]) -> None:
+        self[consent_handle] = record
+
+    async def handles_for_consent_id(self, consent_id: str) -> list[str]:
+        return [h for h, rec in self.items() if rec.get("consent_id") == consent_id]
+
+
+def _serialise_record(record: dict[str, Any]) -> str:
+    payload = dict(record)
+    status = payload.get("status")
+    if isinstance(status, ConsentStatus):
+        payload["status"] = status.value
+    return json.dumps(payload)
+
+
+def _deserialise_record(raw: str) -> dict[str, Any]:
+    payload = json.loads(raw)
+    status = payload.get("status")
+    if isinstance(status, str):
+        try:
+            payload["status"] = ConsentStatus(status)
+        except ValueError:
+            pass
+    return payload
+
+
+class RedisConsentStore:
+    """Tenant-scoped Redis-backed store shared by every API replica.
+
+    Keys:
+      aa:consent:{tenant_id}:{handle}          -> JSON record (TTL)
+      aa:consent_by_id:{tenant_id}:{consent_id} -> handle (TTL)
+      aa:consent_tenant:{handle}               -> tenant_id (TTL) — lets the
+        unauthenticated provider callback find the owning tenant.
+    """
+
+    def __init__(self, redis: Any, tenant_id: str, ttl_seconds: int = CONSENT_RECORD_TTL_SECONDS) -> None:
+        self._redis = redis
+        self._tenant_id = str(tenant_id)
+        self._ttl = ttl_seconds
+
+    @staticmethod
+    def tenant_key(consent_handle: str) -> str:
+        return f"aa:consent_tenant:{consent_handle}"
+
+    def _record_key(self, consent_handle: str) -> str:
+        return f"aa:consent:{self._tenant_id}:{consent_handle}"
+
+    def _by_id_key(self, consent_id: str) -> str:
+        return f"aa:consent_by_id:{self._tenant_id}:{consent_id}"
+
+    async def get(self, consent_handle: str) -> dict[str, Any] | None:
+        raw = await self._redis.get(self._record_key(consent_handle))
+        if not raw:
+            return None
+        return _deserialise_record(raw)
+
+    async def put(self, consent_handle: str, record: dict[str, Any]) -> None:
+        await self._redis.set(self._record_key(consent_handle), _serialise_record(record), ex=self._ttl)
+        await self._redis.set(self.tenant_key(consent_handle), self._tenant_id, ex=self._ttl)
+        consent_id = record.get("consent_id")
+        if consent_id:
+            await self._redis.set(self._by_id_key(str(consent_id)), consent_handle, ex=self._ttl)
+
+    async def handles_for_consent_id(self, consent_id: str) -> list[str]:
+        handle = await self._redis.get(self._by_id_key(consent_id))
+        return [handle] if handle else []
+
+    @classmethod
+    async def tenant_for_handle(cls, redis: Any, consent_handle: str) -> str | None:
+        value = await redis.get(cls.tenant_key(consent_handle))
+        return str(value) if value else None
+
 
 class AAConsentManager:
     """Manages Account Aggregator consent lifecycle per RBI NBFC-AA guidelines."""
@@ -41,6 +137,7 @@ class AAConsentManager:
         client_secret: str = "",
         callback_url: str = "",
         fiu_id: str = "",
+        store: ConsentStore | None = None,
     ):
         cleaned_base_url = base_url.rstrip("/")
         try:
@@ -58,8 +155,8 @@ class AAConsentManager:
         self.callback_url = callback_url
         self.fiu_id = fiu_id
 
-        # In-memory consent store (DB-backed in production)
-        self._consents: dict[str, dict[str, Any]] = {}
+        # Durable consent state — RedisConsentStore in the API, memory in tests.
+        self._consents: ConsentStore = store if store is not None else MemoryConsentStore()
         self._sessions: dict[str, dict[str, Any]] = {}
         self._token: str = ""
 
@@ -148,7 +245,7 @@ class AAConsentManager:
         actual_handle = data.get("ConsentHandle", consent_handle)
 
         # Store consent state
-        self._consents[actual_handle] = {
+        await self._consents.put(actual_handle, {
             "consent_handle": actual_handle,
             "customer_vua": request.customer_vua,
             "status": ConsentStatus.PENDING,
@@ -158,7 +255,7 @@ class AAConsentManager:
             "from_date": request.from_date,
             "to_date": request.to_date,
             "created_at": datetime.now(UTC).isoformat(),
-        }
+        })
 
         redirect_url = (
             f"https://finvu.in/consent/{actual_handle}"
@@ -183,7 +280,7 @@ class AAConsentManager:
         consent_id: str = "",
     ) -> dict[str, Any]:
         """Process consent callback from Finvu AA."""
-        record = self._consents.get(consent_handle)
+        record = await self._consents.get(consent_handle)
         if not record:
             logger.warning("aa_consent_unknown_handle", handle=consent_handle)
             return {"error": "Unknown consent handle"}
@@ -191,6 +288,7 @@ class AAConsentManager:
         record["status"] = consent_status
         if consent_id:
             record["consent_id"] = consent_id
+        await self._consents.put(consent_handle, record)
 
         logger.info(
             "aa_consent_callback",
@@ -303,17 +401,19 @@ class AAConsentManager:
             )
             resp.raise_for_status()
 
-        # Update local state
-        for record in self._consents.values():
-            if record.get("consent_id") == consent_id:
+        # Update durable state
+        for handle in await self._consents.handles_for_consent_id(consent_id):
+            record = await self._consents.get(handle)
+            if record is not None:
                 record["status"] = ConsentStatus.REVOKED
+                await self._consents.put(handle, record)
 
         logger.info("aa_consent_revoked", consent_id=consent_id)
         return {"consent_id": consent_id, "status": "REVOKED"}
 
-    def get_consent_status(self, consent_handle: str) -> dict[str, Any]:
-        """Get local consent state by handle."""
-        record = self._consents.get(consent_handle)
+    async def get_consent_status(self, consent_handle: str) -> dict[str, Any]:
+        """Get stored consent state by handle."""
+        record = await self._consents.get(consent_handle)
         if not record:
             return {"error": "Not found"}
         return {

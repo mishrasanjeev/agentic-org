@@ -6,12 +6,17 @@ are rotated continuously and don't need an operational runbook.
 
 ## What rotates on the quarterly cron
 
-| Secret ID              | Reason to rotate                            |
-|------------------------|---------------------------------------------|
-| AGENTICORG_SECRET_KEY  | Signs local JWTs + CSRF tokens              |
-| AGENTICORG_WEBHOOK_SECRET | Verifies inbound webhooks (Stripe/Plural) |
-| GRANTEX_API_KEY        | Service account for Grantex                 |
-| LLM provider keys      | Rotated by vendor console (annually)        |
+| Secret ID                       | How it rotates                                                     |
+|---------------------------------|--------------------------------------------------------------------|
+| CDC_WEBHOOK_SECRET_<CONNECTOR>  | `secrets-rotation.yml` (self-generated HMAC; update the sender too) |
+| AGENTICORG_SECRET_KEY           | `core/crypto/rewrap.py` only - it is also the vault key fallback    |
+| GRANTEX_API_KEY                 | Re-issue in the Grantex console, then add the new version manually |
+| STRIPE_WEBHOOK_SECRET / Plural  | Re-issue in the provider console; never generated locally          |
+| LLM provider keys               | Rotated by vendor console (annually)                               |
+
+The workflow refuses `AGENTICORG_SECRET_KEY` and any externally issued
+credential: replacing a provider-issued key with random bytes does not
+"rotate" it, it breaks every call that uses it (audit 2026-09-13).
 
 Database passwords and long-lived OAuth refresh tokens are rotated on
 separate cadences — see the relevant runbooks.
@@ -25,31 +30,27 @@ separate cadences — see the relevant runbooks.
 3. **Incident:** any SEV-1 auth-related incident immediately triggers
    a rotation plus incident review.
 
-## Dual-read window
+## No dual-read window
 
-Our secrets live in **Google Secret Manager**. When we add a new
-version we do **not** immediately disable the old one — we leave it
-active for 24 hours so:
-
-- In-flight JWTs signed with the old key continue to validate.
-- Webhook payloads queued by Stripe/Plural during the swap still pass
-  signature verification.
-
-After 24h a follow-up GitHub Actions job (same workflow, next
-schedule) disables the old version.
+Our secrets live in **Google Secret Manager** and are mounted as
+`:latest`. The rolled revision reads the new version immediately; the
+application has no second-version read path. The previous version is
+left enabled only so an operator can roll back. Update the sending side
+(connector/provider console) to the new value right after the roll,
+verify deliveries, then disable the old version manually.
 
 ## Manual rotation
 
 ```
 gh workflow run secrets-rotation.yml \
-  -f secrets=AGENTICORG_SECRET_KEY,AGENTICORG_WEBHOOK_SECRET \
+  -f secrets=CDC_WEBHOOK_SECRET_ZOHO_BOOKS,CDC_WEBHOOK_SECRET_HUBSPOT \
   -f dry_run=false
 ```
 
 The workflow:
 1. Creates a new version of each secret via `gcloud secrets versions add`.
-2. Rolls the `agenticorg-api` deployment so new pods read the latest
-   version on startup.
+2. Rolls the `agenticorg-api`, `agenticorg-worker` and `agenticorg-beat`
+   Cloud Run services so every runtime reads the latest version.
 3. Emits a `secret_rotated` audit event.
 
 ## Verification

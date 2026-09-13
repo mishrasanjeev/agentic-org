@@ -72,11 +72,14 @@ export default function SLAMonitor() {
       }
       setErrors(fetchErrors);
 
+      // /health does not emit these three metrics today; show N/A (not a
+      // green OK) unless the value is actually present.
+      const okIfPresent = (value: unknown) => (value == null || value === "" ? null : isHealthy);
       setMetrics([
         { label: "Uptime", current: isHealthy === null ? "N/A" : isHealthy ? "Healthy" : "Degraded", target: "99.9%", ok: isHealthy },
-        { label: "API P95 Latency", current: healthData?.p95_latency || "N/A", target: "< 2s", ok: isHealthy },
-        { label: "Agent Success Rate", current: healthData?.agent_success_rate || "N/A", target: "> 95%", ok: isHealthy },
-        { label: "HITL Response Time", current: healthData?.hitl_response_time || "N/A", target: "< 4 hrs", ok: isHealthy },
+        { label: "API P95 Latency", current: healthData?.p95_latency || "N/A", target: "< 2s", ok: okIfPresent(healthData?.p95_latency) },
+        { label: "Agent Success Rate", current: healthData?.agent_success_rate || "N/A", target: "> 95%", ok: okIfPresent(healthData?.agent_success_rate) },
+        { label: "HITL Response Time", current: healthData?.hitl_response_time || "N/A", target: "< 4 hrs", ok: okIfPresent(healthData?.hitl_response_time) },
       ]);
 
       // The /health/checks contract returns either a bare array (legacy)
@@ -108,7 +111,18 @@ export default function SLAMonitor() {
       if (uptimeRes.status === "fulfilled") {
         const body = uptimeRes.value.data;
         const rawUptime = Array.isArray(body) ? body : (body?.items || []);
-        setUptimeData(rawUptime);
+        // /health/uptime items are {timestamp, up, status}; the chart reads
+        // {hour, uptime}, so map here instead of plotting undefined keys.
+        setUptimeData(
+          rawUptime.map((item: any) => {
+            if (item && typeof item.hour === "string" && typeof item.uptime === "number") return item;
+            const ts = item?.timestamp ? new Date(item.timestamp) : null;
+            const hour = ts && !Number.isNaN(ts.getTime())
+              ? ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : "";
+            return { hour, uptime: item?.up ? 100 : 0, status: item?.status };
+          }),
+        );
       } else {
         setUptimeData([]);
       }
@@ -194,7 +208,7 @@ export default function SLAMonitor() {
                 <LineChart data={uptimeData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                   <XAxis dataKey="hour" tick={{ fontSize: 11 }} interval={3} />
-                  <YAxis domain={[95, 100]} tick={{ fontSize: 11 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Line type="monotone" dataKey="uptime" stroke="#22c55e" strokeWidth={2} dot={false} />
                 </LineChart>

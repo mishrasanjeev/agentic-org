@@ -105,7 +105,9 @@ class ContentFactoryAgent(BaseAgent):
 
             model_override = self._resolve_llm_model()
             trace.append(f"Generating {content_type} content via LLM")
-            llm_response = await llm_router.complete(llm_messages, model_override=model_override)
+            llm_response = await llm_router.complete(
+                llm_messages, model_override=model_override, tenant_id=self.tenant_id
+            )
             draft_content = llm_response.content.strip()
             trace.append(f"Draft generated: {len(draft_content)} chars, {len(draft_content.split())} words")
 
@@ -133,7 +135,9 @@ class ContentFactoryAgent(BaseAgent):
                         f"Maintain a {tone} brand voice.\n\n{draft_content}"
                     )},
                 ]
-                fix_response = await llm_router.complete(fix_messages, model_override=model_override)
+                fix_response = await llm_router.complete(
+                    fix_messages, model_override=model_override, tenant_id=self.tenant_id
+                )
                 draft_content = fix_response.content.strip()
                 trace.append("Brand voice issues fixed")
 

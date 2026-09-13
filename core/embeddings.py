@@ -47,6 +47,7 @@ backfill Cloud Run revisions to skip the download on subsequent boots.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import math
 import os
@@ -55,6 +56,8 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 import structlog
+
+from core.config import is_relaxed_env, settings
 
 if TYPE_CHECKING:
     from fastembed import TextEmbedding
@@ -115,8 +118,12 @@ def _env_truthy(name: str) -> bool:
 
 
 def _use_fake_embeddings() -> bool:
-    """Return True for the hermetic test embedding backend."""
-    return _env_truthy("AGENTICORG_TEST_FAKE_EMBEDDINGS")
+    """Return True for the hermetic test embedding backend.
+
+    Gated on a relaxed runtime so a leaked ``AGENTICORG_TEST_FAKE_EMBEDDINGS``
+    flag can never swap production vectors for the bag-of-concepts fake.
+    """
+    return _env_truthy("AGENTICORG_TEST_FAKE_EMBEDDINGS") and is_relaxed_env(settings.env)
 
 
 EMBEDDING_MODEL_NAME = _configured_model_name()
@@ -269,6 +276,24 @@ def embed_one(text: str) -> list[float]:
     return embed([text])[0]
 
 
+async def embed_async(texts: list[str]) -> list[list[float]]:
+    """Async ``embed`` for request handlers and workers on the event loop.
+
+    TEI goes through ``httpx.AsyncClient``; the in-process model paths
+    (fastembed / FlagEmbedding, CPU-bound) run in a worker thread so the
+    loop is never blocked.
+    """
+    if not texts:
+        return []
+    if rag_use_bge_m3() and os.getenv("AGENTICORG_TEI_URL"):
+        return await _embed_via_tei_async(texts)
+    return await asyncio.to_thread(embed, texts)
+
+
+async def embed_one_async(text: str) -> list[float]:
+    return (await embed_async([text]))[0]
+
+
 # ─── FlagEmbedding (bge-m3) ─────────────────────────────────────────
 
 _bge_m3_lock = threading.Lock()
@@ -356,24 +381,9 @@ def _embed_via_tei(texts: list[str]) -> list[list[float]]:
         request:  {"inputs": ["t1", "t2"], "normalize": true}
         response: [[v1...], [v2...]]
     """
-    import google.auth
-    import google.auth.transport.requests
     import httpx
-    from google.oauth2 import id_token
 
-    base = os.environ["AGENTICORG_TEI_URL"].rstrip("/")
-    # Mint an audience-bound ID token. Falls back to anonymous if no
-    # GCP creds are available (dev / test environments where TEI is
-    # exposed via --allow-unauthenticated).
-    headers = {"Content-Type": "application/json"}
-    try:
-        auth_req = google.auth.transport.requests.Request()
-        token = id_token.fetch_id_token(auth_req, base)
-        headers["Authorization"] = f"Bearer {token}"
-    # enterprise-gate: broad-except-ok reason=tei-token-fetch-failure-falls-back-to-anonymous-dev-request
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("tei_id_token_fetch_skipped", error=str(exc))
-
+    base, headers = _tei_request_target()
     payload = {"inputs": texts, "normalize": True, "truncate": True}
     # Aishwarya 2026-04-27 TC_002: KB search returned 504 because the
     # TEI service runs at min=0 (Option D — cost-cut) and the cold
@@ -399,6 +409,53 @@ def _embed_via_tei(texts: list[str]) -> list[list[float]]:
     )
     with httpx.Client(timeout=timeout) as client:
         response = client.post(f"{base}/embed", json=payload, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+    return [list(map(float, v)) for v in data]
+
+
+def _tei_request_target() -> tuple[str, dict[str, str]]:
+    """Return the TEI base URL and auth headers.
+
+    Mints an audience-bound ID token. Falls back to anonymous if no GCP
+    creds are available (dev / test environments where TEI is exposed via
+    ``--allow-unauthenticated``).
+    """
+    base = os.environ["AGENTICORG_TEI_URL"].rstrip("/")
+    headers = {"Content-Type": "application/json"}
+    try:
+        import google.auth
+        import google.auth.transport.requests
+        from google.oauth2 import id_token
+
+        auth_req = google.auth.transport.requests.Request()
+        token = id_token.fetch_id_token(auth_req, base)
+        headers["Authorization"] = f"Bearer {token}"
+    # enterprise-gate: broad-except-ok reason=tei-token-fetch-failure-falls-back-to-anonymous-dev-request
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("tei_id_token_fetch_skipped", error=str(exc))
+    return base, headers
+
+
+def _tei_timeout() -> Any:
+    import httpx
+
+    read_timeout = _tei_read_timeout_seconds()
+    return httpx.Timeout(read_timeout, connect=_tei_connect_timeout_seconds(read_timeout))
+
+
+async def _embed_via_tei_async(texts: list[str]) -> list[list[float]]:
+    """Async twin of ``_embed_via_tei`` — same payload, ``httpx.AsyncClient``.
+
+    The ID-token mint is a blocking Google auth HTTP call, so it runs in a
+    worker thread.
+    """
+    import httpx
+
+    base, headers = await asyncio.to_thread(_tei_request_target)
+    payload = {"inputs": texts, "normalize": True, "truncate": True}
+    async with httpx.AsyncClient(timeout=_tei_timeout()) as client:
+        response = await client.post(f"{base}/embed", json=payload, headers=headers)
         response.raise_for_status()
         data = response.json()
     return [list(map(float, v)) for v in data]

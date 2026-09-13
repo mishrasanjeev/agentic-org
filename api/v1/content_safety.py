@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
+from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.content_safety.checker import check_content_safety
 
@@ -43,16 +44,21 @@ class ContentSafetyResponse(BaseModel):
 )
 @route_meta(
     auth_required=True,
-    tenant_required=False,
+    tenant_required=True,
     scope="content_safety.external_input.sensitive.write",
     rate_limit="content-safety-check",
     idempotency="deterministic-for-same-text-and-config",
     audit_event="content_safety.check",
 )
-async def check_safety(req: ContentSafetyRequest) -> dict[str, Any]:
+async def check_safety(
+    req: ContentSafetyRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
     """Run content safety checks (PII, toxicity, near-duplicate) on the given text.
 
     Returns whether the text is safe, a list of issues found, and per-check scores.
+    The near-duplicate window is scoped to the authenticated tenant; without a
+    tenant the checker skips dedupe entirely.
     """
     result = await check_content_safety(
         text=req.text,
@@ -60,6 +66,7 @@ async def check_safety(req: ContentSafetyRequest) -> dict[str, Any]:
             "check_pii": req.config.check_pii,
             "check_toxicity": req.config.check_toxicity,
             "check_duplicates": req.config.check_duplicates,
+            "tenant_id": tenant_id,
         },
     )
     return result

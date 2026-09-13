@@ -76,7 +76,7 @@ class PublicPlanCatalog(CatalogModel):
 
 
 PUBLIC_PLAN_CATALOG = PublicPlanCatalog(
-    catalog_version="2026-07-15.1",
+    catalog_version="2026-09-13.1",
     plan_count=3,
     plans=(
         PublicPlan(
@@ -101,7 +101,7 @@ PUBLIC_PLAN_CATALOG = PublicPlanCatalog(
             display_name="Pro",
             display_order=20,
             prices=(
-                PlanPrice(currency="USD", amount_minor=2_00, interval="month"),
+                PlanPrice(currency="USD", amount_minor=99_00, interval="month"),
                 PlanPrice(currency="INR", amount_minor=9_999_00, interval="month"),
             ),
             limits=PlanLimits(

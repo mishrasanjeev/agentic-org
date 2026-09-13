@@ -9,6 +9,7 @@ Each connector tool becomes a LangChain @tool function that:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -433,6 +434,255 @@ async def _execute_connector_tool(
         return payload
 
 
+def _authorized_tool_refs(authorized_tools: list[str]) -> set[tuple[str | None, str]]:
+    """Normalise ``authorized_tools`` entries to ``(connector | None, tool)`` pairs.
+
+    Accepts every spelling the product uses: bare ``list_contacts``,
+    ``hubspot:list_contacts`` / ``hubspot.list_contacts`` /
+    ``hubspot__list_contacts`` and Grantex scopes
+    ``tool:hubspot:<perm>:list_contacts``.
+    """
+    refs: set[tuple[str | None, str]] = set()
+    for raw in authorized_tools or []:
+        ref = str(raw or "").strip()
+        if not ref:
+            continue
+        if ref.startswith("tool:"):
+            parts = ref.split(":")
+            if len(parts) >= 4 and parts[1] and parts[3]:
+                refs.add((_canonical_connector_name(parts[1]), parts[3]))
+            continue
+        if "." in ref and ":" not in ref:
+            ref = ref.replace(".", ":", 1)
+        connector_hint, tool_name = _split_connector_tool_ref(ref)
+        if connector_hint:
+            refs.add((connector_hint, tool_name))
+            continue
+        if "__" in ref:
+            maybe_connector, maybe_tool = ref.split("__", 1)
+            if ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
+                refs.add((_canonical_connector_name(maybe_connector), maybe_tool))
+                continue
+        refs.add((None, ref))
+    return refs
+
+
+def is_tool_authorized(authorized_tools: list[str], connector_name: str, tool_name: str) -> bool:
+    """Return True when ``connector.tool`` is covered by ``authorized_tools``.
+
+    Connector-qualified entries must match both halves. A bare tool name
+    matches only when the shared tool index resolves it to this connector,
+    so ``list_invoices`` authorized for Zoho never unlocks Stripe.
+    """
+    connector_name = _canonical_connector_name(connector_name)
+    tool_name = str(tool_name or "").strip()
+    if not connector_name or not tool_name:
+        return False
+    refs = _authorized_tool_refs(authorized_tools)
+    if (connector_name, tool_name) in refs:
+        return True
+    if (None, tool_name) not in refs:
+        return False
+    index = _build_tool_index(connector_names=[connector_name], include_connector_aliases=True)
+    match = index.get(tool_name)
+    return bool(match and match[0] == connector_name)
+
+
+async def load_connector_config(
+    connector_name: str,
+    tenant_id: str | None,
+    company_id: str | None,
+) -> dict[str, Any] | None:
+    """Load the encrypted per-company connector config for a tool call.
+
+    Returns ``None`` when no config row exists so callers fail closed
+    instead of constructing a provider with empty credentials.
+    """
+    if not connector_name or not tenant_id or not company_id:
+        return None
+    import json as _json
+    import uuid as _uuid
+
+    try:
+        tenant_uuid = _uuid.UUID(str(tenant_id))
+        company_uuid = _uuid.UUID(str(company_id))
+    except (TypeError, ValueError):
+        return None
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.connector_config import ConnectorConfig
+
+    async with get_tenant_session(tenant_uuid, company_uuid) as session:
+        result = await session.execute(
+            select(ConnectorConfig).where(
+                ConnectorConfig.tenant_id == tenant_uuid,
+                ConnectorConfig.company_id == company_uuid,
+                ConnectorConfig.connector_name == connector_name,
+            )
+        )
+        row = result.scalar_one_or_none()
+    if row is None:
+        return None
+
+    config = dict(row.config or {})
+    creds = row.credentials_encrypted or {}
+    if isinstance(creds, str):
+        creds = _json.loads(creds)
+    if isinstance(creds, dict) and "_encrypted" in creds:
+        from core.crypto import decrypt_for_tenant
+
+        # KMS-backed decrypt is synchronous (gRPC); keep it off the event loop.
+        creds = _json.loads(await asyncio.to_thread(decrypt_for_tenant, creds["_encrypted"]))
+    if isinstance(creds, dict):
+        config.update(creds)
+    return config
+
+
+async def execute_agent_tool(
+    connector_name: str,
+    tool_name: str,
+    params: dict[str, Any],
+    *,
+    tenant_id: str | None,
+    company_id: str | None,
+    domain: ActionDomain | str | None,
+    authorized_tools: list[str],
+    grant_token: str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
+) -> dict[str, Any]:
+    """Governed tool dispatch for ``BaseAgent`` callers without a ToolGateway.
+
+    Same path LangGraph agents take: ``authorized_tools`` membership,
+    Grantex ``enforce`` when a grant token is present, tenant/company scoped
+    connector config, then ``_execute_connector_tool`` (which applies the
+    action policy). Every denial is an explicit ``{"error": ...}`` payload;
+    the agent runtime turns those into a failed step.
+    """
+    connector_name = _canonical_connector_name(connector_name)
+    if not is_tool_authorized(authorized_tools, connector_name, tool_name):
+        logger.warning(
+            "agent_tool_scope_denied",
+            connector=connector_name,
+            tool=tool_name,
+            reason="not_in_authorized_tools",
+        )
+        return {
+            "error": {
+                "code": "E1007",
+                "message": f"scope_denied: {connector_name}.{tool_name} is not in the agent's authorized_tools",
+            }
+        }
+
+    if grant_token:
+        from core.langgraph.grantex_auth import get_grantex_client
+
+        # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
+        # synchronous HTTPS fetch; run it off the event loop.
+        enforcement = await asyncio.to_thread(
+            get_grantex_client().enforce,
+            grant_token=grant_token,
+            connector=connector_name,
+            tool=tool_name,
+            amount=params.get("amount") if isinstance(params.get("amount"), int | float) else None,
+        )
+        if not enforcement.allowed:
+            logger.warning(
+                "agent_tool_grant_denied",
+                connector=connector_name,
+                tool=tool_name,
+                reason=enforcement.reason,
+            )
+            return {"error": {"code": "E1007", "message": f"scope_denied: {enforcement.reason}"}}
+
+    if not company_id and is_strict_runtime_env(settings.env):
+        return {
+            "error": {
+                "code": "E1010",
+                "message": "company_scope_required: tool calls need a company-scoped agent in this runtime",
+            }
+        }
+
+    config = await load_connector_config(connector_name, tenant_id, company_id)
+    if config is None and company_id:
+        return {
+            "error": {
+                "code": "E1005",
+                "message": f"Connector not configured: {connector_name} has no connector config for this company",
+            }
+        }
+
+    return await _execute_connector_tool(
+        connector_name,
+        tool_name,
+        params,
+        config,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        domain=domain,
+        capability_authorization=capability_authorization,
+    )
+
+
+def _deanonymize_value(value: Any, token_map: dict[str, str]) -> Any:
+    """Restore PII tokens in ``value`` recursively (strings inside dicts/lists)."""
+    if not token_map:
+        return value
+    if isinstance(value, str):
+        from core.pii.deanonymizer import deanonymize
+
+        return deanonymize(value, token_map)
+    if isinstance(value, dict):
+        return {k: _deanonymize_value(v, token_map) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_deanonymize_value(v, token_map) for v in value]
+    return value
+
+
+def _redact_text_with_token_map(text: str, redactor: Any, token_map: dict[str, str]) -> str:
+    """Mask PII in ``text`` reusing existing tokens; new findings extend ``token_map``.
+
+    Known original values are swapped back to their existing tokens first so a
+    result echoing the input email gets the same ``<EMAIL_ADDRESS_1>`` the LLM
+    already knows. Fresh entities get tokens that never collide with the map.
+    """
+    if not text:
+        return text
+    for token, original in sorted(token_map.items(), key=lambda item: -len(item[1])):
+        if original:
+            text = text.replace(original, token)
+    redacted, new_tokens = redactor.redact(text)
+    if not new_tokens:
+        return redacted
+    counters: dict[str, int] = {}
+    for token in token_map:
+        match = re.match(r"^<([A-Z_]+?)_(\d+)>$", token)
+        if match:
+            counters[match.group(1)] = max(counters.get(match.group(1), 0), int(match.group(2)))
+    for token, original in new_tokens.items():
+        if token in token_map:
+            match = re.match(r"^<([A-Z_]+?)_(\d+)>$", token)
+            etype = match.group(1) if match else "PII"
+            counters[etype] = counters.get(etype, 0) + 1
+            fresh = f"<{etype}_{counters[etype]}>"
+            redacted = redacted.replace(token, fresh)
+            token_map[fresh] = original
+        else:
+            token_map[token] = original
+    return redacted
+
+
+def _redact_value(value: Any, redactor: Any, token_map: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return _redact_text_with_token_map(value, redactor, token_map)
+    if isinstance(value, dict):
+        return {k: _redact_value(v, redactor, token_map) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_value(v, redactor, token_map) for v in value]
+    return value
+
+
 def build_tools_for_agent(
     authorized_tools: list[str],
     connector_config: dict[str, Any] | None = None,
@@ -442,6 +692,7 @@ def build_tools_for_agent(
     company_id: str | None = None,
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
+    pii_token_map: dict[str, str] | None = None,
 ) -> list[StructuredTool]:
     """Build LangChain tools from an agent's authorized_tools list.
 
@@ -456,6 +707,13 @@ def build_tools_for_agent(
     ``connector_ids`` but none resolved to a live ConnectorConfig, so
     the index must be empty rather than fall back to every globally
     registered connector.
+
+    ``pii_token_map`` is the ``before_llm`` redaction map shared with the
+    runner. The LLM only ever sees ``<EMAIL_ADDRESS_1>`` style tokens, so
+    its tool arguments are de-anonymized here (recursively) right before
+    the connector call and the connector result is re-masked (extending the
+    same map) before it is returned to the model. Trace/audit logging only
+    ever sees the masked side.
 
     Returns a list of callable LangChain tools ready for LangGraph.
     """
@@ -490,7 +748,11 @@ def build_tools_for_agent(
         def _make_tool_fn(cn: str, tn: str, desc: str):
             async def _tool_fn(**kwargs: Any) -> dict[str, Any]:
                 params = _flatten_structured_tool_kwargs(kwargs)
-                return await _execute_connector_tool(
+                # Live execution payloads carry the real values; masking is
+                # for the model, logs and traces only.
+                if pii_token_map:
+                    params = _deanonymize_value(params, pii_token_map)
+                result = await _execute_connector_tool(
                     cn,
                     tn,
                     params,
@@ -500,6 +762,13 @@ def build_tools_for_agent(
                     domain=domain,
                     capability_authorization=capability_authorization,
                 )
+                if pii_token_map is not None:
+                    from core.pii.redactor import PIIRedactor
+
+                    redactor = PIIRedactor()
+                    if redactor.mode == "before_llm":
+                        result = _redact_value(result, redactor, pii_token_map)
+                return result
 
             _tool_fn.__name__ = tn
             _tool_fn.__doc__ = desc or f"Execute {tn} on {cn} connector"

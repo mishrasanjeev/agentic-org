@@ -205,10 +205,17 @@ class TestChatIsolation:
             )
             assert resp.status_code == 200
 
-    def test_chat_history_returns_list(self, app, tenant_a):
+    def test_chat_history_requires_company(self, app, tenant_a):
+        """History is company-validated like /chat/query (audit 2026-09-12)."""
         with tenant_client(app, tenant_a) as client:
             resp = client.get("/api/v1/chat/history")
+            assert resp.status_code == 400
+
+    def test_chat_history_returns_list(self, app, tenant_a):
+        with tenant_client(app, tenant_a) as client:
+            resp = client.get("/api/v1/chat/history", params={"company_id": str(TEST_COMPANY_ID)})
             assert resp.status_code == 200
+            assert isinstance(resp.json(), list)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

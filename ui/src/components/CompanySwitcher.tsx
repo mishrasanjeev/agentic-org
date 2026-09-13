@@ -31,11 +31,19 @@ export default function CompanySwitcher() {
             : [];
         setCompanies(list);
 
-        // Auto-select first company if none stored
-        if (!current && list.length > 0) {
-          const first = list[0].id;
-          setCurrent(first);
-          localStorage.setItem("company_id", first);
+        // Validate the stored selection against the tenant's real list. A
+        // stale id (deleted company, or another user's tenant on a shared
+        // browser) would otherwise scope every dashboard to an empty set.
+        const storedIsValid = current !== "" && list.some((c) => c.id === current);
+        if (!storedIsValid) {
+          if (list.length > 0) {
+            const first = list[0].id;
+            setCurrent(first);
+            localStorage.setItem("company_id", first);
+          } else if (current) {
+            setCurrent("");
+            localStorage.removeItem("company_id");
+          }
         }
       } catch {
         // Silently fail â€” header should still render

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import json
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 from urllib.parse import urlparse
 
 import pytest
@@ -104,44 +105,64 @@ class TestProTierLimits:
 
 
 class TestUsageCounterIncrements:
-    """test_usage_counter_increments — Redis-based usage counter works."""
+    """test_usage_counter_increments — Redis-based usage counter works (async pool)."""
 
-    @patch("core.billing.usage_tracker._get_redis")
-    def test_usage_counter_increments(self, mock_get_redis):
-        mock_redis = MagicMock()
+    def test_usage_counter_increments(self):
+        from unittest.mock import AsyncMock
+
+        mock_redis = AsyncMock()
         mock_redis.incrby.return_value = 5
         mock_redis.ttl.return_value = -1
-        mock_get_redis.return_value = mock_redis
 
         from core.billing.usage_tracker import increment_agent_runs
 
-        result = increment_agent_runs("tenant_abc", count=1)
+        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=mock_redis)):
+            result = asyncio.run(increment_agent_runs("tenant_abc", count=1))
         assert result == 5
-        mock_redis.incrby.assert_called_once_with("usage:tenant_abc:runs", 1)
+        mock_redis.incrby.assert_awaited_once_with("usage:tenant_abc:runs", 1)
         # Should set TTL on fresh key
-        mock_redis.expire.assert_called_once()
+        mock_redis.expire.assert_awaited_once()
 
-    @patch("core.billing.usage_tracker._get_redis")
-    def test_get_usage_returns_dict(self, mock_get_redis):
-        mock_redis = MagicMock()
+    def test_get_usage_returns_dict(self):
+        from unittest.mock import AsyncMock
+
+        mock_redis = AsyncMock()
         mock_redis.get.side_effect = lambda k: {
             "usage:t1:runs": "42",
-            "usage:t1:agents": "3",
             "usage:t1:storage": "1048576",
         }.get(k)
-        mock_get_redis.return_value = mock_redis
 
         from core.billing.usage_tracker import get_usage
 
-        usage = get_usage("t1")
+        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=mock_redis)), patch(
+            "core.billing.usage_tracker.count_active_agents", AsyncMock(return_value=3)
+        ):
+            usage = asyncio.run(get_usage("t1"))
         assert usage == {"agent_runs": 42, "agent_count": 3, "storage_bytes": 1048576}
+
+    def test_usage_tracker_has_no_per_call_sync_client(self):
+        """Counters must use the shared async pool, never ``redis.from_url`` per call."""
+        import inspect
+
+        from core.billing import limits, usage_tracker
+
+        for fn in (
+            usage_tracker.increment_agent_runs,
+            usage_tracker.increment_storage,
+            usage_tracker.get_usage,
+            usage_tracker.reset_monthly,
+            limits.check_limit,
+            limits._get_tenant_tier,
+        ):
+            assert inspect.iscoroutinefunction(fn), fn.__name__
+            assert "from_url" not in inspect.getsource(fn), fn.__name__
 
 
 class TestSoftWarningAt80Percent:
     """test_soft_warning_at_80_percent — Warning fires at 80% usage."""
 
-    @patch("core.billing.limits._get_tenant_tier", return_value="free")
-    @patch("core.billing.usage_tracker.get_usage")
+    @patch("core.billing.limits._get_tenant_tier", new_callable=AsyncMock, return_value="free")
+    @patch("core.billing.usage_tracker.get_usage", new_callable=AsyncMock)
     def test_soft_warning_at_80_percent(self, mock_usage, mock_tier):
         mock_usage.return_value = {
             "agent_runs": 800,  # 80% of 1000
@@ -151,7 +172,7 @@ class TestSoftWarningAt80Percent:
 
         from core.billing.limits import check_limit
 
-        result = check_limit("t1", "agent_runs")
+        result = asyncio.run(check_limit("t1", "agent_runs"))
         assert result.allowed is True
         assert result.warning is True
         assert result.usage == 800
@@ -161,8 +182,8 @@ class TestSoftWarningAt80Percent:
 class TestHardBlockAt100Percent:
     """test_hard_block_at_100_percent — Hard block at 100% usage."""
 
-    @patch("core.billing.limits._get_tenant_tier", return_value="free")
-    @patch("core.billing.usage_tracker.get_usage")
+    @patch("core.billing.limits._get_tenant_tier", new_callable=AsyncMock, return_value="free")
+    @patch("core.billing.usage_tracker.get_usage", new_callable=AsyncMock)
     def test_hard_block_at_100_percent(self, mock_usage, mock_tier):
         mock_usage.return_value = {
             "agent_runs": 1000,  # 100% of 1000
@@ -172,14 +193,14 @@ class TestHardBlockAt100Percent:
 
         from core.billing.limits import check_limit
 
-        result = check_limit("t1", "agent_runs")
+        result = asyncio.run(check_limit("t1", "agent_runs"))
         assert result.allowed is False
         assert result.warning is False
         assert result.usage == 1_000
         assert result.limit == 1_000
 
-    @patch("core.billing.limits._get_tenant_tier", return_value="free")
-    @patch("core.billing.usage_tracker.get_usage")
+    @patch("core.billing.limits._get_tenant_tier", new_callable=AsyncMock, return_value="free")
+    @patch("core.billing.usage_tracker.get_usage", new_callable=AsyncMock)
     def test_over_limit_also_blocked(self, mock_usage, mock_tier):
         mock_usage.return_value = {
             "agent_runs": 1200,
@@ -189,10 +210,10 @@ class TestHardBlockAt100Percent:
 
         from core.billing.limits import check_limit
 
-        result = check_limit("t1", "agent_runs")
+        result = asyncio.run(check_limit("t1", "agent_runs"))
         assert result.allowed is False
 
-        result_agents = check_limit("t1", "agent_count")
+        result_agents = asyncio.run(check_limit("t1", "agent_count"))
         assert result_agents.allowed is False
 
 
@@ -203,7 +224,8 @@ class TestStripeWebhookValidatesSignature:
     """test_stripe_webhook_validates_signature — signature validation."""
 
     @patch("core.billing.stripe_client._get_stripe")
-    def test_stripe_webhook_validates_signature(self, mock_get_stripe):
+    def test_stripe_webhook_validates_signature(self, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
 
         mock_stripe.Webhook.construct_event.return_value = {
@@ -228,7 +250,8 @@ class TestStripeWebhookValidatesSignature:
         mock_stripe.Webhook.construct_event.assert_called_once()
 
     @patch("core.billing.stripe_client._get_stripe")
-    def test_stripe_webhook_invalid_signature_raises(self, mock_get_stripe):
+    def test_stripe_webhook_invalid_signature_raises(self, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.side_effect = ValueError("Invalid signature")
         mock_get_stripe.return_value = mock_stripe
@@ -268,7 +291,7 @@ class TestIndiaPricingInINR:
 
         assert plan_price_minor("pro", "INR") == 9_999_00
         assert plan_price_minor("enterprise", "INR") == 49_999_00
-        assert plan_price_minor("pro", "USD") == 2_00
+        assert plan_price_minor("pro", "USD") == 99_00
         assert plan_price_minor("enterprise", "USD") == 499_00
 
     def test_pinelabs_plan_amounts(self):
@@ -415,6 +438,49 @@ class TestPluralCreateOrder:
         assert customer["mobile_number"] == "9876543210"
         assert customer["country_code"] == "91"
 
+    @patch("core.billing.pinelabs_client._get_access_token", return_value="tok")
+    @patch("core.billing.pinelabs_client._get_http")
+    def test_create_order_ignores_client_amount_and_records_expected(self, mock_http, mock_token):
+        """Audit #1: amount is always PLAN_AMOUNT_INR[plan]; expected amount stored in mapping."""
+        from core.billing.pinelabs_client import (
+            PLAN_AMOUNT_INR,
+            create_payment_order,
+            lookup_order_details,
+        )
+
+        resp = MagicMock()
+        resp.json.return_value = {"order_id": "v1-amt-1", "redirect_url": "https://x/checkout"}
+        resp.raise_for_status = MagicMock()
+        mock_http.return_value.post.return_value = resp
+
+        with pytest.raises(TypeError):
+            create_payment_order(tenant_id="t1", plan="pro", amount_inr=1)  # type: ignore[call-arg]
+
+        result = create_payment_order(tenant_id="t1", plan="pro")
+        sent = mock_http.return_value.post.call_args.kwargs["json"]
+        assert sent["order_amount"] == {"value": PLAN_AMOUNT_INR["pro"], "currency": "INR"}
+        stored = lookup_order_details(result["merchant_order_reference"])
+        assert stored["amount"] == PLAN_AMOUNT_INR["pro"]
+        assert stored["currency"] == "INR"
+
+    def test_india_subscribe_request_has_no_client_amount(self):
+        from api.v1.billing import IndiaSubscribeRequest
+
+        assert "amount_inr" not in IndiaSubscribeRequest.model_fields
+
+    @patch("core.billing.pinelabs_client._get_access_token", return_value="tok")
+    @patch("core.billing.pinelabs_client._get_http")
+    def test_create_order_is_not_retried(self, mock_http, mock_token):
+        """Audit #2: order creation is non-idempotent — a transient failure must not re-POST."""
+        import httpx
+
+        from core.billing.pinelabs_client import create_payment_order
+
+        mock_http.return_value.post.side_effect = httpx.ConnectError("boom")
+        with pytest.raises(httpx.ConnectError):
+            create_payment_order(tenant_id="t1", plan="pro")
+        assert mock_http.return_value.post.call_count == 1
+
     def test_create_order_rejects_unknown_plan(self):
         from core.billing.pinelabs_client import create_payment_order
 
@@ -526,6 +592,7 @@ class TestPluralWebhookHandler:
             "order_id": "v1-order-42",
             "status": "PROCESSED",
             "merchant_order_reference": "aoabc123",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         body = json.dumps(payload).encode()
 
@@ -550,7 +617,7 @@ class TestPluralWebhookHandler:
         assert result["tenant_id"] == "tenant1"
         assert result["plan"] == "pro"
         assert result["processed"] is True
-        activate.assert_called_once_with("tenant1", "pro", "v1-order-42")
+        activate.assert_called_once_with("tenant1", "pro", "v1-order-42", ordered_at=ANY)
 
     def test_handle_webhook_success_without_order_mapping_fails_closed(self):
         from core.billing.pinelabs_client import (
@@ -598,6 +665,7 @@ class TestPluralWebhookHandler:
             "order_id": "v1-order-fail",
             "status": "PROCESSED",
             "merchant_order_reference": "activation-fails-ref",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         body = json.dumps(payload).encode()
 
@@ -617,6 +685,95 @@ class TestPluralWebhookHandler:
         ):
             with pytest.raises(PluralWebhookProcessingError, match="activation failed"):
                 handle_webhook(body, headers)
+
+    @staticmethod
+    def _signed(payload: dict, secret_raw: bytes, webhook_id: str):
+        secret = base64.b64encode(secret_raw).decode()
+        webhook_ts = str(int(time.time()))
+        body = json.dumps(payload).encode()
+        signed_content = f"{webhook_id}.{webhook_ts}.".encode() + body
+        sig = base64.b64encode(
+            hmac.new(secret_raw, signed_content, hashlib.sha256).digest()
+        ).decode()
+        headers = {
+            "webhook-id": webhook_id,
+            "webhook-timestamp": webhook_ts,
+            "webhook-signature": f"v1,{sig}",
+        }
+        return secret, body, headers
+
+    @pytest.mark.parametrize(
+        "paid",
+        [
+            {"value": 1_00, "currency": "INR"},  # underpaid
+            {"value": 9_999_00, "currency": "USD"},  # wrong currency
+            {"value": 49_999_00, "currency": "INR"},  # different plan's price
+        ],
+    )
+    def test_handle_webhook_refuses_activation_on_amount_mismatch(self, paid):
+        """Audit #1: a verified webhook whose paid amount != plan price must not activate."""
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+            store_order_mapping,
+        )
+
+        store_order_mapping("amt-mismatch-ref", "v1-order-amt", "tenant-amt", "pro", 9_999_00, "INR")
+        secret, body, headers = self._signed(
+            {
+                "order_id": "v1-order-amt",
+                "status": "PROCESSED",
+                "merchant_order_reference": "amt-mismatch-ref",
+                "order_amount": paid,
+            },
+            b"webhook_key_amt",
+            "evt_amt_mismatch",
+        )
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate:
+            with pytest.raises(PluralWebhookProcessingError, match="does not match"):
+                handle_webhook(body, headers)
+        activate.assert_not_called()
+
+    def test_handle_webhook_without_amount_falls_back_to_provider_status(self):
+        """If the event omits order_amount, verify against GET order status; refuse on mismatch."""
+        from core.billing.pinelabs_client import (
+            PluralWebhookProcessingError,
+            handle_webhook,
+            store_order_mapping,
+        )
+
+        store_order_mapping("amt-noamt-ref", "v1-order-noamt", "tenant-noamt", "pro", 9_999_00, "INR")
+        secret, body, headers = self._signed(
+            {
+                "order_id": "v1-order-noamt",
+                "status": "PROCESSED",
+                "merchant_order_reference": "amt-noamt-ref",
+            },
+            b"webhook_key_noamt",
+            "evt_noamt",
+        )
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate, patch(
+            "core.billing.pinelabs_client.get_order_status",
+            return_value={"order_amount": {"value": 1_00, "currency": "INR"}},
+        ):
+            with pytest.raises(PluralWebhookProcessingError, match="does not match"):
+                handle_webhook(body, headers)
+        activate.assert_not_called()
+
+        with patch("core.billing.pinelabs_client._WEBHOOK_SECRET", secret), patch(
+            "core.billing.pinelabs_client._activate_subscription"
+        ) as activate, patch(
+            "core.billing.pinelabs_client.get_order_status",
+            return_value={"order_amount": {"value": 9_999_00, "currency": "INR"}},
+        ):
+            assert handle_webhook(body, headers)["processed"] is True
+        activate.assert_called_once_with("tenant-noamt", "pro", "v1-order-noamt", ordered_at=ANY)
 
     def test_handle_webhook_rejects_old_timestamp(self):
         from core.billing.pinelabs_client import handle_webhook
@@ -718,6 +875,7 @@ class TestPluralE2ERedirectFlow:
             "order_id": "v1-e2e-order-001",
             "status": "PROCESSED",
             "merchant_order_reference": "aoe2etest",
+            "order_amount": {"value": 9_999_00, "currency": "INR"},
         }
         webhook_body = json.dumps(webhook_payload).encode()
 
@@ -742,7 +900,7 @@ class TestPluralE2ERedirectFlow:
         assert webhook_result["tenant_id"] == "e2e"
         assert webhook_result["plan"] == "pro"
         assert webhook_result["order_id"] == "v1-e2e-order-001"
-        activate.assert_called_once_with("e2e", "pro", "v1-e2e-order-001")
+        activate.assert_called_once_with("e2e", "pro", "v1-e2e-order-001", ordered_at=ANY)
 
 
 # ── Stripe SDK Tests ────────────────────────────────────────────────
@@ -885,7 +1043,7 @@ class TestStripeCheckoutSession:
         assert result["session_id"] == "cs_test_session_001"
         call_kwargs = mock_stripe.checkout.Session.create.call_args[1]
         assert call_kwargs["line_items"][0]["price_data"]["currency"] == "usd"
-        assert call_kwargs["line_items"][0]["price_data"]["unit_amount"] == 2_00
+        assert call_kwargs["line_items"][0]["price_data"]["unit_amount"] == 99_00
         assert call_kwargs["line_items"][0]["price_data"]["recurring"] == {"interval": "month"}
         assert call_kwargs["line_items"][0]["price_data"]["product_data"]["metadata"] == {"plan": "pro"}
         mock_stripe.Customer.search.assert_not_called()
@@ -949,7 +1107,8 @@ class TestStripeWebhookActivation:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._activate_subscription")
-    def test_checkout_completed_activates_subscription(self, mock_activate, mock_get_stripe):
+    def test_checkout_completed_activates_subscription(self, mock_activate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "checkout.session.completed",
@@ -980,17 +1139,20 @@ class TestStripeWebhookActivation:
             plan="enterprise",
             subscription_id="sub_e2e_001",
             customer_id="cus_e2e_001",
+            subscription=ANY,
         )
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._deactivate_subscription")
-    def test_subscription_deleted_deactivates(self, mock_deactivate, mock_get_stripe):
+    def test_subscription_deleted_deactivates(self, mock_deactivate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "customer.subscription.deleted",
             "created": int(time.time()),
             "data": {
                 "object": {
+                    "id": "sub_del_001",
                     "metadata": {"tenant_id": "t1"},
                 }
             },
@@ -1003,20 +1165,23 @@ class TestStripeWebhookActivation:
 
         assert result["processed"] is True
         assert result["cancelled"] is True
-        mock_deactivate.assert_called_once_with("t1")
+        # The event's subscription id is forwarded so only the stored
+        # external_id can be downgraded (audit 2026-09-13 finding 4).
+        mock_deactivate.assert_called_once_with("t1", subscription_id="sub_del_001")
 
 
 class TestStripeSubscriptionPlanChanges:
     """Stripe paid-to-paid plan changes update the existing subscription."""
 
     @patch("core.billing.stripe_client._get_stripe")
-    @patch("core.billing.usage_tracker._get_redis")
+    @patch("core.billing.subscriptions.record_subscription_sync")
+    @patch("core.billing.subscriptions.get_subscription_sync")
     def test_change_subscription_plan_modifies_existing_subscription(
-        self, mock_redis_fn, mock_get_stripe
+        self, mock_get_sub, mock_record, mock_get_stripe
     ):
-        mock_redis = MagicMock()
-        mock_redis.get.return_value = "sub_existing"
-        mock_redis_fn.return_value = mock_redis
+        mock_get_sub.return_value = {
+            "provider": "stripe", "is_paid": True, "order_id": "sub_existing", "plan": "pro",
+        }
 
         mock_stripe = MagicMock()
         mock_stripe.Subscription.retrieve.return_value = {
@@ -1028,6 +1193,8 @@ class TestStripeSubscriptionPlanChanges:
             "id": "sub_existing",
             "status": "active",
             "customer": "cus_existing",
+            "current_period_start": 1_800_000_000,
+            "current_period_end": 1_802_592_000,
             "items": {
                 "data": [{"id": "si_existing", "price": {"id": "price_enterprise"}}]
             },
@@ -1052,18 +1219,22 @@ class TestStripeSubscriptionPlanChanges:
             metadata={"tenant_id": "t1", "plan": "enterprise"},
             proration_behavior="create_prorations",
         )
-        mock_redis.set.assert_any_call("tenant_tier:t1", "enterprise")
-        mock_redis.set.assert_any_call("tenant:t1:plan", "enterprise")
-        mock_redis.set.assert_any_call("tenant:t1:stripe_subscription_id", "sub_existing")
+        # The durable row (not Redis) is what records the new plan + period.
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert mock_record.call_args.args == ("t1",)
+        assert kwargs["provider"] == "stripe"
+        assert kwargs["plan"] == "enterprise"
+        assert kwargs["provider_subscription_id"] == "sub_existing"
+        assert kwargs["provider_customer_id"] == "cus_existing"
+        assert kwargs["current_period_end"] is not None
 
     @patch("core.billing.stripe_client._get_stripe")
-    @patch("core.billing.usage_tracker._get_redis")
+    @patch("core.billing.subscriptions.record_subscription_sync")
     def test_subscription_updated_webhook_syncs_plan_from_price(
-        self, mock_redis_fn, mock_get_stripe
+        self, mock_record, mock_get_stripe, monkeypatch
     ):
-        mock_redis = MagicMock()
-        mock_redis_fn.return_value = mock_redis
-
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "customer.subscription.updated",
@@ -1098,16 +1269,47 @@ class TestStripeSubscriptionPlanChanges:
         assert result["processed"] is True
         assert result["tenant_id"] == "t1"
         assert result["plan"] == "enterprise"
-        mock_redis.set.assert_any_call("tenant_tier:t1", "enterprise")
-        mock_redis.set.assert_any_call("tenant:t1:plan", "enterprise")
-        mock_redis.set.assert_any_call("tenant:t1:billing_order_id", "sub_updated")
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["plan"] == "enterprise"
+        assert kwargs["provider_subscription_id"] == "sub_updated"
+        assert kwargs["status"] == "active"
+
+    @patch("core.billing.stripe_client._get_stripe")
+    @patch("core.billing.subscriptions.deactivate_subscription_sync")
+    def test_subscription_updated_canceled_downgrades_row(self, mock_deactivate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+        mock_stripe = MagicMock()
+        mock_stripe.Webhook.construct_event.return_value = {
+            "type": "customer.subscription.updated",
+            "created": int(time.time()),
+            "data": {
+                "object": {
+                    "id": "sub_gone",
+                    "status": "canceled",
+                    "customer": "cus_gone",
+                    "metadata": {"tenant_id": "t1", "plan": "pro"},
+                }
+            },
+        }
+        mock_get_stripe.return_value = mock_stripe
+
+        from core.billing.stripe_client import handle_webhook
+
+        result = handle_webhook(b'{"type":"customer.subscription.updated"}', "sig")
+        assert result["processed"] is True
+        # The event's subscription id must match the stored external_id
+        # (audit 2026-09-13 finding 4) — a stale event cannot downgrade.
+        mock_deactivate.assert_called_once_with(
+            "t1", status="canceled", provider_subscription_id="sub_gone"
+        )
 
 
 class TestStripeCustomerPortal:
     """Stripe Customer Portal session creation."""
 
     @patch("core.billing.stripe_client._get_stripe")
-    @patch("core.billing.usage_tracker._get_redis")
+    @patch("core.billing.usage_tracker.sync_redis_client")
     def test_create_portal_session(self, mock_redis_fn, mock_get_stripe):
         mock_redis = MagicMock()
         mock_redis.get.return_value = "cus_portal_123"
@@ -1133,7 +1335,8 @@ class TestStripeE2ECheckoutFlow:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._activate_subscription")
-    def test_full_stripe_checkout_flow(self, mock_activate, mock_get_stripe):
+    def test_full_stripe_checkout_flow(self, mock_activate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_get_stripe.return_value = mock_stripe
 
@@ -1199,4 +1402,5 @@ class TestStripeE2ECheckoutFlow:
             plan="pro",
             subscription_id="sub_e2e_stripe",
             customer_id="cus_e2e_stripe",
+            subscription=ANY,
         )

@@ -67,7 +67,10 @@ export default function CHRODashboard() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await api.get("/kpis/chro");
+      // Mirror CFODashboard: scope KPIs to the company chosen in the switcher.
+      const companyId = localStorage.getItem("company_id") || "";
+      const params = companyId ? { company_id: companyId } : {};
+      const resp = await api.get("/kpis/chro", { params });
       setData(resp.data);
     } catch {
       setError(t("errors.failedToLoadKpis", "Failed to load CHRO KPIs"));

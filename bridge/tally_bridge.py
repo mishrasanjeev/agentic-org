@@ -81,11 +81,15 @@ class TallyBridge:
             try:
                 await self._connect()
                 self._reconnect_delay = 1.0  # Reset on successful connect
-                await asyncio.gather(
-                    self._message_loop(),
-                    self._heartbeat_loop(),
-                    self._health_check_loop(),
-                )
+                await self._run_connection_loops()
+                # A graceful server close (1000/1001) ends ``_message_loop``
+                # without raising; reconnect exactly like an error close.
+                if self._running:
+                    logger.warning(
+                        "bridge_connection_closed",
+                        reconnect_in=self._reconnect_delay,
+                    )
+                    await self._backoff_before_reconnect()
             except (
                 websockets.ConnectionClosed,
                 websockets.InvalidStatus,
@@ -97,11 +101,33 @@ class TallyBridge:
                     reconnect_in=self._reconnect_delay,
                 )
                 if self._running:
-                    await asyncio.sleep(self._reconnect_delay)
-                    self._reconnect_delay = min(
-                        self._reconnect_delay * 2,
-                        self._max_reconnect_delay,
-                    )
+                    await self._backoff_before_reconnect()
+
+    async def _run_connection_loops(self) -> None:
+        """Run the socket loops until any one of them ends; cancel the rest.
+
+        ``asyncio.gather`` never returned on a graceful close because the
+        heartbeat/health loops kept running, so the bridge silently stopped
+        serving requests until the process was restarted.
+        """
+        tasks = [
+            asyncio.create_task(self._message_loop()),
+            asyncio.create_task(self._heartbeat_loop()),
+            asyncio.create_task(self._health_check_loop()),
+        ]
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            task.result()  # re-raise ConnectionClosed / OSError for the caller
+
+    async def _backoff_before_reconnect(self) -> None:
+        await asyncio.sleep(self._reconnect_delay)
+        self._reconnect_delay = min(
+            self._reconnect_delay * 2,
+            self._max_reconnect_delay,
+        )
 
     async def _connect(self) -> None:
         """Establish WebSocket connection to the cloud platform."""
@@ -206,8 +232,8 @@ class TallyBridge:
                 break
 
     async def _health_check_loop(self) -> None:
-        """Periodically check if local Tally is reachable."""
-        while self._running:
+        """Periodically check if local Tally is reachable (while connected)."""
+        while self._running and self._ws:
             await asyncio.sleep(self.health_check_interval)
             self._tally_healthy = await self._tally_health_check()
 

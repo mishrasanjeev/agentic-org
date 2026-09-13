@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -157,6 +157,7 @@ export default function IndustryPacks() {
   const [loading, setLoading] = useState(true);
   const [selectedPack, setSelectedPack] = useState<IndustryPack | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -209,14 +210,18 @@ export default function IndustryPacks() {
   const handleInstall = async (pack: IndustryPack) => {
     if (!pack.installable) return;
     setActionLoading(pack.id);
+    setActionError(null);
     try {
       await api.post(`/packs/${pack.id}/install`);
-    } catch {
-      // optimistic update
+      // Refetch instead of flipping local state so the list reflects what
+      // the server actually installed.
+      await fetchData();
+      if (selectedPack?.id === pack.id) setSelectedPack({ ...pack, installed: true });
+    } catch (err) {
+      setActionError(extractApiError(err, `Failed to install ${pack.name}.`));
+    } finally {
+      setActionLoading(null);
     }
-    setPacks((prev) => prev.map((p) => (p.id === pack.id ? { ...p, installed: true } : p)));
-    if (selectedPack?.id === pack.id) setSelectedPack({ ...pack, installed: true });
-    setActionLoading(null);
   };
 
   const handleRepair = async (pack: IndustryPack) => {
@@ -236,14 +241,16 @@ export default function IndustryPacks() {
     );
     if (!confirmed) return;
     setActionLoading(pack.id);
+    setActionError(null);
     try {
       await api.delete(`/packs/${pack.id}`);
-    } catch {
-      // optimistic update
+      await fetchData();
+      if (selectedPack?.id === pack.id) setSelectedPack({ ...pack, installed: false });
+    } catch (err) {
+      setActionError(extractApiError(err, `Failed to uninstall ${pack.name}.`));
+    } finally {
+      setActionLoading(null);
     }
-    setPacks((prev) => prev.map((p) => (p.id === pack.id ? { ...p, installed: false } : p)));
-    if (selectedPack?.id === pack.id) setSelectedPack({ ...pack, installed: false });
-    setActionLoading(null);
   };
 
   if (loading) {
@@ -260,6 +267,12 @@ export default function IndustryPacks() {
         <h2 className="text-2xl font-bold">Industry Packs</h2>
         <Button variant="outline" onClick={fetchData}>Refresh</Button>
       </div>
+
+      {actionError && (
+        <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" data-testid="pack-action-error">
+          {actionError}
+        </div>
+      )}
 
       {/* Pack grid */}
       {packs.length === 0 ? (

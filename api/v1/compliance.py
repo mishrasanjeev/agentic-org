@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import os
 import uuid as _uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
+from audit.dsar import DSARHandler, serialize
 from core.database import get_tenant_session
 from core.models.audit import AuditLog
+from core.models.dsar import DSARRequestRecord
 from core.schemas.api import DSARRequest
 
 router = APIRouter()
@@ -32,7 +34,7 @@ async def _create_dsar_audit_entry(
         actor_type="user",
         actor_id=subject_email,
         action=f"dsar_{request_type}_request",
-        outcome="processing",
+        outcome="received",
         details={
             "request_id": str(request_id),
             "subject_email": subject_email,
@@ -44,8 +46,35 @@ async def _create_dsar_audit_entry(
     return entry
 
 
+async def _submit_and_process(
+    tid: _uuid.UUID,
+    request_type: str,
+    body: DSARRequest,
+    request: Request,
+) -> dict:
+    """Persist the DSAR row, run it inline, and return the honest terminal state."""
+    requested_by = str(getattr(request.state, "user_sub", "") or "unknown")
+    handler = DSARHandler()
+    async with get_tenant_session(tid) as session:
+        record = await handler.submit(
+            session,
+            tenant_id=tid,
+            request_type=request_type,
+            subject_email=body.subject_email,
+            requested_by=requested_by,
+        )
+        await _create_dsar_audit_entry(session, tid, request_type, body.subject_email, record.id)
+        record = await handler.process(session, record)
+        payload = serialize(record, include_result=request_type != "export")
+    if record.status == "failed":
+        # The row is persisted with status=failed; surface it instead of
+        # pretending the request succeeded.
+        raise HTTPException(status_code=500, detail=f"DSAR {request_type} failed; see request {record.id}")
+    return payload
+
+
 # ── POST /dsar/access ────────────────────────────────────────────────────────
-@router.post("/dsar/access")
+@router.post("/dsar/access", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -56,24 +85,15 @@ async def _create_dsar_audit_entry(
 )
 async def dsar_access(
     body: DSARRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    tid = _uuid.UUID(tenant_id)
-    request_id = _uuid.uuid4()
-    async with get_tenant_session(tid) as session:
-        await _create_dsar_audit_entry(session, tid, "access", body.subject_email, request_id)
-
-    return {
-        "request_id": str(request_id),
-        "type": "access",
-        "status": "processing",
-        "subject_email": body.subject_email,
-        "created_at": datetime.now(UTC).isoformat(),
-    }
+    """Persist a data-access request and return the subject's data inline."""
+    return await _submit_and_process(_uuid.UUID(tenant_id), "access", body, request)
 
 
 # ── POST /dsar/erase ────────────────────────────────────────────────────────
-@router.post("/dsar/erase")
+@router.post("/dsar/erase", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -84,27 +104,15 @@ async def dsar_access(
 )
 async def dsar_erase(
     body: DSARRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    tid = _uuid.UUID(tenant_id)
-    request_id = _uuid.uuid4()
-    deadline = datetime.now(UTC) + timedelta(days=30)
-    async with get_tenant_session(tid) as session:
-        await _create_dsar_audit_entry(session, tid, "erase", body.subject_email, request_id)
-
-    return {
-        "request_id": str(request_id),
-        "type": "erase",
-        "status": "processing",
-        "subject_email": body.subject_email,
-        "deadline": deadline.isoformat(),
-        "deadline_days": 30,
-        "created_at": datetime.now(UTC).isoformat(),
-    }
+    """Anonymise the subject's PII (tenant admins only). Status is honest."""
+    return await _submit_and_process(_uuid.UUID(tenant_id), "erase", body, request)
 
 
 # ── POST /dsar/export ───────────────────────────────────────────────────────
-@router.post("/dsar/export")
+@router.post("/dsar/export", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -115,32 +123,43 @@ async def dsar_erase(
 )
 async def dsar_export(
     body: DSARRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    """Persist an export request; the JSON export is read back via ``GET /dsar/{id}``."""
+    return await _submit_and_process(_uuid.UUID(tenant_id), "export", body, request)
+
+
+# ── GET /dsar/{request_id} ──────────────────────────────────────────────────
+@router.get("/dsar/{request_id}", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="compliance.dsar.sensitive.read",
+    rate_limit="compliance-dsar-request",
+    idempotency="read-only",
+    audit_event="dsar.request.read",
+)
+async def dsar_status(
+    request_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Poll a DSAR request (tenant-scoped); includes the collected data / export."""
     tid = _uuid.UUID(tenant_id)
-    request_id = _uuid.uuid4()
+    try:
+        rid = _uuid.UUID(request_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="DSAR request not found") from None
     async with get_tenant_session(tid) as session:
-        await _create_dsar_audit_entry(session, tid, "export", body.subject_email, request_id)
-
-        # Estimate data size: count audit entries for this subject
-        count_result = await session.execute(
-            select(func.count())
-            .select_from(AuditLog)
-            .where(AuditLog.tenant_id == tid, AuditLog.actor_id == body.subject_email)
+        result = await session.execute(
+            select(DSARRequestRecord).where(
+                DSARRequestRecord.id == rid, DSARRequestRecord.tenant_id == tid
+            )
         )
-        record_count = count_result.scalar() or 0
-        estimated_size_mb = round(record_count * 0.002, 2)  # rough estimate
-
-    return {
-        "request_id": str(request_id),
-        "type": "export",
-        "status": "processing",
-        "subject_email": body.subject_email,
-        "format": "json",
-        "estimated_records": record_count,
-        "estimated_size_mb": estimated_size_mb,
-        "created_at": datetime.now(UTC).isoformat(),
-    }
+        record = result.scalar_one_or_none()
+        if record is None:
+            raise HTTPException(status_code=404, detail="DSAR request not found")
+        return serialize(record)
 
 
 # ── GET /compliance/evidence-package ─────────────────────────────────────────

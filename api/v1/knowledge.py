@@ -1066,9 +1066,9 @@ async def _native_semantic_search(
     # Try the vector path first. Column + model swap honour the
     # RAG_USE_BGE_M3 flag — both sides flip atomically.
     try:
-        from core.embeddings import embed_one, rag_embedding_column
+        from core.embeddings import embed_one_async, rag_embedding_column
 
-        qvec = embed_one(query)
+        qvec = await embed_one_async(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         col = rag_embedding_column()
         async with get_tenant_session(tid) as session:

@@ -24,7 +24,7 @@ public_router = APIRouter(prefix="/status", tags=["Status"])
 
 class ServiceStatus(BaseModel):
     name: str
-    status: str  # operational | degraded | outage
+    status: str  # operational | degraded | outage | unknown
     message: str | None = None
 
 
@@ -148,17 +148,21 @@ async def public_status() -> StatusResponse:
             message=None if redis_ok else "Redis connectivity degraded",
         )
     )
+    # No cheap, local probe exists for the Celery workers or the LLM
+    # providers, and the public status page must not fan out to external
+    # services. Report "unknown" instead of a hard-coded "operational".
     services.append(
         ServiceStatus(
             name="Scheduled jobs (Celery)",
-            status="operational",
+            status="unknown",
+            message="Worker health is not probed from the public status page",
         )
     )
     services.append(
         ServiceStatus(
             name="LLM routing",
-            status="operational",
-            message="Primary: Gemini 2.5 Flash; fallback: Claude",
+            status="unknown",
+            message="Provider health is not probed from the public status page",
         )
     )
 

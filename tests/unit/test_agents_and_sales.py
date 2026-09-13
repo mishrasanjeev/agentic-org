@@ -746,6 +746,8 @@ class TestPromoteAgent:
             shadow_min_samples=10,
             shadow_accuracy_current=Decimal("0.97"),
             shadow_accuracy_floor=Decimal("0.95"),
+            shadow_feedback_count=3,
+            shadow_human_confidence_current=Decimal("0.96"),
         )
         exec_result = MagicMock()
         exec_result.scalar_one_or_none.return_value = agent

@@ -130,10 +130,14 @@ class TestREQ05AsyncRedis:
     def test_billing_subscription_uses_async_redis(self):
         """Billing subscription endpoint uses async Redis."""
         from pathlib import Path
+        # 2026-09-13: entitlement moved to the durable billing_subscriptions
+        # row (core/billing/subscriptions.py); Redis is a cache warmed via the
+        # async client. The route module must not touch a sync Redis client.
         content = Path("api/v1/billing.py").read_text()
-        assert "await redis.get" in content
-        # Cancel endpoint should also be async
-        assert "await redis.set" in content or "await redis.delete" in content
+        assert "get_subscription(" in content
+        assert "redis.from_url(" not in content and "redis.Redis(" not in content
+        subs = Path("core/billing/subscriptions.py").read_text()
+        assert "core.async_redis" in subs
 
 
 # ═══════════════════════════════════════════════════════════════════════════

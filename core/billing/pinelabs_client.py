@@ -95,9 +95,16 @@ def _strict_order_mapping() -> bool:
 
 
 def _redis_client():
+    """Sync Redis client for the order map.
+
+    This module is synchronous by design and always runs under
+    ``asyncio.to_thread`` from the billing routes, so a blocking client is
+    correct here. The client is a cached singleton (see
+    ``usage_tracker.sync_redis_client``), not a new connection per call.
+    """
     try:
-        from core.billing.usage_tracker import _get_redis
-        return _get_redis()
+        from core.billing.usage_tracker import sync_redis_client
+        return sync_redis_client()
     # enterprise-gate: broad-except-ok reason=order-mapping-callers-fail-closed-in-strict-runtime
     except Exception:
         return None
@@ -105,11 +112,25 @@ def _redis_client():
 
 def store_order_mapping(
     merchant_ref: str, order_id: str, tenant_id: str = "", plan: str = "",
+    amount: int = 0, currency: str = "INR",
 ) -> None:
-    """Store merchant_ref → order details mapping in Redis (with in-memory fallback)."""
+    """Store merchant_ref → order details mapping in Redis (with in-memory fallback).
+
+    ``amount``/``currency`` record what the server charged for this order so
+    ``handle_webhook`` can refuse activation when the paid amount differs.
+    """
     import json as _json
 
-    entry = {"order_id": order_id, "tenant_id": tenant_id, "plan": plan}
+    entry = {
+        "order_id": order_id,
+        "tenant_id": tenant_id,
+        "plan": plan,
+        "amount": int(amount or 0),
+        "currency": currency,
+        # When the order was placed; ``_activate_subscription`` uses it to
+        # ignore a late webhook for an order older than the active period.
+        "created_at": datetime.now(UTC).isoformat(),
+    }
     order_id_entry = {**entry, "merchant_order_reference": merchant_ref}
 
     redis = _redis_client()
@@ -269,11 +290,9 @@ def _auth_headers() -> dict[str, str]:
 # ── Create Order (Hosted Checkout / Redirect) ──────────────────────
 
 
-@retry_http(max_attempts=3)
 def create_payment_order(
     tenant_id: str,
     plan: str,
-    amount_inr: int | None = None,
     customer_email: str = "",
     customer_name: str = "",
     customer_phone: str = "",
@@ -284,14 +303,18 @@ def create_payment_order(
     Plural handles the payment page with all enabled methods (Cards, UPI,
     Net Banking, Wallets, EMI).
 
+    Not wrapped in ``retry_http``: order creation is not idempotent at the
+    provider (each attempt mints a new order), so a retry after an ambiguous
+    failure could create duplicate payable orders. Token fetch and status
+    GET keep their retries.
+
     Parameters
     ----------
     tenant_id : str
         Tenant initiating the payment.
     plan : str
-        Plan name — ``pro`` or ``enterprise``.
-    amount_inr : int | None
-        Override amount in paise.  Falls back to PLAN_AMOUNT_INR.
+        Plan name — ``pro`` or ``enterprise``.  The charged amount is always
+        the server-owned ``PLAN_AMOUNT_INR[plan]``; callers cannot override it.
     customer_email, customer_name, customer_phone : str
         Optional customer details for the checkout page.
 
@@ -300,7 +323,7 @@ def create_payment_order(
     dict with order_id, challenge_url, amount, currency, status.
     """
     http = _get_http()
-    amount = amount_inr or PLAN_AMOUNT_INR.get(plan, 0)
+    amount = PLAN_AMOUNT_INR.get(plan, 0)
     if not amount:
         raise ValueError(f"Unknown plan or zero amount: {plan}")
 
@@ -352,7 +375,7 @@ def create_payment_order(
 
     # Store mapping so the callback endpoint can look up the order
     if order_id:
-        store_order_mapping(merchant_ref, order_id, tenant_id, plan)
+        store_order_mapping(merchant_ref, order_id, tenant_id, plan, amount, "INR")
 
     logger.info(
         "plural_order_created",
@@ -501,6 +524,8 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
         raise ValueError("Invalid Plural webhook signature")
 
     payload = json.loads(raw_body)
+    if isinstance(payload.get("data"), dict):
+        payload = payload["data"]
     order_id = payload.get("order_id", "")
     status = payload.get("status", "").upper()
     merchant_ref = payload.get("merchant_order_reference", "")
@@ -530,8 +555,11 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
             raise PluralWebhookProcessingError(
                 "Plural order mapping missing for successful payment"
             )
+        _verify_paid_amount(payload, stored, plan, order_id, merchant_ref, webhook_id)
         try:
-            _activate_subscription(tenant_id, plan, order_id)
+            _activate_subscription(
+                tenant_id, plan, order_id, ordered_at=_parse_ordered_at(stored.get("created_at"))
+            )
         # enterprise-gate: broad-except-ok reason=plural-webhook-side-effect-failure-raises-not-success
         except Exception as exc:
             logger.exception(
@@ -556,20 +584,128 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
     return result
 
 
-def _activate_subscription(tenant_id: str, plan: str, order_id: str) -> None:
+def _verify_paid_amount(
+    payload: dict[str, Any],
+    stored: dict[str, Any],
+    plan: str,
+    order_id: str,
+    merchant_ref: str,
+    webhook_id: str,
+) -> None:
+    """Refuse activation unless the provider-reported paid amount matches.
+
+    Expected amount/currency come from the server-side order mapping written
+    by ``create_payment_order`` (falling back to ``PLAN_AMOUNT_INR[plan]`` for
+    mappings written before the amount was recorded). Paid amount comes from
+    the webhook ``order_amount``; if the event omits it, the order is fetched
+    from Plural. Any mismatch or missing value fails closed.
+    """
+    expected_amount = int(stored.get("amount") or 0) or PLAN_AMOUNT_INR.get(plan, 0)
+    expected_currency = str(stored.get("currency") or "INR").upper()
+
+    paid = payload.get("order_amount")
+    if not isinstance(paid, dict) or paid.get("value") is None:
+        paid = get_order_status(order_id).get("order_amount")
+    if not isinstance(paid, dict) or paid.get("value") is None:
+        logger.error(
+            "plural_webhook_amount_unverifiable",
+            order_id=order_id, merchant_ref=merchant_ref, webhook_id=webhook_id,
+            audit=True,
+        )
+        raise PluralWebhookProcessingError("Plural paid amount unavailable for verification")
+
+    try:
+        paid_amount = int(paid.get("value"))
+    except (TypeError, ValueError) as exc:
+        raise PluralWebhookProcessingError("Plural paid amount malformed") from exc
+    paid_currency = str(paid.get("currency") or "").upper()
+
+    if (
+        not expected_amount
+        or paid_amount != expected_amount
+        or paid_currency != expected_currency
+    ):
+        logger.error(
+            "plural_webhook_amount_mismatch_rejected",
+            order_id=order_id,
+            merchant_ref=merchant_ref,
+            webhook_id=webhook_id,
+            plan=plan,
+            expected_amount=expected_amount,
+            expected_currency=expected_currency,
+            paid_amount=paid_amount,
+            paid_currency=paid_currency,
+            audit=True,
+        )
+        raise PluralWebhookProcessingError(
+            "Plural paid amount does not match the plan price; activation refused"
+        )
+
+
+def _parse_ordered_at(value: Any) -> datetime | None:
+    """Parse the order mapping's ``created_at``; ``None`` when absent/malformed."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _activate_subscription(
+    tenant_id: str, plan: str, order_id: str, *, ordered_at: datetime | None = None
+) -> None:
     """Upgrade tenant plan after confirmed payment.
 
-    Creates a billing_subscription record and updates the tenant tier.
-    """
-    from core.billing.usage_tracker import _get_redis
+    Persists the ``billing_subscriptions`` row (source of truth) and warms
+    the Redis cache. A Plural order is a one-time payment, so the row gets a
+    fixed ``current_period_end``; the beat task
+    ``core.tasks.budget_tasks.expire_plural_subscriptions`` downgrades it
+    once that passes.
 
-    redis = _get_redis()
-    # Store the active plan — both the canonical key read by
-    # limits._get_tenant_tier() AND the billing-specific keys.
-    redis.set(f"tenant_tier:{tenant_id}", plan)
-    redis.set(f"tenant:{tenant_id}:plan", plan)
-    redis.set(f"tenant:{tenant_id}:billing_provider", "plural")
-    redis.set(f"tenant:{tenant_id}:billing_order_id", order_id)
+    Stale-order guard: the upsert overwrites plan and period unconditionally,
+    so a replayed webhook (same ``order_id``) or a late webhook for an order
+    placed *before* the currently active period started (``ordered_at`` <
+    ``current_period_start``) is ignored rather than rewriting a newer
+    activation. Legitimate new orders (placed after the active period began)
+    always apply, including downgrades.
+    """
+    from core.billing.subscriptions import (
+        get_subscription_sync,
+        plural_period,
+        record_subscription_sync,
+    )
+
+    existing = get_subscription_sync(tenant_id)
+    if existing["provider"] == "plural" and existing["is_paid"] and existing["order_id"]:
+        if existing["order_id"] == order_id:
+            logger.info(
+                "plural_activation_replay_ignored", tenant_id=tenant_id, order_id=order_id
+            )
+            return
+        active_since = existing.get("current_period_start")
+        if ordered_at is not None and active_since:
+            if ordered_at < datetime.fromisoformat(active_since):
+                logger.warning(
+                    "plural_activation_stale_order_ignored",
+                    tenant_id=tenant_id,
+                    order_id=order_id,
+                    active_order_id=existing["order_id"],
+                    active_plan=existing["plan"],
+                )
+                return
+
+    period_start, period_end = plural_period()
+    record_subscription_sync(
+        tenant_id,
+        provider="plural",
+        plan=plan,
+        status="active",
+        provider_subscription_id=order_id,
+        current_period_start=period_start,
+        current_period_end=period_end,
+    )
 
     logger.info(
         "subscription_activated",

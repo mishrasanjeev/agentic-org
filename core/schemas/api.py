@@ -56,6 +56,9 @@ class AgentCreate(BaseModel):
     )
     confidence_floor: float = Field(0.88, ge=0.0, le=1.0)
     max_retries: int = 3
+    # Per-agent LLM routing override (auto | tier1 | tier2 | tier3 | disabled).
+    # Persisted as ``llm_config["routing"]`` which core/llm/router.py reads.
+    llm_routing: str | None = Field(None, pattern=r"^(auto|tier1|tier2|tier3|disabled)$")
     output_schema: str | None = None
     initial_status: str = "shadow"
     shadow_comparison_agent: str | None = None
@@ -107,6 +110,11 @@ class AgentUpdate(BaseModel):
     org_level: int | None = None
     change_reason: str | None = None
     connector_ids: list[str] | None = None
+    max_retries: int | None = Field(None, ge=0, le=20)
+    # Learned rules prepended to the system prompt on every run
+    # (core/langgraph/runner.py). Full-list replace; DELETE
+    # /agents/{id}/amendments/{index} removes a single entry.
+    prompt_amendments: list[str] | None = None
 
 
 class AgentResponse(BaseModel):
@@ -348,3 +356,18 @@ class PromptEditHistoryResponse(BaseModel):
     prompt_after: str
     change_reason: str | None
     created_at: datetime
+
+
+class AgentFeedbackSubmit(BaseModel):
+    """Body for POST /agents/{id}/feedback.
+
+    Validated at the boundary so free text cannot exceed a sane size (it can
+    end up inside an LLM analysis prompt) and corrected/original outputs are
+    real JSON objects.
+    """
+
+    run_id: str = Field(..., min_length=1, max_length=200)
+    feedback_type: str = Field(..., min_length=1, max_length=30)
+    text: str = Field(default="", max_length=4000)
+    corrected_output: dict | None = None
+    original_output: dict | None = None

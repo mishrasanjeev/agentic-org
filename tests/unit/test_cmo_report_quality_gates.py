@@ -430,7 +430,7 @@ def test_cmo_report_generator_labels_fallback_report_as_draft_only(monkeypatch: 
     monkeypatch.setattr(
         ReportGenerator,
         "_fetch_cmo_kpis",
-        staticmethod(lambda company_id: {"demo": True, "source": "report_generator_fallback"}),
+        staticmethod(lambda company_id, tenant_id="default": {"demo": True, "source": "report_generator_fallback"}),
     )
 
     output = ReportGenerator().generate("cmo_weekly", params={})

@@ -17,23 +17,34 @@ from auth.aa_callback_signing import (
     TIMESTAMP_HEADER,
     verify_aa_callback,
 )
-from connectors.finance.aa_consent_types import AACallbackPayload
+from connectors.finance.aa_consent_types import AACallbackPayload, ConsentRequest
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/aa", tags=["Account Aggregator"])
 
-# Consent manager instances per tenant (in production, use a service registry)
-_consent_managers: dict[str, Any] = {}
+
+async def _consent_redis():
+    """Shared async Redis pool; consent handles must survive restarts and replicas."""
+    from core.async_redis import get_async_redis
+
+    redis = await get_async_redis()
+    if redis is None:
+        raise HTTPException(status_code=503, detail="consent store unavailable")
+    return redis
 
 
-def _get_consent_manager(tenant_id: str):
-    """Get or create consent manager for a tenant."""
-    from connectors.finance.aa_consent import AAConsentManager
+async def _get_consent_manager(tenant_id: str):
+    """Build a consent manager whose state lives in tenant-scoped Redis keys.
 
-    if tenant_id not in _consent_managers:
-        _consent_managers[tenant_id] = AAConsentManager()
-    return _consent_managers[tenant_id]
+    Audit 2026-09-13: pre-fix managers were cached in a process-local dict,
+    so a provider callback landing on another replica (or after a restart)
+    could never find the handle and was silently acknowledged.
+    """
+    from connectors.finance.aa_consent import AAConsentManager, RedisConsentStore
+
+    redis = await _consent_redis()
+    return AAConsentManager(store=RedisConsentStore(redis, tenant_id))
 
 
 def _get_redis():
@@ -122,18 +133,26 @@ async def consent_callback(request: Request) -> dict[str, str]:
         consent_id=payload.consent_id,
     )
 
-    # Find the consent manager that created this handle
-    for manager in _consent_managers.values():
-        result = await manager.handle_consent_callback(
-            consent_handle=payload.consent_handle,
-            consent_status=payload.consent_status,
-            consent_id=payload.consent_id,
-        )
-        if "error" not in result:
-            return {"status": "ok", "consent_handle": payload.consent_handle}
+    # Resolve the tenant that created this handle from the durable store.
+    from connectors.finance.aa_consent import RedisConsentStore
 
-    # If no manager knows this handle, still acknowledge (idempotent)
-    logger.warning("aa_consent_callback_unmatched", handle=payload.consent_handle)
+    redis = await _consent_redis()
+    tenant_id = await RedisConsentStore.tenant_for_handle(redis, payload.consent_handle)
+    if tenant_id is None:
+        # Non-2xx on purpose: the provider retries, and an operator sees the
+        # miss instead of a silent "ok" for a handle nobody owns.
+        logger.warning("aa_consent_callback_unmatched", handle=payload.consent_handle)
+        raise HTTPException(status_code=404, detail="unknown consent handle")
+
+    manager = await _get_consent_manager(tenant_id)
+    result = await manager.handle_consent_callback(
+        consent_handle=payload.consent_handle,
+        consent_status=payload.consent_status,
+        consent_id=payload.consent_id,
+    )
+    if "error" in result:
+        logger.warning("aa_consent_callback_unmatched", handle=payload.consent_handle)
+        raise HTTPException(status_code=404, detail="unknown consent handle")
     return {"status": "ok", "consent_handle": payload.consent_handle}
 
 
@@ -155,11 +174,8 @@ async def consent_status(
     # directly by ``get_current_tenant``. Earlier code annotated it as
     # ``dict`` and called ``.get("tenant_id")`` — that raised
     # AttributeError on every consent request/status call.
-    manager = _consent_managers.get(tenant_id)
-    if not manager:
-        raise HTTPException(status_code=404, detail="No consent manager for tenant")
-
-    result = manager.get_consent_status(consent_handle)
+    manager = await _get_consent_manager(tenant_id)
+    result = await manager.get_consent_status(consent_handle)
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
@@ -175,21 +191,18 @@ async def consent_status(
     audit_event="aa.consent.request",
 )
 async def create_consent_request(
-    params: dict[str, Any],
+    params: ConsentRequest,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict[str, str]:
     """Create a new AA consent request.
 
-    Returns consent_handle and redirect_url for user approval.
+    Returns consent_handle and redirect_url for user approval. The body is
+    validated by ``ConsentRequest`` at the boundary (pre-fix it was an
+    untyped ``dict`` re-parsed inside the handler).
     """
-    from connectors.finance.aa_consent_types import ConsentRequest
-
     # SEC-2026-05-P3-014: ``tenant_id`` is a string (UUID) returned
     # directly by ``get_current_tenant``. Earlier code annotated it as
     # ``dict`` and called ``.get("tenant_id")`` — that raised
     # AttributeError on every consent request/status call.
-    manager = _get_consent_manager(tenant_id)
-
-    request = ConsentRequest(**params)
-    result = await manager.create_consent_request(request)
-    return result
+    manager = await _get_consent_manager(tenant_id)
+    return await manager.create_consent_request(params)

@@ -222,6 +222,12 @@ class TestGrantexMiddlewareFailureClearing:
         ), patch(
             "auth.grantex_middleware._is_grantex_token",
             return_value=False,
+        ), patch(
+            # 2026-09-13: legacy tokens fail closed on a missing users row;
+            # there is no DB here, so treat the subject as an active user.
+            "auth.grantex_middleware.check_user_session_state",
+            new_callable=AsyncMock,
+            return_value=None,
         ):
             await middleware.dispatch(request, call_next)
 
@@ -253,6 +259,12 @@ class TestGrantexMiddlewareFailureClearing:
         ), patch(
             "auth.grantex_middleware._is_grantex_token",
             return_value=False,
+        ), patch(
+            # 2026-09-13: legacy tokens fail closed on a missing users row;
+            # there is no DB here, so treat the subject as an active user.
+            "auth.grantex_middleware.check_user_session_state",
+            new_callable=AsyncMock,
+            return_value=None,
         ):
             resp = await middleware.dispatch(request, call_next)
 
@@ -293,6 +305,12 @@ class TestGrantexMiddlewareFailureClearing:
         ), patch(
             "auth.grantex_middleware._is_grantex_token",
             return_value=False,
+        ), patch(
+            # 2026-09-13: legacy tokens fail closed on a missing users row;
+            # there is no DB here, so treat the subject as an active user.
+            "auth.grantex_middleware.check_user_session_state",
+            new_callable=AsyncMock,
+            return_value=None,
         ):
             await middleware.dispatch(request, call_next)
 

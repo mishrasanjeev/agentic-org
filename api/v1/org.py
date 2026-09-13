@@ -7,12 +7,13 @@ import logging
 import os
 import re
 import uuid
+from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
 from jwt import PyJWTError
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 
 from api.deps import require_tenant_admin
 from api.route_metadata import route_meta
@@ -20,6 +21,7 @@ from auth.jwt import create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
 from auth.one_time_codes import peek as peek_code
+from core.auth_state import invalidate_user_session_state
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_invite_email
@@ -174,12 +176,13 @@ async def invite_member(body: InviteRequest, request: Request):
 
     tenant_id = _get_tenant_id(request)
     inviter_email = getattr(request.state, "user_sub", "unknown")
+    email = body.email.strip().lower()
 
     async with async_session_factory() as session:
         existing = await session.execute(
             select(User).where(
                 User.tenant_id == uuid.UUID(tenant_id),
-                User.email == body.email,
+                func.lower(User.email) == email,
             )
         )
         if existing.scalar_one_or_none():
@@ -195,8 +198,8 @@ async def invite_member(body: InviteRequest, request: Request):
         user = User(
             id=uuid.uuid4(),
             tenant_id=uuid.UUID(tenant_id),
-            email=body.email,
-            name=body.name or body.email.split("@")[0],
+            email=email,
+            name=body.name or email.split("@")[0],
             role=body.role,
             domain=body.domain,
             status="pending",
@@ -207,7 +210,7 @@ async def invite_member(body: InviteRequest, request: Request):
 
     invite_token = create_access_token(
         data={
-            "sub": body.email,
+            "sub": email,
             "agenticorg:tenant_id": tenant_id,
             "agenticorg:invite": True,
             "agenticorg:user_id": str(user.id),
@@ -225,7 +228,7 @@ async def invite_member(body: InviteRequest, request: Request):
     try:
         await asyncio.to_thread(
             send_invite_email,
-            body.email,
+            email,
             tenant.name,
             inviter_email,
             body.role,
@@ -238,7 +241,7 @@ async def invite_member(body: InviteRequest, request: Request):
     return {
         "status": "invited",
         "user_id": str(user.id),
-        "email": body.email,
+        "email": email,
         "invite_link": invite_link,
     }
 
@@ -281,6 +284,8 @@ async def get_invite_info(token: str | None = None, code: str | None = None):
             raise HTTPException(status_code=404, detail="Invited user not found")
 
         user, tenant = row
+        if user.status != "pending":
+            raise HTTPException(status_code=409, detail="Invitation is no longer valid")
         return {
             "org_name": tenant.name,
             "email": user.email,
@@ -320,14 +325,18 @@ async def accept_invite(body: AcceptInviteRequest):
             raise HTTPException(status_code=404, detail="Invited user not found")
         if user.status == "active":
             raise HTTPException(status_code=409, detail="Invitation already accepted")
+        if user.status != "pending":
+            # e.g. ``inactive`` after DELETE /org/members/{id}: an old invite
+            # link must not re-activate a deactivated member.
+            raise HTTPException(status_code=409, detail="Invitation is no longer valid")
         invite_email = claims.get("sub")
-        if invite_email and invite_email != user.email:
+        if invite_email and invite_email.lower() != (user.email or "").lower():
             raise HTTPException(status_code=400, detail="Invite token does not match invited user")
 
-        user.password_hash = _bcrypt.hashpw(
-            body.password.encode(),
-            _bcrypt.gensalt(rounds=12),
-        ).decode()
+        # bcrypt cost-12 hashing is CPU-bound (~250ms): keep it off the loop.
+        user.password_hash = await asyncio.to_thread(
+            lambda: _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+        )
         user.status = "active"
         if body.name and body.name.strip():
             user.name = body.name.strip()
@@ -345,7 +354,7 @@ async def accept_invite(body: AcceptInviteRequest):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -428,7 +437,11 @@ async def deactivate_member(user_id: str, request: Request):
             raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
 
         user.status = "inactive"
+        # Revoke every outstanding session: tokens issued before this
+        # watermark are rejected by the auth middleware (v6z17).
+        user.sessions_invalid_before = datetime.now(UTC)
         session.add(user)
         await session.commit()
 
+    await invalidate_user_session_state(tenant_id, user.email)
     return {"status": "deactivated", "user_id": user_id}

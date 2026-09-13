@@ -12,7 +12,7 @@ import structlog
 
 from workflows.parser import WorkflowParser
 from workflows.retry import retry_with_backoff
-from workflows.state_store import WorkflowStateStore
+from workflows.state_store import StaleStateError, WorkflowStateStore
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
     UnknownStepStatusError,
@@ -37,6 +37,86 @@ logger = structlog.get_logger()
 
 class WorkflowTimeoutError(Exception):
     """Raised when a workflow exceeds its configured timeout_hours."""
+
+
+class StepFailedError(Exception):
+    """Internal: carries a ``status == "failed"`` step result through ``retry_with_backoff``."""
+
+    def __init__(self, result: dict[str, Any]) -> None:
+        super().__init__(str(result.get("error") or "step failed"))
+        self.result = result
+
+
+_RETRY_DIRECTIVE_RE = re.compile(r"retry\((\d+)\)")
+_READ_ONLY_ACTION_PREFIXES = (
+    "analy",
+    "audit",
+    "check",
+    "classif",
+    "compare",
+    "describe",
+    "detect",
+    "estimate",
+    "evaluate",
+    "extract",
+    "fetch",
+    "find",
+    "forecast",
+    "get",
+    "identify",
+    "list",
+    "lookup",
+    "monitor",
+    "plan",
+    "query",
+    "rank",
+    "read",
+    "recommend",
+    "reconcile",
+    "research",
+    "retrieve",
+    "review",
+    "score",
+    "search",
+    "summar",
+    "validate",
+    "verify",
+)
+_WRITE_ACTION_HINTS = (
+    "activate",
+    "approve",
+    "cancel",
+    "charge",
+    "create",
+    "delete",
+    "deploy",
+    "disburse",
+    "execute",
+    "file",
+    "initiate",
+    "launch",
+    "mutate",
+    "notify",
+    "pay",
+    "post",
+    "publish",
+    "queue",
+    "refund",
+    "release",
+    "remove",
+    "schedule",
+    "send",
+    "set_",
+    "setup",
+    "spend",
+    "submit",
+    "sync",
+    "transfer",
+    "update",
+    "upload",
+    "upsert",
+    "write",
+)
 
 
 class WorkflowEngine:
@@ -89,8 +169,16 @@ class WorkflowEngine:
         """Drive the workflow to completion (or pause on HITL / timeout / error).
 
         Steps are executed in topological order respecting ``depends_on``.
-        After each step the state is checkpointed.
+        After each step the state is checkpointed. A checkpoint rejected as
+        stale means a concurrent writer (``cancel``, a timeout task) already
+        moved the run on; its status is reported instead of being overwritten.
         """
+        try:
+            return await self._execute_unguarded(run_id)
+        except StaleStateError as exc:
+            return await self._stale_state_result(run_id, exc)
+
+    async def _execute_unguarded(self, run_id: str) -> dict[str, Any]:
         state = await self.state_store.load(run_id)
         if not state:
             return {"error": "Run not found"}
@@ -102,11 +190,25 @@ class WorkflowEngine:
         step_index = self._build_step_index(steps)
         execution_order = self._topological_sort(steps)
         timeout_hours = state["definition"].get("timeout_hours")
+        ran_step = False
 
         for step_id in execution_order:
             # Skip steps already completed (supports resumption after checkpoint).
             if step_id in state.get("step_results", {}):
                 continue
+
+            # ---- re-read the durable status: cancel() may have won during the last step ----
+            # (the state loaded above is fresh for the first step of this call)
+            if ran_step:
+                live_status = await self._live_status(run_id)
+                if live_status not in (None, "running"):
+                    logger.info(
+                        "workflow_stopped_by_status_change",
+                        run_id=run_id,
+                        step_id=step_id,
+                        status=live_status,
+                    )
+                    return {"status": live_status, "step_results": state["step_results"]}
 
             # ---- timeout check ----
             if timeout_hours is not None:
@@ -147,6 +249,7 @@ class WorkflowEngine:
             context = self._build_context(state)
 
             # ---- execute the step (with retry if configured) ----
+            ran_step = True
             try:
                 result = await self._execute_with_retry(step, state, context)
             # enterprise-gate: broad-except-ok reason=step-boundary-marks-durable-workflow-failed
@@ -211,6 +314,7 @@ class WorkflowEngine:
                     # dependency checks pass if needed; the main loop will reach the
                     # target in topological order.  We also mark skipped branches.
                     state["step_results"][step_id]["branch_target"] = branch_target
+                self._skip_branch_not_taken(step, branch_target, state)
 
             # ---- handle HITL pause ----
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
@@ -277,6 +381,12 @@ class WorkflowEngine:
 
         Executes just the next eligible step in topological order, then returns.
         """
+        try:
+            return await self._execute_next_unguarded(run_id)
+        except StaleStateError as exc:
+            return await self._stale_state_result(run_id, exc)
+
+    async def _execute_next_unguarded(self, run_id: str) -> dict[str, Any]:
         state = await self.state_store.load(run_id)
         if not state:
             return {"error": "Run not found"}
@@ -364,6 +474,7 @@ class WorkflowEngine:
                 branch_target = self._resolve_condition_branch(step, result, context)
                 if branch_target:
                     state["step_results"][step_id]["branch_target"] = branch_target
+                self._skip_branch_not_taken(step, branch_target, state)
 
             if step.get("type") == "human_in_loop" or result.get("status") == "waiting_hitl":
                 state["status"] = "waiting_hitl"
@@ -431,12 +542,53 @@ class WorkflowEngine:
         if not waiting_step_id:
             return {"error": "No waiting step recorded"}
 
-        # Record the HITL decision as the step's completed output.
-        state["step_results"][waiting_step_id] = {
-            "output": decision,
-            "status": "completed",
-            "confidence": decision.get("confidence"),
-        }
+        if self._is_rejection(decision):
+            # A rejection is terminal: record it on the HITL step, fail the
+            # run, and never execute dependent steps.
+            state["step_results"][waiting_step_id] = {
+                "output": decision,
+                "status": "rejected",
+                "confidence": decision.get("confidence"),
+                "error": {"code": "hitl_rejected", "message": "Rejected by human reviewer"},
+            }
+            state["steps_completed"] = len(state["step_results"])
+            state["status"] = "failed"
+            state["error"] = {
+                "code": "hitl_rejected",
+                "message": f"Step '{waiting_step_id}' was rejected by a human reviewer",
+            }
+            state["completed_at"] = datetime.now(UTC).isoformat()
+            state.pop("waiting_step_id", None)
+            await self.state_store.save(
+                state,
+                actor="workflow_engine.hitl_resume",
+                step_id=waiting_step_id,
+                metadata={"event": "hitl_rejected"},
+            )
+            logger.info("workflow_hitl_rejected", run_id=run_id, step_id=waiting_step_id)
+            return {"status": "failed", "step_results": state["step_results"]}
+
+        # Record the HITL decision on the step. A dedicated human_in_loop step
+        # has no output of its own, so the decision *is* its output. Any other
+        # step (e.g. an agent that escalated for approval) keeps the work it
+        # produced before the pause; the decision is attached alongside it.
+        prior = state["step_results"].get(waiting_step_id) or {}
+        prior_output = prior.get("output")
+        if self._step_type_for(state, waiting_step_id) == "human_in_loop" or prior_output in (None, {}, ""):
+            state["step_results"][waiting_step_id] = {
+                "output": decision,
+                "status": "completed",
+                "confidence": decision.get("confidence"),
+            }
+        else:
+            merged_output = dict(prior_output) if isinstance(prior_output, dict) else {"result": prior_output}
+            merged_output["hitl_decision"] = decision
+            prior_confidence = prior.get("confidence")
+            state["step_results"][waiting_step_id] = {
+                "output": merged_output,
+                "status": "completed",
+                "confidence": prior_confidence if prior_confidence is not None else decision.get("confidence"),
+            }
         state["steps_completed"] = len(state["step_results"])
         state["status"] = "running"
         state.pop("waiting_step_id", None)
@@ -678,13 +830,70 @@ class WorkflowEngine:
                 state_result["action"] = result.get("action")
         return state_result
 
+    async def _live_status(self, run_id: str) -> str | None:
+        latest = await self.state_store.load(run_id)
+        return latest.get("status") if latest else None
+
+    async def _stale_state_result(self, run_id: str, exc: StaleStateError) -> dict[str, Any]:
+        """A concurrent writer won the race; report its status, never overwrite it."""
+        latest = await self.state_store.load(run_id) or {}
+        status = latest.get("status", "unknown")
+        logger.warning(
+            "workflow_state_stale_write_rejected",
+            run_id=run_id,
+            status=status,
+            expected_version=exc.expected,
+            actual_version=exc.actual,
+        )
+        return {"status": status, "step_results": latest.get("step_results", {})}
+
+    @staticmethod
+    def _step_type_for(state: dict[str, Any], step_id: str) -> str:
+        for step in (state.get("definition") or {}).get("steps", []) or []:
+            if isinstance(step, dict) and step.get("id") == step_id:
+                return str(step.get("type") or "agent").strip().lower()
+        return "agent"
+
+    @staticmethod
+    def _is_rejection(decision: dict[str, Any]) -> bool:
+        raw = decision.get("decision") if isinstance(decision, dict) else None
+        return str(raw or "").strip().lower() in {"reject", "rejected", "deny", "denied"}
+
+    @staticmethod
+    def _skip_branch_not_taken(step: dict, branch_target: str | None, state: dict) -> None:
+        """Mark the condition path that was not selected as skipped.
+
+        Downstream steps that depend on the skipped path are then skipped by
+        ``_check_dependencies`` (a skipped dependency is not ``completed``).
+        """
+        for path_key in ("true_path", "false_path"):
+            other = step.get(path_key)
+            if not other or other == branch_target or other in state["step_results"]:
+                continue
+            state["step_results"][other] = {
+                "output": None,
+                "status": "skipped",
+                "confidence": None,
+                "reason": "branch_not_taken",
+            }
+        state["steps_completed"] = len(state["step_results"])
+
     @staticmethod
     def _step_allows_failure(step: dict) -> bool:
+        """Return True when a failed step must not fail the run.
+
+        ``on_failure`` may combine a retry directive with a fallback, e.g.
+        ``"retry(3)"`` (fail the run once retries are exhausted) or
+        ``"retry(3) then continue"`` / ``"retry(3), ignore"`` (continue after
+        the retries are exhausted). A bare ``retry(N)`` never allows failure.
+        """
         on_failure = str(step.get("on_failure", "")).strip().lower()
+        fallback = _RETRY_DIRECTIVE_RE.sub("", on_failure)
+        fallback_tokens = {token for token in re.split(r"[^a-z_]+", fallback) if token}
         return bool(
             step.get("optional") is True
             or step.get("allow_failure") is True
-            or on_failure in {"continue", "ignore", "optional"}
+            or fallback_tokens & {"continue", "ignore", "optional"}
         )
 
     @staticmethod
@@ -756,6 +965,8 @@ class WorkflowEngine:
             dep_result = step_results.get(dep_id)
             if dep_result is None:
                 return f"Dependency '{dep_id}' has not been executed"
+            if dep_result.get("status") == "skipped" and dep_result.get("reason") == "branch_not_taken":
+                return "branch_not_taken"
             if dep_result.get("status") not in ("completed",):
                 return f"Dependency '{dep_id}' did not complete successfully (status={dep_result.get('status')})"
         return None
@@ -797,7 +1008,24 @@ class WorkflowEngine:
         """Execute a step, optionally wrapping in retry_with_backoff.
 
         The step may declare ``on_failure: "retry(N)"`` where *N* is the max
-        number of retry attempts.
+        number of retry attempts. Step handlers return failures as
+        ``{"status": "failed"}`` dicts rather than raising, so a failed
+        result is re-raised as :class:`StepFailedError` inside the retry loop
+        and unwrapped back into the final result once retries are spent.
+
+        Retry rule (a retry must never duplicate a side effect):
+
+        * ``connector_tool`` steps (and ``agent`` steps that resolve to a
+          connector tool) retry when the tool is read-only by name
+          (``get_*``/``list_*``/``fetch_*``/...) or the step carries an
+          ``idempotency_key``;
+        * ``agent`` steps retry only when ``action`` is read-only or the step
+          carries an ``idempotency_key`` (the key is forwarded to the connector
+          gateway, which dedupes the replay);
+        * ``http`` steps retry only with method ``GET``;
+        * ``notify`` steps and writes without an idempotency key are never
+          retried — ``retry(N)`` on them is ignored and the first failure
+          stands.
         """
         on_failure = step.get("on_failure", "")
         max_retries = self._parse_retry_count(on_failure)
@@ -805,20 +1033,67 @@ class WorkflowEngine:
         # Inject the built context into state so step handlers can use it.
         state_with_context = {**state, "context": context, "_state_store": self.state_store}
 
+        if max_retries > 0 and self._step_is_retryable(step):
+
+            async def _attempt() -> dict[str, Any]:
+                result = await execute_step(step, state_with_context)
+                if isinstance(result, dict) and result.get("status") == "failed":
+                    raise StepFailedError(result)
+                return result
+
+            try:
+                return await retry_with_backoff(func=_attempt, max_retries=max_retries)
+            except StepFailedError as exc:
+                final = dict(exc.result)
+                final["retry_attempts"] = max_retries
+                return final
+
         if max_retries > 0:
-            return await retry_with_backoff(
-                func=lambda: execute_step(step, state_with_context),
-                max_retries=max_retries,
+            logger.info(
+                "workflow_retry_directive_ignored_non_idempotent",
+                step_id=step.get("id"),
+                step_type=step.get("type", "agent"),
             )
 
         return await execute_step(step, state_with_context)
+
+    @staticmethod
+    def _is_read_only_name(name: Any) -> bool:
+        normalized = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if not normalized:
+            return False
+        if any(hint in normalized for hint in _WRITE_ACTION_HINTS):
+            return False
+        return normalized.startswith(_READ_ONLY_ACTION_PREFIXES)
+
+    @classmethod
+    def _step_is_retryable(cls, step: dict) -> bool:
+        """Apply the retry rule documented on ``_execute_with_retry``."""
+        from workflows.step_types import _connector_tool_ref_from_step
+
+        step_type = str(step.get("type", "agent")).strip().lower()
+        if step_type in {"notify", "sub_workflow", "human_in_loop", "wait", "wait_for_event"}:
+            return False
+        if step_type == "http":
+            return str(step.get("method", "GET")).strip().upper() == "GET"
+
+        connector, tool = _connector_tool_ref_from_step(step, allow_action_tool=step_type == "connector_tool")
+        if step_type == "connector_tool" or (step_type == "agent" and connector and tool):
+            if step.get("idempotency_key"):
+                return True
+            return cls._is_read_only_name(tool)
+        if step_type == "agent":
+            if step.get("idempotency_key"):
+                return True
+            return cls._is_read_only_name(step.get("action", "process"))
+        return False
 
     @staticmethod
     def _parse_retry_count(on_failure: str) -> int:
         """Extract the retry count from an ``on_failure`` directive like ``retry(3)``."""
         if not on_failure:
             return 0
-        match = re.match(r"retry\((\d+)\)", on_failure.strip())
+        match = _RETRY_DIRECTIVE_RE.match(str(on_failure).strip())
         if match:
             return int(match.group(1))
         return 0

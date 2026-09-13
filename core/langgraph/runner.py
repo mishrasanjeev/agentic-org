@@ -110,6 +110,13 @@ async def run_agent(
         Dict with: status, output, confidence, reasoning_trace,
         tool_calls_log, hitl_trigger, error.
     """
+    # --- Step 0: Billing entitlement gate (core.billing.metering, never raises) ---
+    from core.billing.metering import gate_agent_run, meter_agent_run
+
+    limit_block = await gate_agent_run(tenant_id)
+    if limit_block is not None:
+        return limit_block
+
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
     try:
@@ -146,23 +153,6 @@ async def run_agent(
         amended_prompt = amendments_block + system_prompt
         logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
     amended_prompt = _with_reference_resolution_guidance(amended_prompt)
-
-    # Build the graph
-    graph = build_agent_graph(
-        system_prompt=amended_prompt,
-        authorized_tools=authorized_tools,
-        llm_model=llm_model,
-        confidence_floor=confidence_floor,
-        hitl_condition=hitl_condition,
-        connector_config=connector_config,
-        connector_names=connector_names,
-        tenant_id=tenant_id,
-        company_id=company_id,
-        domain=domain,
-    )
-
-    # Compile with checkpointer
-    compiled = graph.compile(checkpointer=_checkpointer)
 
     # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
     # if production has redaction disabled — never silently send PII to LLMs.
@@ -209,6 +199,26 @@ async def run_agent(
             logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
         user_message = _build_user_message(task_input)
 
+    # Build the graph. The tool wrappers share ``pii_token_map`` so the
+    # model's tokenized tool arguments are restored before the connector
+    # call and connector results are re-masked before returning to the LLM.
+    graph = build_agent_graph(
+        system_prompt=amended_prompt,
+        authorized_tools=authorized_tools,
+        llm_model=llm_model,
+        confidence_floor=confidence_floor,
+        hitl_condition=hitl_condition,
+        connector_config=connector_config,
+        connector_names=connector_names,
+        tenant_id=tenant_id,
+        company_id=company_id,
+        domain=domain,
+        pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
+    )
+
+    # Compile with checkpointer
+    compiled = graph.compile(checkpointer=_checkpointer)
+
     initial_state: AgentState = {
         "messages": [
             SystemMessage(content=amended_prompt),
@@ -246,6 +256,7 @@ async def run_agent(
             timeout=MAX_AGENT_DURATION_SEC,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        await meter_agent_run(tenant_id)  # billing usage counter; best-effort
 
         # Extract token usage from AI messages
         tokens_used = 0

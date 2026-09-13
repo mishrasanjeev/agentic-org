@@ -108,9 +108,21 @@ class Settings(BaseSettings):
 
     # Auth
     auth_provider: str = "grantex"
+    # Grantex bearer tokens are accepted only when ``iss`` matches this issuer
+    # and ``aud`` matches this audience (auth/grantex_middleware.py). Audience
+    # is mandatory in strict runtimes. Env: AGENTICORG_GRANTEX_ISSUER/_AUDIENCE.
+    grantex_issuer: str = ""
+    grantex_audience: str = ""
+    # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
+    route_enforcement_mode: str = "enforce"
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
+    # Per-IP throttles key on the first X-Forwarded-For hop instead of the
+    # socket peer (api/client_ip.py). Enable ONLY behind a trusted reverse
+    # proxy (Cloud Run / nginx) that overwrites the header; otherwise the
+    # throttle bucket is client-spoofable. Env: AGENTICORG_TRUST_PROXY_HEADERS.
+    trust_proxy_headers: bool = False
 
     # Google OAuth
     google_oauth_client_id: str = ""  # Google Cloud Console OAuth 2.0 Client ID

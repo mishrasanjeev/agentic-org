@@ -116,11 +116,10 @@ async def test_knowledge_search_embedding_timeout_uses_keyword_fallback(monkeypa
         async def execute(self, _stmt, _params):
             return _Rows()
 
-    monkeypatch.setattr(
-        core.embeddings,
-        "embed_one",
-        lambda _query: (_ for _ in ()).throw(httpx.ReadTimeout("TEI read timed out")),
-    )
+    async def _timeout(_query):
+        raise httpx.ReadTimeout("TEI read timed out")
+
+    monkeypatch.setattr(core.embeddings, "embed_one_async", _timeout)
     monkeypatch.setattr(core.database, "get_tenant_session", lambda _tenant_id: _Session())
 
     results = await knowledge._native_semantic_search(

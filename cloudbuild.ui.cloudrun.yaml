@@ -4,11 +4,19 @@ steps:
       - build
       - -f
       - Dockerfile.ui.cloudrun
+      # Keep the Cloud Build image byte-for-byte equivalent to the CI build
+      # (.github/workflows/deploy.yml), which passes VITE_GA4_ID; without it
+      # this path silently produced a bundle with analytics disabled.
+      - --build-arg
+      - VITE_GA4_ID=$_VITE_GA4_ID
       - -t
-      - asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg-ui-cloudrun:v1
+      - $_IMAGE
       - .
 images:
-  - asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg-ui-cloudrun:v1
+  - $_IMAGE
+substitutions:
+  _IMAGE: asia-south1-docker.pkg.dev/perfect-period-305406/agenticorg/agenticorg-ui-cloudrun:v1
+  _VITE_GA4_ID: ""
 options:
   machineType: E2_HIGHCPU_8
 timeout: 1500s

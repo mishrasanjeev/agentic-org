@@ -48,6 +48,29 @@ class OIDCTokens:
     claims: dict[str, Any]
 
 
+def resolve_client_secret(config: dict[str, Any]) -> str:
+    """Return the OIDC client secret from an ``sso_configs.config`` payload.
+
+    ``client_secret_enc`` (ciphertext from ``core.crypto.encrypt_for_tenant``)
+    is the stored form since audit 2026-09-13. Plaintext ``client_secret``
+    rows written by earlier releases are still honoured for one release
+    with a warning so operators can re-save the config; new writes never
+    persist plaintext (see ``api/v1/sso.py``).
+    """
+    encrypted = config.get("client_secret_enc")
+    if isinstance(encrypted, str) and encrypted:
+        from core.crypto import decrypt_for_tenant
+
+        return decrypt_for_tenant(encrypted)
+    legacy = config.get("client_secret", "")
+    if legacy:
+        logger.warning(
+            "sso_client_secret_plaintext_legacy_row",
+            hint="re-save the SSO config to migrate the secret to encrypted storage",
+        )
+    return legacy or ""
+
+
 class OIDCProvider:
     """A single tenant's OIDC provider configuration.
 
@@ -55,7 +78,7 @@ class OIDCProvider:
         {
           "issuer": "https://login.microsoftonline.com/<tid>/v2.0",
           "client_id": "...",
-          "client_secret_ref": "secret://path/to/client_secret",
+          "client_secret_enc": "<ciphertext from core.crypto.encrypt_for_tenant>",
           "scopes": ["openid", "profile", "email"],
           "redirect_uri": "https://app.agenticorg.ai/api/v1/auth/sso/azure/callback"
         }
@@ -66,7 +89,7 @@ class OIDCProvider:
         self.issuer = self._validate_issuer(config["issuer"])
         self._issuer_host = urlparse(self.issuer).hostname or ""
         self.client_id = config["client_id"]
-        self.client_secret = config.get("client_secret", "")
+        self.client_secret = resolve_client_secret(config)
         self.redirect_uri = config["redirect_uri"]
         self.scopes = config.get("scopes") or ["openid", "profile", "email"]
         self._discovery: dict[str, Any] | None = None

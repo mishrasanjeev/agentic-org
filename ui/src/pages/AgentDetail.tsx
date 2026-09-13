@@ -437,8 +437,8 @@ export default function AgentDetail() {
       </div>
 
       {activeTab === "overview" && <OverviewTab agent={agent} onUpdated={fetchAgent} />}
-      {activeTab === "config" && <ConfigTab agent={agent} />}
-      {activeTab === "prompt" && <PromptTab agent={agent} />}
+      {activeTab === "config" && <ConfigTab agent={agent} onUpdated={() => fetchAgent(true)} />}
+      {activeTab === "prompt" && <PromptTab agent={agent} onUpdated={() => fetchAgent(true)} />}
       {activeTab === "shadow" && <ShadowTab agent={agent} onUpdated={() => fetchAgent(true)} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
@@ -638,16 +638,6 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
     if (!expanded) return;
     let cancelled = false;
 
-    // Keep the feedback fetch so the thumbs-up/down controls still have a
-    // run_id to attach to.
-    api.get(`/agents/${agentId}/feedback?limit=1`).then(({ data }) => {
-      if (cancelled) return;
-      const items = Array.isArray(data) ? data : data?.items || [];
-      if (items.length > 0) {
-        setRunResult({ task_id: items[0].run_id, status: "completed" });
-      }
-    }).catch(() => {});
-
     api
       .get(`/agents/${agentId}/explanation/latest`)
       .then(({ data }) => {
@@ -655,9 +645,15 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
         if (!data?.has_run) {
           setExplanationHasRun(false);
           setExplanation(null);
+          setRunResult(null);
           return;
         }
         setExplanationHasRun(true);
+        // The explanation payload carries the run this trace belongs to;
+        // the thumbs-up/down controls attach feedback to that run_id.
+        setRunResult(
+          data.run_id ? { task_id: String(data.run_id), status: data.status || "completed" } : null,
+        );
         setExplanation({
           bullets: Array.isArray(data.bullets) ? data.bullets : [],
           confidence: typeof data.confidence === "number" ? data.confidence : undefined,
@@ -828,6 +824,7 @@ function LearningTab({ agent }: { agent: Agent }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<{ amendment?: string; reason?: string; confidence?: number } | null>(null);
   const [loadingFeedback, setLoadingFeedback] = useState(true);
+  const [amendmentError, setAmendmentError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -863,14 +860,30 @@ function LearningTab({ agent }: { agent: Agent }) {
   }
 
   async function applyAmendment(amendment: string) {
+    setAmendmentError(null);
     try {
       // Apply by updating the agent's prompt_amendments via the API
       const current = [...amendments, amendment];
       await api.patch(`/agents/${agent.id}`, { prompt_amendments: current });
       setAmendments(current);
       setAnalysisResult(null);
-    } catch {
-      /* ignore */
+    } catch (err) {
+      setAmendmentError(errorDetailToMessage(err, "Failed to apply amendment"));
+    }
+  }
+
+  async function dismissAmendment(idx: number) {
+    setAmendmentError(null);
+    try {
+      const { data } = await api.delete(`/agents/${agent.id}/amendments/${idx}`);
+      const next = amendments.filter((_, i) => i !== idx);
+      setAmendments(next);
+      if (data && typeof data.count === "number" && data.count !== next.length) {
+        // Server list drifted from ours; reload to stay truthful.
+        loadData();
+      }
+    } catch (err) {
+      setAmendmentError(errorDetailToMessage(err, "Failed to remove amendment"));
     }
   }
 
@@ -903,7 +916,7 @@ function LearningTab({ agent }: { agent: Agent }) {
                     variant="outline"
                     size="sm"
                     className="ml-2 text-xs"
-                    onClick={() => setAmendments(amendments.filter((_, i) => i !== idx))}
+                    onClick={() => dismissAmendment(idx)}
                   >
                     Dismiss
                   </Button>
@@ -912,6 +925,9 @@ function LearningTab({ agent }: { agent: Agent }) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No learned rules yet. Submit feedback and run analysis to generate amendments.</p>
+          )}
+          {amendmentError && (
+            <p className="text-sm text-destructive" data-testid="amendment-error">{amendmentError}</p>
           )}
 
           {/* Analysis result */}
@@ -978,7 +994,7 @@ function LearningTab({ agent }: { agent: Agent }) {
 }
 
 /* â”€â”€ï¿½ï¿½ Config Tab â”€â”€â”€ */
-function ConfigTab({ agent }: { agent: Agent }) {
+function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1028,6 +1044,7 @@ function ConfigTab({ agent }: { agent: Agent }) {
     try {
       const payload: Record<string, any> = {
         confidence_floor: editConfidenceFloor / 100,
+        max_retries: editMaxRetries,
       };
       if (editLlmModel) {
         payload.llm = { model: editLlmModel };
@@ -1037,6 +1054,7 @@ function ConfigTab({ agent }: { agent: Agent }) {
       }
       await api.patch(`/agents/${agent.id}`, payload);
       setEditing(false);
+      await onUpdated();
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       const msg = typeof detail === "string"
@@ -1168,7 +1186,7 @@ function ConfigTab({ agent }: { agent: Agent }) {
 }
 
 /* â”€â”€â”€ Prompt Tab â”€â”€â”€ */
-function PromptTab({ agent }: { agent: Agent }) {
+function PromptTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
   const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(agent.system_prompt_text || "");
@@ -1187,10 +1205,12 @@ function PromptTab({ agent }: { agent: Agent }) {
     try {
       await agentsApi.update(agent.id, {
         system_prompt_text: editText,
-        prompt_change_reason: editReason || undefined,
+        change_reason: editReason || undefined,
       });
       setEditing(false);
       setEditReason("");
+      // Refetch so the read-only view and the next Edit prefill show the saved prompt.
+      await onUpdated();
       // Refresh history
       agentsApi.promptHistory(agent.id).then(({ data }) => setHistory(data || [])).catch(() => {});
     } catch (err: any) {
@@ -1610,12 +1630,46 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
 }
 
 /* â”€â”€â”€ Cost Tab â”€â”€â”€ */
+type AgentBudget = {
+  monthly_cap_usd?: number;
+  monthly_spent_usd?: number;
+  monthly_pct_used?: number;
+  warnings?: string[];
+};
+
 function CostTab({ agent }: { agent: Agent }) {
+  // Real spend comes from GET /agents/{id}/budget (aggregated task costs);
+  // cost_controls.cost_current_usd is never advanced by the runtime, so it is
+  // only honoured as an operator-recorded floor (the higher value wins).
+  const [budget, setBudget] = useState<AgentBudget | null>(null);
+  const [budgetError, setBudgetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBudget(null);
+    setBudgetError(null);
+    api
+      .get(`/agents/${agent.id}/budget`)
+      .then(({ data }) => {
+        if (!cancelled) setBudget(data || {});
+      })
+      .catch((err) => {
+        if (!cancelled) setBudgetError(errorDetailToMessage(err, "Failed to load budget usage"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agent.id]);
+
   const monthlyCap =
+    budget?.monthly_cap_usd ??
     agent.cost_controls?.monthly_cap_usd ??
     agent.cost_controls?.monthly_cost_cap_usd ??
     0;
-  const costCurrent = agent.cost_controls?.cost_current_usd ?? 0;
+  const costCurrent = Math.max(
+    budget?.monthly_spent_usd ?? 0,
+    agent.cost_controls?.cost_current_usd ?? 0,
+  );
   const utilizationPct = monthlyCap > 0 ? Math.min((costCurrent / monthlyCap) * 100, 100) : 0;
 
   const isOverBudget = costCurrent > monthlyCap && monthlyCap > 0;
@@ -1638,11 +1692,19 @@ function CostTab({ agent }: { agent: Agent }) {
           </div>
           <div className="flex flex-col gap-1">
             <span className="text-muted-foreground text-xs uppercase tracking-wide">Current Spend</span>
-            <span className={`text-2xl font-bold ${isOverBudget ? "text-red-600" : ""}`}>
-              ${costCurrent.toFixed(2)}
+            <span className={`text-2xl font-bold ${isOverBudget ? "text-red-600" : ""}`} data-testid="cost-current-spend">
+              {budgetError ? "N/A" : budget ? `$${costCurrent.toFixed(2)}` : "Loading..."}
             </span>
           </div>
         </div>
+        {budgetError && <p className="text-sm text-destructive">{budgetError}</p>}
+        {budget?.warnings && budget.warnings.length > 0 && (
+          <ul className="text-sm text-yellow-700 list-disc list-inside">
+            {budget.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
+        )}
 
         {/* Budget Utilization Bar */}
         {monthlyCap > 0 && (

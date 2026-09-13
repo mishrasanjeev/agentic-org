@@ -1,0 +1,22 @@
+{
+  "revision": "v6z12_voice_runtime",
+  "table": "voice_calls",
+  "columns": [
+    "transcript_encrypted"
+  ],
+  "rollback_doc": "Drop voice_calls before application traffic is enabled. The table is new in this revision, so rollback does not transform or discard pre-existing ciphertext.",
+  "dry_run": false,
+  "started_at": "2026-09-13T01:50:58.179584+00:00",
+  "row_counts": {
+    "voice_calls": 0
+  },
+  "decrypt_post_sample": {
+    "transcript_encrypted": 0
+  },
+  "decrypt_pre_sample": {
+    "transcript_encrypted": 0
+  },
+  "pre_count": 0,
+  "post_count": 0,
+  "completed_at": "2026-09-13T01:50:58.182994+00:00"
+}

@@ -136,4 +136,35 @@ describe("AuthProvider route-aware session hydration", () => {
       expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
     });
   });
+
+  it("clears the selected company_id on a successful logout", async () => {
+    // Audit finding #11: company_id is tenant-scoped and must not leak to the
+    // next user of this browser.
+    localStorage.setItem("company_id", "comp-from-previous-user");
+    vi.mocked(fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          email: "admin@example.com",
+          name: "Admin",
+          role: "admin",
+          domain: "ops",
+          tenant_id: "tenant-1",
+          onboarding_complete: true,
+        }),
+      } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200 } as Response);
+
+    renderAt("/dashboard");
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("true");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("authenticated")).toHaveTextContent("false");
+    });
+    expect(localStorage.getItem("company_id")).toBeNull();
+  });
 });

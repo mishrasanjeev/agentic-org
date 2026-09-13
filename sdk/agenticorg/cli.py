@@ -3,7 +3,7 @@
 Usage:
     agenticorg agents list
     agenticorg agents run commerce_sales_agent --action buyer_discovery_preview \
-        --input '{"merchant_id": "merchant_demo"}'
+        --input '{"merchant_id": "merchant_demo"}' --company-id <company-uuid>
     agenticorg agents generate "Create a contract intelligence agent using Confluence and Jira"
     agenticorg workflows generate "Review vendor renewal risk"
     agenticorg workflows run <workflow-id> --input '{"vendor_id": "V-100"}'
@@ -47,6 +47,7 @@ def main() -> None:
     run_p.add_argument("agent_type", help="Agent type or UUID")
     run_p.add_argument("--input", dest="input_json", help="JSON input data")
     run_p.add_argument("--action", dest="run_action", default="process", help="Action (default: process)")
+    run_p.add_argument("--company-id", help="Company UUID (required when running by agent type)")
 
     gen_p = agents_sub.add_parser("generate", help="Generate an agent from a description")
     gen_p.add_argument("description", help="Plain-English agent description")
@@ -173,7 +174,12 @@ def _handle_agents(client: Any, args: argparse.Namespace) -> None:
         _print_json(client.agents.get(args.agent_id))
     elif args.agents_action == "run":
         inputs = _load_json(args.input_json, default={})
-        result = client.agents.run(args.agent_type, action=args.run_action, inputs=inputs)
+        result = client.agents.run(
+            args.agent_type,
+            action=args.run_action,
+            inputs=inputs,
+            company_id=args.company_id,
+        )
         _print_json(result)
     elif args.agents_action == "generate":
         _print_json(

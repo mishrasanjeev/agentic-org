@@ -649,7 +649,11 @@ async def _execute_workflow_bg(
 
                     # Create HITLQueue entry for approval steps
                     if created and step_status == "waiting_hitl":
-                        timeout_h = step_def.get("timeout_hours", 4)
+                        from core.push.sender import notify_approval_created as _push_approval_created
+                        from workflows.run_sync import hitl_timeout_hours, schedule_hitl_timeout
+
+                        timeout_h = hitl_timeout_hours(step_result, step_def)
+                        hitl_expires_at = datetime.now(UTC) + timedelta(hours=timeout_h)
                         hitl_agent_id = step_row.agent_id
                         if not hitl_agent_id:
                             hitl_agent_id = (
@@ -660,8 +664,7 @@ async def _execute_workflow_bg(
                                 )
                             ).scalar_one_or_none()
                         if hitl_agent_id:
-                            session.add(
-                                HITLQueue(
+                            hitl_item = HITLQueue(
                                     tenant_id=tenant_id,
                                     workflow_run_id=run_id,
                                     agent_id=hitl_agent_id,
@@ -681,20 +684,30 @@ async def _execute_workflow_bg(
                                         "step_id": step_id,
                                         "engine_run_id": engine_run_id,
                                     },
-                                    expires_at=datetime.now(UTC)
-                                    + timedelta(hours=timeout_h),
-                                )
+                                    expires_at=hitl_expires_at,
+                            )
+                            session.add(hitl_item)
+                            # HITLQueue.id is a Python-side default applied at
+                            # flush; push must not carry approval_id="None".
+                            await session.flush()
+                            schedule_hitl_timeout(engine_run_id, step_id, hitl_expires_at)
+                            await _push_approval_created(
+                                str(tenant_id), item_id=str(hitl_item.id), action=step_id
                             )
 
                 db_run.steps_completed = _run_steps_completed(state)
                 db_run.steps_total = _run_steps_total(state, db_run.steps_total)
-                db_run.status = state.get("status", "running")
-                if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
-                    db_run.completed_at = datetime.now(UTC)
-                if state.get("status") == "completed":
-                    db_run.result = state.get("step_results")
+                # A concurrent cancel already finalised the DB row; an in-flight
+                # engine checkpoint must never downgrade a terminal status.
+                db_status_terminal = db_run.status in TERMINAL_WORKFLOW_STATUSES
+                if not db_status_terminal:
+                    db_run.status = state.get("status", "running")
+                    if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
+                        db_run.completed_at = datetime.now(UTC)
+                    if state.get("status") == "completed":
+                        db_run.result = state.get("step_results")
 
-            if state.get("status") in TERMINAL_WORKFLOW_STATUSES | PAUSED_WORKFLOW_STATUSES:
+            if db_status_terminal or state.get("status") in TERMINAL_WORKFLOW_STATUSES | PAUSED_WORKFLOW_STATUSES:
                 break
 
     # enterprise-gate: broad-except-ok reason=background-workflow-boundary-marks-db-run-failed
@@ -707,9 +720,10 @@ async def _execute_workflow_bg(
                         select(WorkflowRun).where(WorkflowRun.id == run_id)
                     )
                 ).scalar_one()
-                db_run.status = "failed"
-                db_run.error = {"message": str(exc)}
-                db_run.completed_at = datetime.now(UTC)
+                if db_run.status not in TERMINAL_WORKFLOW_STATUSES:
+                    db_run.status = "failed"
+                    db_run.error = {"message": str(exc)}
+                    db_run.completed_at = datetime.now(UTC)
         # enterprise-gate: broad-except-ok reason=background-error-handler-logs-secondary-db-failure
         except Exception as inner:
             _log.error("workflow_bg_error_handler_failed", error=str(inner))
@@ -718,8 +732,10 @@ async def _execute_workflow_bg(
         # ── A/B variant outcome tracking ───────────────────────────────
         # If this run was routed via a variant, increment the variant's
         # success/failure counters so the operator can pick a winner.
+        # Only terminal runs count; a paused (HITL/wait) run is recorded
+        # by the resume path once it actually finishes.
         try:
-            from core.workflow_ab import record_outcome
+            from workflows.run_sync import record_ab_outcome_if_terminal
 
             async with get_tenant_session(tenant_id) as session:
                 db_run = (
@@ -727,14 +743,7 @@ async def _execute_workflow_bg(
                         select(WorkflowRun).where(WorkflowRun.id == run_id)
                     )
                 ).scalar_one_or_none()
-                if db_run is not None:
-                    ab = (db_run.context or {}).get("ab") or {}
-                    variant_id = ab.get("variant_id")
-                    if variant_id:
-                        await record_outcome(
-                            _uuid.UUID(variant_id),
-                            success=db_run.status == "completed",
-                        )
+                await record_ab_outcome_if_terminal(db_run)
         # enterprise-gate: broad-except-ok reason=ab-outcome-recording-is-best-effort-after-run-terminal
         except Exception:
             _log.debug("workflow_ab_record_outcome_skipped", run_id=str(run_id))
@@ -793,7 +802,8 @@ async def run_workflow(
             from core.workflow_ab import pick_variant
 
             subject = (body.payload or {}).get("user_id") or tenant_id
-            variant_pick = await pick_variant(wf.id, str(subject))
+            # tenant_id binds the RLS context for workflow_variants.
+            variant_pick = await pick_variant(wf.id, str(subject), tenant_id=tenant_id)
         # enterprise-gate: broad-except-ok reason=ab-variant-selection-falls-back-to-base-definition
         except Exception:
             _log.debug("workflow_ab_pick_variant_skipped", workflow_id=str(wf_id))

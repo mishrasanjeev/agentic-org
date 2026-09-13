@@ -545,7 +545,8 @@ function validate(data, shortDoc, fullDoc) {
     "Google Cloud Run",
     "React " + data.meta.reactMajor,
     "Python " + data.meta.python,
-    "$2/month",
+    // Pro plan price: keep in sync with core/billing/catalog.py (99_00 USD).
+    "$99/month",
     "$499/month",
     "OACP artifacts",
     "third-party certification",

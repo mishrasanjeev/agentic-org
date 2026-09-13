@@ -34,6 +34,11 @@ def feed_runtime() -> Generator[tuple[InMemoryFeedEventRepository, InMemoryFeedE
         reset_live_feed_for_tests()
 
 
+# Session credentials travel in the cookie or the Authorization header;
+# ``?token=`` query strings are rejected (audit 2026-09-13: JWTs in logs).
+_AUTH = {"Authorization": "Bearer valid"}
+
+
 def _test_app() -> FastAPI:
     app = FastAPI()
     app.include_router(feed.router, prefix="/api/v1")
@@ -51,13 +56,26 @@ def test_unauthenticated_websocket_handshake_is_rejected(feed_runtime) -> None:
     assert exc.value.code == 1008
 
 
+def test_query_string_token_is_not_honoured(feed_runtime) -> None:
+    tenant_id = str(uuid.uuid4())
+    claims = {"sub": "user-1", "agenticorg:tenant_id": tenant_id, "grantex:scopes": []}
+    client = TestClient(_test_app())
+
+    with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}?token=valid"):
+                pass
+
+    assert exc.value.code == 1008
+
+
 def test_authenticated_matching_tenant_connects(feed_runtime) -> None:
     tenant_id = str(uuid.uuid4())
     claims = {"sub": "user-1", "agenticorg:tenant_id": tenant_id, "grantex:scopes": []}
     client = TestClient(_test_app())
 
     with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
-        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}?token=valid") as websocket:
+        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
             message = websocket.receive_json()
 
     assert message == {"type": "heartbeat", "tenant_id": tenant_id, "sequence": None}
@@ -71,7 +89,7 @@ def test_authenticated_tenant_mismatch_is_rejected(feed_runtime) -> None:
 
     with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
         with pytest.raises(WebSocketDisconnect) as exc:
-            with client.websocket_connect(f"/api/v1/ws/feed/{path_tenant_id}?token=valid"):
+            with client.websocket_connect(f"/api/v1/ws/feed/{path_tenant_id}", headers=_AUTH):
                 pass
 
     assert exc.value.code == 1008
@@ -141,7 +159,7 @@ def test_bad_json_socket_message_is_isolated(feed_runtime) -> None:
     client = TestClient(_test_app())
 
     with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
-        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}?token=valid") as websocket:
+        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
             assert websocket.receive_json()["type"] == "heartbeat"
             websocket.send_text("{bad-json")
             assert websocket.receive_json()["code"] == "invalid_json"

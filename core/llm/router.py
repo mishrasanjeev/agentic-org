@@ -41,7 +41,7 @@ from typing import Any
 
 import structlog
 
-from core.config import external_keys, settings
+from core.config import external_keys, is_relaxed_env, settings
 
 logger = structlog.get_logger()
 
@@ -189,11 +189,35 @@ def _gemini_daily_cap_usd() -> float:
         return 10.0
 
 
-async def _todays_gemini_spend_usd() -> float:
+def _gemini_platform_daily_cap_usd() -> float:
+    """Platform-wide daily cap across all tenants. Default $100; ``0`` disables."""
+    raw = (os.getenv("AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP") or "100.0").strip()
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning(
+            "gemini_platform_daily_cap_invalid",
+            value=raw,
+            using_default=100.0,
+        )
+        return 100.0
+
+
+async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
     """Sum today's (UTC) ``cost_usd`` from ``agent_task_results``.
 
-    Read-only, single SELECT. Database lookup failure fails closed so
-    the Gemini cap cannot be bypassed by treating unknown spend as zero.
+    With ``tenant_id`` the SUM is restricted to that tenant so one
+    tenant's spend cannot exhaust the cap for everyone; without it the
+    SUM is platform-wide. Read-only, single SELECT. Database lookup
+    failure fails closed so the cap cannot be bypassed by treating
+    unknown spend as zero.
+
+    ``agent_task_results`` is FORCE-RLS protected: a raw session with no
+    tenant GUC sums zero rows and the cap silently never trips. The
+    per-tenant SUM therefore runs inside ``get_tenant_session`` (an
+    unbindable tenant id is a lookup failure → refused), and the
+    platform-wide SUM disables row security for the statement so a role
+    that cannot bypass RLS errors out loudly instead of reading zero.
     """
     try:
         from datetime import UTC, datetime
@@ -201,43 +225,68 @@ async def _todays_gemini_spend_usd() -> float:
         from sqlalchemy import text as _text
         from sqlalchemy.exc import SQLAlchemyError
 
-        from core.database import async_session_factory
+        from core.database import async_session_factory, get_tenant_session
 
         utc_today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        async with async_session_factory() as session:
-            row = (await session.execute(
-                _text(
-                    "SELECT COALESCE(SUM(cost_usd), 0) FROM agent_task_results "
-                    "WHERE created_at >= :since AND llm_model LIKE 'gemini%'"
-                ),
-                {"since": utc_today},
-            )).scalar_one()
+        sql = (
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM agent_task_results "
+            "WHERE created_at >= :since AND llm_model LIKE 'gemini%'"
+        )
+        params: dict[str, Any] = {"since": utc_today}
+        if tenant_id:
+            sql += " AND tenant_id = CAST(:tenant_id AS uuid)"
+            params["tenant_id"] = str(tenant_id)
+            async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
+                row = (await session.execute(_text(sql), params)).scalar_one()
+        else:
+            async with async_session_factory() as session:
+                await session.execute(_text("SET LOCAL row_security = off"))
+                row = (await session.execute(_text(sql), params)).scalar_one()
         return float(row or 0.0)
-    except SQLAlchemyError as exc:
-        logger.warning("gemini_daily_spend_lookup_failed", error=str(exc))
+    except (SQLAlchemyError, ValueError) as exc:
+        logger.warning(
+            "gemini_daily_spend_lookup_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         raise DailyBudgetExceeded(
             "Gemini daily spend lookup unavailable; refusing request to "
             "avoid bypassing AGENTICORG_GEMINI_DAILY_USD_CAP."
         ) from exc
 
 
-async def assert_under_gemini_cap(estimated_cost_usd: float = 0.0) -> None:
-    """Refuse the call when today's spend + estimate would exceed the cap.
+async def assert_under_gemini_cap(
+    estimated_cost_usd: float = 0.0, tenant_id: str | None = None
+) -> None:
+    """Refuse the call when today's spend + estimate would exceed a cap.
+
+    Two caps apply: ``AGENTICORG_GEMINI_DAILY_USD_CAP`` is per tenant
+    (scoped by ``tenant_id``; without a tenant it is applied to the
+    platform-wide SUM, fail closed) and
+    ``AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP`` is platform-wide.
 
     Call sites: :class:`LLMRouter._call_gemini` invokes this BEFORE
     making the upstream API call so we never mint a charge that
-    pushes us past the cap. Set the cap to ``0`` to disable.
+    pushes us past the cap. Set a cap to ``0`` to disable it.
     """
     cap = _gemini_daily_cap_usd()
-    if cap <= 0:
-        return
-    spent = await _todays_gemini_spend_usd()
-    if spent + estimated_cost_usd >= cap:
-        raise DailyBudgetExceeded(
-            f"Gemini daily spend cap reached: spent ${spent:.4f} of "
-            f"${cap:.2f}/day. Set AGENTICORG_GEMINI_DAILY_USD_CAP higher "
-            "or wait for the UTC day to roll over."
-        )
+    if cap > 0:
+        spent = await _todays_gemini_spend_usd(tenant_id)
+        if spent + estimated_cost_usd >= cap:
+            raise DailyBudgetExceeded(
+                f"Gemini daily spend cap reached: spent ${spent:.4f} of "
+                f"${cap:.2f}/day. Set AGENTICORG_GEMINI_DAILY_USD_CAP higher "
+                "or wait for the UTC day to roll over."
+            )
+    platform_cap = _gemini_platform_daily_cap_usd()
+    if platform_cap > 0:
+        platform_spent = await _todays_gemini_spend_usd()
+        if platform_spent + estimated_cost_usd >= platform_cap:
+            raise DailyBudgetExceeded(
+                f"Gemini platform daily spend cap reached: spent ${platform_spent:.4f} of "
+                f"${platform_cap:.2f}/day. Set AGENTICORG_GEMINI_PLATFORM_DAILY_USD_CAP "
+                "higher or wait for the UTC day to roll over."
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -455,23 +504,35 @@ class LLMRouter:
         model_override: str | None = None,
         temperature: float | None = None,
         max_tokens: int = 4096,
+        tenant_id: str | None = None,
     ) -> LLMResponse:
         """Send completion request with automatic failover."""
         model = model_override or self.primary_model
         temp = temperature if temperature is not None else self.temperature
+        # Only forward tenant_id when set so existing _call_model call shapes stay stable.
+        scope = {"tenant_id": tenant_id} if tenant_id else {}
 
         try:
-            return await self._call_model(model, messages, temp, max_tokens)
+            return await self._call_model(model, messages, temp, max_tokens, **scope)
+        except DailyBudgetExceeded:
+            # The cap is per day/tenant, not per model: retrying another
+            # Gemini model would just bypass it.
+            raise
         # enterprise-gate: broad-except-ok reason=llm-primary-failure-falls-back-or-reraises
         except Exception as e:
             logger.warning("llm_primary_failed", model=model, error=str(e))
             if model != self.fallback_model:
                 logger.info("llm_falling_back", fallback=self.fallback_model)
-                return await self._call_model(self.fallback_model, messages, temp, max_tokens)
+                return await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
             raise
 
     async def _call_model(
-        self, model: str, messages: list[dict], temperature: float, max_tokens: int
+        self,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        max_tokens: int,
+        tenant_id: str | None = None,
     ) -> LLMResponse:
         start = time.monotonic()
 
@@ -490,7 +551,9 @@ class LLMRouter:
         # reproducible. See docs/hermetic_test_doubles.md.
         from core.test_doubles import fake_llm  # noqa: PLC0415 — local import keeps prod cold-path lean
 
-        if fake_llm.is_active():
+        # Relaxed-runtime gate: a leaked AGENTICORG_TEST_FAKE_LLM flag must
+        # never route production traffic to the deterministic fake.
+        if fake_llm.is_active() and is_relaxed_env(settings.env):
             payload = fake_llm.fake_complete(
                 model=model,
                 messages=messages,
@@ -500,13 +563,17 @@ class LLMRouter:
             return LLMResponse(**payload)
 
         if "gemini" in model:
-            return await self._call_gemini(model, messages, temperature, max_tokens, start)
+            return await self._call_gemini(
+                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
+            )
         elif "claude" in model:
             return await self._call_claude(model, messages, temperature, max_tokens, start)
         else:  # gpt
             return await self._call_openai(model, messages, temperature, max_tokens, start)
 
-    async def _call_gemini(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+    async def _call_gemini(
+        self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
+    ) -> LLMResponse:
         """Call Google Gemini via the google.genai SDK.
 
         Free tier: 15 RPM, 1M tokens/day for Flash and Flash-Lite.
@@ -519,7 +586,7 @@ class LLMRouter:
         from google import genai
 
         # Hard daily cap — fail-closed BEFORE we mint a new charge.
-        await assert_under_gemini_cap()
+        await assert_under_gemini_cap(tenant_id=tenant_id)
 
         if not external_keys.google_gemini_api_key:
             raise LLMProviderConfigurationError("Gemini provider is not configured")

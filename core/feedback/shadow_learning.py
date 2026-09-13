@@ -149,6 +149,52 @@ def learned_review_policy(agent: Any) -> dict[str, Any]:
     }
 
 
+def promotion_evidence_gate(agent: Any) -> dict[str, Any]:
+    """Fail-closed evidence check for shadow -> active promotion.
+
+    ``shadow_accuracy_current`` is a blend of the model's *self-reported*
+    confidence and human HITL decisions. On its own it is not accuracy: an
+    agent that never met a reviewer but reports 0.95 confidence on every
+    run would sail through a floor check. Promotion therefore additionally
+    requires a minimum number of terminal human reviews and a human
+    confidence at or above the same floor the caller applies to the blend.
+
+    Returns ``{"ok": bool, "reason": str, ...evidence}``. Callers decide the
+    HTTP mapping. ``shadow_min_samples <= 0`` is the explicit opt-out and
+    is handled by the caller, not here.
+    """
+    human_reviews = _integer_metric(agent, "shadow_feedback_count")
+    human = _decimal_metric(agent, "shadow_human_confidence_current")
+    floor = max(
+        _decimal_metric(agent, "shadow_accuracy_floor", Decimal("0")) or Decimal("0"),
+        LEARNED_ROUTINE_CONFIDENCE_FLOOR,
+    )
+    evidence = {
+        "human_reviews": human_reviews,
+        "required_human_reviews": MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY,
+        "human_confidence": float(human) if human is not None else None,
+        "required_human_confidence": float(floor),
+    }
+    if human_reviews < MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY:
+        return {
+            "ok": False,
+            "reason": (
+                f"Shadow agent has {human_reviews}/{MIN_HUMAN_REVIEWS_FOR_LEARNED_AUTONOMY} "
+                "terminal human reviews; model self-reported confidence alone cannot promote"
+            ),
+            **evidence,
+        }
+    if human is None or human < floor:
+        return {
+            "ok": False,
+            "reason": (
+                f"Human review confidence {evidence['human_confidence']} is below floor {float(floor)}"
+            ),
+            **evidence,
+        }
+    return {"ok": True, "reason": "human_evidence_sufficient", **evidence}
+
+
 async def capture_hitl_feedback(
     session: AsyncSession,
     *,

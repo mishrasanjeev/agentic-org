@@ -408,6 +408,13 @@ async def test_grantex_auth_explicit_bearer_wins_over_ambient_cookie() -> None:
 
     with patch("auth.grantex_middleware._is_grantex_token", return_value=False), \
          patch(
+             # 2026-09-13: legacy tokens fail closed on a missing users row;
+             # no DB-backed user exists for this mocked subject.
+             "auth.grantex_middleware.check_user_session_state",
+             new_callable=AsyncMock,
+             return_value=None,
+         ), \
+         patch(
              "auth.grantex_middleware.validate_token",
              new_callable=AsyncMock,
              return_value=mock_claims,

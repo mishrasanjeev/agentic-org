@@ -151,5 +151,5 @@ class TestBillingConfigurationMessage:
         from api.v1 import billing
 
         src = inspect.getsource(billing.subscribe_india)
-        assert "PINELABS_API_KEY" in src
+        assert "PLURAL_CLIENT_ID" in src
         assert "503" in src

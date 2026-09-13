@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -17,12 +18,14 @@ from workflows.event_waits import WorkflowEventWaitStore
 from workflows.parallel_executor import execute_parallel
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
+    PAUSED_STEP_STATUSES,
     AgentExecutionError,
     ConnectorToolConfigError,
     ConnectorToolExecutionError,
     ExternalWriteConfirmationMissingError,
     MissingAgentConfigError,
     MissingLLMProviderConfigError,
+    NotifyActionContainedError,
     NotifySideEffectNotConfiguredError,
     ParallelChildError,
     UnknownStepStatusError,
@@ -237,7 +240,8 @@ async def _load_workflow_connector_config(
     if isinstance(creds, dict) and "_encrypted" in creds:
         from core.crypto import decrypt_for_tenant
 
-        creds = _json.loads(decrypt_for_tenant(creds["_encrypted"]))
+        # KMS-backed decrypt is synchronous (gRPC); keep it off the event loop.
+        creds = _json.loads(await asyncio.to_thread(decrypt_for_tenant, creds["_encrypted"]))
     if isinstance(creds, dict):
         config.update(creds)
     return config
@@ -640,7 +644,9 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             ),
             task=TaskInput(action=action, inputs=inputs, context=state.get("context", {})),
             hitl_policy=HITLPolicy(),
-            metadata=TaskMetadata(),
+            # Forward the step's idempotency_key so a retried agent step can be
+            # de-duplicated by the tool gateway instead of replaying writes.
+            metadata=TaskMetadata(idempotency_key=str(step.get("idempotency_key") or "")),
         )
 
         result = await agent_instance.execute(task)
@@ -925,7 +931,61 @@ async def _execute_notify(step: dict, state: dict) -> dict[str, Any]:
     if connector in {"email", "sendgrid", "smtp"} and to and html:
         from core.email import send_email
 
-        if send_email(str(to), str(subject), str(html)):
+        # Same governance boundary as connector writes: an email is a
+        # customer-facing side effect, so it goes through the action policy
+        # with the run's tenant/company/domain before anything is sent.
+        tenant_id = str(state.get("tenant_id") or "")
+        requested_company_id = step.get("company_id") or _state_lookup(state, "company_id")
+        domain = step.get("domain") or _state_lookup(state, "domain")
+        if is_strict_runtime_env(settings.env) or tenant_id or requested_company_id or domain:
+            from core.governance.action_policy import (
+                ActionContext,
+                database_feature_flag_resolver,
+                evaluate_action,
+            )
+
+            company_id: str | None = None
+            if requested_company_id:
+                try:
+                    company_id = str(await _validated_workflow_company(tenant_id, requested_company_id))
+                except ValueError as exc:
+                    return failure_result(
+                        step_id=step["id"],
+                        step_type="notify",
+                        failure=NotifyActionContainedError(
+                            step_id=step["id"], connector=connector, reason=str(exc)
+                        ),
+                    )
+            decision = await evaluate_action(
+                "email:send_email",
+                context=ActionContext(
+                    tenant_id=tenant_id or None,
+                    company_id=company_id,
+                    domain=domain,
+                    runtime_env=settings.env,
+                ),
+                feature_flags=database_feature_flag_resolver,
+            )
+            if not decision.dispatch_allowed:
+                governance = decision.to_dict()
+                logger.warning(
+                    "notify_action_contained",
+                    extra={"step_id": step["id"], "connector": connector, "reason": decision.reason},
+                )
+                return failure_result(
+                    step_id=step["id"],
+                    step_type="notify",
+                    failure=NotifyActionContainedError(
+                        step_id=step["id"],
+                        connector=connector,
+                        reason=str(decision.reason),
+                        governance=governance,
+                    ),
+                    output={"governance": governance},
+                )
+
+        # send_email is synchronous SMTP; never block the event loop.
+        if await asyncio.to_thread(send_email, str(to), str(subject), str(html)):
             return {
                 "step_id": step["id"],
                 "type": "notify",
@@ -993,6 +1053,32 @@ async def _execute_sub_workflow(step: dict, state: dict) -> dict[str, Any]:
     )
     result = await sub_engine.execute(sub_run_id)
     status = result.get("status", "failed")
+    if status in PAUSED_STEP_STATUSES:
+        # Fail closed: the parent engine cannot resume a nested run. Surfacing
+        # the child's pause would strand the parent forever and route a HITL
+        # decision to the wrong run. Pausing steps (human_in_loop, wait,
+        # wait_for_event) inside a sub_workflow are unsupported by design.
+        logger.warning(
+            "sub_workflow_pause_unsupported",
+            extra={
+                "run_id": state.get("id", ""),
+                "step_id": step["id"],
+                "sub_run_id": sub_run_id,
+                "sub_status": status,
+            },
+        )
+        return {
+            "step_id": step["id"],
+            "type": "sub_workflow",
+            "status": "failed",
+            "sub_run_id": sub_run_id,
+            "output": result.get("step_results", {}),
+            "code": "sub_workflow_pause_unsupported",
+            "error": (
+                f"sub_workflow_pause_unsupported: nested run {sub_run_id} paused with "
+                f"status '{status}'; pausing steps are not supported inside sub_workflow"
+            ),
+        }
     if status not in ALLOWED_STEP_STATUSES:
         status = "failed"
 

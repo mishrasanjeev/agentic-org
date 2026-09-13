@@ -19,3 +19,14 @@ def run_budget_evaluator() -> dict:
     from core.billing.budget_evaluator import evaluate_budget_alerts
 
     return run_async(evaluate_budget_alerts())
+
+
+@app.task(name="core.tasks.budget_tasks.expire_plural_subscriptions")
+def expire_plural_subscriptions() -> dict:
+    """Downgrade Plural (one-time order) subscriptions past ``current_period_end``.
+
+    Scheduled by Celery Beat hourly — see celery_app.beat_schedule.
+    """
+    from core.billing.subscriptions import expire_overdue_plural_subscriptions
+
+    return run_async(expire_overdue_plural_subscriptions())

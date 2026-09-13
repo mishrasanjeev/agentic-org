@@ -6,9 +6,10 @@ const { loginWithToken, navigate } = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ loginWithToken }),
-}));
+vi.mock("@/contexts/AuthContext", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/contexts/AuthContext")>();
+  return { ...actual, useAuth: () => ({ loginWithToken }) };
+});
 
 vi.mock("react-router", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router")>();
@@ -32,6 +33,17 @@ describe("SSOCallback cookie-first completion", () => {
     await waitFor(() => {
       expect(loginWithToken).toHaveBeenCalledWith(undefined);
       expect(navigate).toHaveBeenCalledWith("/dashboard", { replace: true });
+    });
+  });
+
+  it("lands merchant operators on the commerce runtime instead of the gated dashboard", async () => {
+    // Audit finding #13: /dashboard rejects the merchant role.
+    loginWithToken.mockResolvedValue({ role: "merchant", email: "m@example.com" });
+
+    render(<SSOCallback />);
+
+    await waitFor(() => {
+      expect(navigate).toHaveBeenCalledWith("/dashboard/commerce-runtime", { replace: true });
     });
   });
 

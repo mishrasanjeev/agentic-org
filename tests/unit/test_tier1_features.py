@@ -605,7 +605,8 @@ class TestPushSender:
         asyncio.run(
             save_subscription("tenant-1", sub)
         )
-        assert len(_memory_store.get("tenant-1", set())) == 1
+        # Subscriptions are stored under the Redis-shaped key (tenant-wide set)
+        assert len(_memory_store.get("push_subs:tenant-1", set())) == 1
 
     def test_send_push_empty_subscription_returns_zero(self):
         from core.push.sender import send_push_notification
@@ -674,12 +675,12 @@ class TestPushSender:
             "keys": {"p256dh": "k", "auth": "a"},
         })
         )
-        assert len(_memory_store.get("tenant-rm", set())) == 1
+        assert len(_memory_store.get("push_subs:tenant-rm", set())) == 1
 
         asyncio.run(
             remove_subscription("tenant-rm", "https://push.example.com/to-remove")
         )
-        assert len(_memory_store.get("tenant-rm", set())) == 0
+        assert len(_memory_store.get("push_subs:tenant-rm", set())) == 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ConnectorCard from "@/components/ConnectorCard";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 import type { Connector } from "@/types";
 
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
@@ -41,40 +41,11 @@ interface ComposioApp {
   no_auth: boolean;
 }
 
-const DEMO_MARKETPLACE_APPS: ComposioApp[] = [
-  {
-    key: "demo_hubspot",
-    name: "HubSpot",
-    description: "CRM contacts, companies, deals, and engagement workflow actions.",
-    logo: "",
-    categories: ["crm", "marketing"],
-    enabled: false,
-    no_auth: false,
-  },
-  {
-    key: "demo_slack",
-    name: "Slack",
-    description: "Send team notifications, approval prompts, and operational alerts.",
-    logo: "",
-    categories: ["comms", "ops"],
-    enabled: false,
-    no_auth: false,
-  },
-  {
-    key: "demo_google_sheets",
-    name: "Google Sheets",
-    description: "Read and update sheets used by finance, sales, and ops teams.",
-    logo: "",
-    categories: ["productivity", "finance"],
-    enabled: false,
-    no_auth: false,
-  },
-];
-
 export default function Connectors() {
   const navigate = useNavigate();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
+  const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [healthResult, setHealthResult] = useState<{ id: string; msg: string; ok: boolean } | null>(null);
 
@@ -88,12 +59,13 @@ export default function Connectors() {
   const [marketplaceTotal, setMarketplaceTotal] = useState(0);
   const [marketplaceCategories, setMarketplaceCategories] = useState<string[]>([]);
   const [marketplaceLoading, setMarketplaceLoading] = useState(false);
-  const [connectedApps, setConnectedApps] = useState<Set<string>>(new Set());
+  const [marketplaceError, setMarketplaceError] = useState<string | null>(null);
 
   // Native-connector catalog sourced from /api/v1/connectors/registry â€” the
   // single source of truth (runtime registry + connectors/catalog_meta.py).
   const [nativeCatalog, setNativeCatalog] = useState<NativeCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchConnectors();
@@ -102,13 +74,15 @@ export default function Connectors() {
 
   async function fetchNativeCatalog() {
     setCatalogLoading(true);
+    setCatalogError(null);
     try {
       const { data } = await api.get<{ items: NativeCatalogItem[]; total: number }>(
         "/connectors/registry",
       );
       setNativeCatalog(Array.isArray(data?.items) ? data.items : []);
-    } catch {
+    } catch (err: unknown) {
       setNativeCatalog([]);
+      setCatalogError(extractApiError(err, "Failed to load connector catalog"));
     } finally {
       setCatalogLoading(false);
     }
@@ -116,28 +90,20 @@ export default function Connectors() {
 
   async function fetchConnectors() {
     setLoading(true);
+    setConnectorsError(null);
     try {
       const { data } = await api.get("/connectors");
       const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       // API returns connector_id, map to id for consistency
       const items = raw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
-
-      if (items.length > 0) {
-        setConnectors(items);
-      } else {
-        // Fallback: show available connectors from the code registry
-        // when no tenant connectors have been registered yet
-        try {
-          const { data: regData } = await api.get("/connectors/registry");
-          const regRaw = Array.isArray(regData) ? regData : Array.isArray(regData?.items) ? regData.items : [];
-          const regItems = regRaw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
-          setConnectors(regItems);
-        } catch {
-          setConnectors([]);
-        }
-      }
-    } catch {
+      // No registry fallback here: the catalog below is the place to browse
+      // unregistered connectors. Substituting registry entries for tenant
+      // connectors fabricated stats and produced Edit/Archive buttons that
+      // pointed at non-existent instances.
+      setConnectors(items);
+    } catch (err: unknown) {
       setConnectors([]);
+      setConnectorsError(extractApiError(err, "Failed to load connectors"));
     } finally {
       setLoading(false);
     }
@@ -190,17 +156,19 @@ export default function Connectors() {
   // Fetch marketplace apps from Composio API
   async function fetchMarketplace() {
     setMarketplaceLoading(true);
+    setMarketplaceError(null);
     try {
       const params: Record<string, string> = { limit: "200" };
       if (marketplaceSearch) params.search = marketplaceSearch;
       if (marketplaceCategory) params.category = marketplaceCategory;
       const { data } = await api.get("/composio/apps", { params });
-      const apps = Array.isArray(data.apps) ? data.apps : [];
-      setMarketplaceApps(apps.length > 0 ? apps : DEMO_MARKETPLACE_APPS);
-      setMarketplaceTotal(data.total || apps.length || DEMO_MARKETPLACE_APPS.length);
-    } catch {
-      setMarketplaceApps(DEMO_MARKETPLACE_APPS);
-      setMarketplaceTotal(DEMO_MARKETPLACE_APPS.length);
+      const apps: ComposioApp[] = Array.isArray(data?.apps) ? data.apps : [];
+      setMarketplaceApps(apps);
+      setMarketplaceTotal(typeof data?.total === "number" ? data.total : apps.length);
+    } catch (err: unknown) {
+      setMarketplaceApps([]);
+      setMarketplaceTotal(0);
+      setMarketplaceError(extractApiError(err, "Failed to load marketplace apps"));
     } finally {
       setMarketplaceLoading(false);
     }
@@ -227,18 +195,6 @@ export default function Connectors() {
 
   // Filtering is done server-side via query params
   const filteredMarketplace = marketplaceApps;
-
-  function handleConnect(appName: string) {
-    setConnectedApps((prev) => {
-      const next = new Set(prev);
-      if (next.has(appName)) {
-        next.delete(appName);
-      } else {
-        next.add(appName);
-      }
-      return next;
-    });
-  }
 
   return (
     <div className="space-y-6">
@@ -300,8 +256,25 @@ export default function Connectors() {
               them in a dedicated flex row below the card. */}
           {loading ? (
             <p className="text-muted-foreground">Loading connectors...</p>
+          ) : connectorsError ? (
+            <div
+              className="rounded-lg px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 flex items-center justify-between"
+              data-testid="connectors-error"
+            >
+              <span>Failed to load connectors: {connectorsError}</span>
+              <Button variant="outline" size="sm" onClick={() => fetchConnectors()}>Retry</Button>
+            </div>
           ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground">No connectors found.</p>
+            <div className="rounded-lg border border-dashed border-border p-6 text-center" data-testid="connectors-empty">
+              <p className="text-sm font-medium">
+                {connectors.length === 0
+                  ? "No connectors registered for this tenant yet."
+                  : "No registered connectors in this category."}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Pick one from the catalog below or use Register Connector to add your own.
+              </p>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filtered.map((connector) => (
@@ -343,9 +316,13 @@ export default function Connectors() {
               </p>
               {catalogLoading && nativeCatalog.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Loading catalogâ€¦</p>
+              ) : catalogError ? (
+                <p className="text-sm text-red-700" data-testid="native-catalog-error">
+                  Catalog unavailable: {catalogError}
+                </p>
               ) : nativeCatalog.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Catalog unavailable. Check that /api/v1/connectors/registry is reachable.
+                  Catalog is empty. Check that /api/v1/connectors/registry is reachable.
                 </p>
               ) : (
                 <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -421,8 +398,20 @@ export default function Connectors() {
 
           {marketplaceLoading ? (
             <p className="text-muted-foreground">Loading marketplace apps...</p>
+          ) : marketplaceError ? (
+            <div
+              className="rounded-lg px-4 py-3 text-sm bg-red-50 text-red-800 border border-red-200 flex items-center justify-between"
+              data-testid="marketplace-error"
+            >
+              <span>Failed to load marketplace apps: {marketplaceError}</span>
+              <Button variant="outline" size="sm" onClick={() => fetchMarketplace()}>Retry</Button>
+            </div>
           ) : filteredMarketplace.length === 0 ? (
-            <p className="text-muted-foreground">No marketplace apps match your search.</p>
+            <p className="text-muted-foreground" data-testid="marketplace-empty">
+              {marketplaceSearch || marketplaceCategory
+                ? "No marketplace apps match your search."
+                : "No marketplace apps are available for this tenant."}
+            </p>
           ) : (
             <div className="grid grid-cols-3 gap-4">
               {filteredMarketplace.map((app) => (
@@ -446,16 +435,14 @@ export default function Connectors() {
                     <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{app.description}</p>
                     <Button
                       size="sm"
-                      variant={connectedApps.has(app.key) ? "outline" : "default"}
+                      variant="outline"
                       className="w-full"
-                      onClick={() => handleConnect(app.key)}
+                      disabled
+                      title="OAuth connect is not wired up yet"
                       data-testid={`marketplace-connect-${app.key}`}
                     >
-                      {connectedApps.has(app.key) ? "Connected (Demo)" : "Connect (Demo)"}
+                      {app.enabled ? "Connected" : "Connect (coming soon)"}
                     </Button>
-                    <p className="text-[10px] text-muted-foreground text-center mt-1">
-                      OAuth handoff pending â€” UI state only
-                    </p>
                   </CardContent>
                 </Card>
               ))}

@@ -41,12 +41,24 @@ export default function ClientPortal() {
     setError("");
     try {
       const params = companyId ? { company_id: companyId } : undefined;
-      const [inviteRes, docRes] = await Promise.all([
-        api.get("/client-portal/invites", { params }).catch(() => ({ data: [] })),
-        api.get("/client-portal/documents", { params }).catch(() => ({ data: [] })),
+      const [inviteRes, docRes] = await Promise.allSettled([
+        api.get("/client-portal/invites", { params }),
+        api.get("/client-portal/documents", { params }),
       ]);
-      setInvites(Array.isArray(inviteRes.data) ? inviteRes.data : []);
-      setDocuments(Array.isArray(docRes.data) ? docRes.data : []);
+      const failures: string[] = [];
+      if (inviteRes.status === "fulfilled") {
+        setInvites(Array.isArray(inviteRes.value.data) ? inviteRes.value.data : []);
+      } else {
+        setInvites([]);
+        failures.push(extractApiError(inviteRes.reason, "Failed to load invites."));
+      }
+      if (docRes.status === "fulfilled") {
+        setDocuments(Array.isArray(docRes.value.data) ? docRes.value.data : []);
+      } else {
+        setDocuments([]);
+        failures.push(extractApiError(docRes.reason, "Failed to load documents."));
+      }
+      if (failures.length) setError(failures.join(" "));
     } catch (err) {
       setError(extractApiError(err, "Failed to load client portal data."));
     }

@@ -118,12 +118,23 @@ export default function RPASchedules() {
     }
     setFormSubmitting(true);
     try {
+      // Never post secret-typed params inline: the backend rejects them
+      // with 422 and they belong in the vault, not in a schedule row.
+      const script = registry.find((r) => r.script_key === formScript);
+      const secretKeys = new Set(
+        Object.entries(script?.params_schema || {})
+          .filter(([, def]) => def.type === "password")
+          .map(([key]) => key),
+      );
+      const params = Object.fromEntries(
+        Object.entries(formParams).filter(([key]) => !secretKeys.has(key)),
+      );
       await api.post("/rpa-schedules", {
         name: formName.trim(),
         script_key: formScript,
         cron_expression: formCron,
         enabled: true,
-        params: formParams,
+        params,
       });
       resetForm();
       setNotice("Schedule created.");
@@ -257,12 +268,29 @@ export default function RPASchedules() {
                       {def.label || key}
                       {def.required ? " *" : ""}
                     </label>
-                    <input
-                      type={def.type === "password" ? "password" : "text"}
-                      className="w-full border rounded px-2 py-1.5 text-sm bg-background"
-                      value={formParams[key] || ""}
-                      onChange={(e) => setFormParams((prev) => ({ ...prev, [key]: e.target.value }))}
-                    />
+                    {def.type === "password" ? (
+                      <>
+                        <input
+                          type="text"
+                          disabled
+                          data-testid={`rpa-param-secret-${key}`}
+                          className="w-full border rounded px-2 py-1.5 text-sm bg-muted/40 text-muted-foreground"
+                          value=""
+                          placeholder="Managed via vault reference"
+                          readOnly
+                        />
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Inline secrets are rejected by the API (422). Store this value in the vault and reference it from the connector configuration instead.
+                        </p>
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                        value={formParams[key] || ""}
+                        onChange={(e) => setFormParams((prev) => ({ ...prev, [key]: e.target.value }))}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

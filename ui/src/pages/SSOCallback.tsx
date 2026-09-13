@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, defaultLandingForRole } from "@/contexts/AuthContext";
 
 /** Complete the cookie-first OIDC redirect and hydrate the browser session. */
 export default function SSOCallback() {
@@ -41,10 +41,10 @@ export default function SSOCallback() {
     // The optional fragment is accepted only while old redirects age out;
     // AuthContext never stores or uses it as browser authentication.
     void loginWithToken(legacyToken || undefined)
-      .then(() => {
+      .then((sessionUser) => {
         if (!active) return;
         window.history.replaceState(null, "", "/sso/callback");
-        navigate("/dashboard", { replace: true });
+        navigate(defaultLandingForRole(sessionUser?.role), { replace: true });
       })
       .catch((reason) => fail(String(reason?.message || reason)));
 

@@ -415,13 +415,19 @@ class TestFinanceFunctional:
     async def test_ft_fin_009_ap_retry_on_erp_outage(
         self, workflow_engine, mock_state_store, base_state
     ):
-        """FT-FIN-009: AP agent retries 3x with exponential backoff on ERP outage, then escalates."""
+        """FT-FIN-009: AP agent retries 3x with exponential backoff on ERP outage, then escalates.
+
+        The ERP post is a write, so the retry directive is only honoured when
+        the step carries an ``idempotency_key`` (2026-09-13 retry rule: writes
+        without a key are never replayed).
+        """
         steps = [
             {
                 "id": "post_to_erp",
                 "type": "agent",
                 "agent": "ap_processor",
                 "action": "post_invoice_to_oracle",
+                "idempotency_key": "invoice:INV-001:post",
                 "on_failure": "retry(3)",
             },
         ]

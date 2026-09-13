@@ -201,10 +201,14 @@ class TestAgentGraph:
         Shadow-run regression trace_id=ecc5d00364a0."""
         from core.langgraph.agent_graph import _check_hitl_trigger
 
-        # confidence above floor + non-dict output: no trigger, no crash
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", None) == ""
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", [1, 2]) == ""
-        assert _check_hitl_trigger(0.95, 0.88, "amount > 100", "str") == ""
+        # confidence above floor + non-dict output: no crash. The condition
+        # references a field that is absent, so the evaluator fails closed
+        # and triggers HITL (previously it silently returned "").
+        for bad_output in (None, [1, 2], "str"):
+            trigger = _check_hitl_trigger(0.95, 0.88, "amount > 100", bad_output)
+            assert isinstance(trigger, str) and "fail closed" in trigger
+        # A condition that does not reference output fields still evaluates.
+        assert _check_hitl_trigger(0.95, 0.88, "confidence < 0.5", None) == ""
         # Below floor still triggers regardless of output type
         trigger = _check_hitl_trigger(0.5, 0.88, "", None)
         assert "confidence" in trigger
@@ -369,14 +373,21 @@ class TestGrantexRegistration:
 
 
 class TestGrantexMiddleware:
-    def test_is_grantex_token_rs256(self):
-        # RS256 header: {"alg":"RS256","typ":"JWT"}
+    def test_is_grantex_token_rs256(self, monkeypatch):
+        # Audit 2026-09-13: RS256 alone is not enough — the unverified ``iss``
+        # must match the configured Grantex issuer, otherwise the token goes
+        # through the legacy validator and never triggers a JWKS fetch.
         import base64
 
         from auth.grantex_middleware import _is_grantex_token
+
+        monkeypatch.setenv("AGENTICORG_GRANTEX_ISSUER", "https://grantex.test")
         header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
-        fake_token = f"{header}.payload.signature"
-        assert _is_grantex_token(fake_token) is True
+        grantex_payload = base64.urlsafe_b64encode(b'{"iss":"https://grantex.test"}').rstrip(b"=").decode()
+        other_payload = base64.urlsafe_b64encode(b'{"iss":"https://other.idp"}').rstrip(b"=").decode()
+        assert _is_grantex_token(f"{header}.{grantex_payload}.signature") is True
+        assert _is_grantex_token(f"{header}.{other_payload}.signature") is False
+        assert _is_grantex_token(f"{header}.payload.signature") is False
 
     def test_is_grantex_token_hs256(self):
         import base64

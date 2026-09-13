@@ -1,4 +1,18 @@
-"""Eval runner — loads golden datasets, simulates agent output, scores, generates scorecard."""
+"""Eval runner — loads golden datasets, executes (or simulates) agent output, scores, generates scorecard.
+
+Execution modes
+---------------
+``simulated`` (default): the "agent output" is a deterministic perturbation of
+the golden *expected* output and the operational metrics are synthetic. This
+exercises the scorer and the dataset schema; it says nothing about a real
+agent. A simulated scorecard is labelled ``execution_mode: "simulated"`` and
+the public API surfaces it as ``data_quality: "simulated"``.
+
+``live``: an ``executor`` callable is supplied (see ``run_eval``) that runs the
+real agent on ``case["input"]`` and returns ``(output_dict, metrics_dict)``.
+Only these scorecards are labelled ``execution_mode: "live"`` and served as
+``data_quality: "measured"``.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +20,7 @@ import argparse
 import hashlib
 import json
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +36,8 @@ from evals.scorer import (
     security_score,
 )
 
+Executor = Callable[[dict], tuple[dict, dict]]
+SCORECARD_VERSION = "1.1.0"
 GOLDEN_DIR = Path(__file__).resolve().parent / "golden_datasets"
 DOMAINS = ["finance", "hr", "marketing", "ops", "commerce"]
 
@@ -118,10 +135,28 @@ def load_golden_dataset(domain: str) -> list[dict]:
         return json.load(f)
 
 
-def evaluate_case(case: dict) -> dict:
-    """Evaluate a single test case and return detailed scores."""
-    actual_output = simulate_agent_output(case)
-    metrics = _simulate_metrics(case["id"])
+_REQUIRED_METRICS = (
+    "latency_ms", "sla_ms", "retries", "recovery_success",
+    "tokens_used", "token_budget", "scopes", "violations",
+)
+
+
+def evaluate_case(case: dict, executor: Executor | None = None) -> dict:
+    """Evaluate a single test case and return detailed scores.
+
+    With ``executor`` the case is run for real; a missing metric key from the
+    executor is a hard error rather than a silently perfect score.
+    """
+    if executor is None:
+        actual_output = simulate_agent_output(case)
+        metrics = _simulate_metrics(case["id"])
+    else:
+        actual_output, metrics = executor(case)
+        if not isinstance(actual_output, dict):
+            raise TypeError(f"executor returned non-dict output for {case['id']}")
+        missing = [k for k in _REQUIRED_METRICS if k not in metrics]
+        if missing:
+            raise ValueError(f"executor metrics for {case['id']} missing {missing}")
 
     scores = {
         "quality": quality_score(case["expected_output"], actual_output),
@@ -142,6 +177,7 @@ def evaluate_case(case: dict) -> dict:
         "scores": scores,
         "composite": comp,
         "grade": grade(comp),
+        "execution_mode": "live" if executor is not None else "simulated",
         "metrics": {
             "latency_ms": metrics["latency_ms"],
             "retries": metrics["retries"],
@@ -153,8 +189,13 @@ def evaluate_case(case: dict) -> dict:
 def run_eval(
     domain_filter: str | None = None,
     agent_filter: str | None = None,
+    executor: Executor | None = None,
 ) -> dict:
-    """Run evaluation across all (or filtered) golden datasets."""
+    """Run evaluation across all (or filtered) golden datasets.
+
+    ``executor`` runs real agents; without it the scorecard is simulated and
+    labelled as such.
+    """
     domains_to_run = [domain_filter] if domain_filter else DOMAINS
     all_results: list[dict] = []
     domain_aggregates: dict[str, dict] = {}
@@ -169,7 +210,7 @@ def run_eval(
         domain_results = []
         for case in cases:
             case["domain"] = domain  # inject domain from filename
-            result = evaluate_case(case)
+            result = evaluate_case(case, executor)
             domain_results.append(result)
             all_results.append(result)
 
@@ -230,7 +271,8 @@ def run_eval(
 
     return {
         "generated_at": datetime.now(tz=UTC).isoformat(),
-        "version": "1.0.0",
+        "version": SCORECARD_VERSION,
+        "execution_mode": "live" if executor is not None else "simulated",
         "platform_metrics": platform_metrics,
         "domain_aggregates": domain_aggregates,
         "agent_aggregates": agent_aggregates,
@@ -248,9 +290,15 @@ def main() -> None:
     parser.add_argument("--agent", type=str, default=None, help="Filter by agent type")
     parser.add_argument("--output", type=str, default="scorecard.json", help="Output path for scorecard")
     parser.add_argument("--ci", action="store_true", help="CI mode — exit 1 if any agent composite < 0.80")
+    parser.add_argument(
+        "--allow-simulated-gate",
+        action="store_true",
+        help="Let --ci pass on a simulated scorecard (scorer smoke test only; not agent quality evidence)",
+    )
     args = parser.parse_args()
 
     scorecard = run_eval(domain_filter=args.domain, agent_filter=args.agent)
+    print(f"Execution mode: {scorecard['execution_mode']}")  # noqa: T201
 
     # Write scorecard
     output_path = Path(args.output)
@@ -271,6 +319,12 @@ def main() -> None:
 
     # CI gate
     if args.ci:
+        if scorecard["execution_mode"] != "live" and not args.allow_simulated_gate:
+            print(  # noqa: T201
+                "\nCI GATE REFUSED — scorecard is simulated (perturbed golden output), "
+                "not agent output. Pass --allow-simulated-gate to use it as a scorer smoke test only."
+            )
+            sys.exit(2)
         failing = [
             agent_type
             for agent_type, agg in scorecard["agent_aggregates"].items()

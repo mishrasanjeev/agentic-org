@@ -45,6 +45,17 @@ async def jit_provision_user(
         )
         existing = result.scalar_one_or_none()
         if existing is not None:
+            # Fail closed: a deactivated / suspended / pending member must not
+            # regain access simply because the IdP still asserts the identity.
+            if existing.status != "active":
+                logger.warning(
+                    "sso_inactive_user_rejected",
+                    tenant_id=str(tenant_id),
+                    user_id=str(existing.id),
+                    provider=provider_key,
+                    status=existing.status,
+                )
+                raise ValueError("User account is not active")
             logger.info(
                 "sso_existing_user",
                 tenant_id=str(tenant_id),

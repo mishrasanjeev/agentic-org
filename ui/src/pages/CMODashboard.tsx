@@ -1985,7 +1985,7 @@ export default function CMODashboard() {
                         <tr key={row.source_connector_key} className="border-b align-top last:border-0">
                           <td className="py-2 pr-4">
                             <div className="font-medium">{row.source_name}</div>
-                            <div className="text-xs text-muted-foreground">{row.source_connector_key} Â· {row.category}</div>
+                            <div className="text-xs text-muted-foreground">{row.source_connector_key} · {row.category}</div>
                           </td>
                           <td className="py-2 pr-4">
                             <Badge variant={BACKFILL_BADGE_VARIANT[status]}>

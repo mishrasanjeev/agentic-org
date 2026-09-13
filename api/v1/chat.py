@@ -179,7 +179,7 @@ except Exception:
         _log.info("chat_redis_unavailable_using_memory_fallback")
 
 
-def _session_key(tenant_id: str, company_id: str, agent_id: str = "") -> str:
+def _session_key(tenant_id: str, company_id: str, agent_id: str = "", user_id: str = "") -> str:
     """Compose the Redis bucket key for chat history.
 
     Root-cause fix for Codex 2026-04-22 isolation gap: without
@@ -188,9 +188,24 @@ def _session_key(tenant_id: str, company_id: str, agent_id: str = "") -> str:
     accounting agent's sidebar. When the caller provides an agent id,
     scope the history to it. Callers that omit ``agent_id`` continue to
     use the legacy bucket so we don't orphan existing sessions.
+
+    ``user_id`` (the authenticated principal) is always part of the key:
+    chat history is per user, and two members of the same tenant/company
+    must never read each other's conversations.
     """
     base = f"{tenant_id}:{company_id}"
-    return f"{base}:{agent_id}" if agent_id else base
+    if agent_id:
+        base = f"{base}:{agent_id}"
+    return f"{base}:u:{user_id}" if user_id else base
+
+
+def _session_user_id(request: Request) -> str:
+    """Authenticated principal for chat-history scoping. Fails closed."""
+    claims = getattr(request.state, "claims", None) or {}
+    user_id = claims.get("agenticorg:user_id") or claims.get("sub") or getattr(request.state, "user_sub", "")
+    if not user_id:
+        raise HTTPException(401, "Not authenticated")
+    return str(user_id)
 
 
 async def _load_session(key: str) -> list[dict]:
@@ -454,8 +469,7 @@ async def _record_chat_hitl(
 
     try:
         async with get_tenant_session(tid) as session:
-            session.add(
-                HITLQueue(
+            hitl_item = HITLQueue(
                     tenant_id=tid,
                     agent_id=aid,
                     workflow_run_id=None,
@@ -469,8 +483,13 @@ async def _record_chat_hitl(
                     },
                     context=context,
                     expires_at=datetime.now(UTC) + timedelta(hours=4),
-                )
             )
+            session.add(hitl_item)
+        from core.push.sender import notify_approval_created
+
+        await notify_approval_created(
+            str(tid), item_id=str(hitl_item.id), agent_name=agent_name or agent_type or "", action=str(hitl_trigger)
+        )
         return True
     # enterprise-gate: broad-except-ok reason=chat-hitl-queue-failure-returns-retryable-503
     except Exception:  # noqa: BLE001
@@ -845,7 +864,7 @@ async def chat_query(
     # bucket to it too. The ``agent_id`` suffix is opaque to Redis and
     # costs nothing; callers that don't pass ``agent_id`` keep the old
     # bucket layout.
-    session_key = _session_key(tenant_id, body.company_id, body.agent_id)
+    session_key = _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
     entries = await _load_session(session_key)
     now = datetime.now(UTC).isoformat()
     entries.append(
@@ -883,6 +902,7 @@ async def chat_query(
     audit_event="chat.history.read",
 )
 async def chat_history(
+    request: Request,
     company_id: str = "",
     agent_id: str = "",
     tenant_id: str = Depends(get_current_tenant),
@@ -896,7 +916,15 @@ async def chat_history(
     /chat/query`` write path so reads and writes agree. Callers that
     omit ``agent_id`` see the legacy tenant+company bucket (no data
     loss for existing sessions).
+
+    ``company_id`` is proven to belong to the caller's tenant (same check
+    as ``POST /chat/query``) and the bucket is scoped to the authenticated
+    user, so a client cannot read another member's or another company's
+    history by supplying a foreign id.
     """
-    session_key = _session_key(tenant_id, company_id, agent_id)
+    from api.v1.agents import _require_company_for_tenant
+
+    company_uuid = await _require_company_for_tenant(tenant_id, company_id)
+    session_key = _session_key(tenant_id, str(company_uuid), agent_id, _session_user_id(request))
     entries = await _load_session(session_key)
     return [ChatMessage(**e) for e in entries]

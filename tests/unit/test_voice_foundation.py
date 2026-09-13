@@ -196,3 +196,26 @@ class TestSIPConnection:
         assert result["success"] is False
         assert result["details"]["format_valid"] is True
         assert result["details"]["connectivity_verified"] is False
+
+
+def test_decrypt_credentials_fails_closed_on_invalid_token(monkeypatch):
+    """A value that is not valid ciphertext for the current key must raise —
+    pre-fix it was returned verbatim and used as a live SIP secret."""
+    pytest.importorskip("cryptography")
+    from core.voice.sip_config import (
+        VoiceCredentialEncryptionError,
+        decrypt_credentials,
+        encrypt_credentials,
+    )
+
+    monkeypatch.setenv("AGENTICORG_SECRET_KEY", "unit-test-secret-key-1")
+    enc = encrypt_credentials({"password": "s3cret"})
+    assert decrypt_credentials(enc) == {"password": "s3cret"}
+
+    with pytest.raises(VoiceCredentialEncryptionError, match="password"):
+        decrypt_credentials({"password": "plaintext-or-tampered"})
+
+    # Key rotation: ciphertext from another key is refused, not echoed back.
+    monkeypatch.setenv("AGENTICORG_SECRET_KEY", "unit-test-secret-key-2")
+    with pytest.raises(VoiceCredentialEncryptionError):
+        decrypt_credentials(enc)

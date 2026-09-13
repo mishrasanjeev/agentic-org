@@ -225,3 +225,33 @@ def test_email_send_runs_validation_before_fake_mail_seam() -> None:
                 "validate_email_domain must run BEFORE the "
                 "fake-mail seam check, not after."
             )
+
+
+# ─────────────────────────────────────────────────────────────────
+# HTML injection: interpolated values are escaped
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_email_templates_escape_html_in_user_values(monkeypatch) -> None:
+    """An org name like ``<a href="https://evil">Acme</a>`` must render as
+    text in the invite/welcome body, not as a live link (phishing vector)."""
+    from core import email as email_mod
+
+    captured: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        email_mod, "send_email", lambda to, subject, html: captured.append((to, subject, html)) or True
+    )
+    evil = '<a href="https://evil.example">Acme</a>'
+
+    email_mod.send_invite_email("u@corp.in", evil, "<script>x</script>", "admin' onmouseover=1", "https://ok/x?a=1&b=2")
+    email_mod.send_welcome_email("u@corp.in", evil, "<img src=x onerror=1>")
+
+    for _to, _subject, html in captured:
+        assert "<a href=\"https://evil" not in html
+        assert "<script>" not in html
+        assert "<img" not in html
+        assert "&lt;a href=&quot;https://evil.example&quot;&gt;Acme&lt;/a&gt;" in html
+    invite_html = captured[0][2]
+    assert "&lt;script&gt;x&lt;/script&gt;" in invite_html
+    assert "admin&#x27; onmouseover=1" in invite_html
+    assert "href='https://ok/x?a=1&amp;b=2'" in invite_html

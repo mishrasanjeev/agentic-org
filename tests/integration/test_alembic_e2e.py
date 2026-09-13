@@ -44,6 +44,9 @@ _READINESS_TABLES = {
     "capability_evidence_records",
     "capability_promotion_events",
 }
+# v4.0.0 tables with no ORM model; a fresh bootstrap only gets them from the
+# v6z19 repair revision (billing entitlement + tenant CDC triggers).
+_REPAIRED_RUNTIME_TABLES = {"billing_subscriptions", "cdc_triggers"}
 _READINESS_TRIGGERS = {
     "capability_readiness_scope",
     "capability_readiness_transition_guard",
@@ -472,6 +475,7 @@ def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
     assert "connector_configs" in tables
     assert "alembic_version" in tables
     assert _READINESS_TABLES <= tables
+    assert _REPAIRED_RUNTIME_TABLES <= tables
 
     with create_engine(_SYNC_URL).connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()

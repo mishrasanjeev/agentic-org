@@ -72,7 +72,7 @@ def _script_payload(raw_result: dict[str, Any], *, http_only: bool) -> dict[str,
 
 async def _execute_schedule(tenant_id: str, schedule_id: str) -> dict[str, Any]:
     """Async body that runs a single schedule end-to-end."""
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.rpa_schedule import RPASchedule
     from core.rpa.executor import execute_rpa_script
     from core.rpa.quality import QUALITY_TARGET, filter_chunks
@@ -85,8 +85,8 @@ async def _execute_schedule(tenant_id: str, schedule_id: str) -> dict[str, Any]:
         logger.warning("rpa_task_invalid_id tenant=%s schedule=%s err=%s", tenant_id, schedule_id, exc)
         return {"ok": False, "error": "invalid id"}
 
-    # 1. Load schedule
-    async with async_session_factory() as session:
+    # 1. Load schedule (rpa_schedules is FORCE-RLS: bind the tenant context)
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(RPASchedule).where(
                 RPASchedule.id == sid, RPASchedule.tenant_id == tid
@@ -184,10 +184,13 @@ async def _record_success(
     rejected: int,
     avg_quality: float | None,
 ) -> None:
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.rpa_schedule import RPASchedule
 
-    async with async_session_factory() as session:
+    # Tenant-bound session: rpa_schedules is FORCE-RLS, and get_tenant_session
+    # commits on exit — a raw session here was rolled back on close, so the
+    # last_run_* telemetry and next_run_at advance were never persisted.
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(RPASchedule).where(
                 RPASchedule.id == sid, RPASchedule.tenant_id == tid
@@ -231,10 +234,13 @@ async def _record_failure(
     rejected: int,
     avg_quality: float | None,
 ) -> None:
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.rpa_schedule import RPASchedule
 
-    async with async_session_factory() as session:
+    # Tenant-bound session: rpa_schedules is FORCE-RLS, and get_tenant_session
+    # commits on exit — a raw session here was rolled back on close, so the
+    # last_run_* telemetry and next_run_at advance were never persisted.
+    async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(RPASchedule).where(
                 RPASchedule.id == sid, RPASchedule.tenant_id == tid
@@ -277,10 +283,13 @@ async def _embed_and_store(
         logger.warning("rpa_embed_skip: core.embeddings not available")
         return 0
 
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
 
     inserted = 0
-    async with async_session_factory() as session:
+    # Tenant-bound session, committed on exit. The raw session used before
+    # was rolled back on close, so no chunk ever reached knowledge_documents
+    # even though the task reported ``inserted=N``.
+    async with get_tenant_session(tid) as session:
         for ch in chunks:
             content = (ch.get("content") or "")[:2000]
             if not content:

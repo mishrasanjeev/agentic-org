@@ -42,7 +42,23 @@ JWKS_TIMEOUT = httpx.Timeout(DEFAULT_HTTP_TIMEOUT_SECONDS)
 _blacklisted_tokens: dict[str, float] = {}  # token -> expiry timestamp
 _BLACKLIST_MAX_SIZE = 10_000  # prevent unbounded growth
 _redis_client: aioredis.Redis | None = None
-_BLACKLIST_TTL = 3700  # slightly longer than token expiry (60 min)
+_BLACKLIST_TTL = 3700  # floor: slightly longer than the default 60 min token TTL
+
+
+def _blacklist_ttl_for(token: str) -> int:
+    """Seconds to keep ``token`` revoked: its remaining lifetime, floor ``_BLACKLIST_TTL``.
+
+    ``token_ttl_minutes`` is configurable, so a fixed 3700s let long-lived
+    tokens outlive their own revocation. Decoded without verification: the
+    caller has already validated the token, and a non-JWT falls back to the floor.
+    """
+    try:
+        exp = jwt.decode(token, options={"verify_signature": False}).get("exp")
+    except (PyJWTError, ValueError, TypeError, AttributeError):
+        return _BLACKLIST_TTL
+    if not isinstance(exp, int | float):
+        return _BLACKLIST_TTL
+    return max(_BLACKLIST_TTL, int(exp - time.time()) + 100)
 
 
 def _runtime_env() -> str:
@@ -61,7 +77,7 @@ def _auth_state_strict() -> bool:
     return env_override or is_strict_runtime_env(_runtime_env())
 
 
-def _remember_blacklisted_token(token: str) -> None:
+def _remember_blacklisted_token(token: str, ttl: int = _BLACKLIST_TTL) -> None:
     """Store a token in the bounded local blacklist fallback."""
     if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
         now = time.time()
@@ -71,7 +87,7 @@ def _remember_blacklisted_token(token: str) -> None:
         if len(_blacklisted_tokens) >= _BLACKLIST_MAX_SIZE:
             oldest = min(_blacklisted_tokens, key=_blacklisted_tokens.get)
             _blacklisted_tokens.pop(oldest, None)
-    _blacklisted_tokens[token] = time.time() + _BLACKLIST_TTL
+    _blacklisted_tokens[token] = time.time() + ttl
 
 
 def _get_redis() -> aioredis.Redis | None:
@@ -128,6 +144,7 @@ async def blacklist_token(token: str) -> None:
     than silently dropping the revocation onto one replica's memory.
     """
     strict = _auth_state_strict()
+    ttl = _blacklist_ttl_for(token)
 
     r = _get_redis()
     if r is None:
@@ -136,7 +153,7 @@ async def blacklist_token(token: str) -> None:
                 "Token blacklist requires Redis in strict mode "
                 "(AGENTICORG_AUTH_STATE_STRICT=1) — write refused"
             )
-        _remember_blacklisted_token(token)
+        _remember_blacklisted_token(token, ttl)
         return
 
     try:
@@ -144,13 +161,13 @@ async def blacklist_token(token: str) -> None:
         # Revocation is a security boundary: do not report success until
         # Redis acknowledges the write. The old fire-and-forget task could
         # claim logout succeeded even when SETEX later failed.
-        await r.setex(key, _BLACKLIST_TTL, "1")
+        await r.setex(key, ttl, "1")
         if not strict:
-            _remember_blacklisted_token(token)
+            _remember_blacklisted_token(token, ttl)
     # enterprise-gate: broad-except-ok reason=token-blacklist-write-fails-closed-in-strict-runtime
     except Exception as exc:
         if not strict:
-            _remember_blacklisted_token(token)
+            _remember_blacklisted_token(token, ttl)
         if strict:
             raise RuntimeError(
                 f"Token blacklist Redis write failed in strict mode: {exc}"

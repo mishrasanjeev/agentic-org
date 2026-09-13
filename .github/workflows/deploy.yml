@@ -2,13 +2,22 @@ name: AgenticOrg CI/CD
 on:
   push: { branches: [main], tags: ["v*"] }
   pull_request: { branches: [main] }
+  workflow_dispatch:
+    inputs:
+      run_post_deploy_e2e:
+        description: >-
+          Run the post-deploy E2E suite (pytest e2e + synthetic + Playwright)
+          against production. Production is deployed manually via
+          scripts/deploy_cloud_run.sh, so this is how the gate is exercised
+          after a release.
+        required: false
+        default: false
+        type: boolean
 
 env:
   GCP_REGION: ${{ vars.GCP_REGION || 'asia-south1' }}
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GAR_REGISTRY: ${{ vars.GCP_REGION || 'asia-south1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/agenticorg
-  HELM_RELEASE: agenticorg
-  HELM_CHART_PATH: ./helm
 
 jobs:
   classify-changes:
@@ -251,7 +260,7 @@ jobs:
           AGENTICORG_SECRET_KEY=ci-test-secret-key-minimum-16 \
             celery -A core.tasks.celery_app worker \
               --loglevel=info \
-              --queues=reports,delivery,maintenance,workflows,rpa \
+              --queues=celery,reports,delivery,maintenance,workflows,rpa \
               --detach \
               --pidfile=/tmp/celery-worker.pid \
               --logfile=/tmp/celery-worker.log
@@ -294,6 +303,7 @@ jobs:
   release-acceptance:
     needs: [classify-changes, frontend-validation, frontend-quality, unit-tests, integration-tests, security-scan]
     if: |
+      github.event_name != 'workflow_dispatch' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.classify-changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
@@ -334,6 +344,7 @@ jobs:
   build:
     needs: [classify-changes, frontend-validation, frontend-quality, unit-tests, integration-tests, security-scan, release-acceptance]
     if: |
+      github.event_name != 'workflow_dispatch' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
       needs.classify-changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
@@ -374,82 +385,20 @@ jobs:
           docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:${{ github.sha }}
           docker push ${{ env.GAR_REGISTRY }}/agenticorg-ui-cloudrun:latest
 
-  deploy-staging:
-    needs: [classify-changes, build]
-    # Staging namespace removed to cut costs. Re-enable only with the
-    # docs-only guard intact so planning/doc merges never deploy.
-    if: ${{ false && needs.classify-changes.outputs.docs_only != 'true' }}
-    runs-on: ubuntu-latest
-    environment: staging
-    permissions:
-      id-token: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v3
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
-
-      - name: Install GKE auth plugin
-        run: gcloud components install gke-gcloud-auth-plugin --quiet
-
-      - name: Configure kubectl for GKE staging
-        run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_STAGING }} \
-            --region ${{ env.GCP_REGION }} \
-            --project ${{ env.GCP_PROJECT_ID }}
-
-      - name: Deploy to staging via Helm
-        run: |
-          helm upgrade --install ${{ env.HELM_RELEASE }} ${{ env.HELM_CHART_PATH }} \
-            --namespace agenticorg-staging \
-            --create-namespace \
-            --set image.repository=${{ env.GAR_REGISTRY }}/agenticorg \
-            --set image.tag=${{ github.sha }} \
-            --set imageUI.tag=${{ github.sha }} \
-            --set postgresql.auth.password=${{ secrets.STAGING_DB_PASSWORD }} \
-            --set redis.auth.password=${{ secrets.STAGING_REDIS_PASSWORD }} \
-            --values ${{ env.HELM_CHART_PATH }}/values-staging.yaml \
-            --wait \
-            --timeout 300s
-
-      - name: Verify staging deployment health
-        run: |
-          kubectl rollout status deployment/${{ env.HELM_RELEASE }}-api \
-            --namespace agenticorg-staging \
-            --timeout=300s
-
-      - name: Smoke-test staging health endpoint
-        run: |
-          STAGING_URL="${{ secrets.STAGING_API_URL }}"
-          for i in $(seq 1 30); do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${STAGING_URL}/api/v1/health" || true)
-            if [ "$STATUS" = "200" ]; then
-              echo "Staging health check passed"
-              exit 0
-            fi
-            echo "Attempt $i: HTTP $STATUS — retrying in 10s..."
-            sleep 10
-          done
-          echo "Staging health check failed after 30 attempts"
-          exit 1
-
   e2e-tests:
     needs: [classify-changes, deploy-production]
-    # deploy-production can still succeed when approval-gate is skipped on main
-    # pushes, so gate these jobs on the actual deploy result instead of the
-    # default implicit status chain.
+    # deploy-production is currently disabled (production is rolled out
+    # manually with scripts/deploy_cloud_run.sh), which used to make this
+    # job unreachable and the "blocking" post-deploy suite dead code. It now
+    # also runs on demand: Actions -> "AgenticOrg CI/CD" -> Run workflow
+    # with run_post_deploy_e2e=true after a manual production release.
     if: |
       always() &&
-      github.ref == 'refs/heads/main' &&
       needs.classify-changes.outputs.docs_only != 'true' &&
-      needs.deploy-production.result == 'success'
+      (
+        (github.ref == 'refs/heads/main' && needs.deploy-production.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && inputs.run_post_deploy_e2e == true)
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read

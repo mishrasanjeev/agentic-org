@@ -41,7 +41,7 @@ The product facts endpoint is authoritative for the deployed version and current
 ## Hosted pricing
 
 - <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Free: $0/month or INR 0/month; 3 agents; 1000 runs; 1 GB storage.
-- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro: $2/month or INR 9,999/month; 15 agents; 10000 runs; 50 GB storage.
+- <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro: $99/month or INR 9,999/month; 15 agents; 10000 runs; 50 GB storage.
 - <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise: $499/month or INR 49,999/month; Unlimited agents; Unlimited runs; Unlimited storage.
 
 Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and external API costs are separate.

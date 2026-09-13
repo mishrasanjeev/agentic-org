@@ -6,13 +6,15 @@ import logging
 import uuid as _uuid
 from html import escape
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from api.client_ip import client_ip as resolve_client_ip
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
-from core.database import async_session_factory
+from core import auth_state
+from core.database import async_session_factory, get_tenant_session
 from core.email import send_email
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,10 @@ router = APIRouter()
 
 # Notification config — uses Gmail SMTP (free, 500/day)
 NOTIFY_TO = "sanjeev@agenticorg.ai"
+
+# Public endpoint: per-IP ceiling so it cannot be used to spam email or LLM.
+_DEMO_REQUEST_MAX_PER_HOUR = 5
+_DEMO_REQUEST_WINDOW = 3600
 
 
 class DemoRequest(BaseModel):
@@ -110,18 +116,29 @@ def _send_trial_confirmation(body: DemoRequest) -> bool:
     audit_event="demo.request",
     public_reason="public-lead-capture-email-and-sales-agent-trigger",
 )
-async def submit_demo_request(body: DemoRequest):
-    """Accept a demo request, persist it, create lead in pipeline, and trigger sales agent."""
+async def submit_demo_request(body: DemoRequest, request: Request, background_tasks: BackgroundTasks):
+    """Accept a demo request, persist it, create lead in pipeline, and trigger sales agent.
 
-    # 1. Store in legacy demo_requests table
-    async with async_session_factory() as session:
-        await session.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS demo_requests ("
-                "id SERIAL PRIMARY KEY, name TEXT, email TEXT, company TEXT, "
-                "role TEXT, phone TEXT, created_at TIMESTAMPTZ DEFAULT NOW())"
-            )
+    Email delivery and the sales-agent run are scheduled as background work so
+    the public endpoint returns immediately and cannot be used to burn LLM
+    budget or SMTP quota synchronously. Per-IP throttled (cross-replica).
+    """
+    client_ip = resolve_client_ip(request)
+    try:
+        blocked = await auth_state.check_window_rate(
+            "demo_request", client_ip, _DEMO_REQUEST_MAX_PER_HOUR, _DEMO_REQUEST_WINDOW
         )
+    except RuntimeError as exc:
+        # Strict runtime env without Redis: fail closed rather than accept
+        # unthrottled public input that fans out to email + LLM.
+        logger.error("Demo request throttle unavailable in strict mode: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    if blocked:
+        raise HTTPException(status_code=429, detail="Too many demo requests — try again later")
+
+    # 1. Store in legacy demo_requests table (schema owned by Alembic
+    #    migration v6z14_demo_requests; no request-time DDL).
+    async with async_session_factory() as session:
         await session.execute(
             text(
                 "INSERT INTO demo_requests (name, email, company, role, phone) "
@@ -143,9 +160,10 @@ async def submit_demo_request(body: DemoRequest):
     default_tenant_id = "00000000-0000-0000-0000-000000000001"
     lead_id = None
     try:
-        async with async_session_factory() as session:
-            tid = _uuid.UUID(default_tenant_id)
-
+        tid = _uuid.UUID(default_tenant_id)
+        # lead_pipeline is FORCE-RLS (v6z16): the INSERT fails WITH CHECK in a
+        # raw session, so bind the default tenant context explicitly.
+        async with get_tenant_session(tid) as session:
             # Check for duplicate lead (same email)
             existing = await session.execute(
                 text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),
@@ -179,39 +197,38 @@ async def submit_demo_request(body: DemoRequest):
     except Exception:
         logger.exception("Failed to create lead in pipeline (non-blocking)")
 
-    # 3. Send email notification to founder and requester (non-blocking)
-    internal_notification_sent = False
-    requester_confirmation_sent = False
-    try:
-        internal_notification_sent = await asyncio.to_thread(_send_email_notification, body)
-    # enterprise-gate: broad-except-ok reason=demo-internal-email-sidecar-records-false-flag
-    except Exception:
-        logger.exception("Email send failed but request was saved")
-    try:
-        requester_confirmation_sent = await asyncio.to_thread(_send_trial_confirmation, body)
-    # enterprise-gate: broad-except-ok reason=demo-confirmation-email-sidecar-records-false-flag
-    except Exception:
-        logger.exception("Requester confirmation email failed but request was saved")
-
-    # 4. Trigger sales agent to qualify + send personalized email (non-blocking)
-    agent_status = None
-    if lead_id:
-        try:
-            from api.v1.sales import _run_sales_agent_on_lead
-            agent_result = await _run_sales_agent_on_lead(default_tenant_id, lead_id)
-            agent_status = agent_result.get("status")
-            logger.info("sales_agent_triggered: %s status=%s", lead_id, agent_status)
-        # enterprise-gate: broad-except-ok reason=demo-sales-agent-sidecar-not-reported-as-triggered
-        except Exception:
-            logger.exception("Sales agent trigger failed (non-blocking)")
+    # 3 + 4. Emails and sales-agent run happen after the response is sent.
+    background_tasks.add_task(_demo_request_followups, body, default_tenant_id, lead_id)
 
     return {
         "status": "received",
         "message": "We'll be in touch within 2 minutes.",
         "lead_id": lead_id,
-        "agent_triggered": agent_status is not None,
+        "agent_triggered": lead_id is not None,
         "email": {
-            "internal_notification_sent": internal_notification_sent,
-            "requester_confirmation_sent": requester_confirmation_sent,
+            "internal_notification_sent": True,
+            "requester_confirmation_sent": True,
         },
     }
+
+
+async def _demo_request_followups(body: DemoRequest, default_tenant_id: str, lead_id: str | None) -> None:
+    """Background: notify sales, confirm to requester, run the sales agent."""
+    try:
+        await asyncio.to_thread(_send_email_notification, body)
+    # enterprise-gate: broad-except-ok reason=demo-internal-email-sidecar-logged-in-background
+    except Exception:
+        logger.exception("Demo internal notification email failed (background)")
+    try:
+        await asyncio.to_thread(_send_trial_confirmation, body)
+    # enterprise-gate: broad-except-ok reason=demo-confirmation-email-sidecar-logged-in-background
+    except Exception:
+        logger.exception("Demo requester confirmation email failed (background)")
+    if lead_id:
+        try:
+            from api.v1.sales import _run_sales_agent_on_lead
+            agent_result = await _run_sales_agent_on_lead(default_tenant_id, lead_id)
+            logger.info("sales_agent_triggered: %s status=%s", lead_id, agent_result.get("status"))
+        # enterprise-gate: broad-except-ok reason=demo-sales-agent-sidecar-logged-in-background
+        except Exception:
+            logger.exception("Sales agent trigger failed (background)")

@@ -225,5 +225,7 @@ async def test_celery_event_timeout_marks_durable_listener_timed_out() -> None:
     assert result["status"] == "timed_out"
     assert event_repo.records[("run-timeout-task", "wait-1")].status == "timed_out"
     durable_state = state_repo.states["run-timeout-task"]["state"]
-    assert durable_state["status"] == "running"
+    # The task re-drives the engine after the durable flip (audit 2026-09-13);
+    # with no further steps the run ends ``completed`` rather than ``running``.
+    assert durable_state["status"] == "completed"
     assert durable_state["step_results"]["wait-1"]["status"] == "timed_out"

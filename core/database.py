@@ -66,6 +66,24 @@ engine: AsyncEngine = create_async_engine(
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
+_UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+
+async def _bind_tenant_context(session: AsyncSession, tid_str: str, company_str: str) -> None:
+    """Apply the tenant/company RLS GUCs to the session's current transaction."""
+    # set_config(..., is_local=true) is the parameterized equivalent of
+    # SET LOCAL and avoids interpolating tenant context into SQL text.
+    # UUID validation remains defense-in-depth for tenant context boundaries.
+    await session.execute(
+        text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
+        {"tenant_id": tid_str},
+    )
+    await session.execute(
+        text("SELECT set_config('agenticorg.company_id', :company_id, true)"),
+        {"company_id": company_str},
+    )
+
+
 @asynccontextmanager
 async def get_tenant_session(
     tenant_id: UUID,
@@ -76,28 +94,36 @@ async def get_tenant_session(
         import re as _re
 
         tid_str = str(tenant_id)
-        if not _re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", tid_str):
+        if not _re.fullmatch(_UUID_RE, tid_str):
             raise ValueError(f"Invalid tenant_id format: {tid_str}")
-        # set_config(..., is_local=true) is the parameterized equivalent of
-        # SET LOCAL and avoids interpolating tenant context into SQL text.
-        # UUID validation remains defense-in-depth for tenant context boundaries.
         await session.execute(
             text("SELECT set_config('agenticorg.tenant_id', :tenant_id, true)"),
             {"tenant_id": tid_str},
         )
         company_str = str(company_id) if company_id is not None else ""
-        if company_str and not _re.fullmatch(
-            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-            company_str,
-        ):
+        if company_str and not _re.fullmatch(_UUID_RE, company_str):
             raise ValueError(f"Invalid company_id format: {company_str}")
         await session.execute(
             text("SELECT set_config('agenticorg.company_id', :company_id, true)"),
             {"company_id": company_str},
         )
+
+        # ``set_config(..., is_local=true)`` lives only for the current
+        # transaction. A handler that calls ``session.commit()`` and keeps
+        # using the session (refresh, follow-up SELECT, second write) would
+        # silently continue *without* tenant context — RLS then hides every
+        # row (or, for the pre-auth tables, shows every tenant's rows).
+        # Wrap commit so the context is re-bound after each commit.
+        original_commit = session.commit
+
+        async def _commit_and_rebind() -> None:
+            await original_commit()
+            await _bind_tenant_context(session, tid_str, company_str)
+
+        session.commit = _commit_and_rebind  # type: ignore[method-assign]
         try:
             yield session
-            await session.commit()
+            await original_commit()
         # enterprise-gate: broad-except-ok reason=tenant-session-failure-rolls-back-and-reraises
         except Exception:
             await session.rollback()

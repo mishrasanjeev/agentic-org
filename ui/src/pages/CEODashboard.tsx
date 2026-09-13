@@ -57,7 +57,10 @@ export default function CEODashboard() {
       setLoading(true);
       setError(null);
       try {
-        const resp = await api.get("/kpis/ceo");
+        // Mirror CFODashboard: scope KPIs to the company chosen in the switcher.
+        const companyId = localStorage.getItem("company_id") || "";
+        const params = companyId ? { company_id: companyId } : {};
+        const resp = await api.get("/kpis/ceo", { params });
         setData(resp.data);
       } catch {
         setError(t("errors.failedToLoadKpis", "Failed to load CEO KPIs"));

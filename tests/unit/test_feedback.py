@@ -40,7 +40,8 @@ class TestSubmitFeedbackStored:
             tenant_id="tenant-001",
         ))
 
-        assert result["status"] == "stored"
+        # Memory storage is not durable and is reported as "degraded", never "stored".
+        assert result["status"] == "degraded"
         assert result["storage"] == "memory"
         assert result["feedback_id"]
 

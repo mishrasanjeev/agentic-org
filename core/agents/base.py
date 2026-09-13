@@ -104,10 +104,37 @@ class BaseAgent:
             # 2. Reason with LLM
             output = await self._reason(context, trace)
 
-            # 3. Execute tool calls if the LLM requested any
+            # 3. Execute tool calls if the LLM requested any. Without an
+            # injected ToolGateway the call goes through the same governed
+            # connector path LangGraph uses (see ``_call_tool``).
             requested_tools = output.pop("tool_calls", None)
-            if requested_tools and isinstance(requested_tools, list) and self.tool_gateway:
+            if requested_tools and isinstance(requested_tools, list):
                 tool_results = await self._execute_tool_calls(requested_tools, trace, tool_calls)
+                failed_call = next(
+                    (tr for tr in tool_results if isinstance(tr.get("result"), dict) and tr["result"].get("error")),
+                    None,
+                )
+                if failed_call is not None:
+                    # A denied or failed tool call must fail the step, never
+                    # complete with the failure buried in the synthesis prompt.
+                    error = failed_call["result"]["error"]
+                    message = error.get("message") if isinstance(error, dict) else str(error)
+                    code = error.get("code") if isinstance(error, dict) and error.get("code") else "tool_call_failed"
+                    trace.append(f"Tool call failed: {failed_call['connector']}.{failed_call['tool']}: {message}")
+                    return self._make_result(
+                        task,
+                        msg_id,
+                        "failed",
+                        {"tool_results": tool_results},
+                        0.0,
+                        trace,
+                        tool_calls,
+                        error={
+                            "code": str(code),
+                            "message": f"{failed_call['connector']}.{failed_call['tool']} failed: {message}",
+                        },
+                        start=start,
+                    )
                 # Feed tool results back to LLM for final synthesis
                 if tool_results:
                     output = await self._synthesize_with_tools(context, output, tool_results, trace)
@@ -215,7 +242,9 @@ class BaseAgent:
         ]
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
-        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override, tenant_id=self.tenant_id
+        )
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
         # Strip markdown code blocks (```json ... ```) that Gemini often wraps
@@ -272,11 +301,36 @@ class BaseAgent:
                 ),
                 assignee=HITLAssignee(role="domain_lead"),
             )
+        if self.hitl_condition:
+            # Same fail-closed evaluator as the LangGraph runtime.
+            from core.langgraph.hitl_condition import evaluate_hitl_condition
+
+            triggered, reason = evaluate_hitl_condition(self.hitl_condition, output, confidence)
+            if triggered:
+                return HITLRequest(
+                    hitl_id=f"hitl_{uuid.uuid4().hex[:12]}",
+                    trigger_condition=reason,
+                    trigger_type="condition_matched",
+                    decision_required=DecisionRequired(
+                        question=f"Agent HITL condition triggered ({reason}). Review required.",
+                        options=[
+                            DecisionOption(id="approve", label="Approve output", action="proceed"),
+                            DecisionOption(id="reject", label="Reject and retry", action="retry"),
+                            DecisionOption(id="defer", label="Defer", action="defer"),
+                        ],
+                    ),
+                    context=HITLContext(
+                        summary=f"Agent {self.agent_type} HITL condition triggered",
+                        recommendation="review",
+                        agent_confidence=confidence,
+                    ),
+                    assignee=HITLAssignee(role="domain_lead"),
+                )
         return None
 
     def _build_tool_descriptions(self) -> list[dict[str, Any]] | None:
         """Build tool descriptions from authorized_tools for the LLM prompt."""
-        if not self.authorized_tools or not self.tool_gateway:
+        if not self.authorized_tools:
             return None
 
         from connectors.registry import ConnectorRegistry
@@ -402,7 +456,9 @@ class BaseAgent:
             },
         ]
         model_override = self._resolve_llm_model()
-        response: LLMResponse = await llm_router.complete(messages, model_override=model_override)
+        response: LLMResponse = await llm_router.complete(
+            messages, model_override=model_override, tenant_id=self.tenant_id
+        )
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 
         content = response.content.strip()
@@ -428,9 +484,28 @@ class BaseAgent:
         params: dict | None = None,
         idempotency_key: str = "",
     ) -> dict[str, Any]:
-        """Call tool through Tool Gateway."""
+        """Call a connector tool.
+
+        With an injected ``tool_gateway`` the call goes through it. Otherwise
+        it takes the governed path shared with LangGraph agents
+        (``core.langgraph.tool_adapter.execute_agent_tool``): the tool must be
+        in ``authorized_tools``, Grantex ``enforce`` runs when a grant token is
+        attached, and the connector is resolved from the tenant/company scoped
+        encrypted config. Every denial comes back as ``{"error": {...}}``.
+        """
         if not self.tool_gateway:
-            return {"error": "No tool gateway configured"}
+            from core.langgraph.tool_adapter import execute_agent_tool
+
+            return await execute_agent_tool(
+                connector_name,
+                tool_name,
+                params or {},
+                tenant_id=self.tenant_id,
+                company_id=self.company_id,
+                domain=self.domain or None,
+                authorized_tools=self.authorized_tools,
+                grant_token=getattr(self, "grant_token", None),
+            )
 
         gateway_args: dict[str, Any] = {
             "tenant_id": self.tenant_id,

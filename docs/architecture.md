@@ -480,6 +480,9 @@ flowchart TD
 6. **transform** -- Apply data transformations (JMESPath expressions)
 7. **notify** -- Send notifications via configured channels
 8. **sub_workflow** -- Invoke another workflow definition as a nested call
+   (pausing steps -- `human_in_loop`, `wait`, `wait_for_event` -- are not
+   supported inside a sub-workflow: the parent fails closed with
+   `code=sub_workflow_pause_unsupported` instead of stranding on a nested pause)
 9. **wait** -- Wait for timer expiry or external event
 
 ---

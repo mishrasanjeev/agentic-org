@@ -32,6 +32,12 @@ GAR_HOST="${GAR_HOST:-${GAR_REGION}-docker.pkg.dev}"
 GAR_REGISTRY="${GAR_REGISTRY:-${GAR_HOST}/${GCP_PROJECT_ID}/agenticorg}"
 API_SERVICE="${API_SERVICE:-agenticorg-api}"
 UI_SERVICE="${UI_SERVICE:-agenticorg-ui}"
+# Celery worker + beat run the same API image as separate Cloud Run services.
+# They must roll with every release: an old worker drops tasks the new API
+# enqueues ("Received unregistered task") and runs old code against the new
+# schema. Set either to "" to skip it (e.g. environments without workers).
+WORKER_SERVICE="${WORKER_SERVICE:-agenticorg-worker}"
+BEAT_SERVICE="${BEAT_SERVICE:-agenticorg-beat}"
 MIGRATE_JOB="${MIGRATE_JOB:-agenticorg-migrate}"
 HEALTH_URL="${HEALTH_URL:-https://app.agenticorg.ai/api/v1/health}"
 API_HEALTH_PATH="${API_HEALTH_PATH:-/api/v1/health}"
@@ -74,6 +80,7 @@ Environment overrides:
   GCP_PROJECT_ID  CLOUD_RUN_REGION  GCP_REGION
   GAR_REGION      GAR_HOST          GAR_REGISTRY
   API_SERVICE     UI_SERVICE  MIGRATE_JOB
+  WORKER_SERVICE  BEAT_SERVICE  (set to "" to skip rolling that service)
   HEALTH_URL      API_HEALTH_PATH  PROD_BRANCH
 
 Examples:
@@ -619,6 +626,33 @@ poll_health_url() {
   return 1
 }
 
+# Stage a worker/beat service on the API image and route 100% to the new
+# revision. Background services have no user-facing health URL; readiness is
+# verified from the revision object (image digest + commit metadata) by
+# update_service_no_traffic before traffic moves.
+deploy_background_service() {
+  local svc="$1"
+  local label="$2"
+  local new_revision=""
+  if ! update_service_no_traffic new_revision "$svc" "$API_IMAGE" "$BACKGROUND_UPDATE_ENV_VARS" "$label" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"; then
+    return 1
+  fi
+  echo "Staged $label revision: $new_revision"
+  if ! move_traffic_to_revision "$svc" "$new_revision" "$label"; then
+    return 1
+  fi
+  echo "New $label traffic: $(traffic_summary "$svc")"
+}
+
+rollback_background_services() {
+  if [[ -n "$WORKER_SERVICE" && -n "$PREVIOUS_WORKER_TRAFFIC_SPEC" ]]; then
+    rollback_service_traffic "$WORKER_SERVICE" "$PREVIOUS_WORKER_TRAFFIC_SPEC" "worker"
+  fi
+  if [[ -n "$BEAT_SERVICE" && -n "$PREVIOUS_BEAT_TRAFFIC_SPEC" ]]; then
+    rollback_service_traffic "$BEAT_SERVICE" "$PREVIOUS_BEAT_TRAFFIC_SPEC" "beat"
+  fi
+}
+
 print_manual_traffic_commands() {
   local api_revision="$1"
   local ui_revision="$2"
@@ -628,6 +662,10 @@ Manual traffic commands:
   gcloud run services update-traffic "$API_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --to-revisions="$api_revision=100"
   gcloud run services update-traffic "$UI_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --to-revisions="$ui_revision=100"
 EOF
+  local svc
+  for svc in $WORKER_SERVICE $BEAT_SERVICE; do
+    echo "  gcloud run services update \"$svc\" --project=\"$GCP_PROJECT_ID\" --region=\"$GCP_REGION\" --image=\"$API_IMAGE\" --update-env-vars=\"$BACKGROUND_UPDATE_ENV_VARS\""
+  done
 }
 
 # 1. Resolve commit.
@@ -644,6 +682,8 @@ echo "  gar region  : $GAR_REGION"
 echo "  registry    : $GAR_REGISTRY"
 echo "  api svc     : $API_SERVICE"
 echo "  ui svc      : $UI_SERVICE"
+echo "  worker svc  : ${WORKER_SERVICE:-<skipped>}"
+echo "  beat svc    : ${BEAT_SERVICE:-<skipped>}"
 echo "  commit      : $DEPLOY_SHA ($SHORT_SHA)"
 echo "  migrations  : $([[ $RUN_MIGRATIONS -eq 1 ]] && echo yes || echo no)"
 echo "  build       : $([[ $SKIP_BUILD -eq 1 ]] && echo skip || echo yes)"
@@ -664,12 +704,12 @@ if [[ $DRY_RUN -eq 0 && $ASSUME_YES -ne 1 ]]; then
 fi
 
 # 2. Sanity-check services and capture current traffic before writing.
-for svc in "$API_SERVICE" "$UI_SERVICE"; do
+for svc in "$API_SERVICE" "$UI_SERVICE" $WORKER_SERVICE $BEAT_SERVICE; do
   if ! gcloud run services describe "$svc" \
         --project="$GCP_PROJECT_ID" --region="$GCP_REGION" \
         --format="value(status.url)" >/dev/null 2>&1; then
     echo "::error::Cloud Run service '$svc' not found in $GCP_REGION/$GCP_PROJECT_ID." >&2
-    echo "  Override with API_SERVICE/UI_SERVICE/GCP_REGION env vars." >&2
+    echo "  Override with API_SERVICE/UI_SERVICE/WORKER_SERVICE/BEAT_SERVICE/GCP_REGION env vars." >&2
     exit 1
   fi
 done
@@ -680,6 +720,16 @@ PREVIOUS_API_TRAFFIC_SPEC="$(traffic_to_revisions "$API_SERVICE")"
 PREVIOUS_UI_TRAFFIC_SPEC="$(traffic_to_revisions "$UI_SERVICE")"
 PREVIOUS_API_READY_REVISION="$(latest_ready_revision "$API_SERVICE" || true)"
 PREVIOUS_UI_READY_REVISION="$(latest_ready_revision "$UI_SERVICE" || true)"
+PREVIOUS_WORKER_TRAFFIC_SPEC=""
+PREVIOUS_BEAT_TRAFFIC_SPEC=""
+if [[ -n "$WORKER_SERVICE" ]]; then
+  PREVIOUS_WORKER_TRAFFIC_SPEC="$(traffic_to_revisions "$WORKER_SERVICE")"
+  echo "Previous worker traffic    : $(traffic_summary "$WORKER_SERVICE")"
+fi
+if [[ -n "$BEAT_SERVICE" ]]; then
+  PREVIOUS_BEAT_TRAFFIC_SPEC="$(traffic_to_revisions "$BEAT_SERVICE")"
+  echo "Previous beat traffic      : $(traffic_summary "$BEAT_SERVICE")"
+fi
 
 echo "Previous API ready revision: ${PREVIOUS_API_READY_REVISION:-unknown}"
 echo "Previous UI ready revision : ${PREVIOUS_UI_READY_REVISION:-unknown}"
@@ -700,6 +750,9 @@ case "$COMMERCE_PUBLIC_DISCOVERY_VALUE" in
 esac
 API_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA},AGENTICORG_COMMERCE_PUBLIC_DISCOVERY_ENABLED=${COMMERCE_PUBLIC_DISCOVERY_VALUE}"
 UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"
+# Worker/beat share the API image; stamp the commit so revision readiness
+# verification (image digest + AGENTICORG_GIT_SHA) applies to them too.
+BACKGROUND_UPDATE_ENV_VARS="AGENTICORG_GIT_SHA=${DEPLOY_SHA}"
 
 # 3. Build + push images.
 if [[ $SKIP_BUILD -eq 0 ]]; then
@@ -713,6 +766,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
   run docker push "${GAR_REGISTRY}/agenticorg:latest"
 
   run docker build \
+    --build-arg "VITE_GA4_ID=${VITE_GA4_ID:-}" \
     -t "$UI_IMAGE" \
     -t "${GAR_REGISTRY}/agenticorg-ui-cloudrun:latest" \
     -f Dockerfile.ui.cloudrun .
@@ -774,6 +828,8 @@ if [[ $DRY_RUN -eq 1 ]]; then
   UI_NEW_REVISION="${UI_SERVICE}-new-${SHORT_SHA}"
   echo "[dry-run] would update $API_SERVICE image/env with --no-traffic"
   echo "[dry-run] would update $UI_SERVICE image/env with --no-traffic"
+  [[ -n "$WORKER_SERVICE" ]] && echo "[dry-run] would update $WORKER_SERVICE to $API_IMAGE and route 100% after API health"
+  [[ -n "$BEAT_SERVICE" ]] && echo "[dry-run] would update $BEAT_SERVICE to $API_IMAGE and route 100% after API health"
   echo "[dry-run] staged API revision placeholder: $API_NEW_REVISION"
   echo "[dry-run] staged UI revision placeholder : $UI_NEW_REVISION"
   case "$TRAFFIC_MODE" in
@@ -855,20 +911,40 @@ if ! poll_health_url "$HEALTH_URL" "public API" 30; then
   exit 1
 fi
 
+# 8b. Roll the Celery worker and beat onto the same image once the API is
+# healthy. They are part of the release: leaving them on the old image drops
+# newly enqueued tasks and runs stale code against the migrated schema.
+if [[ -n "$WORKER_SERVICE" ]] && ! deploy_background_service "$WORKER_SERVICE" "worker"; then
+  remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
+  echo "::error::Failed to roll worker service $WORKER_SERVICE; rolling back API/worker traffic." >&2
+  rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"
+  rollback_background_services
+  exit 1
+fi
+if [[ -n "$BEAT_SERVICE" ]] && ! deploy_background_service "$BEAT_SERVICE" "beat"; then
+  remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
+  echo "::error::Failed to roll beat service $BEAT_SERVICE; rolling back API/worker/beat traffic." >&2
+  rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"
+  rollback_background_services
+  exit 1
+fi
+
 if ! update_service_no_traffic UI_NEW_REVISION "$UI_SERVICE" "$UI_IMAGE" "$UI_UPDATE_ENV_VARS" "UI" "$UI_IMAGE_DIGEST" "GIT_SHA"; then
   remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
-  echo "::error::Failed to stage UI revision after API verification; rolling back API/UI traffic." >&2
+  echo "::error::Failed to stage UI revision after API verification; rolling back API/UI/worker/beat traffic." >&2
   rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"
   rollback_service_traffic "$UI_SERVICE" "$PREVIOUS_UI_TRAFFIC_SPEC" "UI"
+  rollback_background_services
   exit 1
 fi
 echo "Staged UI revision : $UI_NEW_REVISION"
 
 if ! move_traffic_to_revision "$UI_SERVICE" "$UI_NEW_REVISION" "UI"; then
   remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
-  echo "::error::Failed to move UI traffic to $UI_NEW_REVISION; rolling back API/UI traffic." >&2
+  echo "::error::Failed to move UI traffic to $UI_NEW_REVISION; rolling back API/UI/worker/beat traffic." >&2
   rollback_service_traffic "$API_SERVICE" "$PREVIOUS_API_TRAFFIC_SPEC" "API"
   rollback_service_traffic "$UI_SERVICE" "$PREVIOUS_UI_TRAFFIC_SPEC" "UI"
+  rollback_background_services
   exit 1
 fi
 
@@ -876,4 +952,4 @@ remove_probe_tag "$API_SERVICE" "$API_PROBE_TAG"
 
 echo "New API traffic: $(traffic_summary "$API_SERVICE")"
 echo "New UI traffic : $(traffic_summary "$UI_SERVICE")"
-echo "DEPLOYED: API=$API_NEW_REVISION UI=$UI_NEW_REVISION commit=$DEPLOY_SHA"
+echo "DEPLOYED: API=$API_NEW_REVISION UI=$UI_NEW_REVISION worker=${WORKER_SERVICE:-skipped} beat=${BEAT_SERVICE:-skipped} commit=$DEPLOY_SHA"

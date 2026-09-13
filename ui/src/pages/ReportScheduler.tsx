@@ -433,26 +433,38 @@ export default function ReportScheduler() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this schedule?")) return;
     const csrf = readCsrf();
-    await fetch(`${API_BASE}/report-schedules/${id}`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: csrf ? { "X-CSRF-Token": csrf } : {},
-    });
+    setError(null);
+    try {
+      const resp = await fetch(`${API_BASE}/report-schedules/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: csrf ? { "X-CSRF-Token": csrf } : {},
+      });
+      if (!resp.ok) throw new Error(`Delete failed (HTTP ${resp.status})`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    }
     fetchSchedules();
   }
 
   /* ── Toggle active ── */
   async function handleToggle(s: ReportSchedule) {
     const csrf = readCsrf();
-    await fetch(`${API_BASE}/report-schedules/${s.id}`, {
-      method: "PATCH",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-        ...(csrf ? { "X-CSRF-Token": csrf } : {}),
-      },
-      body: JSON.stringify({ is_active: !s.is_active }),
-    });
+    setError(null);
+    try {
+      const resp = await fetch(`${API_BASE}/report-schedules/${s.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(csrf ? { "X-CSRF-Token": csrf } : {}),
+        },
+        body: JSON.stringify({ is_active: !s.is_active }),
+      });
+      if (!resp.ok) throw new Error(`Update failed (HTTP ${resp.status})`);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Update failed");
+    }
     fetchSchedules();
   }
 

@@ -3,9 +3,11 @@
 Handles:
   - Agent registration on Grantex (gets DID)
   - Grant token verification and scope checking
-  - Budget allocation and debit for payment operations
   - Delegation chain for org hierarchy
-  - Audit trail logging
+
+Budget debit and Grantex audit-trail helpers were removed: nothing in the
+runtime called them, and tool-call auditing lives in
+``core.tool_gateway.audit_logger`` / the action-policy decision log.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from typing import Any
 
 import structlog
 from grantex import Grantex, ToolManifest
-from grantex._errors import GrantexApiError, GrantexError
+from grantex._errors import GrantexApiError
 from grantex._types import Agent as GrantexAgent
 
 logger = structlog.get_logger()
@@ -208,62 +210,57 @@ async def delegate_to_child_agent(
     return result
 
 
-async def debit_budget(
-    grant_id: str,
-    amount: float,
-    currency: str = "INR",
-    description: str = "",
-) -> dict[str, Any]:
-    """Debit from an agent's budget allocation.
-
-    Used for payment operations — the agent's grant has a spending cap,
-    and each payment debits from it.
-
-    Returns debit result or raises if insufficient budget.
-    """
-    client = get_grantex_client()
-    from grantex._types import DebitBudgetParams
-
-    result = client.budgets.debit(DebitBudgetParams(  # type: ignore[call-arg]
-        grant_id=grant_id,
-        amount=amount,
-        currency=currency,
-        description=description or "Agent tool execution",
-    ))
-    return {
-        "remaining_balance": getattr(result, "remaining_balance", None),
-        "transaction_id": getattr(result, "transaction_id", ""),
-    }
+_WRITE_TOOL_HINTS = (
+    "create",
+    "post",
+    "update",
+    "delete",
+    "send",
+    "file",
+    "initiate",
+    "queue",
+    "pay",
+    "publish",
+    "schedule",
+    "upsert",
+    "cancel",
+)
 
 
-async def log_audit_entry(
-    agent_id: str,
-    action: str,
-    resource_type: str = "",
-    resource_id: str = "",
-    outcome: str = "success",
-    metadata: dict[str, Any] | None = None,
-) -> None:
-    """Log an action to the Grantex audit trail (hash-chained, append-only)."""
+def _manifest_permission(connector_name: str, tool_name: str) -> str | None:
+    """Return the manifest-declared permission for ``connector.tool`` if shipped."""
     try:
-        client = get_grantex_client()
-        from grantex._types import LogAuditParams
+        mod = importlib.import_module(f"grantex.manifests.{connector_name}")
+    except ImportError:
+        return None
+    manifest = getattr(mod, "manifest", None)
+    get_permission = getattr(manifest, "get_permission", None)
+    if get_permission is None:
+        return None
+    permission = get_permission(tool_name)
+    return str(permission) if permission else None
 
-        client.audit.log(LogAuditParams(  # type: ignore[call-arg]
-            action=action,
-            resource_type=resource_type or "agent_execution",
-            resource_id=resource_id or agent_id,
-            outcome=outcome,
-            metadata=metadata or {},
-        ))
-    except GrantexError:
-        logger.warning("grantex_audit_log_failed", agent_id=agent_id, action=action)
+
+def _tool_permission(connector_name: str, tool_name: str) -> str:
+    """Permission level the SDK understands (``read``/``write``/``delete``/``admin``)."""
+    declared = _manifest_permission(connector_name, tool_name)
+    if declared:
+        return declared
+    lowered = tool_name.lower()
+    return "write" if any(hint in lowered for hint in _WRITE_TOOL_HINTS) else "read"
 
 
 def _tools_to_scopes(tools: list[str]) -> list[str]:
     """Map tool names to Grantex scope format.
 
-    "fetch_bank_statement" -> "tool:banking_aa:execute:fetch_bank_statement"
+    ``grantex.enforce`` resolves the granted level from the third scope
+    segment and only understands ``read < write < delete < admin``; an
+    ``execute`` segment resolves to no permission and every call is denied.
+    The permission comes from the shipped manifest when available, else from
+    a conservative name heuristic (unknown → ``read``).
+
+    "fetch_bank_statement" -> "tool:banking_aa:read:fetch_bank_statement"
+    "create_contact"       -> "tool:hubspot:write:create_contact"
     """
     from core.langgraph.tool_adapter import _actual_tool_name, _build_tool_index
 
@@ -273,5 +270,6 @@ def _tools_to_scopes(tools: list[str]) -> list[str]:
         match = index.get(tool_name)
         if match:
             connector_name = match[0]
-            scopes.append(f"tool:{connector_name}:execute:{_actual_tool_name(tool_name)}")
+            actual = _actual_tool_name(tool_name)
+            scopes.append(f"tool:{connector_name}:{_tool_permission(connector_name, actual)}:{actual}")
     return scopes

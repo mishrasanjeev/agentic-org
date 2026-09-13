@@ -53,6 +53,11 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         "capability_readiness_records",
         "capability_evidence_records",
         "capability_promotion_events",
+        # Billing entitlement + tenant CDC triggers (v4.0.0 tables with no
+        # ORM model). The empty-database bootstrap stamps past v4.0.0, so
+        # only the v6z19 repair creates them; a green upgrade must prove it.
+        "billing_subscriptions",
+        "cdc_triggers",
     }
 )
 

@@ -414,6 +414,16 @@ async def diagnostics():
         "api_key_configured": bool(os.getenv("COMPOSIO_API_KEY", "")),
     }
 
+    # Billing gateway readiness (booleans only). INR readiness reflects the
+    # Plural credentials the client actually reads (PLURAL_CLIENT_ID/SECRET),
+    # never the legacy PINELABS_API_KEY / PLURAL_API_KEY names.
+    from api.v1.billing import _plural_configured
+
+    checks["billing"] = {
+        "usd_stripe_configured": bool(os.getenv("STRIPE_SECRET_KEY", "")),
+        "inr_plural_configured": _plural_configured(),
+    }
+
     core_healthy = checks["db"] == "healthy" and checks["redis"] == "healthy"
     return {
         "status": "healthy" if core_healthy and healthy_count == total_count else (

@@ -324,3 +324,209 @@ class TestCeleryTasks:
         from core.tasks.celery_app import app
 
         assert "cleanup-old-reports" in app.conf.beat_schedule
+
+
+# ── Scheduled report poller reads report_schedules from the DB ───────────
+
+
+class _FakeScalars:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return self._rows
+
+
+class _FakeResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def scalars(self):
+        return _FakeScalars(self._rows)
+
+
+class _FakeTxn:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+class _FakeSession:
+    def __init__(self, rows):
+        self.rows = rows
+        self.statements = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+    def begin(self):
+        return _FakeTxn()
+
+    async def execute(self, stmt):
+        self.statements.append(stmt)
+        return _FakeResult(self.rows)
+
+
+class TestScheduledReportPoller:
+    def _row(self, **overrides):
+        from datetime import UTC, datetime, timedelta
+        from types import SimpleNamespace
+
+        base = {
+            "id": uuid.uuid4(),
+            "tenant_id": uuid.uuid4(),
+            "company_id": uuid.uuid4(),
+            "report_type": "cfo_daily",
+            "cron_expression": "daily",
+            "recipients": [{"type": "email", "target": "cfo@corp.in"}],
+            "format": "pdf",
+            "enabled": True,
+            "last_run_at": None,
+            "next_run_at": datetime.now(UTC) - timedelta(minutes=1),
+            "config": {"params": {"x": 1}},
+        }
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    @pytest.mark.asyncio
+    async def test_claim_due_schedules_uses_skip_locked_and_advances_next_run(self, monkeypatch):
+        from datetime import UTC, datetime
+
+        from core.tasks import report_tasks as rt
+
+        row = self._row()
+        session = _FakeSession([row])
+        monkeypatch.setattr("core.database.async_session_factory", lambda: session)
+
+        before = datetime.now(UTC)
+        claimed = await rt._claim_due_schedules()
+
+        from sqlalchemy.dialects import postgresql
+
+        sql = str(session.statements[0].compile(dialect=postgresql.dialect()))
+        assert "FOR UPDATE SKIP LOCKED" in sql
+        assert "report_schedules.enabled IS true" in sql
+        assert "next_run_at" in sql
+        assert row.last_run_at >= before
+        assert row.next_run_at > before  # advanced in the same txn as the claim
+        assert claimed == [
+            {
+                "report_type": "cfo_daily",
+                "params": {"x": 1},
+                "company_id": str(row.company_id),
+                "tenant_id": str(row.tenant_id),
+                "delivery_channels": [{"type": "email", "target": "cfo@corp.in"}],
+                "format": "pdf",
+                "schedule_id": str(row.id),
+            }
+        ]
+
+    def test_generate_scheduled_reports_fans_out_db_rows(self, monkeypatch):
+        from core.tasks import report_tasks as rt
+
+        cfg = {"report_type": "cfo_daily", "schedule_id": "s1", "tenant_id": "t"}
+
+        async def _claim():
+            return [cfg]
+
+        monkeypatch.setattr(rt, "_claim_due_schedules", _claim)
+        # run_async is imported lazily inside the task; provide a loop-local
+        # stand-in so the test does not depend on the worker runner module.
+        import asyncio
+        import sys
+        import types
+
+        fake_runner = types.ModuleType("core.tasks.async_runner")
+        fake_runner.run_async = lambda coro: asyncio.new_event_loop().run_until_complete(coro)
+        monkeypatch.setitem(sys.modules, "core.tasks.async_runner", fake_runner)
+        sent = []
+        monkeypatch.setattr(rt.generate_report, "delay", lambda c: sent.append(c))
+
+        result = rt.generate_scheduled_reports.run()
+
+        assert sent == [cfg]
+        assert result == {"fired": ["s1"], "errors": [], "checked": 1}
+
+    def test_next_run_after_keywords_and_cron(self):
+        from datetime import UTC, datetime, timedelta
+
+        from core.tasks import report_tasks as rt
+
+        now = datetime(2026, 9, 13, 10, 0, tzinfo=UTC)
+        assert rt._next_run_after("hourly", now) == now + timedelta(hours=1)
+        assert rt._next_run_after("bogus expr", now) == now + timedelta(days=1)
+        nxt = rt._next_run_after("0 6 * * *", now)
+        assert nxt > now
+        if pytest.importorskip("croniter", reason="croniter optional"):
+            assert nxt.hour == 6
+
+
+class TestDemoContentNeverDelivered:
+    def test_is_demo_or_fallback(self):
+        from core.tasks.report_tasks import _is_demo_or_fallback as f
+
+        assert f({"demo": True}) is True
+        assert f({"source": "report_generator_fallback"}) is True
+        assert f({"demo": False, "source": "computed", "agent_count": 3}) is False
+
+    def test_generate_report_blocks_delivery_for_fallback_content(self, monkeypatch, tmp_path):
+        from core.reports.generator import ReportGenerator
+        from core.tasks import report_tasks as rt
+
+        monkeypatch.setattr(
+            ReportGenerator,
+            "_fetch_cfo_kpis",
+            staticmethod(lambda company_id, tenant_id="default": {"demo": True, "source": "report_generator_fallback"}),
+        )
+        delivered = []
+        monkeypatch.setattr(rt.deliver_report, "delay", lambda **kw: delivered.append(kw))
+        monkeypatch.setattr(rt, "_REPORTS_DIR", tmp_path)
+
+        result = rt.generate_report.run(
+            {
+                "report_type": "cfo_daily",
+                "tenant_id": str(uuid.uuid4()),
+                "company_id": "default",
+                "delivery_channels": [{"type": "email", "target": "cfo@corp.in"}],
+                "format": "pdf",
+            }
+        )
+
+        assert result["status"] == "failed"
+        assert result["reason"] == "report_content_is_demo_or_fallback"
+        assert result["paths"] == []
+        assert delivered == []
+
+    def test_fetch_kpis_uses_in_process_builder_for_tenant(self, monkeypatch):
+        from core.reports.generator import ReportGenerator
+
+        tenant = str(uuid.uuid4())
+        seen = {}
+
+        async def _fake_builder(tenant_id, role, company_id):
+            seen.update(tenant_id=tenant_id, role=role, company_id=company_id)
+            return {"agent_count": 4, "total_tasks_30d": 12, "success_rate": 90.0, "demo": False, "source": "computed"}
+
+        monkeypatch.setattr("api.v1.kpis._build_kpi_response", _fake_builder)
+        import asyncio
+        import sys
+        import types
+
+        fake_runner = types.ModuleType("core.tasks.async_runner")
+        fake_runner.run_async = lambda coro: asyncio.new_event_loop().run_until_complete(coro)
+        monkeypatch.setitem(sys.modules, "core.tasks.async_runner", fake_runner)
+        data = ReportGenerator._fetch_cfo_kpis("comp-1", tenant)
+
+        assert seen == {"tenant_id": tenant, "role": "cfo", "company_id": "comp-1"}
+        assert data["agent_count"] == 4 and data["demo"] is False
+
+    def test_fetch_kpis_without_tenant_scope_is_fallback(self):
+        from core.reports.generator import ReportGenerator
+
+        data = ReportGenerator._fetch_cmo_kpis("default")
+        assert data["demo"] is True and data["source"] == "report_generator_fallback"

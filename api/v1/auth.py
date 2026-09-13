@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import os
 import re
 import time
 import uuid
 from collections import defaultdict
+from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -17,10 +19,13 @@ from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
+from core import auth_state
+from core.auth_state import invalidate_user_session_state
 from core.config import (
     is_strict_runtime_env,
     redis_socket_timeout_kwargs,
@@ -118,6 +123,17 @@ class SignupRequest(BaseModel):
     password: str
 
 
+async def _hash_password(password: str) -> str:
+    """bcrypt cost-12 hashing is CPU-bound (~250ms): keep it off the event loop."""
+    return await asyncio.to_thread(
+        lambda: _bcrypt.hashpw(password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+    )
+
+
+async def _verify_password(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(_bcrypt.checkpw, password.encode(), password_hash.encode())
+
+
 def _make_slug(name: str) -> str:
     """Generate a URL-safe slug from an organization name."""
     slug = name.lower()
@@ -139,18 +155,20 @@ def _make_slug(name: str) -> str:
 async def signup(body: SignupRequest, request: Request, response: Response):
     """Register a new organization and admin user."""
     # Rate-limit signups per IP (Redis-backed)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     from core.auth_state import check_signup_rate
     if await check_signup_rate(client_ip):
         raise HTTPException(status_code=429, detail="Too many signup attempts — try again later")
 
     # Password policy
     _validate_password(body.password)
+    admin_email = body.admin_email.strip().lower()
 
     async with async_session_factory() as session:
-        # Check email not already registered globally
+        # Check email not already registered globally (case-insensitive:
+        # rows created before normalisation may carry mixed case).
         existing = await session.execute(
-            select(User).where(User.email == body.admin_email)
+            select(User).where(func.lower(User.email) == admin_email)
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Email already registered")
@@ -174,11 +192,11 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         await session.flush()
 
         # Create admin user
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+        pw_hash = await _hash_password(body.password)
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant.id,
-            email=body.admin_email,
+            email=admin_email,
             name=body.admin_name,
             role="admin",
             domain="all",
@@ -208,7 +226,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -250,8 +268,15 @@ _throttle_redis = None
 
 
 def _auth_state_strict() -> bool:
-    """Is strict multi-replica auth-state enforcement enabled?"""
-    return os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    """Is strict multi-replica auth-state enforcement enabled?
+
+    Mirrors ``core.auth_state._strict``: the env override OR a strict runtime
+    env (production/staging) — so prod never silently degrades to in-memory.
+    """
+    env_override = os.getenv("AGENTICORG_AUTH_STATE_STRICT", "").lower() in ("1", "true", "yes")
+    env = getattr(settings, "env", "development")
+    runtime_env = env if isinstance(env, str) else "development"
+    return env_override or is_strict_runtime_env(runtime_env)
 
 
 async def _get_throttle_redis():
@@ -363,13 +388,14 @@ async def _clear_rate_limit(client_ip: str) -> None:
 )
 async def login(body: LoginRequest, request: Request, response: Response):
     # Rate-limit login attempts per IP (Redis-backed, in-memory fallback)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     if await _check_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
 
+    email = body.email.strip().lower()
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.email == body.email, User.status == "active")
+            select(User).where(func.lower(User.email) == email, User.status == "active")
         )
         users = result.scalars().all()
         # Email is not a safe tenant identity: the same address may exist in
@@ -380,7 +406,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         user = users[0] if users else None
         if not user or not user.password_hash:
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
+        if not await _verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         await _clear_rate_limit(client_ip)
         # Fetch tenant for onboarding status
@@ -413,7 +439,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -452,21 +478,29 @@ async def google_login(body: GoogleLoginRequest, response: Response):
         raise HTTPException(status_code=501, detail="Google login not configured")
 
     try:
-        idinfo = google_id_token.verify_oauth2_token(
-            body.credential, google_requests.Request(), client_id
+        # Google's verifier fetches its certs with a blocking HTTP client.
+        idinfo = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            body.credential,
+            google_requests.Request(),
+            client_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {e}") from None
 
-    email = idinfo.get("email", "")
+    email = (idinfo.get("email") or "").strip().lower()
     name = idinfo.get("name", email.split("@")[0])
 
     if not email:
         raise HTTPException(status_code=401, detail="Google token missing email")
+    # An unverified Google e-mail proves nothing about ownership of the
+    # address that keys the account lookup below.
+    if not idinfo.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Google account email is not verified")
 
     # Find or create user
     async with async_session_factory() as session:
-        result = await session.execute(select(User).where(User.email == email))
+        result = await session.execute(select(User).where(func.lower(User.email) == email))
         users = result.scalars().all()
         if len(users) > 1:
             raise HTTPException(
@@ -474,6 +508,10 @@ async def google_login(body: GoogleLoginRequest, response: Response):
                 detail="This email is associated with multiple organizations; use organization SSO.",
             )
         user = users[0] if users else None
+        # Mirror the password path: pending invites and deactivated members
+        # must not obtain a session (nor a fresh tenant) via Google.
+        if user is not None and user.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active")
 
         if not user:
             # Create a NEW tenant for this Google user (no cross-tenant leakage)
@@ -524,7 +562,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
             "name": user.name,
             "role": user.role,
             "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role),
+            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
         },
         expires_minutes=getattr(settings, "token_ttl_minutes", 60),
     )
@@ -553,9 +591,11 @@ class ResetPasswordRequest(BaseModel):
     password: str
 
 
-# Rate limiting for password reset (max 3 per email per hour)
-_reset_attempts: dict[str, list[float]] = defaultdict(list)
+# Rate limiting for password reset: max 3 per email per hour AND a per-IP
+# ceiling, both Redis-backed via core.auth_state (in-memory only in relaxed
+# env, strict env fails closed with 503 like login throttling).
 _RESET_MAX = 3
+_RESET_IP_MAX = 20
 _RESET_WINDOW = 3600  # 1 hour
 
 
@@ -573,17 +613,23 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
     """Send a password reset link if the email is registered."""
     email = body.email.strip().lower()
 
-    # Rate-limit per email
-    now = time.time()
-    _reset_attempts[email] = [t for t in _reset_attempts[email] if now - t < _RESET_WINDOW]
-    if len(_reset_attempts[email]) >= _RESET_MAX:
+    # Rate-limit per IP and per email (cross-replica).
+    client_ip = resolve_client_ip(request)
+    try:
+        ip_blocked = await auth_state.check_window_rate("reset_ip", client_ip, _RESET_IP_MAX, _RESET_WINDOW)
+        email_blocked = await auth_state.check_window_rate(
+            "reset_email", hashlib.sha256(email.encode()).hexdigest(), _RESET_MAX, _RESET_WINDOW
+        )
+    except RuntimeError as exc:
+        logger.error("Password reset throttle unavailable in strict mode: %s", exc)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    if ip_blocked or email_blocked:
         # Still return success to avoid email enumeration
         return {"status": "ok", "message": "If that email is registered, a reset link has been sent."}
-    _reset_attempts[email].append(now)
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.email == email, User.status == "active")
+            select(User).where(func.lower(User.email) == email, User.status == "active")
         )
         users = result.scalars().all()
         # Preserve enumeration-safe behavior while avoiding an ambiguous
@@ -659,11 +705,14 @@ async def reset_password(body: ResetPasswordRequest):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
-        user.password_hash = pw_hash
+        user.password_hash = await _hash_password(body.password)
+        # A password reset invalidates every session issued before it
+        # (stolen-credential recovery). Enforced by the auth middleware.
+        user.sessions_invalid_before = datetime.now(UTC)
         session.add(user)
         await session.commit()
 
+    await invalidate_user_session_state(str(tenant_id), email)
     return {"status": "ok", "message": "Password has been reset. You can now sign in."}
 
 
@@ -683,6 +732,14 @@ async def logout(request: Request, response: Response):
     token = getattr(request.state, "auth_token", "")
     if not isinstance(token, str) or not token:
         raise HTTPException(status_code=401, detail="Missing session cookie or Authorization header")
+    # API keys (ao_sk_...) are long-lived credentials, not sessions: the JWT
+    # blacklist never consults them, so reporting "logged_out" would be a lie.
+    # Revoke via DELETE /api-keys/{id} instead.
+    if token.startswith("ao_sk_") or getattr(request.state, "auth_mode", "") == "api_key":
+        raise HTTPException(
+            status_code=400,
+            detail="Logout applies to session tokens only; revoke API keys via the API key management endpoint",
+        )
     try:
         await blacklist_token(token)
     # enterprise-gate: broad-except-ok reason=logout-must-map-any-revocation-store-failure-to-retryable-503
@@ -691,6 +748,53 @@ async def logout(request: Request, response: Response):
         raise HTTPException(status_code=503, detail="Unable to revoke session; please retry") from exc
     _clear_session_cookie(response)
     return {"status": "logged_out"}
+
+
+@router.post("/logout-all")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="auth.session.logout",
+    rate_limit="auth-mutating",
+    idempotency="session-watermark-monotonic",
+    audit_event="auth.logout_all",
+)
+async def logout_all(request: Request, response: Response):
+    """Revoke every session of the current user (all devices, all replicas).
+
+    Sets ``users.sessions_invalid_before`` to now; the auth middleware then
+    rejects any legacy JWT issued before that instant. The blacklist is
+    per-token and cannot express "everything issued so far" — this can.
+    """
+    if getattr(request.state, "auth_mode", "") != "legacy":
+        raise HTTPException(
+            status_code=400,
+            detail="Logout applies to session tokens only; revoke API keys via the API key management endpoint",
+        )
+    claims = getattr(request.state, "claims", None)
+    tenant_value = getattr(request.state, "tenant_id", "")
+    email = claims.get("sub", "") if isinstance(claims, dict) else ""
+    if not tenant_value or not isinstance(email, str) or not email:
+        raise HTTPException(401, "Missing authenticated session context")
+    try:
+        tenant_id = uuid.UUID(str(tenant_value))
+    except (TypeError, ValueError):
+        raise HTTPException(401, "Invalid authenticated tenant context") from None
+
+    async with get_tenant_session(tenant_id) as session:
+        result = await session.execute(
+            select(User).where(User.tenant_id == tenant_id, User.email == email)
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(401, "User not found")
+        user.sessions_invalid_before = datetime.now(UTC)
+        session.add(user)
+        await session.commit()
+
+    await invalidate_user_session_state(str(tenant_id), email)
+    _clear_session_cookie(response)
+    return {"status": "logged_out_all"}
 
 
 @router.get("/me")

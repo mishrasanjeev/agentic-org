@@ -14,6 +14,26 @@ import {
 
 type EventType = "thinking" | "tool_call" | "result" | "hitl_trigger";
 
+/**
+ * Classify a real /audit ``event_type``. The backend writes prefixed names
+ * (``agent.run``, ``tool.<name>``, ``hitl.*``); the legacy bare values are
+ * kept so older rows still classify.
+ */
+export function classifyAuditEventType(raw: unknown): EventType {
+  const t = typeof raw === "string" ? raw : "";
+  if (t === "hitl_trigger" || t.startsWith("hitl.")) return "hitl_trigger";
+  if (t === "tool_call" || t.startsWith("tool.")) return "tool_call";
+  if (t === "thinking") return "thinking";
+  if (t === "agent.run" || t === "result") return "result";
+  return "thinking";
+}
+
+/** /audit rows carry ``created_at``; ``timestamp`` is only a legacy alias. */
+export function auditEntryTimestamp(entry: { created_at?: unknown; timestamp?: unknown }): string | null {
+  const raw = entry?.created_at ?? entry?.timestamp;
+  return typeof raw === "string" && raw ? raw : null;
+}
+
 interface AgentEvent {
   id: number;
   timestamp: string;
@@ -111,18 +131,24 @@ export default function Observatory() {
   const [throughputData, setThroughputData] = useState<{ t: number; v: number }[]>(
     () => Array.from({ length: 20 }, (_, i) => ({ t: i, v: 0 }))
   );
-  const [workflowStepIdx, setWorkflowStepIdx] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
   const lastFetchedId = useRef<string | null>(null);
+  // Audit rows already folded into the counters. Without this, every poll
+  // that detected one new row re-added all 20-50 returned rows to
+  // "Transactions Today" / "HITL Escalations".
+  const seenAuditKeys = useRef<Set<string>>(new Set());
 
   // Pick the primary domain for the workflow display
   const primaryDomain = domains[0];
   const workflow = DOMAIN_WORKFLOWS[primaryDomain] || DOMAIN_WORKFLOWS.finance;
 
-  const workflowSteps: WorkflowStep[] = workflow.steps.map((label, i) => ({
+  // The pipeline is a static reference diagram for the role's primary domain.
+  // It is NOT driven by run state (the API exposes no per-step telemetry here),
+  // so it is rendered without running/completed markers and labelled as such.
+  const workflowSteps: WorkflowStep[] = workflow.steps.map((label) => ({
     label,
-    status: i < workflowStepIdx ? "completed" : i === workflowStepIdx ? "running" : "pending",
+    status: "pending",
   }));
 
   // Active agent count from recent events
@@ -130,13 +156,10 @@ export default function Observatory() {
 
   // Map an audit entry from the API into an AgentEvent
   const mapAuditEntry = useCallback((entry: any): AgentEvent => {
-    const eventType: EventType =
-      entry.event_type === "hitl_trigger" ? "hitl_trigger"
-        : entry.event_type === "tool_call" ? "tool_call"
-        : entry.event_type === "thinking" ? "thinking"
-        : "result";
-    const ts = entry.timestamp
-      ? new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    const eventType: EventType = classifyAuditEventType(entry.event_type);
+    const rawTs = auditEntryTimestamp(entry);
+    const ts = rawTs
+      ? new Date(rawTs).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
       : new Date().toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     return {
       id: nextId.current++,
@@ -152,16 +175,30 @@ export default function Observatory() {
   // Poll API for real events
   const fetchEvents = useCallback(async () => {
     try {
-      const { data } = await api.get("/audit", { params: { limit: 20 } });
+      // /audit paginates with page/per_page (a ``limit`` param is ignored).
+      // date_from = local midnight so the "Transactions Today" tally only
+      // counts today's rows instead of whatever the newest 20 happen to be.
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const { data } = await api.get("/audit", { params: { page: 1, per_page: 20, date_from: startOfToday } });
       const raw: any[] = Array.isArray(data) ? data : data?.items || [];
       if (raw.length === 0) return;
 
       // Detect new entries since last fetch
-      const newestId = raw[0]?.id || raw[0]?.timestamp;
+      const newestId = raw[0]?.id || auditEntryTimestamp(raw[0]);
       if (newestId === lastFetchedId.current) return;
       lastFetchedId.current = newestId;
 
-      const mapped = raw.map(mapAuditEntry);
+      // Only rows we have not seen before count towards the tallies.
+      const fresh = raw.filter((entry, idx) => {
+        const key = String(entry?.id ?? `${auditEntryTimestamp(entry) ?? ""}#${idx}`);
+        if (seenAuditKeys.current.has(key)) return false;
+        seenAuditKeys.current.add(key);
+        return true;
+      });
+      if (fresh.length === 0) return;
+
+      const mapped = fresh.map(mapAuditEntry);
       setEvents((old) => {
         const merged = [...mapped, ...old];
         // Deduplicate by keeping unique messages (first occurrence)
@@ -196,15 +233,6 @@ export default function Observatory() {
     const interval = setInterval(fetchEvents, 5000);
     return () => clearInterval(interval);
   }, [fetchEvents]);
-
-  // Advance the workflow step periodically (only when we have events)
-  useEffect(() => {
-    if (events.length === 0) return;
-    const stepTimer = setInterval(() => {
-      setWorkflowStepIdx((prev) => (prev + 1) % workflow.steps.length);
-    }, 8000);
-    return () => clearInterval(stepTimer);
-  }, [workflow.steps.length, events.length]);
 
   // Auto-scroll feed
   useEffect(() => {
@@ -264,8 +292,11 @@ export default function Observatory() {
         {/* --- LEFT 60%: Active Workflow --- */}
         <div className="w-[60%] border-r border-slate-700 p-6 flex flex-col">
           <div className="mb-6">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Active Workflow</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Reference Pipeline</p>
             <h2 className="text-lg font-semibold">{workflow.name}</h2>
+            <p className="text-xs text-slate-500 mt-1" data-testid="observatory-pipeline-note">
+              Illustrative stage map for this domain. Step status is not tracked here; live activity is in the feed.
+            </p>
           </div>
 
           {/* Step Timeline */}
@@ -313,7 +344,7 @@ export default function Observatory() {
             <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700">
               <ResponsiveContainer width="100%" height={100}>
                 <LineChart data={throughputData}>
-                  <YAxis domain={[20, 80]} hide />
+                  <YAxis domain={[0, "auto"]} hide />
                   <Line
                     type="monotone"
                     dataKey="v"

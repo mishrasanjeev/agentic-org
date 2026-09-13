@@ -38,6 +38,7 @@ from core.models.workflow import StepExecution
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
+    AgentFeedbackSubmit,
     AgentUpdate,
     FleetLimits,
     PaginatedResponse,
@@ -1492,7 +1493,11 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             prompt_variables=body.prompt_variables,
             llm_model=body.llm.model,
             llm_fallback=body.llm.fallback_model,
-            llm_config=body.llm.model_dump(),
+            llm_config=(
+                {**body.llm.model_dump(), "routing": body.llm_routing}
+                if body.llm_routing
+                else body.llm.model_dump()
+            ),
             confidence_floor=Decimal(str(body.confidence_floor)),
             hitl_condition=body.hitl_policy.condition,
             max_retries=body.max_retries,
@@ -2472,6 +2477,10 @@ async def update_agent(
             agent.parent_agent_id = _uuid.UUID(pid) if pid else None
         if "connector_ids" in update_data and update_data["connector_ids"] is not None:
             agent.connector_ids = list(update_data["connector_ids"])
+        if "max_retries" in update_data and update_data["max_retries"] is not None:
+            agent.max_retries = int(update_data["max_retries"])
+        if "prompt_amendments" in update_data and update_data["prompt_amendments"] is not None:
+            agent.prompt_amendments = [str(a) for a in update_data["prompt_amendments"]]
 
         # Audit trail for prompt edits
         new_prompt = agent.system_prompt_text
@@ -3049,6 +3058,14 @@ async def run_agent(
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
             session.add(hitl_entry)
+        from core.push.sender import notify_approval_created
+
+        await notify_approval_created(
+            tenant_id,
+            item_id=str(hitl_entry.id),
+            agent_name=str(agent_config.get("name") or agent_config.get("agent_type") or ""),
+            action=str(hitl_trigger),
+        )
 
     # 6c. Track running accuracy for shadow AND active agents (atomic SQL)
     #
@@ -3375,6 +3392,14 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
                     409,
                     f"Shadow accuracy {agent.shadow_accuracy_current} is below floor {required_accuracy}",
                 )
+            # The blended accuracy above is dominated by model self-reported
+            # confidence when no human has reviewed the agent. Require real
+            # human evidence before an agent may act unsupervised.
+            from core.feedback.shadow_learning import promotion_evidence_gate
+
+            evidence = promotion_evidence_gate(agent)
+            if not evidence["ok"]:
+                raise HTTPException(409, evidence["reason"])
 
         async with get_tenant_session(tid, agent.company_id) as connector_session:
             await _assert_connectors_ready_for_activation(
@@ -3914,32 +3939,34 @@ async def get_agent_budget(
 )
 async def submit_agent_feedback(
     agent_id: UUID,
-    body: dict | None = None,
+    body: AgentFeedbackSubmit,
     tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
 ):
-    """Submit feedback (thumbs up/down, correction, HITL reject) for an agent run."""
-    if body is None:
-        body = {}
+    """Submit feedback (thumbs up/down, correction, HITL reject) for an agent run.
 
+    The actor is recorded from the authenticated session, never from the
+    body: learned rules are derived from this data and must be attributable.
+    """
     from core.feedback.collector import submit_feedback
 
-    run_id = body.get("run_id", "")
-    feedback_type = body.get("feedback_type", "")
-    text = body.get("text", "")
-    corrected_output = body.get("corrected_output")
-
-    if not feedback_type:
-        raise HTTPException(400, "feedback_type is required")
-    if not run_id:
-        raise HTTPException(400, "run_id is required")
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        exists = await session.execute(
+            select(Agent.id).where(Agent.id == agent_id, Agent.tenant_id == tid)
+        )
+        if exists.scalar_one_or_none() is None:
+            raise HTTPException(404, "Agent not found")
 
     result = await submit_feedback(
         agent_id=str(agent_id),
-        run_id=run_id,
-        feedback_type=feedback_type,
-        text=text,
-        corrected_output=corrected_output,
+        run_id=body.run_id,
+        feedback_type=body.feedback_type,
+        text=body.text,
+        corrected_output=body.corrected_output,
+        original_output=body.original_output,
         tenant_id=tenant_id,
+        actor_id=str(user.get("sub") or user.get("user_id") or "") or None,
     )
 
     if result.get("status") == "error":
@@ -4266,3 +4293,60 @@ async def delete_agent(
         session.add(agent)
 
     return {"id": str(agent_id), "deleted": True, "status": "deleted"}
+
+
+# ── DELETE /agents/{id}/amendments/{index} ──────────────────────────────────
+@router.delete(
+    "/agents/{agent_id}/amendments/{index}",
+    dependencies=[require_tenant_admin],
+)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.sensitive.amendments.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-delete-by-index",
+    audit_event="agents.amendments.delete",
+)
+async def delete_agent_amendment(
+    agent_id: UUID,
+    index: int,
+    tenant_id: str = Depends(get_current_tenant),
+):
+    """Remove a learned rule that a human reviewer rejects.
+
+    Learned rules are prepended to the system prompt on every run, so an
+    unwanted or wrong rule must be revocable by a tenant admin without a
+    redeploy.
+    """
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        raw = getattr(agent, "prompt_amendments", None) or []
+        amendments = [str(a) for a in raw] if isinstance(raw, list) else []
+        if index < 0 or index >= len(amendments):
+            raise HTTPException(404, f"No amendment at index {index}")
+        removed = amendments.pop(index)
+        agent.prompt_amendments = amendments
+        session.add(
+            AuditLog(
+                tenant_id=tid,
+                company_id=agent.company_id,
+                event_type="agent.amendment_removed",
+                actor_type="user",
+                actor_id="api",
+                agent_id=agent.id,
+                resource_type="agent",
+                resource_id=str(agent.id),
+                action="delete",
+                outcome="success",
+                details={"index": index, "amendment": removed[:500]},
+            )
+        )
+
+    return {"agent_id": str(agent_id), "removed": removed, "count": len(amendments)}

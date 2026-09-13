@@ -30,6 +30,12 @@ class User(BaseModel):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    # v6z17: session revocation watermark. Legacy JWTs whose ``iat`` is
+    # older than this are rejected by the auth middleware. Set on member
+    # deactivation, password reset, and logout-all. NULL = never revoked.
+    sessions_invalid_before: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=True
+    )
     # v4.6.0: i18n — per-user timezone (IANA) + locale (BCP-47 short form)
     timezone: Mapped[str] = mapped_column(
         String(64), nullable=False, server_default=text("'UTC'")

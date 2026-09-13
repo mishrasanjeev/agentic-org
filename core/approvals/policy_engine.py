@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
-from core.database import async_session_factory
+from core.database import get_tenant_session
 from core.models.approval_policy import ApprovalPolicy, ApprovalStep
 
 logger = structlog.get_logger()
@@ -66,8 +66,12 @@ async def resolve_policy(
     """Find the policy that applies to a given scope.
 
     Precedence: explicit name > workflow-scoped > agent-scoped > tenant-global default.
+
+    ``approval_policies`` is FORCE-RLS: the lookup runs in the tenant's
+    session, otherwise a raw session sees no policy and the HITL item falls
+    back to the legacy single-step path.
     """
-    async with async_session_factory() as session:
+    async with get_tenant_session(tenant_id) as session:
         if policy_name:
             result = await session.execute(
                 select(ApprovalPolicy).where(
@@ -117,7 +121,7 @@ async def first_applicable_step(
     policy: ApprovalPolicy, context: dict[str, Any]
 ) -> ApprovalStep | None:
     """Return the lowest-sequence step whose condition matches."""
-    async with async_session_factory() as session:
+    async with get_tenant_session(policy.tenant_id) as session:
         result = await session.execute(
             select(ApprovalStep)
             .where(ApprovalStep.policy_id == policy.id)
@@ -137,7 +141,7 @@ async def next_step_after(
     context: dict[str, Any],
 ) -> ApprovalStep | None:
     """Return the next applicable step after ``current_sequence``."""
-    async with async_session_factory() as session:
+    async with get_tenant_session(policy.tenant_id) as session:
         result = await session.execute(
             select(ApprovalStep)
             .where(

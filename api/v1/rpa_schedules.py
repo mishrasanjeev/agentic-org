@@ -586,29 +586,50 @@ async def run_schedule_now(
 # ── Dispatcher helper (used by the Celery beat task) ─────────────────
 
 
+async def _all_tenant_ids() -> list[_uuid.UUID]:
+    """Enumerate tenants for the cross-tenant beat dispatcher.
+
+    ``rpa_schedules`` is FORCE-RLS protected (v6z16): a raw session with no
+    tenant context returns zero rows under a non-BYPASSRLS role, which would
+    silently stop every schedule from ever dispatching. Enumerate the
+    tenant catalog, then enter each tenant's exact RLS context (same
+    pattern as ``core.tasks.token_refresh``).
+    """
+    from sqlalchemy import text
+
+    from core.database import async_session_factory
+    from core.models.tenant import Tenant
+
+    async with async_session_factory() as session:
+        # A maintenance role that cannot bypass RLS must fail loudly here
+        # rather than enumerate zero tenants.
+        await session.execute(text("SET LOCAL row_security = off"))
+        return list((await session.scalars(select(Tenant.id))).all())
+
+
 async def due_schedule_ids(now: datetime | None = None) -> list[tuple[str, str]]:
     """Return ``[(tenant_id, schedule_id), ...]`` for schedules whose
     ``next_run_at`` is in the past and ``enabled`` is true.
 
     Exposed so ``core.tasks.rpa_tasks.dispatch_due_rpa_schedules`` (a
     Celery beat task) can walk the list without opening a DB session of
-    its own. Works across tenant schemas by running in the default
-    tenant context (the dispatcher does not need tenant-scoped RLS —
-    it only fans out IDs).
+    its own. Runs one tenant-bound session per tenant because the table
+    is RLS-enforced.
     """
-    from core.database import async_session_factory
-
     cutoff = now or datetime.now(UTC)
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(RPASchedule.tenant_id, RPASchedule.id).where(
-                RPASchedule.enabled.is_(True),
-                RPASchedule.next_run_at.is_not(None),
-                RPASchedule.next_run_at <= cutoff,
+    pairs: list[tuple[str, str]] = []
+    for tenant_id in await _all_tenant_ids():
+        async with get_tenant_session(tenant_id) as session:
+            result = await session.execute(
+                select(RPASchedule.tenant_id, RPASchedule.id).where(
+                    RPASchedule.tenant_id == tenant_id,
+                    RPASchedule.enabled.is_(True),
+                    RPASchedule.next_run_at.is_not(None),
+                    RPASchedule.next_run_at <= cutoff,
+                )
             )
-        )
-        rows = result.all()
-    return [(str(tid), str(sid)) for tid, sid in rows]
+            pairs.extend((str(tid), str(sid)) for tid, sid in result.all())
+    return pairs
 
 
 async def claim_due_schedule_ids(
@@ -616,21 +637,26 @@ async def claim_due_schedule_ids(
     *,
     lease_minutes: int = 15,
 ) -> list[tuple[str, str]]:
-    """Atomically lease due schedules before the dispatcher enqueues them."""
-    from core.database import async_session_factory
+    """Atomically lease due schedules before the dispatcher enqueues them.
 
+    One tenant-bound session per tenant (RLS-enforced table); each
+    session commits its lease on exit.
+    """
     cutoff = now or datetime.now(UTC)
     lease_until = cutoff + timedelta(minutes=max(1, lease_minutes))
-    async with async_session_factory() as session:
-        result = await session.execute(
-            update(RPASchedule)
-            .where(
-                RPASchedule.enabled.is_(True),
-                RPASchedule.next_run_at.is_not(None),
-                RPASchedule.next_run_at <= cutoff,
+    pairs: list[tuple[str, str]] = []
+    for tenant_id in await _all_tenant_ids():
+        async with get_tenant_session(tenant_id) as session:
+            result = await session.execute(
+                update(RPASchedule)
+                .where(
+                    RPASchedule.tenant_id == tenant_id,
+                    RPASchedule.enabled.is_(True),
+                    RPASchedule.next_run_at.is_not(None),
+                    RPASchedule.next_run_at <= cutoff,
+                )
+                .values(next_run_at=lease_until)
+                .returning(RPASchedule.tenant_id, RPASchedule.id)
             )
-            .values(next_run_at=lease_until)
-            .returning(RPASchedule.tenant_id, RPASchedule.id)
-        )
-        rows = result.all()
-    return [(str(tid), str(sid)) for tid, sid in rows]
+            pairs.extend((str(tid), str(sid)) for tid, sid in result.all())
+    return pairs

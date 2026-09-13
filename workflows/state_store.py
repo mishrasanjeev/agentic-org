@@ -22,6 +22,29 @@ from core.config import settings
 
 logger = structlog.get_logger()
 
+# Loaded states carry the persisted row version under this key so ``save()``
+# can detect a concurrent writer (e.g. ``cancel``) and fail closed instead of
+# last-writer-wins overwriting a terminal status. It is never persisted.
+STATE_VERSION_KEY = "_state_version"
+
+
+class StaleStateError(RuntimeError):
+    """Raised when saving a state whose loaded version is no longer current."""
+
+    def __init__(self, run_id: str, expected: int | None, actual: int | None) -> None:
+        super().__init__(
+            f"workflow state {run_id} is stale (expected version {expected}, found {actual})"
+        )
+        self.run_id = run_id
+        self.expected = expected
+        self.actual = actual
+
+
+def _without_version(state: dict[str, Any]) -> dict[str, Any]:
+    if STATE_VERSION_KEY not in state:
+        return state
+    return {k: v for k, v in state.items() if k != STATE_VERSION_KEY}
+
 
 def _json_safe(value: Any) -> Any:
     """Return a JSON-compatible deep copy."""
@@ -89,7 +112,8 @@ class WorkflowStateRepository(Protocol):
         step_id: str | None = None,
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+        expected_version: int | None = None,
+    ) -> int | None:
         ...
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
@@ -114,16 +138,19 @@ class InMemoryWorkflowStateRepository:
         step_id: str | None = None,
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+        expected_version: int | None = None,
+    ) -> int | None:
         run_id = str(state["id"])
         if idempotency_key and any(
             t["run_id"] == run_id and t.get("idempotency_key") == idempotency_key
             for t in self.transitions
         ):
-            return
+            return None
 
         previous = self.states.get(run_id)
         previous_hash = previous["state_hash"] if previous else None
+        if previous and expected_version is not None and int(previous["version"]) != int(expected_version):
+            raise StaleStateError(run_id, expected_version, int(previous["version"]))
         version = int(previous["version"]) + 1 if previous else 1
         now = datetime.now(UTC).isoformat()
 
@@ -150,12 +177,15 @@ class InMemoryWorkflowStateRepository:
                 "created_at": now,
             }
         )
+        return version
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
         record = self.states.get(str(run_id))
         if not record:
             return None
-        return copy.deepcopy(record["state"])
+        state = copy.deepcopy(record["state"])
+        state[STATE_VERSION_KEY] = record["version"]
+        return state
 
 
 class SqlAlchemyWorkflowStateRepository:
@@ -175,7 +205,8 @@ class SqlAlchemyWorkflowStateRepository:
         step_id: str | None = None,
         idempotency_key: str | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> None:
+        expected_version: int | None = None,
+    ) -> int | None:
         from core.models.workflow import WorkflowRunState, WorkflowStateTransition
 
         run_id = str(state["id"])
@@ -192,7 +223,7 @@ class SqlAlchemyWorkflowStateRepository:
                         )
                     ).scalar_one_or_none()
                     if existing_transition:
-                        return
+                        return None
 
                 row = (
                     await session.execute(
@@ -203,6 +234,12 @@ class SqlAlchemyWorkflowStateRepository:
                 ).scalar_one_or_none()
 
                 previous_hash = row.state_hash if row else None
+                if (
+                    row is not None
+                    and expected_version is not None
+                    and int(row.version or 0) != int(expected_version)
+                ):
+                    raise StaleStateError(run_id, expected_version, int(row.version or 0))
                 if row is None:
                     row = WorkflowRunState(
                         run_id=run_id,
@@ -236,6 +273,7 @@ class SqlAlchemyWorkflowStateRepository:
                         transition_metadata=_json_safe(metadata or {}),
                     )
                 )
+                return int(row.version)
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
         from core.models.workflow import WorkflowRunState
@@ -248,7 +286,9 @@ class SqlAlchemyWorkflowStateRepository:
             ).scalar_one_or_none()
             if row is None:
                 return None
-            return copy.deepcopy(row.state)
+            state = copy.deepcopy(row.state)
+            state[STATE_VERSION_KEY] = int(row.version or 0)
+            return state
 
 
 class WorkflowStateStore:
@@ -283,12 +323,14 @@ class WorkflowStateStore:
         if not run_id:
             raise ValueError("workflow state must include an 'id'")
 
-        safe_hash = _state_hash(state)
+        expected_version = state.get(STATE_VERSION_KEY)
+        persisted = _without_version(state)
+        safe_hash = _state_hash(persisted)
         effective_tenant_id = _extract_tenant_id(state, tenant_id)
         effective_workflow_run_id = _extract_workflow_run_id(state, workflow_run_id)
 
-        await self.repository.save(
-            state,
+        new_version = await self.repository.save(
+            persisted,
             state_hash=safe_hash,
             tenant_id=effective_tenant_id,
             workflow_run_id=effective_workflow_run_id,
@@ -296,8 +338,13 @@ class WorkflowStateStore:
             step_id=step_id,
             idempotency_key=idempotency_key,
             metadata=metadata,
+            expected_version=expected_version,
         )
-        await self._write_redis_cache(state)
+        if isinstance(new_version, int):
+            # Keep the caller's in-memory state current so its next save
+            # (same engine loop) is not rejected as stale.
+            state[STATE_VERSION_KEY] = new_version
+        await self._write_redis_cache(persisted)
 
     async def load(self, run_id: str) -> dict[str, Any] | None:
         state = await self.repository.load(run_id)

@@ -163,3 +163,93 @@ def test_tc_audit_006_compliance_evidence_endpoint_is_read_only() -> None:
     to POST without code review."""
     src = (REPO / "api" / "v1" / "compliance.py").read_text(encoding="utf-8")
     assert '@router.get("/compliance/evidence-package")' in src
+
+
+# ─────────────────────────────────────────────────────────────────
+# Row signature covers persisted columns and is verifiable
+# ─────────────────────────────────────────────────────────────────
+
+
+def test_audit_signature_is_verifiable_from_persisted_row() -> None:
+    """Pre-fix the HMAC covered a random pre-insert ``id`` that was dropped
+    before the INSERT, so no stored row could ever be verified. The signature
+    must now be recomputable from the row's own columns, and any tampering
+    with a signed column must fail verification."""
+    import asyncio
+    import uuid
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    from core.tool_gateway.audit_logger import (
+        SIGNED_COLUMNS,
+        AuditLogger,
+        sign_audit_record,
+        verify_audit_row,
+    )
+
+    captured: list[dict] = []
+
+    class _Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc):
+            return False
+
+        def add(self, obj):
+            captured.append(dict(obj.__dict__))
+
+        async def commit(self):
+            return None
+
+    class _Row:  # stand-in for core.models.audit.AuditLog
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    import core.models.audit as audit_models
+
+    real = audit_models.AuditLog
+    audit_models.AuditLog = _Row  # type: ignore[misc]
+    try:
+        logger = AuditLogger(db_session_factory=lambda: _Session())
+        asyncio.run(
+            logger.log(
+                tenant_id=str(uuid.uuid4()),
+                agent_id=str(uuid.uuid4()),
+                tool_name="create_invoice",
+                action="execute",
+                outcome="success",
+                details={"latency_ms": 12},
+                trace_id="trace-1",
+            )
+        )
+    finally:
+        audit_models.AuditLog = real  # type: ignore[misc]
+
+    assert len(captured) == 1
+    entry = captured[0]
+    assert "id" not in entry  # DB generates it; it is not part of the signature
+    assert set(SIGNED_COLUMNS) <= set(entry)
+
+    # Simulate what comes back from Postgres: UUID/datetime typed columns and a
+    # DB-generated id — the signature must still verify.
+    row = SimpleNamespace(
+        **{
+            **entry,
+            "id": uuid.uuid4(),
+            "tenant_id": uuid.UUID(entry["tenant_id"]),
+            "agent_id": uuid.UUID(entry["agent_id"]),
+            "created_at": datetime.fromisoformat(entry["created_at"]),
+        }
+    )
+    assert verify_audit_row(row) is True
+    assert sign_audit_record(row, logger._secret) == entry["signature"]
+
+    row.outcome = "blocked"  # tamper
+    assert verify_audit_row(row) is False
+    row.outcome = "success"
+    row.details = {"latency_ms": 13}
+    assert verify_audit_row(row) is False
+
+    assert verify_audit_row(SimpleNamespace(**{**entry, "signature": None})) is False
+    assert verify_audit_row(row, secret=b"other-key") is False

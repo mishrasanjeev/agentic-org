@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
-import api from "../lib/api";
+import api, { extractApiError } from "../lib/api";
 
 /* â”€â”€ Milestone Tracker Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 interface MilestoneTask {
@@ -81,6 +81,45 @@ interface InviteRow {
   email: string;
 }
 
+/* The server only accepts {admin, domain_lead, analyst, auditor, developer}
+   as invite roles; persona labels map to a domain lead for that domain. */
+const PERSONA_INVITE: Record<string, { role: string; domain: string }> = {
+  CFO: { role: "domain_lead", domain: "finance" },
+  CHRO: { role: "domain_lead", domain: "hr" },
+  CMO: { role: "domain_lead", domain: "marketing" },
+  COO: { role: "domain_lead", domain: "ops" },
+};
+
+/* PUT /org/onboarding accepts OnboardingUpdate {onboarding_step, onboarding_complete}
+   (api/v1/org.py) — a bare {complete: true} is silently ignored. */
+export const ONBOARDING_COMPLETE_PAYLOAD = { onboarding_complete: true, onboarding_step: 4 } as const;
+
+/**
+ * Split invite rows by their settled POST /org/invite result. Fulfilled rows
+ * and 409 ("already exists") rows are dropped so a retry never re-sends them;
+ * every other rejection keeps its row and contributes an error message.
+ */
+export function partitionInviteResults<T extends { email: string }>(
+  rows: T[],
+  results: PromiseSettledResult<unknown>[],
+): { remaining: T[]; alreadyInvited: T[]; errors: string[] } {
+  const remaining: T[] = [];
+  const alreadyInvited: T[] = [];
+  const errors: string[] = [];
+  rows.forEach((row, i) => {
+    const res = results[i];
+    if (!res || res.status === "fulfilled") return;
+    const status = (res.reason as { response?: { status?: number } })?.response?.status;
+    if (status === 409) {
+      alreadyInvited.push(row);
+      return;
+    }
+    remaining.push(row);
+    errors.push(`${row.email}: ${extractApiError(res.reason, "invite failed")}`);
+  });
+  return { remaining, alreadyInvited, errors };
+}
+
 export default function Onboarding() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -133,17 +172,34 @@ export default function Onboarding() {
     setInviteError(null);
     try {
       const filled = invites.filter((r) => r.email.trim());
-      for (const invite of filled) {
-        await api.post("/org/invite", {
-          role: invite.role.toLowerCase(),
-          name: invite.name,
-          email: invite.email,
-        });
+      const results = await Promise.allSettled(
+        filled.map((invite) => {
+          const mapped = PERSONA_INVITE[invite.role];
+          if (!mapped) {
+            return Promise.reject(new Error(`Unknown invite persona: ${invite.role}`));
+          }
+          return api.post("/org/invite", {
+            role: mapped.role,
+            domain: mapped.domain,
+            name: invite.name,
+            email: invite.email,
+          });
+        }),
+      );
+      const { remaining, errors } = partitionInviteResults(filled, results);
+      // Sent (or already-invited) rows are cleared so a retry only re-sends
+      // the rows that actually failed.
+      setInvites((prev) =>
+        prev.map((row) => (remaining.includes(row) || !row.email.trim() ? row : { ...row, name: "", email: "" })),
+      );
+      if (errors.length > 0) {
+        setInviteError(`Some invites failed: ${errors.join("; ")}`);
+        return;
       }
       setInviteSuccess(true);
       setStep(3);
-    } catch (err: any) {
-      setInviteError(err.message || "Failed to send invites");
+    } catch (err: unknown) {
+      setInviteError(extractApiError(err, (err as Error)?.message || "Failed to send invites"));
     } finally {
       setInviteLoading(false);
     }
@@ -151,7 +207,7 @@ export default function Onboarding() {
 
   const finishOnboarding = async () => {
     try {
-      await api.put("/org/onboarding", { complete: true });
+      await api.put("/org/onboarding", ONBOARDING_COMPLETE_PAYLOAD);
     } catch {
       // best-effort
     }

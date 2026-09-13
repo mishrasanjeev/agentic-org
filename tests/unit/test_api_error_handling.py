@@ -336,10 +336,19 @@ class TestChatHistoryErrors:
         resp = noauth_client.get("/api/v1/chat/history")
         assert resp.status_code == 401
 
-    def test_chat_history_empty_for_new_session(self, auth_client):
-        """A fresh tenant/company_id combo should return empty list."""
+    def test_chat_history_rejects_unowned_company(self, auth_client):
+        """company_id is tenant-validated like /chat/query (audit 2026-09-12):
+        an id that is not a company of the caller's tenant is refused
+        instead of silently reading (or creating) a bucket for it."""
         resp = auth_client.get(
             f"/api/v1/chat/history?company_id=new-{uuid.uuid4().hex[:8]}"
+        )
+        assert resp.status_code in (400, 404)
+
+    def test_chat_history_empty_for_new_session(self, auth_client):
+        """A fresh tenant/company/user combo should return empty list."""
+        resp = auth_client.get(
+            f"/api/v1/chat/history?company_id={auth_client._test_company_id}&agent_id=fresh-{uuid.uuid4().hex[:8]}"
         )
         assert resp.status_code == 200
         data = resp.json()

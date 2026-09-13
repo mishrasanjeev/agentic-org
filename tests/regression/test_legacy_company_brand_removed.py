@@ -37,8 +37,8 @@ def test_legacy_company_brand_is_not_reintroduced() -> None:
     offenders: list[str] = []
     for rel_path in tracked:
         path = ROOT / rel_path
-        if path.suffix.lower() not in TEXT_SUFFIXES:
-            continue
+        if path.suffix.lower() not in TEXT_SUFFIXES or not path.exists():
+            continue  # tracked-but-deleted in the working tree
         if forbidden in path.read_text(encoding="utf-8", errors="ignore").lower():
             offenders.append(rel_path)
 

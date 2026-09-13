@@ -9,7 +9,6 @@ PDF rendering.
 from __future__ import annotations
 
 import html
-import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -31,6 +30,26 @@ class ReportOutput:
     content_data: dict[str, Any]
     report_type: str
     generated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
+
+
+def _run_coroutine(coro: Any) -> Any:
+    """Run ``coro`` from synchronous generator code.
+
+    Celery workers use the process-local runner loop; if a loop is already
+    running in this thread (e.g. an async API caller), run on a fresh loop
+    in a helper thread instead of blocking/nesting the caller's loop.
+    """
+    import asyncio
+    import concurrent.futures
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        from core.tasks.async_runner import run_async
+
+        return run_async(coro)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 class ReportEvidenceUnavailableError(RuntimeError):
@@ -217,7 +236,7 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        data = self._fetch_cfo_kpis(company_id)
+        data = self._fetch_cfo_kpis(company_id, tenant_id)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         kpis = "".join([
@@ -268,7 +287,7 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        data = self._fetch_cmo_kpis(company_id)
+        data = self._fetch_cmo_kpis(company_id, tenant_id)
         data = _with_cmo_report_quality_gate(data, "cmo_weekly", params)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -324,7 +343,7 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        data = self._fetch_cfo_kpis(company_id)
+        data = self._fetch_cfo_kpis(company_id, tenant_id)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         kpis = "".join([
@@ -378,7 +397,7 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        data = self._fetch_cfo_kpis(company_id)
+        data = self._fetch_cfo_kpis(company_id, tenant_id)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
         kpis = "".join([
@@ -435,7 +454,7 @@ class ReportGenerator:
         company_id: str = "default",
         tenant_id: str = "default",
     ) -> ReportOutput:
-        data = self._fetch_cmo_kpis(company_id)
+        data = self._fetch_cmo_kpis(company_id, tenant_id)
         data = _with_cmo_report_quality_gate(data, "campaign_report", params)
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -502,24 +521,17 @@ class ReportGenerator:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _fetch_cfo_kpis(company_id: str) -> dict[str, Any]:
-        """Fetch CFO KPI data from the internal KPI API."""
-        try:
-            import httpx
+    def _fetch_role_kpis(role: str, company_id: str, tenant_id: str = "default") -> dict[str, Any]:
+        """Compute role KPIs in-process for the report's tenant.
 
-            app_url = os.getenv("AGENTICORG_APP_URL", "http://localhost:8000")
-            resp = httpx.get(
-                f"{app_url}/api/v1/kpis/cfo",
-                params={"company_id": company_id} if company_id else {},
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                return resp.json()
-        # enterprise-gate: broad-except-ok reason=report-kpi-fetch-failure-returns-explicit-fallback-source
-        except Exception:  # noqa: S110
-            pass  # API unavailable — return empty fallback below
-        # Return empty structure if API unavailable
-        return {
+        Pre-fix this issued an unauthenticated ``httpx.get`` against the
+        auth-required ``/api/v1/kpis/<role>`` endpoint, which always returned
+        401 and silently delivered the all-zero "demo" fallback. The KPI
+        builder is now called directly with the tenant/company scope of the
+        schedule; anything that fails still returns the explicit fallback,
+        which ``generate_report`` refuses to deliver.
+        """
+        fallback = {
             "agent_count": 0,
             "total_tasks_30d": 0,
             "success_rate": 0,
@@ -529,31 +541,31 @@ class ReportGenerator:
             "demo": True,
             "source": "report_generator_fallback",
         }
+        try:
+            import uuid as _uuid
+
+            _uuid.UUID(str(tenant_id))
+        except (TypeError, ValueError):
+            log.warning("report_kpi_fetch_skipped_no_tenant", role=role)
+            return fallback
+        try:
+            from api.v1.kpis import _build_kpi_response
+
+            data = _run_coroutine(_build_kpi_response(str(tenant_id), role, company_id or "default"))
+        # enterprise-gate: broad-except-ok reason=report-kpi-compute-failure-returns-explicit-fallback-source
+        except Exception as exc:
+            log.warning("report_kpi_compute_failed", role=role, error=str(exc))
+            return fallback
+        if not isinstance(data, dict):
+            return fallback
+        return {**fallback, **data, "source": data.get("source") or "kpi_builder"}
 
     @staticmethod
-    def _fetch_cmo_kpis(company_id: str) -> dict[str, Any]:
-        """Fetch CMO KPI data from the internal KPI API."""
-        try:
-            import httpx
+    def _fetch_cfo_kpis(company_id: str, tenant_id: str = "default") -> dict[str, Any]:
+        """Fetch CFO KPI data (in-process, tenant-scoped)."""
+        return ReportGenerator._fetch_role_kpis("cfo", company_id, tenant_id)
 
-            app_url = os.getenv("AGENTICORG_APP_URL", "http://localhost:8000")
-            resp = httpx.get(
-                f"{app_url}/api/v1/kpis/cmo",
-                params={"company_id": company_id} if company_id else {},
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                return resp.json()
-        # enterprise-gate: broad-except-ok reason=report-kpi-fetch-failure-returns-explicit-fallback-source
-        except Exception:  # noqa: S110
-            pass  # API unavailable — return empty fallback below
-        return {
-            "agent_count": 0,
-            "total_tasks_30d": 0,
-            "success_rate": 0,
-            "hitl_interventions": 0,
-            "total_cost_usd": 0,
-            "domain_breakdown": [],
-            "demo": True,
-            "source": "report_generator_fallback",
-        }
+    @staticmethod
+    def _fetch_cmo_kpis(company_id: str, tenant_id: str = "default") -> dict[str, Any]:
+        """Fetch CMO KPI data (in-process, tenant-scoped)."""
+        return ReportGenerator._fetch_role_kpis("cmo", company_id, tenant_id)

@@ -215,33 +215,9 @@ export default function CompanyDashboard() {
     }
   };
 
-  const handleDelete = async (company: Company) => {
-    const confirmed = window.confirm(
-      `Permanently delete ${company.name}? This cannot be undone. ` +
-        "Consider Archive if you may need the data later.",
-    );
-    if (!confirmed) return;
-    // Two-stage confirm for hard delete because it's irreversible.
-    const typed = window.prompt(
-      `Type ${company.name} to confirm hard delete:`,
-      "",
-    );
-    if (typed !== company.name) {
-      setError("Delete cancelled â€” name did not match.");
-      return;
-    }
-    setBusyCompanyId(company.id);
-    setError(null);
-    try {
-      await api.delete(`/companies/${company.id}`);
-      setOpenMenuId(null);
-      await fetchData();
-    } catch (err) {
-      setError(extractApiError(err, `Failed to delete ${company.name}.`));
-    } finally {
-      setBusyCompanyId(null);
-    }
-  };
+  // DELETE /companies/{id} is an idempotent soft-delete (is_active=False),
+  // identical to Archive; the "Delete permanently" item that promised a
+  // hard delete was removed so the UI does not misstate what happens.
 
   const downloadBulkTemplate = async () => {
     setError(null);
@@ -524,16 +500,6 @@ export default function CompanyDashboard() {
                             }}
                           >
                             {isActive(company) ? "Archive" : "Reactivate"}
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleDelete(company);
-                            }}
-                          >
-                            Delete permanently
                           </button>
                         </div>
                       )}

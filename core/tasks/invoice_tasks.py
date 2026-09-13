@@ -14,7 +14,8 @@ logger = structlog.get_logger()
 def generate_monthly_invoices() -> dict:
     """Run the monthly invoice generator.
 
-    Scheduled for the 1st of each month at 01:00 IST — see celery_app.
+    Scheduled for the 1st of each month at 06:30 IST (01:00 UTC, after the
+    month has closed in UTC) — see celery_app.
     """
     from core.billing.invoice_generator import generate_invoices_for_period
 

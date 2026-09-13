@@ -1253,6 +1253,7 @@ class TestToolGateway:
         rl.check.return_value = MagicMock(allowed=True)
         idem = AsyncMock()
         idem.get.return_value = None
+        idem.reserve.return_value = (True, None)
         audit = AsyncMock()
         gw = ToolGateway(rate_limiter=rl, idempotency_store=idem, audit_logger=audit)
         return gw
@@ -1306,7 +1307,7 @@ class TestToolGateway:
         }
         connector.execute_tool.assert_not_awaited()
         gateway.rate_limiter.check.assert_not_awaited()
-        gateway.idempotency.get.assert_not_awaited()
+        gateway.idempotency.reserve.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_execute_with_verified_grant_preserves_grantex_path(self, gateway):
@@ -1364,7 +1365,9 @@ class TestToolGateway:
     @pytest.mark.asyncio
     @patch("core.tool_gateway.gateway.check_scope", return_value=(True, "scope_match"))
     async def test_execute_idempotency_hit(self, mock_scope, gateway):
-        gateway.idempotency.get.return_value = {"cached": True}
+        # Idempotency is a SET NX reservation: a completed result comes back
+        # as ``(acquired=False, cached)`` and is returned without dispatch.
+        gateway.idempotency.reserve.return_value = (False, {"cached": True})
         result = await gateway.execute(
             "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {},
             idempotency_key="key-1",
@@ -2293,7 +2296,8 @@ class TestRBAC:
     def test_get_allowed_domains_unknown(self):
         from core.rbac import get_allowed_domains
 
-        assert get_allowed_domains("unknown") is None
+        # Fail closed: unmapped roles get no domains, never "all" (None).
+        assert get_allowed_domains("unknown") == []
 
     def test_get_scopes_for_role_cfo(self):
         from core.rbac import get_scopes_for_role

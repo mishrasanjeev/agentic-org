@@ -1,4 +1,3 @@
-version: "3.9"
 
 services:
   postgres:
@@ -10,8 +9,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
+      # NOTE: ./migrations is intentionally NOT mounted into
+      # /docker-entrypoint-initdb.d. The legacy raw-SQL files there run
+      # ``CREATE EXTENSION "pgvector"`` (the extension is named ``vector``),
+      # which aborts initdb on the pgvector image and left this stack unable
+      # to boot from a fresh volume. Alembic is the sole schema authority
+      # (migrations/README.md); the ``migrate`` service below applies it.
       - pgdata:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U agenticorg"]
       interval: 5s
@@ -48,6 +52,29 @@ services:
       timeout: 5s
       retries: 5
 
+  # One-shot schema bootstrap/upgrade. Runs scripts/alembic_migrate.py
+  # (idempotent: fresh DB, legacy DB, or already-managed DB) and exits 0.
+  # api/worker/beat wait on it via service_completed_successfully, mirroring
+  # the pre-rollout migrate step used for production deploys.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      AGENTICORG_ENV: development
+      AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+      AGENTICORG_REDIS_URL: redis://redis:6379/0
+      AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    healthcheck:
+      disable: true
+    restart: "no"
+    command: python scripts/alembic_migrate.py
+
   api:
     build:
       context: .
@@ -72,6 +99,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     volumes:
       - .:/app
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
@@ -95,6 +124,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # The image HEALTHCHECK probes the API's HTTP liveness endpoint, which a
+    # bare celery worker never serves -> the container would sit at
+    # "unhealthy" forever. Probe the worker itself instead.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A core.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      start_period: 40s
+      retries: 3
     command: celery -A core.tasks.celery_app worker --loglevel=info --concurrency=4 -Q celery,reports,maintenance,workflows,delivery,rpa
 
   beat:
@@ -113,6 +153,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # run_beat.py serves a stub HTTP endpoint on $PORT; probe that instead of
+    # the API liveness path baked into the image.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4).read()"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
     command: python scripts/run_beat.py
 
   # ── Air-gapped: Ollama (CPU) ──────────────────────────────────────

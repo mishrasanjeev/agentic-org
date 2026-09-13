@@ -50,12 +50,24 @@ export default function CABilling() {
     setError("");
     try {
       const params = companyId ? { company_id: companyId } : undefined;
-      const [planRes, invoiceRes] = await Promise.all([
-        api.get("/ca-billing/service-plans").catch(() => ({ data: [] })),
-        api.get("/ca-billing/invoices", { params }).catch(() => ({ data: [] })),
+      const [planRes, invoiceRes] = await Promise.allSettled([
+        api.get("/ca-billing/service-plans"),
+        api.get("/ca-billing/invoices", { params }),
       ]);
-      setPlans(Array.isArray(planRes.data) ? planRes.data : []);
-      setInvoices(Array.isArray(invoiceRes.data) ? invoiceRes.data : []);
+      const failures: string[] = [];
+      if (planRes.status === "fulfilled") {
+        setPlans(Array.isArray(planRes.value.data) ? planRes.value.data : []);
+      } else {
+        setPlans([]);
+        failures.push(extractApiError(planRes.reason, "Failed to load service plans."));
+      }
+      if (invoiceRes.status === "fulfilled") {
+        setInvoices(Array.isArray(invoiceRes.value.data) ? invoiceRes.value.data : []);
+      } else {
+        setInvoices([]);
+        failures.push(extractApiError(invoiceRes.reason, "Failed to load invoices."));
+      }
+      if (failures.length) setError(failures.join(" "));
     } catch (err) {
       setError(extractApiError(err, "Failed to load CA billing data."));
     }

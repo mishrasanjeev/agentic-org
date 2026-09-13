@@ -20,11 +20,16 @@ from core.cdc.receiver import (
 )
 
 
-def _sign(payload: dict, secret: str = "test-secret") -> str:  # noqa: S107
+def _sign(
+    payload: dict,
+    secret: str = "test-secret",  # noqa: S107
+    tenant_id: str = "tenant-a",
+    connector: str = "xero",
+) -> str:
+    """Sign the canonical ``tenant_id\nconnector\nbody`` material (see receiver)."""
+    body = json.dumps(payload, sort_keys=True).encode()
     return hmac.new(
-        secret.encode(),
-        json.dumps(payload, sort_keys=True).encode(),
-        hashlib.sha256,
+        secret.encode(), f"{tenant_id}\n{connector}\n".encode() + body, hashlib.sha256
     ).hexdigest()
 
 
@@ -131,7 +136,7 @@ async def test_get_cdc_events_reads_durable_tenant_scoped_store(
         "resource_id": "inv-b",
     }
     await handle_cdc_webhook("tenant-a", "xero", payload_a, _sign(payload_a), store=cdc_store)
-    await handle_cdc_webhook("tenant-b", "xero", payload_b, _sign(payload_b), store=cdc_store)
+    await handle_cdc_webhook("tenant-b", "xero", payload_b, _sign(payload_b, tenant_id="tenant-b"), store=cdc_store)
 
     events, total = await list_stored_events(tenant_id="tenant-a", store=cdc_store)
 
@@ -151,7 +156,9 @@ async def test_cross_tenant_duplicate_fingerprints_are_allowed(
     }
 
     first = await handle_cdc_webhook("tenant-a", "xero", payload, _sign(payload), store=cdc_store)
-    second = await handle_cdc_webhook("tenant-b", "xero", payload, _sign(payload), store=cdc_store)
+    second = await handle_cdc_webhook(
+        "tenant-b", "xero", payload, _sign(payload, tenant_id="tenant-b"), store=cdc_store
+    )
 
     assert first["status"] == "accepted"
     assert second["status"] == "accepted"
@@ -327,7 +334,7 @@ def test_cdc_webhook_api_accepts_raw_body_signature(cdc_store: InMemoryCDCEventS
     app.include_router(cdc_router)
     client = TestClient(app)
     raw_body = b'{"resource_id":"inv-raw","resource_type":"invoice","event_type":"invoice.created"}'
-    signature = hmac.new(b"test-secret", raw_body, hashlib.sha256).hexdigest()
+    signature = hmac.new(b"test-secret", b"tenant-a\nxero\n" + raw_body, hashlib.sha256).hexdigest()
 
     response = client.post(
         "/webhooks/cdc/tenant-a/xero",
@@ -368,3 +375,34 @@ def test_cdc_webhook_api_invalid_shape_returns_422(cdc_store: InMemoryCDCEventSt
 
     assert response.status_code == 422
     assert response.json()["detail"]["reason"] == "invalid_payload"
+
+
+@pytest.mark.asyncio
+async def test_signature_bound_to_tenant_and_connector(cdc_store: InMemoryCDCEventStore) -> None:
+    """A signature valid for tenant-a/xero must not authenticate a replay to
+    tenant-b (or another connector) — the URL path no longer chooses the tenant."""
+    payload = {
+        "event_type": "invoice.created",
+        "resource_type": "invoice",
+        "resource_id": "inv-replay",
+    }
+    sig_a = _sign(payload, tenant_id="tenant-a", connector="xero")
+
+    ok = await handle_cdc_webhook("tenant-a", "xero", payload, sig_a, store=cdc_store)
+    assert ok["status"] == "accepted"
+
+    replayed = await handle_cdc_webhook("tenant-b", "xero", payload, sig_a, store=cdc_store)
+    assert replayed == {"status": "rejected", "reason": "invalid_signature", "http_status": 403}
+
+    other_connector = await handle_cdc_webhook("tenant-a", "testconn", payload, sig_a, store=cdc_store)
+    assert other_connector["reason"] == "invalid_signature"
+
+    # Body-only signature (legacy scheme) is rejected too.
+    body_only = hmac.new(
+        b"test-secret", json.dumps(payload, sort_keys=True).encode(), hashlib.sha256
+    ).hexdigest()
+    legacy = await handle_cdc_webhook("tenant-a", "xero", payload, body_only, store=cdc_store)
+    assert legacy["reason"] == "invalid_signature"
+
+    events, _ = await list_stored_events(tenant_id="tenant-b", store=cdc_store)
+    assert events == []

@@ -37,12 +37,20 @@ async def _isolated_session_factory(db_engine: AsyncEngine):
     )
 
 
-def _sign(payload: dict, secret: str = "test-secret") -> str:  # noqa: S107
-    return hmac.new(
-        secret.encode(),
-        json.dumps(payload, sort_keys=True).encode(),
-        hashlib.sha256,
-    ).hexdigest()
+def _sign(
+    payload: dict,
+    tenant_id: str,
+    connector: str = "xero",
+    secret: str = "test-secret",  # noqa: S107
+) -> str:
+    """HMAC over ``"<tenant_id>\\n<connector>\\n" + canonical body``.
+
+    The receiver binds tenant and connector into the signed material
+    (``core.cdc.receiver._signed_material``) so an event captured for one
+    tenant cannot be replayed to another tenant's webhook path.
+    """
+    material = f"{tenant_id}\n{connector}\n".encode() + json.dumps(payload, sort_keys=True).encode()
+    return hmac.new(secret.encode(), material, hashlib.sha256).hexdigest()
 
 
 @pytest.mark.asyncio
@@ -77,14 +85,14 @@ async def test_cdc_event_store_persists_and_dedupes_in_postgres(
             str(tenant_id),
             "xero",
             payload,
-            _sign(payload),
+            _sign(payload, str(tenant_id)),
             store=store_a,
         )
         second = await handle_cdc_webhook(
             str(tenant_id),
             "xero",
             payload,
-            _sign(payload),
+            _sign(payload, str(tenant_id)),
             store=store_b,
         )
 
@@ -139,7 +147,7 @@ async def test_cdc_replay_failure_writes_postgres_dead_letter(
             str(tenant_id),
             "xero",
             payload,
-            _sign(payload),
+            _sign(payload, str(tenant_id)),
             store=store,
         )
         event_id = accepted["event_id"]
