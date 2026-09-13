@@ -153,7 +153,14 @@ class TestDurableSubscriptions:
             recorded.update(kwargs)
             return {"current_period_end": kwargs["current_period_end"].isoformat()}
 
+        from core.billing.subscriptions import free_subscription
+
         monkeypatch.setattr("core.billing.subscriptions.record_subscription_sync", _record)
+        # Activation now reads the existing row first (stale-order guard).
+        monkeypatch.setattr(
+            "core.billing.subscriptions.get_subscription_sync",
+            lambda tenant_id: free_subscription(tenant_id),
+        )
         pinelabs_client._activate_subscription(TENANT, "pro", "order_123")
 
         assert recorded["provider"] == "plural"
@@ -221,7 +228,10 @@ class TestDurableSubscriptions:
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
-        assert script.get_heads() == ["v6z18_billing_cdc_state"]
+        # v6z19 (fresh-database repair for the same two tables) is the
+        # single head and chains off v6z18.
+        assert script.get_heads() == ["v6z19_repair_billing_cdc"]
+        assert script.get_revision("v6z19_repair_billing_cdc").down_revision == "v6z18_billing_cdc_state"
         rev = script.get_revision("v6z18_billing_cdc_state")
         assert rev.down_revision == "v6z17_sessions_dsar"
         src = open(rev.path).read()

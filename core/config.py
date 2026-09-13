@@ -118,6 +118,11 @@ class Settings(BaseSettings):
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
+    # Per-IP throttles key on the first X-Forwarded-For hop instead of the
+    # socket peer (api/client_ip.py). Enable ONLY behind a trusted reverse
+    # proxy (Cloud Run / nginx) that overwrites the header; otherwise the
+    # throttle bucket is client-spoofable. Env: AGENTICORG_TRUST_PROXY_HEADERS.
+    trust_proxy_headers: bool = False
 
     # Google OAuth
     google_oauth_client_id: str = ""  # Google Cloud Console OAuth 2.0 Client ID

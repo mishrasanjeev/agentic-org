@@ -106,8 +106,10 @@ mypy_check() {
   # so it never sees those files; locally they trigger spurious
   # "Duplicate module" mypy errors. Exclude it explicitly so the local
   # gate matches CI's effective scope.
+  # ``output/`` and ``.tmp/`` are gitignored local scratch folders (rendered
+  # demo videos, patch scripts) with unrelated module names; CI never has them.
   python -m mypy --ignore-missing-imports \
-    --exclude '(codex-pytest-basetemp|codex-pytest-temp)' \
+    --exclude '(codex-pytest-basetemp|codex-pytest-temp|^output/|^\.tmp/)' \
     .
 }
 

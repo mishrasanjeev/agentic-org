@@ -4,6 +4,7 @@ import { AlertTriangle, FileCheck2, ReceiptText, RefreshCw } from "lucide-react"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { isAxiosError } from "axios";
 import api, { extractApiError } from "@/lib/api";
 
 const SAMPLE_BOOKS_ROWS = [
@@ -118,7 +119,11 @@ export default function CAOperations() {
       });
       setTracesResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : extractApiError(err, "TRACES reconciliation failed."));
+      setError(
+        isAxiosError(err) || !(err instanceof Error)
+          ? extractApiError(err, "TRACES reconciliation failed.")
+          : err.message,
+      );
     } finally {
       setBusy(null);
     }
@@ -136,7 +141,11 @@ export default function CAOperations() {
       });
       setEwayResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : extractApiError(err, "E-way bill batch validation failed."));
+      setError(
+        isAxiosError(err) || !(err instanceof Error)
+          ? extractApiError(err, "E-way bill batch validation failed.")
+          : err.message,
+      );
     } finally {
       setBusy(null);
     }

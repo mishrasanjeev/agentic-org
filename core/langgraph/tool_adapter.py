@@ -9,6 +9,7 @@ Each connector tool becomes a LangChain @tool function that:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
@@ -532,7 +533,8 @@ async def load_connector_config(
     if isinstance(creds, dict) and "_encrypted" in creds:
         from core.crypto import decrypt_for_tenant
 
-        creds = _json.loads(decrypt_for_tenant(creds["_encrypted"]))
+        # KMS-backed decrypt is synchronous (gRPC); keep it off the event loop.
+        creds = _json.loads(await asyncio.to_thread(decrypt_for_tenant, creds["_encrypted"]))
     if isinstance(creds, dict):
         config.update(creds)
     return config
@@ -576,7 +578,10 @@ async def execute_agent_tool(
     if grant_token:
         from core.langgraph.grantex_auth import get_grantex_client
 
-        enforcement = get_grantex_client().enforce(
+        # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
+        # synchronous HTTPS fetch; run it off the event loop.
+        enforcement = await asyncio.to_thread(
+            get_grantex_client().enforce,
             grant_token=grant_token,
             connector=connector_name,
             tool=tool_name,

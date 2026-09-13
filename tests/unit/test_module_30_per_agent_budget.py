@@ -175,17 +175,24 @@ def test_tc_budget_006_unique_constraint_keeps_one_row_per_period() -> None:
 # ─────────────────────────────────────────────────────────────────
 
 
-def test_ui_cost_tab_reads_legacy_cost_controls_shape() -> None:
-    """The UI CostTab reads ``cost_controls.monthly_cap_usd`` and
-    ``cost_controls.cost_current_usd`` (note: monthly_cap_usd, NOT
-    monthly_cost_cap_usd — the API serialiser flattens). If the
-    serialiser changes, the UI Cost tab silently shows zeros.
+def test_ui_cost_tab_reads_live_budget_not_legacy_cost_controls() -> None:
+    """The UI CostTab renders spend from ``GET /agents/{id}/budget``
+    (``monthly_spent_usd`` from the cost ledger). ``cost_controls.
+    cost_current_usd`` is only ever the create-time default 0.0 — reading
+    it showed "$0.00 / Within budget" for agents about to hit their cap
+    (audit 2026-09-13). The cap keeps its serialiser fallbacks.
     """
     src = (REPO / "ui" / "src" / "pages" / "AgentDetail.tsx").read_text(
         encoding="utf-8"
     )
+    assert "/agents/${agent.id}/budget" in src
+    assert "budget?.monthly_spent_usd" in src
     assert "cost_controls?.monthly_cap_usd" in src
     assert "cost_controls?.monthly_cost_cap_usd" in src
-    assert "cost_controls?.cost_current_usd" in src
+    # The legacy field is only an operator-recorded floor under the ledger
+    # value (QA TC-BUDGET-007 seeds spend through it), never the sole source.
+    assert "budget?.monthly_spent_usd ?? 0," in src
+    assert "agent.cost_controls?.cost_current_usd ?? 0," in src
+    assert src.index("Math.max(") < src.index("agent.cost_controls?.cost_current_usd ?? 0,")
     # Empty-state path must remain (TC-BUDGET-008 in Playwright).
     assert "No monthly cost cap configured" in src

@@ -10,10 +10,11 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import text
 
+from api.client_ip import client_ip as resolve_client_ip
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core import auth_state
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.email import send_email
 
 logger = logging.getLogger(__name__)
@@ -122,7 +123,7 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
     the public endpoint returns immediately and cannot be used to burn LLM
     budget or SMTP quota synchronously. Per-IP throttled (cross-replica).
     """
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     try:
         blocked = await auth_state.check_window_rate(
             "demo_request", client_ip, _DEMO_REQUEST_MAX_PER_HOUR, _DEMO_REQUEST_WINDOW
@@ -159,9 +160,10 @@ async def submit_demo_request(body: DemoRequest, request: Request, background_ta
     default_tenant_id = "00000000-0000-0000-0000-000000000001"
     lead_id = None
     try:
-        async with async_session_factory() as session:
-            tid = _uuid.UUID(default_tenant_id)
-
+        tid = _uuid.UUID(default_tenant_id)
+        # lead_pipeline is FORCE-RLS (v6z16): the INSERT fails WITH CHECK in a
+        # raw session, so bind the default tenant context explicitly.
+        async with get_tenant_session(tid) as session:
             # Check for duplicate lead (same email)
             existing = await session.execute(
                 text("SELECT id FROM lead_pipeline WHERE email = :email AND tenant_id = :tid"),

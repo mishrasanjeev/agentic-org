@@ -88,7 +88,46 @@ export function extractApiError(e: unknown, fallback = "An error occurred"): str
   const data = (e as any)?.response?.data;
   const detail = data?.detail;
   if (typeof detail === "string") return detail;
+  // Pydantic/FastAPI 422 validation errors: detail is an array of {loc, msg}.
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item: any) => {
+        if (typeof item === "string") return item;
+        if (!item || typeof item !== "object") return "";
+        const loc = Array.isArray(item.loc)
+          ? item.loc.filter((p: unknown) => p !== "body" && p !== "query" && p !== "path").join(".")
+          : "";
+        const msg = typeof item.msg === "string" ? item.msg : "";
+        if (loc && msg) return `${loc}: ${msg}`;
+        return msg || loc;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+    return fallback;
+  }
   if (detail && typeof detail === "object") {
+    // Row-level validation payloads (e.g. professional tax): detail.row_errors /
+    // detail.errors are arrays of strings or {row_number, employee_ref, errors[]}.
+    const rows = Array.isArray(detail.row_errors)
+      ? detail.row_errors
+      : Array.isArray(detail.errors)
+        ? detail.errors
+        : null;
+    if (rows) {
+      const parts = rows
+        .map((r: any) => {
+          if (typeof r === "string") return r;
+          if (!r || typeof r !== "object") return "";
+          const msgs = Array.isArray(r.errors) ? r.errors.map(String).join(", ") : String(r.msg || r.message || "");
+          const label = r.row_number != null ? `Row ${r.row_number}${r.employee_ref ? ` (${r.employee_ref})` : ""}` : "";
+          return label && msgs ? `${label}: ${msgs}` : msgs || label;
+        })
+        .filter(Boolean);
+      if (parts.length) {
+        const prefix = typeof detail.message === "string" ? `${detail.message} ` : "";
+        return `${prefix}${parts.join("; ")}`;
+      }
+    }
     if (Array.isArray((detail as any).connectors)) {
       const connectors = (detail as any).connectors
         .map((c: any) => `${c.connector || "connector"} (${String(c.reason || "not ready").replace(/_/g, " ")})`)

@@ -184,14 +184,12 @@ class TestComputeQuarterlyDeadlines:
             assert r["due_date"] == date(2027, 1, 31)
 
     def test_q4_due_after_march(self):
-        """Q4 (Jan-Mar) TDS due in April (30th, since Apr has 30 days)."""
+        """Q4 (Jan-Mar) TDS 24Q/26Q are due 31 May (Rule 31A), not 30 April."""
         results = self._compute(date(2026, 4, 8))
         q4 = [r for r in results if r["filing_period"] == "2026-Q4"]
         assert len(q4) == 2
         for r in q4:
-            # Q4 end month = March (3), next month = April
-            assert r["due_date"].month == 4
-            assert r["due_date"].day == 30
+            assert r["due_date"] == date(2027, 5, 31)
 
     def test_fy_detection_pre_april(self):
         """When today is Jan-Mar, FY year is previous calendar year."""

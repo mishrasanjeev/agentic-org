@@ -258,7 +258,8 @@ class TestUserSessionState:
         from core.auth_state import UserSessionState
 
         now = time.time()
-        assert UserSessionState(found=False).rejects_token(now) is None
+        assert UserSessionState(found=False).rejects_token(now) == "user_missing"
+        assert UserSessionState(found=False, lookup_failed=True).rejects_token(now) is None
         assert UserSessionState(found=True, status="active").rejects_token(now) is None
         assert UserSessionState(found=True, status="inactive").rejects_token(now) == "user_inactive"
         state = UserSessionState(found=True, status="active", sessions_invalid_before=now)

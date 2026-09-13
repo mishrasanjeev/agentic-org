@@ -42,6 +42,12 @@ export default function Dashboard() {
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchWarnings, setFetchWarnings] = useState<string[]>([]);
+  // GET /approvals without status returns only pending (default per_page=20),
+  // so resolved/pending counts come from the paginated ``total`` fields.
+  const [approvalTotals, setApprovalTotals] = useState<{ pending: number | null; resolved: number | null }>({
+    pending: null,
+    resolved: null,
+  });
   const { facts } = useProductFacts();
 
   useEffect(() => {
@@ -52,12 +58,14 @@ export default function Dashboard() {
     setLoading(true);
     const warnings: string[] = [];
     try {
-      const [agentsResp, approvalsResp, auditResp] = await Promise.allSettled([
+      const [agentsResp, approvalsResp, auditResp, approvedResp, rejectedResp] = await Promise.allSettled([
         // listAll paginates with per_page=100 so the dashboard never silently
         // truncates organizations with more than the first API page.
         agentsApi.listAll(),
         api.get("/approvals"),
         api.get("/audit", { params: { limit: 10 } }),
+        api.get("/approvals", { params: { status: "approved", per_page: 1 } }),
+        api.get("/approvals", { params: { status: "rejected", per_page: 1 } }),
       ]);
 
       if (agentsResp.status === "fulfilled") {
@@ -70,6 +78,23 @@ export default function Dashboard() {
         setApprovals(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []);
       } else {
         warnings.push("Approvals data could not be loaded");
+      }
+      {
+        const pendingTotal =
+          approvalsResp.status === "fulfilled" && typeof approvalsResp.value.data?.total === "number"
+            ? approvalsResp.value.data.total
+            : null;
+        const countOf = (r: PromiseSettledResult<{ data?: { total?: unknown } }>) =>
+          r.status === "fulfilled" && typeof r.value.data?.total === "number" ? r.value.data.total : null;
+        const approvedTotal = countOf(approvedResp);
+        const rejectedTotal = countOf(rejectedResp);
+        if (approvedTotal === null || rejectedTotal === null) {
+          warnings.push("Resolved approval counts could not be loaded");
+        }
+        setApprovalTotals({
+          pending: pendingTotal,
+          resolved: approvedTotal !== null && rejectedTotal !== null ? approvedTotal + rejectedTotal : null,
+        });
       }
       if (auditResp.status === "fulfilled") {
         const d = auditResp.value.data;
@@ -89,7 +114,8 @@ export default function Dashboard() {
   const totalAgents = agents.length;
   const activeAgents = agents.filter((a) => a.status === "active").length;
   const shadowAgents = agents.filter((a) => a.status === "shadow").length;
-  const pendingApprovals = approvals.filter((a) => a.status === "pending").length;
+  const pendingApprovals =
+    approvalTotals.pending ?? approvals.filter((a) => a.status === "pending").length;
 
   // Status distribution for pie chart
   const statusCounts: Record<string, number> = {};
@@ -121,11 +147,15 @@ export default function Dashboard() {
   // â€” it was a fabricated KPI with no backing API, exactly the decorative
   // state the plan bans. "Approvals Resolved" is a real ratio computed
   // from the approvals we already fetched.
-  const resolvedApprovals = approvals.filter(
-    (a) => a.status !== "pending" && a.status !== "expired",
-  ).length;
-  const resolvedPct = approvals.length > 0
-    ? Math.round((resolvedApprovals / approvals.length) * 100)
+  // The default list is pending-only, so "resolved" must come from the
+  // status=approved/rejected totals; fall back to the fetched rows only
+  // when those counts are unavailable.
+  const resolvedApprovals =
+    approvalTotals.resolved ??
+    approvals.filter((a) => a.status !== "pending" && a.status !== "expired").length;
+  const approvalsTotal = pendingApprovals + resolvedApprovals;
+  const resolvedPct = approvalsTotal > 0
+    ? Math.round((resolvedApprovals / approvalsTotal) * 100)
     : 0;
 
   // TC_002 Hindi coverage (2026-04-23): this page was cited by Codex
@@ -139,12 +169,12 @@ export default function Dashboard() {
     { label: t("dashboard.shadowAgents", "Shadow Agents"), value: shadowAgents, color: "text-yellow-600", subtitle: "" },
     {
       label: t("dashboard.approvalsResolved", "Approvals Resolved"),
-      value: approvals.length > 0 ? `${resolvedPct}%` : "â€”",
+      value: approvalsTotal > 0 ? `${resolvedPct}%` : "â€”",
       color: "text-green-600",
-      subtitle: approvals.length > 0
+      subtitle: approvalsTotal > 0
         ? t("dashboard.decisionsCount", "{{resolved}}/{{total}} decisions", {
             resolved: resolvedApprovals,
-            total: approvals.length,
+            total: approvalsTotal,
           })
         : t("dashboard.noApprovalsLogged", "No approvals logged"),
     },

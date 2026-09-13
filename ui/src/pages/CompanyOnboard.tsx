@@ -32,7 +32,6 @@ interface CompanyForm {
   signatory_designation: string;
   signatory_email: string;
   dsc_serial: string;
-  dsc_holder: string;
   dsc_expiry: string;
   /* Step 4: Banking */
   bank_name: string;
@@ -51,7 +50,7 @@ interface CompanyForm {
 const INITIAL_FORM: CompanyForm = {
   name: "", gstin: "", pan: "", tan: "", cin: "", state: "", industry: "", address: "",
   pf_reg: "", esi_reg: "", pt_reg: "", fy_start: "2026-04-01", fy_end: "2027-03-31",
-  signatory_name: "", signatory_designation: "", signatory_email: "", dsc_serial: "", dsc_holder: "", dsc_expiry: "",
+  signatory_name: "", signatory_designation: "", signatory_email: "", dsc_serial: "", dsc_expiry: "",
   bank_name: "", account_number: "", ifsc: "", branch: "",
   tally_bridge_url: "", tally_bridge_id: "", tally_company_name: "",
   gst_auto_file: false, compliance_email: "",
@@ -306,6 +305,11 @@ export default function CompanyOnboard() {
         bank_name: form.bank_name || undefined,
         bank_account_number: form.account_number || undefined,
         bank_ifsc: form.ifsc || undefined,
+        bank_branch: form.branch || undefined,
+        // companies.fy_start_month / fy_end_month are 2-char month codes;
+        // derive them from the FY dates collected on Step 2.
+        fy_start_month: form.fy_start ? form.fy_start.slice(5, 7) : undefined,
+        fy_end_month: form.fy_end ? form.fy_end.slice(5, 7) : undefined,
         pf_registration: form.pf_reg || undefined,
         esi_registration: form.esi_reg || undefined,
         pt_registration: form.pt_reg || undefined,
@@ -489,10 +493,6 @@ export default function CompanyOnboard() {
                 <input value={form.dsc_serial} onChange={(e) => update("dsc_serial", e.target.value)} className={fieldClass("dsc_serial")} placeholder="DSC certificate serial" />
               </div>
               <div>
-                <label className={labelClass}>DSC Holder Name</label>
-                <input value={form.dsc_holder} onChange={(e) => update("dsc_holder", e.target.value)} className={fieldClass("dsc_holder")} placeholder="Name on DSC" />
-              </div>
-              <div>
                 <label className={labelClass}>DSC Expiry Date</label>
                 <input type="date" value={form.dsc_expiry} onChange={(e) => update("dsc_expiry", e.target.value)} className={fieldClass("dsc_expiry")} />
               </div>
@@ -634,7 +634,6 @@ export default function CompanyOnboard() {
                   <div><span className="text-muted-foreground">Designation:</span> {form.signatory_designation || "â€”"}</div>
                   <div><span className="text-muted-foreground">Email:</span> {form.signatory_email || "â€”"}</div>
                   <div><span className="text-muted-foreground">DSC Serial:</span> {form.dsc_serial || "â€”"}</div>
-                  <div><span className="text-muted-foreground">DSC Holder:</span> {form.dsc_holder || "â€”"}</div>
                   <div><span className="text-muted-foreground">DSC Expiry:</span> {form.dsc_expiry || "â€”"}</div>
                 </div>
               </div>

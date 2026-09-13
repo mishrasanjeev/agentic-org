@@ -38,6 +38,20 @@ except ImportError:  # pragma: no cover
 _STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 _STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 
+
+class StripeWebhookNotConfiguredError(RuntimeError):
+    """Raised when a webhook arrives but STRIPE_WEBHOOK_SECRET is unset.
+
+    ``Webhook.construct_event(payload, sig, "")`` would verify against an
+    empty secret, so an unconfigured deployment must reject every event
+    (Stripe retries) instead of accepting forged activations.
+    """
+
+
+def _webhook_secret() -> str:
+    """Read the webhook secret at call time so a late-set env var is honoured."""
+    return os.getenv("STRIPE_WEBHOOK_SECRET", "") or _STRIPE_WEBHOOK_SECRET
+
 # Optional price IDs created in Stripe Dashboard. Checkout uses price_data when absent.
 # enterprise-gate: process-local-ok reason=static-plan-price-environment-map
 PLAN_PRICE_MAP: dict[str, str] = {
@@ -66,7 +80,10 @@ def _get_stripe():
     """Return configured stripe module or raise."""
     if _stripe is None:
         raise RuntimeError("stripe package is not installed — run: pip install stripe")
-    _stripe.api_key = _STRIPE_SECRET_KEY
+    api_key = os.getenv("STRIPE_SECRET_KEY", "") or _STRIPE_SECRET_KEY
+    if not api_key:
+        raise RuntimeError("STRIPE_SECRET_KEY is not configured")
+    _stripe.api_key = api_key
     return _stripe
 
 
@@ -93,18 +110,22 @@ def _first_subscription_item_id(subscription: Any) -> str:
 
 
 def _plan_from_subscription(subscription: Any) -> str:
-    metadata = _get_value(subscription, "metadata", {}) or {}
-    plan = metadata.get("plan", "") if isinstance(metadata, dict) else ""
-    if plan:
-        return plan
+    """Derive the plan from the live price id; ``metadata.plan`` is only a fallback.
 
+    Subscription metadata is written at checkout / plan change and goes
+    stale when the plan is changed elsewhere (Customer Portal, Dashboard),
+    whereas the price id always reflects what Stripe is billing.
+    """
     items = _get_value(subscription, "items", {})
-    data = _get_value(items, "data", [])
-    if not data:
-        return ""
-    price = _get_value(data[0], "price", {})
-    price_id = _get_value(price, "id", "")
-    return _price_to_plan(price_id)
+    data = _get_value(items, "data", []) or []
+    if data:
+        price = _get_value(data[0], "price", {})
+        plan = _price_to_plan(_get_value(price, "id", ""))
+        if plan:
+            return plan
+
+    metadata = _get_value(subscription, "metadata", {}) or {}
+    return metadata.get("plan", "") if isinstance(metadata, dict) else ""
 
 
 def _retrieve_subscription(stripe_mod: Any, subscription_id: str) -> Any:
@@ -355,8 +376,14 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
       - customer.subscription.updated → sync status
       - customer.subscription.deleted → deactivate
     """
+    secret = _webhook_secret()
+    if not secret:
+        # Fail closed BEFORE construct_event: an empty secret would make
+        # every forged payload verify (same guard as Plural's client).
+        logger.error("stripe_webhook_secret_not_configured")
+        raise StripeWebhookNotConfiguredError("STRIPE_WEBHOOK_SECRET is not configured")
     s = _get_stripe()
-    event = s.Webhook.construct_event(payload, sig_header, _STRIPE_WEBHOOK_SECRET)
+    event = s.Webhook.construct_event(payload, sig_header, secret)
 
     # Signature delivery freshness is enforced by Stripe construct_event.
     # Do not reject by event.created: retries retain the original event time.
@@ -422,7 +449,10 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
     elif event_type == "customer.subscription.deleted":
         tenant_id = data_obj.get("metadata", {}).get("tenant_id", "")
         if tenant_id:
-            _deactivate_subscription(tenant_id)
+            # Only the subscription we have on file may downgrade the
+            # tenant; a deleted event for an older/replaced subscription
+            # must not cancel the current one.
+            _deactivate_subscription(tenant_id, subscription_id=data_obj.get("id", ""))
         result.update(processed=True, tenant_id=tenant_id, cancelled=True)
         logger.info("stripe_subscription_cancelled", tenant_id=tenant_id)
 
@@ -485,13 +515,27 @@ def _activate_subscription(
     )
 
 
-def _deactivate_subscription(tenant_id: str, status: str = "cancelled") -> None:
-    """Downgrade tenant to free plan after cancellation."""
+def _deactivate_subscription(
+    tenant_id: str, status: str = "cancelled", subscription_id: str = ""
+) -> None:
+    """Downgrade tenant to free plan after cancellation.
+
+    ``subscription_id`` (the Stripe event's ``data.object.id``) must match the
+    stored ``external_id`` for the row to change; an empty value is only used
+    by the authenticated cancel endpoint, which already acted on the stored id.
+    """
     from core.billing.subscriptions import deactivate_subscription_sync
 
-    deactivate_subscription_sync(tenant_id, status=status)
+    deactivate_subscription_sync(
+        tenant_id, status=status, provider_subscription_id=subscription_id
+    )
 
-    logger.info("subscription_deactivated", tenant_id=tenant_id, status=status)
+    logger.info(
+        "subscription_deactivated",
+        tenant_id=tenant_id,
+        status=status,
+        subscription_id=subscription_id,
+    )
 
 
 def cancel_subscription(subscription_id: str) -> bool:
@@ -516,7 +560,7 @@ def _sync_subscription_state(
     """Mirror a Stripe subscription object into the billing_subscriptions row.
 
     Stripe sends plan changes through ``customer.subscription.updated``.
-    We derive the plan from metadata first, then from the active price id.
+    We derive the plan from the active price id first, then from metadata.
     """
     metadata = _get_value(subscription, "metadata", {}) or {}
     tenant_id = (
@@ -560,7 +604,9 @@ def _sync_subscription_state(
             subscription_id=subscription_id,
         )
     elif status in {"canceled", "incomplete_expired", "unpaid"}:
-        _deactivate_subscription(tenant_id, status=status)
+        # Guarded by external_id: a stale event for a replaced subscription
+        # does not deactivate the tenant's current one.
+        _deactivate_subscription(tenant_id, status=status, subscription_id=subscription_id)
 
     return plan
 

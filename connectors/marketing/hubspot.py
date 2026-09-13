@@ -216,6 +216,21 @@ class HubspotConnector(BaseConnector):
             return ",".join(str(item).strip() for item in value if str(item).strip())
         return str(value or default)
 
+    @staticmethod
+    def _with_after(query: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+        """Forward the caller's ``after`` cursor to a HubSpot list endpoint."""
+        after = params.get("after")
+        if after:
+            query["after"] = str(after)
+        return query
+
+    @staticmethod
+    def _paging_meta(data: dict[str, Any]) -> dict[str, Any]:
+        """Expose ``paging.next.after`` so callers can actually fetch page 2."""
+        next_page = (data.get("paging") or {}).get("next") or {}
+        next_after = next_page.get("after") if isinstance(next_page, dict) else None
+        return {"has_more": bool(next_after), "next_after": next_after}
+
     def _timestamp(self, value: Any = None) -> str:
         if value:
             return str(value)
@@ -322,7 +337,7 @@ class HubspotConnector(BaseConnector):
         properties = params.get("properties", "firstname,lastname,email,company,phone")
         data = await self._get(
             "/crm/v3/objects/contacts",
-            params={"limit": limit, "properties": properties},
+            params=self._with_after({"limit": limit, "properties": properties}, params),
         )
         return {
             "contacts": [
@@ -333,7 +348,7 @@ class HubspotConnector(BaseConnector):
                 for c in data.get("results", [])
             ],
             "total": data.get("total", len(data.get("results", []))),
-            "has_more": bool(data.get("paging", {}).get("next")),
+            **self._paging_meta(data),
         }
 
     async def search_contacts(self, **params) -> dict[str, Any]:
@@ -419,13 +434,16 @@ class HubspotConnector(BaseConnector):
         limit = params.get("limit", 20)
         data = await self._get(
             "/crm/v3/objects/deals",
-            params={
-                "limit": limit,
-                "properties": self._properties_param(
-                    params.get("properties"),
-                    "dealname,amount,dealstage,pipeline,closedate,hubspot_owner_id",
-                ),
-            },
+            params=self._with_after(
+                {
+                    "limit": limit,
+                    "properties": self._properties_param(
+                        params.get("properties"),
+                        "dealname,amount,dealstage,pipeline,closedate,hubspot_owner_id",
+                    ),
+                },
+                params,
+            ),
         )
         return {
             "deals": [
@@ -436,6 +454,7 @@ class HubspotConnector(BaseConnector):
                 for d in data.get("results", [])
             ],
             "total": data.get("total", len(data.get("results", []))),
+            **self._paging_meta(data),
         }
 
     async def search_deals(self, **params) -> dict[str, Any]:
@@ -538,13 +557,16 @@ class HubspotConnector(BaseConnector):
         limit = params.get("limit", 20)
         data = await self._get(
             "/crm/v3/objects/companies",
-            params={
-                "limit": limit,
-                "properties": self._properties_param(
-                    params.get("properties"),
-                    "name,domain,industry,numberofemployees,city,phone",
-                ),
-            },
+            params=self._with_after(
+                {
+                    "limit": limit,
+                    "properties": self._properties_param(
+                        params.get("properties"),
+                        "name,domain,industry,numberofemployees,city,phone",
+                    ),
+                },
+                params,
+            ),
         )
         return {
             "companies": [
@@ -552,6 +574,7 @@ class HubspotConnector(BaseConnector):
                 for c in data.get("results", [])
             ],
             "total": data.get("total", len(data.get("results", []))),
+            **self._paging_meta(data),
         }
 
     async def create_company(self, **params) -> dict[str, Any]:
@@ -661,15 +684,22 @@ class HubspotConnector(BaseConnector):
         """List CRM tasks."""
         data = await self._get(
             "/crm/v3/objects/tasks",
-            params={
-                "limit": params.get("limit", 20),
-                "properties": self._properties_param(
-                    params.get("properties"),
-                    "hs_task_subject,hs_task_status,hs_task_priority,hs_timestamp",
-                ),
-            },
+            params=self._with_after(
+                {
+                    "limit": params.get("limit", 20),
+                    "properties": self._properties_param(
+                        params.get("properties"),
+                        "hs_task_subject,hs_task_status,hs_task_priority,hs_timestamp",
+                    ),
+                },
+                params,
+            ),
         )
-        return {"tasks": data.get("results", []), "total": data.get("total", 0)}
+        return {
+            "tasks": data.get("results", []),
+            "total": data.get("total", 0),
+            **self._paging_meta(data),
+        }
 
     async def create_task(self, **params) -> dict[str, Any]:
         """Create a HubSpot CRM task."""
@@ -696,15 +726,22 @@ class HubspotConnector(BaseConnector):
         """List CRM notes."""
         data = await self._get(
             "/crm/v3/objects/notes",
-            params={
-                "limit": params.get("limit", 20),
-                "properties": self._properties_param(
-                    params.get("properties"),
-                    "hs_note_body,hs_timestamp,hubspot_owner_id",
-                ),
-            },
+            params=self._with_after(
+                {
+                    "limit": params.get("limit", 20),
+                    "properties": self._properties_param(
+                        params.get("properties"),
+                        "hs_note_body,hs_timestamp,hubspot_owner_id",
+                    ),
+                },
+                params,
+            ),
         )
-        return {"notes": data.get("results", []), "total": data.get("total", 0)}
+        return {
+            "notes": data.get("results", []),
+            "total": data.get("total", 0),
+            **self._paging_meta(data),
+        }
 
     async def create_note(self, **params) -> dict[str, Any]:
         """Create a HubSpot CRM note."""

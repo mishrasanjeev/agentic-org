@@ -103,7 +103,13 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
             )
         )
         user = result.scalar_one_or_none()
-        user_id = user.id if user else uuid.UUID(tenant_id)
+        if user is None:
+            # api_keys.user_id is a FK to users; a tenant id is not a user id
+            # (500 on insert). API-key / agent principals cannot mint keys.
+            raise HTTPException(
+                status_code=403, detail="A human administrator is required to create API keys"
+            )
+        user_id = user.id
 
     # Limit: max 10 active keys per tenant
     async with async_session_factory() as session:
@@ -124,8 +130,11 @@ async def create_api_key(body: CreateKeyRequest, request: Request):
         from datetime import timedelta
         expires_at = datetime.now(UTC) + timedelta(days=body.expires_days)
 
+    # Canonical RBAC names (api.route_enforcement.SCOPE_FAMILIES). The old
+    # ``agents:run`` / ``connectors:read`` spellings are still accepted as
+    # aliases for keys issued before 2026-09-13.
     default_scopes = [
-        "agents:read", "agents:run", "connectors:read",
+        "agents:read", "agents:write", "connectors.read",
         "mcp:read", "mcp:call", "a2a:read",
     ]
 

@@ -18,6 +18,7 @@ from workflows.event_waits import WorkflowEventWaitStore
 from workflows.parallel_executor import execute_parallel
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
+    PAUSED_STEP_STATUSES,
     AgentExecutionError,
     ConnectorToolConfigError,
     ConnectorToolExecutionError,
@@ -239,7 +240,8 @@ async def _load_workflow_connector_config(
     if isinstance(creds, dict) and "_encrypted" in creds:
         from core.crypto import decrypt_for_tenant
 
-        creds = _json.loads(decrypt_for_tenant(creds["_encrypted"]))
+        # KMS-backed decrypt is synchronous (gRPC); keep it off the event loop.
+        creds = _json.loads(await asyncio.to_thread(decrypt_for_tenant, creds["_encrypted"]))
     if isinstance(creds, dict):
         config.update(creds)
     return config
@@ -642,7 +644,9 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             ),
             task=TaskInput(action=action, inputs=inputs, context=state.get("context", {})),
             hitl_policy=HITLPolicy(),
-            metadata=TaskMetadata(),
+            # Forward the step's idempotency_key so a retried agent step can be
+            # de-duplicated by the tool gateway instead of replaying writes.
+            metadata=TaskMetadata(idempotency_key=str(step.get("idempotency_key") or "")),
         )
 
         result = await agent_instance.execute(task)
@@ -1049,6 +1053,32 @@ async def _execute_sub_workflow(step: dict, state: dict) -> dict[str, Any]:
     )
     result = await sub_engine.execute(sub_run_id)
     status = result.get("status", "failed")
+    if status in PAUSED_STEP_STATUSES:
+        # Fail closed: the parent engine cannot resume a nested run. Surfacing
+        # the child's pause would strand the parent forever and route a HITL
+        # decision to the wrong run. Pausing steps (human_in_loop, wait,
+        # wait_for_event) inside a sub_workflow are unsupported by design.
+        logger.warning(
+            "sub_workflow_pause_unsupported",
+            extra={
+                "run_id": state.get("id", ""),
+                "step_id": step["id"],
+                "sub_run_id": sub_run_id,
+                "sub_status": status,
+            },
+        )
+        return {
+            "step_id": step["id"],
+            "type": "sub_workflow",
+            "status": "failed",
+            "sub_run_id": sub_run_id,
+            "output": result.get("step_results", {}),
+            "code": "sub_workflow_pause_unsupported",
+            "error": (
+                f"sub_workflow_pause_unsupported: nested run {sub_run_id} paused with "
+                f"status '{status}'; pausing steps are not supported inside sub_workflow"
+            ),
+        }
     if status not in ALLOWED_STEP_STATUSES:
         status = "failed"
 

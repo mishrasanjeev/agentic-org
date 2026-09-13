@@ -55,7 +55,7 @@ async def gate_agent_run(tenant_id: str) -> dict[str, Any] | None:
         from core.billing.limits import check_limit
 
         verdict = await check_limit(tenant_id, "agent_runs")
-    # enterprise-gate: broad-except-ok reason=metering-outage-must-not-block-or-crash-agent-runs
+    # enterprise-gate: broad-except-ok reason=metering-outage-degrades-to-unmetered-run-and-does-not-block-agent-runs
     except Exception:
         logger.warning("agent_run_limit_check_unavailable", tenant_id=tenant_id)
         return None
@@ -79,6 +79,6 @@ async def meter_agent_run(tenant_id: str) -> None:
         from core.billing.usage_tracker import increment_agent_runs
 
         await increment_agent_runs(tenant_id)
-    # enterprise-gate: broad-except-ok reason=usage-metering-is-best-effort-after-a-completed-run
+    # enterprise-gate: broad-except-ok reason=post-run-metering-failure-does-not-fail-the-completed-run-logged-only
     except Exception:
         logger.warning("agent_run_metering_failed", tenant_id=tenant_id)

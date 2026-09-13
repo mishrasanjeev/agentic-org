@@ -259,7 +259,16 @@ const TRACE_COLOR_MAP: Record<string, string> = {
 /*  parseTraceLines â€” turns reasoning_trace + output into colored lines */
 /* ------------------------------------------------------------------ */
 
-function parseTraceLines(
+/**
+ * POST /agents/{id}/run returns ``status: "hitl_triggered"`` plus a
+ * ``hitl_trigger`` reason string (api/v1/agents.py run_agent). The older
+ * ``hitl_triggered`` / ``requires_approval`` booleans were never emitted.
+ */
+export function isHitlTriggered(result: Record<string, unknown>): boolean {
+  return result.status === "hitl_triggered" || Boolean(result.hitl_trigger);
+}
+
+export function parseTraceLines(
   agentName: string,
   result: Record<string, unknown>,
 ): TraceLine[] {
@@ -361,9 +370,11 @@ function parseTraceLines(
   }
 
   // HITL info
-  const hitl = result.hitl_request as Record<string, unknown> | undefined;
-  if (hitl) {
-    lines.push({ text: `Human approval required: ${hitl.trigger_condition || "Threshold exceeded"}`, color: "red" });
+  if (isHitlTriggered(result)) {
+    const reason = typeof result.hitl_trigger === "string" && result.hitl_trigger
+      ? result.hitl_trigger
+      : "Threshold exceeded";
+    lines.push({ text: `Human approval required: ${reason}`, color: "red" });
   }
 
   lines.push({ text: "> Run complete.", color: "gray" });
@@ -605,6 +616,10 @@ export default function Playground() {
         // A public page needs to render a clear sign-in CTA instead of the
         // shared client's normal full-page redirect on 401.
         validateStatus: (code) => code === 401 || (code >= 200 && code < 300),
+        // Synchronous runs may legitimately take minutes (server allows up
+        // to 1800s); the shared 30s client timeout aborted the request and
+        // a retry started a second real run.
+        timeout: 0,
       });
       if (response.status === 401) {
         const message = "Sign in to run agents in the playground.";
@@ -626,7 +641,7 @@ export default function Playground() {
         status: (data.status as string) ?? "completed",
         confidence: (data.confidence as number) ?? null,
         latency: `${elapsed}s`,
-        hitlTriggered: !!(data.hitl_triggered ?? data.requires_approval),
+        hitlTriggered: isHitlTriggered(data),
       });
     } catch (err) {
       const unauthorized = (err as { response?: { status?: number } })?.response?.status === 401;

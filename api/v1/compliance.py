@@ -74,7 +74,7 @@ async def _submit_and_process(
 
 
 # ── POST /dsar/access ────────────────────────────────────────────────────────
-@router.post("/dsar/access")
+@router.post("/dsar/access", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -112,7 +112,7 @@ async def dsar_erase(
 
 
 # ── POST /dsar/export ───────────────────────────────────────────────────────
-@router.post("/dsar/export")
+@router.post("/dsar/export", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -131,7 +131,7 @@ async def dsar_export(
 
 
 # ── GET /dsar/{request_id} ──────────────────────────────────────────────────
-@router.get("/dsar/{request_id}")
+@router.get("/dsar/{request_id}", dependencies=[require_tenant_admin])
 @route_meta(
     auth_required=True,
     tenant_required=True,

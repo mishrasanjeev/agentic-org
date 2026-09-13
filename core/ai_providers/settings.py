@@ -107,10 +107,12 @@ async def get_effective_ai_setting(
             return effective
 
     try:
-        from core.database import async_session_factory
+        from core.database import get_tenant_session
         from core.models.tenant_ai_setting import TenantAISetting
 
-        async with async_session_factory() as session:
+        # tenant_ai_settings is FORCE-RLS (v6z16); bind the tenant context or
+        # the read returns no row and platform defaults win silently.
+        async with get_tenant_session(tid) as session:
             result = await session.execute(
                 select(TenantAISetting).where(
                     TenantAISetting.tenant_id == tid

@@ -21,10 +21,13 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from core.database import async_session_factory, get_tenant_session
 from core.models.budget_alert import BudgetAlert
+from core.models.company import Company
+from core.models.tenant import Tenant
+from core.models.user import User
 
 logger = structlog.get_logger()
 
@@ -77,6 +80,38 @@ async def _spend_since(
         return Decimal(str(total or 0))
 
 
+async def _alert_recipient(alert: BudgetAlert) -> str | None:
+    """Resolve the tenant-owned recipient for a budget alert email.
+
+    Company-scoped alerts use the company's ``compliance_alerts_email``;
+    otherwise (or when unset) the tenant's earliest active admin user.
+    Returns ``None`` when the tenant has no recipient — the caller skips
+    the email; there is deliberately no platform-wide fallback address.
+    """
+    async with get_tenant_session(alert.tenant_id) as session:
+        if alert.company_id is not None:
+            row = await session.execute(
+                select(Company.compliance_alerts_email).where(
+                    Company.id == alert.company_id,
+                    Company.tenant_id == alert.tenant_id,
+                )
+            )
+            email = (row.scalar_one_or_none() or "").strip()
+            if email:
+                return email
+        row = await session.execute(
+            select(User.email)
+            .where(
+                User.tenant_id == alert.tenant_id,
+                User.role == "admin",
+                User.status == "active",
+            )
+            .order_by(User.created_at)
+            .limit(1)
+        )
+        return (row.scalar_one_or_none() or "").strip() or None
+
+
 async def _send_notification(
     alert: BudgetAlert,
     spend: Decimal,
@@ -96,7 +131,16 @@ async def _send_notification(
             if channel == "email":
                 from core.email import send_email
 
-                # Best-effort email — the billing admin for the tenant.
+                # Recipient is resolved from the alert's tenant; never a
+                # hard-coded internal address (cross-tenant data leak).
+                to = await _alert_recipient(alert)
+                if not to:
+                    logger.warning(
+                        "budget_alert_skipped_no_recipient",
+                        alert_id=str(alert.id),
+                        tenant_id=str(alert.tenant_id),
+                    )
+                    continue
                 # core.email.send_email is synchronous; wrap the HTML
                 # body since that's the signature it expects.
                 html_body = (
@@ -105,7 +149,7 @@ async def _send_notification(
                 )
                 await asyncio.to_thread(
                     send_email,
-                    "sanjeev@agenticorg.ai",
+                    to,
                     subject,
                     html_body,
                 )
@@ -150,9 +194,26 @@ async def evaluate_budget_alerts() -> dict:
     checked = 0
     triggered = 0
 
+    # ``budget_alerts`` is FORCE-RLS: a raw cross-tenant SELECT returns no
+    # rows under a non-BYPASSRLS role. Enumerate tenants (failing loudly if
+    # the role cannot bypass RLS) and read each tenant's alerts in its own
+    # tenant session.
     async with async_session_factory() as session:
-        result = await session.execute(select(BudgetAlert))
-        alerts = result.scalars().all()
+        await session.execute(text("SET LOCAL row_security = off"))
+        tenant_ids = [
+            row[0]
+            for row in (
+                await session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))
+            ).all()
+        ]
+
+    alerts: list[BudgetAlert] = []
+    for tid in tenant_ids:
+        async with get_tenant_session(tid) as session:
+            result = await session.execute(
+                select(BudgetAlert).where(BudgetAlert.tenant_id == tid)
+            )
+            alerts.extend(result.scalars().all())
 
     for alert in alerts:
         checked += 1
@@ -180,10 +241,13 @@ async def evaluate_budget_alerts() -> dict:
 
             await _send_notification(alert, spend, percent)
 
-            # Persist the trigger
-            async with async_session_factory() as write_session:
+            # Persist the trigger (tenant session: RLS WITH CHECK on UPDATE)
+            async with get_tenant_session(alert.tenant_id) as write_session:
                 result = await write_session.execute(
-                    select(BudgetAlert).where(BudgetAlert.id == alert.id)
+                    select(BudgetAlert).where(
+                        BudgetAlert.id == alert.id,
+                        BudgetAlert.tenant_id == alert.tenant_id,
+                    )
                 )
                 fresh = result.scalar_one_or_none()
                 if fresh is not None:

@@ -432,7 +432,9 @@ class ZohoBooksConnector(BaseConnector):
         org_id, source = self._org_id_from_params(source_params or extra)
         if org_id:
             params["organization_id"] = org_id
-            self._set_org_id(org_id)
+            # Per-call org context is scoped to this call only. The connector
+            # instance is cached per tenant, so persisting a caller-supplied
+            # org would silently re-point every later call that omits it.
         logger.debug(
             "zoho_books_org_context_resolved",
             source=source,
@@ -1214,8 +1216,8 @@ class ZohoBooksConnector(BaseConnector):
         Returns the active organization from the connected Zoho Books
         account. Useful for agents whose prompts reference the
         company by name or need the organization_id for follow-up calls.
-        If a caller supplies organization_id, the connector records that
-        as the active org for later calls in the same session.
+        If a caller supplies organization_id, it scopes this call only; the
+        cached connector's configured org is left untouched.
         """
         explicit_org_id = ""
         query: dict[str, Any] | None = None
@@ -1234,7 +1236,6 @@ class ZohoBooksConnector(BaseConnector):
                 "are configured."
             )
         if explicit_org_id:
-            self._set_org_id(explicit_org_id)
             orgs = [
                 org
                 for org in orgs
@@ -1368,7 +1369,6 @@ class ZohoBooksConnector(BaseConnector):
                 org_id, _source = self._org_id_from_params(params)
                 if org_id:
                     query["organization_id"] = org_id
-                    self._set_org_id(org_id)
         data = await super()._get(path, query or None)
         self._raise_for_zoho_error(data, path)
         return data

@@ -11,7 +11,7 @@ import io
 import logging
 import re
 import uuid as _uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from cryptography.fernet import InvalidToken
@@ -328,15 +328,33 @@ class CompanyOnboard(BaseModel):
     bank_name: str | None = None
     bank_account_number: str | None = None
     bank_ifsc: str | None = None
+    bank_branch: str | None = None
     pf_registration: str | None = None
     esi_registration: str | None = None
     pt_registration: str | None = None
     gst_auto_file: bool = False
+    # Tally Connection fields captured on the onboarding wizard; merged over
+    # the default stub so unset keys keep their defaults.
+    tally_config: dict | None = None
+    # 2-char month codes (companies.fy_start_month / fy_end_month).
+    fy_start_month: str | None = Field(None, pattern=r"^(0[1-9]|1[0-2])$")
+    fy_end_month: str | None = Field(None, pattern=r"^(0[1-9]|1[0-2])$")
 
     @field_validator("state_code", mode="before")
     @classmethod
     def _normalize_state(cls, value: str | None) -> str | None:
         return _normalize_state_code(value)
+
+    @field_validator("dsc_expiry")
+    @classmethod
+    def _validate_dsc_expiry(cls, value: str | None) -> str | None:
+        if value in (None, ""):
+            return None
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("dsc_expiry must be an ISO date (YYYY-MM-DD)") from exc
+        return value
 
 
 class RoleMapping(BaseModel):
@@ -1201,13 +1219,18 @@ async def onboard_company(
         if user_email:
             user_roles[user_email] = CompanyRole.partner.value
 
-        # Default Tally config stub
+        # Default Tally config stub; wizard-supplied keys override it so the
+        # Tally Connection step is not silently dropped.
         default_tally: dict = {
             "bridge_url": "",
             "bridge_id": "",
             "company_name": body.name,
             "auto_sync": False,
         }
+        if body.tally_config:
+            default_tally.update(
+                {k: v for k, v in body.tally_config.items() if v is not None}
+            )
 
         company = Company(
             tenant_id=tid,
@@ -1221,19 +1244,23 @@ async def onboard_company(
             registered_address=body.registered_address,
             signatory_name=body.signatory_name,
             signatory_designation=body.signatory_designation,
+            signatory_email=body.signatory_email,
             compliance_email=body.compliance_email,
+            dsc_serial=body.dsc_serial,
+            dsc_expiry=date.fromisoformat(body.dsc_expiry) if body.dsc_expiry else None,
             bank_name=body.bank_name,
             bank_account_number=body.bank_account_number,
             bank_ifsc=body.bank_ifsc,
+            bank_branch=body.bank_branch,
             pf_registration=body.pf_registration,
             esi_registration=body.esi_registration,
             pt_registration=body.pt_registration,
             gst_auto_file=body.gst_auto_file,
             tally_config=default_tally,
             user_roles=user_roles,
-            # India FY defaults
-            fy_start_month="04",
-            fy_end_month="03",
+            # India FY defaults unless the wizard supplied month codes
+            fy_start_month=body.fy_start_month or "04",
+            fy_end_month=body.fy_end_month or "03",
         )
         session.add(company)
         await session.flush()

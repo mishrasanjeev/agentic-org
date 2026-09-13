@@ -185,7 +185,9 @@ async def _refresh_all() -> dict:
                 token_data = resp.json()
 
             new_access = token_data.get("access_token", "")
-            new_refresh = token_data.get("refresh_token", refresh_token)
+            # Providers may return ``"refresh_token": null`` (present-but-null);
+            # ``.get(key, default)`` would store None and break the next cycle.
+            new_refresh = token_data.get("refresh_token") or refresh_token
             new_expires_in = token_data.get("expires_in", 3600)
             new_expires_at = (
                 datetime.now(UTC) + timedelta(seconds=int(new_expires_in))

@@ -2,13 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 import { buildCsv } from "@/lib/csv";
 import type { AuditEntry } from "@/types";
 
 export default function Audit() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [eventTypeFilter, setEventTypeFilter] = useState("");
   const [page, setPage] = useState(1);
   const perPage = 50;
@@ -19,14 +20,18 @@ export default function Audit() {
 
   async function fetchAudit() {
     setLoading(true);
+    setLoadError(null);
     try {
       // Fetch without event_type filter — we filter client-side for partial matching
       const params: Record<string, string> = { page: String(page), per_page: String(perPage) };
       const { data } = await api.get("/audit", { params });
       const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       setEntries(items);
-    } catch {
+    } catch (err) {
+      // A failed fetch must not look like "no audit entries" — and an
+      // evidence export of an empty list would be silently wrong.
       setEntries([]);
+      setLoadError(extractApiError(err, "Failed to load audit entries."));
     } finally {
       setLoading(false);
     }
@@ -89,10 +94,17 @@ export default function Audit() {
       <div className="flex justify-between items-center flex-wrap gap-2">
         <h2 className="text-2xl font-bold">Audit Log</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportJSON}>Export Evidence Package</Button>
-          <Button variant="outline" onClick={exportCSV}>Download CSV</Button>
+          <Button variant="outline" onClick={exportJSON} disabled={loading || loadError !== null}>Export Evidence Package</Button>
+          <Button variant="outline" onClick={exportCSV} disabled={loading || loadError !== null}>Download CSV</Button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" data-testid="audit-load-error">
+          {loadError}
+          <Button variant="outline" size="sm" className="ml-3" onClick={fetchAudit}>Retry</Button>
+        </div>
+      )}
 
       <div className="flex gap-4 items-center">
         <div className="relative">
@@ -122,7 +134,7 @@ export default function Audit() {
 
       {loading ? (
         <p className="text-muted-foreground">Loading audit entries...</p>
-      ) : filteredEntries.length === 0 ? (
+      ) : loadError ? null : filteredEntries.length === 0 ? (
         <p className="text-muted-foreground">
           {eventTypeFilter ? `No audit entries matching "${eventTypeFilter}". Try a shorter search term.` : "No audit entries found."}
         </p>

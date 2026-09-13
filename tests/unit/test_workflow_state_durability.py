@@ -104,8 +104,10 @@ async def test_celery_wait_resume_updates_durable_state_not_redis_only() -> None
 
     assert result["status"] == "resumed"
     durable_state = repo.states["run-wait"]["state"]
-    assert durable_state["status"] == "running"
+    # The task re-drives the engine after the durable flip (audit 2026-09-13),
+    # so a run with no further steps ends ``completed`` rather than ``running``.
+    assert durable_state["status"] == "completed"
     assert durable_state["step_results"]["wait-1"]["status"] == "completed"
     assert "waiting_step_id" not in durable_state
-    assert repo.transitions[-1]["actor"] == "celery.resume_workflow_wait"
-    assert repo.transitions[-1]["step_id"] == "wait-1"
+    resume_transitions = [t for t in repo.transitions if t["actor"] == "celery.resume_workflow_wait"]
+    assert resume_transitions and resume_transitions[-1]["step_id"] == "wait-1"

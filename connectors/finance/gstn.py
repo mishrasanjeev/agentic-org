@@ -214,6 +214,23 @@ class GstnConnector(BaseConnector):
         if legacy_auth_token:
             self._auth_headers["auth-token"] = self._access_token
 
+    async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Execute tool with automatic 401 retry (re-authenticates and retries once).
+
+        The connector instance is cached per tenant, so a token obtained in
+        ``_authenticate`` eventually expires mid-session. Re-auth + rebuild the
+        HTTP client so fresh headers are used, then retry exactly once.
+        """
+        try:
+            return await super().execute_tool(tool_name, params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 401:
+                raise
+            logger.info("gstn_401_retry", tool=tool_name)
+            await self._authenticate()
+            await self._rebuild_http_client()
+            return await super().execute_tool(tool_name, params)
+
     async def _sign_and_post(self, path: str, data: dict) -> dict[str, Any]:
         """Sign the payload with DSC and POST to the GSP endpoint.
 
@@ -347,6 +364,20 @@ class GstnConnector(BaseConnector):
                     "row_number": index,
                     "client_reference": invoice.get("client_reference") or invoice.get("document_number"),
                     "error": _public_eway_bill_validation_error(exc),
+                })
+            except (httpx.HTTPError, RuntimeError) as exc:
+                # submit=True: a GSTN/transport failure on row k must not discard
+                # rows 1..k-1 that were already generated. Record and continue so
+                # the caller always receives the partial summary.
+                logger.warning(
+                    "gstn_bulk_eway_bill_row_failed",
+                    row_number=index,
+                    error_type=type(exc).__name__,
+                )
+                failed.append({
+                    "row_number": index,
+                    "client_reference": invoice.get("client_reference") or invoice.get("document_number"),
+                    "error": "E-way bill submission failed for this row.",
                 })
 
         return {

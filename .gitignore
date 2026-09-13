@@ -42,6 +42,7 @@ codex-pytest-cache/
 codex-pytest-basetemp/
 codex-pytest-temp/
 codex-pytest-artifacts/
+/.tmp/
 cover/
 .env
 .env.c6z.local

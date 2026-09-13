@@ -79,6 +79,26 @@ const STATUS_BADGE: Record<
 // both.
 type DuplicateAction = "replace" | "keep_both" | "cancel";
 
+interface KnowledgeSearchResult {
+  chunk_text: string;
+  score?: number;
+  document_name?: string;
+}
+
+/** Coerce a /knowledge/search result row (object or legacy string) into a renderable shape. */
+export function normalizeSearchResult(raw: unknown): KnowledgeSearchResult | null {
+  if (typeof raw === "string") return raw ? { chunk_text: raw } : null;
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const text = typeof r.chunk_text === "string" ? r.chunk_text : typeof r.content === "string" ? r.content : "";
+  if (!text) return null;
+  return {
+    chunk_text: text,
+    score: typeof r.score === "number" ? r.score : undefined,
+    document_name: typeof r.document_name === "string" ? r.document_name : undefined,
+  };
+}
+
 function DuplicateDecisionModal({
   filename,
   onDecide,
@@ -136,7 +156,8 @@ export default function KnowledgeBase() {
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<string[]>([]);
+  // POST /knowledge/search returns {results: [{chunk_text, score, document_name}]}
+  const [searchResults, setSearchResults] = useState<KnowledgeSearchResult[]>([]);
   // TC_002 (Aishwarya 2026-04-23): surface real backend errors to the user
   // instead of a blanket "API offline" line.
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -310,7 +331,9 @@ export default function KnowledgeBase() {
     setSearchError(null);
     try {
       const res = await api.post("/knowledge/search", { query: searchQuery });
-      const results = Array.isArray(res.data?.results) ? res.data.results : [];
+      const results = (Array.isArray(res.data?.results) ? res.data.results : [])
+        .map(normalizeSearchResult)
+        .filter((r: KnowledgeSearchResult | null): r is KnowledgeSearchResult => r !== null);
       setSearchResults(results);
       // TC_002 (Aishwarya 2026-04-23): when the backend returns zero
       // results, show a dedicated empty state — not the previous
@@ -438,7 +461,15 @@ export default function KnowledgeBase() {
         <div className="border rounded-lg p-4 bg-muted/20 space-y-2">
           <h3 className="text-sm font-semibold">Search Results</h3>
           {searchResults.map((r, i) => (
-            <p key={i} className="text-sm text-muted-foreground">{r}</p>
+            <div key={i} className="text-sm" data-testid="kb-search-result">
+              {(r.document_name || r.score != null) && (
+                <p className="text-xs text-muted-foreground">
+                  {r.document_name}
+                  {r.score != null ? `${r.document_name ? " · " : ""}score ${r.score.toFixed(2)}` : ""}
+                </p>
+              )}
+              <p className="text-muted-foreground">{r.chunk_text}</p>
+            </div>
           ))}
         </div>
       )}

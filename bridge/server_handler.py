@@ -17,6 +17,8 @@ from sqlalchemy import select
 
 from api.route_metadata import route_meta
 from bridge.state import (
+    TERMINAL_REQUEST_STATUSES,
+    BridgeRequestRecord,
     BridgeRouteError,
     BridgeSessionRecord,
     BrokerSubscription,
@@ -435,6 +437,40 @@ def _complete_local_waiter(request_id: str, message: dict[str, Any]) -> None:
         future.set_result(message)
 
 
+# Failures the original caller received as a response payload (not an
+# exception) — replaying them must keep the same shape.
+_RESPONSE_STYLE_FAILURE_CODES = frozenset({"bridge_error", "malformed_response", "bridge_send_failed"})
+
+
+def _replay_terminal_record(record: BridgeRequestRecord, *, bridge_id: str) -> dict[str, Any]:
+    """Return the stored outcome of a finished request instead of re-sending it.
+
+    ``create_request`` hands back the existing row for a repeated
+    ``idempotency_key``. Publishing ``post_xml`` again would make Tally post
+    the voucher twice, so the durable record is authoritative.
+    """
+    logger.info("bridge_request_replayed", request_id=record.request_id, status=record.status)
+    if record.status == "responded" and isinstance(record.result, dict):
+        return dict(record.result)
+    error = record.error or {}
+    code = str(error.get("code") or record.status)
+    message = str(error.get("message") or f"Bridge request {record.status}")
+    if code in _RESPONSE_STYLE_FAILURE_CODES:
+        return {
+            "type": "response",
+            "request_id": record.request_id,
+            "status": "error",
+            "error_category": code,
+            "error": message,
+        }
+    raise BridgeRouteError(
+        message,
+        code=code,
+        request_id=record.request_id,
+        bridge_id=bridge_id,
+    )
+
+
 async def route_to_bridge(
     bridge_id: str,
     xml_body: str,
@@ -485,7 +521,13 @@ async def route_to_bridge(
         timeout_seconds=timeout,
         idempotency_key=idempotency_key,
     )
+    # ``create_request`` returns the existing record for a repeated
+    # idempotency_key: either it already finished (return its outcome) or it
+    # is in flight on some pod (wait for it, never publish a second time).
+    replayed = record.request_id != effective_request_id or record.status != "pending"
     effective_request_id = record.request_id
+    if record.status in TERMINAL_REQUEST_STATUSES:
+        return _replay_terminal_record(record, bridge_id=bridge_id)
 
     if not session.connected:
         await get_bridge_state_repository().mark_failed(
@@ -528,34 +570,51 @@ async def route_to_bridge(
             bridge_id=bridge_id,
         ) from exc
 
-    try:
-        await get_bridge_broker().publish_request(
-            bridge_id,
-            {
-                "type": "post_xml",
-                "request_id": effective_request_id,
-                "bridge_id": bridge_id,
-                "tenant_id": session.tenant_id,
-                "method": "post_xml",
-                "xml_body": xml_body,
-            },
-        )
-    # enterprise-gate: broad-except-ok reason=broker-publish-failure-marks-durable-request-failed
-    except Exception as exc:
-        _pending_requests.pop(effective_request_id, None)
-        await response_subscription.close()
-        await get_bridge_state_repository().mark_failed(
-            request_id=effective_request_id,
+    if replayed:
+        # Close the race where the response landed between create_request and
+        # subscribe_response: re-read the durable record before waiting on it.
+        current = await get_bridge_state_repository().get_request(
+            effective_request_id,
             tenant_id=session.tenant_id,
-            code="bridge_publish_failed",
-            message=str(exc),
         )
-        raise BridgeRouteError(
-            "Bridge broker publish failed",
-            code="bridge_publish_failed",
+        if current is not None and current.status in TERMINAL_REQUEST_STATUSES:
+            _pending_requests.pop(effective_request_id, None)
+            await response_subscription.close()
+            return _replay_terminal_record(current, bridge_id=bridge_id)
+        logger.info(
+            "bridge_request_replay_waiting",
             request_id=effective_request_id,
-            bridge_id=bridge_id,
-        ) from exc
+            status=record.status,
+        )
+    else:
+        try:
+            await get_bridge_broker().publish_request(
+                bridge_id,
+                {
+                    "type": "post_xml",
+                    "request_id": effective_request_id,
+                    "bridge_id": bridge_id,
+                    "tenant_id": session.tenant_id,
+                    "method": "post_xml",
+                    "xml_body": xml_body,
+                },
+            )
+        # enterprise-gate: broad-except-ok reason=broker-publish-failure-marks-durable-request-failed
+        except Exception as exc:
+            _pending_requests.pop(effective_request_id, None)
+            await response_subscription.close()
+            await get_bridge_state_repository().mark_failed(
+                request_id=effective_request_id,
+                tenant_id=session.tenant_id,
+                code="bridge_publish_failed",
+                message=str(exc),
+            )
+            raise BridgeRouteError(
+                "Bridge broker publish failed",
+                code="bridge_publish_failed",
+                request_id=effective_request_id,
+                bridge_id=bridge_id,
+            ) from exc
 
     try:
         result = await asyncio.wait_for(future, timeout=timeout)

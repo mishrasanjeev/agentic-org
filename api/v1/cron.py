@@ -6,6 +6,7 @@ Protected by API key authentication (not user JWT).
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 
@@ -29,8 +30,8 @@ def _get_cron_api_key() -> str:
 
 
 def _verify_cron_key(x_cron_key: str = Header(default="")) -> None:
-    """Verify cron API key from header."""
-    if x_cron_key != _get_cron_api_key():
+    """Verify cron API key from header (constant-time compare)."""
+    if not hmac.compare_digest(x_cron_key.encode(), _get_cron_api_key().encode()):
         raise HTTPException(403, "Invalid cron API key")
 
 
@@ -95,4 +96,5 @@ async def trigger_compliance_alerts(
     # enterprise-gate: broad-except-ok reason=cron-trigger-returns-server-error-on-job-failure
     except Exception as exc:
         logger.exception("Compliance cron failed: %s", exc)
-        raise HTTPException(500, f"Cron failed: {exc}") from exc
+        # Exception text is logged above; never echo it to the caller.
+        raise HTTPException(500, "Cron job failed") from exc

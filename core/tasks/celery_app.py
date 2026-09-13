@@ -104,8 +104,14 @@ app.conf.beat_schedule = {
         "options": {"queue": "maintenance"},
     },
     "generate-monthly-invoices": {
+        # Beat crontabs are evaluated in the app timezone (Asia/Kolkata).
+        # 06:30 IST on the 1st == 01:00 UTC on the 1st, i.e. AFTER the
+        # billed month has closed in UTC (the generator's task-count
+        # window is UTC). The previous 01:00 IST slot was 19:30 UTC on
+        # the LAST day of the month: late tasks were missed and the
+        # invoice_number uniqueness constraint blocked regeneration.
         "task": "core.tasks.invoice_tasks.generate_monthly_invoices",
-        "schedule": crontab(hour=1, minute=0, day_of_month="1"),
+        "schedule": crontab(hour=6, minute=30, day_of_month="1"),
         "options": {"queue": "maintenance"},
     },
     "dispatch-due-rpa-schedules": {

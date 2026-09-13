@@ -33,7 +33,11 @@ async def record_ab_outcome_if_terminal(db_run: Any) -> None:
     variant_id = ab.get("variant_id")
     if not variant_id or ab.get("outcome_recorded"):
         return
-    await record_outcome(uuid.UUID(str(variant_id)), success=db_run.status == "completed")
+    await record_outcome(
+        uuid.UUID(str(variant_id)),
+        success=db_run.status == "completed",
+        tenant_id=db_run.tenant_id,
+    )
     context["ab"] = {**ab, "outcome_recorded": True}
     db_run.context = context
 
@@ -213,6 +217,9 @@ async def sync_engine_state_to_workflow_run(
                             expires_at=expires_at,
                     )
                     session.add(hitl_item)
+                    # HITLQueue.id is a Python-side default applied at flush; without
+                    # this the push notification carries approval_id="None".
+                    await session.flush()
                     schedule_hitl_timeout(engine_run_id, step_id, expires_at)
                     from core.push.sender import notify_approval_created
 
@@ -220,13 +227,15 @@ async def sync_engine_state_to_workflow_run(
 
         db_run.steps_completed = _run_steps_completed(state)
         db_run.steps_total = _run_steps_total(state, db_run.steps_total)
-        db_run.status = state.get("status", "running")
-        if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
-            db_run.completed_at = datetime.now(UTC)
-        if state.get("status") == "completed":
-            db_run.result = state.get("step_results")
-        if state.get("status") == "failed" and isinstance(state.get("error"), dict):
-            db_run.error = state["error"]
+        # Never downgrade a DB row that a concurrent cancel already finalised.
+        if db_run.status not in TERMINAL_WORKFLOW_STATUSES:
+            db_run.status = state.get("status", "running")
+            if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
+                db_run.completed_at = datetime.now(UTC)
+            if state.get("status") == "completed":
+                db_run.result = state.get("step_results")
+            if state.get("status") == "failed" and isinstance(state.get("error"), dict):
+                db_run.error = state["error"]
 
         try:
             await record_ab_outcome_if_terminal(db_run)

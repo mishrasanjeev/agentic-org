@@ -506,14 +506,21 @@ class TestDemoRequestHardening:
         with (
             patch("api.v1.demo.auth_state.check_window_rate", new=AsyncMock(return_value=False)),
             patch("api.v1.demo.async_session_factory") as sf,
+            patch("api.v1.demo.get_tenant_session") as ts,
             patch.object(demo, "_send_email_notification") as notify,
             patch.object(demo, "_send_trial_confirmation") as confirm,
         ):
             sf.return_value.__aenter__ = AsyncMock(return_value=session)
             sf.return_value.__aexit__ = AsyncMock(return_value=False)
+            # 2026-09-13: lead_pipeline is FORCE-RLS, so the lead write runs in
+            # a tenant-bound session for the default tenant.
+            ts.return_value.__aenter__ = AsyncMock(return_value=session)
+            ts.return_value.__aexit__ = AsyncMock(return_value=False)
             out = await submit_demo_request(body, _request(), bg)
         assert out["status"] == "received"
         assert out["lead_id"]
+        ts.assert_called_once()
+        assert str(ts.call_args.args[0]) == "00000000-0000-0000-0000-000000000001"
         bg.add_task.assert_called_once()
         assert bg.add_task.call_args.args[0] is demo._demo_request_followups
         notify.assert_not_called()

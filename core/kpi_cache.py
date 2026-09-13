@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 
 from core.config import redis_socket_timeout_kwargs, settings
-from core.database import async_session_factory
+from core.database import get_tenant_session
 
 logger = logging.getLogger(__name__)
 
@@ -232,11 +232,14 @@ class KPICache:
         return await self._pg_is_stale(tenant_id, role, metric_name, company_id)
 
     # ── PostgreSQL helpers ─────────────────────────────────────────────
+    # ``kpi_cache`` is FORCE-RLS: every PG read/write binds the caller's
+    # tenant context via get_tenant_session (which also validates the id),
+    # otherwise a raw session silently reads nothing / fails WITH CHECK.
 
     async def _pg_get(
         self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> dict | None:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
             row = (
                 await session.execute(
                     text(
@@ -271,7 +274,7 @@ class KPICache:
     async def _pg_get_all_for_role(
         self, tenant_id: str, role: str, company_id: str | None = None
     ) -> dict[str, dict]:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
             rows = (
                 await session.execute(
                     text(
@@ -310,7 +313,7 @@ class KPICache:
         source: str,
         company_id: str | None = None,
     ) -> None:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
             await session.execute(
                 text(
                     "INSERT INTO kpi_cache "
@@ -338,7 +341,7 @@ class KPICache:
         metric_name: str | None,
         company_id: str | None = None,
     ) -> None:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
             if metric_name:
                 await session.execute(
                     text(
@@ -368,7 +371,7 @@ class KPICache:
     async def _pg_is_stale(
         self, tenant_id: str, role: str, metric_name: str, company_id: str | None = None
     ) -> bool:
-        async with async_session_factory() as session:
+        async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
             row = (
                 await session.execute(
                     text(

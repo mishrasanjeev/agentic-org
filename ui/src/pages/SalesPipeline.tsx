@@ -3,7 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
 
 const STAGES = [
@@ -87,7 +87,9 @@ export default function SalesPipeline() {
       // Auto-select the processed lead to show details
       const updatedLead = leads.find(l => l.id === leadId);
       if (updatedLead) setSelectedLead(updatedLead);
-    } catch { /* ignore */ }
+    } catch (err) {
+      setImportMsg({ type: "error", msg: extractApiError(err, "Failed to run the sales agent on this lead.") });
+    }
     finally { setProcessing(null); }
   }
 
@@ -106,7 +108,9 @@ export default function SalesPipeline() {
       setNewLead({ name: "", email: "", company: "", role: "", deal_value_usd: "" });
       setShowAddLead(false);
       await fetchData();
-    } catch { /* ignore */ }
+    } catch (err) {
+      setImportMsg({ type: "error", msg: extractApiError(err, "Failed to add lead.") });
+    }
     finally { setAddingLead(false); }
   }
 

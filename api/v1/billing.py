@@ -771,7 +771,7 @@ async def stripe_webhook(request: Request) -> dict[str, Any]:
     """Handle Stripe webhook callbacks."""
     import asyncio
 
-    from core.billing.stripe_client import handle_webhook
+    from core.billing.stripe_client import StripeWebhookNotConfiguredError, handle_webhook
 
     body = await request.body()
     sig = request.headers.get("Stripe-Signature", "")
@@ -781,6 +781,10 @@ async def stripe_webhook(request: Request) -> dict[str, Any]:
     try:
         result = await asyncio.to_thread(handle_webhook, body, sig)
         return result
+    except StripeWebhookNotConfiguredError as exc:
+        # Never 200 an unverifiable event: Stripe retries once the secret is set.
+        logger.error("stripe_webhook_rejected_secret_not_configured")
+        raise HTTPException(status_code=503, detail="Stripe webhook secret not configured") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # enterprise-gate: broad-except-ok reason=stripe-webhook-processing-fails-http-error-no-success

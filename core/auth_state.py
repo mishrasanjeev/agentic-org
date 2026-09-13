@@ -17,12 +17,15 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass
 
+import jwt
 import redis.asyncio as aioredis
+from jwt import PyJWTError
 
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 
@@ -93,7 +96,7 @@ AUTH_MAX_FAILURES = 10
 AUTH_BLOCK_DURATION = 900  # 15 minutes
 SIGNUP_MAX_PER_HOUR = 5
 SIGNUP_WINDOW = 3600
-TOKEN_BLACKLIST_TTL = 3700  # slightly > token TTL (60 min)
+TOKEN_BLACKLIST_TTL = 3700  # floor: slightly > the default 60 min token TTL
 
 
 # ---------------------------------------------------------------------------
@@ -207,14 +210,30 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(f"{secret}:{token}".encode()).hexdigest()
 
 
+def _blacklist_ttl_for(token: str) -> int:
+    """Remaining token lifetime (unverified ``exp``), floored at ``TOKEN_BLACKLIST_TTL``.
+
+    ``token_ttl_minutes`` is configurable; a fixed TTL let long-lived tokens
+    outlive their revocation. Non-JWT input falls back to the floor.
+    """
+    try:
+        exp = jwt.decode(token, options={"verify_signature": False}).get("exp")
+    except (PyJWTError, ValueError, TypeError, AttributeError):
+        return TOKEN_BLACKLIST_TTL
+    if not isinstance(exp, int | float):
+        return TOKEN_BLACKLIST_TTL
+    return max(TOKEN_BLACKLIST_TTL, int(exp - time.time()) + 100)
+
+
 async def blacklist_token(token: str) -> None:
-    """Add a token to the blacklist."""
+    """Add a token to the blacklist for the rest of its lifetime."""
     h = _hash_token(token)
-    _mem_blacklist[h] = time.time() + TOKEN_BLACKLIST_TTL
+    ttl = _blacklist_ttl_for(token)
+    _mem_blacklist[h] = time.time() + ttl
     r = await _get_redis()
     if r:
         try:
-            await r.setex(f"auth:blacklist:{h}", TOKEN_BLACKLIST_TTL, "1")
+            await r.setex(f"auth:blacklist:{h}", ttl, "1")
             return
         # enterprise-gate: broad-except-ok reason=token-blacklist-write-fails-closed-in-strict-runtime
         except Exception as exc:
@@ -284,6 +303,7 @@ async def check_signup_rate(ip: str) -> bool:
 # Generic fixed-window counters (password reset, public demo requests, ...)
 # ---------------------------------------------------------------------------
 
+# enterprise-gate: process-local-ok reason=bounded-in-memory-rate-window-relaxed-runtime-only-when-redis-unavailable
 _mem_window: dict[str, list[float]] = defaultdict(list)
 
 
@@ -334,16 +354,27 @@ class UserSessionState:
     found: bool
     status: str = ""
     sessions_invalid_before: float | None = None  # POSIX seconds, UTC
+    # True only when the users row could not be read in a relaxed runtime
+    # (strict raises instead). Distinguishes a degraded lookup from a row
+    # that is definitively absent.
+    lookup_failed: bool = False
 
     def rejects_token(self, issued_at: float | None) -> str | None:
         """Return a rejection reason or ``None`` if the token is still valid."""
         if not self.found:
-            return None
+            # Only legacy session tokens reach this check (middleware +
+            # websocket legacy paths). A session whose users row is gone
+            # must not be honoured; a degraded relaxed-runtime lookup keeps
+            # the pre-existing best-effort behaviour (logged by the loader).
+            return None if self.lookup_failed else "user_missing"
         if self.status != "active":
             return "user_inactive"
         if self.sessions_invalid_before is None:
             return None
-        if issued_at is None or issued_at < self.sessions_invalid_before:
+        # JWT ``iat`` has second granularity while the watermark carries
+        # microseconds: compare against the whole-second floor so a token
+        # minted in the same second as a reset / logout-all is honoured.
+        if issued_at is None or issued_at < math.floor(self.sessions_invalid_before):
             return "session_revoked"
         return None
 
@@ -433,7 +464,7 @@ async def get_user_session_state(tenant_id: str, email: str) -> UserSessionState
     except Exception as exc:
         _raise_if_strict("get_user_session_state", exc)
         logger.warning("auth_state: users lookup failed, treating as unknown user (%s)", exc)
-        return UserSessionState(found=False)
+        return UserSessionState(found=False, lookup_failed=True)
 
     _mem_user_state[key] = (now + USER_SESSION_STATE_TTL, state)
     if r:

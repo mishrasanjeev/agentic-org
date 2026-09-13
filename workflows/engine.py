@@ -12,7 +12,7 @@ import structlog
 
 from workflows.parser import WorkflowParser
 from workflows.retry import retry_with_backoff
-from workflows.state_store import WorkflowStateStore
+from workflows.state_store import StaleStateError, WorkflowStateStore
 from workflows.step_results import (
     ALLOWED_STEP_STATUSES,
     UnknownStepStatusError,
@@ -56,21 +56,18 @@ _READ_ONLY_ACTION_PREFIXES = (
     "compare",
     "describe",
     "detect",
-    "draft",
     "estimate",
     "evaluate",
     "extract",
     "fetch",
     "find",
     "forecast",
-    "generate",
     "get",
     "identify",
     "list",
     "lookup",
     "monitor",
     "plan",
-    "process",
     "query",
     "rank",
     "read",
@@ -172,8 +169,16 @@ class WorkflowEngine:
         """Drive the workflow to completion (or pause on HITL / timeout / error).
 
         Steps are executed in topological order respecting ``depends_on``.
-        After each step the state is checkpointed.
+        After each step the state is checkpointed. A checkpoint rejected as
+        stale means a concurrent writer (``cancel``, a timeout task) already
+        moved the run on; its status is reported instead of being overwritten.
         """
+        try:
+            return await self._execute_unguarded(run_id)
+        except StaleStateError as exc:
+            return await self._stale_state_result(run_id, exc)
+
+    async def _execute_unguarded(self, run_id: str) -> dict[str, Any]:
         state = await self.state_store.load(run_id)
         if not state:
             return {"error": "Run not found"}
@@ -185,11 +190,25 @@ class WorkflowEngine:
         step_index = self._build_step_index(steps)
         execution_order = self._topological_sort(steps)
         timeout_hours = state["definition"].get("timeout_hours")
+        ran_step = False
 
         for step_id in execution_order:
             # Skip steps already completed (supports resumption after checkpoint).
             if step_id in state.get("step_results", {}):
                 continue
+
+            # ---- re-read the durable status: cancel() may have won during the last step ----
+            # (the state loaded above is fresh for the first step of this call)
+            if ran_step:
+                live_status = await self._live_status(run_id)
+                if live_status not in (None, "running"):
+                    logger.info(
+                        "workflow_stopped_by_status_change",
+                        run_id=run_id,
+                        step_id=step_id,
+                        status=live_status,
+                    )
+                    return {"status": live_status, "step_results": state["step_results"]}
 
             # ---- timeout check ----
             if timeout_hours is not None:
@@ -230,6 +249,7 @@ class WorkflowEngine:
             context = self._build_context(state)
 
             # ---- execute the step (with retry if configured) ----
+            ran_step = True
             try:
                 result = await self._execute_with_retry(step, state, context)
             # enterprise-gate: broad-except-ok reason=step-boundary-marks-durable-workflow-failed
@@ -361,6 +381,12 @@ class WorkflowEngine:
 
         Executes just the next eligible step in topological order, then returns.
         """
+        try:
+            return await self._execute_next_unguarded(run_id)
+        except StaleStateError as exc:
+            return await self._stale_state_result(run_id, exc)
+
+    async def _execute_next_unguarded(self, run_id: str) -> dict[str, Any]:
         state = await self.state_store.load(run_id)
         if not state:
             return {"error": "Run not found"}
@@ -542,12 +568,27 @@ class WorkflowEngine:
             logger.info("workflow_hitl_rejected", run_id=run_id, step_id=waiting_step_id)
             return {"status": "failed", "step_results": state["step_results"]}
 
-        # Record the HITL decision as the step's completed output.
-        state["step_results"][waiting_step_id] = {
-            "output": decision,
-            "status": "completed",
-            "confidence": decision.get("confidence"),
-        }
+        # Record the HITL decision on the step. A dedicated human_in_loop step
+        # has no output of its own, so the decision *is* its output. Any other
+        # step (e.g. an agent that escalated for approval) keeps the work it
+        # produced before the pause; the decision is attached alongside it.
+        prior = state["step_results"].get(waiting_step_id) or {}
+        prior_output = prior.get("output")
+        if self._step_type_for(state, waiting_step_id) == "human_in_loop" or prior_output in (None, {}, ""):
+            state["step_results"][waiting_step_id] = {
+                "output": decision,
+                "status": "completed",
+                "confidence": decision.get("confidence"),
+            }
+        else:
+            merged_output = dict(prior_output) if isinstance(prior_output, dict) else {"result": prior_output}
+            merged_output["hitl_decision"] = decision
+            prior_confidence = prior.get("confidence")
+            state["step_results"][waiting_step_id] = {
+                "output": merged_output,
+                "status": "completed",
+                "confidence": prior_confidence if prior_confidence is not None else decision.get("confidence"),
+            }
         state["steps_completed"] = len(state["step_results"])
         state["status"] = "running"
         state.pop("waiting_step_id", None)
@@ -788,6 +829,30 @@ class WorkflowEngine:
             if result.get("action"):
                 state_result["action"] = result.get("action")
         return state_result
+
+    async def _live_status(self, run_id: str) -> str | None:
+        latest = await self.state_store.load(run_id)
+        return latest.get("status") if latest else None
+
+    async def _stale_state_result(self, run_id: str, exc: StaleStateError) -> dict[str, Any]:
+        """A concurrent writer won the race; report its status, never overwrite it."""
+        latest = await self.state_store.load(run_id) or {}
+        status = latest.get("status", "unknown")
+        logger.warning(
+            "workflow_state_stale_write_rejected",
+            run_id=run_id,
+            status=status,
+            expected_version=exc.expected,
+            actual_version=exc.actual,
+        )
+        return {"status": status, "step_results": latest.get("step_results", {})}
+
+    @staticmethod
+    def _step_type_for(state: dict[str, Any], step_id: str) -> str:
+        for step in (state.get("definition") or {}).get("steps", []) or []:
+            if isinstance(step, dict) and step.get("id") == step_id:
+                return str(step.get("type") or "agent").strip().lower()
+        return "agent"
 
     @staticmethod
     def _is_rejection(decision: dict[str, Any]) -> bool:

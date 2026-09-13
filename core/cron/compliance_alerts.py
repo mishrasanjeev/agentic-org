@@ -18,9 +18,10 @@ from typing import Any
 
 from sqlalchemy import select, text
 
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.models.company import Company
 from core.models.compliance_deadline import ComplianceDeadline
+from core.models.tenant import Tenant
 
 logger = logging.getLogger(__name__)
 
@@ -91,17 +92,22 @@ def _compute_quarterly_deadlines(
         year = fy_year if end_month >= 4 else fy_year + 1
         period = f"{fy_year}-Q{qtr}"
 
-        # TDS due date: 31st of the month after quarter end
+        # TDS due date: 31st of the month after quarter end (Q1-Q3).
+        # Q4 (Jan-Mar) is the exception: 24Q/26Q are due 31 May, not 30 Apr
+        # (Rule 31A, Income-tax Rules).
         due_month = end_month + 1
         due_year = year
         if due_month > 12:
             due_month -= 12
             due_year += 1
 
-        try:
-            due = date(due_year, due_month, 31)
-        except ValueError:
-            due = date(due_year, due_month, 30)
+        if qtr == 4:
+            due = date(due_year, 5, 31)
+        else:
+            try:
+                due = date(due_year, due_month, 31)
+            except ValueError:
+                due = date(due_year, due_month, 30)
 
         for dtype in ["tds_26q", "tds_24q"]:
             deadlines.append({
@@ -285,32 +291,55 @@ async def run_compliance_alert_cron() -> dict:
     3. Return summary.
     """
     total_new_deadlines = 0
-    alert_summary = {"alerts_7d": 0, "alerts_1d": 0, "overdue": 0}
+    alert_summary: dict[str, Any] = {"alerts_7d": 0, "alerts_1d": 0, "overdue": 0}
 
-    async with async_session_factory() as session:
+    async with async_session_factory() as lock_session:
         # Beat and the /cron/compliance-alerts endpoint can overlap; only one
         # run may generate deadlines + send alerts at a time (the lock is
-        # released with the transaction).
+        # released with the transaction, so this session stays open for the
+        # whole run).
         locked = (
-            await session.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": _CRON_LOCK_KEY})
+            await lock_session.execute(
+                text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": _CRON_LOCK_KEY}
+            )
         ).scalar_one()
         if not locked:
             logger.info("Compliance cron skipped: another run holds the lock")
             return {"new_deadlines": 0, **alert_summary, "skipped": "locked"}
 
-        # Get all active companies
-        result = await session.execute(
-            select(Company).where(Company.is_active == True)  # noqa: E712
-        )
-        companies = result.scalars().all()
+        # ``companies`` / ``compliance_deadlines`` are FORCE-RLS: a raw
+        # cross-tenant SELECT returns no rows and INSERT/UPDATE fail WITH
+        # CHECK under a non-BYPASSRLS role. Enumerate tenants (failing loudly
+        # if the role cannot bypass RLS) and do every read/write inside that
+        # tenant's exact RLS context.
+        await lock_session.execute(text("SET LOCAL row_security = off"))
+        tenant_ids = [
+            row[0]
+            for row in (
+                await lock_session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))
+            ).all()
+        ]
 
-        for company in companies:
-            new = await generate_deadlines_for_company(session, company)
-            total_new_deadlines += new
+        for tenant_id in tenant_ids:
+            async with get_tenant_session(tenant_id) as session:
+                # Get all active companies for this tenant
+                result = await session.execute(
+                    select(Company).where(
+                        Company.tenant_id == tenant_id,
+                        Company.is_active == True,  # noqa: E712
+                    )
+                )
+                companies = result.scalars().all()
 
-        # Send alerts
-        alert_summary = await send_alerts_for_due_deadlines(session)
-        await session.commit()
+                for company in companies:
+                    new = await generate_deadlines_for_company(session, company)
+                    total_new_deadlines += new
+
+                # Send alerts (deadlines visible in this tenant's session)
+                tenant_summary = await send_alerts_for_due_deadlines(session)
+                for key, value in tenant_summary.items():
+                    alert_summary[key] = alert_summary.get(key, 0) + value
+                # get_tenant_session commits on exit.
 
     logger.info(
         "Compliance cron complete: new_deadlines=%d, 7d_alerts=%d, 1d_alerts=%d, overdue=%d",

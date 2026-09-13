@@ -211,15 +211,21 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
     SUM is platform-wide. Read-only, single SELECT. Database lookup
     failure fails closed so the cap cannot be bypassed by treating
     unknown spend as zero.
+
+    ``agent_task_results`` is FORCE-RLS protected: a raw session with no
+    tenant GUC sums zero rows and the cap silently never trips. The
+    per-tenant SUM therefore runs inside ``get_tenant_session`` (an
+    unbindable tenant id is a lookup failure → refused), and the
+    platform-wide SUM disables row security for the statement so a role
+    that cannot bypass RLS errors out loudly instead of reading zero.
     """
     try:
-        import uuid as _uuid
         from datetime import UTC, datetime
 
         from sqlalchemy import text as _text
         from sqlalchemy.exc import SQLAlchemyError
 
-        from core.database import async_session_factory
+        from core.database import async_session_factory, get_tenant_session
 
         utc_today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         sql = (
@@ -228,13 +234,21 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
         )
         params: dict[str, Any] = {"since": utc_today}
         if tenant_id:
-            sql += " AND tenant_id = :tenant_id"
-            params["tenant_id"] = _uuid.UUID(str(tenant_id))
-        async with async_session_factory() as session:
-            row = (await session.execute(_text(sql), params)).scalar_one()
+            sql += " AND tenant_id = CAST(:tenant_id AS uuid)"
+            params["tenant_id"] = str(tenant_id)
+            async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
+                row = (await session.execute(_text(sql), params)).scalar_one()
+        else:
+            async with async_session_factory() as session:
+                await session.execute(_text("SET LOCAL row_security = off"))
+                row = (await session.execute(_text(sql), params)).scalar_one()
         return float(row or 0.0)
-    except SQLAlchemyError as exc:
-        logger.warning("gemini_daily_spend_lookup_failed", error=str(exc))
+    except (SQLAlchemyError, ValueError) as exc:
+        logger.warning(
+            "gemini_daily_spend_lookup_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         raise DailyBudgetExceeded(
             "Gemini daily spend lookup unavailable; refusing request to "
             "avoid bypassing AGENTICORG_GEMINI_DAILY_USD_CAP."

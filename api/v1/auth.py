@@ -19,6 +19,7 @@ from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
+from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import route_meta
 from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
@@ -154,18 +155,20 @@ def _make_slug(name: str) -> str:
 async def signup(body: SignupRequest, request: Request, response: Response):
     """Register a new organization and admin user."""
     # Rate-limit signups per IP (Redis-backed)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     from core.auth_state import check_signup_rate
     if await check_signup_rate(client_ip):
         raise HTTPException(status_code=429, detail="Too many signup attempts — try again later")
 
     # Password policy
     _validate_password(body.password)
+    admin_email = body.admin_email.strip().lower()
 
     async with async_session_factory() as session:
-        # Check email not already registered globally
+        # Check email not already registered globally (case-insensitive:
+        # rows created before normalisation may carry mixed case).
         existing = await session.execute(
-            select(User).where(User.email == body.admin_email)
+            select(User).where(func.lower(User.email) == admin_email)
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=409, detail="Email already registered")
@@ -193,7 +196,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant.id,
-            email=body.admin_email,
+            email=admin_email,
             name=body.admin_name,
             role="admin",
             domain="all",
@@ -385,13 +388,14 @@ async def _clear_rate_limit(client_ip: str) -> None:
 )
 async def login(body: LoginRequest, request: Request, response: Response):
     # Rate-limit login attempts per IP (Redis-backed, in-memory fallback)
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     if await _check_rate_limit(client_ip):
         raise HTTPException(status_code=429, detail="Too many login attempts — try again in 1 minute")
 
+    email = body.email.strip().lower()
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.email == body.email, User.status == "active")
+            select(User).where(func.lower(User.email) == email, User.status == "active")
         )
         users = result.scalars().all()
         # Email is not a safe tenant identity: the same address may exist in
@@ -484,15 +488,19 @@ async def google_login(body: GoogleLoginRequest, response: Response):
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {e}") from None
 
-    email = idinfo.get("email", "")
+    email = (idinfo.get("email") or "").strip().lower()
     name = idinfo.get("name", email.split("@")[0])
 
     if not email:
         raise HTTPException(status_code=401, detail="Google token missing email")
+    # An unverified Google e-mail proves nothing about ownership of the
+    # address that keys the account lookup below.
+    if not idinfo.get("email_verified"):
+        raise HTTPException(status_code=401, detail="Google account email is not verified")
 
     # Find or create user
     async with async_session_factory() as session:
-        result = await session.execute(select(User).where(User.email == email))
+        result = await session.execute(select(User).where(func.lower(User.email) == email))
         users = result.scalars().all()
         if len(users) > 1:
             raise HTTPException(
@@ -500,6 +508,10 @@ async def google_login(body: GoogleLoginRequest, response: Response):
                 detail="This email is associated with multiple organizations; use organization SSO.",
             )
         user = users[0] if users else None
+        # Mirror the password path: pending invites and deactivated members
+        # must not obtain a session (nor a fresh tenant) via Google.
+        if user is not None and user.status != "active":
+            raise HTTPException(status_code=401, detail="Account is not active")
 
         if not user:
             # Create a NEW tenant for this Google user (no cross-tenant leakage)
@@ -602,7 +614,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
     email = body.email.strip().lower()
 
     # Rate-limit per IP and per email (cross-replica).
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = resolve_client_ip(request)
     try:
         ip_blocked = await auth_state.check_window_rate("reset_ip", client_ip, _RESET_IP_MAX, _RESET_WINDOW)
         email_blocked = await auth_state.check_window_rate(
@@ -617,7 +629,7 @@ async def forgot_password(body: ForgotPasswordRequest, request: Request):
 
     async with async_session_factory() as session:
         result = await session.execute(
-            select(User).where(User.email == email, User.status == "active")
+            select(User).where(func.lower(User.email) == email, User.status == "active")
         )
         users = result.scalars().all()
         # Preserve enumeration-safe behavior while avoiding an ambiguous

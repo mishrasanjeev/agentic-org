@@ -75,7 +75,9 @@ def fake_redis(monkeypatch):
 
 
 def _session_factory(monkeypatch, session):
-    monkeypatch.setattr(kc, "async_session_factory", lambda: session)
+    # kpi_cache is FORCE-RLS: the PG helpers enter get_tenant_session(tenant_id)
+    # (audit 2026-09-13 finding 3) rather than a raw session.
+    monkeypatch.setattr(kc, "get_tenant_session", lambda tenant_id: session)
 
 
 @pytest.mark.asyncio

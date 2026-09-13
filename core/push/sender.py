@@ -351,7 +351,7 @@ async def notify_approval_created(
             )
             for k in totals:
                 totals[k] += result.get(k, 0)
-    # enterprise-gate: broad-except-ok reason=approval-push-is-best-effort-never-blocks-hitl-creation
+    # enterprise-gate: broad-except-ok reason=approval-push-failure-does-not-block-hitl-creation-logged-only
     except Exception as exc:
         _log.warning("approval_push_failed", tenant_id=tenant_id, error=str(exc))
     return totals

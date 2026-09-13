@@ -1493,7 +1493,11 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             prompt_variables=body.prompt_variables,
             llm_model=body.llm.model,
             llm_fallback=body.llm.fallback_model,
-            llm_config=body.llm.model_dump(),
+            llm_config=(
+                {**body.llm.model_dump(), "routing": body.llm_routing}
+                if body.llm_routing
+                else body.llm.model_dump()
+            ),
             confidence_floor=Decimal(str(body.confidence_floor)),
             hitl_condition=body.hitl_policy.condition,
             max_retries=body.max_retries,
@@ -2473,6 +2477,10 @@ async def update_agent(
             agent.parent_agent_id = _uuid.UUID(pid) if pid else None
         if "connector_ids" in update_data and update_data["connector_ids"] is not None:
             agent.connector_ids = list(update_data["connector_ids"])
+        if "max_retries" in update_data and update_data["max_retries"] is not None:
+            agent.max_retries = int(update_data["max_retries"])
+        if "prompt_amendments" in update_data and update_data["prompt_amendments"] is not None:
+            agent.prompt_amendments = [str(a) for a in update_data["prompt_amendments"]]
 
         # Audit trail for prompt edits
         new_prompt = agent.system_prompt_text

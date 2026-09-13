@@ -14,6 +14,26 @@ import {
 
 type EventType = "thinking" | "tool_call" | "result" | "hitl_trigger";
 
+/**
+ * Classify a real /audit ``event_type``. The backend writes prefixed names
+ * (``agent.run``, ``tool.<name>``, ``hitl.*``); the legacy bare values are
+ * kept so older rows still classify.
+ */
+export function classifyAuditEventType(raw: unknown): EventType {
+  const t = typeof raw === "string" ? raw : "";
+  if (t === "hitl_trigger" || t.startsWith("hitl.")) return "hitl_trigger";
+  if (t === "tool_call" || t.startsWith("tool.")) return "tool_call";
+  if (t === "thinking") return "thinking";
+  if (t === "agent.run" || t === "result") return "result";
+  return "thinking";
+}
+
+/** /audit rows carry ``created_at``; ``timestamp`` is only a legacy alias. */
+export function auditEntryTimestamp(entry: { created_at?: unknown; timestamp?: unknown }): string | null {
+  const raw = entry?.created_at ?? entry?.timestamp;
+  return typeof raw === "string" && raw ? raw : null;
+}
+
 interface AgentEvent {
   id: number;
   timestamp: string;
@@ -136,13 +156,10 @@ export default function Observatory() {
 
   // Map an audit entry from the API into an AgentEvent
   const mapAuditEntry = useCallback((entry: any): AgentEvent => {
-    const eventType: EventType =
-      entry.event_type === "hitl_trigger" ? "hitl_trigger"
-        : entry.event_type === "tool_call" ? "tool_call"
-        : entry.event_type === "thinking" ? "thinking"
-        : "result";
-    const ts = entry.timestamp
-      ? new Date(entry.timestamp).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    const eventType: EventType = classifyAuditEventType(entry.event_type);
+    const rawTs = auditEntryTimestamp(entry);
+    const ts = rawTs
+      ? new Date(rawTs).toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
       : new Date().toLocaleTimeString("en-IN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
     return {
       id: nextId.current++,
@@ -159,18 +176,22 @@ export default function Observatory() {
   const fetchEvents = useCallback(async () => {
     try {
       // /audit paginates with page/per_page (a ``limit`` param is ignored).
-      const { data } = await api.get("/audit", { params: { page: 1, per_page: 20 } });
+      // date_from = local midnight so the "Transactions Today" tally only
+      // counts today's rows instead of whatever the newest 20 happen to be.
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const { data } = await api.get("/audit", { params: { page: 1, per_page: 20, date_from: startOfToday } });
       const raw: any[] = Array.isArray(data) ? data : data?.items || [];
       if (raw.length === 0) return;
 
       // Detect new entries since last fetch
-      const newestId = raw[0]?.id || raw[0]?.timestamp;
+      const newestId = raw[0]?.id || auditEntryTimestamp(raw[0]);
       if (newestId === lastFetchedId.current) return;
       lastFetchedId.current = newestId;
 
       // Only rows we have not seen before count towards the tallies.
       const fresh = raw.filter((entry, idx) => {
-        const key = String(entry?.id ?? `${entry?.timestamp ?? ""}#${idx}`);
+        const key = String(entry?.id ?? `${auditEntryTimestamp(entry) ?? ""}#${idx}`);
         if (seenAuditKeys.current.has(key)) return false;
         seenAuditKeys.current.add(key);
         return true;

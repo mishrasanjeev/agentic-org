@@ -75,11 +75,17 @@ _SELECT_SQL = text(
     """
 )
 
+# ``external_id`` guard: a provider cancellation event names the subscription
+# it is about. Only the row holding that id may be downgraded, so a stale or
+# replayed event for a replaced subscription cannot cancel the current one.
+# An empty ``external_id`` (authenticated cancel endpoint, which already acted
+# on the stored id) matches the tenant's row unconditionally.
 _DEACTIVATE_SQL = text(
     """
     UPDATE billing_subscriptions
     SET plan = :plan, status = :status, updated_at = :now
     WHERE tenant_id = CAST(:tenant_id AS uuid)
+      AND (CAST(:external_id AS text) = '' OR external_id = CAST(:external_id AS text))
     """
 )
 
@@ -247,17 +253,29 @@ async def _select(session: AsyncSession, tenant_id: uuid.UUID) -> dict[str, Any]
 
 
 async def _deactivate(
-    session: AsyncSession, tenant_id: uuid.UUID, *, status: str
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    status: str,
+    provider_subscription_id: str = "",
 ) -> None:
-    await session.execute(
+    result = await session.execute(
         _DEACTIVATE_SQL,
         {
             "tenant_id": str(tenant_id),
             "plan": FREE_PLAN,
             "status": status,
             "now": datetime.now(UTC),
+            "external_id": provider_subscription_id or "",
         },
     )
+    if provider_subscription_id and getattr(result, "rowcount", None) == 0:
+        logger.warning(
+            "billing_subscription_deactivate_ignored_unmatched_id",
+            tenant_id=str(tenant_id),
+            provider_subscription_id=provider_subscription_id,
+            status=status,
+        )
 
 
 # ── Public async API (request loop / Celery runner) ─────────────────
@@ -308,14 +326,22 @@ async def record_subscription(
     return sub
 
 
-async def deactivate_subscription(tenant_id: str, *, status: str = "cancelled") -> dict[str, Any]:
-    """Downgrade a tenant to free (cancel / expiry / provider deletion)."""
+async def deactivate_subscription(
+    tenant_id: str, *, status: str = "cancelled", provider_subscription_id: str = ""
+) -> dict[str, Any]:
+    """Downgrade a tenant to free (cancel / expiry / provider deletion).
+
+    ``provider_subscription_id``, when given, must equal the stored
+    ``external_id`` for the row to change (see ``_DEACTIVATE_SQL``).
+    """
     from core.async_redis import get_async_redis
     from core.database import get_tenant_session
 
     tid = _tenant_uuid(tenant_id)
     async with get_tenant_session(tid) as session:
-        await _deactivate(session, tid, status=status)
+        await _deactivate(
+            session, tid, status=status, provider_subscription_id=provider_subscription_id
+        )
         sub = await _select(session, tid)
     await _warm_cache(await get_async_redis(), sub)
     logger.info("billing_subscription_deactivated", tenant_id=str(tid), status=status)
@@ -382,7 +408,9 @@ async def expire_overdue_plural_subscriptions(now: datetime | None = None) -> di
                 end = sub["current_period_end"]
                 if not end or datetime.fromisoformat(end) > moment:
                     continue
-                await _deactivate(session, tid, status="expired")
+                await _deactivate(
+                    session, tid, status="expired", provider_subscription_id=sub["order_id"]
+                )
                 sub = await _select(session, tid)
             await _warm_cache(redis, sub)
             expired += 1
@@ -504,12 +532,16 @@ def record_subscription_sync(
     return sub
 
 
-def deactivate_subscription_sync(tenant_id: str, *, status: str = "cancelled") -> dict[str, Any]:
+def deactivate_subscription_sync(
+    tenant_id: str, *, status: str = "cancelled", provider_subscription_id: str = ""
+) -> dict[str, Any]:
     """Thread-safe sync variant of :func:`deactivate_subscription`."""
     tid = _tenant_uuid(tenant_id)
 
     async def _op(session: AsyncSession, _tid: uuid.UUID) -> dict[str, Any]:
-        await _deactivate(session, _tid, status=status)
+        await _deactivate(
+            session, _tid, status=status, provider_subscription_id=provider_subscription_id
+        )
         return await _select(session, _tid)
 
     sub = _run_bridge(_run_with_private_resources(_op, tid))

@@ -21,10 +21,24 @@ from dataclasses import dataclass
 import structlog
 from sqlalchemy import select, update
 
-from core.database import async_session_factory
+from core.database import async_session_factory, get_tenant_session
 from core.models.workflow_variant import WorkflowVariant
 
 logger = structlog.get_logger()
+
+
+def _variant_session(tenant_id: uuid.UUID | str | None, op: str):
+    """Session for ``workflow_variants`` (FORCE-RLS).
+
+    With a tenant id the exact RLS context is bound. Without one, a raw
+    session is used for callers that predate the tenant argument: under a
+    non-BYPASSRLS role it sees no rows / updates nothing, so it is logged
+    loudly rather than silently. Callers should always pass ``tenant_id``.
+    """
+    if tenant_id is not None:
+        return get_tenant_session(uuid.UUID(str(tenant_id)))
+    logger.warning("workflow_ab_no_tenant_context", op=op)
+    return async_session_factory()
 
 
 @dataclass
@@ -40,16 +54,23 @@ def _bucket(workflow_id: uuid.UUID, subject_id: str) -> int:
 
 
 async def pick_variant(
-    workflow_id: uuid.UUID, subject_id: str
+    workflow_id: uuid.UUID,
+    subject_id: str,
+    tenant_id: uuid.UUID | str | None = None,
 ) -> VariantPick | None:
-    """Return the variant a subject lands on, or None if no active variants."""
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(WorkflowVariant).where(
-                WorkflowVariant.workflow_id == workflow_id,
-                WorkflowVariant.is_active.is_(True),
-            )
+    """Return the variant a subject lands on, or None if no active variants.
+
+    ``tenant_id`` binds the RLS context for ``workflow_variants``; when given,
+    the query is additionally pinned to that tenant.
+    """
+    async with _variant_session(tenant_id, "pick_variant") as session:
+        stmt = select(WorkflowVariant).where(
+            WorkflowVariant.workflow_id == workflow_id,
+            WorkflowVariant.is_active.is_(True),
         )
+        if tenant_id is not None:
+            stmt = stmt.where(WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)))
+        result = await session.execute(stmt)
         variants = result.scalars().all()
 
     if not variants:
@@ -87,8 +108,16 @@ async def pick_variant(
     )
 
 
-async def record_outcome(variant_id: uuid.UUID, success: bool) -> None:
-    """Increment run/success/failure counters after a run completes."""
+async def record_outcome(
+    variant_id: uuid.UUID,
+    success: bool,
+    tenant_id: uuid.UUID | str | None = None,
+) -> None:
+    """Increment run/success/failure counters after a run completes.
+
+    ``tenant_id`` binds the RLS context for ``workflow_variants`` (the UPDATE
+    matches zero rows without it under a non-BYPASSRLS role).
+    """
     # Atomic SQL increment: concurrent runs must not lose counts to a
     # read-modify-write race.
     counter = WorkflowVariant.success_count if success else WorkflowVariant.failure_count
@@ -96,8 +125,9 @@ async def record_outcome(variant_id: uuid.UUID, success: bool) -> None:
         "run_count": WorkflowVariant.run_count + 1,
         counter.key: counter + 1,
     }
-    async with async_session_factory() as session:
-        await session.execute(
-            update(WorkflowVariant).where(WorkflowVariant.id == variant_id).values(**values)
-        )
+    stmt = update(WorkflowVariant).where(WorkflowVariant.id == variant_id).values(**values)
+    if tenant_id is not None:
+        stmt = stmt.where(WorkflowVariant.tenant_id == uuid.UUID(str(tenant_id)))
+    async with _variant_session(tenant_id, "record_outcome") as session:
+        await session.execute(stmt)
         await session.commit()

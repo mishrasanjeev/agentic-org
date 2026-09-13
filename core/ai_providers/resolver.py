@@ -134,10 +134,12 @@ async def _fetch_tenant_credential(
     falls back).
     """
     from core.crypto.tenant_secrets import decrypt_for_tenant
-    from core.database import async_session_factory
+    from core.database import get_tenant_session
     from core.models.tenant_ai_credential import TenantAICredential
 
-    async with async_session_factory() as session:
+    # tenant_ai_credentials is FORCE-RLS (v6z16): a raw session returns no
+    # row and the tenant's BYO key silently falls back to platform keys.
+    async with get_tenant_session(tenant_id) as session:
         result = await session.execute(
             select(TenantAICredential).where(
                 TenantAICredential.tenant_id == tenant_id,
@@ -187,10 +189,12 @@ async def _stamp_last_used(
     try:
         from datetime import UTC, datetime
 
-        from core.database import async_session_factory
+        from core.database import get_tenant_session
         from core.models.tenant_ai_credential import TenantAICredential
 
-        async with async_session_factory() as session:
+        # Tenant-bound (RLS) and committed on exit; the raw session used
+        # before was rolled back on close so last_used_at never persisted.
+        async with get_tenant_session(tenant_id) as session:
             result = await session.execute(
                 select(TenantAICredential).where(
                     TenantAICredential.tenant_id == tenant_id,

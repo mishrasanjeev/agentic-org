@@ -170,7 +170,12 @@ export default function CMOVendorSandboxConnectors() {
   async function fetchStatus() {
     setLoading(true);
     try {
-      const { data } = await api.get("/connectors/cmo-vendor-sandbox");
+      // CMODashboard reads company-scoped rows; without company_id the
+      // connectors would be read/written tenant-global and never show up.
+      const companyId = localStorage.getItem("company_id") || "";
+      const { data } = await api.get("/connectors/cmo-vendor-sandbox", {
+        params: companyId ? { company_id: companyId } : {},
+      });
       setStatusRows(Array.isArray(data?.categories) ? data.categories : []);
       setMissingCategories(Array.isArray(data?.missing_categories) ? data.missing_categories : []);
     } catch (err: unknown) {
@@ -248,7 +253,11 @@ export default function CMOVendorSandboxConnectors() {
 
     setSaving(true);
     try {
-      const { data } = await api.post("/connectors/cmo-vendor-sandbox", { connectors });
+      const companyId = localStorage.getItem("company_id") || "";
+      const { data } = await api.post("/connectors/cmo-vendor-sandbox", {
+        connectors,
+        ...(companyId ? { company_id: companyId } : {}),
+      });
       setFeedback({
         type: "success",
         message: data?.message || "CMO vendor-sandbox connectors saved",

@@ -289,6 +289,7 @@ def test_no_direct_provider_env_reads_outside_resolver() -> None:
         "tests/",
         ".venv/",
         ".tmp_lc/",
+        ".tmp/",
         ".uv-cache/",
         "ui/",
         "node_modules/",

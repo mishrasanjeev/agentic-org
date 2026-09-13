@@ -65,9 +65,27 @@ export default function ScopeDashboard() {
     setErrors([]);
     try {
       // Attempt to load real data from both endpoints
+      // The cards are labelled "(24h)", so ask for the last 24 hours and
+      // walk the server pages (per_page is capped at 100) instead of
+      // reading only the default first 50 rows of all time.
+      const dateFrom = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const fetchEnforce24h = async () => {
+        const perPage = 100;
+        const maxPages = 20;
+        const first = await api.get("/audit/enforce", { params: { date_from: dateFrom, page: 1, per_page: perPage } });
+        const body = first.data;
+        if (Array.isArray(body)) return { data: body };
+        const items: unknown[] = Array.isArray(body?.items) ? [...body.items] : [];
+        const pages = typeof body?.pages === "number" ? Math.min(body.pages, maxPages) : 1;
+        for (let p = 2; p <= pages; p++) {
+          const next = await api.get("/audit/enforce", { params: { date_from: dateFrom, page: p, per_page: perPage } });
+          if (Array.isArray(next.data?.items)) items.push(...next.data.items);
+        }
+        return { data: items };
+      };
       const [agentsRes, enforceRes] = await Promise.allSettled([
         agentsApi.listAll(),
-        api.get("/audit/enforce"),
+        fetchEnforce24h(),
       ]);
 
       // 2026-04-30 enterprise gap fix: when EITHER endpoint fails,
@@ -91,9 +109,7 @@ export default function ScopeDashboard() {
       setErrors(fetchErrors);
 
       const agents = agentsRes.status === "fulfilled" ? agentsRes.value : [];
-      const enforceData = enforceRes.status === "fulfilled"
-        ? (Array.isArray(enforceRes.value.data) ? enforceRes.value.data : enforceRes.value.data?.items || [])
-        : [];
+      const enforceData: unknown[] = enforceRes.status === "fulfilled" ? enforceRes.value.data : [];
 
       // Build scope entries from real data
       const scopeMap = new Map<string, AgentScope>();

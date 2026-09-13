@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import api from "@/lib/api";
+import api, { extractApiError } from "@/lib/api";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -102,9 +102,11 @@ export default function PartnerDashboard() {
     revenue_per_month_inr: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchPartnerData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.get("/partner-dashboard");
       const data = (res.data || {}) as Record<string, unknown>;
@@ -169,8 +171,9 @@ export default function PartnerDashboard() {
       } else {
         setDeadlines([]);
       }
-    } catch {
-      // API unavailable, show empty state
+    } catch (err) {
+      // API unavailable: zeroed KPIs are not real data, so say so.
+      setLoadError(extractApiError(err, "Failed to load partner dashboard data."));
       setClients([]);
       setDeadlines([]);
       setSummary({
@@ -257,6 +260,12 @@ export default function PartnerDashboard() {
       <Helmet>
         <title>{t("partnerDashboard.title")} | AgenticOrg</title>
       </Helmet>
+
+      {loadError && (
+        <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3" data-testid="partner-load-error">
+          {loadError}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">

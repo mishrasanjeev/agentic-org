@@ -36,7 +36,9 @@ async def test_zoho_downstream_tools_honor_explicit_organization_id() -> None:
     assert call.kwargs["params"]["organization_id"] == "60072428145"
     assert call.kwargs["params"]["contact_type"] == "vendor"
     assert "org_id" not in call.kwargs["params"]
-    assert connector.config["organization_id"] == "60072428145"
+    # Per-call org must not re-point the tenant-cached connector (audit 2026-09-13).
+    assert connector.config["organization_id"] == "stale-org"
+    assert connector._org_id == "stale-org"
 
 
 @pytest.mark.asyncio
@@ -93,7 +95,9 @@ async def test_zoho_get_organization_accepts_numeric_explicit_org_id() -> None:
 
     call = connector._client.get.call_args
     assert call.kwargs["params"]["organization_id"] == "60072428145"
-    assert connector.config["organization_id"] == "60072428145"
+    # Explicit org scopes this call only; nothing is persisted on the connector.
+    assert "organization_id" not in connector.config
+    assert connector._org_id == ""
 
 
 def test_crm_connectors_register_production_crud_and_validation_tools() -> None:

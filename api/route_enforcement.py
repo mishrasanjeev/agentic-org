@@ -32,6 +32,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from api.client_ip import client_ip as resolve_client_ip
 from api.route_metadata import ROUTE_METADATA_ATTR
 from core.config import settings
 
@@ -110,6 +111,16 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "report_schedules": ("report_schedules.read", "report_schedules.write"),
 }
 
+# Legacy spellings that issued credentials still carry. ``create_api_key``
+# used to hand out ``agents:run`` / ``connectors:read`` (colon), which could
+# never satisfy the family map above (audit 2026-09-13 finding 2). Aliases
+# map to the canonical RBAC scope; ``_expand_granted`` also accepts the
+# colon/dot separator variant of every family scope.
+LEGACY_SCOPE_ALIASES: dict[str, str] = {
+    "agents:run": "agents:write",
+    "connectors:read": "connectors.read",
+}
+
 
 def _family(declared_scope: str) -> str:
     head = declared_scope.split(":", 1)[0]
@@ -138,8 +149,25 @@ def unmapped_scope_families(declared_scopes: list[str]) -> set[str]:
     return {_family(s) for s in declared_scopes if s and _family(s) not in SCOPE_FAMILIES}
 
 
+def _expand_granted(granted: list[str]) -> set[str]:
+    """Granted scopes plus their legacy aliases and separator variants."""
+    out: set[str] = set()
+    for scope in granted:
+        if not isinstance(scope, str) or not scope:
+            continue
+        out.add(scope)
+        alias = LEGACY_SCOPE_ALIASES.get(scope)
+        if alias:
+            out.add(alias)
+        for sep, other in ((":", "."), (".", ":")):
+            if sep in scope:
+                head, tail = scope.split(sep, 1)
+                out.add(f"{head}{other}{tail}")
+    return out
+
+
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return resolve_client_ip(request)
 
 
 def _enforcement_mode() -> str:
@@ -186,7 +214,7 @@ def _check_scope(request: Request, meta: dict[str, Any]) -> None:
     required = required_scopes_for(meta.get("scope"), request.method)
     if not required:
         return
-    granted = getattr(request.state, "scopes", None) or []
+    granted = _expand_granted(getattr(request.state, "scopes", None) or [])
     if ADMIN_SCOPE in granted or any(s in granted for s in required):
         return
     _deny(request, 403, f"Missing scope: {' or '.join(required)}", declared=meta.get("scope"))

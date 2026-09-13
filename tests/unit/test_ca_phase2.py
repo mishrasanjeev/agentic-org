@@ -409,10 +409,11 @@ class TestCronQuarterlyDeadlines:
         )
         q4_records = [r for r in results if r["filing_period"] == "2026-Q4"]
         assert len(q4_records) == 2
-        # Q4 end month is March (3), next month is April -> due Apr 30
+        # Q4 (Jan-Mar) TDS returns 24Q/26Q are due 31 May, not 30 April
+        # (audit 2026-09-13: the generic "next month" rule was a month early).
         for rec in q4_records:
-            assert rec["due_date"].month == 4
-            assert rec["due_date"].day == 30
+            assert rec["due_date"].month == 5
+            assert rec["due_date"].day == 31
 
 
 # ============================================================================

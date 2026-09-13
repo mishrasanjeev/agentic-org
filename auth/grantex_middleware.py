@@ -38,6 +38,7 @@ from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from api.client_ip import client_ip as resolve_client_ip
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
 from core.auth_state import (
     clear_auth_failures,
@@ -92,7 +93,7 @@ def grantex_expected_issuer() -> str:
         from grantex._verify import _derive_issuer_from_jwks_uri
 
         return _derive_issuer_from_jwks_uri(grantex_jwks_uri()).rstrip("/")
-    # enterprise-gate: broad-except-ok reason=missing-grantex-sdk-means-grantex-mode-is-unconfigured
+    # enterprise-gate: broad-except-ok reason=missing-grantex-sdk-does-not-enable-grantex-mode-empty-issuer-fails-closed
     except Exception:
         return ""
 
@@ -366,6 +367,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/billing/webhook/",  # Plural & Stripe server-to-server webhooks
         "/api/v1/client-portal/public/",  # Signed client portal invite/access tokens
         "/api/v1/auth/sso/",  # SSO login + OIDC callback (pre-session)
+        "/api/v1/cron/",  # Cloud Scheduler triggers: X-Cron-Key verified by the route
     )
 
     async def _credential_failure_response(
@@ -392,7 +394,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in self.EXEMPT_PATHS or request.url.path.startswith(self.EXEMPT_PREFIXES):
             return await call_next(request)
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = resolve_client_ip(request)
 
         # Extract token. Explicit Authorization wins over ambient cookies
         # so API keys (ao_sk_...), SDKs, CI, and browser automation are

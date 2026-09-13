@@ -35,7 +35,6 @@ export default function ConnectorDetailPage() {
   // Editable fields
   const [authType, setAuthType] = useState("");
   const [authToken, setAuthToken] = useState("");
-  const [secretRef, setSecretRef] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [baseUrlError, setBaseUrlError] = useState("");
   const [rateLimitRpm, setRateLimitRpm] = useState(60);
@@ -119,7 +118,8 @@ export default function ConnectorDetailPage() {
         base_url: baseUrl.trim() || undefined,
         rate_limit_rpm: rateLimitRpm,
       };
-      if (secretRef.trim()) update.secret_ref = secretRef.trim();
+      // secret_ref is in the PUT handler's _blocked_fields and is silently
+      // dropped, so the edit form no longer offers it.
       // TC_008 (Aishwarya 2026-04-23): basic auth takes two fields; the
       // single-field helper didn't carry username. Use the basic-auth
       // helper so both username and password flow through.
@@ -146,7 +146,6 @@ export default function ConnectorDetailPage() {
       setConnector(data);
       setEditing(false);
       setAuthToken("");
-      setSecretRef("");
       setFeedback({ type: "success", msg: "Connector updated successfully" });
     } catch (e: unknown) {
       setFeedback({ type: "error", msg: extractApiError(e, "Failed to update connector") });
@@ -480,10 +479,6 @@ export default function ConnectorDetailPage() {
                       <p className="text-xs text-muted-foreground mt-1">Connector-specific parameters (e.g. Zoho Books <code>organization_id</code>).</p>
                       {extraConfigError && <p className="text-xs text-red-600 mt-1">{extraConfigError}</p>}
                     </div>
-                    <div>
-                      <label className="text-sm font-medium">Secret Reference</label>
-                      <input type="text" value={secretRef} onChange={(e) => setSecretRef(e.target.value)} placeholder="gcp-secret-manager://slack-bot-token" className="border rounded px-3 py-2 text-sm w-full mt-1" />
-                    </div>
                   </>
                 )}
                 <div>
@@ -492,7 +487,7 @@ export default function ConnectorDetailPage() {
                 </div>
                 <div className="flex gap-2 pt-2">
                   <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
-                  <Button size="sm" variant="outline" onClick={() => { setEditing(false); setAuthToken(""); setSecretRef(""); setBasicUsername(""); }}>Cancel</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setEditing(false); setAuthToken(""); setBasicUsername(""); }}>Cancel</Button>
                 </div>
               </div>
             ) : (

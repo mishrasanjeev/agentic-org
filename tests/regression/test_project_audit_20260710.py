@@ -268,9 +268,11 @@ async def test_oidc_callback_sets_cookie_session_without_bearer_fragment() -> No
     assert any(cookie.startswith("agenticorg_csrf=") for cookie in cookies)
 
 
-def test_valid_old_stripe_event_is_processed_on_retry() -> None:
+def test_valid_old_stripe_event_is_processed_on_retry(monkeypatch) -> None:
     from core.billing import stripe_client
 
+    # handle_webhook fails closed without a configured webhook secret.
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
     event = {
         "id": "evt_old_retry",
         "created": 1,

@@ -108,8 +108,10 @@ async def list_providers(email: str = Query(..., description="User email — use
 
     out = []
     for c in configs:
-        allowed = c.allowed_domains or []
-        if not allowed or domain in allowed:
+        # Empty ``allowed_domains`` means NOT anonymously discoverable:
+        # returning every tenant's providers enumerates other organisations.
+        allowed = {str(d).lower() for d in (c.allowed_domains or [])}
+        if domain in allowed:
             out.append(
                 {
                     "provider_key": c.provider_key,

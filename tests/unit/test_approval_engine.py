@@ -118,15 +118,19 @@ class TestApplyDecision:
 
 
 def _patch_session(session):
-    """Return a patch that makes async_session_factory yield `session`."""
+    """Return a patch that makes get_tenant_session yield `session`.
+
+    approval_policies is FORCE-RLS, so the engine binds the tenant context
+    (audit 2026-09-13 finding 3) instead of opening a raw session.
+    """
 
     @asynccontextmanager
-    async def _ctx():
+    async def _ctx(*_args, **_kwargs):
         yield session
 
     return patch(
-        "core.approvals.policy_engine.async_session_factory",
-        side_effect=lambda: _ctx(),
+        "core.approvals.policy_engine.get_tenant_session",
+        side_effect=_ctx,
     )
 
 

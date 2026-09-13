@@ -55,12 +55,11 @@ def _extract_token(websocket: WebSocket) -> str:
     if authorization.startswith("Bearer "):
         return authorization[7:]
 
-    return (
-        websocket.query_params.get("token")
-        or websocket.query_params.get("access_token")
-        or websocket.query_params.get("ws_ticket")
-        or ""
-    )
+    # Query-string credentials (``?token=`` / ``?access_token=`` /
+    # ``?ws_ticket=``) are not honoured: they put session JWTs into proxy
+    # and access logs. The UI (ui/src/lib/websocket.ts) connects same-origin
+    # and relies on the HttpOnly cookie; no short-lived ticket issuer exists.
+    return ""
 
 
 async def _claims_from_api_key(token: str) -> dict[str, Any]:

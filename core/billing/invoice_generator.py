@@ -7,9 +7,11 @@ For each active tenant we:
   4. Upload the PDF to GCS.
   5. Insert an Invoice row and email a link to the billing contact.
 
-This runs monthly on the 1st at 01:00 IST via Celery Beat. Invoices
-are idempotent per (tenant, period) via the invoice_number uniqueness
-constraint.
+This runs monthly on the 1st at 06:30 IST (01:00 UTC) via Celery Beat.
+Invoices are idempotent per (tenant, period) via the invoice_number
+uniqueness constraint, so the generator refuses to run before the billed
+month has closed in UTC (``_count_tasks`` windows are UTC) — an early run
+would freeze a partial-month invoice that can never be regenerated.
 """
 
 from __future__ import annotations
@@ -311,7 +313,27 @@ async def generate_invoices_for_period(
     created = 0
     skipped = 0
 
+    if now < end:
+        # The month is not closed yet (e.g. beat fired in a timezone ahead
+        # of UTC). Generating now would miss late tasks and the uniqueness
+        # constraint would block a corrected invoice forever.
+        logger.warning(
+            "invoice_period_not_closed",
+            now=now.isoformat(),
+            period_end=end.isoformat(),
+        )
+        return {
+            "created": 0,
+            "skipped": 0,
+            "period_start": start.isoformat(),
+            "period_end": end.isoformat(),
+            "skipped_reason": "period_not_closed",
+        }
+
     async with async_session_factory() as session:
+        # Tenant enumeration for a cross-tenant beat job: fail loudly if the
+        # role cannot bypass RLS rather than silently invoicing nobody.
+        await session.execute(text("SET LOCAL row_security = off"))
         stmt = select(Tenant).where(Tenant.deleted_at.is_(None))
         if tenant_filter is not None:
             stmt = stmt.where(Tenant.id == tenant_filter)
@@ -322,8 +344,10 @@ async def generate_invoices_for_period(
         try:
             invoice_number = f"AO-{tenant.id.hex[:6].upper()}-{start.strftime('%Y%m')}"
 
-            # Idempotency — skip if this invoice already exists
-            async with async_session_factory() as check_session:
+            # Idempotency — skip if this invoice already exists. ``invoices``
+            # is FORCE-RLS: the check must run in the tenant's session or it
+            # sees no rows and re-inserts (which then fails WITH CHECK).
+            async with get_tenant_session(tenant.id) as check_session:
                 result = await check_session.execute(
                     select(Invoice).where(
                         Invoice.tenant_id == tenant.id,
@@ -364,7 +388,7 @@ async def generate_invoices_for_period(
             )
             pdf_url = await _upload_pdf(tenant.id, invoice_number, pdf_bytes)
 
-            async with async_session_factory() as write_session:
+            async with get_tenant_session(tenant.id) as write_session:
                 inv = Invoice(
                     tenant_id=tenant.id,
                     invoice_number=invoice_number,
@@ -382,7 +406,7 @@ async def generate_invoices_for_period(
                     payment_provider=provider or ("stripe" if currency == "USD" else "plural"),
                 )
                 write_session.add(inv)
-                await write_session.commit()
+                # get_tenant_session commits on exit (tenant GUC still bound).
 
             created += 1
             logger.info(

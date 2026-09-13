@@ -224,7 +224,8 @@ class TestStripeWebhookValidatesSignature:
     """test_stripe_webhook_validates_signature — signature validation."""
 
     @patch("core.billing.stripe_client._get_stripe")
-    def test_stripe_webhook_validates_signature(self, mock_get_stripe):
+    def test_stripe_webhook_validates_signature(self, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
 
         mock_stripe.Webhook.construct_event.return_value = {
@@ -249,7 +250,8 @@ class TestStripeWebhookValidatesSignature:
         mock_stripe.Webhook.construct_event.assert_called_once()
 
     @patch("core.billing.stripe_client._get_stripe")
-    def test_stripe_webhook_invalid_signature_raises(self, mock_get_stripe):
+    def test_stripe_webhook_invalid_signature_raises(self, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.side_effect = ValueError("Invalid signature")
         mock_get_stripe.return_value = mock_stripe
@@ -615,7 +617,7 @@ class TestPluralWebhookHandler:
         assert result["tenant_id"] == "tenant1"
         assert result["plan"] == "pro"
         assert result["processed"] is True
-        activate.assert_called_once_with("tenant1", "pro", "v1-order-42")
+        activate.assert_called_once_with("tenant1", "pro", "v1-order-42", ordered_at=ANY)
 
     def test_handle_webhook_success_without_order_mapping_fails_closed(self):
         from core.billing.pinelabs_client import (
@@ -771,7 +773,7 @@ class TestPluralWebhookHandler:
             return_value={"order_amount": {"value": 9_999_00, "currency": "INR"}},
         ):
             assert handle_webhook(body, headers)["processed"] is True
-        activate.assert_called_once_with("tenant-noamt", "pro", "v1-order-noamt")
+        activate.assert_called_once_with("tenant-noamt", "pro", "v1-order-noamt", ordered_at=ANY)
 
     def test_handle_webhook_rejects_old_timestamp(self):
         from core.billing.pinelabs_client import handle_webhook
@@ -898,7 +900,7 @@ class TestPluralE2ERedirectFlow:
         assert webhook_result["tenant_id"] == "e2e"
         assert webhook_result["plan"] == "pro"
         assert webhook_result["order_id"] == "v1-e2e-order-001"
-        activate.assert_called_once_with("e2e", "pro", "v1-e2e-order-001")
+        activate.assert_called_once_with("e2e", "pro", "v1-e2e-order-001", ordered_at=ANY)
 
 
 # ── Stripe SDK Tests ────────────────────────────────────────────────
@@ -1105,7 +1107,8 @@ class TestStripeWebhookActivation:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._activate_subscription")
-    def test_checkout_completed_activates_subscription(self, mock_activate, mock_get_stripe):
+    def test_checkout_completed_activates_subscription(self, mock_activate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "checkout.session.completed",
@@ -1141,13 +1144,15 @@ class TestStripeWebhookActivation:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._deactivate_subscription")
-    def test_subscription_deleted_deactivates(self, mock_deactivate, mock_get_stripe):
+    def test_subscription_deleted_deactivates(self, mock_deactivate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "customer.subscription.deleted",
             "created": int(time.time()),
             "data": {
                 "object": {
+                    "id": "sub_del_001",
                     "metadata": {"tenant_id": "t1"},
                 }
             },
@@ -1160,7 +1165,9 @@ class TestStripeWebhookActivation:
 
         assert result["processed"] is True
         assert result["cancelled"] is True
-        mock_deactivate.assert_called_once_with("t1")
+        # The event's subscription id is forwarded so only the stored
+        # external_id can be downgraded (audit 2026-09-13 finding 4).
+        mock_deactivate.assert_called_once_with("t1", subscription_id="sub_del_001")
 
 
 class TestStripeSubscriptionPlanChanges:
@@ -1225,8 +1232,9 @@ class TestStripeSubscriptionPlanChanges:
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.subscriptions.record_subscription_sync")
     def test_subscription_updated_webhook_syncs_plan_from_price(
-        self, mock_record, mock_get_stripe
+        self, mock_record, mock_get_stripe, monkeypatch
     ):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "customer.subscription.updated",
@@ -1269,7 +1277,8 @@ class TestStripeSubscriptionPlanChanges:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.subscriptions.deactivate_subscription_sync")
-    def test_subscription_updated_canceled_downgrades_row(self, mock_deactivate, mock_get_stripe):
+    def test_subscription_updated_canceled_downgrades_row(self, mock_deactivate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_stripe.Webhook.construct_event.return_value = {
             "type": "customer.subscription.updated",
@@ -1289,7 +1298,11 @@ class TestStripeSubscriptionPlanChanges:
 
         result = handle_webhook(b'{"type":"customer.subscription.updated"}', "sig")
         assert result["processed"] is True
-        mock_deactivate.assert_called_once_with("t1", status="canceled")
+        # The event's subscription id must match the stored external_id
+        # (audit 2026-09-13 finding 4) — a stale event cannot downgrade.
+        mock_deactivate.assert_called_once_with(
+            "t1", status="canceled", provider_subscription_id="sub_gone"
+        )
 
 
 class TestStripeCustomerPortal:
@@ -1322,7 +1335,8 @@ class TestStripeE2ECheckoutFlow:
 
     @patch("core.billing.stripe_client._get_stripe")
     @patch("core.billing.stripe_client._activate_subscription")
-    def test_full_stripe_checkout_flow(self, mock_activate, mock_get_stripe):
+    def test_full_stripe_checkout_flow(self, mock_activate, mock_get_stripe, monkeypatch):
+        monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
         mock_stripe = MagicMock()
         mock_get_stripe.return_value = mock_stripe
 

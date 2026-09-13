@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 import types
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -379,6 +380,8 @@ async def test_resume_syncs_workflow_run_when_context_present() -> None:
 class _Run:
     def __init__(self, status: str, variant_id: str | None = "44444444-4444-4444-4444-444444444444"):
         self.status = status
+        # record_outcome binds the RLS context from the run's tenant.
+        self.tenant_id = uuid.UUID("11111111-1111-1111-1111-111111111111")
         self.context = {"ab": {"variant_id": variant_id}} if variant_id else {}
 
 
@@ -402,6 +405,7 @@ async def test_ab_outcome_recorded_once_on_terminal() -> None:
         await record_ab_outcome_if_terminal(run)  # resume path re-sync
     rec.assert_awaited_once()
     assert rec.await_args.kwargs["success"] is True
+    assert rec.await_args.kwargs["tenant_id"] == run.tenant_id
     assert run.context["ab"]["outcome_recorded"] is True
 
     failed = _Run("failed")
@@ -522,15 +526,19 @@ async def test_spend_query_filters_by_tenant(monkeypatch: pytest.MonkeyPatch) ->
         async def __aexit__(self, *a):
             return False
 
-        async def execute(self, stmt, params):
+        async def execute(self, stmt, params=None):
             captured["sql"] = str(stmt)
             captured["params"] = params
             return type("R", (), {"scalar_one": lambda self: 1.25})()
 
+    # agent_task_results is FORCE-RLS: the per-tenant SUM runs inside
+    # get_tenant_session (audit 2026-09-13 finding 2); the platform-wide
+    # SUM uses a raw session with row security disabled.
+    monkeypatch.setattr(core.database, "get_tenant_session", lambda tid: _Session())
     monkeypatch.setattr(core.database, "async_session_factory", lambda: _Session())
     tenant = "22222222-2222-2222-2222-222222222222"
     assert await r._todays_gemini_spend_usd(tenant) == 1.25
-    assert "tenant_id = :tenant_id" in captured["sql"]
+    assert "tenant_id = CAST(:tenant_id AS uuid)" in captured["sql"]
     assert str(captured["params"]["tenant_id"]) == tenant
 
     await r._todays_gemini_spend_usd()

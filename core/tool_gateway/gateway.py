@@ -133,7 +133,10 @@ class ToolGateway:
             from core.langgraph.grantex_auth import get_grantex_client
 
             grantex = get_grantex_client()
-            result = grantex.enforce(
+            # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
+            # synchronous HTTPS fetch; run it off the event loop.
+            result = await asyncio.to_thread(
+                grantex.enforce,
                 grant_token=effective_token,
                 connector=connector_name,
                 tool=tool_name,
@@ -398,7 +401,9 @@ class ToolGateway:
                         if isinstance(creds, dict) and "_encrypted" in creds:
                             from core.crypto import decrypt_for_tenant
 
-                            raw = decrypt_for_tenant(creds["_encrypted"])
+                            # KMS-backed decrypt is synchronous (gRPC); keep it
+                            # off the event loop.
+                            raw = await asyncio.to_thread(decrypt_for_tenant, creds["_encrypted"])
                             creds = _json.loads(raw)
                         # Merge non-secret config with decrypted creds
                         config = {**(cc.config or {}), **(creds or {})}

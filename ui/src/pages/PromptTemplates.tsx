@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { promptTemplatesApi } from "@/lib/api";
+import { promptTemplatesApi, extractApiError } from "@/lib/api";
 import type { PromptTemplate } from "@/types";
 
 function humanize(s: string) {
@@ -18,6 +18,7 @@ export default function PromptTemplates() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -188,9 +189,14 @@ export default function PromptTemplates() {
                     </Button>
                     <Button variant="destructive" size="sm" onClick={async () => {
                       if (!confirm("Delete this template?")) return;
-                      await promptTemplatesApi.delete(selected.id);
-                      setSelectedId(null);
-                      fetchTemplates();
+                      setActionError(null);
+                      try {
+                        await promptTemplatesApi.delete(selected.id);
+                        setSelectedId(null);
+                        fetchTemplates();
+                      } catch (err) {
+                        setActionError(extractApiError(err, "Failed to delete template."));
+                      }
                     }}>Delete</Button>
                   </>
                 )}
@@ -201,13 +207,23 @@ export default function PromptTemplates() {
             )}
           </CardHeader>
           <CardContent>
+            {actionError && (
+              <div className="rounded border border-destructive bg-destructive/10 px-3 py-2 text-sm text-destructive mb-3" role="alert">
+                {actionError}
+              </div>
+            )}
             {editing && !selected.is_builtin ? (
               <div className="space-y-3">
                 <textarea value={editText} onChange={(e) => setEditText(e.target.value)} className="border rounded px-3 py-2 text-sm w-full font-mono" rows={15} />
                 <Button size="sm" onClick={async () => {
-                  await promptTemplatesApi.update(selected.id, { template_text: editText });
-                  setEditing(false);
-                  fetchTemplates();
+                  setActionError(null);
+                  try {
+                    await promptTemplatesApi.update(selected.id, { template_text: editText });
+                    setEditing(false);
+                    fetchTemplates();
+                  } catch (err) {
+                    setActionError(extractApiError(err, "Failed to save template."));
+                  }
                 }}>Save Changes</Button>
               </div>
             ) : (

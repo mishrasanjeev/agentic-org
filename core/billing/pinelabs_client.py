@@ -127,6 +127,9 @@ def store_order_mapping(
         "plan": plan,
         "amount": int(amount or 0),
         "currency": currency,
+        # When the order was placed; ``_activate_subscription`` uses it to
+        # ignore a late webhook for an order older than the active period.
+        "created_at": datetime.now(UTC).isoformat(),
     }
     order_id_entry = {**entry, "merchant_order_reference": merchant_ref}
 
@@ -554,7 +557,9 @@ def handle_webhook(raw_body: bytes, headers: dict[str, str]) -> dict[str, Any]:
             )
         _verify_paid_amount(payload, stored, plan, order_id, merchant_ref, webhook_id)
         try:
-            _activate_subscription(tenant_id, plan, order_id)
+            _activate_subscription(
+                tenant_id, plan, order_id, ordered_at=_parse_ordered_at(stored.get("created_at"))
+            )
         # enterprise-gate: broad-except-ok reason=plural-webhook-side-effect-failure-raises-not-success
         except Exception as exc:
             logger.exception(
@@ -637,7 +642,20 @@ def _verify_paid_amount(
         )
 
 
-def _activate_subscription(tenant_id: str, plan: str, order_id: str) -> None:
+def _parse_ordered_at(value: Any) -> datetime | None:
+    """Parse the order mapping's ``created_at``; ``None`` when absent/malformed."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+def _activate_subscription(
+    tenant_id: str, plan: str, order_id: str, *, ordered_at: datetime | None = None
+) -> None:
     """Upgrade tenant plan after confirmed payment.
 
     Persists the ``billing_subscriptions`` row (source of truth) and warms
@@ -645,8 +663,38 @@ def _activate_subscription(tenant_id: str, plan: str, order_id: str) -> None:
     fixed ``current_period_end``; the beat task
     ``core.tasks.budget_tasks.expire_plural_subscriptions`` downgrades it
     once that passes.
+
+    Stale-order guard: the upsert overwrites plan and period unconditionally,
+    so a replayed webhook (same ``order_id``) or a late webhook for an order
+    placed *before* the currently active period started (``ordered_at`` <
+    ``current_period_start``) is ignored rather than rewriting a newer
+    activation. Legitimate new orders (placed after the active period began)
+    always apply, including downgrades.
     """
-    from core.billing.subscriptions import plural_period, record_subscription_sync
+    from core.billing.subscriptions import (
+        get_subscription_sync,
+        plural_period,
+        record_subscription_sync,
+    )
+
+    existing = get_subscription_sync(tenant_id)
+    if existing["provider"] == "plural" and existing["is_paid"] and existing["order_id"]:
+        if existing["order_id"] == order_id:
+            logger.info(
+                "plural_activation_replay_ignored", tenant_id=tenant_id, order_id=order_id
+            )
+            return
+        active_since = existing.get("current_period_start")
+        if ordered_at is not None and active_since:
+            if ordered_at < datetime.fromisoformat(active_since):
+                logger.warning(
+                    "plural_activation_stale_order_ignored",
+                    tenant_id=tenant_id,
+                    order_id=order_id,
+                    active_order_id=existing["order_id"],
+                    active_plan=existing["plan"],
+                )
+                return
 
     period_start, period_end = plural_period()
     record_subscription_sync(

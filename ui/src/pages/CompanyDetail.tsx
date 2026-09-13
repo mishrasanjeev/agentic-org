@@ -152,9 +152,27 @@ function itemsFromResponse<T>(data: unknown): T[] {
   return [];
 }
 
+/**
+ * Parse an API date. A date-only ``YYYY-MM-DD`` string is a calendar day,
+ * so build it in local time — ``new Date("2026-04-20")`` is UTC midnight,
+ * which renders as the 19th (and flips overdue early) west of UTC.
+ */
+export function parseLocalDate(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return new Date(value);
+}
+
+/** Midnight at the start of the day *after* a due date, in local time. */
+function endOfLocalDay(value: string): Date {
+  const d = parseLocalDate(value);
+  if (Number.isNaN(d.getTime())) return d;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+}
+
 function formatDate(value?: string | null): string {
   if (!value) return "-";
-  const date = new Date(value);
+  const date = parseLocalDate(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
 }
@@ -192,15 +210,15 @@ function healthColor(score: number): string {
   return "text-red-600";
 }
 
-function deadlineStatus(deadline: ComplianceDeadline): string {
+export function deadlineStatus(deadline: ComplianceDeadline, now: Date = new Date()): string {
   if (deadline.filed) return "filed";
-  const due = new Date(deadline.due_date);
-  const today = new Date();
-  return due.getTime() < today.getTime() ? "overdue" : "pending";
+  // A deadline is only overdue once its due *day* has fully elapsed locally.
+  const dueEnd = endOfLocalDay(deadline.due_date);
+  return dueEnd.getTime() <= now.getTime() ? "overdue" : "pending";
 }
 
 function deadlineSortValue(deadline: ComplianceDeadline): number {
-  return new Date(deadline.due_date).getTime();
+  return parseLocalDate(deadline.due_date).getTime();
 }
 
 export default function CompanyDetail() {

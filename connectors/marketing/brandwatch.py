@@ -9,8 +9,11 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import structlog
 
 from connectors.framework.base_connector import BaseConnector
+
+logger = structlog.get_logger()
 
 BRANDWATCH_API_BASE_URL = "https://api.brandwatch.com"
 
@@ -52,6 +55,23 @@ class BrandwatchConnector(BaseConnector):
             token = resp.json()["access_token"]
 
         self._auth_headers = {"Authorization": f"Bearer {token}"}
+
+    async def execute_tool(self, tool_name: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Execute tool with automatic 401 retry (re-authenticates and retries once).
+
+        The connector instance is cached per tenant, so a token obtained in
+        ``_authenticate`` eventually expires mid-session. Re-auth + rebuild the
+        HTTP client so fresh headers are used, then retry exactly once.
+        """
+        try:
+            return await super().execute_tool(tool_name, params)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code != 401:
+                raise
+            logger.info("brandwatch_401_retry", tool=tool_name)
+            await self._authenticate()
+            await self._rebuild_http_client()
+            return await super().execute_tool(tool_name, params)
 
     async def health_check(self) -> dict[str, Any]:
         try:

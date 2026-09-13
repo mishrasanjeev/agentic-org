@@ -124,6 +124,38 @@ TENANT_TABLES: tuple[str, ...] = (
 
 ALL_TABLES: tuple[str, ...] = TENANT_TABLES + PRE_AUTH_TABLES + TENANT_COMPANY_TABLES
 
+# Tables that already carried an enforced tenant policy on production-shaped
+# databases before this revision (v4.1.0-v4.8.0 chain). ``upgrade`` replaces
+# their policy with the uniform shape; ``downgrade`` must not strip them —
+# doing so would leave sso_configs / invoices / approval_policies readable
+# across tenants on a rollback. Their pre-v6z16 protection is equivalent to
+# (never stronger than) the uniform policy, so keeping it is the faithful
+# and safe undo.
+PREVIOUSLY_COVERED_TABLES: frozenset[str] = frozenset(
+    {
+        # v4.1.0 - v4.3.0 (ENABLE + tenant_isolation)
+        "companies",
+        "ca_subscriptions",
+        "filing_approvals",
+        "gstn_uploads",
+        "gstn_credentials",
+        "compliance_deadlines",
+        # v4.5.0 (FORCE + tenant_company_isolation)
+        "agent_task_results",
+        # v4.6.0 (FORCE + tenant_isolation)
+        "departments",
+        "cost_centers",
+        "user_delegations",
+        "budget_alerts",
+        # v4.7.0 / v4.8.0 baseline (FORCE + tenant_isolation)
+        "sso_configs",
+        "approval_policies",
+        "invoices",
+        "tenant_branding",
+        "workflow_variants",
+    }
+)
+
 # Legacy policy names from v4.1.0 / v4.2.0 / v4.3.0 that must not remain
 # next to the uniform policy (permissive policies are ORed together).
 LEGACY_POLICY_NAMES: tuple[str, ...] = ("tenant_isolation", "company_isolation")
@@ -173,11 +205,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Reverses only what this revision added. Legacy v4.x policies that were
-    # dropped above are not recreated: they were inert (RLS never enabled)
-    # or superseded, and restoring the permissive company_isolation shape
-    # would be a regression.
+    # Reverses only what this revision added. Tables that were already
+    # RLS-protected before v6z16 keep their (uniform-shape) policy: the
+    # pre-v6z16 state was protected, so disabling RLS here would widen
+    # tenant isolation on rollback. The legacy permissive
+    # ``company_isolation`` shape is deliberately not restored.
     for table in ALL_TABLES:
+        if table in PREVIOUSLY_COVERED_TABLES:
+            continue
         policy = _policy_name(table)
         body = (
             f"DROP POLICY IF EXISTS {policy} ON {table}; "

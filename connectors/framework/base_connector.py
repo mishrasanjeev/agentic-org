@@ -317,13 +317,29 @@ class BaseConnector(abc.ABC):
             await self._client.aclose()
         self._client = self._build_http_client()
 
+    @staticmethod
+    def _response_json(resp: httpx.Response) -> dict[str, Any]:
+        """Decode a JSON body, tolerating empty/204 responses.
+
+        Many providers answer writes with ``204 No Content`` (Salesforce PATCH,
+        Jira PUT, Zoom/Google Calendar/Okta DELETE). Raising JSONDecodeError
+        there fails the step *after* the write landed, and the retry re-applies
+        the write. Mirror HubSpot's ``_request_json`` envelope instead.
+        """
+        if resp.status_code == 204 or not resp.content:
+            return {"status": "ok", "http_status": resp.status_code}
+        try:
+            return resp.json()
+        except ValueError:
+            return {"status": "ok", "http_status": resp.status_code}
+
     async def _get(self, path: str, params: dict | None = None) -> dict[str, Any]:
         if not self._client:
             raise RuntimeError("Connector not connected")
         self._validate_request_url("GET", path)
         resp = await self._client.get(path, params=params)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     async def _post(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
@@ -331,7 +347,7 @@ class BaseConnector(abc.ABC):
         self._validate_request_url("POST", path)
         resp = await self._client.post(path, json=data)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     async def _post_form(self, path: str, data: dict | None = None) -> dict[str, Any]:
         """POST with form-encoded body (application/x-www-form-urlencoded).
@@ -343,7 +359,7 @@ class BaseConnector(abc.ABC):
         self._validate_request_url("POST", path)
         resp = await self._client.post(path, data=data)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     async def _odata_get(self, path: str, params: dict | None = None) -> dict[str, Any]:
         """GET for OData APIs (SAP S/4HANA, Dynamics 365).
@@ -388,7 +404,7 @@ class BaseConnector(abc.ABC):
         self._validate_request_url("PUT", path)
         resp = await self._client.put(path, json=data)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     async def _patch(self, path: str, data: dict | None = None) -> dict[str, Any]:
         if not self._client:
@@ -396,7 +412,7 @@ class BaseConnector(abc.ABC):
         self._validate_request_url("PATCH", path)
         resp = await self._client.patch(path, json=data)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     async def _delete(self, path: str) -> dict[str, Any]:
         if not self._client:
@@ -404,7 +420,7 @@ class BaseConnector(abc.ABC):
         self._validate_request_url("DELETE", path)
         resp = await self._client.delete(path)
         resp.raise_for_status()
-        return resp.json()
+        return self._response_json(resp)
 
     def _validate_request_url(self, method: str, path: str) -> None:
         if not self._client:

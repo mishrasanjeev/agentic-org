@@ -687,6 +687,9 @@ async def _execute_workflow_bg(
                                     expires_at=hitl_expires_at,
                             )
                             session.add(hitl_item)
+                            # HITLQueue.id is a Python-side default applied at
+                            # flush; push must not carry approval_id="None".
+                            await session.flush()
                             schedule_hitl_timeout(engine_run_id, step_id, hitl_expires_at)
                             await _push_approval_created(
                                 str(tenant_id), item_id=str(hitl_item.id), action=step_id
@@ -694,13 +697,17 @@ async def _execute_workflow_bg(
 
                 db_run.steps_completed = _run_steps_completed(state)
                 db_run.steps_total = _run_steps_total(state, db_run.steps_total)
-                db_run.status = state.get("status", "running")
-                if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
-                    db_run.completed_at = datetime.now(UTC)
-                if state.get("status") == "completed":
-                    db_run.result = state.get("step_results")
+                # A concurrent cancel already finalised the DB row; an in-flight
+                # engine checkpoint must never downgrade a terminal status.
+                db_status_terminal = db_run.status in TERMINAL_WORKFLOW_STATUSES
+                if not db_status_terminal:
+                    db_run.status = state.get("status", "running")
+                    if state.get("status") in TERMINAL_WORKFLOW_STATUSES:
+                        db_run.completed_at = datetime.now(UTC)
+                    if state.get("status") == "completed":
+                        db_run.result = state.get("step_results")
 
-            if state.get("status") in TERMINAL_WORKFLOW_STATUSES | PAUSED_WORKFLOW_STATUSES:
+            if db_status_terminal or state.get("status") in TERMINAL_WORKFLOW_STATUSES | PAUSED_WORKFLOW_STATUSES:
                 break
 
     # enterprise-gate: broad-except-ok reason=background-workflow-boundary-marks-db-run-failed
@@ -713,9 +720,10 @@ async def _execute_workflow_bg(
                         select(WorkflowRun).where(WorkflowRun.id == run_id)
                     )
                 ).scalar_one()
-                db_run.status = "failed"
-                db_run.error = {"message": str(exc)}
-                db_run.completed_at = datetime.now(UTC)
+                if db_run.status not in TERMINAL_WORKFLOW_STATUSES:
+                    db_run.status = "failed"
+                    db_run.error = {"message": str(exc)}
+                    db_run.completed_at = datetime.now(UTC)
         # enterprise-gate: broad-except-ok reason=background-error-handler-logs-secondary-db-failure
         except Exception as inner:
             _log.error("workflow_bg_error_handler_failed", error=str(inner))
@@ -794,7 +802,8 @@ async def run_workflow(
             from core.workflow_ab import pick_variant
 
             subject = (body.payload or {}).get("user_id") or tenant_id
-            variant_pick = await pick_variant(wf.id, str(subject))
+            # tenant_id binds the RLS context for workflow_variants.
+            variant_pick = await pick_variant(wf.id, str(subject), tenant_id=tenant_id)
         # enterprise-gate: broad-except-ok reason=ab-variant-selection-falls-back-to-base-definition
         except Exception:
             _log.debug("workflow_ab_pick_variant_skipped", workflow_id=str(wf_id))
