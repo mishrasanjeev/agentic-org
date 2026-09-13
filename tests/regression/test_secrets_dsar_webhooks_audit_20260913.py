@@ -144,6 +144,9 @@ async def test_dsar_erase_and_access_replay_against_postgres():
     from core.models.tenant import Tenant
     from core.models.user import User
 
+    # Earlier tests in the same process may have used the shared engine on a
+    # different (now closed) event loop; drop those pooled connections first.
+    await engine.dispose()
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: DSARRequestRecord.__table__.create(sync_conn, checkfirst=True))
 

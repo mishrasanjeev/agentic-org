@@ -259,15 +259,55 @@ def auth_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+_sync_seed_engine = None
+
+
+def _ensure_user_row(tenant_id: str, email: str) -> None:
+    """Seed ``tenants`` + ``users`` rows for a minted JWT (idempotent, sync).
+
+    Legacy session tokens fail closed when their subject has no ``users``
+    row in the token's tenant (``core.auth_state.UserSessionState``), so a
+    token minted for an ad-hoc tenant must be backed by a row exactly like the
+    login flow would have created. Uses a NullPool sync engine so it never
+    shares asyncpg connections with the async test engine.
+    """
+    global _sync_seed_engine
+    if not DB_URL:
+        return
+    from sqlalchemy import create_engine
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.pool import NullPool
+
+    if _sync_seed_engine is None:
+        sync_url = DB_URL.replace("postgresql+asyncpg", "postgresql").replace("+asyncpg", "")
+        _sync_seed_engine = create_engine(sync_url, poolclass=NullPool)
+    with _sync_seed_engine.begin() as conn:
+        conn.execute(sa_text(
+            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+            "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb) "
+            "ON CONFLICT (id) DO NOTHING"
+        ), {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": f"tenant-{tenant_id[:8]}"})
+        conn.execute(sa_text(
+            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
+            "VALUES (:id, :tenant_id, :email, 'Integration Admin', 'admin', 'active', false) "
+            "ON CONFLICT (tenant_id, email) DO NOTHING"
+        ), {"id": str(uuid.uuid4()), "tenant_id": tenant_id, "email": email})
+
+
 @pytest.fixture
 def make_auth_headers():
-    """Factory fixture — mint headers with custom claims."""
+    """Factory fixture — mint headers with custom claims.
+
+    Every minted token is backed by a ``users`` row in its tenant (see
+    ``_ensure_user_row``) so the session-state check honours it.
+    """
 
     def _factory(
         tenant_id: str = TEST_TENANT_ID,
         scopes: list[str] | None = None,
         agent_id: str = TEST_AGENT_ID,
     ) -> dict[str, str]:
+        _ensure_user_row(tenant_id, TEST_USER_SUB)
         token = _make_jwt(tenant_id=tenant_id, scopes=scopes, agent_id=agent_id)
         return {"Authorization": f"Bearer {token}"}
 
