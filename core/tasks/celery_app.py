@@ -28,6 +28,7 @@ app = Celery(
     broker=_redis_url,
     backend=_redis_url,
     include=[
+        "core.cron.tasks",
         "core.tasks.budget_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
@@ -64,6 +65,7 @@ app.conf.update(
         # Redis remain executable during rolling deploys.
         "resume_workflow_wait": {"queue": "workflows"},
         "timeout_workflow_event": {"queue": "workflows"},
+        "timeout_workflow_hitl": {"queue": "workflows"},
         # RPA scheduler (feat/rpa-framework-rbi): runs go to a
         # dedicated queue so long scrapes don't starve the short
         # report jobs.
@@ -86,6 +88,14 @@ app.conf.beat_schedule = {
     "run-budget-evaluator": {
         "task": "core.tasks.budget_tasks.run_budget_evaluator",
         "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "expire-plural-subscriptions": {
+        # Plural hosted checkout is a one-time order, not a mandate: each
+        # payment buys a fixed period recorded on billing_subscriptions.
+        # Downgrade rows whose period has ended so entitlement expires.
+        "task": "core.tasks.budget_tasks.expire_plural_subscriptions",
+        "schedule": 3600.0,  # hourly
         "options": {"queue": "maintenance"},
     },
     "refresh-expiring-tokens": {
@@ -113,6 +123,12 @@ app.conf.beat_schedule = {
         # live probe. See core/tasks/health_snapshot.py.
         "task": "core.tasks.health_snapshot.record_health_snapshot",
         "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "compliance-alerts-daily": {
+        # Moved from the dead core.cron.celery_beat app (nothing ran it).
+        "task": "core.cron.tasks.run_compliance_alerts",
+        "schedule": crontab(hour=6, minute=0),  # 6:00 AM IST daily
         "options": {"queue": "maintenance"},
     },
     "shadow-reconciliation-report": {

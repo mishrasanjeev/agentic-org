@@ -38,6 +38,99 @@ async def record_ab_outcome_if_terminal(db_run: Any) -> None:
     db_run.context = context
 
 
+def hitl_timeout_hours(step_result: dict[str, Any], step_def: dict[str, Any]) -> float:
+    """Resolve the HITL SLA for a waiting step.
+
+    The engine result (``output.timeout_hours``) wins because it already
+    applied the approval timeout policy; the definition value is the
+    fallback and 4h the default.
+    """
+    output = step_result.get("output") if isinstance(step_result, dict) else None
+    candidates = (
+        output.get("timeout_hours") if isinstance(output, dict) else None,
+        step_result.get("timeout_hours") if isinstance(step_result, dict) else None,
+        step_def.get("timeout_hours"),
+    )
+    for raw in candidates:
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value > 0:
+            return value
+    return 4.0
+
+
+def schedule_hitl_timeout(engine_run_id: str, step_id: str, expires_at: datetime) -> bool:
+    """Queue ``timeout_workflow_hitl`` for ``expires_at``.
+
+    Scheduling failure is logged and returns False; the HITL item still
+    exists with its ``expires_at`` so the approvals list and ``/decide``
+    enforce the deadline, and an operator can re-run the timeout task.
+    """
+    try:
+        from core.tasks.workflow_tasks import timeout_workflow_hitl
+
+        timeout_workflow_hitl.apply_async(args=[engine_run_id, step_id], eta=expires_at)
+        return True
+    # enterprise-gate: broad-except-ok reason=hitl-timeout-scheduling-failure-leaves-durable-expires-at
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "workflow_hitl_timeout_schedule_failed",
+            run_id=engine_run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
+        return False
+
+
+async def expire_pending_hitl_items(
+    *,
+    tenant_id: uuid.UUID,
+    workflow_run_id: uuid.UUID,
+    step_id: str,
+    new_status: str = "expired",
+    assignee_role: str | None = None,
+    expires_at: datetime | None = None,
+) -> int:
+    """Flip the pending HITL queue rows for one workflow step.
+
+    ``new_status="expired"`` closes them on timeout; passing ``assignee_role``
+    and ``expires_at`` with ``new_status="pending"`` escalates them instead.
+    Returns the number of rows changed.
+    """
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.hitl import HITLQueue
+
+    changed = 0
+    async with get_tenant_session(tenant_id) as session:
+        rows = (
+            await session.execute(
+                select(HITLQueue).where(
+                    HITLQueue.tenant_id == tenant_id,
+                    HITLQueue.workflow_run_id == workflow_run_id,
+                    HITLQueue.status == "pending",
+                )
+            )
+        ).scalars().all()
+        for item in rows:
+            context = item.context if isinstance(item.context, dict) else {}
+            if str(context.get("step_id") or "") != str(step_id):
+                continue
+            item.status = new_status
+            if assignee_role:
+                item.assignee_role = assignee_role
+            if expires_at is not None:
+                item.expires_at = expires_at
+            if new_status == "expired":
+                item.decision_at = datetime.now(UTC)
+                item.decision_notes = "Expired: no decision before the approval deadline."
+            changed += 1
+    return changed
+
+
 async def sync_engine_state_to_workflow_run(
     *,
     tenant_id: uuid.UUID,
@@ -87,7 +180,7 @@ async def sync_engine_state_to_workflow_run(
             )
 
             if created and step_row.status == "waiting_hitl":
-                timeout_h = step_def.get("timeout_hours", 4)
+                timeout_h = hitl_timeout_hours(step_result, step_def)
                 hitl_agent_id = step_row.agent_id
                 if not hitl_agent_id:
                     hitl_agent_id = (
@@ -96,8 +189,8 @@ async def sync_engine_state_to_workflow_run(
                         )
                     ).scalar_one_or_none()
                 if hitl_agent_id:
-                    session.add(
-                        HITLQueue(
+                    expires_at = datetime.now(UTC) + timedelta(hours=timeout_h)
+                    hitl_item = HITLQueue(
                             tenant_id=tenant_id,
                             workflow_run_id=workflow_run_id,
                             agent_id=hitl_agent_id,
@@ -117,9 +210,13 @@ async def sync_engine_state_to_workflow_run(
                                 "step_id": step_id,
                                 "engine_run_id": engine_run_id,
                             },
-                            expires_at=datetime.now(UTC) + timedelta(hours=timeout_h),
-                        )
+                            expires_at=expires_at,
                     )
+                    session.add(hitl_item)
+                    schedule_hitl_timeout(engine_run_id, step_id, expires_at)
+                    from core.push.sender import notify_approval_created
+
+                    await notify_approval_created(str(tenant_id), item_id=str(hitl_item.id), action=step_id)
 
         db_run.steps_completed = _run_steps_completed(state)
         db_run.steps_total = _run_steps_total(state, db_run.steps_total)

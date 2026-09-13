@@ -60,18 +60,18 @@ class TestBuildLineItems:
 
     def test_pro_plan_under_allowance(self):
         items, subtotal = _build_line_items("pro", task_count=5_000)
-        # Pro = $2 base, 10K allowance, no overage
-        assert subtotal == Decimal("2.00")
+        # Pro = $99 base, 10K allowance, no overage
+        assert subtotal == Decimal("99.00")
         assert len(items) == 1
         assert items[0]["description"].startswith("Pro plan")
 
     def test_pro_plan_with_overage(self):
         items, subtotal = _build_line_items("pro", task_count=15_000)
-        # Pro: $2 base + 5000 overage / 1000 * $2.50 = $2 + $12.50 = $14.50
-        assert subtotal == Decimal("14.50")
+        # Pro: $99 base + 5000 overage / 1000 * $2.50 = $99 + $12.50 = $111.50
+        assert subtotal == Decimal("111.50")
         assert len(items) == 2
         # First item is base subscription
-        assert items[0]["amount"] == "2.00"
+        assert items[0]["amount"] == "99.00"
         # Second item is overage line
         assert "overage" in items[1]["description"]
         assert items[1]["amount"] == "12.50"
@@ -210,37 +210,56 @@ class TestEffectivePlanAndProviderBilling:
 
     @pytest.mark.asyncio
     async def test_resolve_billing_state_prefers_provider_record(self, monkeypatch):
+        """The billing_subscriptions row (not Redis, not Tenant.plan) decides the plan."""
         from core.billing import invoice_generator as ig
+        from core.billing.subscriptions import free_subscription
 
         tenant = _Tenant(plan="enterprise")
-        fake = _FakeRedis(
-            {
-                f"tenant:{tenant.id}:plan": b"pro",
-                f"tenant:{tenant.id}:billing_provider": b"plural",
-            }
-        )
+        seen: list[str] = []
 
-        async def _get_redis():
-            return fake
+        async def _get_subscription(tenant_id: str):
+            seen.append(tenant_id)
+            sub = free_subscription(tenant_id)
+            sub.update(plan="pro", tier="pro", provider="plural", status="active", is_paid=True)
+            return sub
 
-        monkeypatch.setattr("core.async_redis.get_async_redis", _get_redis)
+        monkeypatch.setattr("core.billing.subscriptions.get_subscription", _get_subscription)
         plan, provider = await ig._resolve_billing_state(tenant)
+        assert seen == [str(tenant.id)]
         assert (plan, provider) == ("pro", "plural")
         assert ig._tenant_currency(tenant, provider) == "INR"
 
     @pytest.mark.asyncio
     async def test_resolve_billing_state_falls_back_to_tenant_row(self, monkeypatch):
         from core.billing import invoice_generator as ig
+        from core.billing.subscriptions import free_subscription
 
         tenant = _Tenant(plan="free", region="US")
 
-        async def _get_redis():
-            return _FakeRedis({})
+        async def _get_subscription(tenant_id: str):
+            return free_subscription(tenant_id)
 
-        monkeypatch.setattr("core.async_redis.get_async_redis", _get_redis)
+        monkeypatch.setattr("core.billing.subscriptions.get_subscription", _get_subscription)
         plan, provider = await ig._resolve_billing_state(tenant)
         assert (plan, provider) == ("free", "")
         assert ig._tenant_currency(tenant, provider) == "USD"
+
+    @pytest.mark.asyncio
+    async def test_resolve_billing_state_expired_plural_is_not_provider_billed(self, monkeypatch):
+        """An expired Plural row must not suppress the base fee as 'provider billed'."""
+        from core.billing import invoice_generator as ig
+        from core.billing.subscriptions import free_subscription
+
+        tenant = _Tenant(plan="free", region="IN")
+
+        async def _get_subscription(tenant_id: str):
+            sub = free_subscription(tenant_id)
+            sub.update(provider="plural", status="expired", is_paid=False)
+            return sub
+
+        monkeypatch.setattr("core.billing.subscriptions.get_subscription", _get_subscription)
+        plan, provider = await ig._resolve_billing_state(tenant)
+        assert (plan, provider) == ("free", "")
 
     def test_tenant_model_default_plan_is_free(self):
         from core.models.tenant import Tenant

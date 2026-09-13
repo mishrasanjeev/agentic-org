@@ -17,8 +17,34 @@ from core.billing.pinelabs_client import PLAN_AMOUNT_INR  # noqa: E402
 from core.billing.stripe_client import PLAN_AMOUNT_USD  # noqa: E402
 
 
-def catalog_consistency_issues() -> list[str]:
+# Plausible INR-per-USD band for list prices. The Pro plan shipped for months
+# at USD 2.00 vs INR 9,999 (a leftover live-checkout test price from PR #613);
+# a ~5000:1 ratio must fail this gate.
+FX_BAND_INR_PER_USD = (Decimal("60"), Decimal("140"))
+
+
+def fx_band_issues() -> list[str]:
     issues: list[str] = []
+    low, high = FX_BAND_INR_PER_USD
+    for plan in PUBLIC_PLAN_CATALOG.plans:
+        usd = plan_price_minor(plan.plan_id, "USD")
+        inr = plan_price_minor(plan.plan_id, "INR")
+        if usd == 0 and inr == 0:
+            continue
+        if usd == 0 or inr == 0:
+            issues.append(f"{plan.plan_id}: one currency is free while the other is paid")
+            continue
+        ratio = Decimal(inr) / Decimal(usd)
+        if not (low <= ratio <= high):
+            issues.append(
+                f"{plan.plan_id}: INR/USD list-price ratio {ratio:.1f} outside "
+                f"plausible FX band {low}-{high} (USD {usd / 100:.2f} vs INR {inr / 100:,.2f})"
+            )
+    return issues
+
+
+def catalog_consistency_issues() -> list[str]:
+    issues: list[str] = fx_band_issues()
     for plan in PUBLIC_PLAN_CATALOG.plans:
         expected_limits = {
             "agent_count": -1 if plan.limits.agent_count is None else plan.limits.agent_count,

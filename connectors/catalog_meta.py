@@ -25,7 +25,10 @@ CATALOG_META: dict[str, dict[str, str]] = {
         "display_name": "LangSmith",
         "description": "Observability for LLM runs, traces, datasets.",
     },
-    "s3": {"display_name": "AWS S3", "description": "Object storage — upload, download, list."},
+    "s3": {
+        "display_name": "Object Storage (GCS)",
+        "description": "Google Cloud Storage — upload, download, list. S3 mode is not supported.",
+    },
     "slack": {
         "display_name": "Slack",
         "description": "Post messages, DMs, channel ops, slash commands.",

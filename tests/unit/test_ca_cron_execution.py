@@ -10,8 +10,17 @@ Tests cover:
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
+import sys
 from datetime import date, timedelta
+
+import pytest
+
+
+def _async_runner_importable() -> bool:
+    # core.tasks.async_runner uses PEP 695 generics (Python 3.12+).
+    return sys.version_info >= (3, 12)
 
 # ============================================================================
 # Celery Beat Configuration
@@ -19,19 +28,21 @@ from datetime import date, timedelta
 
 
 class TestCeleryBeatConfiguration:
-    """Verify Celery Beat schedule is correctly configured."""
+    """Verify the compliance cron is scheduled on the REAL worker app.
 
-    def test_celery_app_importable(self):
-        """celery_app can be imported from core.cron.celery_beat."""
-        from core.cron.celery_beat import celery_app
+    ``core.cron.celery_beat`` (a second Celery app nobody ran) was removed;
+    the schedule entry must live in ``core.tasks.celery_app`` and the task
+    must be importable by the worker's ``include=`` list.
+    """
 
-        assert celery_app is not None
+    def test_dead_celery_beat_app_removed(self):
+        assert importlib.util.find_spec("core.cron.celery_beat") is None
 
     def test_beat_schedule_has_compliance_alerts_daily(self):
         """beat_schedule must have 'compliance-alerts-daily' entry."""
-        from core.cron.celery_beat import celery_app
+        from core.tasks.celery_app import app
 
-        schedule = celery_app.conf.beat_schedule
+        schedule = app.conf.beat_schedule
         assert "compliance-alerts-daily" in schedule, (
             f"Missing 'compliance-alerts-daily'. Found: {list(schedule.keys())}"
         )
@@ -40,32 +51,36 @@ class TestCeleryBeatConfiguration:
         """compliance-alerts-daily runs at crontab(hour=6, minute=0)."""
         from celery.schedules import crontab
 
-        from core.cron.celery_beat import celery_app
+        from core.tasks.celery_app import app
 
-        entry = celery_app.conf.beat_schedule["compliance-alerts-daily"]
+        entry = app.conf.beat_schedule["compliance-alerts-daily"]
         schedule = entry["schedule"]
         assert isinstance(schedule, crontab)
         assert str(schedule._orig_hour) == "6"
         assert str(schedule._orig_minute) == "0"
 
-    def test_task_name_matches(self):
-        """The task name in beat_schedule matches the registered task."""
-        from core.cron.celery_beat import celery_app
+    def test_task_name_matches_registered_task(self):
+        """The beat entry names a task the worker actually registers."""
+        from core.tasks.celery_app import app
 
-        entry = celery_app.conf.beat_schedule["compliance-alerts-daily"]
-        assert entry["task"] == "core.cron.celery_beat.run_compliance_alerts"
+        entry = app.conf.beat_schedule["compliance-alerts-daily"]
+        assert entry["task"] == "core.cron.tasks.run_compliance_alerts"
+        assert "core.cron.tasks" in app.conf.include
 
     def test_celery_timezone_asia_kolkata(self):
         """Celery timezone must be Asia/Kolkata for Indian deadlines."""
-        from core.cron.celery_beat import celery_app
+        from core.tasks.celery_app import app
 
-        assert celery_app.conf.timezone == "Asia/Kolkata"
+        assert app.conf.timezone == "Asia/Kolkata"
 
+    @pytest.mark.skipif(not _async_runner_importable(), reason="needs Python 3.12 runtime")
     def test_run_compliance_alerts_task_exists(self):
-        """The run_compliance_alerts task function must exist."""
-        from core.cron.celery_beat import run_compliance_alerts
+        """The run_compliance_alerts task function must exist on the shared app."""
+        from core.cron.tasks import run_compliance_alerts
+        from core.tasks.celery_app import app
 
         assert callable(run_compliance_alerts)
+        assert run_compliance_alerts.app is app
 
 
 # ============================================================================

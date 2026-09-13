@@ -95,9 +95,16 @@ def _strict_order_mapping() -> bool:
 
 
 def _redis_client():
+    """Sync Redis client for the order map.
+
+    This module is synchronous by design and always runs under
+    ``asyncio.to_thread`` from the billing routes, so a blocking client is
+    correct here. The client is a cached singleton (see
+    ``usage_tracker.sync_redis_client``), not a new connection per call.
+    """
     try:
-        from core.billing.usage_tracker import _get_redis
-        return _get_redis()
+        from core.billing.usage_tracker import sync_redis_client
+        return sync_redis_client()
     # enterprise-gate: broad-except-ok reason=order-mapping-callers-fail-closed-in-strict-runtime
     except Exception:
         return None
@@ -633,17 +640,24 @@ def _verify_paid_amount(
 def _activate_subscription(tenant_id: str, plan: str, order_id: str) -> None:
     """Upgrade tenant plan after confirmed payment.
 
-    Creates a billing_subscription record and updates the tenant tier.
+    Persists the ``billing_subscriptions`` row (source of truth) and warms
+    the Redis cache. A Plural order is a one-time payment, so the row gets a
+    fixed ``current_period_end``; the beat task
+    ``core.tasks.budget_tasks.expire_plural_subscriptions`` downgrades it
+    once that passes.
     """
-    from core.billing.usage_tracker import _get_redis
+    from core.billing.subscriptions import plural_period, record_subscription_sync
 
-    redis = _get_redis()
-    # Store the active plan — both the canonical key read by
-    # limits._get_tenant_tier() AND the billing-specific keys.
-    redis.set(f"tenant_tier:{tenant_id}", plan)
-    redis.set(f"tenant:{tenant_id}:plan", plan)
-    redis.set(f"tenant:{tenant_id}:billing_provider", "plural")
-    redis.set(f"tenant:{tenant_id}:billing_order_id", order_id)
+    period_start, period_end = plural_period()
+    record_subscription_sync(
+        tenant_id,
+        provider="plural",
+        plan=plan,
+        status="active",
+        provider_subscription_id=order_id,
+        current_period_start=period_start,
+        current_period_end=period_end,
+    )
 
     logger.info(
         "subscription_activated",

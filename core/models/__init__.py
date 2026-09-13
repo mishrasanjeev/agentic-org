@@ -63,6 +63,7 @@ from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
+from core.models.dsar import DSARRequestRecord as DSARRequestRecord
 from core.models.feature_flag import FeatureFlag as FeatureFlag
 from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback

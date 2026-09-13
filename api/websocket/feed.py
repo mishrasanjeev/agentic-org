@@ -15,7 +15,12 @@ from sqlalchemy import select, update
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
-from auth.grantex_middleware import _is_grantex_token
+from auth.grantex_middleware import (
+    GrantexAuthError,
+    _is_grantex_token,
+    check_user_session_state,
+    resolve_grantex_claims,
+)
 from auth.jwt import extract_scopes, extract_tenant_id, validate_token
 from core.database import async_session_factory
 from core.live_feed import (
@@ -69,11 +74,14 @@ async def _claims_from_api_key(token: str) -> dict[str, Any]:
         )
         candidates = result.scalars().all()
 
-    matched_key = None
-    for candidate in candidates:
-        if bcrypt.checkpw(token.encode(), candidate.key_hash.encode()):
-            matched_key = candidate
-            break
+    def _match() -> APIKey | None:
+        # bcrypt is CPU-bound: keep it off the event loop.
+        for candidate in candidates:
+            if bcrypt.checkpw(token.encode(), candidate.key_hash.encode()):
+                return candidate
+        return None
+
+    matched_key = await asyncio.to_thread(_match) if candidates else None
 
     if matched_key is None:
         raise WebSocketAuthError("invalid_api_key", "Invalid API key")
@@ -96,28 +104,16 @@ async def _claims_from_api_key(token: str) -> dict[str, Any]:
 
 
 async def _claims_from_grantex_token(token: str) -> dict[str, Any]:
+    # Same verifier as the HTTP middleware: issuer + audience checked,
+    # JWKS cached and fetched off the event loop, tenant bound via the
+    # registered agent DID (never the token's developer_id).
     try:
-        import os
-
-        from grantex._verify import VerifyGrantTokenOptions, verify_grant_token
-
-        grantex_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
-        verified = verify_grant_token(
-            token,
-            VerifyGrantTokenOptions(jwks_uri=f"{grantex_url}/.well-known/jwks.json"),
-        )
+        return await resolve_grantex_claims(token)
+    except GrantexAuthError as exc:
+        raise WebSocketAuthError("invalid_grant_token", "Invalid or expired grant token") from exc
     # enterprise-gate: broad-except-ok reason=websocket-grantex-auth-failure-fails-closed-policy-violation
     except Exception as exc:  # noqa: BLE001 - auth failure maps to policy violation.
         raise WebSocketAuthError("invalid_grant_token", "Invalid or expired grant token") from exc
-
-    return {
-        "sub": getattr(verified, "principal_id", ""),
-        "agenticorg:tenant_id": getattr(verified, "developer_id", ""),
-        "grantex:scopes": getattr(verified, "scopes", []),
-        "agenticorg:agent_id": getattr(verified, "agent_did", ""),
-        "grantex:grant_id": getattr(verified, "grant_id", ""),
-        "grantex:delegation_depth": getattr(verified, "delegation_depth", 0),
-    }
 
 
 async def authenticate_websocket(websocket: WebSocket, path_tenant_id: str) -> dict[str, Any]:
@@ -134,6 +130,13 @@ async def authenticate_websocket(websocket: WebSocket, path_tenant_id: str) -> d
             claims = await validate_token(token)
         except ValueError as exc:
             raise WebSocketAuthError("invalid_token", "Invalid or expired token") from exc
+        # Same revocation gate as the HTTP middleware (deactivation,
+        # password reset, logout-all bump ``users.sessions_invalid_before``).
+        rejection = await check_user_session_state(extract_tenant_id(claims), claims)
+        if rejection == "unavailable":
+            raise WebSocketAuthError("auth_unavailable", "Session validation temporarily unavailable")
+        if rejection is not None:
+            raise WebSocketAuthError("invalid_token", "Session is no longer valid")
 
     tenant_id = extract_tenant_id(claims)
     if not tenant_id:

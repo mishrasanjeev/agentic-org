@@ -41,7 +41,7 @@ from typing import Any
 
 import structlog
 
-from core.config import external_keys, settings
+from core.config import external_keys, is_relaxed_env, settings
 
 logger = structlog.get_logger()
 
@@ -537,7 +537,9 @@ class LLMRouter:
         # reproducible. See docs/hermetic_test_doubles.md.
         from core.test_doubles import fake_llm  # noqa: PLC0415 — local import keeps prod cold-path lean
 
-        if fake_llm.is_active():
+        # Relaxed-runtime gate: a leaked AGENTICORG_TEST_FAKE_LLM flag must
+        # never route production traffic to the deterministic fake.
+        if fake_llm.is_active() and is_relaxed_env(settings.env):
             payload = fake_llm.fake_complete(
                 model=model,
                 messages=messages,

@@ -9,10 +9,11 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -963,40 +964,71 @@ class TestApprovalsEndpoints:
 # ============================================================================
 
 class TestComplianceEndpoints:
+    """DSAR routes persist a ``dsar_requests`` row and report an honest status.
+
+    Audit 2026-09-13: pre-fix these returned ``status: processing`` plus a
+    fabricated 30-day deadline while nothing was stored or processed.
+    """
+
+    @staticmethod
+    def _request(user_sub: str = "admin@example.com"):
+        return SimpleNamespace(state=SimpleNamespace(user_sub=user_sub))
+
+    @staticmethod
+    def _patch_process(result: dict):
+        async def fake_process(self, session, record):
+            record.status = "completed"
+            record.result = result
+            return record
+
+        return patch("audit.dsar.DSARHandler.process", fake_process)
 
     @pytest.mark.asyncio
-    async def test_dsar_access_happy(self, tenant_id, mock_session):
+    async def test_dsar_access_persists_row_and_returns_completed(self, tenant_id, mock_session):
         from api.v1.compliance import dsar_access
+        from core.models.dsar import DSARRequestRecord
         from core.schemas.api import DSARRequest
 
         body = DSARRequest(subject_email="user@example.com")
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            resp = await dsar_access(body=body, tenant_id=tenant_id)
+            with self._patch_process({"users": [], "truncated": False}):
+                resp = await dsar_access(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
         assert resp["type"] == "access"
-        assert resp["status"] == "processing"
+        assert resp["status"] == "completed"
         assert resp["subject_email"] == "user@example.com"
-        assert "request_id" in resp
+        assert resp["requested_by"] == "admin@example.com"
+        assert resp["poll"] == f"/api/v1/dsar/{resp['request_id']}"
+        assert resp["result"] == {"users": [], "truncated": False}
+        assert "deadline" not in resp and "deadline_days" not in resp
+        added = [call.args[0] for call in mock_session.add.call_args_list]
+        records = [a for a in added if isinstance(a, DSARRequestRecord)]
+        assert len(records) == 1
+        assert records[0].tenant_id == uuid.UUID(tenant_id)
+        assert records[0].request_type == "access"
+        assert records[0].requested_by == "admin@example.com"
 
     @pytest.mark.asyncio
     async def test_dsar_access_creates_audit_entry(self, tenant_id, mock_session):
         from api.v1.compliance import dsar_access
+        from core.models.audit import AuditLog
         from core.schemas.api import DSARRequest
 
         body = DSARRequest(subject_email="user@example.com")
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            await dsar_access(body=body, tenant_id=tenant_id)
+            with self._patch_process({}):
+                await dsar_access(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
-        mock_session.add.assert_called_once()
-        mock_session.flush.assert_awaited_once()
+        added = [call.args[0] for call in mock_session.add.call_args_list]
+        audit_rows = [a for a in added if isinstance(a, AuditLog)]
+        assert len(audit_rows) == 1
+        assert audit_rows[0].outcome == "received"
 
     @pytest.mark.asyncio
     async def test_dsar_access_unique_request_ids(self, tenant_id, mock_session):
@@ -1004,118 +1036,96 @@ class TestComplianceEndpoints:
         from core.schemas.api import DSARRequest
 
         body = DSARRequest(subject_email="user@example.com")
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            resp1 = await dsar_access(body=body, tenant_id=tenant_id)
-            resp2 = await dsar_access(body=body, tenant_id=tenant_id)
+            with self._patch_process({}):
+                resp1 = await dsar_access(body=body, request=self._request(), tenant_id=tenant_id)
+                resp2 = await dsar_access(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
         assert resp1["request_id"] != resp2["request_id"]
 
     @pytest.mark.asyncio
-    async def test_dsar_erase_happy(self, tenant_id, mock_session):
+    async def test_dsar_erase_reports_counts_no_fabricated_deadline(self, tenant_id, mock_session):
         from api.v1.compliance import dsar_erase
         from core.schemas.api import DSARRequest
 
         body = DSARRequest(subject_email="user@example.com")
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            resp = await dsar_erase(body=body, tenant_id=tenant_id)
+            with self._patch_process({"users_anonymised": 1, "audit_log_pseudonymised": 4}):
+                resp = await dsar_erase(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
         assert resp["type"] == "erase"
-        assert resp["status"] == "processing"
-        assert resp["deadline_days"] == 30
+        assert resp["status"] == "completed"
+        assert resp["result"]["users_anonymised"] == 1
+        assert "deadline" not in resp and "deadline_days" not in resp
+
+    def test_dsar_erase_is_admin_gated(self):
+        from api.deps import require_tenant_admin
+        from api.v1.compliance import router
+
+        erase_routes = [r for r in router.routes if getattr(r, "path", "") == "/dsar/erase"]
+        assert len(erase_routes) == 1
+        assert require_tenant_admin in erase_routes[0].dependencies
 
     @pytest.mark.asyncio
-    async def test_dsar_erase_has_deadline(self, tenant_id, mock_session):
+    async def test_dsar_failed_processing_is_persisted_and_surfaced(self, tenant_id, mock_session):
         from api.v1.compliance import dsar_erase
         from core.schemas.api import DSARRequest
 
-        body = DSARRequest(subject_email="user@example.com")
-
-        ctx = _patch_tenant_session("compliance", mock_session)
-        try:
-            resp = await dsar_erase(body=body, tenant_id=tenant_id)
-        finally:
-            ctx.stop()
-
-        assert "deadline" in resp
-        assert resp["deadline_days"] == 30
-
-    @pytest.mark.asyncio
-    async def test_dsar_erase_creates_audit_entry(self, tenant_id, mock_session):
-        from api.v1.compliance import dsar_erase
-        from core.schemas.api import DSARRequest
+        async def failing_process(self, session, record):
+            record.status = "failed"
+            record.error = "OperationalError"
+            return record
 
         body = DSARRequest(subject_email="user@example.com")
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            await dsar_erase(body=body, tenant_id=tenant_id)
+            with patch("audit.dsar.DSARHandler.process", failing_process):
+                with pytest.raises(HTTPException) as exc_info:
+                    await dsar_erase(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
-
-        mock_session.add.assert_called_once()
+        assert exc_info.value.status_code == 500
 
     @pytest.mark.asyncio
-    async def test_dsar_export_happy(self, tenant_id, mock_session):
+    async def test_dsar_export_omits_inline_payload_and_points_to_poll(self, tenant_id, mock_session):
         from api.v1.compliance import dsar_export
         from core.schemas.api import DSARRequest
 
         body = DSARRequest(subject_email="user@example.com")
-        # _create_dsar_audit_entry uses add+flush (not execute), then
-        # dsar_export calls execute once for the count query
-        mock_session.execute.return_value = _make_result(scalar_value=500)
-
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            resp = await dsar_export(body=body, tenant_id=tenant_id)
+            with self._patch_process({"format": "json", "audit_log": [{"id": "x"}]}):
+                resp = await dsar_export(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
         assert resp["type"] == "export"
-        assert resp["format"] == "json"
-        assert resp["estimated_records"] == 500
-        assert resp["estimated_size_mb"] == 1.0  # 500 * 0.002
+        assert resp["status"] == "completed"
+        assert "result" not in resp
+        assert resp["poll"].endswith(resp["request_id"])
+        assert "estimated_size_mb" not in resp
 
     @pytest.mark.asyncio
-    async def test_dsar_export_zero_records(self, tenant_id, mock_session):
-        from api.v1.compliance import dsar_export
-        from core.schemas.api import DSARRequest
+    async def test_dsar_status_is_tenant_scoped_and_404s(self, tenant_id, mock_session):
+        from api.v1.compliance import dsar_status
 
-        body = DSARRequest(subject_email="nobody@example.com")
-        mock_session.execute.return_value = _make_result(scalar_value=0)
-
+        mock_session.execute.return_value = _make_result(scalar_one=None)
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            resp = await dsar_export(body=body, tenant_id=tenant_id)
+            with pytest.raises(HTTPException) as exc_info:
+                await dsar_status(request_id=str(uuid.uuid4()), tenant_id=tenant_id)
+            with pytest.raises(HTTPException) as bad_id:
+                await dsar_status(request_id="not-a-uuid", tenant_id=tenant_id)
         finally:
             ctx.stop()
-
-        assert resp["estimated_records"] == 0
-        assert resp["estimated_size_mb"] == 0.0
-
-    @pytest.mark.asyncio
-    async def test_dsar_export_large_dataset(self, tenant_id, mock_session):
-        from api.v1.compliance import dsar_export
-        from core.schemas.api import DSARRequest
-
-        body = DSARRequest(subject_email="power@example.com")
-        mock_session.execute.return_value = _make_result(scalar_value=10000)
-
-        ctx = _patch_tenant_session("compliance", mock_session)
-        try:
-            resp = await dsar_export(body=body, tenant_id=tenant_id)
-        finally:
-            ctx.stop()
-
-        assert resp["estimated_records"] == 10000
-        assert resp["estimated_size_mb"] == 20.0
+        assert exc_info.value.status_code == 404
+        assert bad_id.value.status_code == 404
 
     @pytest.mark.asyncio
     async def test_evidence_package_happy(self, tenant_id, mock_session):

@@ -87,9 +87,11 @@ async def test_signature_validation():
         os.environ.pop("CDC_WEBHOOK_SECRET_TESTCONN", None)
 
 
-def test_trigger_matches_workflow():
+@pytest.mark.asyncio
+async def test_trigger_matches_workflow():
     """Registered triggers match against CDC events and return workflow IDs."""
-    register_trigger(
+    await register_trigger(
+        tenant_id="t-1",
         connector="hubspot",
         event_type="deal.closed",
         resource_type="deal",
@@ -101,8 +103,55 @@ def test_trigger_matches_workflow():
         "resource_type": "deal",
         "resource_id": "d-99",
     }
-    matched = evaluate_triggers(event, tenant_id="t-1")
+    matched = await evaluate_triggers(event, tenant_id="t-1")
     assert "wf-onboard-customer" in matched
+
+
+@pytest.mark.asyncio
+async def test_triggers_are_tenant_scoped():
+    """Tenant A's trigger must never fire for tenant B's event (no global registry)."""
+    await register_trigger(
+        tenant_id="tenant-a",
+        connector="*",
+        event_type="*",
+        resource_type="*",
+        workflow_id="wf-tenant-a",
+    )
+    event = {"connector": "xero", "event_type": "invoice.created", "resource_type": "invoice"}
+    assert await evaluate_triggers(event, tenant_id="tenant-a") == ["wf-tenant-a"]
+    assert await evaluate_triggers(event, tenant_id="tenant-b") == []
+    assert await evaluate_triggers(event, tenant_id="") == []
+
+
+@pytest.mark.asyncio
+async def test_webhook_evaluates_triggers_for_event_tenant_only():
+    """End to end: the receiver only matches the sending tenant's rules."""
+    await register_trigger(
+        tenant_id="tenant-b",
+        connector="salesforce",
+        event_type="contact.updated",
+        resource_type="contact",
+        workflow_id="wf-b",
+    )
+    payload = {"event_type": "contact.updated", "resource_type": "contact", "resource_id": "c-1"}
+    result_a = await handle_cdc_webhook(
+        "tenant-a", "salesforce", payload, signature=_sign(payload, connector="salesforce"),
+    )
+    assert result_a["status"] == "accepted"
+    assert get_stored_events(tenant_id="tenant-a")[0]["processing_outcome"]["matched_workflows"] == []
+    result_b = await handle_cdc_webhook(
+        "tenant-b", "salesforce", payload,
+        signature=_sign(payload, tenant_id="tenant-b", connector="salesforce"),
+    )
+    assert result_b["status"] == "accepted"
+    assert get_stored_events(tenant_id="tenant-b")[0]["processing_outcome"]["matched_workflows"] == ["wf-b"]
+
+
+def test_sql_trigger_store_rejects_non_uuid_tenant():
+    """Strict-runtime store fails closed for a tenant id that cannot be RLS-scoped."""
+    from core.cdc.triggers import SqlCDCTriggerStore
+
+    assert asyncio.run(SqlCDCTriggerStore().list_active("not-a-uuid")) == []
 
 
 @pytest.mark.asyncio
@@ -130,11 +179,8 @@ async def test_duplicate_event_skipped():
     assert len(get_stored_events(tenant_id="tenant-b")) == 1
 
 
-@pytest.mark.asyncio
-async def test_polling_detects_new_records():
-    """Poller returns empty list for connectors without a registered poller function."""
-    from core.cdc.poller import poll_connector
+def test_global_poller_removed():
+    """The stub poller (single global HUBSPOT_ACCESS_TOKEN, no tenant) is gone."""
+    import importlib.util
 
-    records = await poll_connector("unknown_connector", last_sync_at="2026-01-01T00:00:00+00:00")
-    assert isinstance(records, list)
-    assert len(records) == 0
+    assert importlib.util.find_spec("core.cdc.poller") is None

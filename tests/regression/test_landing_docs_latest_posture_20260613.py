@@ -95,7 +95,7 @@ def test_readme_and_deploy_docs_describe_current_cloud_run_path() -> None:
     assert "Legacy Kubernetes material is not the current production path" in readme
     assert "React 19" in readme
     assert "Python 3.12" in readme
-    assert "$2/month" in readme
+    assert "$99/month" in readme
     assert "$499/month" in readme
     assert "GKE Production" not in readme
 

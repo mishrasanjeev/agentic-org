@@ -373,14 +373,21 @@ class TestGrantexRegistration:
 
 
 class TestGrantexMiddleware:
-    def test_is_grantex_token_rs256(self):
-        # RS256 header: {"alg":"RS256","typ":"JWT"}
+    def test_is_grantex_token_rs256(self, monkeypatch):
+        # Audit 2026-09-13: RS256 alone is not enough — the unverified ``iss``
+        # must match the configured Grantex issuer, otherwise the token goes
+        # through the legacy validator and never triggers a JWKS fetch.
         import base64
 
         from auth.grantex_middleware import _is_grantex_token
+
+        monkeypatch.setenv("AGENTICORG_GRANTEX_ISSUER", "https://grantex.test")
         header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
-        fake_token = f"{header}.payload.signature"
-        assert _is_grantex_token(fake_token) is True
+        grantex_payload = base64.urlsafe_b64encode(b'{"iss":"https://grantex.test"}').rstrip(b"=").decode()
+        other_payload = base64.urlsafe_b64encode(b'{"iss":"https://other.idp"}').rstrip(b"=").decode()
+        assert _is_grantex_token(f"{header}.{grantex_payload}.signature") is True
+        assert _is_grantex_token(f"{header}.{other_payload}.signature") is False
+        assert _is_grantex_token(f"{header}.payload.signature") is False
 
     def test_is_grantex_token_hs256(self):
         import base64

@@ -6,12 +6,12 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_current_user
 from api.route_metadata import route_meta
 from core.push.sender import (
     remove_subscription,
     save_subscription,
-    send_push_notification,
+    send_push_notification_for_user,
 )
 from core.push.vapid import get_vapid_keys
 
@@ -47,6 +47,14 @@ class PushTestResponse(BaseModel):
     sent: int
     failed: int
     stale_removed: int
+
+
+def _user_id(user: dict) -> str:
+    """Fail closed: push subscriptions are per user, so a subject is required."""
+    user_id = str(user.get("sub") or "").strip()
+    if not user_id:
+        raise HTTPException(401, "Authenticated user subject required")
+    return user_id
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
@@ -86,8 +94,10 @@ async def get_vapid_public_key():
 async def subscribe(
     body: SubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
 ):
-    """Register a push subscription for the authenticated tenant."""
+    """Register a push subscription for the authenticated user in their tenant."""
+    user_id = _user_id(user)
     subscription_dict = {
         "endpoint": body.subscription.endpoint,
         "keys": {
@@ -95,7 +105,7 @@ async def subscribe(
             "auth": body.subscription.keys.auth,
         },
     }
-    await save_subscription(tenant_id, subscription_dict)
+    await save_subscription(tenant_id, subscription_dict, user_id=user_id)
     _log.info("push_subscribed", tenant_id=tenant_id)
     return {"status": "subscribed"}
 
@@ -112,9 +122,10 @@ async def subscribe(
 async def unsubscribe(
     body: UnsubscribeRequest,
     tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
 ):
-    """Remove a push subscription for the authenticated tenant."""
-    await remove_subscription(tenant_id, body.endpoint)
+    """Remove one of the authenticated user's push subscriptions."""
+    await remove_subscription(tenant_id, body.endpoint, user_id=_user_id(user))
     _log.info("push_unsubscribed", tenant_id=tenant_id)
     return {"status": "unsubscribed"}
 
@@ -130,10 +141,12 @@ async def unsubscribe(
 )
 async def send_test_notification(
     tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
 ):
-    """Send a test push notification to all subscriptions for the tenant."""
-    result = await send_push_notification(
+    """Send a test push notification to the caller's own subscriptions."""
+    result = await send_push_notification_for_user(
         tenant_id=tenant_id,
+        user_id=_user_id(user),
         title="AgenticOrg Test",
         body="Push notifications are working! You will receive alerts for pending approvals.",
         data={"url": "/dashboard/approvals"},

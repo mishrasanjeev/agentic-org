@@ -164,35 +164,21 @@ async def get_subscription(
 ) -> dict[str, Any]:
     """Return the current subscription status for the authenticated tenant.
 
-    Reads from Redis (the source of truth set by the webhook activation).
+    Reads the ``billing_subscriptions`` row (source of truth) and warms the
+    Redis cache; Redis is only consulted when the database is unavailable.
     """
-    from core.async_redis import get_async_redis
+    from core.billing.subscriptions import get_subscription as _get_subscription
 
-    redis = await get_async_redis()
-    if redis is None:
-        return {
-            "tenant_id": tenant_id, "plan": "free", "tier": "free",
-            "provider": "", "order_id": "", "is_paid": False,
-        }
-    plan_raw = await redis.get(f"tenant:{tenant_id}:plan")
-    plan = (plan_raw.decode() if isinstance(plan_raw, bytes) else plan_raw) or "free"
-
-    tier_raw = await redis.get(f"tenant_tier:{tenant_id}")
-    tier = (tier_raw.decode() if isinstance(tier_raw, bytes) else tier_raw) or "free"
-
-    provider_raw = await redis.get(f"tenant:{tenant_id}:billing_provider")
-    provider = (provider_raw.decode() if isinstance(provider_raw, bytes) else provider_raw) or ""
-
-    order_id_raw = await redis.get(f"tenant:{tenant_id}:billing_order_id")
-    order_id = (order_id_raw.decode() if isinstance(order_id_raw, bytes) else order_id_raw) or ""
-
+    sub = await _get_subscription(tenant_id)
     return {
         "tenant_id": tenant_id,
-        "plan": plan,
-        "tier": tier,
-        "provider": provider,
-        "order_id": order_id,
-        "is_paid": plan not in ("free", ""),
+        "plan": sub["plan"],
+        "tier": sub["tier"],
+        "provider": sub["provider"],
+        "order_id": sub["order_id"],
+        "is_paid": sub["is_paid"],
+        "status": sub["status"],
+        "current_period_end": sub["current_period_end"],
     }
 
 
@@ -208,18 +194,12 @@ async def get_subscription(
 async def get_usage_endpoint(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
     """Return current usage counters for the authenticated tenant.
 
-    Codex 2026-04-23 blocker F: ``get_usage`` uses a synchronous Redis
-    client. Calling it directly from an async route blocks the event
-    loop for the duration of every Redis round-trip — which under real
-    latency stalls every concurrent request on the same worker. Wrap
-    in ``asyncio.to_thread`` so the blocking I/O runs in the thread
-    pool.
+    Run counters come from the shared async Redis pool (metered by the
+    agent runner); the agent count is a live DB count so it cannot drift.
     """
-    import asyncio
-
     from core.billing.usage_tracker import get_usage
 
-    return await asyncio.to_thread(get_usage, tenant_id)
+    return await get_usage(tenant_id)
 
 
 # Codex 2026-04-22 release-signoff: "Billing live-checkout still needs
@@ -355,28 +335,17 @@ async def subscribe_stripe(
     import asyncio
 
     try:
-        from core.async_redis import get_async_redis
+        from core.billing.subscriptions import get_subscription as _get_subscription
 
-        redis = await get_async_redis()
-        if redis is not None:
-            current_plan_raw = await redis.get(f"tenant:{tenant_id}:plan")
-            current_plan = (
-                current_plan_raw.decode()
-                if isinstance(current_plan_raw, bytes)
-                else current_plan_raw
-            ) or "free"
-            sub_id_raw = await redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
-            sub_id = (
-                sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw
-            ) or ""
-            if sub_id and current_plan != "free":
-                from core.billing.stripe_client import change_subscription_plan
+        current = await _get_subscription(tenant_id)
+        if current["is_paid"] and current["provider"] == "stripe" and current["order_id"]:
+            from core.billing.stripe_client import change_subscription_plan
 
-                return await asyncio.to_thread(
-                    change_subscription_plan,
-                    tenant_id=tenant_id,
-                    plan=body.plan,
-                )
+            return await asyncio.to_thread(
+                change_subscription_plan,
+                tenant_id=tenant_id,
+                plan=body.plan,
+            )
 
         result = await asyncio.to_thread(
             create_checkout_session,
@@ -739,34 +708,35 @@ async def cancel_subscription(
     """Cancel a subscription.
 
     Bound to the authenticated tenant — the caller cannot cancel
-    another tenant's subscription.
+    another tenant's subscription. The provider and subscription id are
+    resolved from the server-side ``billing_subscriptions`` row; the
+    client-supplied ``subscription_id`` is never trusted.
     """
-    from core.async_redis import get_async_redis
+    import asyncio
 
-    redis = await get_async_redis()
-    if redis is None:
-        raise HTTPException(503, "Billing state store unavailable")
-
-    provider_raw = await redis.get(f"tenant:{tenant_id}:billing_provider")
-    provider = (
-        provider_raw.decode() if isinstance(provider_raw, bytes) else (provider_raw or "stripe")
+    from core.billing.subscriptions import (
+        deactivate_subscription,
+    )
+    from core.billing.subscriptions import (
+        get_subscription as _get_subscription,
     )
 
-    if provider == "plural":
-        await redis.set(f"tenant_tier:{tenant_id}", "free")
-        await redis.set(f"tenant:{tenant_id}:plan", "free")
-        await redis.delete(f"tenant:{tenant_id}:billing_order_id")
+    current = await _get_subscription(tenant_id)
+    if not current["is_paid"]:
+        raise HTTPException(
+            400,
+            "No active subscription found for this tenant. "
+            "Contact support if you believe this is an error.",
+        )
+
+    if current["provider"] == "plural":
+        await deactivate_subscription(tenant_id, status="cancelled")
         logger.info("plural_subscription_cancelled", tenant_id=tenant_id)
         return {"cancelled": True, "provider": "plural", "tenant_id": tenant_id}
 
-    # Stripe: resolve subscription_id from server-side state — NEVER
-    # trust the caller-supplied ID.
-    import asyncio
-
     from core.billing.stripe_client import cancel_subscription as _cancel
 
-    sub_id_raw = await redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
-    sub_id = (sub_id_raw.decode() if isinstance(sub_id_raw, bytes) else sub_id_raw) or ""
+    sub_id = current["order_id"]
     if not sub_id:
         logger.warning("stripe_cancel_no_server_side_sub", tenant_id=tenant_id)
         raise HTTPException(
@@ -779,10 +749,8 @@ async def cancel_subscription(
     if not success:
         raise HTTPException(status_code=502, detail="Failed to cancel subscription")
 
-    # Downgrade tenant on successful cancellation
-    await redis.set(f"tenant_tier:{tenant_id}", "free")
-    await redis.set(f"tenant:{tenant_id}:plan", "free")
-    await redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
+    # Downgrade tenant on successful cancellation (DB row + cache)
+    await deactivate_subscription(tenant_id, status="cancelled")
     return {"cancelled": True, "provider": "stripe", "tenant_id": tenant_id}
 
 

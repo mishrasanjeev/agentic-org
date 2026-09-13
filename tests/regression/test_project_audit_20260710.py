@@ -300,6 +300,7 @@ def test_valid_old_stripe_event_is_processed_on_retry() -> None:
         plan="pro",
         subscription_id="sub-1",
         customer_id="cus-1",
+        subscription=None,  # durable-subscription row carries period info when Stripe returns it
     )
 
 

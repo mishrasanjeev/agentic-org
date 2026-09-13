@@ -276,7 +276,7 @@ def test_tc_wf_005_hitl_step_assignee_role_resolved_with_fallback() -> None:
     to someone."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
     hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
-        :1500
+        :2200
     ]
     assert 'step_result.get(' in hitl_section
     assert '"assignee_role"' in hitl_section
@@ -288,7 +288,7 @@ def test_tc_wf_005_hitl_step_priority_pulled_from_step_def_with_default() -> Non
     set it — high/urgent must be opt-in."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
     hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
-        :1500
+        :2200
     ]
     assert 'priority=step_def.get("priority", "normal")' in hitl_section
 
@@ -299,6 +299,9 @@ def test_tc_wf_005_hitl_timeout_default_is_four_hours() -> None:
     stale-forever (they'd silently block workflows)."""
     src = (REPO / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
     hitl_section = src.split('if created and step_status == "waiting_hitl":', 1)[1][
-        :1500
+        :2200
     ]
-    assert 'timeout_h = step_def.get("timeout_hours", 4)' in hitl_section
+    assert "timeout_h = hitl_timeout_hours(step_result, step_def)" in hitl_section
+    from workflows.run_sync import hitl_timeout_hours
+
+    assert hitl_timeout_hours({}, {}) == 4.0

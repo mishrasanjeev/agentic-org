@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import uuid
@@ -23,6 +24,7 @@ from workflows.step_results import (
     ExternalWriteConfirmationMissingError,
     MissingAgentConfigError,
     MissingLLMProviderConfigError,
+    NotifyActionContainedError,
     NotifySideEffectNotConfiguredError,
     ParallelChildError,
     UnknownStepStatusError,
@@ -925,7 +927,61 @@ async def _execute_notify(step: dict, state: dict) -> dict[str, Any]:
     if connector in {"email", "sendgrid", "smtp"} and to and html:
         from core.email import send_email
 
-        if send_email(str(to), str(subject), str(html)):
+        # Same governance boundary as connector writes: an email is a
+        # customer-facing side effect, so it goes through the action policy
+        # with the run's tenant/company/domain before anything is sent.
+        tenant_id = str(state.get("tenant_id") or "")
+        requested_company_id = step.get("company_id") or _state_lookup(state, "company_id")
+        domain = step.get("domain") or _state_lookup(state, "domain")
+        if is_strict_runtime_env(settings.env) or tenant_id or requested_company_id or domain:
+            from core.governance.action_policy import (
+                ActionContext,
+                database_feature_flag_resolver,
+                evaluate_action,
+            )
+
+            company_id: str | None = None
+            if requested_company_id:
+                try:
+                    company_id = str(await _validated_workflow_company(tenant_id, requested_company_id))
+                except ValueError as exc:
+                    return failure_result(
+                        step_id=step["id"],
+                        step_type="notify",
+                        failure=NotifyActionContainedError(
+                            step_id=step["id"], connector=connector, reason=str(exc)
+                        ),
+                    )
+            decision = await evaluate_action(
+                "email:send_email",
+                context=ActionContext(
+                    tenant_id=tenant_id or None,
+                    company_id=company_id,
+                    domain=domain,
+                    runtime_env=settings.env,
+                ),
+                feature_flags=database_feature_flag_resolver,
+            )
+            if not decision.dispatch_allowed:
+                governance = decision.to_dict()
+                logger.warning(
+                    "notify_action_contained",
+                    extra={"step_id": step["id"], "connector": connector, "reason": decision.reason},
+                )
+                return failure_result(
+                    step_id=step["id"],
+                    step_type="notify",
+                    failure=NotifyActionContainedError(
+                        step_id=step["id"],
+                        connector=connector,
+                        reason=str(decision.reason),
+                        governance=governance,
+                    ),
+                    output={"governance": governance},
+                )
+
+        # send_email is synchronous SMTP; never block the event loop.
+        if await asyncio.to_thread(send_email, str(to), str(subject), str(html)):
             return {
                 "step_id": step["id"],
                 "type": "notify",

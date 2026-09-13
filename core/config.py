@@ -108,6 +108,13 @@ class Settings(BaseSettings):
 
     # Auth
     auth_provider: str = "grantex"
+    # Grantex bearer tokens are accepted only when ``iss`` matches this issuer
+    # and ``aud`` matches this audience (auth/grantex_middleware.py). Audience
+    # is mandatory in strict runtimes. Env: AGENTICORG_GRANTEX_ISSUER/_AUDIENCE.
+    grantex_issuer: str = ""
+    grantex_audience: str = ""
+    # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
+    route_enforcement_mode: str = "enforce"
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60

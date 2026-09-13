@@ -65,8 +65,10 @@ def test_tc_hitl_001_default_filters_to_pending_only() -> None:
     list_block = src.split('@router.get("/approvals"', 1)[1].split(
         "@router.", 1
     )[0]
-    assert "if not status:" in list_block
+    # Default branch (no ``status`` and no ``include_expired``) stays pending-only.
+    assert "# Default: show only pending items" in list_block
     assert 'HITLQueue.status == "pending"' in list_block
+    assert "include_expired: bool = False" in list_block
 
 
 def test_tc_hitl_001_pending_excludes_expired_items() -> None:

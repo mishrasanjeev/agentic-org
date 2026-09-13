@@ -649,7 +649,11 @@ async def _execute_workflow_bg(
 
                     # Create HITLQueue entry for approval steps
                     if created and step_status == "waiting_hitl":
-                        timeout_h = step_def.get("timeout_hours", 4)
+                        from core.push.sender import notify_approval_created as _push_approval_created
+                        from workflows.run_sync import hitl_timeout_hours, schedule_hitl_timeout
+
+                        timeout_h = hitl_timeout_hours(step_result, step_def)
+                        hitl_expires_at = datetime.now(UTC) + timedelta(hours=timeout_h)
                         hitl_agent_id = step_row.agent_id
                         if not hitl_agent_id:
                             hitl_agent_id = (
@@ -660,8 +664,7 @@ async def _execute_workflow_bg(
                                 )
                             ).scalar_one_or_none()
                         if hitl_agent_id:
-                            session.add(
-                                HITLQueue(
+                            hitl_item = HITLQueue(
                                     tenant_id=tenant_id,
                                     workflow_run_id=run_id,
                                     agent_id=hitl_agent_id,
@@ -681,9 +684,12 @@ async def _execute_workflow_bg(
                                         "step_id": step_id,
                                         "engine_run_id": engine_run_id,
                                     },
-                                    expires_at=datetime.now(UTC)
-                                    + timedelta(hours=timeout_h),
-                                )
+                                    expires_at=hitl_expires_at,
+                            )
+                            session.add(hitl_item)
+                            schedule_hitl_timeout(engine_run_id, step_id, hitl_expires_at)
+                            await _push_approval_created(
+                                str(tenant_id), item_id=str(hitl_item.id), action=step_id
                             )
 
                 db_run.steps_completed = _run_steps_completed(state)

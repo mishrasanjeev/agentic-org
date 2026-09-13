@@ -192,8 +192,9 @@ def test_k_f_billing_async_routes_wrap_sync_calls() -> None:
     tree = ast.parse(src)
 
     # Collect all async functions that reference the sync-billing helpers
+    # get_usage became a native coroutine (core.billing.usage_tracker uses
+    # core.async_redis) on 2026-09-13 and is awaited directly.
     sync_helpers = {
-        "get_usage",
         "create_payment_order",
         "get_order_status",
         "lookup_order_details",

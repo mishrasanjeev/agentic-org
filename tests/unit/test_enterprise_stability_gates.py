@@ -587,7 +587,7 @@ def test_auth_billing_connector_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 45
+    assert len(routes) == 46  # 2026-09-13: +POST /auth/logout-all (session revocation)
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -1038,7 +1038,7 @@ def test_platform_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 35
+    assert len(routes) == 36  # 2026-09-13: +GET /dsar/{request_id} (DSAR poll)
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)

@@ -39,6 +39,89 @@ class WorkflowTimeoutError(Exception):
     """Raised when a workflow exceeds its configured timeout_hours."""
 
 
+class StepFailedError(Exception):
+    """Internal: carries a ``status == "failed"`` step result through ``retry_with_backoff``."""
+
+    def __init__(self, result: dict[str, Any]) -> None:
+        super().__init__(str(result.get("error") or "step failed"))
+        self.result = result
+
+
+_RETRY_DIRECTIVE_RE = re.compile(r"retry\((\d+)\)")
+_READ_ONLY_ACTION_PREFIXES = (
+    "analy",
+    "audit",
+    "check",
+    "classif",
+    "compare",
+    "describe",
+    "detect",
+    "draft",
+    "estimate",
+    "evaluate",
+    "extract",
+    "fetch",
+    "find",
+    "forecast",
+    "generate",
+    "get",
+    "identify",
+    "list",
+    "lookup",
+    "monitor",
+    "plan",
+    "process",
+    "query",
+    "rank",
+    "read",
+    "recommend",
+    "reconcile",
+    "research",
+    "retrieve",
+    "review",
+    "score",
+    "search",
+    "summar",
+    "validate",
+    "verify",
+)
+_WRITE_ACTION_HINTS = (
+    "activate",
+    "approve",
+    "cancel",
+    "charge",
+    "create",
+    "delete",
+    "deploy",
+    "disburse",
+    "execute",
+    "file",
+    "initiate",
+    "launch",
+    "mutate",
+    "notify",
+    "pay",
+    "post",
+    "publish",
+    "queue",
+    "refund",
+    "release",
+    "remove",
+    "schedule",
+    "send",
+    "set_",
+    "setup",
+    "spend",
+    "submit",
+    "sync",
+    "transfer",
+    "update",
+    "upload",
+    "upsert",
+    "write",
+)
+
+
 class WorkflowEngine:
     """Execute workflow definitions with dependency resolution, retry, timeout, and HITL support."""
 
@@ -732,11 +815,20 @@ class WorkflowEngine:
 
     @staticmethod
     def _step_allows_failure(step: dict) -> bool:
+        """Return True when a failed step must not fail the run.
+
+        ``on_failure`` may combine a retry directive with a fallback, e.g.
+        ``"retry(3)"`` (fail the run once retries are exhausted) or
+        ``"retry(3) then continue"`` / ``"retry(3), ignore"`` (continue after
+        the retries are exhausted). A bare ``retry(N)`` never allows failure.
+        """
         on_failure = str(step.get("on_failure", "")).strip().lower()
+        fallback = _RETRY_DIRECTIVE_RE.sub("", on_failure)
+        fallback_tokens = {token for token in re.split(r"[^a-z_]+", fallback) if token}
         return bool(
             step.get("optional") is True
             or step.get("allow_failure") is True
-            or on_failure in {"continue", "ignore", "optional"}
+            or fallback_tokens & {"continue", "ignore", "optional"}
         )
 
     @staticmethod
@@ -851,7 +943,24 @@ class WorkflowEngine:
         """Execute a step, optionally wrapping in retry_with_backoff.
 
         The step may declare ``on_failure: "retry(N)"`` where *N* is the max
-        number of retry attempts.
+        number of retry attempts. Step handlers return failures as
+        ``{"status": "failed"}`` dicts rather than raising, so a failed
+        result is re-raised as :class:`StepFailedError` inside the retry loop
+        and unwrapped back into the final result once retries are spent.
+
+        Retry rule (a retry must never duplicate a side effect):
+
+        * ``connector_tool`` steps (and ``agent`` steps that resolve to a
+          connector tool) retry when the tool is read-only by name
+          (``get_*``/``list_*``/``fetch_*``/...) or the step carries an
+          ``idempotency_key``;
+        * ``agent`` steps retry only when ``action`` is read-only or the step
+          carries an ``idempotency_key`` (the key is forwarded to the connector
+          gateway, which dedupes the replay);
+        * ``http`` steps retry only with method ``GET``;
+        * ``notify`` steps and writes without an idempotency key are never
+          retried — ``retry(N)`` on them is ignored and the first failure
+          stands.
         """
         on_failure = step.get("on_failure", "")
         max_retries = self._parse_retry_count(on_failure)
@@ -859,20 +968,67 @@ class WorkflowEngine:
         # Inject the built context into state so step handlers can use it.
         state_with_context = {**state, "context": context, "_state_store": self.state_store}
 
+        if max_retries > 0 and self._step_is_retryable(step):
+
+            async def _attempt() -> dict[str, Any]:
+                result = await execute_step(step, state_with_context)
+                if isinstance(result, dict) and result.get("status") == "failed":
+                    raise StepFailedError(result)
+                return result
+
+            try:
+                return await retry_with_backoff(func=_attempt, max_retries=max_retries)
+            except StepFailedError as exc:
+                final = dict(exc.result)
+                final["retry_attempts"] = max_retries
+                return final
+
         if max_retries > 0:
-            return await retry_with_backoff(
-                func=lambda: execute_step(step, state_with_context),
-                max_retries=max_retries,
+            logger.info(
+                "workflow_retry_directive_ignored_non_idempotent",
+                step_id=step.get("id"),
+                step_type=step.get("type", "agent"),
             )
 
         return await execute_step(step, state_with_context)
+
+    @staticmethod
+    def _is_read_only_name(name: Any) -> bool:
+        normalized = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if not normalized:
+            return False
+        if any(hint in normalized for hint in _WRITE_ACTION_HINTS):
+            return False
+        return normalized.startswith(_READ_ONLY_ACTION_PREFIXES)
+
+    @classmethod
+    def _step_is_retryable(cls, step: dict) -> bool:
+        """Apply the retry rule documented on ``_execute_with_retry``."""
+        from workflows.step_types import _connector_tool_ref_from_step
+
+        step_type = str(step.get("type", "agent")).strip().lower()
+        if step_type in {"notify", "sub_workflow", "human_in_loop", "wait", "wait_for_event"}:
+            return False
+        if step_type == "http":
+            return str(step.get("method", "GET")).strip().upper() == "GET"
+
+        connector, tool = _connector_tool_ref_from_step(step, allow_action_tool=step_type == "connector_tool")
+        if step_type == "connector_tool" or (step_type == "agent" and connector and tool):
+            if step.get("idempotency_key"):
+                return True
+            return cls._is_read_only_name(tool)
+        if step_type == "agent":
+            if step.get("idempotency_key"):
+                return True
+            return cls._is_read_only_name(step.get("action", "process"))
+        return False
 
     @staticmethod
     def _parse_retry_count(on_failure: str) -> int:
         """Extract the retry count from an ``on_failure`` directive like ``retry(3)``."""
         if not on_failure:
             return 0
-        match = re.match(r"retry\((\d+)\)", on_failure.strip())
+        match = _RETRY_DIRECTIVE_RE.match(str(on_failure).strip())
         if match:
             return int(match.group(1))
         return 0

@@ -263,6 +263,21 @@ async def sso_callback(
 # ── Admin CRUD ────────────────────────────────────────────────────
 
 
+async def _seal_client_secret(config: dict, tenant_id: uuid.UUID) -> dict:
+    """Never persist ``client_secret`` in plaintext JSONB.
+
+    The secret is encrypted with ``core.crypto.encrypt_for_tenant`` and stored
+    under ``client_secret_enc``; the plaintext key is dropped from the row.
+    """
+    from core.crypto import encrypt_for_tenant
+
+    sealed = {k: v for k, v in dict(config).items() if k != "client_secret"}
+    plaintext = config.get("client_secret")
+    if isinstance(plaintext, str) and plaintext:
+        sealed["client_secret_enc"] = await encrypt_for_tenant(plaintext, tenant_id)
+    return sealed
+
+
 class SSOConfigIn(BaseModel):
     provider_key: str = Field(..., min_length=1, max_length=50)
     provider_type: str = Field("oidc", pattern="^(oidc|saml)$")
@@ -334,12 +349,15 @@ async def upsert_config(
     tid = uuid.UUID(tenant_id)
     if body.provider_type == "oidc":
         try:
-            OIDCProvider(body.provider_key, body.config)
+            # Validate shape only; the secret is sealed below and must not
+            # pass through the legacy-plaintext warning path.
+            OIDCProvider(body.provider_key, {k: v for k, v in body.config.items() if k != "client_secret"})
         except (KeyError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
                 detail="OIDC config must use an HTTPS public issuer and required OIDC fields",
             ) from exc
+    stored_config = await _seal_client_secret(body.config, tid)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
             select(SSOConfig).where(
@@ -348,13 +366,18 @@ async def upsert_config(
             )
         )
         config = result.scalar_one_or_none()
+        if config is not None and "client_secret_enc" not in stored_config:
+            # Re-saving without a secret keeps the one already sealed.
+            existing_enc = (config.config or {}).get("client_secret_enc")
+            if existing_enc:
+                stored_config["client_secret_enc"] = existing_enc
         if config is None:
             config = SSOConfig(
                 tenant_id=tid,
                 provider_key=body.provider_key,
                 provider_type=body.provider_type,
                 display_name=body.display_name,
-                config=body.config,
+                config=stored_config,
                 enabled=body.enabled,
                 jit_provisioning=body.jit_provisioning,
                 default_role=body.default_role,
@@ -364,7 +387,7 @@ async def upsert_config(
         else:
             config.provider_type = body.provider_type
             config.display_name = body.display_name
-            config.config = body.config
+            config.config = stored_config
             config.enabled = body.enabled
             config.jit_provisioning = body.jit_provisioning
             config.default_role = body.default_role

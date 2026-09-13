@@ -7,6 +7,7 @@ import logging
 import os
 import re
 import uuid
+from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request
@@ -20,6 +21,7 @@ from auth.jwt import create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
 from auth.one_time_codes import peek as peek_code
+from core.auth_state import invalidate_user_session_state
 from core.config import settings
 from core.database import async_session_factory
 from core.email import send_invite_email
@@ -324,10 +326,10 @@ async def accept_invite(body: AcceptInviteRequest):
         if invite_email and invite_email != user.email:
             raise HTTPException(status_code=400, detail="Invite token does not match invited user")
 
-        user.password_hash = _bcrypt.hashpw(
-            body.password.encode(),
-            _bcrypt.gensalt(rounds=12),
-        ).decode()
+        # bcrypt cost-12 hashing is CPU-bound (~250ms): keep it off the loop.
+        user.password_hash = await asyncio.to_thread(
+            lambda: _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+        )
         user.status = "active"
         if body.name and body.name.strip():
             user.name = body.name.strip()
@@ -428,7 +430,11 @@ async def deactivate_member(user_id: str, request: Request):
             raise HTTPException(status_code=400, detail="Cannot deactivate yourself")
 
         user.status = "inactive"
+        # Revoke every outstanding session: tokens issued before this
+        # watermark are rejected by the auth middleware (v6z17).
+        user.sessions_invalid_before = datetime.now(UTC)
         session.add(user)
         await session.commit()
 
+    await invalidate_user_session_state(tenant_id, user.email)
     return {"status": "deactivated", "user_id": user_id}

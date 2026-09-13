@@ -17,6 +17,7 @@ Reference: https://stripe.com/docs/api
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -47,7 +48,7 @@ PLAN_PRICE_MAP: dict[str, str] = {
 
 # Plan -> USD amount in cents for dynamic Checkout price_data.
 PLAN_AMOUNT_USD: dict[str, int] = {
-    "pro": 2_00,  # $2/mo
+    "pro": 99_00,  # $99/mo
     "enterprise": 499_00,  # $499/mo
 }
 
@@ -106,6 +107,18 @@ def _plan_from_subscription(subscription: Any) -> str:
     return _price_to_plan(price_id)
 
 
+def _retrieve_subscription(stripe_mod: Any, subscription_id: str) -> Any:
+    """Best-effort fetch of the Stripe subscription for its period bounds."""
+    if not subscription_id:
+        return None
+    try:
+        return stripe_mod.Subscription.retrieve(subscription_id)
+    # enterprise-gate: broad-except-ok reason=period-bounds-are-optional-activation-still-persists
+    except Exception:
+        logger.warning("stripe_subscription_retrieve_failed", subscription_id=subscription_id)
+        return None
+
+
 def _customer_cache_key(tenant_id: str) -> str:
     return f"tenant:{tenant_id}:stripe_customer_id"
 
@@ -117,9 +130,9 @@ def _read_cached_customer_id(tenant_id: str) -> str:
     local acceleration for reusing an existing customer id.
     """
     try:
-        from core.billing.usage_tracker import _get_redis
+        from core.billing.usage_tracker import sync_redis_client
 
-        redis = _get_redis()
+        redis = sync_redis_client()
         stored = redis.get(_customer_cache_key(tenant_id))
     except (ImportError, RuntimeError, OSError, RedisError) as exc:
         logger.warning(
@@ -133,9 +146,9 @@ def _read_cached_customer_id(tenant_id: str) -> str:
 
 def _cache_customer_id(tenant_id: str, customer_id: str) -> None:
     try:
-        from core.billing.usage_tracker import _get_redis
+        from core.billing.usage_tracker import sync_redis_client
 
-        redis = _get_redis()
+        redis = sync_redis_client()
         redis.set(_customer_cache_key(tenant_id), customer_id)
     except (ImportError, RuntimeError, OSError, RedisError) as exc:
         logger.warning(
@@ -144,6 +157,29 @@ def _cache_customer_id(tenant_id: str, customer_id: str) -> None:
             customer_id=customer_id,
             error_type=type(exc).__name__,
         )
+
+
+def _stored_customer_id(tenant_id: str) -> str:
+    """Customer id from the billing_subscriptions row (cache miss fallback)."""
+    from core.billing.subscriptions import get_subscription_sync
+
+    try:
+        sub = get_subscription_sync(tenant_id)
+    # enterprise-gate: broad-except-ok reason=portal-lookup-falls-back-to-no-customer-and-raises-value-error
+    except Exception:
+        logger.warning("stripe_customer_lookup_db_unavailable", tenant_id=tenant_id)
+        return ""
+    return str(sub.get("provider_customer_id") or "") if sub.get("provider") == "stripe" else ""
+
+
+def stored_stripe_subscription_id(tenant_id: str) -> str:
+    """Return the tenant's active Stripe subscription id from the DB row."""
+    from core.billing.subscriptions import get_subscription_sync
+
+    sub = get_subscription_sync(tenant_id)
+    if sub.get("provider") != "stripe" or not sub.get("is_paid"):
+        return ""
+    return str(sub.get("order_id") or "")
 
 
 def _checkout_line_item(plan: str) -> dict[str, Any]:
@@ -340,6 +376,7 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
                 plan=plan,
                 subscription_id=data_obj.get("subscription", ""),
                 customer_id=data_obj.get("customer", ""),
+                subscription=_retrieve_subscription(s, data_obj.get("subscription", "")),
             )
 
         result.update(
@@ -395,24 +432,49 @@ def handle_webhook(payload: bytes, sig_header: str) -> dict[str, Any]:
 # ── Subscription Management ─────────────────────────────────────────
 
 
+def _period_bounds(subscription: Any) -> tuple[datetime | None, datetime | None]:
+    """Stripe reports the billing period as unix seconds on the subscription."""
+
+    def _ts(value: Any) -> datetime | None:
+        try:
+            return datetime.fromtimestamp(int(value), tz=UTC) if value else None
+        except (TypeError, ValueError, OSError):
+            return None
+
+    if subscription is None:
+        return None, None
+    return (
+        _ts(_get_value(subscription, "current_period_start", None)),
+        _ts(_get_value(subscription, "current_period_end", None)),
+    )
+
+
 def _activate_subscription(
     tenant_id: str,
     plan: str,
     subscription_id: str,
     customer_id: str,
+    subscription: Any = None,
 ) -> None:
-    """Upgrade tenant plan after confirmed Stripe payment."""
-    from core.billing.usage_tracker import _get_redis
+    """Upgrade tenant plan after confirmed Stripe payment.
 
-    redis = _get_redis()
-    # Store the active plan — both the canonical key read by
-    # limits._get_tenant_tier() AND the billing-specific keys.
-    redis.set(f"tenant_tier:{tenant_id}", plan)
-    redis.set(f"tenant:{tenant_id}:plan", plan)
-    redis.set(f"tenant:{tenant_id}:billing_provider", "stripe")
-    redis.set(f"tenant:{tenant_id}:billing_order_id", subscription_id)
-    redis.set(f"tenant:{tenant_id}:stripe_subscription_id", subscription_id)
-    redis.set(f"tenant:{tenant_id}:stripe_customer_id", customer_id)
+    Persists the ``billing_subscriptions`` row (source of truth) and warms
+    the Redis cache. ``subscription`` (optional Stripe object) supplies the
+    current period; ``customer.subscription.updated`` webhooks keep it fresh.
+    """
+    from core.billing.subscriptions import record_subscription_sync
+
+    period_start, period_end = _period_bounds(subscription)
+    record_subscription_sync(
+        tenant_id,
+        provider="stripe",
+        plan=plan,
+        status="active",
+        provider_subscription_id=subscription_id,
+        provider_customer_id=customer_id,
+        current_period_start=period_start,
+        current_period_end=period_end,
+    )
 
     logger.info(
         "subscription_activated",
@@ -423,17 +485,13 @@ def _activate_subscription(
     )
 
 
-def _deactivate_subscription(tenant_id: str) -> None:
+def _deactivate_subscription(tenant_id: str, status: str = "cancelled") -> None:
     """Downgrade tenant to free plan after cancellation."""
-    from core.billing.usage_tracker import _get_redis
+    from core.billing.subscriptions import deactivate_subscription_sync
 
-    redis = _get_redis()
-    redis.set(f"tenant_tier:{tenant_id}", "free")
-    redis.set(f"tenant:{tenant_id}:plan", "free")
-    redis.delete(f"tenant:{tenant_id}:billing_order_id")
-    redis.delete(f"tenant:{tenant_id}:stripe_subscription_id")
+    deactivate_subscription_sync(tenant_id, status=status)
 
-    logger.info("subscription_deactivated", tenant_id=tenant_id)
+    logger.info("subscription_deactivated", tenant_id=tenant_id, status=status)
 
 
 def cancel_subscription(subscription_id: str) -> bool:
@@ -455,13 +513,11 @@ def _sync_subscription_state(
     fallback_tenant_id: str = "",
     fallback_plan: str = "",
 ) -> str:
-    """Mirror a Stripe subscription object into Redis billing state.
+    """Mirror a Stripe subscription object into the billing_subscriptions row.
 
     Stripe sends plan changes through ``customer.subscription.updated``.
     We derive the plan from metadata first, then from the active price id.
     """
-    from core.billing.usage_tracker import _get_redis
-
     metadata = _get_value(subscription, "metadata", {}) or {}
     tenant_id = (
         metadata.get("tenant_id", "")
@@ -482,15 +538,19 @@ def _sync_subscription_state(
         return plan
 
     if status in ACTIVE_SUBSCRIPTION_STATUSES and plan:
-        redis = _get_redis()
-        redis.set(f"tenant_tier:{tenant_id}", plan)
-        redis.set(f"tenant:{tenant_id}:plan", plan)
-        redis.set(f"tenant:{tenant_id}:billing_provider", "stripe")
-        if subscription_id:
-            redis.set(f"tenant:{tenant_id}:billing_order_id", subscription_id)
-            redis.set(f"tenant:{tenant_id}:stripe_subscription_id", subscription_id)
-        if customer_id:
-            redis.set(f"tenant:{tenant_id}:stripe_customer_id", customer_id)
+        from core.billing.subscriptions import record_subscription_sync
+
+        period_start, period_end = _period_bounds(subscription)
+        record_subscription_sync(
+            tenant_id,
+            provider="stripe",
+            plan=plan,
+            status=status,
+            provider_subscription_id=subscription_id,
+            provider_customer_id=customer_id,
+            current_period_start=period_start,
+            current_period_end=period_end,
+        )
         logger.info(
             "subscription_synced",
             tenant_id=tenant_id,
@@ -500,7 +560,7 @@ def _sync_subscription_state(
             subscription_id=subscription_id,
         )
     elif status in {"canceled", "incomplete_expired", "unpaid"}:
-        _deactivate_subscription(tenant_id)
+        _deactivate_subscription(tenant_id, status=status)
 
     return plan
 
@@ -516,11 +576,7 @@ def change_subscription_plan(tenant_id: str, plan: str) -> dict[str, Any]:
     if not price_id:
         raise ValueError(f"Unknown plan or missing price ID: {plan}")
 
-    from core.billing.usage_tracker import _get_redis
-
-    redis = _get_redis()
-    stored = redis.get(f"tenant:{tenant_id}:stripe_subscription_id")
-    subscription_id = stored if isinstance(stored, str) else (stored or b"").decode()
+    subscription_id = stored_stripe_subscription_id(tenant_id)
     if not subscription_id:
         raise ValueError(f"No active Stripe subscription found for tenant {tenant_id}")
 
@@ -562,7 +618,7 @@ def create_portal_session(tenant_id: str, return_url: str = "") -> str:
     """
     s = _get_stripe()
 
-    customer_id = _read_cached_customer_id(tenant_id)
+    customer_id = _read_cached_customer_id(tenant_id) or _stored_customer_id(tenant_id)
     if not customer_id:
         raise ValueError(f"No Stripe customer found for tenant {tenant_id}")
 
@@ -575,13 +631,3 @@ def create_portal_session(tenant_id: str, return_url: str = "") -> str:
 
     logger.info("stripe_portal_created", tenant_id=tenant_id)
     return session.url
-
-
-# ── Usage Query ─────────────────────────────────────────────────────
-
-
-def get_usage(tenant_id: str) -> dict[str, Any]:
-    """Return current usage counters for a tenant."""
-    from core.billing.usage_tracker import get_usage as _get_usage
-
-    return _get_usage(tenant_id)

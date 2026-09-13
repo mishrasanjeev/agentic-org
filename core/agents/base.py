@@ -104,10 +104,37 @@ class BaseAgent:
             # 2. Reason with LLM
             output = await self._reason(context, trace)
 
-            # 3. Execute tool calls if the LLM requested any
+            # 3. Execute tool calls if the LLM requested any. Without an
+            # injected ToolGateway the call goes through the same governed
+            # connector path LangGraph uses (see ``_call_tool``).
             requested_tools = output.pop("tool_calls", None)
-            if requested_tools and isinstance(requested_tools, list) and self.tool_gateway:
+            if requested_tools and isinstance(requested_tools, list):
                 tool_results = await self._execute_tool_calls(requested_tools, trace, tool_calls)
+                failed_call = next(
+                    (tr for tr in tool_results if isinstance(tr.get("result"), dict) and tr["result"].get("error")),
+                    None,
+                )
+                if failed_call is not None:
+                    # A denied or failed tool call must fail the step, never
+                    # complete with the failure buried in the synthesis prompt.
+                    error = failed_call["result"]["error"]
+                    message = error.get("message") if isinstance(error, dict) else str(error)
+                    code = error.get("code") if isinstance(error, dict) and error.get("code") else "tool_call_failed"
+                    trace.append(f"Tool call failed: {failed_call['connector']}.{failed_call['tool']}: {message}")
+                    return self._make_result(
+                        task,
+                        msg_id,
+                        "failed",
+                        {"tool_results": tool_results},
+                        0.0,
+                        trace,
+                        tool_calls,
+                        error={
+                            "code": str(code),
+                            "message": f"{failed_call['connector']}.{failed_call['tool']} failed: {message}",
+                        },
+                        start=start,
+                    )
                 # Feed tool results back to LLM for final synthesis
                 if tool_results:
                     output = await self._synthesize_with_tools(context, output, tool_results, trace)
@@ -303,7 +330,7 @@ class BaseAgent:
 
     def _build_tool_descriptions(self) -> list[dict[str, Any]] | None:
         """Build tool descriptions from authorized_tools for the LLM prompt."""
-        if not self.authorized_tools or not self.tool_gateway:
+        if not self.authorized_tools:
             return None
 
         from connectors.registry import ConnectorRegistry
@@ -457,9 +484,28 @@ class BaseAgent:
         params: dict | None = None,
         idempotency_key: str = "",
     ) -> dict[str, Any]:
-        """Call tool through Tool Gateway."""
+        """Call a connector tool.
+
+        With an injected ``tool_gateway`` the call goes through it. Otherwise
+        it takes the governed path shared with LangGraph agents
+        (``core.langgraph.tool_adapter.execute_agent_tool``): the tool must be
+        in ``authorized_tools``, Grantex ``enforce`` runs when a grant token is
+        attached, and the connector is resolved from the tenant/company scoped
+        encrypted config. Every denial comes back as ``{"error": {...}}``.
+        """
         if not self.tool_gateway:
-            return {"error": "No tool gateway configured"}
+            from core.langgraph.tool_adapter import execute_agent_tool
+
+            return await execute_agent_tool(
+                connector_name,
+                tool_name,
+                params or {},
+                tenant_id=self.tenant_id,
+                company_id=self.company_id,
+                domain=self.domain or None,
+                authorized_tools=self.authorized_tools,
+                grant_token=getattr(self, "grant_token", None),
+            )
 
         gateway_args: dict[str, Any] = {
             "tenant_id": self.tenant_id,

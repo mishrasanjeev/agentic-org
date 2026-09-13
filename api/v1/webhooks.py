@@ -270,9 +270,18 @@ def _verify_sendgrid_signature(
 ) -> bool:
     """Verify SendGrid Event Webhook signature.
 
-    Uses HMAC-SHA256 with the webhook verification key. Fails closed
-    when no key is configured — pre-fix this returned True (dev-mode
-    bypass) which allowed forged events in production. Per
+    SendGrid signs ``timestamp + raw_payload`` with an ECDSA P-256 key
+    (SHA-256) and sends the base64 DER signature in
+    ``X-Twilio-Email-Event-Webhook-Signature`` plus the timestamp in
+    ``X-Twilio-Email-Event-Webhook-Timestamp``. ``SENDGRID_WEBHOOK_KEY`` is
+    the base64 *public* verification key shown in the SendGrid console.
+
+    Audit 2026-09-13: pre-fix this computed an HMAC-SHA256 with the key as a
+    shared secret, which can never match a real SendGrid signature — every
+    genuine event was rejected (and the check proved nothing).
+
+    Fails closed when no key is configured — pre-fix this returned True
+    (dev-mode bypass) which allowed forged events in production. Per
     SECURITY_AUDIT_2026-04-19.md HIGH-04.
     """
     verification_key = public_key or os.getenv("SENDGRID_WEBHOOK_KEY", "")
@@ -285,14 +294,30 @@ def _verify_sendgrid_signature(
             hint="Set SENDGRID_WEBHOOK_KEY in env. HIGH-04 fail-closed.",
         )
         return False
+    if not signature or not timestamp:
+        return False
 
-    signed_payload = f"{timestamp}{payload.decode('utf-8')}"
-    expected = hmac.new(
-        verification_key.encode("utf-8"),
-        signed_payload.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    try:
+        key_bytes = base64.b64decode(verification_key, validate=True)
+        loaded = serialization.load_der_public_key(key_bytes)
+        if not isinstance(loaded, ec.EllipticCurvePublicKey):
+            logger.error("sendgrid_webhook_key_not_ec_public_key")
+            return False
+        der_signature = base64.b64decode(signature, validate=True)
+    except (ValueError, TypeError) as exc:
+        logger.warning("sendgrid_webhook_signature_malformed", error=type(exc).__name__)
+        return False
+
+    signed_payload = timestamp.encode("utf-8") + payload
+    try:
+        loaded.verify(der_signature, signed_payload, ec.ECDSA(hashes.SHA256()))
+    except InvalidSignature:
+        return False
+    return True
 
 
 def _verify_mailchimp_signature(

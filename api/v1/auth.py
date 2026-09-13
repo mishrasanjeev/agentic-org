@@ -10,6 +10,7 @@ import re
 import time
 import uuid
 from collections import defaultdict
+from datetime import UTC, datetime
 
 import bcrypt as _bcrypt
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -23,6 +24,7 @@ from auth.jwt import blacklist_token, create_access_token, validate_local_token
 from auth.one_time_codes import consume as consume_code
 from auth.one_time_codes import issue as issue_code
 from core import auth_state
+from core.auth_state import invalidate_user_session_state
 from core.config import (
     is_strict_runtime_env,
     redis_socket_timeout_kwargs,
@@ -120,6 +122,17 @@ class SignupRequest(BaseModel):
     password: str
 
 
+async def _hash_password(password: str) -> str:
+    """bcrypt cost-12 hashing is CPU-bound (~250ms): keep it off the event loop."""
+    return await asyncio.to_thread(
+        lambda: _bcrypt.hashpw(password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+    )
+
+
+async def _verify_password(password: str, password_hash: str) -> bool:
+    return await asyncio.to_thread(_bcrypt.checkpw, password.encode(), password_hash.encode())
+
+
 def _make_slug(name: str) -> str:
     """Generate a URL-safe slug from an organization name."""
     slug = name.lower()
@@ -176,7 +189,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         await session.flush()
 
         # Create admin user
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
+        pw_hash = await _hash_password(body.password)
         user = User(
             id=uuid.uuid4(),
             tenant_id=tenant.id,
@@ -389,7 +402,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
         user = users[0] if users else None
         if not user or not user.password_hash:
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        if not _bcrypt.checkpw(body.password.encode(), user.password_hash.encode()):
+        if not await _verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid email or password")
         await _clear_rate_limit(client_ip)
         # Fetch tenant for onboarding status
@@ -461,8 +474,12 @@ async def google_login(body: GoogleLoginRequest, response: Response):
         raise HTTPException(status_code=501, detail="Google login not configured")
 
     try:
-        idinfo = google_id_token.verify_oauth2_token(
-            body.credential, google_requests.Request(), client_id
+        # Google's verifier fetches its certs with a blocking HTTP client.
+        idinfo = await asyncio.to_thread(
+            google_id_token.verify_oauth2_token,
+            body.credential,
+            google_requests.Request(),
+            client_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {e}") from None
@@ -676,11 +693,14 @@ async def reset_password(body: ResetPasswordRequest):
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        pw_hash = _bcrypt.hashpw(body.password.encode(), _bcrypt.gensalt(rounds=12)).decode()
-        user.password_hash = pw_hash
+        user.password_hash = await _hash_password(body.password)
+        # A password reset invalidates every session issued before it
+        # (stolen-credential recovery). Enforced by the auth middleware.
+        user.sessions_invalid_before = datetime.now(UTC)
         session.add(user)
         await session.commit()
 
+    await invalidate_user_session_state(str(tenant_id), email)
     return {"status": "ok", "message": "Password has been reset. You can now sign in."}
 
 
@@ -716,6 +736,53 @@ async def logout(request: Request, response: Response):
         raise HTTPException(status_code=503, detail="Unable to revoke session; please retry") from exc
     _clear_session_cookie(response)
     return {"status": "logged_out"}
+
+
+@router.post("/logout-all")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="auth.session.logout",
+    rate_limit="auth-mutating",
+    idempotency="session-watermark-monotonic",
+    audit_event="auth.logout_all",
+)
+async def logout_all(request: Request, response: Response):
+    """Revoke every session of the current user (all devices, all replicas).
+
+    Sets ``users.sessions_invalid_before`` to now; the auth middleware then
+    rejects any legacy JWT issued before that instant. The blacklist is
+    per-token and cannot express "everything issued so far" — this can.
+    """
+    if getattr(request.state, "auth_mode", "") != "legacy":
+        raise HTTPException(
+            status_code=400,
+            detail="Logout applies to session tokens only; revoke API keys via the API key management endpoint",
+        )
+    claims = getattr(request.state, "claims", None)
+    tenant_value = getattr(request.state, "tenant_id", "")
+    email = claims.get("sub", "") if isinstance(claims, dict) else ""
+    if not tenant_value or not isinstance(email, str) or not email:
+        raise HTTPException(401, "Missing authenticated session context")
+    try:
+        tenant_id = uuid.UUID(str(tenant_value))
+    except (TypeError, ValueError):
+        raise HTTPException(401, "Invalid authenticated tenant context") from None
+
+    async with get_tenant_session(tenant_id) as session:
+        result = await session.execute(
+            select(User).where(User.tenant_id == tenant_id, User.email == email)
+        )
+        user = result.scalar_one_or_none()
+        if user is None:
+            raise HTTPException(401, "User not found")
+        user.sessions_invalid_before = datetime.now(UTC)
+        session.add(user)
+        await session.commit()
+
+    await invalidate_user_session_state(str(tenant_id), email)
+    _clear_session_cookie(response)
+    return {"status": "logged_out_all"}
 
 
 @router.get("/me")

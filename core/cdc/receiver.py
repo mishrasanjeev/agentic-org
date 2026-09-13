@@ -646,6 +646,22 @@ def _run_sync(coro: Any) -> Any:
     raise RuntimeError("Use the async CDC store APIs from an active event loop")
 
 
+async def _evaluate_triggers(event: dict[str, Any], tenant_id: str) -> list[str]:
+    """Match ``event`` against the tenant's ``cdc_triggers`` rules.
+
+    Resolved through the module attribute at call time so test seams can
+    monkeypatch ``core.cdc.triggers.evaluate_triggers`` with a sync stub.
+    """
+    import inspect
+
+    from core.cdc import triggers as _triggers
+
+    result = _triggers.evaluate_triggers(event, tenant_id=tenant_id)
+    if inspect.isawaitable(result):
+        result = await result
+    return list(result or [])
+
+
 async def handle_cdc_webhook(
     tenant_id: str,
     connector: str,
@@ -729,9 +745,7 @@ async def handle_cdc_webhook(
         }
 
     try:
-        from core.cdc.triggers import evaluate_triggers
-
-        matched_workflows = evaluate_triggers(stored_event, tenant_id=str(tenant_id))
+        matched_workflows = await _evaluate_triggers(stored_event, str(tenant_id))
         await event_store.mark_processed(
             str(stored_event["id"]),
             outcome={"matched_workflows": matched_workflows, "workflow_count": len(matched_workflows)},
@@ -840,9 +854,7 @@ async def replay_cdc_event(
 
     event = claim["event"]
     try:
-        from core.cdc.triggers import evaluate_triggers
-
-        matched_workflows = evaluate_triggers(event, tenant_id=tenant_id)
+        matched_workflows = await _evaluate_triggers(event, tenant_id)
         await event_store.mark_processed(
             event_id,
             outcome={

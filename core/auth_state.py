@@ -20,6 +20,7 @@ import logging
 import os
 import time
 from collections import defaultdict
+from dataclasses import dataclass
 
 import redis.asyncio as aioredis
 
@@ -103,6 +104,7 @@ _mem_failures: dict[str, list[float]] = defaultdict(list)
 _mem_blocked: dict[str, float] = {}
 _mem_blacklist: dict[str, float] = {}  # token_hash -> expiry
 _mem_signup: dict[str, list[float]] = defaultdict(list)
+_mem_user_state: dict[str, tuple[float, UserSessionState]] = {}  # key -> (expiry, state)
 
 
 # ---------------------------------------------------------------------------
@@ -313,3 +315,150 @@ async def check_window_rate(namespace: str, key: str, limit: int, window: int) -
         return True
     _mem_window[mem_key].append(now)
     return False
+
+
+# ---------------------------------------------------------------------------
+# Per-user session state (status + revocation watermark)
+# ---------------------------------------------------------------------------
+
+USER_SESSION_STATE_TTL = 30  # seconds — bounds the revocation lag across replicas
+
+# Sentinel for "no users row" so a miss is cached too (bounded by the TTL).
+_USER_STATE_MISSING = "missing"
+
+
+@dataclass(frozen=True)
+class UserSessionState:
+    """What the auth middleware needs to decide whether a JWT is still honoured."""
+
+    found: bool
+    status: str = ""
+    sessions_invalid_before: float | None = None  # POSIX seconds, UTC
+
+    def rejects_token(self, issued_at: float | None) -> str | None:
+        """Return a rejection reason or ``None`` if the token is still valid."""
+        if not self.found:
+            return None
+        if self.status != "active":
+            return "user_inactive"
+        if self.sessions_invalid_before is None:
+            return None
+        if issued_at is None or issued_at < self.sessions_invalid_before:
+            return "session_revoked"
+        return None
+
+
+def _user_state_key(tenant_id: str, email: str) -> str:
+    digest = hashlib.sha256(f"{tenant_id}:{email.lower()}".encode()).hexdigest()
+    return f"auth:user_state:{digest}"
+
+
+def _encode_user_state(state: UserSessionState) -> str:
+    if not state.found:
+        return _USER_STATE_MISSING
+    watermark = "" if state.sessions_invalid_before is None else repr(state.sessions_invalid_before)
+    return f"{state.status}|{watermark}"
+
+
+def _decode_user_state(raw: str) -> UserSessionState:
+    if raw == _USER_STATE_MISSING:
+        return UserSessionState(found=False)
+    status, _, watermark = raw.partition("|")
+    return UserSessionState(
+        found=True,
+        status=status,
+        sessions_invalid_before=float(watermark) if watermark else None,
+    )
+
+
+async def _load_user_state_from_db(tenant_id: str, email: str) -> UserSessionState:
+    import uuid
+
+    from sqlalchemy import select
+
+    from core.database import async_session_factory
+    from core.models.user import User
+
+    tid = uuid.UUID(str(tenant_id))
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User.status, User.sessions_invalid_before).where(
+                User.tenant_id == tid, User.email == email
+            )
+        )
+        row = result.first()
+    if row is None:
+        return UserSessionState(found=False)
+    status, watermark = row
+    return UserSessionState(
+        found=True,
+        status=str(status or ""),
+        sessions_invalid_before=watermark.timestamp() if watermark is not None else None,
+    )
+
+
+async def get_user_session_state(tenant_id: str, email: str) -> UserSessionState:
+    """Return the user's status + revocation watermark, cached for a short TTL.
+
+    Redis is consulted first (cross-replica, ``USER_SESSION_STATE_TTL``), then
+    the ``users`` row. In strict runtime env a combined cache + DB failure
+    raises ``RuntimeError`` so the middleware fails closed; relaxed runtimes
+    degrade to an in-memory cache with the same TTL.
+    """
+    key = _user_state_key(tenant_id, email)
+    now = time.time()
+    cached = _mem_user_state.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+
+    # The users row is authoritative; Redis is only a cross-replica cache.
+    # A Redis outage therefore falls through to the DB even in strict mode
+    # (``_get_redis`` raises there) — only cache AND DB failing is fatal.
+    r = None
+    try:
+        r = await _get_redis()
+        if r:
+            raw = await r.get(key)
+            if raw:
+                state = _decode_user_state(raw)
+                _mem_user_state[key] = (now + USER_SESSION_STATE_TTL, state)
+                return state
+    # enterprise-gate: broad-except-ok reason=user-state-cache-read-falls-through-to-authoritative-db-read
+    except Exception as exc:
+        logger.warning("auth_state: Redis user-state read failed (%s)", exc)
+
+    try:
+        state = await _load_user_state_from_db(tenant_id, email)
+    # enterprise-gate: broad-except-ok reason=user-state-db-read-fails-closed-in-strict-runtime
+    except Exception as exc:
+        _raise_if_strict("get_user_session_state", exc)
+        logger.warning("auth_state: users lookup failed, treating as unknown user (%s)", exc)
+        return UserSessionState(found=False)
+
+    _mem_user_state[key] = (now + USER_SESSION_STATE_TTL, state)
+    if r:
+        try:
+            await r.setex(key, USER_SESSION_STATE_TTL, _encode_user_state(state))
+        # enterprise-gate: broad-except-ok reason=user-state-cache-write-is-best-effort-after-authoritative-db-read
+        except Exception as exc:
+            logger.warning("auth_state: Redis user-state write failed (%s)", exc)
+    return state
+
+
+async def invalidate_user_session_state(tenant_id: str, email: str) -> None:
+    """Drop the cached state after a revocation so the new watermark is seen promptly.
+
+    Best-effort: the watermark is already committed in ``users`` (the
+    authoritative source), so a cache-bust failure only delays enforcement
+    on other replicas by at most ``USER_SESSION_STATE_TTL`` seconds.
+    """
+    key = _user_state_key(tenant_id, email)
+    _mem_user_state.pop(key, None)
+    try:
+        r = await _get_redis()
+        if r:
+            await r.delete(key)
+    # enterprise-gate: broad-except-ok reason=revocation-cache-bust-is-best-effort-and-ttl-bounded
+    except Exception as exc:
+        logger.warning("auth_state: Redis user-state delete failed (%s)", exc)
+

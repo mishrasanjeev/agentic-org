@@ -469,8 +469,7 @@ async def _record_chat_hitl(
 
     try:
         async with get_tenant_session(tid) as session:
-            session.add(
-                HITLQueue(
+            hitl_item = HITLQueue(
                     tenant_id=tid,
                     agent_id=aid,
                     workflow_run_id=None,
@@ -484,8 +483,13 @@ async def _record_chat_hitl(
                     },
                     context=context,
                     expires_at=datetime.now(UTC) + timedelta(hours=4),
-                )
             )
+            session.add(hitl_item)
+        from core.push.sender import notify_approval_created
+
+        await notify_approval_created(
+            str(tid), item_id=str(hitl_item.id), agent_name=agent_name or agent_type or "", action=str(hitl_trigger)
+        )
         return True
     # enterprise-gate: broad-except-ok reason=chat-hitl-queue-failure-returns-retryable-503
     except Exception:  # noqa: BLE001

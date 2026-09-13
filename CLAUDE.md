@@ -164,7 +164,7 @@ Fast backend-only iteration:
 SKIP_UI=1 bash scripts/preflight.sh
 ```
 
-The gate checks: branch safety (never main), `ruff check .` (whole tree), `bandit -ll -iii` on api/auth/core, alembic revision IDs ≤ 32 chars, `verify=False` scan in production code, `pytest tests/regression/ tests/unit/`, `tsc --noEmit`, and `npm run build`.
+The gate mirrors CI exactly: branch safety (never main), `ruff check .` (whole tree), `bandit -ll` on core/connectors/api/auth, alembic revision IDs ≤ 32 chars, `verify=False` scan in production code, `pytest tests/regression/ tests/unit/ tests/security/ tests/connector_harness/ --cov-fail-under=55`, `tsc --noEmit`, `npm run lint`, `vitest`, and `npm run build`.
 
 Git hooks enforce this automatically — run once per clone:
 

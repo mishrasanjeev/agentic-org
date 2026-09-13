@@ -32,7 +32,7 @@ def test_catalog_contains_only_offer_facts_not_unsupported_entitlements() -> Non
 
 
 def test_price_contract_uses_minor_units_and_explicit_interval() -> None:
-    assert plan_price_minor("pro", "USD") == 2_00
+    assert plan_price_minor("pro", "USD") == 99_00
     assert plan_price_minor("pro", "INR") == 9_999_00
     assert plan_by_id("pro").prices[0].interval == "month"
 

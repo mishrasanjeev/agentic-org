@@ -1,8 +1,12 @@
-"""Object Storage connector — GCS-native with S3-compatible fallback.
+"""Object Storage connector — Google Cloud Storage (JSON API).
 
-Integrates with Google Cloud Storage (GCS) natively via the JSON API,
-or falls back to S3-compatible endpoints (MinIO, AWS S3) when configured.
 Used for document storage, report archival, and file sharing.
+
+The former ``s3_compatible`` mode was not an S3 implementation: it sent the
+access key as a Bearer token against GCS JSON-API paths, which leaks the key
+to the wrong host and can never authenticate against S3/MinIO (they require
+AWS SigV4). ``boto3``/``aiobotocore`` are not production dependencies, so
+the mode is refused with an explicit error instead of silently misbehaving.
 """
 
 from __future__ import annotations
@@ -10,6 +14,10 @@ from __future__ import annotations
 from typing import Any
 
 from connectors.framework.base_connector import BaseConnector
+
+
+class S3CompatibleModeUnsupportedError(ValueError):
+    """Raised when a connector config asks for the unimplemented S3 mode."""
 
 
 class S3Connector(BaseConnector):
@@ -23,7 +31,14 @@ class S3Connector(BaseConnector):
     def __init__(self, config: dict[str, Any] | None = None):
         super().__init__(config)
         self._default_bucket = self.config.get("bucket", "")
-        self._is_s3 = self.config.get("s3_compatible", False)
+        if self.config.get("s3_compatible"):
+            raise S3CompatibleModeUnsupportedError(
+                "s3_compatible mode is not supported: this connector speaks the GCS "
+                "JSON API only. S3/MinIO need AWS SigV4 request signing, which is "
+                "not implemented (boto3/aiobotocore are not shipped). Remove "
+                "'s3_compatible' from the connector config and supply a GCS "
+                "OAuth2 access_token, or use a dedicated S3 connector."
+            )
 
     def _register_tools(self):
         self._tool_registry["upload_document"] = self.upload_document
@@ -34,17 +49,10 @@ class S3Connector(BaseConnector):
         self._tool_registry["copy_object"] = self.copy_object
 
     async def _authenticate(self):
-        if self._is_s3:
-            # S3-compatible (MinIO, AWS) — use access key/secret
-            access_key = self._get_secret("access_key")
-            self._get_secret("secret_key")
-            # For S3-compatible, credentials are sent per-request via AWS Sig V4
-            # Simplified: use access key as Bearer (works with MinIO)
-            self._auth_headers = {"Authorization": f"Bearer {access_key}"}
-        else:
-            # GCS — use OAuth2 access token from service account
-            access_token = self._get_secret("access_token")
-            self._auth_headers = {"Authorization": f"Bearer {access_token}"}
+        # GCS — use OAuth2 access token from service account. Never an
+        # access key: static keys are not bearer credentials.
+        access_token = self._get_secret("access_token")
+        self._auth_headers = {"Authorization": f"Bearer {access_token}"}
 
     async def health_check(self) -> dict[str, Any]:
         try:

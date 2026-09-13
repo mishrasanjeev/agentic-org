@@ -1,4 +1,4 @@
-"""Celery tasks for workflow wait step and event-based resumption.
+"""Celery tasks for workflow wait, event and HITL deadline handling.
 
 Workflow run state is durable in PostgreSQL via ``WorkflowStateStore``.
 Redis is still used for best-effort event-listener cache cleanup, but these
@@ -249,6 +249,157 @@ def timeout_workflow_event(run_id: str, step_id: str) -> dict:
     except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
         logger.error(
             "timeout_workflow_event_failed",
+            run_id=run_id,
+            step_id=step_id,
+            error=str(exc),
+        )
+        return {"status": "error", "reason": str(exc)}
+
+
+async def _timeout_workflow_hitl_async(run_id: str, step_id: str) -> dict:
+    """Enforce the HITL deadline for ``step_id`` of engine run ``run_id``.
+
+    If the run is still waiting on this step:
+
+    * with an ``approval_timeout_policy`` whose outcome is ``auto_escalate``
+      (see ``core.marketing.approval_timeouts``) the step is escalated once —
+      the pending HITL rows are reassigned to ``escalation_role``, the
+      deadline is extended by the policy SLA and a new timeout is queued;
+    * otherwise the step becomes ``timed_out``, the run fails with
+      ``error.code=hitl_timeout``, the HITL rows flip to ``expired`` and the
+      DB run is synced.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from workflows.run_sync import (
+        expire_pending_hitl_items,
+        schedule_hitl_timeout,
+        sync_engine_state_to_workflow_run,
+    )
+
+    log = logger.bind(run_id=run_id, step_id=step_id)
+    store = _state_store()
+    await store.init()
+    try:
+        state = await store.load(run_id)
+        if not state:
+            log.warning("workflow_state_not_found")
+            return {"status": "error", "reason": "workflow_state_not_found"}
+        if state.get("status") != "waiting_hitl" or state.get("waiting_step_id") != step_id:
+            log.info("hitl_step_no_longer_waiting", status=state.get("status"))
+            return {"status": "noop", "reason": f"current status is {state.get('status')}"}
+
+        step_results = state.setdefault("step_results", {})
+        step_result = step_results.get(step_id) or {}
+        output = dict(step_result.get("output") or {}) if isinstance(step_result.get("output"), dict) else {}
+        now = datetime.now(UTC)
+
+        tenant_id = state.get("tenant_id")
+        workflow_run_id = state.get("workflow_run_id")
+        tenant_uuid = workflow_run_uuid = None
+        if tenant_id and workflow_run_id:
+            import uuid
+
+            tenant_uuid = uuid.UUID(str(tenant_id))
+            workflow_run_uuid = uuid.UUID(str(workflow_run_id))
+
+        policy = output.get("approval_timeout_policy")
+        escalation_role = str(policy.get("escalation_role") or "") if isinstance(policy, dict) else ""
+        if (
+            isinstance(policy, dict)
+            and policy.get("timeout_outcome") == "auto_escalate"
+            and escalation_role
+            and not output.get("hitl_escalated")
+        ):
+            sla_hours = float(policy.get("default_sla_hours") or output.get("timeout_hours") or 4)
+            new_expires_at = now + timedelta(hours=sla_hours)
+            output.update(
+                {
+                    "hitl_escalated": True,
+                    "hitl_escalated_at": now.isoformat(),
+                    "assignee_role": escalation_role,
+                    "escalated_from_role": step_result.get("output", {}).get("assignee_role"),
+                }
+            )
+            step_results[step_id] = {**step_result, "output": output}
+            await store.save(
+                state,
+                actor="celery.timeout_workflow_hitl",
+                step_id=step_id,
+                idempotency_key=f"timeout_workflow_hitl:escalate:{run_id}:{step_id}",
+                metadata={"task": "timeout_workflow_hitl", "event": "hitl_escalated"},
+            )
+            if tenant_uuid and workflow_run_uuid:
+                await expire_pending_hitl_items(
+                    tenant_id=tenant_uuid,
+                    workflow_run_id=workflow_run_uuid,
+                    step_id=step_id,
+                    new_status="pending",
+                    assignee_role=escalation_role,
+                    expires_at=new_expires_at,
+                )
+            schedule_hitl_timeout(run_id, step_id, new_expires_at)
+            log.info("workflow_hitl_escalated", escalation_role=escalation_role)
+            return {
+                "status": "escalated",
+                "run_id": run_id,
+                "step_id": step_id,
+                "escalation_role": escalation_role,
+                "expires_at": new_expires_at.isoformat(),
+            }
+
+        error = {
+            "code": "hitl_timeout",
+            "message": f"Step '{step_id}' timed out waiting for a human decision",
+        }
+        step_results[step_id] = {
+            **step_result,
+            "status": "timed_out",
+            "error": error,
+            "completed_by": "timeout_workflow_hitl",
+        }
+        state["steps_completed"] = len(step_results)
+        state["status"] = "failed"
+        state["error"] = error
+        state["completed_at"] = now.isoformat()
+        state.pop("waiting_step_id", None)
+        await store.save(
+            state,
+            actor="celery.timeout_workflow_hitl",
+            step_id=step_id,
+            idempotency_key=f"timeout_workflow_hitl:{run_id}:{step_id}",
+            metadata={"task": "timeout_workflow_hitl", "event": "hitl_timed_out"},
+        )
+        log.info("workflow_hitl_timed_out")
+
+        if tenant_uuid and workflow_run_uuid:
+            await expire_pending_hitl_items(
+                tenant_id=tenant_uuid,
+                workflow_run_id=workflow_run_uuid,
+                step_id=step_id,
+            )
+            await sync_engine_state_to_workflow_run(
+                tenant_id=tenant_uuid,
+                workflow_run_id=workflow_run_uuid,
+                engine_run_id=run_id,
+                state=state,
+            )
+        else:
+            log.warning("workflow_run_sync_skipped_missing_context")
+        return {"status": "timed_out", "run_id": run_id, "step_id": step_id}
+    finally:
+        await store.close()
+
+
+@app.task(name="timeout_workflow_hitl")
+def timeout_workflow_hitl(run_id: str, step_id: str) -> dict:
+    """Fail (or escalate) a workflow whose HITL step passed its deadline."""
+    try:
+        return run_async(_timeout_workflow_hitl_async(run_id, step_id))
+    # enterprise-gate: broad-except-ok reason=celery-boundary-returns-structured-workflow-error
+    except Exception as exc:  # noqa: BLE001 - Celery task returns structured errors.
+        logger.error(
+            "timeout_workflow_hitl_failed",
             run_id=run_id,
             step_id=step_id,
             error=str(exc),

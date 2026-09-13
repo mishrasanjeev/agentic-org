@@ -3050,6 +3050,14 @@ async def run_agent(
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
             session.add(hitl_entry)
+        from core.push.sender import notify_approval_created
+
+        await notify_approval_created(
+            tenant_id,
+            item_id=str(hitl_entry.id),
+            agent_name=str(agent_config.get("name") or agent_config.get("agent_type") or ""),
+            action=str(hitl_trigger),
+        )
 
     # 6c. Track running accuracy for shadow AND active agents (atomic SQL)
     #

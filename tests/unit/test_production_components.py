@@ -309,7 +309,8 @@ class TestAAConsentFlow:
         )
         assert "error" in result
 
-    def test_get_consent_status(self):
+    @pytest.mark.asyncio
+    async def test_get_consent_status(self):
         from connectors.finance.aa_consent import AAConsentManager
         from connectors.finance.aa_consent_types import ConsentStatus
 
@@ -320,11 +321,11 @@ class TestAAConsentFlow:
             "consent_id": "c1",
         }
 
-        status = manager.get_consent_status("h1")
+        status = await manager.get_consent_status("h1")
         assert status["status"] == "APPROVED"
         assert status["consent_id"] == "c1"
 
-        missing = manager.get_consent_status("nonexistent")
+        missing = await manager.get_consent_status("nonexistent")
         assert "error" in missing
 
 

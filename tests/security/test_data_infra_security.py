@@ -6,6 +6,7 @@ container vulnerability scanning, and audit log immutability.
 """
 
 import hashlib
+import uuid
 from unittest.mock import patch
 
 import pytest
@@ -299,25 +300,55 @@ class TestSECDATA007:
     """DPDP erasure request must remove PII and pseudonymise audit records."""
 
     @pytest.mark.asyncio
-    async def test_dsar_erase_request_accepted(self):
-        """SEC-DATA-007: A DPDP erasure request must be accepted and processed
-        with a 30-day compliance deadline.
+    async def test_dsar_erase_request_anonymises_subject(self):
+        """SEC-DATA-007: a DPDP erasure request anonymises the subject's PII
+        and pseudonymises their audit trail — with a real, persisted status
+        (audit 2026-09-13 replaced the fake ``processing`` + 30-day stub).
         """
-        handler = DSARHandler()
-        result = await handler.erase_request("user@example.com")
+        from unittest.mock import AsyncMock, MagicMock
 
-        assert result["type"] == "erase"
-        assert result["status"] == "processing"
-        assert result["deadline_days"] == 30
+        handler = DSARHandler()
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=[MagicMock(rowcount=1), MagicMock(rowcount=3), MagicMock(rowcount=0)])
+        result = await handler.erase_subject(session, tenant_id=uuid.uuid4(), subject_email="user@example.com")
+
+        assert result["users_anonymised"] == 1
+        assert result["audit_log_pseudonymised"] == 3
+        assert result["pseudonym"].startswith("erased:")
+        assert "user@example.com" not in result["pseudonym"]
+        assert "deadline_days" not in result
+        # The UPDATE statements target users / audit_log / agent_feedback.
+        statements = [str(call.args[0]) for call in session.execute.call_args_list]
+        assert any("UPDATE users" in s for s in statements)
+        assert any("UPDATE audit_log" in s for s in statements)
+        assert any("UPDATE agent_feedback" in s for s in statements)
 
     @pytest.mark.asyncio
     async def test_dsar_access_request_returns_data(self):
-        """SEC-DATA-007: A data access request must return the subject's data."""
-        handler = DSARHandler()
-        result = await handler.access_request("user@example.com")
+        """SEC-DATA-007: a data access request returns the subject's rows and
+        reports truncation honestly instead of a fake ``processing`` status.
+        """
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, MagicMock
 
-        assert result["type"] == "access"
-        assert result["status"] == "processing"
+        user = SimpleNamespace(
+            id=uuid.uuid4(), email="user@example.com", name="U", role="analyst", domain="finance",
+            status="active", timezone="UTC", locale="en", last_login_at=None, created_at=None,
+        )
+        users_result = MagicMock()
+        users_result.scalars.return_value.all.return_value = [user]
+        empty = MagicMock()
+        empty.scalars.return_value.all.return_value = []
+        count = MagicMock()
+        count.scalar.return_value = 0
+        session = AsyncMock()
+        session.execute = AsyncMock(side_effect=[users_result, count, empty, count, empty])
+        handler = DSARHandler()
+        result = await handler.collect_subject(session, tenant_id=uuid.uuid4(), subject_email="user@example.com")
+
+        assert result["users"][0]["email"] == "user@example.com"
+        assert result["totals"] == {"users": 1, "audit_log": 0, "agent_feedback": 0}
+        assert result["truncated"] is False
 
     def test_audit_pseudonymisation_after_erasure(self):
         """SEC-DATA-007: After erasure, audit logs must be pseudonymised --

@@ -119,8 +119,9 @@ async def _fake_llm_complete(
     model_override: str | None = None,
     temperature: float | None = None,
     max_tokens: int = 4096,
+    tenant_id: str | None = None,
 ) -> LLMResponse:
-    del messages, model_override, temperature, max_tokens
+    del messages, model_override, temperature, max_tokens, tenant_id
     content = " ".join(["growth content strategy"] * 40)
     return LLMResponse(content=content, model="test-llm", tokens_used=12)
 

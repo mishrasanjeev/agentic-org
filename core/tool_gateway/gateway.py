@@ -224,14 +224,28 @@ class ToolGateway:
                     }
                 }
 
-        # 3. Check idempotency
+        # 3. Reserve the idempotency key (SET NX) so two concurrent calls with
+        # the same key cannot both pass a check-then-store race and execute
+        # the side effect twice. The reservation is released on any failure.
         scoped_idempotency_key = (
             f"{company_id or '_global'}:{idempotency_key}" if idempotency_key else None
         )
+        reserved = False
         if scoped_idempotency_key and self.idempotency:
-            cached = await self.idempotency.get(tenant_id, scoped_idempotency_key)
+            reserved, cached = await self.idempotency.reserve(tenant_id, scoped_idempotency_key)
             if cached is not None:
                 return cached
+            if not reserved:
+                return {
+                    "error": {
+                        "code": "E1009",
+                        "message": "idempotent_request_in_progress: a call with this key is already executing",
+                    }
+                }
+
+        async def _release_reservation() -> None:
+            if reserved and scoped_idempotency_key and self.idempotency:
+                await self.idempotency.release(tenant_id, scoped_idempotency_key)
 
         # 4. Resolve connector — tenant-scoped + global fallback
         connector = self._connectors.get((tenant_id, company_id, connector_name))
@@ -240,6 +254,7 @@ class ToolGateway:
         if not connector:
             connector = await self._resolve_connector(tenant_id, company_id, connector_name)
         if not connector:
+            await _release_reservation()
             return {"error": {"code": "E1005", "message": f"Connector not found: {connector_name}"}}
 
         # Execute with RAW params — connectors need the real values
@@ -254,9 +269,14 @@ class ToolGateway:
             masked_params = mask_pii(params) if isinstance(params, dict) else params
             masked_result = mask_pii(result) if isinstance(result, dict) else result
 
-            # 6. Store idempotency result (unmasked — it's server-side)
+            # 6. Store idempotency result (unmasked — it's server-side).
+            # An error payload is not a completed side effect: release the
+            # reservation so a retry with the same key can run.
             if scoped_idempotency_key and self.idempotency:
-                await self.idempotency.store(tenant_id, scoped_idempotency_key, result)
+                if isinstance(result, dict) and result.get("error"):
+                    await _release_reservation()
+                else:
+                    await self.idempotency.store(tenant_id, scoped_idempotency_key, result)
 
             # 7. Audit log (masked)
             if self.audit:
@@ -280,6 +300,7 @@ class ToolGateway:
         # enterprise-gate: broad-except-ok reason=tool-execution-boundary-returns-explicit-error-result
         except Exception as e:
             latency_ms = int((time.monotonic() - start_time) * 1000)
+            await _release_reservation()
             if self.audit:
                 await self.audit.log(
                     tenant_id=tenant_id,

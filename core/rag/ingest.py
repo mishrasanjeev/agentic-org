@@ -138,8 +138,8 @@ async def _resolve_embedding_profile(
     )
 
 
-def _embed_chunks(texts: list[str], model: str | None = None) -> list[list[float]]:
-    """Batch-embed via ``core.embeddings``.
+async def _embed_chunks(texts: list[str], model: str | None = None) -> list[list[float]]:
+    """Batch-embed via ``core.embeddings`` without blocking the event loop.
 
     PR-3 uses the platform BGE model regardless of which cloud embedding
     the tenant selected — cloud-embedding paths (OpenAI / Voyage /
@@ -147,9 +147,9 @@ def _embed_chunks(texts: list[str], model: str | None = None) -> list[list[float
     the mismatch so operators see when a tenant's selection isn't
     honoured yet.
     """
-    from core.embeddings import embed
+    from core.embeddings import embed_async
 
-    return embed(texts)
+    return await embed_async(texts)
 
 
 def _default_object_type_for_mime(mime_type: str) -> str:
@@ -253,7 +253,7 @@ async def ingest_document(
     # 3. Resolve tenant embedding profile + embed
     provider, model, dimensions = await _resolve_embedding_profile(tenant_id)
     try:
-        vectors = _embed_chunks([c[0] for c in chunks], model=model)
+        vectors = await _embed_chunks([c[0] for c in chunks], model=model)
     # enterprise-gate: broad-except-ok reason=rag-embedding-failure-returns-ingest-result-with-errors
     except Exception as exc:
         logger.exception("rag_embed_failed")

@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging as _logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.error_handlers import register_error_handlers
 from api.middleware import DeprecationHeaderMiddleware
+from api.route_enforcement import enforce_route_metadata
 from api.v1 import (
     a2a,
     aa_callback,
@@ -135,6 +136,10 @@ async def lifespan(app: FastAPI):
 _is_strict_runtime = is_strict_runtime_env(settings.env)
 
 app = FastAPI(
+    # route_meta(scope=, rate_limit=) is enforced at request time for every
+    # route (api/route_enforcement.py) — the annotations are no longer
+    # documentation-only.
+    dependencies=[Depends(enforce_route_metadata)],
     title="AgenticOrg",
     description=("AI Virtual Employee Platform. Real-time counts: GET /api/v1/product-facts."),
     version=product_facts._version_from_pyproject(),

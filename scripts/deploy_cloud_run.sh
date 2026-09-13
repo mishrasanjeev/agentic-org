@@ -713,6 +713,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
   run docker push "${GAR_REGISTRY}/agenticorg:latest"
 
   run docker build \
+    --build-arg "VITE_GA4_ID=${VITE_GA4_ID:-}" \
     -t "$UI_IMAGE" \
     -t "${GAR_REGISTRY}/agenticorg-ui-cloudrun:latest" \
     -f Dockerfile.ui.cloudrun .

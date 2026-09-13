@@ -80,6 +80,18 @@ def _can_decide(
     return True, ""
 
 
+def _effective_status(item: HITLQueue, now: datetime | None = None) -> str:
+    """Report a pending item whose deadline passed as ``expired``.
+
+    The Celery ``timeout_workflow_hitl`` task flips the row durably; until it
+    fires (or if it could not be queued) the list must not show the item as
+    still decidable, and ``/decide`` already rejects it with 410.
+    """
+    if item.status == "pending" and item.expires_at and (now or datetime.now(UTC)) > item.expires_at:
+        return "expired"
+    return item.status
+
+
 def _hitl_to_dict(item: HITLQueue) -> dict:
     return {
         "id": str(item.id),
@@ -88,7 +100,7 @@ def _hitl_to_dict(item: HITLQueue) -> dict:
         "title": item.title,
         "trigger_type": item.trigger_type,
         "priority": item.priority,
-        "status": item.status,
+        "status": _effective_status(item),
         "assignee_role": item.assignee_role,
         "decision_options": item.decision_options,
         "context": item.context,
@@ -115,11 +127,19 @@ async def list_approvals(
     domain: str | None = None,
     priority: str | None = None,
     status: str | None = None,
+    include_expired: bool = False,
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
 ):
+    """List HITL items.
+
+    Default: pending, undecided, not past their deadline. ``status=expired``
+    lists items the timeout task closed; ``include_expired=true`` adds both
+    those and pending items whose ``expires_at`` already passed (reported
+    with ``status: "expired"``) so a timed-out approval never vanishes.
+    """
     if page < 1:
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
@@ -142,14 +162,16 @@ async def list_approvals(
         if status:
             base = base.where(HITLQueue.status == status)
             count_base = count_base.where(HITLQueue.status == status)
-
-        # Default: show only pending items
-        if not status:
+        elif include_expired:
+            base = base.where(HITLQueue.status.in_(("pending", "expired")))
+            count_base = count_base.where(HITLQueue.status.in_(("pending", "expired")))
+        else:
+            # Default: show only pending items
             base = base.where(HITLQueue.status == "pending")
             count_base = count_base.where(HITLQueue.status == "pending")
 
-        # Exclude expired items from the pending queue
-        if status == "pending" or not status:
+        # Exclude deadline-passed items from the decidable pending queue
+        if (status == "pending" or not status) and not include_expired:
             now = datetime.now(UTC)
             base = base.where(
                 (HITLQueue.expires_at.is_(None)) | (HITLQueue.expires_at > now)

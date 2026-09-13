@@ -233,6 +233,7 @@ def build_agent_graph(
     company_id: str | None = None,
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
+    pii_token_map: dict[str, str] | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -261,6 +262,7 @@ def build_agent_graph(
         company_id=company_id,
         domain=domain,
         capability_authorization=capability_authorization,
+        pii_token_map=pii_token_map,
     )
 
     # LLM is created lazily on first call to avoid API key validation at build time

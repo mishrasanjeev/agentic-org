@@ -33,7 +33,7 @@ logger = structlog.get_logger()
 # Plan pricing — aligned with core.billing.catalog.PUBLIC_PLAN_CATALOG
 PLAN_MONTHLY_FEE = {
     "free": Decimal("0"),
-    "pro": Decimal("2.00"),
+    "pro": Decimal("99.00"),
     "enterprise": Decimal("499.00"),
 }
 USAGE_RATE_PER_1K_TASKS = Decimal("2.50")  # $2.50 per 1000 tasks above plan allowance
@@ -47,29 +47,22 @@ PROVIDER_BILLED = {"stripe", "plural"}
 async def _resolve_billing_state(tenant: Tenant) -> tuple[str, str]:
     """Return ``(effective_plan, billing_provider)`` for a tenant.
 
-    Billing's source of truth is Redis: ``tenant:{id}:plan`` and
-    ``tenant:{id}:billing_provider`` are written by the Stripe/Plural
-    activation paths (``_activate_subscription``) and by cancel. ``Tenant.plan``
-    is never updated by billing, so it is only a fallback when Redis has no
-    record. Provider is "" when the tenant is not provider-billed.
+    Billing's source of truth is the ``billing_subscriptions`` row
+    (``core.billing.subscriptions``); Redis is only its cache. ``Tenant.plan``
+    is never updated by billing, so it is only a fallback when the tenant has
+    no subscription row. Provider is "" when the tenant is not provider-billed.
     """
-    from core.async_redis import get_async_redis
+    from core.billing.subscriptions import get_subscription
 
-    plan = ""
-    provider = ""
     try:
-        redis = await get_async_redis()
-        if redis is not None:
-            raw_plan = await redis.get(f"tenant:{tenant.id}:plan")
-            raw_provider = await redis.get(f"tenant:{tenant.id}:billing_provider")
-            plan = raw_plan.decode() if isinstance(raw_plan, bytes) else (raw_plan or "")
-            provider = (
-                raw_provider.decode() if isinstance(raw_provider, bytes) else (raw_provider or "")
-            )
+        sub = await get_subscription(str(tenant.id))
     # enterprise-gate: broad-except-ok reason=billing-state-lookup-failure-falls-back-to-tenant-row
     except Exception:
         logger.warning("invoice_billing_state_lookup_failed", tenant_id=str(tenant.id))
-    return (plan or tenant.plan or "free"), provider
+        return (tenant.plan or "free"), ""
+    if sub["is_paid"]:
+        return sub["plan"], sub["provider"]
+    return (tenant.plan or "free"), ""
 
 
 def _tenant_currency(tenant: Tenant, provider: str) -> str:
