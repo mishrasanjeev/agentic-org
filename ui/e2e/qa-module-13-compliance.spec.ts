@@ -42,7 +42,7 @@ test.describe("Module 13: Compliance @qa @compliance @audit", () => {
     const payload = await resp.json();
     expect(payload).toHaveProperty("request_id");
     expect(payload.type).toBe("access");
-    expect(payload.status).toBe("processing");
+    expect(["received", "completed", "failed"]).toContain(payload.status); // processed for real since 2026-09-13
     expect(payload.subject_email).toBe(subject);
     expect(payload).toHaveProperty("created_at");
   });
@@ -51,7 +51,7 @@ test.describe("Module 13: Compliance @qa @compliance @audit", () => {
   // TC-COMP-002: DSAR erase request — 30-day deadline
   // -------------------------------------------------------------------------
 
-  test("TC-COMP-002 POST /dsar/erase returns 30-day deadline payload", async ({
+  test("TC-COMP-002 POST /dsar/erase persists and processes the request", async ({
     request,
   }) => {
     const ts = Date.now();
@@ -68,16 +68,18 @@ test.describe("Module 13: Compliance @qa @compliance @audit", () => {
     const payload = await resp.json();
     expect(payload).toHaveProperty("request_id");
     expect(payload.type).toBe("erase");
-    expect(payload.status).toBe("processing");
-    expect(payload.deadline_days).toBe(30);
-    expect(payload).toHaveProperty("deadline");
+    expect(["received", "completed", "failed"]).toContain(payload.status); // processed for real since 2026-09-13
+    // 2026-09-13: no fabricated 30-day deadline — the request is persisted
+    // and processed; the row is pollable.
+    expect(payload.poll).toBe(`/api/v1/dsar/${payload.request_id}`);
+    expect(payload).toHaveProperty("completed_at");
   });
 
   // -------------------------------------------------------------------------
   // TC-COMP-003: DSAR export request — json format
   // -------------------------------------------------------------------------
 
-  test("TC-COMP-003 POST /dsar/export returns json format + size estimates", async ({
+  test("TC-COMP-003 POST /dsar/export returns the processed export result", async ({
     request,
   }) => {
     const ts = Date.now();
@@ -94,12 +96,15 @@ test.describe("Module 13: Compliance @qa @compliance @audit", () => {
     const payload = await resp.json();
     expect(payload).toHaveProperty("request_id");
     expect(payload.type).toBe("export");
-    expect(payload.status).toBe("processing");
-    expect(payload.format).toBe("json");
-    // Size estimate may be 0 for a non-existing subject — assert
-    // the FIELD is present, not that it's non-zero.
-    expect(payload).toHaveProperty("estimated_records");
-    expect(payload).toHaveProperty("estimated_size_mb");
+    expect(["received", "completed", "failed"]).toContain(payload.status); // processed for real since 2026-09-13
+    expect(payload.poll).toBe(`/api/v1/dsar/${payload.request_id}`);
+    // The persisted row is pollable and carries the export result.
+    const poll = await request.get(`${APP}/api/v1${payload.poll.replace(/^\/api\/v1/, "")}`, {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+      failOnStatusCode: false,
+    });
+    expect(poll.status()).toBe(200);
+    expect(await poll.json()).toHaveProperty("result");
   });
 
   // -------------------------------------------------------------------------

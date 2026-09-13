@@ -69,26 +69,29 @@ test.describe("Decorative-state freeze (P1.2)", () => {
     }
   });
 
-  test("Connectors Marketplace Connect button is labelled as Demo", async ({
+  test("Connectors Marketplace never fabricates apps: real cards are non-actionable, otherwise an honest empty/error state", async ({
     page,
   }) => {
+    // 2026-09-13: DEMO_MARKETPLACE_APPS was removed. With no Composio
+    // catalog configured the tab must show an explicit empty or error
+    // state; when a catalog is present every Connect button is disabled
+    // (OAuth handoff is not wired) — never a fake "Connect (Demo)" toggle.
     await page.goto(`${APP}/dashboard/connectors`, { waitUntil: "networkidle" });
     await page.getByTestId("tab-marketplace").click();
 
-    // Wait for marketplace cards to render. We don't assert a specific app
-    // name (Composio catalog rotates) — we just need one connect button.
-    const firstConnect = page
-      .locator('[data-testid^="marketplace-connect-"]')
-      .first();
-    await expect(
-      firstConnect,
-      "at least one marketplace Connect button must render",
-    ).toBeVisible({ timeout: 15_000 });
+    const connect = page.locator('[data-testid^="marketplace-connect-"]').first();
+    const empty = page.getByTestId("marketplace-empty");
+    const error = page.getByTestId("marketplace-error");
+    await expect(connect.or(empty).or(error).first()).toBeVisible({ timeout: 15_000 });
 
-    const label = (await firstConnect.textContent()) || "";
-    expect(
-      label.includes("Demo"),
-      `Connect button must be labelled as Demo, got: '${label}'`,
-    ).toBe(true);
+    if (await connect.count()) {
+      await expect(connect).toBeDisabled();
+      const label = (await connect.textContent()) || "";
+      expect(label.includes("Demo"), `no demo toggles allowed, got: '${label}'`).toBe(false);
+    } else {
+      const shown = (await empty.isVisible()) ? empty : error;
+      const text = ((await shown.textContent()) || "").trim();
+      expect(text.length > 0, "empty/error state must carry a message").toBe(true);
+    }
   });
 });

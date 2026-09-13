@@ -55,7 +55,9 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "push-public-config": (60, 60),
     "healthcheck": (600, 60),
     "infra-health-probe": (600, 60),
-    "auth-login": (10, 60),
+    # Per client IP. Offices/NAT and CI suites share an IP; credential
+    # stuffing is separately bounded by the failure-based login throttle.
+    "auth-login": (120, 60),
     "auth-signup": (5, 3600),
     "auth-password-reset": (5, 3600),
     "auth-invite": (30, 3600),
