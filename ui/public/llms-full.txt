@@ -238,7 +238,7 @@ The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/bill
 | Plan | USD list price | INR list price | Agents | Runs | Storage |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Free | $0/month | INR 0/month | 3 | 1,000/month | 1 GB |
-| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $2/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
+| <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Pro | $99/month | INR 9,999/month | 15 | 10,000/month | 50 GB |
 | <!-- claim-id: BILLING-CATALOG-PUBLIC-PLANS --> Enterprise | $499/month | INR 49,999/month | Unlimited | Unlimited | Unlimited |
 
 The repository is Apache-2.0 licensed. Infrastructure, model-provider, external API, payment-provider, and support costs are separate from the software license.
