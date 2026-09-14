@@ -9,6 +9,10 @@ The doubles live under `core/test_doubles/` and are imported
 lazily inside the production seam so they don't add to cold-path
 imports outside test runs.
 
+For recorded model output rather than generated stand-ins — including
+LangGraph agent runs, which the fake LLM does not cover — see
+[Record and replay model calls](testing/record-replay.md).
+
 ## Active doubles
 
 ### Fake LLM — `core/test_doubles/fake_llm.py`

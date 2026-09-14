@@ -36,7 +36,7 @@ from __future__ import annotations
 import inspect
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import structlog
@@ -549,11 +549,34 @@ class LLMRouter:
         # so PR CI never makes a real LLM call. The fake is keyed by
         # prompt fingerprint so cost-cap and routing tests stay
         # reproducible. See docs/hermetic_test_doubles.md.
+        from core import model_replay  # noqa: PLC0415 — local import keeps prod cold-path lean
         from core.test_doubles import fake_llm  # noqa: PLC0415 — local import keeps prod cold-path lean
+
+        fake_active = fake_llm.is_active() and is_relaxed_env(settings.env)
+
+        # Record/replay (docs/testing/record-replay.md). An explicit
+        # AGENTICORG_MODEL_MODE always applies; the CI replay default yields
+        # to the fake LLM when that hermetic seam is already on.
+        mode = model_replay.current_mode(hermetic_fallback=fake_active)
+        if mode is not model_replay.ModelMode.LIVE:
+
+            async def _live_call() -> dict[str, Any]:
+                response = await self._call_provider(model, messages, temperature, max_tokens, start, tenant_id)
+                return asdict(response)
+
+            payload = await model_replay.replay_router_call(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                live_call=_live_call,
+                mode=mode,
+            )
+            return LLMResponse(**payload)
 
         # Relaxed-runtime gate: a leaked AGENTICORG_TEST_FAKE_LLM flag must
         # never route production traffic to the deterministic fake.
-        if fake_llm.is_active() and is_relaxed_env(settings.env):
+        if fake_active:
             payload = fake_llm.fake_complete(
                 model=model,
                 messages=messages,
@@ -562,6 +585,17 @@ class LLMRouter:
             )
             return LLMResponse(**payload)
 
+        return await self._call_provider(model, messages, temperature, max_tokens, start, tenant_id)
+
+    async def _call_provider(
+        self,
+        model: str,
+        messages: list[dict],
+        temperature: float,
+        max_tokens: int,
+        start: float,
+        tenant_id: str | None,
+    ) -> LLMResponse:
         if "gemini" in model:
             return await self._call_gemini(
                 model, messages, temperature, max_tokens, start, tenant_id=tenant_id

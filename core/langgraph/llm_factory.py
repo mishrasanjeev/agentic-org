@@ -20,6 +20,7 @@ from contextvars import ContextVar, Token
 import structlog
 from langchain_core.language_models import BaseChatModel
 
+from core import model_replay
 from core.ai_providers.catalog import find_llm, validate_llm_selection
 from core.llm.router import LLMProviderConfigurationError, smart_router
 
@@ -163,7 +164,49 @@ def create_chat_model(
 
     Returns:
         A LangChain ``BaseChatModel`` ready for ``.ainvoke()``.
+
+    In ``record`` and ``replay`` model modes (``AGENTICORG_MODEL_MODE``, see
+    ``core.model_replay``) the model is wrapped for cassettes, and the real
+    model is only built when a live call is made.
     """
+    mode = model_replay.current_mode()
+    if mode is not model_replay.ModelMode.LIVE:
+        pinned = _normalise_provider(provider or (routing_config or {}).get("provider"))
+        return model_replay.ReplayChatModel(
+            model_name=f"{pinned}/{model}" if pinned else (model or "default"),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            live_factory=lambda: _create_live_chat_model(
+                model,
+                temperature,
+                max_tokens,
+                query=query,
+                routing_config=routing_config,
+                tenant_id=tenant_id,
+                provider=provider,
+            ),
+        )
+    return _create_live_chat_model(
+        model,
+        temperature,
+        max_tokens,
+        query=query,
+        routing_config=routing_config,
+        tenant_id=tenant_id,
+        provider=provider,
+    )
+
+
+def _create_live_chat_model(
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    *,
+    query: str,
+    routing_config: dict | None,
+    tenant_id: str | None,
+    provider: str | None,
+) -> BaseChatModel:
     routing_config = routing_config or {}
     routing_mode = routing_config.get("routing", os.getenv("AGENTICORG_LLM_ROUTING", "auto"))
     llm_mode = _get_llm_mode()
