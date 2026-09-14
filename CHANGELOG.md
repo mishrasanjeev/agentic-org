@@ -5,6 +5,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- `ScriptedChatModel` and the `scripted_model` test fixture: fixed tool-call
+  sequences for testing agent graph mechanics (tools, interrupts, resume)
+  without model text. A script that is overrun, calls an unbound tool or is
+  left partly unused fails the test. See `docs/hermetic_test_doubles.md`.
 - Record and replay for model calls (`AGENTICORG_MODEL_MODE` =
   `live`/`record`/`replay`) covering LangGraph agents and `LLMRouter`
   completions. Cassettes are keyed by a hash of the rendered request, so a
