@@ -95,9 +95,14 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from connectors.plugins import load_configured_plugins
     from core.database import init_db
 
     await init_db()
+
+    # Native connectors and agents register at import; plugins load after them
+    # so a plugin can never replace a native implementation.
+    load_configured_plugins()
 
     # One-time cleanup: remove poisoned blacklist keys created by the old
     # token[:32] scheme.  All HS256 JWTs share the same header prefix, so a
