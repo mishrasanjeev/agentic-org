@@ -88,6 +88,29 @@ npm run dev    # http://localhost:5173
 
 ## Code Standards
 
+### Licence headers
+
+AgenticOrg is Apache-2.0. Every **new** source file (`.py`, `.ts`, `.tsx`,
+`.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`) must carry an SPDX identifier within its
+first five lines — after a shebang or encoding line if there is one:
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+```
+
+```ts
+// SPDX-License-Identifier: Apache-2.0
+```
+
+Existing files are not required to gain a header when edited. Type declaration
+files (`.d.ts`), minified bundles, empty files and recorded test cassettes are
+exempt. Pull requests enforce this in CI, and `scripts/preflight.sh` runs the
+same check over your branch:
+
+```bash
+python scripts/check_license_headers.py --base origin/main
+```
+
 ### Python (Backend)
 
 - **Linter**: `ruff check .` (zero violations required)
