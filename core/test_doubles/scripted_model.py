@@ -26,7 +26,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import ConfigDict, Field
 
-Step = AIMessage | Callable[[list[BaseMessage]], AIMessage]
+type Step = AIMessage | Callable[[list[BaseMessage]], AIMessage]
 
 
 class ScriptExhaustedError(AssertionError):
