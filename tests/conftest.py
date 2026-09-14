@@ -168,3 +168,47 @@ def sample_invoice():
         "gstin": "29ABCDE1234F1Z5",
         "confidence": 0.96,
     }
+
+
+CASSETTE_ROOT = Path(__file__).resolve().parent / "cassettes"
+
+
+@pytest.fixture
+def model_cassette(request):
+    """Scope model calls to ``tests/cassettes/<test module>/<test name>/``.
+
+    Under ``CI`` the calls replay from that directory and a missing cassette
+    fails the test; locally they are live unless ``AGENTICORG_MODEL_MODE`` is
+    set. Record deliberately with ``AGENTICORG_MODEL_MODE=record`` and commit
+    the cassettes with the change. See docs/testing/record-replay.md.
+    """
+    from core.model_replay import cassette_scope
+
+    module = request.node.module.__name__.rsplit(".", 1)[-1]
+    name = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in request.node.name)
+    with cassette_scope(CASSETTE_ROOT / module / name) as directory:
+        yield directory
+
+
+@pytest.fixture
+def scripted_model(monkeypatch):
+    """Install scripted model turns where agent graphs build their model.
+
+    Call it with a list of steps (``tool_call(...)``, ``final(...)`` or a
+    callable taking the messages); it returns the ``ScriptedChatModel``. The
+    test fails if the graph asks for more turns than scripted or leaves steps
+    unused. See core/test_doubles/scripted_model.py.
+    """
+    from core.test_doubles.scripted_model import ScriptedChatModel
+
+    installed: list[ScriptedChatModel] = []
+
+    def install(steps):
+        model = ScriptedChatModel(steps=steps)
+        installed.append(model)
+        monkeypatch.setattr("core.langgraph.agent_graph.create_chat_model", lambda *a, **k: model)
+        return model
+
+    yield install
+    for model in installed:
+        model.assert_consumed()

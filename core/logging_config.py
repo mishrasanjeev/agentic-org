@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import MutableMapping
+from typing import Any
 
 import structlog
 
@@ -63,7 +65,9 @@ _CLOUD_SEVERITY = {
 }
 
 
-def add_cloud_severity(_logger: object, _method: str, event_dict: dict) -> dict:
+def add_cloud_severity(
+    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Mirror ``level`` into ``severity`` for Google Cloud Logging.
 
     Cloud Run parses single-line JSON stdout into ``jsonPayload`` but only
@@ -82,6 +86,7 @@ def build_formatter(log_format: str) -> logging.Formatter:
         if log_format == "console"
         else structlog.processors.JSONRenderer(sort_keys=True)
     )
+    cloud_processors: list[structlog.typing.Processor] = [add_cloud_severity]
     return structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=_shared_processors(),
         processors=[
@@ -89,7 +94,7 @@ def build_formatter(log_format: str) -> logging.Formatter:
             # Exceptions become a single ``exception`` string field so a
             # traceback never spans multiple log records/lines.
             structlog.processors.format_exc_info,
-            *([add_cloud_severity] if log_format == "json" else []),
+            *(cloud_processors if log_format == "json" else []),
             renderer,
         ],
     )

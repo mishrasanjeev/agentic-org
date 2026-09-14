@@ -13,7 +13,7 @@ from typing import Any
 import structlog.contextvars
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish, setup_logging, task_postrun, task_prerun
+from celery.signals import before_task_publish, setup_logging, task_postrun, task_prerun, worker_process_init
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
@@ -175,6 +175,14 @@ def _configure_celery_logging(**_kwargs: Any) -> None:
     from core.logging_config import configure_logging
 
     configure_logging()
+
+
+@worker_process_init.connect
+def _load_plugins_in_worker(**_kwargs: Any) -> None:
+    """Workers run agents and connectors too, so they load the same plugins as the API."""
+    from connectors.plugins import load_configured_plugins
+
+    load_configured_plugins()
 
 
 @before_task_publish.connect

@@ -54,18 +54,18 @@ dependencies = [
     "uvicorn[standard]>=0.52.4",
     "sqlalchemy[asyncio]>=2.0.52",
     "asyncpg>=0.30.0",
-    "psycopg2-binary>=2.9.12",
+    "psycopg2-binary>=2.9.13",
     "alembic>=1.19.2",
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
     "cryptography>=50.0.1",
-    "PyJWT[crypto]>=2.13.0",
+    "PyJWT[crypto]>=2.14.0",
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.28.0",
     # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
     # canonicalisation and constant-time validation to the maintained SDK.
-    "twilio>=9.11.0",
+    "twilio>=9.11.1",
     # Billing checkout is a production request path. Keep the Stripe SDK in
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
@@ -77,7 +77,7 @@ dependencies = [
     "google-cloud-storage>=2.18.0",
     "google-cloud-secret-manager>=2.30.0",
     "google-api-python-client>=2.200.0",
-    "google-auth>=2.57.1",
+    "google-auth>=2.58.0",
     "dnspython>=2.7.0",
     "structlog>=24.4.0",
     "opentelemetry-api>=1.44.0",
@@ -89,12 +89,12 @@ dependencies = [
     "langgraph>=1.2.11",
     "langchain>=1.4.0",
     "langchain-google-genai>=4.4.0",
-    "langchain-anthropic>=1.7.1",
-    "langchain-openai>=1.6.1",
+    "langchain-anthropic>=1.7.2",
+    "langchain-openai>=1.6.2",
     "langgraph-checkpoint-postgres>=3.1.2",
     "grantex>=0.5.0",
-    "langsmith>=0.12.2",
-    "pypdf>=6.18.0",
+    "langsmith>=0.12.4",
+    "pypdf>=6.18.1",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
     "python-docx>=1.2.0",
@@ -157,7 +157,7 @@ dev = [
     # supported redis transport requires redis<6.5.
     "testcontainers[postgres]>=4.15.0,<4.16.0",
     "factory-boy>=3.3.3",
-    "ruff>=0.16.6",
+    "ruff>=0.16.7",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.6.2",

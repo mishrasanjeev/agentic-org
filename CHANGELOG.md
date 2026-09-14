@@ -5,6 +5,46 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Secret scanning with gitleaks 8.30.1 on every pull request, every push to
+  `main` and weekly over the full history, plus a pre-commit hook and a
+  `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
+  scanning" in `CONTRIBUTING.md`.
+- New source files must carry `SPDX-License-Identifier: Apache-2.0` in their
+  first five lines; enforced on pull requests and in `scripts/preflight.sh`.
+  Existing files are unaffected. See "Licence headers" in `CONTRIBUTING.md`.
+- Container scanning of both the API and console images on every pull
+  request, push to `main` and nightly (previously the API image only, nightly
+  only), with a pinned Trivy 0.74.0, dated exceptions in `.trivyignore.yaml`
+  and a CycloneDX SBOM artifact per image. See "Container scanning" in
+  `CONTRIBUTING.md`. The console image's seven base-image `libuuid` findings
+  are tracked in `FINDINGS.md` with exceptions expiring 2026-10-14.
+- One-command local stack: `make dev` builds and starts Postgres, Redis,
+  MinIO, migrations, the API, the worker and the console from
+  `docker-compose.dev.yml` (base images pinned by digest, ports bound to
+  127.0.0.1, no credentials needed), waits for health and runs a smoke test.
+  `make down`, `make clean`, `make logs` and `make ps` manage it. See
+  `docs/quickstart-local.md`.
+- `ScriptedChatModel` and the `scripted_model` test fixture: fixed tool-call
+  sequences for testing agent graph mechanics (tools, interrupts, resume)
+  without model text. A script that is overrun, calls an unbound tool or is
+  left partly unused fails the test. See `docs/hermetic_test_doubles.md`.
+- Record and replay for model calls (`AGENTICORG_MODEL_MODE` =
+  `live`/`record`/`replay`) covering LangGraph agents and `LLMRouter`
+  completions. Cassettes are keyed by a hash of the rendered request, so a
+  prompt, tool or tool-output change misses loudly instead of replaying stale
+  text; replay never falls back to a live call and both non-live modes are
+  refused outside local and test runtimes. Tests opt in with the
+  `model_cassette` fixture and replay by default in CI. Production behaviour
+  is unchanged when the variable is unset. See
+  `docs/testing/record-replay.md` and ADR 0008.
+- Connectors and agents can ship as separate packages through the
+  `agenticorg.connectors` and `agenticorg.agents` entry-point groups
+  (`agenticorg.providers` and `agenticorg.workflows` are discovered and
+  rejected until their registries exist). Off by default
+  (`AGENTICORG_PLUGIN_LOADING`); only distributions in
+  `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
+  priority; every rejection is logged with a reason and counted in
+  `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
@@ -12,6 +52,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   on both legacy and ORM-bootstrap installations.
 
 ### Fixed
+- The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report
+  healthy. Their Docker healthcheck probed `localhost`, which resolves to
+  `::1` in the nginx:alpine base while nginx listens on IPv4, so the
+  containers showed unhealthy while serving traffic and anything waiting on
+  their health never proceeded. The probe now requests
+  `http://127.0.0.1/health`.
 - Knowledge deletion now retires native vector chunks as well as RAGFlow and
   document records, preventing deleted content from remaining searchable.
 - Plural billing callback OpenAPI operations now have unique GET/POST IDs for

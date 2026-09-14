@@ -1,7 +1,7 @@
 # SEC-010: production base images pinned by digest. Refresh via
 # scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
 # node:26-slim @ 2026-05-01
-FROM node:26-slim@sha256:c0753125a3789977aefe869cbebccf70e3cfd7ea84ca48547458f02e4f1d7146 AS builder
+FROM node:26-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS builder
 WORKDIR /app
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -23,4 +23,4 @@ COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'
 ENV PORT=8080
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:${PORT}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://127.0.0.1:${PORT}/health || exit 1

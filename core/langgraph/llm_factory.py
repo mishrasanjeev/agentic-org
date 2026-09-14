@@ -13,14 +13,95 @@ from __future__ import annotations
 
 import os
 import socket
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 
 import structlog
 from langchain_core.language_models import BaseChatModel
 
+from core import model_replay
 from core.ai_providers.catalog import find_llm, validate_llm_selection
 from core.llm.router import LLMProviderConfigurationError, smart_router
 
 logger = structlog.get_logger()
+
+# Credentials resolved on the caller's event loop before a graph is built.
+# ``get_provider_credential_sync`` cannot be used from inside a running loop:
+# it runs the async resolver on a fresh loop in a worker thread, where the
+# shared asyncpg pool (bound to the main loop) fails and the tenant lookup is
+# reported as "provider is not configured". Keyed by (tenant_id, provider).
+_PREFETCHED_LLM_CREDENTIALS: ContextVar[dict[tuple[str, str], object] | None] = ContextVar(
+    "_PREFETCHED_LLM_CREDENTIALS", default=None
+)
+_CLOUD_LLM_PROVIDERS = frozenset({"gemini", "anthropic", "openai", "openai_compatible"})
+
+
+def _infer_cloud_provider(model: str, provider: str | None) -> str | None:
+    """Provider id create_chat_model will dispatch to (None for local models)."""
+    if provider:
+        return provider
+    resolved = _resolve_model(model)
+    if _is_ollama_model(resolved) or _is_vllm_model(resolved):
+        return None
+    if "claude" in resolved:
+        return "anthropic"
+    if "gpt" in resolved:
+        return "openai"
+    return "gemini"
+
+
+async def prefetch_llm_credential(
+    model: str, provider: str | None, tenant_id: str | None
+) -> Token[dict[tuple[str, str], object] | None] | None:
+    """Resolve the tenant-aware LLM credential on the running event loop.
+
+    Call from async code right before a synchronous ``create_chat_model``
+    (e.g. ``build_agent_graph``); reset the returned token afterwards.
+    """
+    if not tenant_id:
+        return None
+    cloud = _infer_cloud_provider(model, provider)
+    if cloud not in _CLOUD_LLM_PROVIDERS:
+        return None
+    from core.ai_providers.resolver import ProviderNotConfigured, get_provider_credential
+
+    credential: object | None
+    try:
+        credential = await get_provider_credential(tenant_id, cloud, "llm")
+    except ProviderNotConfigured:
+        credential = None
+    # enterprise-gate: broad-except-ok reason=llm-key-prefetch-failure-degrades-to-provider-unavailable
+    except Exception as exc:
+        logger.warning("llm_key_prefetch_failed", provider=cloud, error=str(exc))
+        credential = None
+    prefetched = dict(_PREFETCHED_LLM_CREDENTIALS.get() or {})
+    prefetched[(str(tenant_id), cloud)] = credential
+    return _PREFETCHED_LLM_CREDENTIALS.set(prefetched)
+
+
+def reset_prefetched_llm_credential(token: Token | None) -> None:
+    if token is not None:
+        _PREFETCHED_LLM_CREDENTIALS.reset(token)
+
+
+def snapshot_prefetched_llm_credentials() -> dict[tuple[str, str], object] | None:
+    """Capture the prefetch at graph-build time for a lazily created model."""
+    current = _PREFETCHED_LLM_CREDENTIALS.get()
+    return dict(current) if current else None
+
+
+@contextmanager
+def use_prefetched_llm_credentials(snapshot: dict[tuple[str, str], object] | None) -> Iterator[None]:
+    """Re-apply a build-time snapshot around a deferred ``create_chat_model``."""
+    if not snapshot:
+        yield
+        return
+    token = _PREFETCHED_LLM_CREDENTIALS.set(snapshot)
+    try:
+        yield
+    finally:
+        _PREFETCHED_LLM_CREDENTIALS.reset(token)
 
 
 def _is_local_endpoint_available(host: str = "localhost", port: int = 11434, timeout: float = 1.0) -> bool:
@@ -83,7 +164,49 @@ def create_chat_model(
 
     Returns:
         A LangChain ``BaseChatModel`` ready for ``.ainvoke()``.
+
+    In ``record`` and ``replay`` model modes (``AGENTICORG_MODEL_MODE``, see
+    ``core.model_replay``) the model is wrapped for cassettes, and the real
+    model is only built when a live call is made.
     """
+    mode = model_replay.current_mode()
+    if mode is not model_replay.ModelMode.LIVE:
+        pinned = _normalise_provider(provider or (routing_config or {}).get("provider"))
+        return model_replay.ReplayChatModel(
+            model_name=f"{pinned}/{model}" if pinned else (model or "default"),
+            temperature=temperature,
+            max_tokens=max_tokens,
+            live_factory=lambda: _create_live_chat_model(
+                model,
+                temperature,
+                max_tokens,
+                query=query,
+                routing_config=routing_config,
+                tenant_id=tenant_id,
+                provider=provider,
+            ),
+        )
+    return _create_live_chat_model(
+        model,
+        temperature,
+        max_tokens,
+        query=query,
+        routing_config=routing_config,
+        tenant_id=tenant_id,
+        provider=provider,
+    )
+
+
+def _create_live_chat_model(
+    model: str,
+    temperature: float,
+    max_tokens: int,
+    *,
+    query: str,
+    routing_config: dict | None,
+    tenant_id: str | None,
+    provider: str | None,
+) -> BaseChatModel:
     routing_config = routing_config or {}
     routing_mode = routing_config.get("routing", os.getenv("AGENTICORG_LLM_ROUTING", "auto"))
     llm_mode = _get_llm_mode()
@@ -205,6 +328,10 @@ def _resolve_cloud_credential(provider: str, tenant_id: str | None = None):
     Returns the full ``ResolvedCredential`` because ``openai_compatible``
     also needs the non-secret ``provider_config.base_url``.
     """
+    prefetched = _PREFETCHED_LLM_CREDENTIALS.get()
+    if prefetched is not None and tenant_id and (str(tenant_id), provider) in prefetched:
+        return prefetched[(str(tenant_id), provider)]
+
     from core.ai_providers.resolver import (
         ProviderNotConfigured,
         get_provider_credential_sync,

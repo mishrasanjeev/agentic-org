@@ -35,16 +35,16 @@
     "clsx": "^2.1.0",
     "date-fns": "^4.4.0",
     "i18next": "^26.4.2",
-    "lucide-react": "^1.43.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
+    "lucide-react": "^1.45.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "react-helmet-async": "^3.0.0",
     "react-i18next": "^17.0.13",
     "react-router": "^8.3.1",
     "reactflow": "^11.11.0",
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.2"
   },
   "overrides": {
     "@babel/core": "7.29.6",
@@ -64,12 +64,12 @@
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@typescript-eslint/eslint-plugin": "^8.70.0",
     "@typescript-eslint/parser": "^8.68.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "autoprefixer": "^10.5.5",
+    "autoprefixer": "^10.5.6",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
@@ -78,7 +78,7 @@
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
-    "vite": "^8.2.2",
+    "vite": "^8.3.0",
     "vitest": "^5.0.0"
   }
 }

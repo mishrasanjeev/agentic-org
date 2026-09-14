@@ -154,6 +154,12 @@ class Settings(BaseSettings):
     # Env: AGENTICORG_UI_BASE_URL.
     ui_base_url: str = ""
 
+    # Entry-point plugins (connectors/plugins.py). Off by default: loading a
+    # plugin runs third-party code, so only allowlisted distributions load.
+    # Env: AGENTICORG_PLUGIN_LOADING, AGENTICORG_PLUGIN_ALLOWLIST (comma list).
+    plugin_loading: bool = False
+    plugin_allowlist: str = ""
+
     # Platform behaviour
     pii_masking: bool = True
     data_region: str = "IN"

@@ -33,6 +33,7 @@ SKIP_MYPY=${SKIP_MYPY:-0}
 SKIP_MODULE_COV=${SKIP_MODULE_COV:-0}
 SKIP_CONSISTENCY=${SKIP_CONSISTENCY:-0}
 SKIP_TAG_CHECK=${SKIP_TAG_CHECK:-0}
+SKIP_SECRETS=${SKIP_SECRETS:-0}
 
 if [[ "${1:-}" == "--fast" ]]; then
   FAST=1
@@ -129,6 +130,21 @@ bandit_check() {
 }
 
 # ---------------------------------------------------------------------------
+# 3b. Secret scan — the commits this branch adds on top of origin/main, with
+#     the same pinned gitleaks and script as .github/workflows/secret-scan.yml.
+#     Fails closed when gitleaks is missing; install it or SKIP_SECRETS=1.
+# ---------------------------------------------------------------------------
+secret_scan() {
+  if [[ "$SKIP_SECRETS" == "1" ]]; then
+    echo "[preflight] skipped (SKIP_SECRETS=1)"
+    return 0
+  fi
+  local base
+  base=$(git merge-base origin/main HEAD)
+  bash scripts/scan-secrets.sh range "$base" HEAD
+}
+
+# ---------------------------------------------------------------------------
 # 4. Alembic revision IDs — alembic_version.version_num is VARCHAR(32).
 # ---------------------------------------------------------------------------
 alembic_id_check() {
@@ -161,6 +177,14 @@ verify_false_scan() {
     echo "$hits"
     return 1
   fi
+}
+
+# ---------------------------------------------------------------------------
+# 5b. SPDX licence headers — new source files on this branch, the same check
+#     the CI unit-tests job runs on pull requests.
+# ---------------------------------------------------------------------------
+license_header_check() {
+  python scripts/check_license_headers.py --base "$(git merge-base origin/main HEAD)" --head HEAD
 }
 
 # ---------------------------------------------------------------------------
@@ -272,8 +296,10 @@ run_step "branch safety"          branch_check
 run_step "ruff (whole tree)"      ruff_check
 run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
+run_step "secret scan (branch)"   secret_scan
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
+run_step "licence headers (new)"  license_header_check
 run_step "enterprise stability"   enterprise_stability_gate
 run_step "pytest (CI unit suites)" pytest_check
 run_step "ui eslint"              ui_lint

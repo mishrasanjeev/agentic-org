@@ -34,6 +34,41 @@ cp .env.example .env
 pytest tests/unit/
 ```
 
+### Secret scanning
+
+Every pull request, every push to `main` and a weekly full-history run are
+scanned with [gitleaks](https://github.com/gitleaks/gitleaks) 8.30.1
+(`.github/workflows/secret-scan.yml`). `scripts/preflight.sh` runs the same
+scan over your branch. Install gitleaks 8.30.1 locally, then install the hooks
+once per clone:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run the checks by hand:
+
+```bash
+bash scripts/scan-secrets.sh range "$(git merge-base origin/main HEAD)" HEAD
+bash scripts/scan-secrets.sh history
+bash scripts/test-scan-secrets.sh     # scanner self-test
+```
+
+The scanner fails closed: a missing or different gitleaks version, an unknown
+mode or an unresolvable commit is an error, not a pass.
+
+If a scan reports a finding:
+
+1. **A live credential** — revoke or rotate it first, then remove it from the
+   branch. Rewriting history does not un-leak a pushed secret; rotation does.
+   Report it privately as described in [SECURITY.md](SECURITY.md).
+2. **A placeholder** (a test fixture or documentation example) — prefer
+   changing it so it no longer looks like a credential. If it must stay,
+   append `gitleaks:allow` as a comment on that line, or add its fingerprint
+   (printed with the finding) to `.gitleaksignore` and say why in the pull
+   request.
+
 ### UI Development
 
 ```bash
@@ -52,6 +87,29 @@ npm run dev    # http://localhost:5173
 6. **Submit a Pull Request** against `main`
 
 ## Code Standards
+
+### Licence headers
+
+AgenticOrg is Apache-2.0. Every **new** source file (`.py`, `.ts`, `.tsx`,
+`.js`, `.jsx`, `.mjs`, `.cjs`, `.sh`) must carry an SPDX identifier within its
+first five lines — after a shebang or encoding line if there is one:
+
+```python
+# SPDX-License-Identifier: Apache-2.0
+```
+
+```ts
+// SPDX-License-Identifier: Apache-2.0
+```
+
+Existing files are not required to gain a header when edited. Type declaration
+files (`.d.ts`), minified bundles, empty files and recorded test cassettes are
+exempt. Pull requests enforce this in CI, and `scripts/preflight.sh` runs the
+same check over your branch:
+
+```bash
+python scripts/check_license_headers.py --base origin/main
+```
 
 ### Python (Backend)
 
@@ -74,6 +132,28 @@ npm run dev    # http://localhost:5173
 - All PRD test IDs (FT-FIN-xxx, SEC-AUTH-xxx, etc.) must pass
 - Use `pytest-asyncio` for async tests
 - Mock external services, not internal modules
+
+### Container scanning
+
+`.github/workflows/container-scan.yml` builds the API (`Dockerfile`) and console
+(`Dockerfile.ui`) images on every pull request, push to `main` and nightly,
+scans each with [Trivy](https://trivy.dev/) 0.74.0 and uploads a CycloneDX SBOM
+per image (`agenticorg-api-sbom`, `agenticorg-ui-sbom`). The scan fails on HIGH
+or CRITICAL vulnerabilities that have a fixed version. Run it locally:
+
+```bash
+docker build -t agenticorg-api:scan .
+bash scripts/scan-container.sh image agenticorg-api:scan agenticorg-api.cdx.json
+bash scripts/test-scan-container.sh   # scanner self-test
+```
+
+**Exceptions.** Fix a finding when you can: refresh the pinned base image
+digest (`scripts/refresh_image_digests.sh`), update the dependency, or keep the
+package out of the runtime image. When a fix has to wait, add an entry to
+`.trivyignore.yaml` with the vulnerability `id`, the exact package `purls`, a
+`statement` naming the `FINDINGS.md` entry that tracks the fix, and an
+`expired_at` date no more than 30 days out. An expired entry stops applying and
+the scan fails again.
 
 ## Agent Development
 

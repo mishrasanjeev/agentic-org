@@ -9,6 +9,10 @@ The doubles live under `core/test_doubles/` and are imported
 lazily inside the production seam so they don't add to cold-path
 imports outside test runs.
 
+For recorded model output rather than generated stand-ins — including
+LangGraph agent runs, which the fake LLM does not cover — see
+[Record and replay model calls](testing/record-replay.md).
+
 ## Active doubles
 
 ### Fake LLM — `core/test_doubles/fake_llm.py`
@@ -226,6 +230,22 @@ CI: the `integration-tests` job launches `celery worker --detach`
 bound to the Redis service so opt-out tests have a real worker
 listening on the standard queues (reports, delivery, maintenance,
 workflows, rpa).
+
+### Scripted chat model — `core/test_doubles/scripted_model.py`
+
+| | |
+|---|---|
+| Replaces | The chat model LangGraph agents build in `core.langgraph.agent_graph` |
+| Activation | The `scripted_model` fixture in `tests/conftest.py` |
+| Use it for | Graph mechanics that should not depend on model text: routing to tools, retries, HITL interrupt and resume |
+| Steps | `tool_call(name, **args)`, `final({...})`, or a callable that receives the messages and returns an `AIMessage` |
+| Fails loudly when | the graph asks for more turns than scripted; a step calls a tool the graph did not bind; steps are left unused at teardown |
+| Inspection | `model.calls` (messages sent on each turn), `model.remaining`, `bound.bound_tool_names` |
+
+Worked examples that run in CI are in `tests/unit/test_scripted_model.py`,
+including a tool call followed by completion and an interrupt that is resumed
+with a rejection. For recorded model output rather than scripted turns, use
+[record and replay](testing/record-replay.md).
 
 ## Foundation #7 status — complete
 

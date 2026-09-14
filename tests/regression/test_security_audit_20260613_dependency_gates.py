@@ -80,6 +80,7 @@ def test_unused_presidio_anonymizer_does_not_block_cryptography_updates() -> Non
 def test_security_workflows_do_not_continue_on_error() -> None:
     for workflow in (
         REPO / ".github" / "workflows" / "security-scan.yml",
+        REPO / ".github" / "workflows" / "container-scan.yml",
         REPO / ".github" / "workflows" / "deploy.yml",
     ):
         content = workflow.read_text(encoding="utf-8")
@@ -88,12 +89,17 @@ def test_security_workflows_do_not_continue_on_error() -> None:
 
 
 def test_container_scan_fails_on_fixable_highs_without_blocking_unfixed_base_cves() -> None:
-    workflow = (REPO / ".github" / "workflows" / "security-scan.yml").read_text(
-        encoding="utf-8"
-    )
-    assert 'severity: "CRITICAL,HIGH"' in workflow
-    assert "ignore-unfixed: true" in workflow
-    assert 'exit-code: "1"' in workflow
+    # The container scan moved from security-scan.yml (trivy-action inputs) to
+    # container-scan.yml, which calls scripts/scan-container.sh. The gate is
+    # unchanged: HIGH/CRITICAL, unfixed vulnerabilities do not block, a finding
+    # exits 1.
+    workflow = (REPO / ".github" / "workflows" / "container-scan.yml").read_text(encoding="utf-8")
+    assert "bash scripts/scan-container.sh image" in workflow
+    script = (REPO / "scripts" / "scan-container.sh").read_text(encoding="utf-8")
+    assert "--severity HIGH,CRITICAL" in script
+    assert "--ignore-unfixed" in script
+    assert "--exit-code 1" in script
+    assert "|| true" not in script
 
 
 def test_runtime_image_does_not_install_curl_for_healthcheck() -> None:
