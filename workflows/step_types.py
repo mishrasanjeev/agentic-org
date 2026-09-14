@@ -175,7 +175,48 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
         "llm_model": agent.llm_model,
         "cost_controls": agent.cost_controls or {},
         "system_prompt_text": agent.system_prompt_text or "",
+        # Bug sheet 2026-09-14 row 30: ownership, checked by
+        # _workflow_run_may_use_agent before the step runs.
+        "visibility": str(getattr(agent, "visibility", "") or "tenant"),
+        "owner_user_id": str(agent.owner_user_id) if getattr(agent, "owner_user_id", None) else None,
     }
+
+
+async def _workflow_run_may_use_agent(stored_config: dict[str, Any], state: dict) -> bool:
+    """A personal agent may run only in a workflow run its owner started.
+
+    The initiator is read from the durable ``WorkflowRun.context`` (stamped
+    server-side by ``POST /workflows/{id}/run``), never from the payload. A
+    run with no recorded human initiator (sub-workflows, runs created before
+    the stamp existed) cannot use a personal agent. Shared agents: allowed.
+    """
+    if stored_config.get("visibility") != "personal":
+        return True
+    owner = stored_config.get("owner_user_id")
+    run_id = state.get("workflow_run_id")
+    tenant_id = state.get("tenant_id")
+    if not owner or not run_id or not tenant_id:
+        return False
+    try:
+        run_uuid = uuid.UUID(str(run_id))
+        tenant_uuid = uuid.UUID(str(tenant_id))
+    except (TypeError, ValueError):
+        return False
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.workflow import WorkflowRun
+    from workflows.run_sync import workflow_run_initiator
+
+    async with get_tenant_session(tenant_uuid) as session:
+        db_run = (
+            await session.execute(
+                select(WorkflowRun).where(WorkflowRun.id == run_uuid, WorkflowRun.tenant_id == tenant_uuid)
+            )
+        ).scalar_one_or_none()
+    initiator = workflow_run_initiator(db_run)
+    return initiator is not None and str(initiator) == str(owner)
 
 
 async def _validated_workflow_company(tenant_id: str, company_id: Any) -> uuid.UUID:
@@ -545,6 +586,20 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
     agent_type = step.get("agent", step.get("agent_type", "")) or stored_config.get("agent_type", "")
     action = step.get("action", "process")
     inputs = step.get("inputs", state.get("trigger_payload", {}))
+
+    if stored_config and not await _workflow_run_may_use_agent(stored_config, state):
+        return failure_result(
+            step_id=str(step.get("id", "")),
+            step_type="agent",
+            failure=AgentExecutionError(
+                agent=agent_type,
+                step_id=str(step.get("id", "")),
+                cause=(
+                    "Workflow step references a personal agent; only a run started by "
+                    "the agent's owner may use it."
+                ),
+            ),
+        )
 
     if not agent_type and not agent_id:
         return _missing_agent_result(step, action)

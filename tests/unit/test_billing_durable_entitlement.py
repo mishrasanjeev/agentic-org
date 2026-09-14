@@ -228,9 +228,11 @@ class TestDurableSubscriptions:
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
-        # v6z19 (fresh-database repair for the same two tables) is the
-        # single head and chains off v6z18.
-        assert script.get_heads() == ["v6z19_repair_billing_cdc"]
+        # v6z19 (fresh-database repair for the same two tables) chains off
+        # v6z18. Later migrations may sit above it; pin the single-head
+        # invariant and the chain, not the identity of the current head.
+        assert len(script.get_heads()) == 1
+        assert "v6z19_repair_billing_cdc" in {r.revision for r in script.walk_revisions()}
         assert script.get_revision("v6z19_repair_billing_cdc").down_revision == "v6z18_billing_cdc_state"
         rev = script.get_revision("v6z18_billing_cdc_state")
         assert rev.down_revision == "v6z17_sessions_dsar"
@@ -448,8 +450,9 @@ class TestPushPerUser:
         with patch("core.push.sender.get_vapid_keys", return_value=("pub", "priv")), patch(
             "pywebpush.webpush"
         ) as mock_push:
+            # bug sheet 2026-09-14 row 30: a shared-agent item still fans out to subscribers.
             totals = asyncio.run(
-                sender.notify_approval_created("tenant-1", item_id="h1", agent_name="AP")
+                sender.notify_approval_created("tenant-1", item_id="h1", agent_name="AP", agent_visibility="tenant")
             )
         assert totals["sent"] == 2 and mock_push.call_count == 2
         payloads = [c.kwargs["data"] for c in mock_push.call_args_list]
@@ -459,8 +462,11 @@ class TestPushPerUser:
         from core.push import sender
 
         with patch("core.push.sender.get_vapid_keys", side_effect=RuntimeError("no vapid")):
+            # bug sheet 2026-09-14 row 30: explicit shared scope so the vapid failure path runs.
             totals = asyncio.run(
-                sender.notify_approval_created("tenant-1", item_id="h1", user_ids=["alice"])
+                sender.notify_approval_created(
+                    "tenant-1", item_id="h1", user_ids=["alice"], agent_visibility="tenant"
+                )
             )
         assert totals == {"sent": 0, "failed": 0, "stale_removed": 0}
 

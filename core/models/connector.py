@@ -40,6 +40,12 @@ class Connector(BaseModel):
     rate_limit_rpm: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     timeout_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=10000)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # Bug sheet 2026-09-14 rows 17/18 (migration v6z21): NULL is a
+    # tenant-shared, admin-managed connector; otherwise the owning user.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL", name="fk_connectors_owner_user_id"),
+        nullable=True,
+    )
     health_check_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=True), nullable=True
     )

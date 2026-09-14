@@ -71,6 +71,10 @@ class Agent(BaseModel):
     llm_model: Mapped[str] = mapped_column(
         String(100), nullable=False, default="claude-3-5-sonnet-20241022"
     )
+    # Bug sheet 2026-09-14 #31: explicit provider pin (catalog id such as
+    # ``gemini`` / ``anthropic`` / ``openai_compatible``). NULL on legacy
+    # rows means "infer from the model name" (pre-v6z20 behaviour).
+    llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     llm_fallback: Mapped[str | None] = mapped_column(String(100), nullable=True)
     llm_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     confidence_floor: Mapped[Decimal] = mapped_column(
@@ -81,6 +85,16 @@ class Agent(BaseModel):
     retry_backoff: Mapped[str] = mapped_column(String(20), nullable=False, default="exponential")
     authorized_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     connector_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
+    # Bug sheet 2026-09-14 rows 19/22 (migration v6z21): 'tenant' agents are
+    # shared and admin-managed; 'personal' agents belong to owner_user_id.
+    # Rules live in core/ownership.py.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL", name="fk_agents_owner_user_id"),
+        nullable=True,
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="tenant", server_default="tenant"
+    )
     output_schema: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="shadow")
     version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")

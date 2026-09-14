@@ -330,8 +330,11 @@ class TestAmendmentRevocation:
         assert exc.value.status_code == 404
 
     def test_route_is_admin_gated(self):
-        from api.v1.agents import router
+        import inspect
+
+        from api.v1.agents import delete_agent_amendment, router
 
         route = next(r for r in router.routes if r.path == "/agents/{agent_id}/amendments/{index}")
         assert "DELETE" in route.methods
-        assert route.dependencies, "amendment removal must be admin-gated"
+        # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin, enforced in the handler.
+        assert "require_agent_mutable(agent, _effective_caller(caller))" in inspect.getsource(delete_agent_amendment)

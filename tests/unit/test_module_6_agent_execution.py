@@ -296,8 +296,9 @@ def test_tc_exec_006_only_retired_status_blocks_run_at_api_layer() -> None:
 
 def test_tc_exec_007_clone_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    clone_block = src.split('"/agents/{agent_id}/clone"', 1)[1][:300]
-    assert "require_tenant_admin" in clone_block
+    # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin on the source agent.
+    clone_block = src.split("async def clone_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(parent, effective_caller)" in clone_block
 
 
 def test_tc_exec_007_clone_enforces_scope_ceiling() -> None:

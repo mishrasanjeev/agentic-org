@@ -36,7 +36,8 @@ services:
     command: redis-server --appendonly yes
 
   minio:
-    image: minio/minio:latest
+    # minio/minio is no longer published on Docker Hub; quay.io is canonical.
+    image: quay.io/minio/minio:latest
     environment:
       MINIO_ROOT_USER: agenticorg
       MINIO_ROOT_PASSWORD: agenticorg_dev

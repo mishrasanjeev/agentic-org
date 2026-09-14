@@ -121,10 +121,16 @@ class TestREQ05AsyncRedis:
         assert callable(get_async_redis)
 
     def test_sso_uses_async_redis(self):
-        """SSO state store uses async Redis, not sync _get_redis."""
+        """SSO replay marker uses async Redis, not sync _get_redis.
+
+        Bug sheet 2026-09-14 row 7: login-flow state moved out of Redis
+        (signed state + encrypted flow cookie); Redis only backs the
+        best-effort one-shot replay marker, via the async client.
+        """
         from pathlib import Path
         content = Path("api/v1/sso.py").read_text()
-        assert "await r.setex" in content or "await r.get" in content
+        assert "get_async_redis" in content
+        assert "await r.set(" in content and "nx=True" in content
         assert "from core.billing.usage_tracker import _get_redis" not in content
 
     def test_billing_subscription_uses_async_redis(self):

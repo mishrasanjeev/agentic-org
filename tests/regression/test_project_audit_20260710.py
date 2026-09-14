@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 import sys
@@ -162,6 +161,7 @@ async def test_auth_me_uses_verified_tenant_context_not_ambient_cookie() -> None
     )
     tenant = SimpleNamespace(
         id=tenant_id,
+        name="Member Org",
         settings={"onboarding_complete": True},
     )
     user_result = MagicMock()
@@ -194,27 +194,26 @@ async def test_auth_me_uses_verified_tenant_context_not_ambient_cookie() -> None
     assert profile["tenant_id"] == str(tenant_id)
     assert profile["email"] == user.email
     assert profile["onboarding_complete"] is True
+    # Bug sheet 2026-09-14 #27: the header shows the verified tenant's name.
+    assert profile["org_name"] == "Member Org"
     assert seen_tenants == [tenant_id]
 
 
 @pytest.mark.asyncio
 async def test_oidc_callback_sets_cookie_session_without_bearer_fragment() -> None:
     from api.v1 import sso as sso_module
+    from auth.sso.state_token import FLOW_COOKIE_NAME, encrypt_flow_cookie, issue_state_token
 
     tenant_id = uuid.uuid4()
-    state = "state-value"
-    redis = MagicMock()
-    redis.get = AsyncMock(
-        return_value=json.dumps(
-            {
-                "tenant_id": str(tenant_id),
-                "nonce": "nonce",
-                "verifier": "verifier",
-                "return_to": "/dashboard",
-            }
-        ).encode()
+    # Bug sheet 2026-09-14 row 7: flow state is no longer a Redis record; the
+    # callback takes a signed state token plus the encrypted flow cookie.
+    state, claims = issue_state_token(
+        tenant_id=tenant_id, provider_key="oidc", nonce="nonce", return_to="/dashboard"
     )
-    redis.delete = AsyncMock()
+    request = MagicMock()
+    request.cookies = {FLOW_COOKIE_NAME: encrypt_flow_cookie(jti=claims.jti, verifier="verifier")}
+    redis = MagicMock()
+    redis.set = AsyncMock(return_value=True)
     provider = MagicMock()
     provider.exchange_code = AsyncMock(
         return_value=SimpleNamespace(claims={"sub": "member@example.com"})
@@ -251,6 +250,7 @@ async def test_oidc_callback_sets_cookie_session_without_bearer_fragment() -> No
         patch.object(sso_module, "get_tenant_session", tenant_session),
     ):
         response = await sso_module.sso_callback(
+            request=request,
             provider_key="oidc",
             code="provider-code",
             state=state,
@@ -266,6 +266,7 @@ async def test_oidc_callback_sets_cookie_session_without_bearer_fragment() -> No
     assert "#token=" not in location
     assert any(cookie.startswith("agenticorg_session=") for cookie in cookies)
     assert any(cookie.startswith("agenticorg_csrf=") for cookie in cookies)
+    provider.exchange_code.assert_awaited_once_with("provider-code", "verifier", "nonce")
 
 
 def test_valid_old_stripe_event_is_processed_on_retry(monkeypatch) -> None:

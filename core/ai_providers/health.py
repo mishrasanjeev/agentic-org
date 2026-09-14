@@ -10,6 +10,7 @@ Called from ``api/v1/tenant_ai_credentials.py::test_credential``.
 
 from __future__ import annotations
 
+import re
 import time
 import uuid as _uuid
 from typing import Any
@@ -28,6 +29,10 @@ logger = structlog.get_logger(__name__)
 
 _PROBE_TIMEOUT_S = 10.0
 
+# Azure OpenAI data-plane API version used when provider_config carries none.
+_AZURE_OPENAI_DEFAULT_API_VERSION = "2024-10-21"
+_AZURE_API_VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}(-preview)?$")
+
 
 async def _probe_openai(credential: str, base_url: str | None = None) -> dict[str, Any]:
     """OpenAI + OpenAI-compatible: GET /v1/models (lists available models)."""
@@ -38,6 +43,35 @@ async def _probe_openai(credential: str, base_url: str | None = None) -> dict[st
     ) as client:
         start = time.time()
         resp = await client.get(url, headers={"Authorization": f"Bearer {credential}"})
+        latency_ms = int((time.time() - start) * 1000)
+    if resp.status_code == 200:
+        return {"ok": True, "latency_ms": latency_ms, "raw_status": 200}
+    return {
+        "ok": False,
+        "latency_ms": latency_ms,
+        "raw_status": resp.status_code,
+        "error": _classify_http_error(resp.status_code),
+    }
+
+
+async def _probe_azure_openai(
+    credential: str,
+    base_url: str,
+    api_version: str | None = None,
+) -> dict[str, Any]:
+    """Azure OpenAI: GET {endpoint}/openai/models?api-version=... with ``api-key``.
+
+    Bug sheet #40 (2026-09-14): Azure ignores ``Authorization: Bearer`` and
+    does not serve ``/v1/models``, so routing Azure through the OpenAI
+    probe returned 401/404 for perfectly valid keys.
+    """
+    url = _azure_openai_models_url(base_url, api_version)
+    async with httpx.AsyncClient(
+        timeout=_PROBE_TIMEOUT_S,
+        transport=build_pinned_async_transport(require_dns=True),
+    ) as client:
+        start = time.time()
+        resp = await client.get(url, headers={"api-key": credential})
         latency_ms = int((time.time() - start) * 1000)
     if resp.status_code == 200:
         return {"ok": True, "latency_ms": latency_ms, "raw_status": 200}
@@ -166,6 +200,21 @@ def _openai_models_url(base_url: str | None) -> str:
     return validated.url
 
 
+def _azure_openai_models_url(base_url: str, api_version: str | None) -> str:
+    version = str(api_version or "").strip() or _AZURE_OPENAI_DEFAULT_API_VERSION
+    if not _AZURE_API_VERSION_RE.match(version):
+        # Fail closed: a malformed version is an operator config error, not
+        # something to paper over with the default.
+        raise ValueError("Azure OpenAI provider_config.api_version is malformed")
+    endpoint = base_url.rstrip("/")
+    validated = validate_public_url(
+        f"{endpoint}/openai/models?api-version={version}",
+        allowed_schemes=("https",),
+        require_dns=True,
+    )
+    return validated.url
+
+
 def _validate_openai_probe_base(provider: str, base_url: str | None) -> str | None:
     clean = str(base_url or "").strip().rstrip("/")
     if provider == "openai":
@@ -200,10 +249,8 @@ async def probe_provider(
         return {"ok": False, "error": type(exc).__name__}
 
     secret = resolved.secret
-    base_url = (
-        (resolved.provider_config or {}).get("base_url")
-        if resolved.provider_config else None
-    )
+    provider_config = resolved.provider_config if isinstance(resolved.provider_config, dict) else {}
+    base_url = provider_config.get("base_url")
 
     try:
         if provider == "openai":
@@ -220,7 +267,12 @@ async def probe_provider(
                         "(your Azure resource endpoint)."
                     ),
                 }
-            return await _probe_openai(secret, _validate_openai_probe_base(provider, base_url))
+            validated_base = _validate_openai_probe_base(provider, base_url)
+            return await _probe_azure_openai(
+                secret,
+                str(validated_base),
+                provider_config.get("api_version"),
+            )
         if provider == "anthropic":
             return await _probe_anthropic(secret)
         if provider == "gemini":

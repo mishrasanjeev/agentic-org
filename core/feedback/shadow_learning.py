@@ -271,7 +271,12 @@ async def capture_hitl_feedback(
         or context.get("correlation_id")
         or item.id
     )
-    original_output = item.decision_options.get("context") if item.decision_options else None
+    # The agent's output lives in ``context["output"]`` (bug sheet #44,
+    # 2026-09-14). Rows written before that change duplicated it under
+    # ``decision_options["context"]``; keep reading those.
+    original_output = context.get("output")
+    if original_output is None and item.decision_options:
+        original_output = item.decision_options.get("context")
     feedback = AgentFeedback(
         tenant_id=item.tenant_id,
         agent_id=item.agent_id,

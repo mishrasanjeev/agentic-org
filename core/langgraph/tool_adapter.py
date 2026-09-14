@@ -10,14 +10,18 @@ Each connector tool becomes a LangChain @tool function that:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import re
 import time
-from typing import Any
+from collections.abc import Callable
+from types import SimpleNamespace
+from typing import Any, get_type_hints
 
 import httpx
 import structlog
 from langchain_core.tools import StructuredTool
+from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
@@ -196,13 +200,20 @@ def _split_connector_tool_ref(tool_ref: str) -> tuple[str | None, str]:
     names like ``get_trial_balance`` exist on both Tally and Zoho Books.
     ``tool:connector:execute:resource`` is a Grantex scope, not an
     authorized-tool reference, so it is left untouched.
+
+    Bug sheet #14 (2026-09-14): ``connector.tool`` is the spelling the
+    agent-creation UI and several packs persist, so it is accepted as an
+    equivalent of ``connector:tool``. No registered connector or tool name
+    contains a ``.`` (verified against the live registry), so the split is
+    unambiguous.
     """
     raw = str(tool_ref or "").strip()
     if raw.startswith("tool:"):
         return None, raw
-    if ":" not in raw:
+    qualified = raw.replace(".", ":", 1) if ":" not in raw and "." in raw else raw
+    if ":" not in qualified:
         return None, raw
-    connector_name, tool_name = raw.split(":", 1)
+    connector_name, tool_name = qualified.split(":", 1)
     connector_name = _canonical_connector_name(connector_name)
     tool_name = tool_name.strip()
     if not connector_name or not tool_name or ":" in tool_name:
@@ -249,6 +260,12 @@ def _flatten_structured_tool_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
     nested = kwargs.get("kwargs")
     if len(kwargs) == 1 and isinstance(nested, dict):
         return dict(nested)
+    if isinstance(nested, dict):
+        # Bug sheet #15 (2026-09-14): with a real args_schema LangChain adds
+        # the handler defaults next to a legacy ``kwargs`` wrapper, so the
+        # single-key check above no longer matches. The wrapped values are
+        # what the model actually sent, so they win over those defaults.
+        return {**{k: v for k, v in kwargs.items() if k != "kwargs"}, **nested}
     return kwargs
 
 
@@ -444,27 +461,188 @@ def _authorized_tool_refs(authorized_tools: list[str]) -> set[tuple[str | None, 
     """
     refs: set[tuple[str | None, str]] = set()
     for raw in authorized_tools or []:
-        ref = str(raw or "").strip()
-        if not ref:
-            continue
-        if ref.startswith("tool:"):
-            parts = ref.split(":")
-            if len(parts) >= 4 and parts[1] and parts[3]:
-                refs.add((_canonical_connector_name(parts[1]), parts[3]))
-            continue
-        if "." in ref and ":" not in ref:
-            ref = ref.replace(".", ":", 1)
-        connector_hint, tool_name = _split_connector_tool_ref(ref)
-        if connector_hint:
-            refs.add((connector_hint, tool_name))
-            continue
-        if "__" in ref:
-            maybe_connector, maybe_tool = ref.split("__", 1)
-            if ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
-                refs.add((_canonical_connector_name(maybe_connector), maybe_tool))
-                continue
-        refs.add((None, ref))
+        parsed = _parse_authorized_tool_ref(raw)
+        if parsed is not None:
+            refs.add(parsed)
     return refs
+
+
+def _parse_authorized_tool_ref(raw: Any) -> tuple[str | None, str] | None:
+    """Normalise one ``authorized_tools`` entry to ``(connector | None, tool)``.
+
+    Bug sheet #14 (2026-09-14): this is the single normaliser for every
+    spelling the product persists — bare ``send_email``,
+    ``gmail:send_email`` / ``gmail.send_email`` / ``gmail__send_email`` and
+    Grantex scopes ``tool:gmail:<perm>:send_email`` — so ``is_tool_authorized``
+    and ``build_tools_for_agent`` can never disagree about what a ref means.
+    Returns ``None`` for empty refs and malformed Grantex scopes.
+    """
+    ref = str(raw or "").strip()
+    if not ref:
+        return None
+    if ref.startswith("tool:"):
+        parts = ref.split(":")
+        if len(parts) >= 4 and parts[1] and parts[3]:
+            return _canonical_connector_name(parts[1]), parts[3]
+        return None
+    connector_hint, tool_name = _split_connector_tool_ref(ref)
+    if connector_hint:
+        return connector_hint, tool_name
+    if "__" in ref:
+        maybe_connector, maybe_tool = ref.split("__", 1)
+        if maybe_tool and ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
+            return _canonical_connector_name(maybe_connector), maybe_tool
+    return None, ref
+
+
+def _connector_tool_handlers(
+    connector_name: str,
+    connector_config: dict[str, Any] | None,
+) -> dict[str, Callable[..., Any]]:
+    """Return ``tool_name -> bound handler`` for a registered connector.
+
+    Same ``__new__`` + ``_register_tools`` trick ``_build_tool_index`` uses:
+    no ``connect()``/network, only the registry. ``{}`` when the connector
+    is unknown or its registration raises, so callers fall back to an
+    open schema instead of failing the whole tool build.
+    """
+    if connector_name == "composio":
+        # The Composio meta-connector discovers tools over the network in
+        # ``_register_tools``; its tools keep the open schema.
+        return {}
+    connector_cls = ConnectorRegistry.get(connector_name)
+    if not connector_cls:
+        return {}
+    instance = connector_cls.__new__(connector_cls)
+    instance.config = connector_config or {}
+    instance._tool_registry = {}
+    try:
+        instance._register_tools()
+    # enterprise-gate: broad-except-ok reason=connector-tool-schema-derivation-falls-back-to-open-schema
+    except Exception:  # noqa: BLE001
+        return {}
+    return dict(instance._tool_registry)
+
+
+def _handler_param_names(handler: Callable[..., Any] | None) -> tuple[set[str], bool]:
+    """Return ``(keyword-able parameter names, accepts **kwargs)`` for a handler.
+
+    Bound methods already exclude ``self``. An unreadable signature is
+    treated as ``**kwargs`` (pass everything through) so a connector that
+    wraps its handlers in something ``inspect`` cannot see keeps working.
+    """
+    if handler is None:
+        return set(), True
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return set(), True
+    names: set[str] = set()
+    var_kw = False
+    for param in signature.parameters.values():
+        if param.kind is inspect.Parameter.VAR_KEYWORD:
+            var_kw = True
+        elif param.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY):
+            names.add(param.name)
+    return names, var_kw
+
+
+_OPEN_TOOL_ARGS_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": True}
+
+
+def _tool_args_schema(handler: Callable[..., Any] | None, tool_name: str) -> type[BaseModel] | dict[str, Any]:
+    """Derive the LLM-facing argument schema from the connector handler.
+
+    Bug sheet #15 (2026-09-14): ``StructuredTool.from_function`` on the
+    ``**kwargs`` wrapper exposed one opaque ``kwargs`` object, so the model
+    guessed parameter names and top-level keys were silently dropped
+    before the connector saw them. Named handler parameters
+    (``send_email(to, subject, body, cc, bcc)``) become typed, defaulted
+    Pydantic fields (``self`` is already bound away); an annotation that is
+    unresolvable or has no JSON schema becomes ``Any`` for that field only.
+    Handlers that only accept ``**params`` carry no names in their
+    signature, so they get an open object schema (the docstring, which
+    lists the params, is the tool description) and every key the model
+    sends reaches the handler.
+
+    Extra keys are allowed at the schema so ``build_tools_for_agent`` can
+    drop-and-log them against the real signature instead of Pydantic
+    discarding them silently.
+    """
+    names, var_kw = _handler_param_names(handler)
+    if not names:
+        if var_kw:
+            return dict(_OPEN_TOOL_ARGS_SCHEMA)
+        return create_model(tool_name, __config__=ConfigDict(extra="allow"))
+    fields: dict[str, Any] = {}
+    for param in inspect.signature(handler).parameters.values():  # type: ignore[arg-type]
+        if param.name not in names:
+            continue
+        default = ... if param.default is inspect.Parameter.empty else param.default
+        fields[param.name] = (_schemable_annotation(handler, param.annotation), default)
+    try:
+        model = create_model(tool_name, __config__=ConfigDict(extra="allow"), **fields)
+        model.model_json_schema()  # fail here, not later inside bind_tools
+    # enterprise-gate: broad-except-ok reason=unschemable-handler-signature-falls-back-to-open-schema
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("tool_args_schema_fallback", tool=tool_name, error_type=type(exc).__name__)
+        return dict(_OPEN_TOOL_ARGS_SCHEMA)
+    return model
+
+
+def _schemable_annotation(handler: Callable[..., Any] | None, annotation: Any) -> Any:
+    """Resolve one parameter annotation, or ``Any`` when it cannot be schema'd.
+
+    Connector modules use ``from __future__ import annotations`` so
+    annotations arrive as strings; they are resolved against the handler's
+    module globals one parameter at a time so a single unknown type does not
+    erase the typing of every other field.
+    """
+    if annotation is inspect.Parameter.empty:
+        return Any
+    if isinstance(annotation, str):
+        func = getattr(handler, "__func__", handler)
+        probe = SimpleNamespace(
+            __annotations__={"value": annotation},
+            __globals__=getattr(func, "__globals__", {}),
+        )
+        try:
+            annotation = get_type_hints(probe)["value"]
+        # enterprise-gate: broad-except-ok reason=unresolvable-annotation-degrades-to-untyped-field
+        except Exception:  # noqa: BLE001
+            return Any
+    try:
+        TypeAdapter(annotation).json_schema()
+    # enterprise-gate: broad-except-ok reason=non-json-schema-annotation-degrades-to-untyped-field
+    except Exception:  # noqa: BLE001
+        return Any
+    return annotation
+
+
+def _drop_unknown_handler_params(
+    params: dict[str, Any],
+    allowed: set[str],
+    accepts_var_kw: bool,
+    *,
+    connector_name: str,
+    tool_name: str,
+) -> dict[str, Any]:
+    """Drop keys the handler cannot accept instead of letting it TypeError.
+
+    Only key names are logged — never values, which may carry live PII.
+    """
+    if accepts_var_kw:
+        return params
+    unknown = sorted(k for k in params if k not in allowed)
+    if not unknown:
+        return params
+    logger.warning(
+        "tool_args_unknown_keys_dropped",
+        connector=connector_name,
+        tool=tool_name,
+        dropped=unknown,
+    )
+    return {k: v for k, v in params.items() if k in allowed}
 
 
 def is_tool_authorized(authorized_tools: list[str], connector_name: str, tool_name: str) -> bool:
@@ -718,7 +896,7 @@ def build_tools_for_agent(
     Returns a list of callable LangChain tools ready for LangGraph.
     """
     tools: list[StructuredTool] = []
-    seen: set[str] = set()
+    handlers_by_connector: dict[str, dict[str, Callable[..., Any]]] = {}
 
     # Build a reverse index. Connector-qualified aliases are included so
     # CA pack tools can keep ``zoho_books:get_trial_balance`` and
@@ -730,24 +908,66 @@ def build_tools_for_agent(
         include_connector_aliases=True,
     )
 
+    # Bug sheet #14 (2026-09-14): resolve every spelling
+    # (``gmail.send_email`` / ``gmail:send_email`` / ``gmail__send_email``
+    # / ``tool:gmail:<perm>:send_email``) through one normaliser so the
+    # index lookup, the registered LLM-facing name and dedup all agree.
+    # One (connector, tool) pair registers exactly once; it takes the
+    # ``connector__tool`` name when any ref for it was connector-qualified
+    # and keeps its historical bare name otherwise.
+    resolved: list[tuple[str, str, str]] = []
+    qualified_pairs: set[tuple[str, str]] = set()
     for tool_ref in authorized_tools:
-        if tool_ref in seen:
+        parsed = _parse_authorized_tool_ref(tool_ref)
+        if parsed is None:
             continue
-        seen.add(tool_ref)
-
-        match = tool_index.get(tool_ref)
+        connector_hint, actual_tool_name = parsed
+        lookup_key = f"{connector_hint}:{actual_tool_name}" if connector_hint else actual_tool_name
+        match = tool_index.get(lookup_key)
         if not match:
+            logger.warning(
+                "authorized_tool_unresolved",
+                tool_ref=str(tool_ref)[:120],
+                connector=connector_hint,
+                tool=actual_tool_name,
+                connector_names=sorted(connector_names) if connector_names is not None else None,
+            )
             continue
-
         connector_name, description = match
-        connector_hint, parsed_tool_name = _split_connector_tool_ref(tool_ref)
-        actual_tool_name = parsed_tool_name if connector_hint else _actual_tool_name(tool_ref)
-        public_tool_name = _llm_safe_tool_name(connector_name, actual_tool_name) if connector_hint else actual_tool_name
+        if connector_hint:
+            qualified_pairs.add((connector_name, actual_tool_name))
+        resolved.append((connector_name, actual_tool_name, description))
+
+    seen: set[tuple[str, str]] = set()
+    for connector_name, actual_tool_name, description in resolved:
+        pair = (connector_name, actual_tool_name)
+        if pair in seen:
+            continue
+        seen.add(pair)
+        public_tool_name = (
+            _llm_safe_tool_name(connector_name, actual_tool_name) if pair in qualified_pairs else actual_tool_name
+        )
+
+        if connector_name not in handlers_by_connector:
+            handlers_by_connector[connector_name] = _connector_tool_handlers(connector_name, connector_config)
+        handler = handlers_by_connector[connector_name].get(actual_tool_name)
+        handler_params, handler_accepts_var_kw = _handler_param_names(handler)
+        # The full docstring lists the params for ``**params`` handlers;
+        # OpenAI caps function descriptions at 1024 characters.
+        handler_doc = (inspect.getdoc(handler) or "").strip() if handler is not None else ""
+        tool_description = (handler_doc or description or f"Execute {actual_tool_name} on {connector_name}")[:1024]
 
         # Create an async wrapper that calls the connector
-        def _make_tool_fn(cn: str, tn: str, desc: str):
+        def _make_tool_fn(cn: str, tn: str, desc: str, allowed: set[str], var_kw: bool):
             async def _tool_fn(**kwargs: Any) -> dict[str, Any]:
                 params = _flatten_structured_tool_kwargs(kwargs)
+                params = _drop_unknown_handler_params(
+                    params,
+                    allowed,
+                    var_kw,
+                    connector_name=cn,
+                    tool_name=tn,
+                )
                 # Live execution payloads carry the real values; masking is
                 # for the model, logs and traces only.
                 if pii_token_map:
@@ -775,9 +995,19 @@ def build_tools_for_agent(
             return _tool_fn
 
         tool = StructuredTool.from_function(
-            coroutine=_make_tool_fn(connector_name, actual_tool_name, description),
+            coroutine=_make_tool_fn(
+                connector_name,
+                actual_tool_name,
+                tool_description,
+                handler_params,
+                handler_accepts_var_kw,
+            ),
             name=public_tool_name,
-            description=description or f"Execute {actual_tool_name} on {connector_name}",
+            description=tool_description,
+            args_schema=_tool_args_schema(handler, actual_tool_name),
+            # Lets the graph map ``gmail.send_email`` / ``gmail:send_email``
+            # tool calls back to this registered name (bug sheet #14).
+            metadata={"connector": connector_name, "tool": actual_tool_name},
         )
         tools.append(tool)
 
@@ -852,6 +1082,8 @@ def _build_tool_index(
                 index[tool_name] = (connector_name, doc)
             if include_connector_aliases:
                 index[f"{connector_name}:{tool_name}"] = (connector_name, doc)
+                # Bug sheet #14: ``connector.tool`` is a persisted spelling too.
+                index[f"{connector_name}.{tool_name}"] = (connector_name, doc)
                 index[_llm_safe_tool_name(connector_name, tool_name)] = (
                     connector_name,
                     doc,

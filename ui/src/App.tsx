@@ -6,6 +6,7 @@ import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteSeo from "./components/RouteSeo";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES } from "./lib/roles";
 
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
@@ -383,7 +384,7 @@ export default function App() {
       <Route
         path="/dashboard/agents"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
             <Layout>
               <Agents />
             </Layout>
@@ -393,7 +394,7 @@ export default function App() {
       <Route
         path="/dashboard/org-chart"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
             <Layout>
               <OrgChart />
             </Layout>
@@ -403,7 +404,7 @@ export default function App() {
       <Route
         path="/dashboard/agents/new"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
             <Layout>
               <AgentCreate />
             </Layout>
@@ -423,7 +424,7 @@ export default function App() {
       <Route
         path="/dashboard/agents/:id"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
             <Layout>
               <AgentDetail />
             </Layout>
@@ -473,7 +474,7 @@ export default function App() {
       <Route
         path="/dashboard/approvals"
         element={
-          <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo"]}>
+          <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
             <Layout>
               <Approvals />
             </Layout>
@@ -493,7 +494,7 @@ export default function App() {
       <Route
         path="/dashboard/connectors"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={CONNECTOR_ROLES}>
             <Layout>
               <Connectors />
             </Layout>
@@ -513,7 +514,7 @@ export default function App() {
       <Route
         path="/dashboard/connectors/new"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={CONNECTOR_ROLES}>
             <Layout>
               <ConnectorCreate />
             </Layout>
@@ -533,7 +534,7 @@ export default function App() {
       <Route
         path="/dashboard/connectors/:id"
         element={
-          <ProtectedRoute allowedRoles={["admin"]}>
+          <ProtectedRoute allowedRoles={CONNECTOR_ROLES}>
             <Layout>
               <ConnectorDetail />
             </Layout>

@@ -338,11 +338,15 @@ async def _run_sales_agent_on_lead(
     # Find sales agent
     async with get_tenant_session(tid) as session:
         from core.models.agent import Agent
+        from core.ownership import shared_agents_only_clause
+
         result = await session.execute(
             select(Agent).where(
                 Agent.tenant_id == tid,
                 Agent.agent_type == "sales_agent",
                 Agent.status.in_(["active", "shadow"]),
+                # Bug sheet 2026-09-14 rows 19/22: never a personal agent.
+                shared_agents_only_clause(Agent),
             ).limit(1)
         )
         agent_row = result.scalar_one_or_none()

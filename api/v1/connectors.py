@@ -10,16 +10,25 @@ from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from api.deps import get_current_tenant, require_scope, require_tenant_admin
+from api.deps import get_current_tenant, require_scope
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.marketing.connector_contracts import evaluate_hubspot_crm_read_contract
 from core.models.connector import Connector
+from core.ownership import (
+    caller_from_request,
+    can_mutate_connector,
+    connector_ownership_fields,
+    connector_visibility_clause,
+    require_connector_mutable,
+    require_connector_visible,
+    resolve_new_connector_owner,
+)
 from core.schemas.api import ConnectorCreate, ConnectorUpdate
 from core.security.egress import EgressValidationError, validate_public_url
 
@@ -724,6 +733,8 @@ def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None =
             if hasattr(created_at, "isoformat")
             else None
         ),
+        # Bug sheet 2026-09-14 rows 17/18: shared (admin-managed) vs personal.
+        **connector_ownership_fields(conn),
     }
 
 
@@ -938,6 +949,7 @@ async def list_tools(
     audit_event="connectors.list",
 )
 async def list_connectors(
+    request: Request,
     category: str | None = None,
     company_id: str | None = None,
     page: int = 1,
@@ -950,6 +962,8 @@ async def list_connectors(
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
+    # Bug sheet 2026-09-14 rows 17/18: shared rows plus the caller's own.
+    visible = connector_visibility_clause(Connector, caller_from_request(request))
     company_uuid = await _validated_company_scope(tid, company_id)
     async with get_tenant_session(tid, company_uuid) as session:
         # Uday 2026-04-23: soft-deleted connectors ("archived") must
@@ -961,6 +975,7 @@ async def list_connectors(
         query = select(Connector).where(
             Connector.tenant_id == tid,
             func.coalesce(Connector.status, "active") != "deleted",
+            visible,
         )
         count_query = (
             select(func.count())
@@ -968,13 +983,14 @@ async def list_connectors(
             .where(
                 Connector.tenant_id == tid,
                 func.coalesce(Connector.status, "active") != "deleted",
+                visible,
             )
         )
         if category:
             query = query.where(Connector.category == category)
             count_query = count_query.where(Connector.category == category)
         total = (await session.execute(count_query)).scalar() or 0
-        query = query.offset((page - 1) * per_page).limit(per_page)
+        query = query.order_by(Connector.name).offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         connectors = result.scalars().all()
         encrypted_names: set[str] = set()
@@ -1004,7 +1020,11 @@ async def list_connectors(
 
 
 # ── POST /connectors ────────────────────────────────────────────────────────
-@router.post("/connectors", status_code=201, dependencies=[require_tenant_admin])
+# Bug sheet 2026-09-14 rows 17/18/29: admins register shared connectors;
+# roles holding connectors.personal.write register their own. Names stay
+# unique tenant-wide across owners because runtime credentials are keyed by
+# connector name.
+@router.post("/connectors", status_code=201, dependencies=[require_scope("connectors.personal.write")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1015,8 +1035,11 @@ async def list_connectors(
 )
 async def register_connector(
     body: ConnectorCreate,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    caller = caller_from_request(request)
+    owner_user_id = resolve_new_connector_owner(caller)
     tid = _uuid.UUID(tenant_id)
     company_uuid = await _validated_company_scope(tid, body.company_id)
     normalised_base_url = _normalise_connector_base_url(body.name, body.base_url)
@@ -1061,6 +1084,7 @@ async def register_connector(
             data_schema_ref=body.data_schema_ref,
             rate_limit_rpm=body.rate_limit_rpm,
             status="active",
+            owner_user_id=owner_user_id,
         )
         session.add(connector)
         try:
@@ -1101,7 +1125,16 @@ async def register_connector(
                     500, "Connector reactivation lookup failed"
                 ) from exc
 
-            if existing is not None and (existing.status or "").lower() == "deleted":
+            # Row 29: only a caller who may mutate the archived twin may
+            # revive it; everyone else gets the same 409 as an active
+            # duplicate, which never names the owner.
+            if (
+                existing is not None
+                and (existing.status or "").lower() == "deleted"
+                and can_mutate_connector(existing, caller)
+            ):
+                if caller.is_admin:
+                    existing.owner_user_id = owner_user_id
                 existing.status = "active"
                 existing.category = body.category
                 existing.base_url = normalised_base_url
@@ -1120,6 +1153,10 @@ async def register_connector(
 
         # Store secrets in the encrypted connector_configs table
         if secret_fields:
+            # Row 17: credentials are keyed by connector name, so only a
+            # caller who may mutate this connector may write its config.
+            if not can_mutate_connector(connector, caller):
+                raise HTTPException(403, "Only a tenant admin or the connector's owner can change this connector")
             from core.crypto import encrypt_for_tenant
             from core.models.connector_config import ConnectorConfig
 
@@ -1356,6 +1393,12 @@ async def upsert_cmo_vendor_sandbox_connectors(
                 )
             )
             connector = connector_result.scalar_one_or_none()
+            if connector is not None and connector.owner_user_id is not None:
+                # Bug sheet 2026-09-14 rows 17/18: sandbox setup writes shared
+                # vendor connectors. It must never overwrite (or silently
+                # convert) a user's personal connector and its credentials.
+                # Raising inside the session rolls back earlier categories.
+                raise HTTPException(409, f"Connector '{row['connector_name']}' already exists")
             if connector is None:
                 session.add(
                     Connector(
@@ -1448,9 +1491,11 @@ async def upsert_cmo_vendor_sandbox_connectors(
 )
 async def get_connector(
     conn_id: UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     company_id: str | None = None,
 ):
+    caller = caller_from_request(request)
     tid = _uuid.UUID(tenant_id)
     company_uuid = await _validated_company_scope(tid, company_id)
     async with get_tenant_session(tid, company_uuid) as session:
@@ -1460,6 +1505,8 @@ async def get_connector(
             )
         )
         connector = result.scalar_one_or_none()
+        # Bug sheet 2026-09-14 rows 17/18: another user's connector is a 404.
+        require_connector_visible(connector, caller)
         has_encrypted_credentials = False
         if connector is not None:
             from core.models.connector_config import ConnectorConfig
@@ -1483,7 +1530,7 @@ async def get_connector(
 
 
 # ── PUT /connectors/{conn_id} ──────────────────────────────────────────────
-@router.put("/connectors/{conn_id}", dependencies=[require_tenant_admin])
+@router.put("/connectors/{conn_id}", dependencies=[require_scope("connectors.personal.write")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1495,8 +1542,10 @@ async def get_connector(
 async def update_connector(
     conn_id: UUID,
     body: ConnectorUpdate,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    caller = caller_from_request(request)
     tid = _uuid.UUID(tenant_id)
     company_uuid = await _validated_company_scope(tid, body.company_id)
     async with get_tenant_session(tid, company_uuid) as session:
@@ -1506,13 +1555,16 @@ async def update_connector(
             )
         )
         connector = result.scalar_one_or_none()
-        if not connector:
-            raise HTTPException(404, "Connector not found")
+        # Bug sheet 2026-09-14 rows 17/18: 404 for another user's connector,
+        # 403 for a shared one unless the caller is a tenant admin.
+        require_connector_mutable(connector, caller)
 
         # Prevent blind setattr on secret-bearing or internal fields.
         # auth_config is deprecated for new writes — secrets go via
         # connector_configs.credentials_encrypted.
         _blocked_fields = {"id", "tenant_id", "company_id", "auth_config", "secret_ref"}
+        # Ownership is never reassigned through PUT (rows 17/18).
+        _blocked_fields.add("owner_user_id")
         updates = body.model_dump(exclude_none=True)
         # MEDIUM-12: same SSRF guard on update paths.
         if "base_url" in updates:
@@ -1521,6 +1573,21 @@ async def update_connector(
                 updates["base_url"],
             )
             _assert_public_base_url(updates["base_url"] or "")
+        new_name = updates.get("name")
+        if new_name and new_name != connector.name:
+            # (tenant_id, name) is unique; without this pre-check a rename
+            # onto an existing connector surfaced as an unhandled
+            # IntegrityError (HTTP 500) instead of the same 409 create uses.
+            dup = await session.execute(
+                select(Connector.id).where(
+                    Connector.tenant_id == tid,
+                    Connector.name == new_name,
+                    Connector.id != conn_id,
+                    Connector.status != "deleted",
+                )
+            )
+            if dup.scalar_one_or_none() is not None:
+                raise HTTPException(409, f"Connector '{new_name}' already exists")
         for field, value in updates.items():
             if field in _blocked_fields:
                 continue
@@ -1737,7 +1804,9 @@ async def update_connector(
 # audit history. Hard delete is intentionally not supported — a
 # deleted connector can be restored via PUT /connectors/{id}
 # (status=active).
-@router.delete("/connectors/{conn_id}", status_code=200, dependencies=[require_tenant_admin])
+@router.delete(
+    "/connectors/{conn_id}", status_code=200, dependencies=[require_scope("connectors.personal.write")]
+)
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1748,8 +1817,10 @@ async def update_connector(
 )
 async def delete_connector(
     conn_id: UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    caller = caller_from_request(request)
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -1758,8 +1829,8 @@ async def delete_connector(
             )
         )
         connector = result.scalar_one_or_none()
-        if not connector:
-            raise HTTPException(404, "Connector not found")
+        # Bug sheet 2026-09-14 rows 17/18: owner or tenant admin only.
+        require_connector_mutable(connector, caller)
         connector.status = "deleted"
 
     return {
@@ -1770,7 +1841,7 @@ async def delete_connector(
 
 
 # ── GET /connectors/{conn_id}/health ─────────────────────────────────────────
-@router.get("/connectors/{conn_id}/health", dependencies=[require_tenant_admin])
+@router.get("/connectors/{conn_id}/health", dependencies=[require_scope("connectors.personal.write")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1781,6 +1852,7 @@ async def delete_connector(
 )
 async def connector_health(
     conn_id: UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     company_id: str | None = None,
 ):
@@ -1792,10 +1864,11 @@ async def connector_health(
         )
         connector = result.scalar_one_or_none()
 
-    if not connector:
-        raise HTTPException(404, "Connector not found")
+    # Bug sheet 2026-09-14 rows 17/18: a live probe uses the connector's
+    # credentials, so it is owner or tenant admin only.
+    require_connector_mutable(connector, caller_from_request(request))
 
-    probe = await test_connector(conn_id, tenant_id, company_id)
+    probe = await test_connector(conn_id, request, tenant_id, company_id)
     health = probe.get("health") if isinstance(probe, dict) else None
     status = (
         health.get("status")
@@ -1827,7 +1900,7 @@ async def connector_health(
     }
 
 
-@router.post("/connectors/{conn_id}/test", dependencies=[require_tenant_admin])
+@router.post("/connectors/{conn_id}/test", dependencies=[require_scope("connectors.personal.write")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -1838,6 +1911,7 @@ async def connector_health(
 )
 async def test_connector(
     conn_id: UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     company_id: str | None = None,
 ):
@@ -1859,8 +1933,8 @@ async def test_connector(
         )
         connector = result.scalar_one_or_none()
 
-    if not connector:
-        raise HTTPException(404, "Connector not found")
+    # Bug sheet 2026-09-14 rows 17/18: owner or tenant admin only.
+    require_connector_mutable(connector, caller_from_request(request))
 
     connector_cls = ConnectorRegistry.get(connector.name)
     if not connector_cls:

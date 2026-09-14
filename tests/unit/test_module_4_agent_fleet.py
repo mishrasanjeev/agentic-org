@@ -108,7 +108,9 @@ def test_tc_agt_002_rbac_domain_filter_runs_before_explicit_filter() -> None:
     list_block = src.split('@router.get("/agents", response_model=', 1)[1].split(
         "@router.", 1
     )[0]
-    rbac_idx = list_block.find("Agent.domain.in_(user_domains)")
+    # bug sheet 2026-09-14 rows 19/22: the domain filter moved into agent_visibility_clause (domain + ownership).
+    assert "agent_visibility_clause(Agent, _effective_caller(caller, user_domains))" in list_block
+    rbac_idx = list_block.find("query = query.where(visibility_filter)")
     explicit_idx = list_block.find("if domain:")
     assert rbac_idx > 0 and explicit_idx > 0
     assert rbac_idx < explicit_idx, (
@@ -137,8 +139,9 @@ def test_tc_agt_004_list_endpoint_returns_dict_with_name() -> None:
 
 def test_tc_agt_005_pause_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    pause_block = src.split('"/agents/{agent_id}/pause"', 1)[1][:300]
-    assert "require_tenant_admin" in pause_block
+    # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin, enforced in the handler.
+    pause_block = src.split("async def pause_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(agent, _effective_caller(caller))" in pause_block
 
 
 def test_tc_agt_005_pause_emits_lifecycle_event() -> None:
@@ -174,8 +177,9 @@ def test_tc_agt_006_get_endpoint_returns_full_agent_dict() -> None:
 
 def test_tc_agt_007_patch_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    patch_block = src.split("@router.patch(\n", 1)[1][:400]
-    assert "require_tenant_admin" in patch_block or "require_scope" in patch_block
+    # bug sheet 2026-09-14 rows 19/22/52: admin-only became owner-or-admin, enforced in the handler.
+    patch_block = src.split("async def update_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(agent, effective_caller)" in patch_block
 
 
 def test_tc_agt_007_patch_uses_agentupdate_partial_schema() -> None:
@@ -194,8 +198,9 @@ def test_tc_agt_007_patch_uses_agentupdate_partial_schema() -> None:
 
 def test_tc_agt_008_put_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    put_block = src.split("@router.put(\n", 1)[1][:400]
-    assert "require_tenant_admin" in put_block or "require_scope" in put_block
+    # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin, enforced in the handler.
+    put_block = src.split("async def replace_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(agent, effective_caller)" in put_block
 
 
 def test_tc_agt_008_put_enforces_prompt_lock_on_active_agents() -> None:
@@ -218,8 +223,9 @@ def test_tc_agt_008_put_enforces_prompt_lock_on_active_agents() -> None:
 
 def test_tc_agt_009_promote_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    promote_block = src.split('"/agents/{agent_id}/promote"', 1)[1][:300]
-    assert "require_tenant_admin" in promote_block
+    # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin, enforced in the handler.
+    promote_block = src.split("async def promote_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(agent, _effective_caller(caller))" in promote_block
 
 
 def test_tc_agt_009_promote_map_only_shadow_to_active() -> None:
@@ -270,8 +276,9 @@ def test_tc_agt_009_promote_validates_accuracy_floor() -> None:
 
 def test_tc_agt_010_rollback_endpoint_admin_gated() -> None:
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
-    rollback_block = src.split('"/agents/{agent_id}/rollback"', 1)[1][:300]
-    assert "require_tenant_admin" in rollback_block
+    # bug sheet 2026-09-14 rows 19/22: admin-only became owner-or-admin, enforced in the handler.
+    rollback_block = src.split("async def rollback_agent(", 1)[1].split("@router.", 1)[0]
+    assert "require_agent_mutable(agent, _effective_caller(caller))" in rollback_block
 
 
 def test_tc_agt_010_rollback_picks_previous_not_current_version() -> None:

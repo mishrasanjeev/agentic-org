@@ -6,8 +6,9 @@ the modern recommendation for web apps.
 
 Flow:
   1. /api/v1/auth/sso/{provider_key}/login
-     → We build an authorization URL, set state+nonce+PKCE verifier in
-       a short-lived Redis key, and redirect the user's browser to the IdP.
+     → We build an authorization URL with a signed state token (tenant,
+       nonce, return path), put the PKCE verifier in an encrypted HttpOnly
+       flow cookie (auth/sso/state_token.py), and redirect to the IdP.
   2. IdP authenticates the user and redirects back to our callback.
   3. /api/v1/auth/sso/{provider_key}/callback?code=...&state=...
      → We verify state, exchange the code for tokens, verify the ID token,

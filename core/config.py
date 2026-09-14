@@ -82,12 +82,21 @@ class Settings(BaseSettings):
     # Environment
     env: str = "development"
     log_level: str = "INFO"
+    # Log record rendering (core/logging_config.py): "json" emits one JSON
+    # object per line for container log collectors; "console" is the
+    # human-readable renderer. ``env=test`` defaults to console so pytest
+    # output stays readable unless AGENTICORG_LOG_FORMAT is set explicitly.
+    log_format: str = "json"
     secret_key: str = Field(default="dev-only-secret-key", min_length=16)
 
     # Database
     db_url: str = "postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:5432/agenticorg"
     db_pool_size: int = Field(default=5, ge=1, le=100)
     db_max_overflow: int = Field(default=5, ge=0, le=100)
+    # SQLAlchemy statement echo. Opt-in only (AGENTICORG_DB_ECHO=1): it was
+    # previously tied to env=development, so every dev container emitted
+    # multi-line SQL on stdout.
+    db_echo: bool = False
 
     # Redis
     redis_url: str = "redis://localhost:6379/0"
@@ -137,6 +146,13 @@ class Settings(BaseSettings):
     # ``https://`` value registered on Zoho / Google / etc.
     # Must include scheme + host (and optionally a path prefix).
     public_api_base_url: str = ""
+
+    # Public URL of the web UI (scheme + host, optional path prefix, no
+    # trailing slash). Used to build browser redirects after SSO login when
+    # the UI is served from a different origin than the API (Cloud Run splits
+    # them). Empty means "same origin as the API" (local docker / dev proxy).
+    # Env: AGENTICORG_UI_BASE_URL.
+    ui_base_url: str = ""
 
     # Platform behaviour
     pii_masking: bool = True
@@ -249,3 +265,61 @@ class ExternalKeys(BaseSettings):
 
 settings = Settings()
 external_keys = ExternalKeys()
+
+
+GRANTEX_PRODUCTION_BASE_URL = "https://api.grantex.dev"
+GRANTEX_STAGING_BASE_URL = "https://api-staging.grantex.dev"
+GRANTEX_PRODUCTION_ENVS = frozenset({"production", "prod"})
+# Hosted non-production runtimes verify grant tokens against the Grantex
+# staging issuer: every STRICT_ENVS label that is not production, plus
+# ``uat`` (not listed in STRICT_ENVS, but ``is_strict_runtime_env`` treats
+# it as a hosted runtime). Production, local/dev/test and unknown labels use
+# the production issuer, so an unrecognised env never accepts staging tokens.
+GRANTEX_STAGING_ENVS = (STRICT_ENVS - GRANTEX_PRODUCTION_ENVS) | frozenset({"uat"})
+
+
+def grantex_base_url_for_env(env: str | None = None) -> str:
+    """Return the Grantex API origin (SDK base URL and JWKS host).
+
+    An explicit ``GRANTEX_BASE_URL`` (env var or ``.env``) wins; otherwise
+    staging-like environments use the Grantex staging origin and everything
+    else the production origin. Before bug sheet 2026-09-14 #13 every
+    environment silently resolved to the production issuer.
+    """
+    explicit = os.getenv("GRANTEX_BASE_URL", "").strip() or (
+        external_keys.grantex_base_url if "grantex_base_url" in external_keys.model_fields_set else ""
+    )
+    if explicit:
+        return explicit.strip().rstrip("/")
+    label = normalize_env(env if env is not None else settings.env)
+    if label in GRANTEX_STAGING_ENVS and is_strict_runtime_env(label):
+        return GRANTEX_STAGING_BASE_URL
+    return GRANTEX_PRODUCTION_BASE_URL
+
+
+def grantex_jwks_uri_for_env(env: str | None = None) -> str:
+    """Return the JWKS URI grant tokens are verified against."""
+    return f"{grantex_base_url_for_env(env)}/.well-known/jwks.json"
+
+
+def grantex_issuer_for_env(env: str | None = None) -> str:
+    """Return the expected ``iss`` claim for Grantex grant tokens.
+
+    Precedence: ``AGENTICORG_GRANTEX_ISSUER`` (settings or raw env var), then
+    the issuer the Grantex SDK derives from the per-environment JWKS URI
+    (``GRANTEX_BASE_URL`` if set, else the env default above). Returns ``""``
+    when the SDK is unavailable so callers fail closed.
+    """
+    configured_settings = globals().get("settings")
+    configured = (
+        str(getattr(configured_settings, "grantex_issuer", "") or "").strip()
+        or os.getenv("AGENTICORG_GRANTEX_ISSUER", "").strip()
+    )
+    if configured:
+        return configured.rstrip("/")
+    try:
+        from grantex._verify import _derive_issuer_from_jwks_uri
+    # enterprise-gate: broad-except-ok reason=missing-grantex-sdk-does-not-enable-grantex-mode-empty-issuer-fails-closed
+    except Exception:
+        return ""
+    return str(_derive_issuer_from_jwks_uri(grantex_jwks_uri_for_env(env))).rstrip("/")

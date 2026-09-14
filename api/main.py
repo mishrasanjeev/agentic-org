@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.error_handlers import register_error_handlers
 from api.middleware import DeprecationHeaderMiddleware
+from api.middleware.request_id import RequestIDMiddleware
 from api.route_enforcement import enforce_route_metadata
 from api.v1 import (
     a2a,
@@ -85,6 +86,11 @@ from auth.csrf_middleware import CSRFMiddleware
 from auth.grantex_middleware import GrantexAuthMiddleware
 from bridge.server_handler import router as ws_bridge_router
 from core.config import is_strict_runtime_env, settings
+from core.logging_config import configure_logging
+
+# Single-line JSON logs + request correlation (bug sheet 2026-09-14 #8).
+# Must run before the app (and any logger) is created in this process.
+configure_logging()
 
 
 @asynccontextmanager
@@ -175,17 +181,23 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Let browser clients read the correlation id for support tickets.
+    expose_headers=["X-Request-ID"],
 )
 # SEC-2026-05-P1-003: CSRF middleware sits BETWEEN CORS and the auth
 # middleware in the chain. Starlette runs ``add_middleware``-registered
 # middleware in reverse insertion order - the LAST add_middleware call
 # is the outermost (runs first on the request). So with this ordering:
-#   request flow: Deprecation -> GrantexAuth -> CSRF -> CORS -> route
+#   request flow: RequestID -> Deprecation -> GrantexAuth -> CSRF -> CORS -> route
 # CSRF runs AFTER auth (so it only checks already-validated requests)
 # and BEFORE the route handler.
 app.add_middleware(CSRFMiddleware)
 app.add_middleware(GrantexAuthMiddleware)
 app.add_middleware(DeprecationHeaderMiddleware)
+# Outermost (last add_middleware): binds request_id into structlog
+# contextvars before auth/CSRF run so every log line of the request —
+# including 401/403 rejections — carries the same correlation id.
+app.add_middleware(RequestIDMiddleware)
 
 register_error_handlers(app)
 
@@ -244,6 +256,7 @@ app.include_router(rpa.router, prefix="/api/v1", tags=["RPA"])
 app.include_router(rpa_schedules.router, prefix="/api/v1", tags=["RPA"])
 app.include_router(tenant_ai_credentials.router, prefix="/api/v1", tags=["Tenant AI Credentials"])
 app.include_router(tenant_ai_settings.router, prefix="/api/v1", tags=["Tenant AI Settings"])
+app.include_router(tenant_ai_settings.registry_router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])

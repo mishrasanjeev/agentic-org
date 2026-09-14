@@ -196,6 +196,8 @@ class TestAgentToDict:
             "id", "company_id", "name", "agent_type", "domain", "status", "version",
             "description", "system_prompt_ref", "prompt_variables",
             "llm_model", "llm_fallback", "llm_config",
+            # Bug sheet 2026-09-14 #31: explicit provider pin.
+            "llm_provider",
             "confidence_floor", "hitl_condition", "max_retries",
             "retry_backoff", "authorized_tools", "output_schema",
             "parent_agent_id", "shadow_comparison_agent_id",
@@ -216,6 +218,9 @@ class TestAgentToDict:
             # Session 4 BUG-013: surfaced so the UI can scope tools to
             # linked tenant Connector instances.
             "connector_ids",
+            # bug sheet 2026-09-14 rows 19/22: the old key set predates per-user
+            # agent ownership; the dict now carries visibility + owner_user_id.
+            "visibility", "owner_user_id",
         }
         assert set(result.keys()) == expected_keys
 

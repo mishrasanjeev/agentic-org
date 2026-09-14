@@ -141,7 +141,9 @@ def test_tc_audit_006_auditor_bypasses_domain_filter() -> None:
     if the inversion drops, auditors silently lose visibility on
     cross-domain entries — a real compliance regression."""
     src = (REPO / "api" / "v1" / "audit.py").read_text(encoding="utf-8")
-    assert 'user_role != "auditor"' in src
+    # bug sheet 2026-09-14 row 30: auditor exemption now lives in _audit_agent_filter
+    # (human auditor sessions only) next to the ownership filter for everyone else.
+    assert 'user_role == "auditor" and not caller.is_machine' in src
 
 
 def test_tc_audit_006_audit_log_is_db_level_append_only() -> None:

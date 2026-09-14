@@ -11,14 +11,15 @@ issuer. Any other RS256 token goes through the legacy validator (which
 supports the ``AGENTICORG_JWT_PUBLIC_KEY_URL`` JWKS path), so an attacker
 cannot steer arbitrary tokens into the Grantex path and force a JWKS fetch.
 
-Grantex configuration (env, ``AGENTICORG_`` prefix — ``core/config.py`` is
-outside this module's change set, so the values are read here):
+Grantex configuration (resolved in ``core/config.py``):
 
   AGENTICORG_GRANTEX_AUDIENCE  expected ``aud`` for this deployment. Required
                                in strict runtimes; grant tokens are rejected
                                before any network call when it is unset.
   AGENTICORG_GRANTEX_ISSUER    expected ``iss``. Defaults to the issuer the
-                               Grantex SDK derives from ``GRANTEX_BASE_URL``.
+                               Grantex SDK derives from ``GRANTEX_BASE_URL``,
+                               or from the per-environment default origin
+                               (``grantex_base_url_for_env``) when unset.
 """
 
 from __future__ import annotations
@@ -46,7 +47,12 @@ from core.auth_state import (
     is_ip_blocked,
     record_auth_failure,
 )
-from core.config import is_strict_runtime_env, settings
+from core.config import (
+    grantex_issuer_for_env,
+    grantex_jwks_uri_for_env,
+    is_strict_runtime_env,
+    settings,
+)
 
 logger = structlog.get_logger()
 
@@ -78,24 +84,15 @@ def _unverified_parts(token: str) -> tuple[dict[str, Any], dict[str, Any]] | Non
 
 
 def grantex_jwks_uri() -> str:
-    base_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev").rstrip("/")
-    return f"{base_url}/.well-known/jwks.json"
+    # Per-environment issuer (bug sheet 2026-09-14 #13): staging/uat/preview
+    # resolve to the Grantex staging origin unless GRANTEX_BASE_URL is set.
+    return grantex_jwks_uri_for_env()
 
 
 def grantex_expected_issuer() -> str:
-    configured = (
-        str(getattr(settings, "grantex_issuer", "") or "").strip().rstrip("/")
-        or os.getenv("AGENTICORG_GRANTEX_ISSUER", "").strip().rstrip("/")
-    )
-    if configured:
-        return configured
-    try:
-        from grantex._verify import _derive_issuer_from_jwks_uri
-
-        return _derive_issuer_from_jwks_uri(grantex_jwks_uri()).rstrip("/")
-    # enterprise-gate: broad-except-ok reason=missing-grantex-sdk-does-not-enable-grantex-mode-empty-issuer-fails-closed
-    except Exception:
-        return ""
+    # Single resolver in core.config: AGENTICORG_GRANTEX_ISSUER wins, else the
+    # SDK-derived issuer for the per-environment JWKS URI ("" fails closed).
+    return grantex_issuer_for_env()
 
 
 def grantex_expected_audience() -> str:

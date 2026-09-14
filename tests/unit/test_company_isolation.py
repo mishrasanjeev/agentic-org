@@ -39,7 +39,14 @@ def tenant_client(app, tenant_id: str):
     admin_scopes = ["agenticorg:admin"]
 
     async def _fake_validate(token):
-        return {"sub": f"user-{tenant_id[:8]}", "agenticorg:tenant_id": tenant_id, "agenticorg:scopes": admin_scopes}
+        # role=admin: a domain-less session is refused by chat routing
+        # (fail-closed, sheets #26/#53, 2026-09-14).
+        return {
+            "sub": f"user-{tenant_id[:8]}",
+            "agenticorg:tenant_id": tenant_id,
+            "agenticorg:scopes": admin_scopes,
+            "role": "admin",
+        }
 
     with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=tenant_id):

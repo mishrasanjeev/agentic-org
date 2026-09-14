@@ -1,10 +1,13 @@
 export interface Agent {
   id: string; name: string; agent_type: string; domain: string; status: string;
   company_id?: string | null;
+  // Bug sheet 2026-09-14 rows 17-19/52: tenant-shared or personal to owner_user_id.
+  visibility?: "tenant" | "personal";
+  owner_user_id?: string | null;
   version: string; confidence_floor: number; shadow_sample_count: number;
   shadow_accuracy_current: number | null; created_at: string;
   description?: string; hitl_condition?: string; authorized_tools?: string[];
-  llm_model?: string; max_retries?: number; retry_backoff?: string;
+  llm_model?: string; llm_provider?: string | null; max_retries?: number; retry_backoff?: string;
   shadow_min_samples?: number; shadow_accuracy_floor?: number;
   cost_controls?: {
     monthly_cap_usd?: number;
@@ -50,8 +53,8 @@ export interface PromptEditHistoryEntry {
 }
 export interface Workflow { id: string; name: string; version: string; is_active: boolean; trigger_type: string | null; created_at: string; }
 export interface WorkflowRun { id: string; workflow_def_id: string; status: string; steps_total: number; steps_completed: number; started_at: string; }
-export interface HITLItem { id: string; title: string; trigger_type: string; priority: string; status: string; assignee_role: string; context: any; expires_at: string; decision?: string; decision_at?: string; decision_notes?: string; }
-export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; base_url?: string; description?: string; secret_ref?: string; tool_functions?: any[]; timeout_ms?: number; created_at?: string; }
+export interface HITLItem { id: string; title: string; trigger_type: string; priority: string; status: string; assignee_role: string; context: any; expires_at: string; decision?: string; decision_at?: string; decision_notes?: string; requested_by_user_id?: string | null; }
+export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; base_url?: string; description?: string; secret_ref?: string; tool_functions?: any[]; timeout_ms?: number; created_at?: string; owner_user_id?: string | null; visibility?: "shared" | "personal"; }
 export interface AuditEntry { id: string; event_type: string; actor_type: string; action: string; outcome: string; created_at: string; }
 
 // CFO Dashboard KPIs

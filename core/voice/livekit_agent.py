@@ -104,6 +104,9 @@ class VoiceAgentWorker:
             task_input=task_input,
             grant_token=self.grant_token,
             thread_id=self._thread_id,
+            # Pinned provider from the agent row (bug sheet 2026-09-14 #31);
+            # None keeps model-name inference for legacy configs.
+            llm_provider=cfg.get("llm_provider") or (cfg.get("llm_config") or {}).get("provider"),
         )
 
         # Persist thread for multi-turn conversations

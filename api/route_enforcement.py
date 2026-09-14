@@ -98,11 +98,25 @@ _DEFAULT_RATE = (300, 60)
 # (credential-guessing and unauthenticated spend paths). Everything else
 # stays available with a warning — a rate limiter must not become the outage.
 _FAIL_CLOSED_CLASS_PREFIXES = ("auth-", "public-", "demo-")
+# Bug sheet 2026-09-14 row 7: SSO initiation and the OIDC callback accept no
+# credentials (the IdP owns password brute-force protection) and their flow
+# state is signed + browser-bound, so a limiter outage degrades to
+# allow-with-warning instead of 503-ing every SSO login. Explicit set, not a
+# prefix: every other ``auth-*`` class (login, signup, reset, ...) stays
+# fail-closed.
+_DEGRADE_ON_OUTAGE_CLASSES = frozenset({"auth-sso-login-initiation", "auth-sso-callback"})
 
 # Declared route-scope family (prefix before the first "." or ":") ->
 # (read scope, write scope) from core.rbac.ROLE_SCOPES.
 SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "agents": ("agents:read", "agents:write"),
+    # Chat executes agents (bug sheet #53, 2026-09-14): a query needs the
+    # same write scope as ``POST /agents/{id}/run``; history is a read.
+    "chat": ("agents:read", "agents:write"),
+    # Agent teams route work across agents (bug sheet 2026-09-14 ownership
+    # sweep): the family was unmapped, so any authenticated tenant user could
+    # create or read routing teams. Same scopes as the agents they contain.
+    "agent_teams": ("agents:read", "agents:write"),
     "workflows": ("workflows:read", "workflows:write"),
     "workflow_variants": ("workflows:read", "workflows:write"),
     "approvals": ("approvals:read", "approvals:write"),
@@ -197,7 +211,7 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
     except RuntimeError as exc:
         # Redis unavailable in strict env. Credential/unauthenticated-spend
         # classes fail closed; everything else stays available.
-        if rate_class.startswith(_FAIL_CLOSED_CLASS_PREFIXES):
+        if rate_class.startswith(_FAIL_CLOSED_CLASS_PREFIXES) and rate_class not in _DEGRADE_ON_OUTAGE_CLASSES:
             logger.error("route_rate_limit_backend_unavailable_fail_closed", extra={"rate_class": rate_class})
             raise HTTPException(status_code=503, detail="Rate limiting unavailable; request refused") from exc
         logger.warning("route_rate_limit_backend_unavailable_allowing", extra={"rate_class": rate_class})

@@ -27,16 +27,20 @@ def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for created_by / edited_by.
 
     Codex 2026-04-22 audit gap #9 — the existing prompt audit trail
-    didn't record who made the change. Claims carry ``user_id``
-    (canonical) or ``sub`` (email). Return a UUID when the claim is
-    UUID-shaped, else None so malformed tokens don't blow up writes.
+    didn't record who made the change. Human sessions carry the local
+    ``User.id`` as ``agenticorg:user_id``; ``user_id`` is accepted as a
+    legacy spelling. ``sub`` is deliberately NOT consulted (bug sheet
+    #24, 2026-09-14): it is an e-mail for local logins and an OIDC
+    subject for SSO, and a UUID-shaped OIDC subject is not a local user
+    id. Return None when no usable claim is present so malformed tokens
+    don't blow up writes.
 
     Tolerant of non-dict inputs (e.g., the Depends() sentinel in
     direct-call tests).
     """
     if not isinstance(user, dict) or not user:
         return None
-    for key in ("user_id", "sub"):
+    for key in ("agenticorg:user_id", "user_id"):
         raw = user.get(key)
         if not raw:
             continue

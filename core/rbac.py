@@ -36,6 +36,9 @@ _DOMAIN_ROLE_SCOPES = [
     "report_schedules.read",
     "report_schedules.write",
     "report_schedules.run",
+    # Bug sheet 2026-09-14 rows 17-19/22: create and manage the caller's own
+    # personal connectors (ownership enforced in core/ownership.py).
+    "connectors.personal.write",
 ]
 
 ROLE_SCOPES: dict[str, list[str]] = {
@@ -57,13 +60,21 @@ ROLE_SCOPES: dict[str, list[str]] = {
         "connectors.read",
         "report_schedules.read",
     ],
+    # Row 52: developers build personal agents in any domain. agents:write
+    # and approvals:* let them run, edit, and approve their OWN personal
+    # agents; core/ownership.py keeps tenant-agent mutation admin-only and
+    # limits developer approval decisions to their own personal agents.
     "developer": [
         "agents:read",
+        "agents:write",
+        "approvals:read",
+        "approvals:write",
         "workflows:read",
         "connectors.read",
         "connectors.contracts.read",
         "connectors.registry.read",
         "connectors.tools.read",
+        "connectors.personal.write",
     ],
 }
 

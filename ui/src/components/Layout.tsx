@@ -3,11 +3,14 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES } from "../lib/roles";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
   { code: "hi", label: "HI" },
 ] as const;
+
+const CHAT_ROLES = ["admin", "cfo", "chro", "cmo", "coo", "domain_lead"];
 
 const NLQueryBar = lazy(() => import("./NLQueryBar"));
 const ChatPanel = lazy(() => import("./ChatPanel"));
@@ -16,7 +19,9 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 
 // Nav labels use i18n keys (nav.<key>).
 // See ui/src/locales/en.json and hi.json for translations.
-const ALL_NAV = [
+// Agents, Org Chart, Approvals and Connectors follow the shared role lists in
+// lib/roles.ts so nav and route guards cannot drift (bug sheet 2026-09-14).
+const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[] }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
@@ -32,11 +37,11 @@ const ALL_NAV = [
   { path: "/dashboard/cbo", labelKey: "nav.cbo", label: "CBO Dashboard", roles: ["admin"] },
   { path: "/dashboard/abm", labelKey: "nav.abm", label: "ABM", roles: ["admin", "cmo"] },
   { path: "/dashboard/observatory", labelKey: "nav.observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: AGENT_CREATOR_ROLES },
+  { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: AGENT_CREATOR_ROLES },
   { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: ["admin"] },
+  { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: APPROVAL_ROLES },
+  { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
   { path: "/dashboard/agents/from-sop", labelKey: "nav.createFromSop", label: "Create from SOP", roles: ["admin"] },
@@ -99,12 +104,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const userRole = auth.user?.role || "";
+  // Chat executes agents, so the backend requires agents:write
+  // (api/route_enforcement.py SCOPE_FAMILIES["chat"], bug sheet 2026-09-14
+  // #53). Keep this list aligned with core/rbac.py ROLE_SCOPES.
+  const canChat = CHAT_ROLES.includes(userRole);
   const filteredNav = ALL_NAV.filter(item => item.roles.includes(userRole));
   const roleLabel = ROLE_LABELS[userRole];
 
   const sidebar = (
     <>
-      <h1 className="text-lg font-bold mb-4 px-1">AgenticOrg</h1>
+      <h1 className="text-lg font-bold px-1">AgenticOrg</h1>
+      {auth.user?.org_name ? (
+        <p data-testid="org-name" className="text-xs text-muted-foreground truncate px-1 mb-4" title={auth.user.org_name}>{auth.user.org_name}</p>
+      ) : (
+        <div className="mb-4" />
+      )}
       <nav className="flex flex-col gap-1 flex-1 overflow-y-auto">
         {filteredNav.map(({ path, labelKey, label }) => (
           <Link key={path} to={path}
@@ -158,7 +172,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }`}
       >
         <div className="flex items-center justify-between mb-2">
-          <span className="text-lg font-bold">AgenticOrg</span>
+          <div className="min-w-0">
+            <span className="text-lg font-bold">AgenticOrg</span>
+            {auth.user?.org_name && (
+              <p data-testid="org-name-mobile" className="text-xs text-muted-foreground truncate" title={auth.user.org_name}>{auth.user.org_name}</p>
+            )}
+          </div>
           <button
             onClick={() => setSidebarOpen(false)}
             className="p-1 rounded hover:bg-muted"
@@ -211,11 +230,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </Suspense>
           </div>
           <div className="flex items-center gap-3">
-            <div className="hidden sm:block">
-              <Suspense fallback={null}>
-                <NLQueryBar onOpenChat={() => setChatOpen(true)} />
-              </Suspense>
-            </div>
+            {canChat && (
+              <div className="hidden sm:block">
+                <Suspense fallback={null}>
+                  <NLQueryBar onOpenChat={() => setChatOpen(true)} />
+                </Suspense>
+              </div>
+            )}
             {/* Language picker */}
             <select
               value={currentLang}
@@ -249,9 +270,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Chat slide-out panel */}
-      <Suspense fallback={null}>
-        <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
-      </Suspense>
+      {canChat && (
+        <Suspense fallback={null}>
+          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

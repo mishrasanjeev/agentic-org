@@ -221,6 +221,7 @@ async def signup(body: SignupRequest, request: Request, response: Response):
     token = create_access_token(
         data={
             "sub": user.email,
+            "agenticorg:user_id": str(user.id),
             "agenticorg:tenant_id": str(user.tenant_id),
             "grantex:scopes": get_scopes_for_role(user.role),
             "name": user.name,
@@ -434,6 +435,7 @@ async def login(body: LoginRequest, request: Request, response: Response):
     token = create_access_token(
         data={
             "sub": user.email,
+            "agenticorg:user_id": str(user.id),
             "agenticorg:tenant_id": str(user.tenant_id),
             "grantex:scopes": get_scopes_for_role(user.role),
             "name": user.name,
@@ -557,6 +559,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
     token = create_access_token(
         data={
             "sub": user.email,
+            "agenticorg:user_id": str(user.id),
             "agenticorg:tenant_id": str(user.tenant_id),
             "grantex:scopes": get_scopes_for_role(user.role),
             "name": user.name,
@@ -861,6 +864,7 @@ async def get_current_user_profile(request: Request):
         "role": user.role,
         "domain": user.domain,
         "mfa_enabled": user.mfa_enabled,
+        "org_name": tenant.name if tenant else None,
         "onboarding_complete": onboarding_complete,
     }
 

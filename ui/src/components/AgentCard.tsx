@@ -46,6 +46,9 @@ export default function AgentCard({ agent, onClick }: Props) {
           <div className="flex flex-col items-end gap-1">
             <Badge variant={statusColor as any}>{agent.status}</Badge>
             {shadowBelowFloor && <Badge variant="destructive">Below Floor</Badge>}
+            {agent.visibility === "personal" && (
+              <Badge variant="outline" data-testid="agent-personal-badge">Personal</Badge>
+            )}
           </div>
         </div>
       </CardHeader>

@@ -6,16 +6,34 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from core.ai_providers.catalog import validate_llm_selection
 
 # ── Agent schemas ──
 
 
 class LLMConfig(BaseModel):
     model: str = "claude-3-5-sonnet-20241022"
+    # Bug sheet 2026-09-14 #31: explicit catalog provider id. ``None`` keeps
+    # the legacy "infer provider from the model name" behaviour; when set,
+    # the (provider, model) pair must exist in the catalog or the request is
+    # rejected with 422 instead of silently downgrading at run time.
+    provider: str | None = None
     fallback_model: str = "gpt-4o-2024-11-20"
     temperature: float = 0.1
     context_strategy: str = "sliding_16k"
+
+    @model_validator(mode="after")
+    def _provider_matches_model(self) -> LLMConfig:
+        if self.provider is None:
+            return self
+        if not str(self.provider).strip():
+            self.provider = None
+            return self
+        # ValueError -> pydantic ValidationError -> HTTP 422 at the boundary.
+        self.provider, self.model = validate_llm_selection(self.provider, self.model)
+        return self
 
 
 class HITLPolicyConfig(BaseModel):
@@ -60,7 +78,9 @@ class AgentCreate(BaseModel):
     # Persisted as ``llm_config["routing"]`` which core/llm/router.py reads.
     llm_routing: str | None = Field(None, pattern=r"^(auto|tier1|tier2|tier3|disabled)$")
     output_schema: str | None = None
-    initial_status: str = "shadow"
+    # Creation may only land in a lifecycle state (api/v1/agents.py
+    # _LIFECYCLE_FSM); anything else previously reached the DB unchecked.
+    initial_status: str = Field("shadow", pattern=r"^(shadow|active|paused)$")
     shadow_comparison_agent: str | None = None
     shadow_min_samples: int = 10
     # BUG-012 (Ramesh 2026-04-20): aligned with the ORM default —
@@ -86,6 +106,9 @@ class AgentCreate(BaseModel):
     # connector lookup" -- tools may still fail at call time if no instance is
     # linked, but the agent can be created.
     connector_ids: list[str] = []
+    # Bug sheet 2026-09-14 rows 19/22: 'tenant' (shared, admin only) or
+    # 'personal'. Omitted: admins create tenant agents, others personal.
+    visibility: str | None = Field(None, pattern=r"^(tenant|personal)$")
 
 
 class AgentUpdate(BaseModel):
@@ -110,6 +133,11 @@ class AgentUpdate(BaseModel):
     org_level: int | None = None
     change_reason: str | None = None
     connector_ids: list[str] | None = None
+    # Row 52: PATCH validated a domain change but the schema dropped the
+    # field (extra="ignore"), so it never reached the handler.
+    domain: str | None = Field(None, max_length=50)
+    # Rows 19/22: only a tenant admin may change visibility.
+    visibility: str | None = Field(None, pattern=r"^(tenant|personal)$")
     max_retries: int | None = Field(None, ge=0, le=20)
     # Learned rules prepended to the system prompt on every run
     # (core/langgraph/runner.py). Full-list replace; DELETE
@@ -140,7 +168,7 @@ class AgentCloneRequest(BaseModel):
     name: str
     agent_type: str
     overrides: dict[str, Any] = {}
-    initial_status: str = "shadow"
+    initial_status: str = Field("shadow", pattern=r"^(shadow|active|paused)$")
     shadow_comparison_agent: str | None = None
 
 

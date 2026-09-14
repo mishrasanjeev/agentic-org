@@ -43,7 +43,8 @@ class TestKpiHelpersHonorCompanyId:
         sig = inspect.signature(kpis._get_recent_escalations)
         assert "company_id" in sig.parameters
         src = inspect.getsource(kpis._get_recent_escalations)
-        assert "company_id = :cid" in src
+        # bug sheet 2026-09-14 row 30: hitl_queue has no company_id; scope via the agent.
+        assert "Agent.company_id == company_uuid" in src
 
     def test_cfo_endpoint_threads_company_id_into_helpers(self) -> None:
         """CEO/CFO route bodies must pass company_id to each helper."""

@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select, text
+from sqlalchemy import case, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant
@@ -380,41 +380,43 @@ async def _get_tax_calendar(
 async def _get_recent_escalations(
     tenant_id: str, limit: int = 5, company_id: str | None = None,
 ) -> list[dict]:
-    """Get recent HITL items for CEO attention, optionally scoped."""
+    """Get recent HITL items for CEO attention, optionally scoped.
+
+    Bug sheet 2026-09-14 row 30: items of personal agents are private to
+    their owner and never surface on a shared dashboard. ``hitl_queue`` has
+    no ``company_id`` column, so the company scope is the agent's company
+    (the old raw SQL filtered on the missing column and always failed).
+    """
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+    from core.ownership import shared_agents_only_clause
+
     company_uuid = _parse_company_uuid(company_id)
 
+    query = (
+        select(HITLQueue.id, HITLQueue.title, HITLQueue.priority, HITLQueue.status, HITLQueue.created_at)
+        .join(Agent, Agent.id == HITLQueue.agent_id)
+        .where(
+            HITLQueue.tenant_id == tenant_id,
+            HITLQueue.status == "pending",
+            shared_agents_only_clause(Agent),
+        )
+    )
     if company_uuid is not None:
-        sql = (
-            "SELECT id, title, priority, status, created_at "
-            "FROM hitl_queue "
-            "WHERE status = 'pending' AND company_id = :cid "
-            "ORDER BY CASE priority "
-            "  WHEN 'critical' THEN 0 "
-            "  WHEN 'high' THEN 1 "
-            "  WHEN 'medium' THEN 2 "
-            "  ELSE 3 END, "
-            "created_at DESC "
-            "LIMIT :lim"
-        )
-        params: dict[str, Any] = {"cid": company_uuid, "lim": limit}
-    else:
-        sql = (
-            "SELECT id, title, priority, status, created_at "
-            "FROM hitl_queue "
-            "WHERE status = 'pending' "
-            "ORDER BY CASE priority "
-            "  WHEN 'critical' THEN 0 "
-            "  WHEN 'high' THEN 1 "
-            "  WHEN 'medium' THEN 2 "
-            "  ELSE 3 END, "
-            "created_at DESC "
-            "LIMIT :lim"
-        )
-        params = {"lim": limit}
+        query = query.where(Agent.company_id == company_uuid)
+    query = query.order_by(
+        case(
+            (HITLQueue.priority == "critical", 0),
+            (HITLQueue.priority == "high", 1),
+            (HITLQueue.priority == "medium", 2),
+            else_=3,
+        ),
+        HITLQueue.created_at.desc(),
+    ).limit(limit)
 
     try:
         async with get_tenant_session(tenant_id) as session:
-            rows = (await session.execute(text(sql), params)).all()
+            rows = (await session.execute(query)).all()
             return [
                 {
                     "id": str(r.id),
@@ -587,6 +589,7 @@ async def _load_cmo_approval_timeout_risk(
 
     from core.models.agent import Agent
     from core.models.hitl import HITLQueue
+    from core.ownership import shared_agents_only_clause
 
     company_uuid = _parse_company_uuid(company_id)
     try:
@@ -598,6 +601,8 @@ async def _load_cmo_approval_timeout_risk(
                     HITLQueue.tenant_id == tenant_id,
                     HITLQueue.status == "pending",
                     Agent.domain.in_(["marketing", "content", "sales"]),
+                    # Personal agents' approvals stay private (row 30).
+                    shared_agents_only_clause(Agent),
                 )
             )
             if company_uuid is not None:

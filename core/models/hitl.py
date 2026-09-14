@@ -37,6 +37,12 @@ class HITLQueue(BaseModel):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     assignee_role: Mapped[str] = mapped_column(String(100), nullable=False)
     decision_options: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # Bug sheet 2026-09-14 row 30 (migration v6z21): who triggered the item.
+    # Visibility is derived from the agent's owner (core/ownership.py).
+    requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL", name="fk_hitl_queue_requested_by_user_id"),
+        nullable=True,
+    )
     context: Mapped[dict] = mapped_column(JSONB, nullable=False)
     decision: Mapped[str | None] = mapped_column(String(100), nullable=True)
     decision_by: Mapped[uuid.UUID | None] = mapped_column(

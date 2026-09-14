@@ -22,8 +22,10 @@ def _get_grantex_client():
     try:
         from grantex import Grantex
 
+        from core.config import grantex_base_url_for_env
+
         api_key = os.getenv("GRANTEX_API_KEY", "")
-        base_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
+        base_url = grantex_base_url_for_env()
         if not api_key:
             return None
         return Grantex(api_key=api_key, base_url=base_url)

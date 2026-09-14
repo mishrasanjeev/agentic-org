@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ConnectorCard from "@/components/ConnectorCard";
 import api, { extractApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { canManageConnector, isAdminUser } from "@/lib/roles";
 import type { Connector } from "@/types";
 
 const CATEGORIES = ["all", "finance", "hr", "marketing", "ops", "comms"];
@@ -43,6 +45,10 @@ interface ComposioApp {
 
 export default function Connectors() {
   const navigate = useNavigate();
+  // Bug sheet 2026-09-14 rows 17-19/22: non-admin roles see shared and their
+  // own personal connectors; health/archive only on rows they manage.
+  const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
@@ -201,9 +207,11 @@ export default function Connectors() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Connectors</h2>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => navigate("/dashboard/connectors/cmo-vendor-sandbox")}>
-            CMO Sandbox Setup
-          </Button>
+          {isAdmin && (
+            <Button variant="outline" onClick={() => navigate("/dashboard/connectors/cmo-vendor-sandbox")}>
+              CMO Sandbox Setup
+            </Button>
+          )}
           <Button onClick={() => navigate("/dashboard/connectors/new")}>Register Connector</Button>
         </div>
       </div>
@@ -277,31 +285,38 @@ export default function Connectors() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filtered.map((connector) => (
-                <div key={connector.id} className="flex flex-col gap-2">
-                  <ConnectorCard connector={connector} />
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/dashboard/connectors/${connector.id}`)}
-                      data-testid={`connector-edit-${connector.name || connector.id}`}
-                    >
-                      Edit
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => healthCheck(connector.id)}>
-                      Health Check
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => deleteConnector(connector.id, connector.name)}
-                    >
-                      Archive
-                    </Button>
+              {filtered.map((connector) => {
+                const manageable = canManageConnector(user, connector);
+                return (
+                  <div key={connector.id} className="flex flex-col gap-2">
+                    <ConnectorCard connector={connector} />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/dashboard/connectors/${connector.id}`)}
+                        data-testid={`connector-edit-${connector.name || connector.id}`}
+                      >
+                        {manageable ? "Edit" : "View"}
+                      </Button>
+                      {manageable && (
+                        <>
+                          <Button variant="outline" size="sm" onClick={() => healthCheck(connector.id)}>
+                            Health Check
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => deleteConnector(connector.id, connector.name)}
+                          >
+                            Archive
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

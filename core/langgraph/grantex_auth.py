@@ -21,6 +21,8 @@ from grantex import Grantex, ToolManifest
 from grantex._errors import GrantexApiError
 from grantex._types import Agent as GrantexAgent
 
+from core.config import grantex_base_url_for_env
+
 logger = structlog.get_logger()
 
 # Singleton client — initialized lazily
@@ -32,7 +34,7 @@ def get_grantex_client() -> Grantex:
     global _grantex_client
     if _grantex_client is None:
         api_key = os.getenv("GRANTEX_API_KEY", "")
-        base_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
+        base_url = grantex_base_url_for_env()
         if not api_key:
             raise ValueError(
                 "GRANTEX_API_KEY is required. Set it in environment or .env file."

@@ -149,7 +149,8 @@ def test_production_floor_blocks_legacy_twenty_percent_promotions() -> None:
 
 def test_connector_health_and_detail_use_live_runtime_truth() -> None:
     src = (ROOT / "api" / "v1" / "connectors.py").read_text(encoding="utf-8")
-    assert "probe = await test_connector(conn_id, tenant_id, company_id)" in src
+    # bug sheet 2026-09-14 row 17: the probe passes the request so ownership is re-checked.
+    assert "probe = await test_connector(conn_id, request, tenant_id, company_id)" in src
     assert "_connector_tool_functions(conn)" in src
     assert "_normalise_connector_base_url(conn.name, conn.base_url)" in src
 

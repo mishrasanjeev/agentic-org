@@ -52,7 +52,11 @@ async def agent_card():
     This is the discovery endpoint -- external systems fetch this to learn
     what agents are available and how to authenticate.
     """
-    grantex_url = os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
+    from core.config import grantex_base_url_for_env
+
+    # Same per-environment origin the auth middleware validates against
+    # (bug sheet 2026-09-14 #13); staging must not advertise production.
+    grantex_url = grantex_base_url_for_env()
     base_url = os.getenv("AGENTICORG_BASE_URL", "https://app.agenticorg.ai")
 
     return {
@@ -189,6 +193,12 @@ async def create_task(
             agent_type=body.agent_type,
             company_id=company_uuid,
         )
+        if not connector_ids:
+            # Bug sheet 2026-09-14 #46 (sibling of agents/chat): with no
+            # connector linked for this agent type, do not hand the model
+            # the static tool manifest; every call would target an
+            # unconfigured connector.
+            tools = []
         if connector_ids:
             try:
                 async with get_tenant_session(tid, company_uuid) as session:

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session, get_tenant_session
 from core.models.user import User
+from core.rbac import get_allowed_domains
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,8 +107,29 @@ async def get_active_human_admin(request: Request) -> ActiveHumanAdmin:
 
 
 def get_user_domains(request: Request) -> list[str] | None:
-    claims = getattr(request.state, "claims", {})
-    return claims.get("agenticorg:domains")
+    """Domains the caller may access; ``None`` means unrestricted.
+
+    Fails closed (QA sheet 2026-09-14 #26): a human session whose token has
+    no ``agenticorg:domains`` claim is NOT treated as unrestricted. The list
+    is re-derived from the role/domain claims, and a token with no role gets
+    no domain at all. Machine credentials (API keys, Grantex agent tokens)
+    are tenant-scoped by construction and carry neither claim; their access
+    is bounded by scopes, so they keep the unrestricted domain semantic.
+    """
+    claims = getattr(request.state, "claims", None) or {}
+    if "agenticorg:domains" in claims:
+        return claims.get("agenticorg:domains")
+    if getattr(request.state, "auth_mode", None) in {"api_key", "grantex"}:
+        return None
+    scopes = getattr(request.state, "scopes", None) or claims.get("grantex:scopes") or []
+    if any(str(scope).startswith("agenticorg:admin") for scope in scopes):
+        # The admin scope already bypasses every scope check (require_scope);
+        # a role-less admin token must not collapse to "no domains".
+        return None
+    role = claims.get("role")
+    if not role:
+        return []
+    return get_allowed_domains(str(role), claims.get("domain"))
 
 
 def get_user_role(request: Request) -> str:

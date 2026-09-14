@@ -5,6 +5,10 @@ route for months but the backend never implemented it, so every agent
 fell through to a client-side ``slice(0, 5)`` guess. The endpoint now
 returns a real, optionally connector-aware default list — verified here
 without touching the DB.
+
+Bug sheet #46 (2026-09-14): with no connector linked the derived list is
+empty — the static type/domain map is only ever intersected with what a
+linked connector actually offers, never handed out on its own.
 """
 
 from __future__ import annotations
@@ -16,17 +20,17 @@ from api.v1.agents import (
 
 
 class TestDeriveDefaultToolsStaticPath:
-    def test_no_connectors_returns_agent_type_defaults(self) -> None:
-        """Without a connector filter we fall back to the static map — the
-        same behavior ``create_agent`` had before, kept so existing agents
-        with no connector_ids keep working."""
-        tools = _derive_default_tools("ap_processor", "finance", None)
-        assert tools == _AGENT_TYPE_DEFAULT_TOOLS["ap_processor"]
+    def test_no_connectors_returns_no_tools(self) -> None:
+        """Bug sheet #46 (2026-09-14): an agent with nothing linked gets no
+        tools. The static map is documentation of what a connector could
+        offer, not a grant — advertising it to the LLM produced tool calls
+        the gateway could never execute."""
+        assert _derive_default_tools("ap_processor", "finance", None) == []
+        assert _AGENT_TYPE_DEFAULT_TOOLS["ap_processor"]  # the map itself is intact
 
-    def test_unknown_type_falls_back_to_domain(self) -> None:
-        tools = _derive_default_tools("not_a_real_type", "finance", None)
-        # Matches the _DOMAIN_DEFAULT_TOOLS["finance"] union.
-        assert "fetch_bank_statement" in tools
+    def test_unknown_type_without_connectors_returns_no_tools(self) -> None:
+        # Bug sheet #46: no connector -> no domain-default fallback either.
+        assert _derive_default_tools("not_a_real_type", "finance", None) == []
 
     def test_unknown_type_and_domain_returns_empty(self) -> None:
         assert _derive_default_tools("xxx", "yyy", None) == []
@@ -34,9 +38,8 @@ class TestDeriveDefaultToolsStaticPath:
 
 class TestDeriveDefaultToolsConnectorAware:
     def test_empty_connector_list_is_same_as_none(self) -> None:
-        assert _derive_default_tools("ap_processor", "finance", []) == list(
-            _AGENT_TYPE_DEFAULT_TOOLS["ap_processor"]
-        )
+        # Bug sheet #46: [] and None both mean "nothing linked" -> no tools.
+        assert _derive_default_tools("ap_processor", "finance", []) == []
 
     def test_connector_filter_narrows_to_connector_tools(self) -> None:
         """When the caller links a specific connector, the defaults are
@@ -66,6 +69,6 @@ class TestDeriveDefaultToolsIsIdempotent:
     def test_calling_twice_returns_same_list(self) -> None:
         """Stability: the endpoint is hit on every connector-pick change
         from the UI, and caching the response must not mutate state."""
-        a = _derive_default_tools("ap_processor", "finance", None)
-        b = _derive_default_tools("ap_processor", "finance", None)
+        a = _derive_default_tools("ap_processor", "finance", ["tally"])
+        b = _derive_default_tools("ap_processor", "finance", ["tally"])
         assert a == b
