@@ -142,6 +142,45 @@ def _make_slug(name: str) -> str:
     return slug.strip("-")
 
 
+
+async def _seed_tenant_defaults_isolated(
+    tenant_id: uuid.UUID,
+    *,
+    only_if_empty: bool,
+    trigger: str,
+) -> None:
+    """Seed built-in connectors/agents/templates in the tenant's RLS context.
+
+    Production 2026-09-14: ``agents``/``connectors``/``prompt_templates`` are
+    FORCE ROW LEVEL SECURITY (v6z16). Seeding ran on the credential session,
+    which has no ``agenticorg.tenant_id``: the agent count always read 0, the
+    connector INSERT violated the policy, and the flush rollback expired the
+    session's User/Tenant objects so the error handler itself raised
+    PendingRollbackError. Every admin password login and every new-org
+    signup returned HTTP 500.
+
+    Seeding now runs in its own ``get_tenant_session`` after the caller's
+    tenant/user rows are committed, so a seeding failure can never poison
+    the credential transaction. It is a best-effort sidecar: a failure is
+    logged and login/signup continue with an unseeded tenant.
+    """
+    from core.models.agent import Agent
+
+    tenant_ref = str(tenant_id)
+    try:
+        async with get_tenant_session(tenant_id) as seed_session:
+            if only_if_empty:
+                existing = await seed_session.execute(
+                    select(func.count()).select_from(Agent).where(Agent.tenant_id == tenant_id)
+                )
+                if (existing.scalar() or 0) > 0:
+                    return
+            await seed_tenant_defaults(seed_session, tenant_id)
+        logger.info("Seeded tenant defaults (%s) for tenant %s", trigger, tenant_ref)
+    # enterprise-gate: broad-except-ok reason=default-seeding-failure-degrades-to-unseeded-tenant
+    except Exception:
+        logger.exception("Tenant default seeding (%s) failed for tenant %s", trigger, tenant_ref)
+
 @router.post("/signup", response_model=LoginResponse, status_code=201)
 @route_meta(
     auth_required=False,
@@ -206,16 +245,13 @@ async def signup(body: SignupRequest, request: Request, response: Response):
         session.add(user)
         await session.flush()
 
-        # Seed built-in agents and prompt templates for the new org
-        try:
-            await seed_tenant_defaults(session, tenant.id)
-        # enterprise-gate: broad-except-ok reason=tenant-default-seeding-is-noncritical-signup-sidecar
-        except Exception:
-            logger.exception("Failed to seed defaults for tenant %s — signup continues", tenant.id)
-
         await session.commit()
         await session.refresh(tenant)
         await session.refresh(user)
+
+    # Seed built-in agents and prompt templates for the new org, in the new
+    # tenant's RLS context and after the tenant/user rows are committed.
+    await _seed_tenant_defaults_isolated(tenant.id, only_if_empty=False, trigger="signup")
 
     # Build JWT
     token = create_access_token(
@@ -416,20 +452,9 @@ async def login(body: LoginRequest, request: Request, response: Response):
         )
         tenant = tenant_result.scalar_one_or_none()
 
-        # Auto-seed defaults for orgs created before the seed feature was added
-        if tenant and user.role == "admin":
-            from core.models.agent import Agent
-            agent_count = await session.execute(
-                select(func.count()).select_from(Agent).where(Agent.tenant_id == user.tenant_id)
-            )
-            if (agent_count.scalar() or 0) == 0:
-                try:
-                    await seed_tenant_defaults(session, user.tenant_id)
-                    await session.commit()
-                    logger.info("Auto-seeded defaults for pre-existing tenant %s on login", user.tenant_id)
-                # enterprise-gate: broad-except-ok reason=login-default-seeding-sidecar-does-not-grant-access
-                except Exception:
-                    logger.exception("Auto-seed on login failed for tenant %s", user.tenant_id)
+    # Auto-seed defaults for orgs created before the seed feature was added.
+    if tenant and user.role == "admin":
+        await _seed_tenant_defaults_isolated(user.tenant_id, only_if_empty=True, trigger="login")
 
     tenant_settings = tenant.settings if tenant else {}
     token = create_access_token(
@@ -501,6 +526,7 @@ async def google_login(body: GoogleLoginRequest, response: Response):
         raise HTTPException(status_code=401, detail="Google account email is not verified")
 
     # Find or create user
+    new_google_tenant_id: uuid.UUID | None = None
     async with async_session_factory() as session:
         result = await session.execute(select(User).where(func.lower(User.email) == email))
         users = result.scalars().all()
@@ -546,15 +572,12 @@ async def google_login(body: GoogleLoginRequest, response: Response):
             session.add(user)
             await session.flush()
 
-            # Seed built-in agents and templates for the new org
-            try:
-                await seed_tenant_defaults(session, tenant.id)
-            # enterprise-gate: broad-except-ok reason=tenant-default-seeding-is-noncritical-google-signup-sidecar
-            except Exception:
-                logger.exception("Failed to seed defaults for Google signup tenant %s", tenant.id)
-
             await session.commit()
             await session.refresh(user)
+            new_google_tenant_id = tenant.id
+
+    if new_google_tenant_id is not None:
+        await _seed_tenant_defaults_isolated(new_google_tenant_id, only_if_empty=False, trigger="google_signup")
 
     token = create_access_token(
         data={
