@@ -23,4 +23,4 @@ COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'
 ENV PORT=8080
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://localhost:${PORT}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=3s CMD wget -q --spider http://127.0.0.1:${PORT}/health || exit 1

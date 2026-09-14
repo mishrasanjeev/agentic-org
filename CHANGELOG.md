@@ -19,6 +19,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   on both legacy and ORM-bootstrap installations.
 
 ### Fixed
+- The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report
+  healthy. Their Docker healthcheck probed `localhost`, which resolves to
+  `::1` in the nginx:alpine base while nginx listens on IPv4, so the
+  containers showed unhealthy while serving traffic and anything waiting on
+  their health never proceeded. The probe now requests
+  `http://127.0.0.1/health`.
 - Knowledge deletion now retires native vector chunks as well as RAGFlow and
   document records, preventing deleted content from remaining searchable.
 - Plural billing callback OpenAPI operations now have unique GET/POST IDs for
