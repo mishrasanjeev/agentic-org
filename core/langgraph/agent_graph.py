@@ -26,7 +26,11 @@ from langgraph.types import interrupt
 
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.langgraph.grantex_auth import get_grantex_client
-from core.langgraph.llm_factory import create_chat_model
+from core.langgraph.llm_factory import (
+    create_chat_model,
+    snapshot_prefetched_llm_credentials,
+    use_prefetched_llm_credentials,
+)
 from core.langgraph.state import AgentState
 from core.langgraph.tool_adapter import (
     _actual_tool_name,
@@ -281,13 +285,18 @@ def build_agent_graph(
 
     # LLM is created lazily on first call to avoid API key validation at build time
     _llm_cache: dict[str, Any] = {}
+    # The runner resolves the tenant-aware credential with ``await`` before
+    # building the graph; the model itself is created later inside a node,
+    # after that context is gone, so carry a snapshot into ``_get_llm``.
+    prefetched_credentials = snapshot_prefetched_llm_credentials()
 
     def _get_llm():
         if "instance" not in _llm_cache:
             # Bug sheet 2026-09-14 #31/#38: the pinned provider and tenant must
             # reach the factory, otherwise ``o1-mini`` falls back to Gemini and
             # ``openai_compatible`` never resolves the tenant's base_url.
-            llm = create_chat_model(model=llm_model, tenant_id=tenant_id or None, provider=llm_provider)
+            with use_prefetched_llm_credentials(prefetched_credentials):
+                llm = create_chat_model(model=llm_model, tenant_id=tenant_id or None, provider=llm_provider)
             _llm_cache["instance"] = llm.bind_tools(tools) if tools else llm
         return _llm_cache["instance"]
 
