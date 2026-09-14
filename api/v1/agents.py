@@ -35,6 +35,24 @@ from core.models.lead_pipeline import LeadPipeline
 from core.models.prompt_template import PromptEditHistory
 from core.models.tenant import Tenant
 from core.models.workflow import StepExecution
+from core.ownership import (
+    AGENT_VISIBILITY_PERSONAL,
+    AGENT_VISIBILITY_TENANT,
+    Caller,
+    agent_ownership_fields,
+    agent_visibility_clause,
+    caller_from_request,
+    can_view_agent,
+    can_view_connector,
+    check_agent_domain_change,
+    check_agent_visibility_change,
+    connector_link_allowed,
+    is_personal_agent,
+    require_agent_mutable,
+    require_agent_visible,
+    resolve_new_agent_ownership,
+    shared_agents_only_clause,
+)
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
@@ -479,6 +497,8 @@ def _agent_to_dict(agent: Agent) -> dict:
         # UI can render them, and consumers can detect "Gmail tool requested
         # but no Gmail connector linked" before the agent crashes at runtime.
         "connector_ids": getattr(agent, "connector_ids", None) or [],
+        # Bug sheet 2026-09-14 rows 19/22: 'tenant' or 'personal' + owner.
+        **agent_ownership_fields(agent),
     }
     from core.feedback.shadow_learning import learned_review_policy
 
@@ -754,6 +774,128 @@ def _enforce_domain_access(agent: Agent | None, user_domains: list[str] | None) 
         raise HTTPException(404, "Agent not found")
 
 
+def _effective_caller(caller: object, user_domains: object = None) -> Caller:
+    """Caller for the ownership rules in ``core/ownership.py``.
+
+    Bug sheet 2026-09-14 rows 19/22. FastAPI always injects a real
+    :class:`Caller`. Direct Python calls (tests, internal callers) pass the
+    ``Depends`` sentinel instead: they keep the admin-gated semantics these
+    routes had before per-user ownership (shared agents only, never a
+    personal owner, since there is no user id). An explicit ``user_domains``
+    list narrows that to a domain-limited non-admin, which can mutate nothing.
+    """
+    if isinstance(caller, Caller):
+        return caller
+    domains = user_domains if isinstance(user_domains, list) else None
+    return Caller(user_id=None, role="", domains=domains, is_admin=domains is None, is_machine=False)
+
+
+def _apply_agent_visibility(agent: Any, new_visibility: str | None) -> None:
+    """Persist an already-authorized visibility change (admin only).
+
+    'tenant' clears the owner; 'personal' keeps the existing owner and is
+    rejected when the agent has none (there is no owner field to assign).
+    """
+    if new_visibility is None:
+        return
+    value = new_visibility.strip().lower()
+    if value == AGENT_VISIBILITY_TENANT:
+        agent.visibility = AGENT_VISIBILITY_TENANT
+        agent.owner_user_id = None
+        return
+    if getattr(agent, "owner_user_id", None) is None:
+        raise HTTPException(422, "A personal agent needs an owner; this agent has none")
+    agent.visibility = value
+
+
+async def _personal_connectors_for_ids(
+    session: Any,
+    tenant_id: _uuid.UUID,
+    connector_ids: list[str] | None,
+) -> list[Any]:
+    """Owned (personal) Connector rows referenced by ``connector_ids``.
+
+    Ids are connector names (``registry-<name>`` or bare), Connector UUIDs, or
+    ConnectorConfig UUIDs — the same shapes ``_resolve_connector_configs``
+    accepts. Shared connectors (no owner) never restrict a link, so only
+    owned rows are loaded.
+    """
+    from sqlalchemy import or_
+
+    from core.models.connector import Connector
+    from core.models.connector_config import ConnectorConfig
+
+    names: set[str] = set()
+    uuids: set[_uuid.UUID] = set()
+    for raw_id in connector_ids or []:
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            continue
+        name = raw_id.strip().removeprefix("registry-")
+        names.add(name)
+        try:
+            uuids.add(_uuid.UUID(name))
+        except (TypeError, ValueError):
+            pass
+    if not names:
+        return []
+    matches = [Connector.name.in_(sorted(names))]
+    if uuids:
+        matches.append(Connector.id.in_(sorted(uuids, key=str)))
+        matches.append(
+            Connector.name.in_(
+                select(ConnectorConfig.connector_name).where(
+                    ConnectorConfig.tenant_id == tenant_id,
+                    ConnectorConfig.id.in_(sorted(uuids, key=str)),
+                )
+            )
+        )
+    result = await session.execute(
+        select(Connector).where(
+            Connector.tenant_id == tenant_id,
+            Connector.owner_user_id.is_not(None),
+            or_(*matches),
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _connector_not_available(connector_names: list[str]) -> HTTPException:
+    return HTTPException(
+        403,
+        detail={
+            "error": "connector_not_available_to_agent",
+            "message": (
+                "A personal connector can only be linked to a personal agent owned by the same user."
+            ),
+            "connectors": sorted(set(connector_names)),
+        },
+    )
+
+
+async def _assert_connector_links_allowed(
+    session: Any,
+    tenant_id: _uuid.UUID,
+    connector_ids: list[str] | None,
+    *,
+    agent_visibility: str,
+    agent_owner_user_id: _uuid.UUID | None,
+    caller: Caller,
+) -> None:
+    """Bug sheet 2026-09-14 rows 17/19/22: refuse linking a personal connector
+    to an agent that another user's (or a shared) run could execute, and
+    refuse a non-admin linking a connector they cannot see."""
+    if not connector_ids:
+        return
+    denied: list[str] = []
+    for connector in await _personal_connectors_for_ids(session, tenant_id, connector_ids):
+        if not can_view_connector(connector, caller) or not connector_link_allowed(
+            connector, agent_visibility, agent_owner_user_id
+        ):
+            denied.append(str(connector.name))
+    if denied:
+        raise _connector_not_available(denied)
+
+
 def _validate_authorized_tools(tools: list[str]) -> list[str]:
     """Validate that every tool in the list exists in the connector tool_index.
 
@@ -982,6 +1124,9 @@ async def _resolve_agent_connector_ids_for_type(
                             if company_uuid is not None
                             else Agent.company_id.is_(None)
                         ),
+                        # Bug sheet 2026-09-14 rows 19/22: automatic selection
+                        # never lands on anyone's personal agent.
+                        shared_agents_only_clause(Agent),
                     )
                     .order_by(status_priority)
                     .limit(1)
@@ -1368,8 +1513,30 @@ async def _assert_connectors_ready_for_dispatch(
     tenant_id: _uuid.UUID,
     connector_ids: list[str] | None,
     company_id: _uuid.UUID | None = None,
+    *,
+    agent_visibility: str = AGENT_VISIBILITY_TENANT,
+    agent_owner_user_id: _uuid.UUID | None = None,
+    linked_connector_ids: list[str] | None = None,
 ) -> None:
-    """Block agent execution before tools run when required connectors are not ready."""
+    """Block agent execution before tools run when required connectors are not ready.
+
+    Bug sheet 2026-09-14 rows 17/19/22 (defence in depth): a personal
+    connector may only be used by a personal agent owned by the connector's
+    owner, whatever rows were linked before ownership existed. Callers that
+    do not pass the agent's visibility get shared-agent semantics, so any
+    personal connector is refused (fail closed). ``linked_connector_ids``
+    adds connectors whose credentials the run resolves but whose readiness
+    is not gated (the full list when ``connector_ids`` is a required subset).
+    """
+    ownership_ids = list(connector_ids or []) + list(linked_connector_ids or [])
+    if ownership_ids:
+        denied = [
+            str(connector.name)
+            for connector in await _personal_connectors_for_ids(session, tenant_id, ownership_ids)
+            if not connector_link_allowed(connector, agent_visibility, agent_owner_user_id)
+        ]
+        if denied:
+            raise _connector_not_available(denied)
     try:
         await _assert_connectors_ready_for_activation(
             session,
@@ -1441,7 +1608,6 @@ async def get_default_tools(
 @router.post(
     "/agents",
     status_code=201,
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -1455,14 +1621,16 @@ async def create_agent(
     body: AgentCreate,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
+    # Bug sheet 2026-09-14 rows 19/22/32/50: agents:write (route family) plus
+    # the ownership rules. Admins create shared agents; permitted roles create
+    # personal agents they own, inside their domains (developers: any domain).
+    effective_caller = _effective_caller(caller, user_domains)
+    requested_visibility = body.visibility if isinstance(getattr(body, "visibility", None), str) else None
+    visibility, owner_user_id = resolve_new_agent_ownership(effective_caller, requested_visibility, body.domain)
     company_uuid = _parse_company_id(body.company_id)
-    # Bug sheet #32/#50 (2026-09-14): the route is admin-only today, but the
-    # target domain is still checked server-side so a domain-limited caller
-    # can never create an agent outside their domain if the gate loosens.
-    if isinstance(user_domains, list) and body.domain and body.domain not in user_domains:
-        raise HTTPException(403, f"You do not have access to the '{body.domain}' domain.")
 
     initial_status = body.initial_status or "shadow"
 
@@ -1527,6 +1695,14 @@ async def create_agent(
             )
             if company_exists.scalar_one_or_none() is None:
                 raise HTTPException(404, "Company not found")
+        await _assert_connector_links_allowed(
+            session,
+            tid,
+            connector_ids,
+            agent_visibility=visibility,
+            agent_owner_user_id=owner_user_id,
+            caller=effective_caller,
+        )
         if initial_status == "active":
             async with get_tenant_session(tid, company_uuid) as connector_session:
                 await _assert_connectors_ready_for_activation(
@@ -1622,6 +1798,8 @@ async def create_agent(
             org_level=body.org_level or 0,
             parent_agent_id=(_uuid.UUID(body.parent_agent_id) if body.parent_agent_id else None),
             connector_ids=connector_ids,
+            owner_user_id=owner_user_id,
+            visibility=visibility,
         )
         session.add(agent)
         try:
@@ -1654,7 +1832,7 @@ async def create_agent(
             company_id=company_uuid,
             event_type="agent.create",
             actor_type="user",
-            actor_id=str(tid),
+            actor_id=str(effective_caller.user_id) if effective_caller.user_id else str(tid),
             agent_id=agent.id,
             resource_type="agent",
             resource_id=str(agent.id),
@@ -1704,6 +1882,7 @@ async def create_agent(
         "domain": agent.domain,
         "status": agent.status,
         "version": agent.version,
+        **agent_ownership_fields(agent),
         "token_issued": True,
         "grantex_registered": grantex_info is not None,
         "grantex_did": grantex_info.get("grantex_did", "") if grantex_info else "",
@@ -1728,6 +1907,7 @@ async def list_agents(
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     if page < 1:
         raise HTTPException(422, "page must be >= 1")
@@ -1735,14 +1915,16 @@ async def list_agents(
 
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(company_id)
+    # Bug sheet 2026-09-14 rows 19/22: shared agents in the caller's domains
+    # plus the caller's own personal agents (admins: everything).
+    visibility_filter = agent_visibility_clause(Agent, _effective_caller(caller, user_domains))
     async with get_tenant_session(tid) as session:
         query = select(Agent).where(Agent.tenant_id == tid)
         count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
 
-        # RBAC domain filtering
-        if isinstance(user_domains, list):
-            query = query.where(Agent.domain.in_(user_domains))
-            count_query = count_query.where(Agent.domain.in_(user_domains))
+        # RBAC domain + ownership filtering
+        query = query.where(visibility_filter)
+        count_query = count_query.where(visibility_filter)
 
         if domain:
             query = query.where(Agent.domain == domain)
@@ -1791,9 +1973,8 @@ async def list_agents(
                     await session.flush()
                     query = select(Agent).where(Agent.tenant_id == tid)
                     count_query = select(func.count()).select_from(Agent).where(Agent.tenant_id == tid)
-                    if isinstance(user_domains, list):
-                        query = query.where(Agent.domain.in_(user_domains))
-                        count_query = count_query.where(Agent.domain.in_(user_domains))
+                    query = query.where(visibility_filter)
+                    count_query = count_query.where(visibility_filter)
                     if domain:
                         query = query.where(Agent.domain == domain)
                         count_query = count_query.where(Agent.domain == domain)
@@ -1839,14 +2020,19 @@ async def list_agents(
 async def get_org_tree(
     domain: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Return agents as a hierarchical org tree."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        # BUG-28: Filter out deleted/broken agents from the org chart
+        # BUG-28: Filter out deleted/broken agents from the org chart.
+        # Bug sheet 2026-09-14 rows 19/22: the org chart had no domain or
+        # ownership filter at all; apply the same rule as GET /agents.
         query = select(Agent).where(
             Agent.tenant_id == tid,
             Agent.status.notin_(["deleted", "error", "broken"]),
+            agent_visibility_clause(Agent, _effective_caller(caller, user_domains)),
         )
         if domain:
             query = query.where(Agent.domain == domain)
@@ -1902,6 +2088,7 @@ async def delegate_to_agent(
     body: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Set up Grantex delegation from parent to child agent.
 
@@ -1911,13 +2098,14 @@ async def delegate_to_agent(
     if body is None:
         body = {}
     tid = _uuid.UUID(tenant_id)
+    effective_caller = _effective_caller(caller, user_domains)
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         child = result.scalar_one_or_none()
         if not child:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(child, user_domains)
+        require_agent_visible(child, effective_caller)
         if not child.parent_agent_id:
             raise HTTPException(400, "Agent has no parent — cannot set up delegation")
 
@@ -1926,7 +2114,8 @@ async def delegate_to_agent(
             select(Agent).where(Agent.id == child.parent_agent_id, Agent.tenant_id == tid)
         )
         parent = parent_result.scalar_one_or_none()
-        if not parent:
+        # Rows 19/22: the parent's grant is delegated, so it must be visible too.
+        if not parent or not can_view_agent(parent, effective_caller):
             raise HTTPException(404, "Parent agent not found")
 
     parent_grantex = (parent.config or {}).get("grantex", {})
@@ -2165,6 +2354,7 @@ async def generate_agent(
     body: dict,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Generate agent config from a natural-language description.
 
@@ -2218,9 +2408,14 @@ async def generate_agent(
         # Bug sheet #32/#50 (2026-09-14): the domain is LLM-chosen and the
         # route is reachable with agents:write, so a CFO could deploy an HR
         # agent. Fail closed on the caller's domain list.
+        # Bug sheet 2026-09-14 rows 19/22/52: same ownership rules as POST
+        # /agents — non-admins get a personal agent in an allowed domain
+        # (developers: any domain), admins a shared one.
         target_domain = top.get("domain", "")
-        if isinstance(user_domains, list) and target_domain not in user_domains:
-            raise HTTPException(403, f"You do not have access to the '{target_domain}' domain.")
+        effective_caller = _effective_caller(caller, user_domains)
+        if not effective_caller.is_admin and not target_domain:
+            raise HTTPException(403, "The generated agent has no domain; only a tenant admin can deploy it.")
+        visibility, owner_user_id = resolve_new_agent_ownership(effective_caller, None, target_domain)
 
         # Build tools list. A generated agent is created with no connector
         # linked, so the #46 rule applies exactly as in
@@ -2268,6 +2463,8 @@ async def generate_agent(
                 version="1.0.0",
                 cost_controls={},
                 scaling={},
+                owner_user_id=owner_user_id,
+                visibility=visibility,
             )
             session.add(agent)
             await session.flush()
@@ -2278,7 +2475,7 @@ async def generate_agent(
                 company_id=agent.company_id,
                 event_type="agent.generate_deploy",
                 actor_type="user",
-                actor_id=str(tid),
+                actor_id=str(effective_caller.user_id) if effective_caller.user_id else str(tid),
                 agent_id=agent.id,
                 resource_type="agent",
                 resource_id=str(agent.id),
@@ -2294,6 +2491,7 @@ async def generate_agent(
                 "status": "shadow",
                 "agent_type": agent.agent_type,
                 "domain": agent.domain,
+                **agent_ownership_fields(agent),
             }
 
     return {
@@ -2318,6 +2516,7 @@ async def get_agent(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -2325,14 +2524,15 @@ async def get_agent(
         agent = result.scalar_one_or_none()
     if not agent:
         raise HTTPException(404, "Agent not found")
-    _enforce_domain_access(agent, user_domains)
+    require_agent_visible(agent, _effective_caller(caller, user_domains))
     return _agent_to_dict(agent)
 
 
 # ── PUT /agents/{id} ────────────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: agents:write (route family) + owner-or-admin
+# (require_agent_mutable) instead of admin-only.
 @router.put(
     "/agents/{agent_id}",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -2348,6 +2548,7 @@ async def replace_agent(
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
     user: dict = Depends(get_current_user),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """PUT /agents/{id} — full replace.
 
@@ -2370,11 +2571,27 @@ async def replace_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        effective_caller = _effective_caller(caller, user_domains)
+        require_agent_mutable(agent, effective_caller)
         # Domain RBAC also guards the target domain: a user limited to
         # ``finance`` cannot PUT an agent into ``hr`` via the replace path.
-        if isinstance(user_domains, list) and body.domain and body.domain not in user_domains:
-            raise HTTPException(403, f"You do not have access to the '{body.domain}' domain.")
+        check_agent_domain_change(agent, body.domain, effective_caller)
+        # Rows 19/22: the AgentCreate body carries ``visibility``; only an
+        # admin may change it (a non-admin cannot publish via PUT).
+        requested_visibility = body.visibility if isinstance(getattr(body, "visibility", None), str) else None
+        check_agent_visibility_change(agent, requested_visibility, effective_caller)
+        _apply_agent_visibility(agent, requested_visibility)
+        replacement_connector_ids = getattr(body, "connector_ids", None)
+        await _assert_connector_links_allowed(
+            session,
+            tid,
+            list(replacement_connector_ids)
+            if isinstance(replacement_connector_ids, (list, tuple))
+            else list(getattr(agent, "connector_ids", None) or []),
+            agent_visibility=str(getattr(agent, "visibility", None) or AGENT_VISIBILITY_TENANT),
+            agent_owner_user_id=getattr(agent, "owner_user_id", None),
+            caller=effective_caller,
+        )
 
         # Active-agent prompt lock — matches PATCH semantics so users
         # can't swap out a live agent's prompt via PUT either.
@@ -2480,9 +2697,10 @@ async def replace_agent(
 
 
 # ── PATCH /agents/{id} ──────────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22/52: agents:write (route family) +
+# owner-or-admin (require_agent_mutable) instead of admin-only.
 @router.patch(
     "/agents/{agent_id}",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -2498,6 +2716,7 @@ async def update_agent(
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
     user: dict = Depends(get_current_user),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -2505,13 +2724,28 @@ async def update_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        effective_caller = _effective_caller(caller, user_domains)
+        require_agent_mutable(agent, effective_caller)
 
         update_data = body.model_dump(exclude_unset=True)
-        if isinstance(user_domains, list) and "domain" in update_data and update_data["domain"] not in user_domains:
-            raise HTTPException(
-                403,
-                f"You do not have access to the '{update_data['domain']}' domain.",
+        if "domain" in update_data:
+            check_agent_domain_change(agent, update_data["domain"], effective_caller)
+        # Rows 19/22: only an admin may change visibility; 'tenant' clears the
+        # owner, 'personal' needs an existing owner.
+        new_visibility = update_data.get("visibility")
+        if new_visibility is not None:
+            check_agent_visibility_change(agent, new_visibility, effective_caller)
+            _apply_agent_visibility(agent, new_visibility)
+        if new_visibility is not None or update_data.get("connector_ids") is not None:
+            await _assert_connector_links_allowed(
+                session,
+                tid,
+                list(update_data.get("connector_ids") or [])
+                if update_data.get("connector_ids") is not None
+                else list(getattr(agent, "connector_ids", None) or []),
+                agent_visibility=str(getattr(agent, "visibility", None) or AGENT_VISIBILITY_TENANT),
+                agent_owner_user_id=getattr(agent, "owner_user_id", None),
+                caller=effective_caller,
             )
 
         # Prompt lock: reject prompt edits on active agents. Amendments are
@@ -2536,7 +2770,7 @@ async def update_agent(
             agent.name = update_data["name"]
         # Validated above but never assigned before 2026-09-14 (bug sheet
         # #52): a legitimate domain change silently no-op'd.
-        if "domain" in update_data:
+        if update_data.get("domain") is not None:  # NOT NULL column: null is a no-op
             agent.domain = update_data["domain"]
         if "system_prompt" in update_data:
             agent.system_prompt_ref = update_data["system_prompt"]
@@ -2668,12 +2902,14 @@ async def run_agent(
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Instantiate agent from registry and execute against user input."""
     if payload is None:
         payload = {}
     _validate_run_inputs(payload)
     tid = _uuid.UUID(tenant_id)
+    effective_caller = _effective_caller(caller, user_domains)
 
     # 1. Load agent config from DB
     async with get_tenant_session(tid) as session:
@@ -2681,7 +2917,8 @@ async def run_agent(
         agent_row = result.scalar_one_or_none()
         if not agent_row:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent_row, user_domains)
+        # Bug sheet 2026-09-14 rows 19/22: domain RBAC + personal ownership.
+        require_agent_visible(agent_row, effective_caller)
         if agent_row.status == "retired":
             raise HTTPException(409, "Cannot run a retired agent")
         if _active_agent_below_production_floor(agent_row):
@@ -2698,6 +2935,8 @@ async def run_agent(
         agent_config = _agent_to_dict(agent_row)
         review_learning = agent_config["review_learning"]
         dispatch_connector_ids = _required_connector_ids_for_agent(agent_row)
+        run_agent_visibility = str(getattr(agent_row, "visibility", None) or AGENT_VISIBILITY_TENANT)
+        run_agent_owner_user_id = getattr(agent_row, "owner_user_id", None)
 
     # 2. Prepare execution config
     authorized_tools = agent_config.get("authorized_tools", []) or []
@@ -2914,6 +3153,9 @@ async def run_agent(
                 tid,
                 list(dispatch_connector_ids),
                 company_uuid,
+                agent_visibility=run_agent_visibility,
+                agent_owner_user_id=run_agent_owner_user_id,
+                linked_connector_ids=list(raw_connector_ids),
             )
     resolved_connector_config, resolved_connector_names = await _resolve_connector_configs(
         tenant_id=tenant_id,
@@ -3187,6 +3429,8 @@ async def run_agent(
                 tenant_id=tid,
                 agent_id=agent_id,
                 workflow_run_id=None,
+                # Bug sheet 2026-09-14 row 30: who triggered the run.
+                requested_by_user_id=effective_caller.user_id,
                 title=f"HITL: {agent_config['agent_type']} — {hitl_trigger}",
                 trigger_type=(
                     "confidence_below_floor"
@@ -3218,6 +3462,9 @@ async def run_agent(
             item_id=str(hitl_entry.id),
             agent_name=str(agent_config.get("name") or agent_config.get("agent_type") or ""),
             action=str(hitl_trigger),
+            # Personal agents notify only their owner (core/push/sender.py).
+            agent_visibility=agent_config.get("visibility"),
+            agent_owner_user_id=agent_config.get("owner_user_id"),
         )
 
     # 6c. Track running accuracy for shadow AND active agents (atomic SQL)
@@ -3318,9 +3565,9 @@ async def run_agent(
 
 
 # ── POST /agents/{id}/pause ──────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
     "/agents/{agent_id}/pause",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3330,13 +3577,18 @@ async def run_agent(
     idempotency="idempotent-lifecycle-state",
     audit_event="agents.pause",
 )
-async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def pause_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
         if agent.status == "paused":
             raise HTTPException(409, "Agent is already paused")
         if agent.status == "retired":
@@ -3364,9 +3616,9 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
 
 
 # ── POST /agents/{id}/resume ─────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
     "/agents/{agent_id}/resume",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3376,13 +3628,18 @@ async def pause_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenan
     idempotency="idempotent-lifecycle-state",
     audit_event="agents.resume",
 )
-async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def resume_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
         if agent.status != "paused":
             raise HTTPException(409, f"Cannot resume agent in '{agent.status}' status; must be paused")
 
@@ -3449,9 +3706,9 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
 
 # ── POST /agents/{id}/promote ────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
     "/agents/{agent_id}/promote",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3461,13 +3718,18 @@ async def resume_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
     idempotency="idempotent-lifecycle-state",
     audit_event="agents.promote",
 )
-async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def promote_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
 
         if agent.status == "active":
             version = agent.version or "1.0.0"
@@ -3590,9 +3852,9 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
 
 
 # ── POST /agents/{id}/retire ───────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
     "/agents/{agent_id}/retire",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3602,7 +3864,11 @@ async def promote_agent(agent_id: UUID, tenant_id: str = Depends(get_current_ten
     idempotency="idempotent-lifecycle-state",
     audit_event="agents.retire",
 )
-async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def retire_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     """Retire an agent — marks as retired, removes from active fleet."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -3610,6 +3876,7 @@ async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
         if agent.status == "retired":
             raise HTTPException(409, "Agent is already retired")
 
@@ -3651,7 +3918,11 @@ async def retire_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
     idempotency="idempotent-shadow-retest-reset",
     audit_event="agents.retest",
 )
-async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def retest_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     """TC_AGENT-008: Reset shadow counters so users can re-evaluate a shadow agent."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -3659,6 +3930,8 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        # Bug sheet 2026-09-14 rows 19/22: retest had no gate at all.
+        require_agent_mutable(agent, _effective_caller(caller))
         if agent.status != "shadow":
             raise HTTPException(
                 409,
@@ -3698,9 +3971,9 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
 
 
 # ── POST /agents/{id}/rollback ───────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.post(
     "/agents/{agent_id}/rollback",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3710,13 +3983,18 @@ async def retest_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tena
     idempotency="idempotent-rollback-to-previous-version",
     audit_event="agents.rollback",
 )
-async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_tenant)):
+async def rollback_agent(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
 
         # Find the previous verified-good version (not the current one)
         versions_result = await session.execute(
@@ -3816,9 +4094,9 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
 
 
 # ── POST /agents/{id}/clone ──────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin on the source agent.
 @router.post(
     "/agents/{agent_id}/clone",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -3832,13 +4110,26 @@ async def clone_agent(
     agent_id: UUID,
     body: AgentCloneRequest,
     tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
+    effective_caller = _effective_caller(caller)
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         parent = result.scalar_one_or_none()
         if not parent:
             raise HTTPException(404, "Parent agent not found")
+        require_agent_mutable(parent, effective_caller)
+        # Admins keep the source's visibility/owner; a non-admin (who can only
+        # mutate their own personal agent) always gets a personal clone they own.
+        if effective_caller.is_admin:
+            clone_is_personal = is_personal_agent(parent)
+            clone_visibility = AGENT_VISIBILITY_PERSONAL if clone_is_personal else AGENT_VISIBILITY_TENANT
+            clone_owner_user_id = getattr(parent, "owner_user_id", None) if clone_is_personal else None
+        else:
+            clone_visibility, clone_owner_user_id = resolve_new_agent_ownership(
+                effective_caller, AGENT_VISIBILITY_PERSONAL, parent.domain
+            )
 
         clone_company_id = (
             _parse_company_id(body.overrides.get("company_id"))
@@ -3912,6 +4203,16 @@ async def clone_agent(
             connector_ids=list(body.overrides.get("connector_ids", parent.connector_ids or [])),
             reporting_to=body.overrides.get("reporting_to", parent.reporting_to),
             org_level=body.overrides.get("org_level", parent.org_level),
+            owner_user_id=clone_owner_user_id,
+            visibility=clone_visibility,
+        )
+        await _assert_connector_links_allowed(
+            session,
+            tid,
+            list(clone.connector_ids or []),
+            agent_visibility=clone_visibility,
+            agent_owner_user_id=clone_owner_user_id,
+            caller=effective_caller,
         )
         session.add(clone)
         try:
@@ -3957,6 +4258,7 @@ async def get_prompt_history(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Return prompt edit audit trail for an agent."""
     tid = _uuid.UUID(tenant_id)
@@ -3966,7 +4268,7 @@ async def get_prompt_history(
         ).scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
         result = await session.execute(
             select(PromptEditHistory)
             .where(
@@ -4006,6 +4308,7 @@ async def get_agent_budget(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Return current budget usage for an agent."""
     tid = _uuid.UUID(tenant_id)
@@ -4014,7 +4317,7 @@ async def get_agent_budget(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
 
         cost_controls = agent.cost_controls or {}
         monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0)
@@ -4079,6 +4382,7 @@ async def submit_agent_feedback(
     tenant_id: str = Depends(get_current_tenant),
     user: dict = Depends(get_current_user),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Submit feedback (thumbs up/down, correction, HITL reject) for an agent run.
 
@@ -4094,7 +4398,7 @@ async def submit_agent_feedback(
         ).scalar_one_or_none()
         if agent is None:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
 
     result = await submit_feedback(
         agent_id=str(agent_id),
@@ -4129,6 +4433,7 @@ async def list_agent_feedback(
     offset: int = 0,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """List feedback entries for an agent (paginated)."""
     from core.feedback.collector import list_feedback
@@ -4140,7 +4445,7 @@ async def list_agent_feedback(
         ).scalar_one_or_none()
         if agent is None:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
 
     entries = await list_feedback(
         agent_id=str(agent_id),
@@ -4165,6 +4470,7 @@ async def get_latest_explanation(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Derive a real, human-readable explanation of the agent's most recent
     run from stored `AgentTaskResult` data.
@@ -4197,7 +4503,7 @@ async def get_latest_explanation(
         ).scalar_one_or_none()
         if agent is None:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
         row = (
             await session.execute(
                 select(AgentTaskResult)
@@ -4281,6 +4587,7 @@ async def analyze_agent_feedback(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Trigger feedback analysis to generate prompt amendment suggestions."""
     from core.feedback.analyzer import analyze_feedback
@@ -4292,7 +4599,7 @@ async def analyze_agent_feedback(
         ).scalar_one_or_none()
         if agent is None:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
 
     result = await analyze_feedback(
         agent_id=str(agent_id),
@@ -4315,6 +4622,7 @@ async def list_agent_amendments(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """List current prompt amendments (learned rules) for an agent."""
     tid = _uuid.UUID(tenant_id)
@@ -4325,7 +4633,7 @@ async def list_agent_amendments(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
 
         # prompt_amendments is a JSONB list on the agent record
         raw = getattr(agent, "prompt_amendments", None) or []
@@ -4340,9 +4648,9 @@ async def list_agent_amendments(
 
 
 # ── DELETE /agents/{id} ─────────────────────────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.delete(
     "/agents/{agent_id}",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -4356,6 +4664,7 @@ async def delete_agent(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Delete an agent without row-level FK fragility.
 
@@ -4373,7 +4682,7 @@ async def delete_agent(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
-        _enforce_domain_access(agent, user_domains)
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
 
         if agent.status == "deleted":
             return {"id": str(agent_id), "deleted": True, "status": "deleted", "already_deleted": True}
@@ -4463,9 +4772,9 @@ async def delete_agent(
 
 
 # ── DELETE /agents/{id}/amendments/{index} ──────────────────────────────────
+# Bug sheet 2026-09-14 rows 19/22: owner-or-admin (require_agent_mutable).
 @router.delete(
     "/agents/{agent_id}/amendments/{index}",
-    dependencies=[require_tenant_admin],
 )
 @route_meta(
     auth_required=True,
@@ -4479,11 +4788,13 @@ async def delete_agent_amendment(
     agent_id: UUID,
     index: int,
     tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Remove a learned rule that a human reviewer rejects.
 
     Learned rules are prepended to the system prompt on every run, so an
-    unwanted or wrong rule must be revocable by a tenant admin without a
+    unwanted or wrong rule must be revocable by a tenant admin (or, since
+    bug sheet 2026-09-14 rows 19/22, a personal agent's owner) without a
     redeploy.
     """
     tid = _uuid.UUID(tenant_id)
@@ -4494,6 +4805,7 @@ async def delete_agent_amendment(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller))
         raw = getattr(agent, "prompt_amendments", None) or []
         amendments = [str(a) for a in raw] if isinstance(raw, list) else []
         if index < 0 or index >= len(amendments):

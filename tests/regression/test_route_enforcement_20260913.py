@@ -48,6 +48,21 @@ def _app(auth_mode: str = "legacy", scopes: list[str] | None = None, tenant: str
     async def public():
         return {"public": True}
 
+    @app.post("/auth/login")
+    @route_meta(auth_required=False, tenant_required=False, rate_limit="auth-login")
+    async def password_login():
+        return {"login": True}
+
+    @app.get("/auth/sso/{provider_key}/login")
+    @route_meta(auth_required=False, tenant_required=True, rate_limit="auth-sso-login-initiation")
+    async def sso_login(provider_key: str):
+        return {"sso_login": provider_key}
+
+    @app.get("/auth/sso/{provider_key}/callback")
+    @route_meta(auth_required=False, tenant_required=True, rate_limit="auth-sso-callback")
+    async def sso_callback(provider_key: str):
+        return {"sso_callback": provider_key}
+
     @app.get("/plain")
     async def plain():
         return {"plain": True}
@@ -133,7 +148,25 @@ class TestRateLimitEnforcement:
         with patch("core.auth_state.check_window_rate", broken):
             client = TestClient(_app(scopes=["agents:read"]))
             assert client.get("/public").status_code == 503  # public-* fails closed
+            assert client.post("/auth/login").status_code == 503  # credential class fails closed
             assert client.get("/agents").status_code == 200  # standard stays available
+
+    def test_backend_outage_degrades_for_sso_classes_only(self):
+        """Bug sheet 2026-09-14 row 7: a limiter outage used to 503 every SSO
+        login. SSO initiation/callback carry no credentials (the IdP owns
+        brute-force protection), so they degrade to allow-with-warning; the
+        exemption is an explicit set, not the ``auth-`` prefix."""
+        from api import route_enforcement
+
+        async def broken(*_a, **_k):
+            raise RuntimeError("redis down (strict)")
+
+        assert route_enforcement._DEGRADE_ON_OUTAGE_CLASSES == {"auth-sso-login-initiation", "auth-sso-callback"}
+        with patch("core.auth_state.check_window_rate", broken):
+            client = TestClient(_app())
+            assert client.get("/auth/sso/okta/login").status_code == 200
+            assert client.get("/auth/sso/okta/callback").status_code == 200
+            assert client.post("/auth/login").status_code == 503
 
 
 class TestRouteTableCoverage:

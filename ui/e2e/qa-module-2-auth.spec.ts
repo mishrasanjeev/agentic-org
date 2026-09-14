@@ -313,10 +313,15 @@ test("TC-AUTH-013 auditor cannot navigate to agent-creation / settings / connect
 });
 
 // ---------------------------------------------------------------------------
-// TC-AUTH-014: CFO cannot create agents
+// TC-AUTH-014: CFO creates only personal agents in the finance domain
+//
+// Bug sheet 2026-09-14 row 19: the wizard used to be admin-only. A CFO may
+// now reach it to build a PERSONAL agent (visible only to them and tenant
+// admins), with the domain locked to finance. Tenant-shared agents stay
+// admin-only; the backend returns 403 if a non-admin asks for one.
 // ---------------------------------------------------------------------------
 
-test("TC-AUTH-014 CFO cannot reach the agent-creation wizard", async ({ page }) => {
+test("TC-AUTH-014 CFO reaches the agent wizard for a personal agent with a locked domain", async ({ page }) => {
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').fill(DEMO.cfo.email);
   await page.locator('input[type="password"]').fill(DEMO.cfo.password);
@@ -326,23 +331,19 @@ test("TC-AUTH-014 CFO cannot reach the agent-creation wizard", async ({ page }) 
   await page.goto(`${APP}/dashboard/agents/new`, {
     waitUntil: "domcontentloaded",
   });
-  const onTarget = page.url().includes("/dashboard/agents/new");
-  const deniedVisible = await page
-    .getByText(/access denied|forbidden|unauthorized|not allowed|admin only/i)
-    .first()
-    .isVisible()
-    .catch(() => false);
-  if (onTarget && !deniedVisible) {
-    // Wizard rendered without a denial — verify the wizard control
-    // isn't actually accessible (no "Next" / step controls).
-    const wizardStep = page
-      .getByRole("button", { name: /^Next$|^Create Agent$/i })
-      .first();
-    expect(
-      await wizardStep.isVisible().catch(() => false),
-      "CFO reached /dashboard/agents/new wizard without a denial banner",
-    ).toBe(false);
-  }
+  await expect(page).toHaveURL(/\/dashboard\/agents\/new/);
+  await expect(page.getByTestId("access-denied")).toHaveCount(0);
+  await expect(page.getByTestId("personal-agent-note")).toContainText(
+    "only you and tenant admins can see it",
+    { timeout: 20_000 },
+  );
+
+  await page.getByTestId("skip-to-manual").click();
+  const domain = page.getByTestId("agent-domain");
+  await expect(domain).toBeDisabled();
+  await expect(domain).toHaveValue("finance");
+  // Visibility is an admin-only choice.
+  await expect(page.getByTestId("agent-visibility")).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------

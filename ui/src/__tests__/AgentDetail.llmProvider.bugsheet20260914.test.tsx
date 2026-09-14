@@ -42,6 +42,15 @@ vi.mock("react-helmet-async", () => ({
   Helmet: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+// Bug sheet 2026-09-14 ownership: the page reads the session role; an admin
+// keeps every management control visible for this suite.
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    user: { user_id: "u-admin", email: "admin@example.com", name: "Admin", role: "admin", domain: "all", tenant_id: "t1" },
+    isAuthenticated: true,
+  }),
+}));
+
 import AgentDetail from "@/pages/AgentDetail";
 
 const REGISTRY = {

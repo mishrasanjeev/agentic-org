@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router";
 import { Helmet } from "react-helmet-async";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
+import { defaultLandingForRole, useAuth } from "@/contexts/AuthContext";
 
 /**
  * AccessDenied â€” explicit 403 UX for role-gated routes.
@@ -88,7 +88,7 @@ export default function AccessDenied() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button onClick={() => navigate("/dashboard")} variant="default">
+            <Button onClick={() => navigate(defaultLandingForRole(user?.role))} variant="default">
               Back to dashboard
             </Button>
             <Button onClick={() => navigate(-1)} variant="outline">

@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role
@@ -16,6 +16,13 @@ from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.models.hitl import HITLQueue
+from core.ownership import (
+    approval_visibility_clause,
+    caller_from_request,
+    can_view_agent,
+    is_personal_agent,
+    personal_approval_decision,
+)
 from core.schemas.api import HITLDecision, PaginatedResponse
 
 router = APIRouter()
@@ -115,6 +122,9 @@ def _hitl_to_dict(item: HITLQueue) -> dict:
         "context": item.context,
         "decision": item.decision,
         "decision_by": str(item.decision_by) if item.decision_by else None,
+        "requested_by_user_id": (
+            str(item.requested_by_user_id) if getattr(item, "requested_by_user_id", None) else None
+        ),
         "decision_at": item.decision_at.isoformat() if item.decision_at else None,
         "decision_notes": item.decision_notes,
         "expires_at": item.expires_at.isoformat() if item.expires_at else None,
@@ -133,6 +143,7 @@ def _hitl_to_dict(item: HITLQueue) -> dict:
     audit_event="approvals.list",
 )
 async def list_approvals(
+    request: Request,
     domain: str | None = None,
     priority: str | None = None,
     status: str | None = None,
@@ -140,7 +151,6 @@ async def list_approvals(
     page: int = 1,
     per_page: int = 20,
     tenant_id: str = Depends(get_current_tenant),
-    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """List HITL items.
 
@@ -153,17 +163,22 @@ async def list_approvals(
         raise HTTPException(422, "page must be >= 1")
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
+    caller = caller_from_request(request)
     async with get_tenant_session(tid) as session:
         base = select(HITLQueue).where(HITLQueue.tenant_id == tid)
         count_base = select(func.count()).select_from(HITLQueue).where(HITLQueue.tenant_id == tid)
 
-        # RBAC domain filtering via Agent subquery
-        if user_domains is not None:
-            domain_agent_ids = (
-                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
+        # RBAC domain + ownership filtering via Agent subquery (bug sheet
+        # 2026-09-14 row 30): shared-agent items keep the domain filter,
+        # personal-agent items reach only their owner. Admins see all.
+        if not caller.is_admin:
+            visible_agent_ids = (
+                select(Agent.id)
+                .where(Agent.tenant_id == tid, approval_visibility_clause(Agent, caller))
+                .scalar_subquery()
             )
-            base = base.where(HITLQueue.agent_id.in_(domain_agent_ids))
-            count_base = count_base.where(HITLQueue.agent_id.in_(domain_agent_ids))
+            base = base.where(HITLQueue.agent_id.in_(visible_agent_ids))
+            count_base = count_base.where(HITLQueue.agent_id.in_(visible_agent_ids))
 
         if priority:
             base = base.where(HITLQueue.priority == priority)
@@ -332,6 +347,7 @@ async def decide(
     hitl_id: UUID,
     body: HITLDecision,
     background_tasks: BackgroundTasks,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     user_claims: dict = Depends(get_current_user),
     user_role: str = Depends(get_user_role),
@@ -364,6 +380,20 @@ async def decide(
         item = result.scalar_one_or_none()
         if not item:
             raise HTTPException(404, "HITL item not found")
+
+        # P1.1 + P3.2: Resolve the agent for the ownership and RBAC checks.
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == item.agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        agent_domain = getattr(agent, "domain", None)
+
+        # Bug sheet 2026-09-14 row 30: a personal agent's items belong to its
+        # owner (and admins). A caller who cannot even see the agent gets the
+        # same 404 as a missing item, before any status is revealed.
+        caller = caller_from_request(request)
+        ownership_verdict = personal_approval_decision(agent, caller)
+        if ownership_verdict is False and not can_view_agent(agent, caller):
+            raise HTTPException(404, "HITL item not found")
         if item.status != "pending":
             raise HTTPException(409, f"HITL item already resolved with status '{item.status}'")
 
@@ -378,21 +408,27 @@ async def decide(
                 "HITL item has no assignee_role — cannot validate authorization",
             )
 
-        # P1.1 + P3.2: Resolve agent domain for RBAC check
-        agent_result = await session.execute(
-            select(Agent.domain).where(Agent.id == item.agent_id)
-        )
-        agent_domain = agent_result.scalar_one_or_none()
-
-        # P1.1: Enforce role hierarchy and domain match
-        allowed, reason = _can_decide(user_role, user_domains, item.assignee_role, agent_domain)
+        if ownership_verdict is True:
+            # Owner (or admin) of a personal agent: ownership replaces the
+            # role hierarchy, which is written for shared domain agents.
+            allowed, reason = True, ""
+        elif ownership_verdict is False:
+            allowed = False
+            reason = (
+                "only the agent's owner or a tenant admin can decide approvals for a personal agent"
+                if is_personal_agent(agent)
+                else f"role '{user_role}' may only decide approvals for its own personal agents"
+            )
+        else:
+            # P1.1: Enforce role hierarchy and domain match
+            allowed, reason = _can_decide(user_role, user_domains, item.assignee_role, agent_domain)
 
         # ── Delegation override ────────────────────────────────────────
         # If the direct check fails, look for an active delegation FROM
         # someone whose role *would* allow this decision TO the current
         # user. If we find one, the user acts on behalf of the delegator.
         delegated_from: str | None = None
-        if not allowed:
+        if not allowed and ownership_verdict is None:
             try:
                 from datetime import UTC as _UTC
                 from datetime import datetime as _dt

@@ -5,17 +5,36 @@ from __future__ import annotations
 import uuid as _uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func, or_, select
 
-from api.deps import get_current_tenant, get_user_domains, get_user_role
+from api.deps import get_current_tenant, get_user_role
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.audit import AuditLog
+from core.ownership import Caller, agent_visibility_clause, caller_from_request
 from core.schemas.api import PaginatedResponse
 
 router = APIRouter()
+
+
+def _audit_agent_filter(tid: _uuid.UUID, caller: Caller, user_role: str):
+    """Row filter for audit reads, or ``None`` when the caller sees every row.
+
+    Bug sheet 2026-09-14 row 30: rows follow agent visibility, so other
+    users' personal-agent rows are hidden from non-admins. Admins see all.
+    Auditors are read-only compliance reviewers and must see everything,
+    personal-agent rows included -- that exemption is for audit READ only
+    and only for a human session (a machine credential has no role).
+    Rows with no agent (playground runs, system events) stay visible.
+    """
+    if caller.is_admin or (user_role == "auditor" and not caller.is_machine):
+        return None
+    visible_agent_ids = (
+        select(Agent.id).where(Agent.tenant_id == tid, agent_visibility_clause(Agent, caller)).scalar_subquery()
+    )
+    return or_(AuditLog.agent_id.in_(visible_agent_ids), AuditLog.agent_id.is_(None))
 
 
 def _audit_to_dict(entry: AuditLog) -> dict:
@@ -61,6 +80,7 @@ def _parse_company_id(company_id: str | None) -> _uuid.UUID | None:
     audit_event="audit.query",
 )
 async def query_audit(
+    request: Request,
     event_type: str | None = None,
     agent_id: str | None = None,
     company_id: str | None = None,
@@ -69,7 +89,6 @@ async def query_audit(
     page: int = 1,
     per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
-    user_domains: list[str] | None = Depends(get_user_domains),
     user_role: str = Depends(get_user_role),
 ):
     if page < 1:
@@ -77,20 +96,15 @@ async def query_audit(
     per_page = min(max(per_page, 1), 100)
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(company_id)
+    caller = caller_from_request(request)
     async with get_tenant_session(tid) as session:
         base = select(AuditLog).where(AuditLog.tenant_id == tid)
         count_base = select(func.count()).select_from(AuditLog).where(AuditLog.tenant_id == tid)
 
-        # RBAC domain filtering — auditors see everything; domain roles see only their agents
-        # Also include entries with NULL agent_id (e.g. playground runs, system events)
-        if user_domains is not None and user_role != "auditor":
-            domain_agent_ids = (
-                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
-            )
-            domain_filter = or_(
-                AuditLog.agent_id.in_(domain_agent_ids),
-                AuditLog.agent_id.is_(None),
-            )
+        # RBAC domain + ownership filtering — admins and auditors see everything;
+        # everyone else sees the agents they can view plus NULL-agent rows.
+        domain_filter = _audit_agent_filter(tid, caller, user_role)
+        if domain_filter is not None:
             base = base.where(domain_filter)
             count_base = count_base.where(domain_filter)
 
@@ -205,6 +219,7 @@ def _enforce_to_dict(entry: AuditLog, agent_name_by_id: dict[str, str]) -> dict:
     audit_event="audit.enforcement.query",
 )
 async def query_enforce_audit(
+    request: Request,
     result: str | None = None,  # "allowed" | "denied"
     agent_id: str | None = None,
     connector: str | None = None,
@@ -213,7 +228,6 @@ async def query_enforce_audit(
     page: int = 1,
     per_page: int = 50,
     tenant_id: str = Depends(get_current_tenant),
-    user_domains: list[str] | None = Depends(get_user_domains),
     user_role: str = Depends(get_user_role),
 ):
     """Tool-gateway enforcement events for the current tenant.
@@ -242,15 +256,9 @@ async def query_enforce_audit(
             .where(AuditLog.resource_type == "tool_call")
         )
 
-        # RBAC domain filter — same logic as ``GET /audit``.
-        if user_domains is not None and user_role != "auditor":
-            domain_agent_ids = (
-                select(Agent.id).where(Agent.domain.in_(user_domains)).scalar_subquery()
-            )
-            domain_filter = or_(
-                AuditLog.agent_id.in_(domain_agent_ids),
-                AuditLog.agent_id.is_(None),
-            )
+        # RBAC domain + ownership filter — same logic as ``GET /audit``.
+        domain_filter = _audit_agent_filter(tid, caller_from_request(request), user_role)
+        if domain_filter is not None:
             base = base.where(domain_filter)
             count_base = count_base.where(domain_filter)
 

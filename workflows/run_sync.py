@@ -16,6 +16,43 @@ import structlog
 
 logger = structlog.get_logger()
 
+# Bug sheet 2026-09-14 row 30: ``WorkflowRun.context`` key holding the user id
+# of the human who started the run (stamped server-side by POST
+# /workflows/{id}/run; absent for runs with no human initiator).
+WORKFLOW_RUN_INITIATOR_KEY = "initiated_by_user_id"
+
+
+def workflow_run_initiator(db_run: Any) -> uuid.UUID | None:
+    """User id of the human who started ``db_run``, when one is recorded."""
+    context = getattr(db_run, "context", None)
+    raw = context.get(WORKFLOW_RUN_INITIATOR_KEY) if isinstance(context, dict) else None
+    if not raw:
+        return None
+    try:
+        return uuid.UUID(str(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+async def hitl_agent_push_scope(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID) -> dict[str, Any]:
+    """Push targeting for a workflow HITL item attached to ``agent_id``.
+
+    A personal agent's item is pushed to its owner only. An agent row that
+    cannot be read is treated as ownerless personal, so nobody is pushed.
+    """
+    from sqlalchemy import select
+
+    from core.models.agent import Agent
+    from core.ownership import AGENT_VISIBILITY_PERSONAL, agent_ownership_fields
+
+    agent = (
+        await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tenant_id))
+    ).scalar_one_or_none()
+    if agent is None:
+        return {"agent_visibility": AGENT_VISIBILITY_PERSONAL, "agent_owner_user_id": None}
+    fields = agent_ownership_fields(agent)
+    return {"agent_visibility": fields["visibility"], "agent_owner_user_id": fields["owner_user_id"]}
+
 
 async def record_ab_outcome_if_terminal(db_run: Any) -> None:
     """Record the A/B variant outcome once, only when the run is terminal.
@@ -156,6 +193,7 @@ async def sync_engine_state_to_workflow_run(
     from core.models.agent import Agent
     from core.models.hitl import HITLQueue
     from core.models.workflow import WorkflowRun
+    from core.ownership import AGENT_VISIBILITY_TENANT, shared_agents_only_clause
 
     definition = definition or state.get("definition") or {}
     steps_def = {s["id"]: s for s in definition.get("steps", [])}
@@ -186,12 +224,19 @@ async def sync_engine_state_to_workflow_run(
             if created and step_row.status == "waiting_hitl":
                 timeout_h = hitl_timeout_hours(step_result, step_def)
                 hitl_agent_id = step_row.agent_id
-                if not hitl_agent_id:
+                push_scope: dict[str, Any] = {}
+                if hitl_agent_id:
+                    push_scope = await hitl_agent_push_scope(session, tenant_id, hitl_agent_id)
+                else:
+                    # Fallback attachment never lands on a personal agent (row 30).
                     hitl_agent_id = (
                         await session.execute(
-                            select(Agent.id).where(Agent.tenant_id == tenant_id).limit(1)
+                            select(Agent.id)
+                            .where(Agent.tenant_id == tenant_id, shared_agents_only_clause(Agent))
+                            .limit(1)
                         )
                     ).scalar_one_or_none()
+                    push_scope = {"agent_visibility": AGENT_VISIBILITY_TENANT, "agent_owner_user_id": None}
                 if hitl_agent_id:
                     expires_at = datetime.now(UTC) + timedelta(hours=timeout_h)
                     hitl_item = HITLQueue(
@@ -201,6 +246,7 @@ async def sync_engine_state_to_workflow_run(
                             title=f"Approval required: {step_def.get('title', step_id)}",
                             trigger_type="workflow_step",
                             priority=step_def.get("priority", "normal"),
+                            requested_by_user_id=workflow_run_initiator(db_run),
                             assignee_role=step_result.get(
                                 "assignee_role",
                                 step_def.get("assignee_role", "admin"),
@@ -223,7 +269,9 @@ async def sync_engine_state_to_workflow_run(
                     schedule_hitl_timeout(engine_run_id, step_id, expires_at)
                     from core.push.sender import notify_approval_created
 
-                    await notify_approval_created(str(tenant_id), item_id=str(hitl_item.id), action=step_id)
+                    await notify_approval_created(
+                        str(tenant_id), item_id=str(hitl_item.id), action=step_id, **push_scope
+                    )
 
         db_run.steps_completed = _run_steps_completed(state)
         db_run.steps_total = _run_steps_total(state, db_run.steps_total)

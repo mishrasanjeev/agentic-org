@@ -11,16 +11,25 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
-from api.v1.agents import _enforce_domain_access, _pinned_llm_provider, _record_cost_ledger
+from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
+from core.ownership import (
+    AGENT_VISIBILITY_PERSONAL,
+    Caller,
+    agent_ownership_fields,
+    agent_visibility_clause,
+    caller_from_request,
+    require_agent_visible,
+    shared_agents_only_clause,
+)
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -93,15 +102,35 @@ def _classify_domain(query: str) -> str:
     return max(scores, key=scores.get)  # type: ignore[arg-type]
 
 
+def _chat_routing_clause(caller: Caller | None):
+    """Agents chat may pick for ``caller`` (bug sheet 2026-09-14 row 30).
+
+    Shared agents the caller may see plus the caller's OWN personal agents,
+    never another user's personal agent -- not even for an admin, because
+    routing is automatic selection. No human caller: shared agents only.
+    """
+    if caller is None or caller.user_id is None:
+        return shared_agents_only_clause(Agent)
+    return and_(
+        agent_visibility_clause(Agent, caller),
+        or_(
+            shared_agents_only_clause(Agent),
+            and_(Agent.visibility == AGENT_VISIBILITY_PERSONAL, Agent.owner_user_id == caller.user_id),
+        ),
+    )
+
+
 async def _find_agent_for_domain(
     domain: str,
     tenant_id: str,
     company_id: _uuid.UUID,
+    caller: Caller | None = None,
 ) -> tuple[str, str | None, str | None, list[str]]:
     """Find the best active agent for a domain from the DB.
 
     Returns (agent_display_name, agent_id_str, agent_type, authorized_tools)
-    or falls back to a default.
+    or falls back to a default. Only agents in :func:`_chat_routing_clause`
+    for ``caller`` are candidates.
     """
     db_domain = _DOMAIN_TO_DB_DOMAIN.get(domain, domain)
     try:
@@ -114,6 +143,7 @@ async def _find_agent_for_domain(
                     Agent.company_id == company_id,
                     Agent.domain == db_domain,
                     Agent.status.in_(["active", "shadow"]),
+                    _chat_routing_clause(caller),
                 )
                 .order_by(Agent.status.asc(), Agent.created_at.desc())
                 .limit(1)
@@ -434,6 +464,7 @@ async def _record_chat_hitl(
     hitl_trigger: str | None,
     confidence: float,
     hitl_context: dict[str, Any] | None = None,
+    requested_by_user_id: _uuid.UUID | None = None,
 ) -> bool:
     """Persist chat-triggered HITL so the approval queue is not bypassed.
 
@@ -465,6 +496,9 @@ async def _record_chat_hitl(
 
     try:
         async with get_tenant_session(tid) as session:
+            agent_row = (
+                await session.execute(select(Agent).where(Agent.id == aid, Agent.tenant_id == tid))
+            ).scalar_one_or_none()
             hitl_item = HITLQueue(
                     tenant_id=tid,
                     agent_id=aid,
@@ -473,6 +507,7 @@ async def _record_chat_hitl(
                     trigger_type="chat_policy",
                     priority="high",
                     assignee_role=domain or "admin",
+                    requested_by_user_id=requested_by_user_id,
                     # Bug sheet #44 (2026-09-14): context is stored once, in
                     # ``context`` (which carries ``output``), not duplicated here.
                     decision_options={"options": ["approve", "reject", "override"]},
@@ -482,8 +517,15 @@ async def _record_chat_hitl(
             session.add(hitl_item)
         from core.push.sender import notify_approval_created
 
+        # A personal agent's approval push goes to its owner only (row 30).
+        push_scope = agent_ownership_fields(agent_row) if agent_row is not None else {}
         await notify_approval_created(
-            str(tid), item_id=str(hitl_item.id), agent_name=agent_name or agent_type or "", action=str(hitl_trigger)
+            str(tid),
+            item_id=str(hitl_item.id),
+            agent_name=agent_name or agent_type or "",
+            action=str(hitl_trigger),
+            agent_visibility=push_scope.get("visibility"),
+            agent_owner_user_id=push_scope.get("owner_user_id"),
         )
         return True
     # enterprise-gate: broad-except-ok reason=chat-hitl-queue-failure-returns-retryable-503
@@ -522,12 +564,15 @@ class ChatMessage(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-async def _load_agent_llm_provider(tenant_id: str, company_id: _uuid.UUID, agent_id: str) -> str | None:
-    """Provider pin for a keyword-routed agent (sheet #31, 2026-09-14).
+async def _load_routed_agent(
+    tenant_id: str, company_id: _uuid.UUID, agent_id: str, caller: Caller | None = None
+) -> Any | None:
+    """Agent row for a keyword-routed agent (sheet #31 and row 30, 2026-09-14).
 
-    ``_find_agent_for_domain`` returns only display fields, so the pin is
-    read here. A read failure is a 503 rather than a silent unpinned run on
-    whatever provider the model name happens to resolve to.
+    ``_find_agent_for_domain`` returns only display fields, so the provider
+    pin and the ownership used by the connector dispatch guard are read here.
+    A read failure is a 503 rather than a silent unpinned run on whatever
+    provider the model name happens to resolve to.
     """
     tid = _uuid.UUID(tenant_id)
     try:
@@ -538,12 +583,11 @@ async def _load_agent_llm_provider(tenant_id: str, company_id: _uuid.UUID, agent
                         Agent.id == _uuid.UUID(agent_id),
                         Agent.tenant_id == tid,
                         Agent.company_id == company_id,
+                        _chat_routing_clause(caller),
                     )
                 )
             ).scalar_one_or_none()
-            if agent is None:
-                return None
-            return _pinned_llm_provider(getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None))
+            return agent
     except (OSError, RuntimeError, SQLAlchemyError) as exc:
         _log.error("chat_agent_provider_lookup_failed", agent_id=agent_id, error=str(exc))
         raise HTTPException(
@@ -575,9 +619,16 @@ async def chat_query(
     from api.v1.agents import _require_company_for_tenant
 
     company_uuid = await _require_company_for_tenant(tenant_id, body.company_id)
+    caller = caller_from_request(request)
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
     agent_llm_provider: str | None = None
+    # Ownership of the agent that will run, for the personal-connector guard
+    # in _assert_connectors_ready_for_dispatch (bug sheet 2026-09-14 rows 19/30).
+    # Unknown agent: shared semantics, so any personal connector is refused.
+    agent_visibility = "tenant"
+    agent_owner_user_id: _uuid.UUID | None = None
+    agent_linked_connector_ids: list[str] = []
     # If the caller specified an agent_id, look it up directly instead of
     # relying on keyword-based domain classification. An id that does not
     # resolve to an agent the caller may see is a 404 — never a silent
@@ -598,7 +649,9 @@ async def chat_query(
             )).scalar_one_or_none()
             if agent is None:
                 raise HTTPException(404, "Agent not found")
-            _enforce_domain_access(agent, user_domains)
+            # Domain RBAC for shared agents, owner/admin for personal ones
+            # (bug sheet 2026-09-14 rows 30/53); 404 either way.
+            require_agent_visible(agent, caller)
             domain = agent.domain or "general"
             agent_name = agent.employee_name or agent.name
             agent_id: str | None = str(agent.id)
@@ -611,6 +664,9 @@ async def chat_query(
             agent_llm_provider = _pinned_llm_provider(
                 getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None)
             )
+            agent_visibility = agent_ownership_fields(agent)["visibility"]
+            agent_owner_user_id = getattr(agent, "owner_user_id", None)
+            agent_linked_connector_ids = list(agent_connector_ids)
     else:
         domain = _classify_domain(body.query)
         # Keyword routing must not hand a domain-limited caller an agent
@@ -626,11 +682,19 @@ async def chat_query(
             domain,
             tenant_id,
             company_uuid,
+            caller=caller,
         )
         if agent_id and domain_denied:
             raise HTTPException(403, f"You do not have access to the '{picked_domain}' domain.")
         if agent_id:
-            agent_llm_provider = await _load_agent_llm_provider(tenant_id, company_uuid, agent_id)
+            routed_agent = await _load_routed_agent(tenant_id, company_uuid, agent_id, caller=caller)
+            if routed_agent is not None:
+                agent_llm_provider = _pinned_llm_provider(
+                    getattr(routed_agent, "llm_provider", None), getattr(routed_agent, "llm_config", None)
+                )
+                agent_visibility = agent_ownership_fields(routed_agent)["visibility"]
+                agent_owner_user_id = getattr(routed_agent, "owner_user_id", None)
+                agent_linked_connector_ids = list(getattr(routed_agent, "connector_ids", None) or [])
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
     # what kept user-visible confidence pinned at 60% on reopen TC_003
@@ -684,6 +748,7 @@ async def chat_query(
             hitl_trigger=hitl_trigger,
             confidence=det_confidence,
             hitl_context=det.get("hitl_context") or None,
+            requested_by_user_id=caller.user_id,
         )
         if hitl_trigger and not hitl_recorded:
             _raise_chat_hitl_persist_failed(agent_id, hitl_trigger)
@@ -726,6 +791,9 @@ async def chat_query(
                     tid,
                     connector_ids,
                     company_uuid,
+                    agent_visibility=agent_visibility,
+                    agent_owner_user_id=agent_owner_user_id,
+                    linked_connector_ids=agent_linked_connector_ids,
                 )
             connector_config, resolved_names = await _resolve_connector_configs(
                 tenant_id=tenant_id,
@@ -839,6 +907,7 @@ async def chat_query(
                         "output": lg_result.get("output", {}),
                         "tool_calls": lg_result.get("tool_calls") or lg_result.get("tool_calls_log") or [],
                     },
+                    requested_by_user_id=caller.user_id,
                 )
                 if not hitl_recorded:
                     _raise_chat_hitl_persist_failed(agent_id, hitl_trigger)

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import AgentCard from "@/components/AgentCard";
 import KillSwitch from "@/components/KillSwitch";
 import { agentsApi, companiesApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { AGENT_CREATOR_ROLES, canManageAgent, isAdminUser } from "@/lib/roles";
 import type { Agent } from "@/types";
 
 const DOMAINS = ["all", "finance", "hr", "marketing", "ops", "backoffice", "comms"];
@@ -12,6 +14,12 @@ const STATUSES = ["all", "active", "shadow", "paused", "staging", "deprecated"];
 
 export default function Agents() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Bug sheet 2026-09-14 rows 17-19/52: every agent-creator role may create
+  // (personal) agents; SOP import stays admin-only; the kill switch only
+  // shows on agents the user can manage.
+  const canCreateAgent = AGENT_CREATOR_ROLES.includes(user?.role || "");
+  const isAdmin = isAdminUser(user);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [domainFilter, setDomainFilter] = useState("all");
@@ -141,9 +149,16 @@ export default function Agents() {
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Agent Fleet</h2>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowImport(!showImport)}>Import CSV</Button>
-          <Button variant="outline" onClick={() => navigate("/dashboard/agents/from-sop")}>Create from SOP</Button>
-          <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
+          {/* POST /agents/import-csv stays admin-only server-side. */}
+          {isAdmin && (
+            <Button variant="outline" onClick={() => setShowImport(!showImport)}>Import CSV</Button>
+          )}
+          {isAdmin && (
+            <Button variant="outline" onClick={() => navigate("/dashboard/agents/from-sop")}>Create from SOP</Button>
+          )}
+          {canCreateAgent && (
+            <Button onClick={() => navigate("/dashboard/agents/new")}>Create Agent</Button>
+          )}
         </div>
       </div>
 
@@ -218,7 +233,7 @@ export default function Agents() {
           {filtered.map((agent) => (
             <div key={agent.id} className="relative">
               <AgentCard agent={agent} onClick={() => navigate(`/dashboard/agents/${agent.id}`)} />
-              {agent.status === "active" && (
+              {agent.status === "active" && canManageAgent(user, agent) && (
                 <div className="absolute top-2 right-2">
                   <KillSwitch agentId={agent.id} agentName={agent.name} onPaused={fetchAgents} />
                 </div>

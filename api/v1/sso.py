@@ -11,7 +11,7 @@ Routes:
 
 from __future__ import annotations
 
-import json
+import time
 import uuid
 
 import httpx
@@ -19,14 +19,26 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from redis.exceptions import RedisError
 from sqlalchemy import select
 
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from api.v1.auth import _set_session_cookie
 from auth.jwt import create_access_token
-from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair, new_state
+from auth.sso.oidc import OIDCProvider, new_nonce, new_pkce_pair
 from auth.sso.provisioning import jit_provision_user
+from auth.sso.state_token import (
+    FLOW_COOKIE_NAME,
+    SSOStateClaims,
+    SSOStateError,
+    clear_flow_cookie,
+    clear_flow_cookie_header,
+    decrypt_flow_cookie,
+    issue_state_token,
+    set_flow_cookie,
+    verify_state_token,
+)
 from core.config import settings
 from core.database import async_session_factory, get_tenant_session
 from core.models.sso_config import SSOConfig
@@ -39,7 +51,14 @@ public_router = APIRouter(prefix="/auth/sso", tags=["SSO"])
 admin_router = APIRouter(prefix="/sso", tags=["SSO"], dependencies=[require_tenant_admin])
 
 
-# ── Redis helpers for the short-lived state store ─────────────────
+# ── Login-flow state ──────────────────────────────────────────────
+#
+# Bug sheet 2026-09-14 row 7: flow state no longer lives in Redis (an outage
+# 503'd every SSO login). ``state`` is a signed token and the PKCE verifier
+# rides in an encrypted, browser-bound cookie — see auth/sso/state_token.py.
+# Redis is used only for the best-effort one-shot replay marker below.
+
+_MAX_RETURN_TO_LENGTH = 1024
 
 
 async def _redis():
@@ -47,8 +66,52 @@ async def _redis():
     return await get_async_redis()
 
 
-def _state_key(provider_key: str, state: str) -> str:
-    return f"sso:state:{provider_key}:{state}"
+def _replay_marker_key(jti: str) -> str:
+    return f"sso:used:{jti}"
+
+
+def _safe_return_to(value: str | None) -> str:
+    target = value or "/dashboard"
+    if not target.startswith("/") or target.startswith("//") or len(target) > _MAX_RETURN_TO_LENGTH:
+        return "/dashboard"
+    return target
+
+
+async def _mark_state_consumed(claims: SSOStateClaims, provider_key: str) -> None:
+    """Best-effort one-shot use of the state ``jti``.
+
+    Redis available: ``SET sso:used:{jti} 1 NX EX <remaining ttl>``; a key
+    that already exists means the state+cookie pair was replayed -> 400.
+
+    Redis unavailable or erroring: log ``sso_replay_marker_unavailable`` and
+    CONTINUE (documented degraded mode). Only replay *detection* degrades;
+    replay stays bounded without Redis because:
+      * the flow cookie is HttpOnly, encrypted and bound to this state's jti,
+        so a replay needs the original browser's cookie jar, not just a URL;
+      * the IdP authorization code is single-use, so re-submitting the same
+        callback fails at the token endpoint;
+      * PKCE binds the code to the verifier, which never appears in a URL;
+      * the state expires 10 minutes after issue.
+    Non-Redis errors are not caught here and fail closed as a 500.
+    """
+    try:
+        r = await _redis()
+        if r is None:
+            logger.warning("sso_replay_marker_unavailable", reason="redis_unavailable", provider_key=provider_key)
+            return
+        ttl = max(1, claims.exp - int(time.time()))
+        first_use = await r.set(_replay_marker_key(claims.jti), "1", nx=True, ex=ttl)
+    except (RedisError, OSError, TimeoutError) as exc:
+        logger.warning(
+            "sso_replay_marker_unavailable",
+            reason="redis_error",
+            error_type=type(exc).__name__,
+            provider_key=provider_key,
+        )
+        return
+    if not first_use:
+        logger.warning("sso_state_replay_rejected", provider_key=provider_key)
+        raise HTTPException(400, "Invalid or expired state")
 
 
 async def _load_provider(provider_key: str, tenant_id: uuid.UUID) -> tuple[OIDCProvider, SSOConfig]:
@@ -139,32 +202,27 @@ async def sso_login(
     tenant_id: uuid.UUID,
     return_to: str = "/dashboard",
 ) -> RedirectResponse:
-    """Kick off the OIDC authorization-code flow with PKCE."""
+    """Kick off the OIDC authorization-code flow with PKCE.
+
+    Needs no server-side store: the signed ``state`` carries the tenant,
+    provider, nonce and return path; the PKCE verifier goes into the
+    encrypted HttpOnly flow cookie, never into a URL.
+    """
     provider, _config = await _load_provider(provider_key, tenant_id)
 
-    state = new_state()
     nonce = new_nonce()
     verifier, challenge = new_pkce_pair()
-
-    # Persist state for the callback to verify
-    payload = {
-        "tenant_id": str(tenant_id),
-        "nonce": nonce,
-        "verifier": verifier,
-        "return_to": return_to,
-    }
-    r = await _redis()
-    if r is None:
-        raise HTTPException(503, "SSO state store unavailable (Redis required)")
-    try:
-        await r.setex(_state_key(provider_key, state), 600, json.dumps(payload))
-    # enterprise-gate: broad-except-ok reason=sso-state-write-failure-returns-retryable-503
-    except Exception as exc:
-        logger.exception("sso_state_store_failed")
-        raise HTTPException(503, "Failed to persist SSO state") from exc
+    state, claims = issue_state_token(
+        tenant_id=tenant_id,
+        provider_key=provider_key,
+        nonce=nonce,
+        return_to=_safe_return_to(return_to),
+    )
 
     url = provider.build_authorize_url(state, nonce, challenge)
-    return RedirectResponse(url, status_code=303)
+    response = RedirectResponse(url, status_code=303)
+    set_flow_cookie(response, jti=claims.jti, verifier=verifier)
+    return response
 
 
 @public_router.get("/{provider_key}/callback")
@@ -178,74 +236,77 @@ async def sso_login(
     public_reason="oidc-provider-callback-state-nonce-protected",
 )
 async def sso_callback(
+    request: Request,
     provider_key: str,
     code: str = Query(...),
     state: str = Query(...),
-    request: Request = None,  # noqa: ARG001  (unused placeholder)
 ) -> RedirectResponse:
-    r = await _redis()
-    if r is None:
-        raise HTTPException(503, "SSO state store unavailable")
-    raw = await r.get(_state_key(provider_key, state))
-    if not raw:
-        raise HTTPException(400, "Invalid or expired state")
-
-    if isinstance(raw, bytes):
-        raw = raw.decode()
-    payload = json.loads(raw)
-    await r.delete(_state_key(provider_key, state))  # one-shot
-
-    tenant_id = uuid.UUID(payload["tenant_id"])
-    nonce = payload["nonce"]
-    verifier = payload["verifier"]
-    return_to = payload.get("return_to", "/")
-
-    provider, config = await _load_provider(provider_key, tenant_id)
-
     try:
-        tokens = await provider.exchange_code(code, verifier, nonce)
-    except httpx.HTTPStatusError as exc:
-        logger.warning("sso_token_exchange_failed", status=exc.response.status_code)
-        raise HTTPException(400, "SSO token exchange failed") from exc
-    # enterprise-gate: broad-except-ok reason=sso-verification-failure-fails-closed-400
-    except Exception:
-        logger.exception("sso_verification_failed")
-        raise HTTPException(400, "SSO verification failed") from None
+        try:
+            claims = verify_state_token(state, provider_key=provider_key)
+            verifier = decrypt_flow_cookie(request.cookies.get(FLOW_COOKIE_NAME), expected_jti=claims.jti)
+        except SSOStateError as exc:
+            logger.warning("sso_state_rejected", reason=exc.reason, provider_key=provider_key)
+            raise HTTPException(400, "Invalid or expired state") from None
 
-    try:
-        user = await jit_provision_user(tenant_id, provider_key, tokens.claims)
-    except ValueError as exc:
-        logger.warning("sso_provisioning_rejected", reason=str(exc))
-        raise HTTPException(403, str(exc)) from exc
+        await _mark_state_consumed(claims, provider_key)
 
-    # Look up tenant name for the JWT
-    async with get_tenant_session(tenant_id) as session:
-        result = await session.execute(
-            select(Tenant).where(Tenant.id == tenant_id)
+        # Tenant, nonce and return path come only from the signed state.
+        tenant_id = claims.tenant_id
+        nonce = claims.nonce
+        return_to = claims.return_to
+
+        provider, config = await _load_provider(provider_key, tenant_id)
+
+        try:
+            tokens = await provider.exchange_code(code, verifier, nonce)
+        except httpx.HTTPStatusError as exc:
+            logger.warning("sso_token_exchange_failed", status=exc.response.status_code)
+            raise HTTPException(400, "SSO token exchange failed") from exc
+        # enterprise-gate: broad-except-ok reason=sso-verification-failure-fails-closed-400
+        except Exception:
+            logger.exception("sso_verification_failed")
+            raise HTTPException(400, "SSO verification failed") from None
+
+        try:
+            user = await jit_provision_user(tenant_id, provider_key, tokens.claims)
+        except ValueError as exc:
+            logger.warning("sso_provisioning_rejected", reason=str(exc))
+            raise HTTPException(403, str(exc)) from exc
+
+        # Look up tenant name for the JWT
+        async with get_tenant_session(tenant_id) as session:
+            result = await session.execute(
+                select(Tenant).where(Tenant.id == tenant_id)
+            )
+            tenant = result.scalar_one()
+
+        # Mint our own JWT — user's browser now holds an AgenticOrg session.
+        # Shape matches the rest of api/v1/auth.py so middleware can decode it.
+        from core.rbac import get_allowed_domains
+
+        scopes = get_scopes_for_role(user.role)
+        token = create_access_token(
+            data={
+                "sub": user.email,
+                "agenticorg:user_id": str(user.id),
+                "agenticorg:tenant_id": str(tenant_id),
+                "agenticorg:tenant_name": tenant.name,
+                "grantex:scopes": scopes,
+                "name": user.name,
+                "role": user.role,
+                "domain": user.domain,
+                "agenticorg:domains": get_allowed_domains(user.role, user.domain),
+                "auth_method": "sso_oidc",
+                "sso_provider": provider_key,
+            },
+            expires_minutes=getattr(settings, "token_ttl_minutes", 60),
         )
-        tenant = result.scalar_one()
-
-    # Mint our own JWT — user's browser now holds an AgenticOrg session.
-    # Shape matches the rest of api/v1/auth.py so middleware can decode it.
-    from core.rbac import get_allowed_domains
-
-    scopes = get_scopes_for_role(user.role)
-    token = create_access_token(
-        data={
-            "sub": user.email,
-            "agenticorg:user_id": str(user.id),
-            "agenticorg:tenant_id": str(tenant_id),
-            "agenticorg:tenant_name": tenant.name,
-            "grantex:scopes": scopes,
-            "name": user.name,
-            "role": user.role,
-            "domain": user.domain,
-            "agenticorg:domains": get_allowed_domains(user.role, user.domain),
-            "auth_method": "sso_oidc",
-            "sso_provider": provider_key,
-        },
-        expires_minutes=getattr(settings, "token_ttl_minutes", 60),
-    )
+    except HTTPException as exc:
+        # The flow is over either way: expire the one-shot flow cookie on
+        # error responses too.
+        exc.headers = {**(exc.headers or {}), "set-cookie": clear_flow_cookie_header()}
+        raise
 
     # Establish the same cookie-first browser session used by password and
     # Google login. Never expose bearer material to browser JavaScript.
@@ -261,6 +322,7 @@ async def sso_callback(
         token,
         getattr(settings, "token_ttl_minutes", 60) * 60,
     )
+    clear_flow_cookie(response)
     return response
 
 

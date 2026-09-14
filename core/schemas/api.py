@@ -106,6 +106,9 @@ class AgentCreate(BaseModel):
     # connector lookup" -- tools may still fail at call time if no instance is
     # linked, but the agent can be created.
     connector_ids: list[str] = []
+    # Bug sheet 2026-09-14 rows 19/22: 'tenant' (shared, admin only) or
+    # 'personal'. Omitted: admins create tenant agents, others personal.
+    visibility: str | None = Field(None, pattern=r"^(tenant|personal)$")
 
 
 class AgentUpdate(BaseModel):
@@ -130,6 +133,11 @@ class AgentUpdate(BaseModel):
     org_level: int | None = None
     change_reason: str | None = None
     connector_ids: list[str] | None = None
+    # Row 52: PATCH validated a domain change but the schema dropped the
+    # field (extra="ignore"), so it never reached the handler.
+    domain: str | None = Field(None, max_length=50)
+    # Rows 19/22: only a tenant admin may change visibility.
+    visibility: str | None = Field(None, pattern=r"^(tenant|personal)$")
     max_retries: int | None = Field(None, ge=0, le=20)
     # Learned rules prepended to the system prompt on every run
     # (core/langgraph/runner.py). Full-list replace; DELETE

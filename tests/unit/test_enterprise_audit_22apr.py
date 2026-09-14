@@ -48,17 +48,22 @@ def _route_has_admin_guard(module, path_substr: str, method: str) -> bool:
 class TestAdminGateOnMutations:
     """F1 — every sensitive mutation must sit behind require_tenant_admin."""
 
+    # bug sheet 2026-09-14 rows 19/22: agent create/replace/delete/clone moved from admin-only to
+    # owner-or-admin, so the pins now assert the handler-level ownership checks instead.
     def test_create_agent_requires_admin(self) -> None:
-        assert _route_has_admin_guard(agents_mod, "/agents", "POST")
+        assert "resolve_new_agent_ownership(" in inspect.getsource(agents_mod.create_agent)
 
     def test_replace_agent_requires_admin(self) -> None:
-        assert _route_has_admin_guard(agents_mod, "/agents/{agent_id}", "PUT")
+        assert "require_agent_mutable(agent, effective_caller)" in inspect.getsource(agents_mod.replace_agent)
 
     def test_delete_agent_requires_admin(self) -> None:
-        assert _route_has_admin_guard(agents_mod, "/agents/{agent_id}", "DELETE")
+        assert "require_agent_mutable(agent," in inspect.getsource(agents_mod.delete_agent)
 
     def test_clone_agent_requires_admin(self) -> None:
-        assert _route_has_admin_guard(agents_mod, "/clone", "POST")
+        assert "require_agent_mutable(parent, effective_caller)" in inspect.getsource(agents_mod.clone_agent)
+
+    def test_agent_csv_import_still_requires_admin(self) -> None:
+        assert _route_has_admin_guard(agents_mod, "/agents/import-csv", "POST")
 
     def test_create_company_requires_admin(self) -> None:
         assert _route_has_admin_guard(companies_mod, "/companies", "POST")

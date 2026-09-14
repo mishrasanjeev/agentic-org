@@ -452,7 +452,15 @@ def _make_connector(**overrides):
     conn.health_check_at = overrides.get("health_check_at", datetime(2026, 1, 1, tzinfo=UTC))
     conn.created_at = overrides.get("created_at", datetime(2026, 1, 1, tzinfo=UTC))
     conn.tenant_id = overrides.get("tenant_id", TENANT_UUID)
+    # bug sheet 2026-09-14 row 17: MagicMock would fake a truthy owner.
+    conn.owner_user_id = overrides.get("owner_user_id", None)
     return conn
+
+
+def _connector_admin_request():
+    """bug sheet 2026-09-14 row 17: handlers now read the caller from the request."""
+    claims = {"sub": "admin@x.io", "role": "admin", "agenticorg:user_id": str(uuid.uuid4())}
+    return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=["agenticorg:admin"], auth_mode=None))
 
 
 class TestConnectorsEndpoints:
@@ -481,6 +489,8 @@ class TestConnectorsEndpoints:
             "id", "connector_id", "name", "category", "description", "base_url",
             "auth_type", "has_credentials", "tool_functions", "data_schema_ref",
             "rate_limit_rpm", "timeout_ms", "status", "health_check_at", "created_at",
+            # bug sheet 2026-09-14 rows 17/18: shared vs personal ownership fields.
+            "owner_user_id", "visibility",
         }
         assert set(d.keys()) == expected_keys
 
@@ -498,7 +508,8 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await list_connectors(tenant_id=tenant_id)
+            # bug sheet 2026-09-14 row 17: caller comes from the request
+            resp = await list_connectors(request=_connector_admin_request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -519,7 +530,8 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await list_connectors(tenant_id=tenant_id)
+            # bug sheet 2026-09-14 row 17: caller comes from the request
+            resp = await list_connectors(request=_connector_admin_request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -539,7 +551,9 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await list_connectors(category="crm", tenant_id=tenant_id)
+            resp = await list_connectors(
+                request=_connector_admin_request(), category="crm", tenant_id=tenant_id
+            )  # bug sheet 2026-09-14 row 17: caller comes from the request
         finally:
             ctx.stop()
 
@@ -557,7 +571,9 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await list_connectors(page=3, per_page=10, tenant_id=tenant_id)
+            resp = await list_connectors(
+                request=_connector_admin_request(), page=3, per_page=10, tenant_id=tenant_id
+            )  # bug sheet 2026-09-14 row 17: caller comes from the request
         finally:
             ctx.stop()
 
@@ -579,7 +595,8 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await register_connector(body=body, tenant_id=tenant_id)
+            # bug sheet 2026-09-14 row 17: caller comes from the request
+            resp = await register_connector(body=body, request=_connector_admin_request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -596,7 +613,8 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await register_connector(body=body, tenant_id=tenant_id)
+            # bug sheet 2026-09-14 row 17: caller comes from the request
+            resp = await register_connector(body=body, request=_connector_admin_request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -618,7 +636,9 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await connector_health(conn_id=conn.id, tenant_id=tenant_id)
+            resp = await connector_health(
+                conn_id=conn.id, request=_connector_admin_request(), tenant_id=tenant_id
+            )  # bug sheet 2026-09-14 row 17: caller comes from the request
         finally:
             ctx.stop()
 
@@ -638,7 +658,9 @@ class TestConnectorsEndpoints:
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await connector_health(conn_id=uuid.uuid4(), tenant_id=tenant_id)
+                await connector_health(
+                    conn_id=uuid.uuid4(), request=_connector_admin_request(), tenant_id=tenant_id
+                )  # bug sheet 2026-09-14 row 17: caller comes from the request
             assert exc_info.value.status_code == 404
         finally:
             ctx.stop()
@@ -652,7 +674,9 @@ class TestConnectorsEndpoints:
 
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
-            resp = await connector_health(conn_id=conn.id, tenant_id=tenant_id)
+            resp = await connector_health(
+                conn_id=conn.id, request=_connector_admin_request(), tenant_id=tenant_id
+            )  # bug sheet 2026-09-14 row 17: caller comes from the request
         finally:
             ctx.stop()
 
@@ -662,6 +686,22 @@ class TestConnectorsEndpoints:
 # ============================================================================
 # 5. approvals.py — _hitl_to_dict(), list_approvals(), decide()
 # ============================================================================
+
+def _ownership_request(role: str = "admin", domains: list[str] | None = None, user_id=None):
+    """Request double for handlers that build a ``core.ownership.Caller``.
+
+    bug sheet 2026-09-14 row 30: approvals/audit/workflow handlers now derive
+    the caller (user id, admin scope, domains) from ``request.state``.
+    """
+    claims = {
+        "sub": "tester@example.com",
+        "role": role,
+        "agenticorg:domains": domains,
+        "agenticorg:user_id": str(user_id or uuid.uuid4()),
+    }
+    scopes = ["agenticorg:admin"] if role == "admin" else []
+    return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=scopes, auth_mode="legacy"))
+
 
 def _make_hitl(**overrides):
     item = MagicMock()
@@ -718,6 +758,7 @@ class TestApprovalsEndpoints:
         assert d["created_at"] is None
         assert d["decision_by"] is None
 
+    # bug sheet 2026-09-14 row 30: list/decide take the request to build the ownership Caller.
     @pytest.mark.asyncio
     async def test_list_approvals_happy(self, tenant_id, mock_session):
         from api.v1.approvals import list_approvals
@@ -730,7 +771,7 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await list_approvals(tenant_id=tenant_id, user_domains=None)
+            resp = await list_approvals(tenant_id=tenant_id, request=_ownership_request("admin"))
         finally:
             ctx.stop()
 
@@ -748,7 +789,7 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await list_approvals(tenant_id=tenant_id, user_domains=None)
+            resp = await list_approvals(tenant_id=tenant_id, request=_ownership_request("admin"))
         finally:
             ctx.stop()
 
@@ -766,7 +807,7 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await list_approvals(priority="critical", tenant_id=tenant_id, user_domains=None)
+            resp = await list_approvals(priority="critical", tenant_id=tenant_id, request=_ownership_request("admin"))
         finally:
             ctx.stop()
 
@@ -783,7 +824,7 @@ class TestApprovalsEndpoints:
 
         ctx = _patch_tenant_session("approvals", mock_session)
         try:
-            resp = await list_approvals(status="decided", tenant_id=tenant_id, user_domains=None)
+            resp = await list_approvals(status="decided", tenant_id=tenant_id, request=_ownership_request("admin"))
         finally:
             ctx.stop()
 
@@ -798,7 +839,10 @@ class TestApprovalsEndpoints:
         # decide() reads the HITL item and domain, then captures feedback
         # idempotently and locks the agent row for confidence calibration.
         agent_domain_result = MagicMock()
-        agent_domain_result.scalar_one_or_none.return_value = "finance"
+        # bug sheet 2026-09-14 row 30: decide() loads the Agent row, not just its domain.
+        agent_domain_result.scalar_one_or_none.return_value = SimpleNamespace(
+            domain="finance", visibility="tenant", owner_user_id=None
+        )
         existing_feedback_result = MagicMock()
         existing_feedback_result.scalar_one_or_none.return_value = None
         learning_agent = MagicMock()
@@ -823,6 +867,7 @@ class TestApprovalsEndpoints:
                     hitl_id=item.id,
                     body=body,
                     background_tasks=BackgroundTasks(),
+                    request=_ownership_request("ceo"),  # bug sheet 2026-09-14 row 30
                     tenant_id=tenant_id,
                     user_claims=user_claims,
                     user_role="ceo",  # CEO can decide on manager-level item
@@ -841,7 +886,10 @@ class TestApprovalsEndpoints:
 
         item = _make_hitl(status="pending")
         agent_domain_result = MagicMock()
-        agent_domain_result.scalar_one_or_none.return_value = "finance"
+        # bug sheet 2026-09-14 row 30: decide() loads the Agent row, not just its domain.
+        agent_domain_result.scalar_one_or_none.return_value = SimpleNamespace(
+            domain="finance", visibility="tenant", owner_user_id=None
+        )
         mock_session.execute = AsyncMock(side_effect=[
             _make_result(scalar_one=item),
             agent_domain_result,
@@ -861,6 +909,7 @@ class TestApprovalsEndpoints:
                         hitl_id=item.id,
                         body=body,
                         background_tasks=BackgroundTasks(),
+                        request=_ownership_request("ceo"),  # bug sheet 2026-09-14 row 30
                         tenant_id=tenant_id,
                         user_claims=user_claims,
                         user_role="ceo",
@@ -890,6 +939,7 @@ class TestApprovalsEndpoints:
                     hitl_id=uuid.uuid4(),
                     body=body,
                     background_tasks=BackgroundTasks(),
+                    request=_ownership_request("ceo"),  # bug sheet 2026-09-14 row 30
                     tenant_id=tenant_id,
                     user_claims=user_claims,
                     user_role="ceo",
@@ -918,6 +968,7 @@ class TestApprovalsEndpoints:
                     hitl_id=item.id,
                     body=body,
                     background_tasks=BackgroundTasks(),
+                    request=_ownership_request("ceo"),  # bug sheet 2026-09-14 row 30
                     tenant_id=tenant_id,
                     user_claims=user_claims,
                     user_role="ceo",
@@ -949,6 +1000,7 @@ class TestApprovalsEndpoints:
                     hitl_id=item.id,
                     body=body,
                     background_tasks=BackgroundTasks(),
+                    request=_ownership_request("ceo"),  # bug sheet 2026-09-14 row 30
                     tenant_id=tenant_id,
                     user_claims=user_claims,
                     user_role="ceo",
@@ -1453,6 +1505,7 @@ class TestAuditEndpoints:
         }
         assert set(d.keys()) == expected_keys
 
+    # bug sheet 2026-09-14 row 30: audit reads filter by agent ownership via the request Caller.
     @pytest.mark.asyncio
     async def test_query_audit_happy(self, tenant_id, mock_session):
         from api.v1.audit import query_audit
@@ -1466,7 +1519,7 @@ class TestAuditEndpoints:
         ctx = _patch_tenant_session("audit", mock_session)
         try:
             resp = await query_audit(
-                tenant_id=tenant_id, user_domains=None, user_role="admin",
+                tenant_id=tenant_id, request=_ownership_request("admin", domains=None), user_role="admin",
             )
         finally:
             ctx.stop()
@@ -1486,7 +1539,7 @@ class TestAuditEndpoints:
         ctx = _patch_tenant_session("audit", mock_session)
         try:
             resp = await query_audit(
-                tenant_id=tenant_id, user_domains=None, user_role="admin",
+                tenant_id=tenant_id, request=_ownership_request("admin", domains=None), user_role="admin",
             )
         finally:
             ctx.stop()
@@ -1510,7 +1563,7 @@ class TestAuditEndpoints:
             resp = await query_audit(
                 event_type="auth.login",
                 tenant_id=tenant_id,
-                user_domains=None,
+                request=_ownership_request("admin", domains=None),
                 user_role="admin",
             )
         finally:
@@ -1533,7 +1586,7 @@ class TestAuditEndpoints:
             resp = await query_audit(
                 agent_id=agent_id,
                 tenant_id=tenant_id,
-                user_domains=None,
+                request=_ownership_request("admin", domains=None),
                 user_role="admin",
             )
         finally:
@@ -1556,7 +1609,7 @@ class TestAuditEndpoints:
                 date_from="2026-01-01T00:00:00",
                 date_to="2026-12-31T23:59:59",
                 tenant_id=tenant_id,
-                user_domains=None,
+                request=_ownership_request("admin", domains=None),
                 user_role="admin",
             )
         finally:
@@ -1577,7 +1630,7 @@ class TestAuditEndpoints:
         try:
             resp = await query_audit(
                 tenant_id=tenant_id,
-                user_domains=["finance"],
+                request=_ownership_request("domain_head", domains=["finance"]),
                 user_role="domain_head",
             )
         finally:
@@ -1599,7 +1652,7 @@ class TestAuditEndpoints:
         try:
             resp = await query_audit(
                 tenant_id=tenant_id,
-                user_domains=["finance"],
+                request=_ownership_request("auditor", domains=["finance"]),
                 user_role="auditor",
             )
         finally:
@@ -1835,6 +1888,7 @@ class TestWorkflowsEndpoints:
         finally:
             ctx.stop()
 
+    # bug sheet 2026-09-14 row 30: create/run take the request (step-agent visibility, run initiator).
     @pytest.mark.asyncio
     async def test_create_workflow_happy(self, tenant_id, mock_session):
         from api.v1.workflows import create_workflow
@@ -1847,7 +1901,7 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await create_workflow(body=body, tenant_id=tenant_id)
+            resp = await create_workflow(body=body, request=_ownership_request("admin"), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -1872,7 +1926,7 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await create_workflow(body=body, tenant_id=tenant_id)
+            resp = await create_workflow(body=body, request=_ownership_request("admin"), tenant_id=tenant_id)
         finally:
             ctx.stop()
 
@@ -1891,7 +1945,13 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), body=body, tenant_id=tenant_id)
+            resp = await run_workflow(
+                wf_id=wf.id,
+                background_tasks=BackgroundTasks(),
+                request=_ownership_request("admin"),
+                body=body,
+                tenant_id=tenant_id,
+            )
         finally:
             ctx.stop()
 
@@ -1909,7 +1969,12 @@ class TestWorkflowsEndpoints:
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await run_workflow(wf_id=uuid.uuid4(), background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+                await run_workflow(
+                    wf_id=uuid.uuid4(),
+                    background_tasks=BackgroundTasks(),
+                    request=_ownership_request("admin"),
+                    tenant_id=tenant_id,
+                )
             assert exc_info.value.status_code == 404
         finally:
             ctx.stop()
@@ -1926,7 +1991,12 @@ class TestWorkflowsEndpoints:
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
             with pytest.raises(HTTPException) as exc_info:
-                await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), tenant_id=tenant_id)
+                await run_workflow(
+                    wf_id=wf.id,
+                    background_tasks=BackgroundTasks(),
+                    request=_ownership_request("admin"),
+                    tenant_id=tenant_id,
+                )
             assert exc_info.value.status_code == 409
         finally:
             ctx.stop()
@@ -1941,7 +2011,13 @@ class TestWorkflowsEndpoints:
 
         ctx = _patch_tenant_session("workflows", mock_session)
         try:
-            resp = await run_workflow(wf_id=wf.id, background_tasks=BackgroundTasks(), body=None, tenant_id=tenant_id)
+            resp = await run_workflow(
+                wf_id=wf.id,
+                background_tasks=BackgroundTasks(),
+                request=_ownership_request("admin"),
+                body=None,
+                tenant_id=tenant_id,
+            )
         finally:
             ctx.stop()
 

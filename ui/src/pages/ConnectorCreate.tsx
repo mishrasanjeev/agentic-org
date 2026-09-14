@@ -3,6 +3,8 @@ import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api, { extractApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { isAdminUser } from "@/lib/roles";
 import { AUTH_TYPES, AUTH_FIELD_HINTS } from "@/lib/connector-constants";
 
 const CATEGORIES = ["finance", "hr", "marketing", "ops", "comms"];
@@ -31,6 +33,10 @@ const FALLBACK_AUTH_FIELDS: Record<string, { key: string; label: string; placeho
 
 export default function ConnectorCreate() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // Bug sheet 2026-09-14 rows 17-19/22: admins register shared connectors;
+  // other connector roles register personal ones (the backend decides).
+  const isAdmin = isAdminUser(user);
   const [name, setName] = useState("");
   const [category, setCategory] = useState("finance");
   const [baseUrl, setBaseUrl] = useState("");
@@ -116,6 +122,13 @@ export default function ConnectorCreate() {
           Back to Connectors
         </Button>
       </div>
+
+      {!isAdmin && (
+        <div data-testid="personal-connector-note" className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+          <p className="font-medium">This connector will be personal</p>
+          <p className="text-xs mt-1">Only you and tenant admins can view or change it. Ask a tenant admin to register a shared connector for your team.</p>
+        </div>
+      )}
 
       <Card>
         <CardHeader>

@@ -30,6 +30,7 @@ from core.models.hitl import HITLQueue
 from core.models.prompt_template import PromptEditHistory
 from core.models.tool_call import ToolCall
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
+from core.ownership import shared_agents_only_clause
 
 _PACKS_DIR = Path(__file__).resolve().parent
 
@@ -607,6 +608,9 @@ async def _get_or_create_pack_agents(
                 Agent.company_id == company_id,
                 Agent.agent_type == agent_type,
                 Agent.status != "deleted",
+                # Bug sheet 2026-09-14 rows 19/22: a user's personal agent of
+                # the same type is never a pack duplicate to reuse or delete.
+                shared_agents_only_clause(Agent),
             )
         )
         agent = await _mark_duplicate_pack_agents_deleted(

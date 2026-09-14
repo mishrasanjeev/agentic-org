@@ -152,8 +152,12 @@ def test_v6z20_migration_is_guarded_idempotent_and_single_head() -> None:
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
-    heads = ScriptDirectory.from_config(Config(str(REPO_ROOT / "alembic.ini"))).get_heads()
-    assert heads == ["v6z20_agent_llm_provider"], heads
+    script = ScriptDirectory.from_config(Config(str(REPO_ROOT / "alembic.ini")))
+    heads = script.get_heads()
+    # Later migrations (v6z21 ownership) chain on top; pin the single-head
+    # invariant and that v6z20 is in the chain, not the current head's id.
+    assert len(heads) == 1, heads
+    assert "v6z20_agent_llm_provider" in {rev.revision for rev in script.walk_revisions()}
 
 
 # ── #31 — runtime: explicit provider is honoured, never inferred ──────

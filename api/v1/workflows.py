@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
@@ -17,6 +17,7 @@ from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
+from core.ownership import Caller, caller_from_request, can_view_agent
 from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigger
 
 router = APIRouter()
@@ -174,6 +175,40 @@ def _step_agent_id(step_def: dict) -> _uuid.UUID | None:
         return None
 
 
+def _definition_agent_ids(node: object) -> set[_uuid.UUID]:
+    """Every well-formed ``agent_id`` referenced anywhere in a definition."""
+    found: set[_uuid.UUID] = set()
+    if isinstance(node, dict):
+        parsed = _step_agent_id(node)
+        if parsed is not None:
+            found.add(parsed)
+        for value in node.values():
+            found |= _definition_agent_ids(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _definition_agent_ids(value)
+    return found
+
+
+async def _require_definition_agents_visible(session, tid: _uuid.UUID, definition: dict, caller: Caller) -> None:
+    """403 when a definition references an agent the caller cannot view.
+
+    Bug sheet 2026-09-14 row 30: a workflow must not become a way to run
+    another user's personal agent. The run-time check in
+    ``workflows.step_types`` still requires the run initiator to own it.
+    """
+    from core.models.agent import Agent
+
+    agent_ids = _definition_agent_ids(definition)
+    if not agent_ids:
+        return
+    agents = (
+        await session.execute(select(Agent).where(Agent.tenant_id == tid, Agent.id.in_(agent_ids)))
+    ).scalars().all()
+    if any(not can_view_agent(agent, caller) for agent in agents):
+        raise HTTPException(403, "Workflow references an agent you do not have access to")
+
+
 def _step_completed_at(step_status: str, existing: datetime | None) -> datetime | None:
     if step_status != "waiting_hitl" and step_status not in {
         "pending",
@@ -247,6 +282,7 @@ async def _upsert_step_execution(
 )
 async def generate_workflow_endpoint(
     body: WorkflowGenerateRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     _admin_check=require_tenant_admin,
 ):
@@ -288,6 +324,7 @@ async def generate_workflow_endpoint(
     if body.deploy:
         tid = _uuid.UUID(tenant_id)
         async with get_tenant_session(tid) as session:
+            await _require_definition_agents_visible(session, tid, definition, caller_from_request(request))
             wf = WorkflowDefinition(
                 tenant_id=tid,
                 company_id=None,
@@ -502,6 +539,7 @@ async def list_workflow_runs(
 )
 async def create_workflow(
     body: WorkflowCreate,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     _admin_check=require_tenant_admin,
 ):
@@ -528,6 +566,8 @@ async def create_workflow(
             )
             if company_exists.scalar_one_or_none() is None:
                 raise HTTPException(404, "Company not found")
+
+        await _require_definition_agents_visible(session, tid, definition, caller_from_request(request))
 
         wf = WorkflowDefinition(
             tenant_id=tid,
@@ -596,7 +636,9 @@ async def _execute_workflow_bg(
     """Execute workflow steps in background and sync each result to the DB."""
     from core.models.agent import Agent
     from core.models.hitl import HITLQueue
+    from core.ownership import AGENT_VISIBILITY_TENANT, shared_agents_only_clause
     from workflows.engine import WorkflowEngine
+    from workflows.run_sync import hitl_agent_push_scope, workflow_run_initiator
     from workflows.state_store import WorkflowStateStore
 
     state_store = WorkflowStateStore()
@@ -655,14 +697,19 @@ async def _execute_workflow_bg(
                         timeout_h = hitl_timeout_hours(step_result, step_def)
                         hitl_expires_at = datetime.now(UTC) + timedelta(hours=timeout_h)
                         hitl_agent_id = step_row.agent_id
-                        if not hitl_agent_id:
+                        push_scope: dict = {}
+                        if hitl_agent_id:
+                            push_scope = await hitl_agent_push_scope(session, tenant_id, hitl_agent_id)
+                        else:
+                            # Fallback attachment never lands on a personal agent (row 30).
                             hitl_agent_id = (
                                 await session.execute(
                                     select(Agent.id)
-                                    .where(Agent.tenant_id == tenant_id)
+                                    .where(Agent.tenant_id == tenant_id, shared_agents_only_clause(Agent))
                                     .limit(1)
                                 )
                             ).scalar_one_or_none()
+                            push_scope = {"agent_visibility": AGENT_VISIBILITY_TENANT, "agent_owner_user_id": None}
                         if hitl_agent_id:
                             hitl_item = HITLQueue(
                                     tenant_id=tenant_id,
@@ -671,6 +718,7 @@ async def _execute_workflow_bg(
                                     title=f"Approval required: {step_def.get('title', step_id)}",
                                     trigger_type="workflow_step",
                                     priority=step_def.get("priority", "normal"),
+                                    requested_by_user_id=workflow_run_initiator(db_run),
                                     assignee_role=step_result.get(
                                         "assignee_role",
                                         step_def.get("assignee_role", "admin"),
@@ -692,7 +740,7 @@ async def _execute_workflow_bg(
                             await session.flush()
                             schedule_hitl_timeout(engine_run_id, step_id, hitl_expires_at)
                             await _push_approval_created(
-                                str(tenant_id), item_id=str(hitl_item.id), action=step_id
+                                str(tenant_id), item_id=str(hitl_item.id), action=step_id, **push_scope
                             )
 
                 db_run.steps_completed = _run_steps_completed(state)
@@ -762,6 +810,7 @@ async def _execute_workflow_bg(
 async def run_workflow(
     wf_id: UUID,
     background_tasks: BackgroundTasks,
+    request: Request,
     body: WorkflowRunTrigger | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -820,13 +869,23 @@ async def run_workflow(
         steps_list = definition.get("steps", [])
         steps_total = len(steps_list) if isinstance(steps_list, list) else None
 
+        run_context: dict = {"ab": ab_context} if ab_context else {}
+        # Bug sheet 2026-09-14 row 30: record the human initiator server-side
+        # (never from the payload) so personal-agent steps and HITL items can
+        # be bound to the user who started the run.
+        initiator = caller_from_request(request)
+        if initiator.is_human:
+            from workflows.run_sync import WORKFLOW_RUN_INITIATOR_KEY
+
+            run_context[WORKFLOW_RUN_INITIATOR_KEY] = str(initiator.user_id)
+
         run = WorkflowRun(
             tenant_id=tid,
             company_id=wf.company_id,
             workflow_def_id=wf.id,
             status="running",
             trigger_payload=body.payload,
-            context={"ab": ab_context} if ab_context else {},
+            context=run_context,
             steps_total=steps_total,
             started_at=datetime.now(UTC),
         )

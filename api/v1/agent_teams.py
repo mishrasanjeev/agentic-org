@@ -11,10 +11,11 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.agent import Agent, AgentTeam, AgentTeamMember
+from core.ownership import Caller, agent_visibility_clause, caller_from_request
 
 router = APIRouter()
 
@@ -142,16 +143,23 @@ async def get_team(
 async def create_team(
     body: TeamCreateRequest,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
+    from api.v1.agents import _effective_caller
+
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        # Validate all referenced agents exist and belong to this tenant
+        # Validate all referenced agents exist, belong to this tenant, and are
+        # visible to the caller (bug sheet 2026-09-14 rows 19/22: a team must
+        # not route work to another user's personal agent or an unseen domain).
         if body.members:
             agent_ids = [m.agent_id for m in body.members]
             result = await session.execute(
                 select(Agent.id).where(
                     Agent.id.in_(agent_ids),
                     Agent.tenant_id == tid,
+                    agent_visibility_clause(Agent, _effective_caller(caller, user_domains)),
                 )
             )
             found_ids = {row[0] for row in result.all()}

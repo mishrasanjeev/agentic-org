@@ -85,6 +85,15 @@ class Agent(BaseModel):
     retry_backoff: Mapped[str] = mapped_column(String(20), nullable=False, default="exponential")
     authorized_tools: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     connector_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True, default=list)
+    # Bug sheet 2026-09-14 rows 19/22 (migration v6z21): 'tenant' agents are
+    # shared and admin-managed; 'personal' agents belong to owner_user_id.
+    # Rules live in core/ownership.py.
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    visibility: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="tenant", server_default="tenant"
+    )
     output_schema: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="shadow")
     version: Mapped[str] = mapped_column(String(20), nullable=False, default="1.0.0")

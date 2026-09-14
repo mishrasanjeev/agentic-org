@@ -4,7 +4,8 @@ Closes S0-08 (PR-2). GET/PUT the tenant's effective LLM + embedding
 config. Validates against ``core.ai_providers.catalog`` so operators
 can't flip an env var into a model/dimension mismatch.
 
-Admin-gated at the router level.
+Admin-gated at the router level, except the static catalog
+(``GET /tenant-ai-settings/registry``) on ``registry_router``.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
-from api.deps import get_current_tenant, require_tenant_admin
+from api.deps import get_current_tenant, require_scope, require_tenant_admin
 from api.route_metadata import route_meta
 from core.ai_providers.catalog import (
     EMBEDDING_CATALOG,
@@ -44,6 +45,17 @@ router = APIRouter(
     prefix="/tenant-ai-settings",
     tags=["Tenant AI Settings"],
     dependencies=[require_tenant_admin],
+)
+
+# Bug sheet 2026-09-14 rows 19/22: non-admin agent creators (agents:write)
+# need the provider/model catalog for the create form. The catalog is static
+# allowlist data from ``core.ai_providers.catalog`` (model names, limits,
+# notes) with no tenant settings, credentials, or secret material, so only
+# this route leaves the admin router. Everything else stays admin-only.
+registry_router = APIRouter(
+    prefix="/tenant-ai-settings",
+    tags=["Tenant AI Settings"],
+    dependencies=[require_scope("agents:write")],
 )
 
 
@@ -136,7 +148,7 @@ def _to_out(row: TenantAISetting | None, tenant_id: str) -> TenantAISettingOut:
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
-@router.get("/registry", response_model=RegistryOut)
+@registry_router.get("/registry", response_model=RegistryOut)
 @route_meta(
     auth_required=True,
     tenant_required=False,

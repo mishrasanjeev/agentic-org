@@ -9,9 +9,10 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains, require_scope
 from api.route_metadata import route_meta
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.ownership import Caller, caller_from_request
 
 router = APIRouter()
 _log = structlog.get_logger()
@@ -164,7 +165,10 @@ async def parse_text_sop(
 
 
 # ── POST /sop/deploy — Deploy a reviewed SOP config as an agent ────────────
-@router.post("/sop/deploy", status_code=201)
+# Bug sheet 2026-09-14 rows 19/22: the ``sop`` scope family is unmapped in
+# route enforcement, so this agent-creating route had no RBAC at all. It now
+# needs agents:write (admin passes) and applies create_agent's ownership rules.
+@router.post("/sop/deploy", status_code=201, dependencies=[require_scope("agents:write")])
 @route_meta(
     auth_required=True,
     tenant_required=True,
@@ -176,6 +180,8 @@ async def parse_text_sop(
 async def deploy_sop_agent(
     body: dict,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ):
     """Deploy a reviewed/edited SOP config as a new agent.
 
@@ -234,7 +240,7 @@ async def deploy_sop_agent(
         company_id=company_id,
     )
 
-    result = await create_agent(body=agent_body, tenant_id=tenant_id)
+    result = await create_agent(body=agent_body, tenant_id=tenant_id, user_domains=user_domains, caller=caller)
 
     return {
         "status": "deployed",
@@ -242,6 +248,8 @@ async def deploy_sop_agent(
         "agent_name": agent_name,
         "agent_type": agent_type,
         "domain": domain,
+        "visibility": result.get("visibility"),
+        "owner_user_id": result.get("owner_user_id"),
         "tools_count": len(tools),
         "initial_status": "shadow",
         "grantex_registered": result.get("grantex_registered", False),

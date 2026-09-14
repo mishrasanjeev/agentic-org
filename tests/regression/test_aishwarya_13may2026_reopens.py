@@ -73,7 +73,10 @@ def test_agent_detail_refreshes_shadow_metrics_after_sample_generation() -> None
     src = (Path(__file__).resolve().parents[2] / "ui" / "src" / "pages" / "AgentDetail.tsx").read_text(
         encoding="utf-8"
     )
-    assert "<ShadowTab agent={agent} onUpdated={() => fetchAgent(true)} />" in src
+    # Bug sheet 2026-09-14 rows 19/22: ShadowTab also receives canManage so
+    # sample generation controls follow ownership; the refresh wiring is what
+    # this reopen pins.
+    assert "<ShadowTab agent={agent} onUpdated={() => fetchAgent(true)}" in src
     assert "await onUpdated();" in src
     assert "Refresh to see updated count and accuracy" not in src
     assert "Refresh to see updated results" not in src

@@ -6,6 +6,7 @@ const API_BASE = import.meta.env.VITE_API_URL
   : "/api/v1";
 
 interface AuthUser {
+  user_id: string;
   email: string;
   name: string | null;
   role: string;
@@ -63,6 +64,10 @@ const AuthContext = createContext<AuthContextType | null>(null);
  *  an Access Denied page on every login. */
 export function defaultLandingForRole(role: string | null | undefined): string {
   if (role === "merchant") return "/dashboard/commerce-runtime";
+  // Bug sheet 2026-09-14 rows 17-19/52: domain_lead and developer are not
+  // admitted to /dashboard but can build personal agents, so land them on
+  // the agent fleet instead of an Access Denied page.
+  if (role === "domain_lead" || role === "developer") return "/dashboard/agents";
   return "/dashboard";
 }
 

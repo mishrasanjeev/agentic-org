@@ -42,7 +42,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from api.deps import get_current_tenant, require_tenant_admin
+from api.deps import get_current_tenant, require_scope
 from api.route_metadata import route_meta
 from api.v1.connectors import _assert_public_base_url, _connector_to_dict
 from core.async_redis import get_async_redis
@@ -60,6 +60,12 @@ from core.crypto import decrypt_for_tenant, encrypt_for_tenant
 from core.database import get_tenant_session
 from core.models.connector import Connector
 from core.models.connector_config import ConnectorConfig
+from core.ownership import (
+    Caller,
+    caller_from_request,
+    can_mutate_connector,
+    resolve_new_connector_owner,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -522,6 +528,54 @@ async def _revoke_existing_grant(
         )
 
 
+# ── Connector ownership ──────────────────────────────────────────────────────
+
+_OAUTH_NOT_AUTHORIZED = "You cannot authorize this connector"
+
+
+async def _authorize_oauth_connector(
+    tenant_id: _uuid.UUID, connector_name: str, caller: Caller
+) -> tuple[_uuid.UUID | None, bool]:
+    """Bug sheet 2026-09-14 rows 17/18/29: who may start an OAuth handoff.
+
+    Returns ``(owner_user_id, may_use_existing_config)``. Admins keep today's
+    behaviour: shared owner, no lookup, and any existing config may be used.
+    Other permitted humans may authorize a name that does not exist yet (it
+    becomes theirs) or a connector they own; a shared or another user's
+    connector is 403 with a generic message.
+    """
+    owner_user_id = resolve_new_connector_owner(caller)
+    if caller.is_admin:
+        return owner_user_id, True
+    async with get_tenant_session(tenant_id) as session:
+        result = await session.execute(
+            select(Connector).where(
+                Connector.tenant_id == tenant_id,
+                Connector.name == connector_name,
+            )
+        )
+        existing = result.scalar_one_or_none()
+    if existing is not None and not can_mutate_connector(existing, caller):
+        raise HTTPException(status_code=403, detail=_OAUTH_NOT_AUTHORIZED)
+    return owner_user_id, existing is not None
+
+
+def _oauth_state_caller(payload: dict[str, Any]) -> Caller:
+    """Rebuild the initiating principal recorded in the encrypted state.
+
+    ``owner_user_id`` is empty only for tenant admins (and for states minted
+    before ownership existed, when initiate was admin-only).
+    """
+    raw_owner = payload.get("owner_user_id")
+    if not raw_owner:
+        return Caller(user_id=None, role="", domains=None, is_admin=True, is_machine=False)
+    try:
+        owner = _uuid.UUID(str(raw_owner))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="OAuth state could not be decoded") from exc
+    return Caller(user_id=owner, role="", domains=None, is_admin=False, is_machine=False)
+
+
 # ── Connector persistence ────────────────────────────────────────────────────
 
 
@@ -570,6 +624,7 @@ async def _upsert_oauth_connector(
     token_data: dict[str, Any],
 ) -> Connector:
     connector_name = spec.connector_name
+    state_caller = _oauth_state_caller(payload)
     defaults = _connector_defaults(connector_name)
     user_fields = payload.get("user_fields") or {}
     extra_config = payload.get("extra_config") or {}
@@ -631,10 +686,16 @@ async def _upsert_oauth_connector(
                 rate_limit_rpm=defaults["rate_limit_rpm"],
                 timeout_ms=defaults["timeout_ms"],
                 status="active",
+                owner_user_id=state_caller.user_id,
             )
             session.add(connector)
             await session.flush()
         else:
+            # Rows 17/18/29: never change ownership here, and refuse when the
+            # initiating user may not change this connector (it may have been
+            # registered by someone else after the handoff started).
+            if not can_mutate_connector(connector, state_caller):
+                raise HTTPException(status_code=403, detail=_OAUTH_NOT_AUTHORIZED)
             connector.status = "active"
             connector.category = (
                 defaults["category"]
@@ -711,7 +772,7 @@ async def list_oauth_providers() -> list[OAuthProviderSchema]:
 @router.post(
     "/connectors/oauth/initiate",
     response_model=OAuthInitiateResponse,
-    dependencies=[require_tenant_admin],
+    dependencies=[require_scope("connectors.personal.write")],
 )
 @route_meta(
     auth_required=True,
@@ -726,9 +787,11 @@ async def initiate_connector_oauth(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ) -> OAuthInitiateResponse:
+    caller = caller_from_request(request)
     spec = _provider_for(body.connector_name)
     user_fields = _coerce_user_fields(spec, body)
     tid = _uuid.UUID(tenant_id)
+    owner_user_id, _may_use_existing = await _authorize_oauth_connector(tid, spec.connector_name, caller)
     state = secrets.token_urlsafe(32)
     # Honor an explicit body.redirect_uri ONLY if it is https; otherwise
     # fall back to the canonical setting. This prevents callers from
@@ -764,6 +827,8 @@ async def initiate_connector_oauth(
         "category": body.category,
         "extra_config": extra_config,
         "region_urls": region_urls,
+        # Bug sheet 2026-09-14 rows 17/18: None for a tenant admin (shared).
+        "owner_user_id": str(owner_user_id) if owner_user_id else None,
     }
     await _store_oauth_state(state, tid, payload)
     await _stash_for_reconnect(tid, spec.connector_name, payload)
@@ -786,7 +851,7 @@ async def initiate_connector_oauth(
 @router.post(
     "/connectors/oauth/revoke-and-retry",
     response_model=OAuthInitiateResponse,
-    dependencies=[require_tenant_admin],
+    dependencies=[require_scope("connectors.personal.write")],
 )
 @route_meta(
     auth_required=True,
@@ -809,15 +874,27 @@ async def revoke_and_retry(
     identical to ``initiate`` so the client can redirect to the
     authorize URL the same way.
     """
+    caller = caller_from_request(request)
     spec = _provider_for(body.connector_name)
     tid = _uuid.UUID(tenant_id)
+    owner_user_id, may_use_existing = await _authorize_oauth_connector(
+        tid, spec.connector_name, caller
+    )
     stash = await _pop_reconnect_payload(tid, spec.connector_name)
+    # Bug sheet 2026-09-14 rows 17/18: the reconnect stash is keyed by name,
+    # so a non-admin may only replay an attempt they started themselves.
+    if stash and not caller.is_admin and str(stash.get("owner_user_id") or "") != str(caller.user_id):
+        raise HTTPException(status_code=403, detail=_OAUTH_NOT_AUTHORIZED)
     existing_refresh = None
     if not stash:
-        existing_payload = await _payload_from_existing_connector_config(
-            tenant_id=tid,
-            tenant_id_text=tenant_id,
-            spec=spec,
+        existing_payload = (
+            await _payload_from_existing_connector_config(
+                tenant_id=tid,
+                tenant_id_text=tenant_id,
+                spec=spec,
+            )
+            if may_use_existing
+            else None
         )
         if existing_payload:
             stash, existing_refresh = existing_payload
@@ -830,8 +907,9 @@ async def revoke_and_retry(
                     "fresh connector authorization flow instead."
                 ),
             )
-    # Best-effort revoke using whatever token material we have.
-    if not existing_refresh:
+    # Best-effort revoke using whatever token material we have. Stored token
+    # material is only read for a connector the caller may change.
+    if not existing_refresh and may_use_existing:
         async with get_tenant_session(tid) as session:
             cc_result = await session.execute(
                 select(ConnectorConfig).where(
@@ -863,6 +941,7 @@ async def revoke_and_retry(
     payload = {
         **stash,
         "redirect_uri": redirect_uri,
+        "owner_user_id": str(owner_user_id) if owner_user_id else None,
     }
     await _store_oauth_state(state, tid, payload)
     await _stash_for_reconnect(tid, spec.connector_name, payload)

@@ -8,6 +8,7 @@ from __future__ import annotations
 import time
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -27,6 +28,21 @@ def _make_result(scalar_one=None, scalars_list=None, scalar_value=None):
     if scalar_value is not None:
         result.scalar.return_value = scalar_value
     return result
+
+
+def _ownership_request(role: str = "admin"):
+    """Request double for handlers that build a core.ownership Caller.
+
+    bug sheet 2026-09-14 row 30: approvals/workflows/audit handlers take the request.
+    """
+    claims = {
+        "sub": "tester@example.com",
+        "role": role,
+        "agenticorg:domains": None,
+        "agenticorg:user_id": str(uuid.uuid4()),
+    }
+    scopes = ["agenticorg:admin"] if role == "admin" else []
+    return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=scopes, auth_mode="legacy"))
 
 
 def _patch_tenant_session(module_path: str, mock_session):
@@ -274,7 +290,7 @@ class TestApprovalDecide:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
                 await decide(
-                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, _ownership_request("ceo"), TENANT_STR,
                     user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
                 )
             assert exc.value.status_code == 404
@@ -297,7 +313,7 @@ class TestApprovalDecide:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
                 await decide(
-                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, _ownership_request("ceo"), TENANT_STR,
                     user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
                 )
             assert exc.value.status_code == 409
@@ -321,7 +337,7 @@ class TestApprovalDecide:
             bg = MagicMock()
             with pytest.raises(HTTPException) as exc:
                 await decide(
-                    uuid.uuid4(), HITLDecision(decision="approve"), bg, TENANT_STR,
+                    uuid.uuid4(), HITLDecision(decision="approve"), bg, _ownership_request("ceo"), TENANT_STR,
                     user_claims=self._USER_CLAIMS, user_role="ceo", user_domains=None,
                 )
             assert exc.value.status_code == 410
@@ -343,6 +359,7 @@ class TestWorkflowCreate:
         with pytest.raises(HTTPException) as exc:
             await create_workflow(
                 WorkflowCreate(name="test", definition={}),
+                _ownership_request("admin"),
                 TENANT_STR,
             )
         assert exc.value.status_code == 400
@@ -356,6 +373,7 @@ class TestWorkflowCreate:
         with pytest.raises(HTTPException) as exc:
             await create_workflow(
                 WorkflowCreate(name="test", definition={"steps": []}),
+                _ownership_request("admin"),
                 TENANT_STR,
             )
         assert exc.value.status_code == 400
@@ -365,6 +383,14 @@ class TestWorkflowCreate:
 # ═══════════════════════════════════════════════════════════════════════════
 # CONNECTORS — Validation
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _connector_admin_request():
+    """bug sheet 2026-09-14 row 17: connector handlers read the caller from the request."""
+    from types import SimpleNamespace
+
+    claims = {"sub": "admin@x.io", "role": "admin", "agenticorg:user_id": str(uuid.uuid4())}
+    return SimpleNamespace(state=SimpleNamespace(claims=claims, scopes=["agenticorg:admin"], auth_mode=None))
 
 
 class TestConnectorCreate:
@@ -385,6 +411,7 @@ class TestConnectorCreate:
             with pytest.raises(HTTPException) as exc:
                 await register_connector(
                     ConnectorCreate(name="slack", category="comms", auth_type="api_key"),
+                    _connector_admin_request(),  # bug sheet 2026-09-14 row 17
                     TENANT_STR,
                 )
             assert exc.value.status_code == 409
@@ -406,6 +433,7 @@ class TestConnectorCreate:
                 await update_connector(
                     uuid.uuid4(),
                     ConnectorUpdate(rate_limit_rpm=200),
+                    _connector_admin_request(),  # bug sheet 2026-09-14 row 17
                     TENANT_STR,
                 )
             assert exc.value.status_code == 404
@@ -421,7 +449,8 @@ class TestConnectorCreate:
         ctx = _patch_tenant_session("connectors", mock_session)
         try:
             with pytest.raises(HTTPException) as exc:
-                await get_connector(uuid.uuid4(), TENANT_STR)
+                # bug sheet 2026-09-14 row 17: caller comes from the request
+                await get_connector(uuid.uuid4(), _connector_admin_request(), TENANT_STR)
             assert exc.value.status_code == 404
         finally:
             ctx.stop()
@@ -445,7 +474,7 @@ class TestAuditValidation:
                 await query_audit(
                     agent_id="not-a-uuid",
                     tenant_id=TENANT_STR,
-                    user_domains=None,
+                    request=_ownership_request("admin"),
                     user_role="admin",
                 )
             assert exc.value.status_code == 400
@@ -465,7 +494,7 @@ class TestAuditValidation:
                 await query_audit(
                     date_from="not-a-date",
                     tenant_id=TENANT_STR,
-                    user_domains=None,
+                    request=_ownership_request("admin"),
                     user_role="admin",
                 )
             assert exc.value.status_code == 400

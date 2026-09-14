@@ -205,7 +205,12 @@ def test_tc_dash_005_agents_endpoint_enforces_user_domains_filter() -> None:
     list_block = src.split('@router.get("/agents", response_model=', 1)[1].split(
         "@router.", 1
     )[0]
-    assert "Agent.domain.in_(user_domains)" in list_block
+    # Bug sheet 2026-09-14 rows 19/22: the list filter moved into
+    # core/ownership.agent_visibility_clause, which keeps the domain RBAC for
+    # shared agents and adds the caller's own personal agents.
+    assert "agent_visibility_clause(Agent" in list_block
+    ownership_src = (REPO / "core" / "ownership.py").read_text(encoding="utf-8")
+    assert "agent_model.domain.in_(caller.domains)" in ownership_src
     assert "user_domains: list[str] | None = Depends(get_user_domains)" in src
 
 

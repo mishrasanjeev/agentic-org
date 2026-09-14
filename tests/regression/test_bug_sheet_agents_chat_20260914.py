@@ -424,7 +424,8 @@ class TestAgentSubRoutesHonourDomainRbac:
             fn = getattr(agents_mod, name)
             assert "user_domains" in inspect.signature(fn).parameters, name
             if name not in ("generate_agent", "create_agent"):
-                assert "_enforce_domain_access(" in inspect.getsource(fn), name
+                # bug sheet 2026-09-14 rows 19/22: _enforce_domain_access was replaced by the ownership-aware check.
+                assert "require_agent_visible(" in inspect.getsource(fn), name
 
 
 # ---------------------------------------------------------------------------

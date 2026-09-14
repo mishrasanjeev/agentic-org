@@ -4,6 +4,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api, { extractApiError } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { canManageConnector } from "@/lib/roles";
 import { AUTH_TYPES, authTypeLabel, buildAuthConfig, buildBasicAuthConfig } from "@/lib/connector-constants";
 
 interface ConnectorDetail {
@@ -20,11 +22,14 @@ interface ConnectorDetail {
   status: string;
   health_check_at: string | null;
   created_at: string | null;
+  owner_user_id?: string | null;
+  visibility?: "shared" | "personal";
 }
 
 export default function ConnectorDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [connector, setConnector] = useState<ConnectorDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -292,6 +297,13 @@ export default function ConnectorDetailPage() {
     </div>
   );
 
+  // Bug sheet 2026-09-14 rows 17-19/22: edit, test, health and OAuth are
+  // allowed for admins and the connector owner; the backend returns 403
+  // for everyone else.
+  const canManage = canManageConnector(user, connector);
+  const isPersonal = connector.visibility === "personal";
+  const ownedByMe = !!connector.owner_user_id && connector.owner_user_id === user?.user_id;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -299,11 +311,18 @@ export default function ConnectorDetailPage() {
           <h2 className="text-2xl font-bold">{connector.name}</h2>
           <Badge variant={connector.status === "active" ? "default" : "destructive"}>{connector.status}</Badge>
           <Badge variant="outline">{connector.category}</Badge>
+          <Badge variant="secondary" data-testid="connector-visibility-badge">
+            {isPersonal ? (ownedByMe ? "Personal · owned by you" : "Personal") : "Shared"}
+          </Badge>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleTestConnection} disabled={testing}>{testing ? "Testing..." : "Test Connection"}</Button>
-          <Button variant="outline" onClick={handleHealthCheck}>Health Check</Button>
-          {connector.auth_type === "oauth2" && !isZohoBooks && (
+          {canManage && (
+            <>
+              <Button variant="outline" onClick={handleTestConnection} disabled={testing}>{testing ? "Testing..." : "Test Connection"}</Button>
+              <Button variant="outline" onClick={handleHealthCheck}>Health Check</Button>
+            </>
+          )}
+          {canManage && connector.auth_type === "oauth2" && !isZohoBooks && (
             <Button
               variant="outline"
               onClick={handleReconnect}
@@ -343,11 +362,11 @@ export default function ConnectorDetailPage() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-sm font-semibold">Authentication Configuration</CardTitle>
-              {!editing && <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>}
+              {!editing && canManage && <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>}
             </div>
           </CardHeader>
           <CardContent>
-            {editing ? (
+            {editing && canManage ? (
               <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">Auth Type</label>
@@ -494,7 +513,11 @@ export default function ConnectorDetailPage() {
               <div className="space-y-2 text-sm">
                 <p className="text-muted-foreground">Auth type: <span className="font-medium text-foreground">{connector.auth_type}</span></p>
                 <p className="text-muted-foreground">Credentials are stored securely and not displayed.</p>
-                <p className="text-muted-foreground">Click Edit to update authentication settings.</p>
+                <p className="text-muted-foreground" data-testid="connector-manage-hint">
+                  {canManage
+                    ? "Click Edit to update authentication settings."
+                    : "Only the connector owner or a tenant admin can change it."}
+                </p>
               </div>
             )}
           </CardContent>

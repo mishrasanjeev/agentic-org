@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api, { extractApiError, promptTemplatesApi, agentsApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { agentDomainsForUser, isAdminUser, isDomainLocked } from "@/lib/roles";
 import {
   agentLlmProviders,
   formatLlmOption,
@@ -13,7 +15,6 @@ import {
 } from "@/lib/llm-registry";
 import type { Agent, PromptTemplate } from "@/types";
 
-const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
 const AGENT_TYPES: Record<string, string[]> = {
   finance: ["ap_processor", "ar_collections", "recon_agent", "tax_compliance", "close_agent", "fpa_agent"],
   hr: ["talent_acquisition", "onboarding_agent", "payroll_engine", "performance_coach", "ld_coordinator", "offboarding_agent"],
@@ -70,6 +71,17 @@ interface GeneratedSuggestion {
 
 export default function AgentCreate() {
   const navigate = useNavigate();
+  // Bug sheet 2026-09-14 rows 17-19/52: non-admins create personal agents in
+  // their own domain (developers: any domain); admins choose visibility. The
+  // backend enforces the same rules and answers 403 otherwise.
+  const { user } = useAuth();
+  const isAdmin = isAdminUser(user);
+  const domainLocked = isDomainLocked(user);
+  const domainOptions = useMemo(
+    () => agentDomainsForUser({ role: user?.role, domain: user?.domain }),
+    [user?.role, user?.domain],
+  );
+  const [visibility, setVisibility] = useState<"tenant" | "personal">("tenant");
   const [step, setStep] = useState(-1); // -1 = NL description step
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -84,10 +96,10 @@ export default function AgentCreate() {
   const [employeeName, setEmployeeName] = useState("");
   const [designation, setDesignation] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
-  const [domain, setDomain] = useState("finance");
+  const [domain, setDomain] = useState(() => domainOptions[0] ?? "finance");
 
   // Step 2: Role
-  const [agentType, setAgentType] = useState(AGENT_TYPES.finance[0]);
+  const [agentType, setAgentType] = useState(() => AGENT_TYPES[domain]?.[0] ?? "");
   const [customType, setCustomType] = useState("");
   const [useCustomType, setUseCustomType] = useState(false);
   const [specialization, setSpecialization] = useState("");
@@ -140,6 +152,15 @@ export default function AgentCreate() {
   const [selectedCompanyId] = useState(
     () => localStorage.getItem("company_id") || "",
   );
+
+  // Keep a locked domain inside the user's allowed set (e.g. the session
+  // hydrated after first render).
+  useEffect(() => {
+    if (domainLocked && domainOptions.length > 0 && !domainOptions.includes(domain)) {
+      setDomain(domainOptions[0]);
+      setAgentType(AGENT_TYPES[domainOptions[0]]?.[0] ?? "");
+    }
+  }, [domainLocked, domainOptions, domain]);
 
   // Load available parent agents when domain changes
   useEffect(() => {
@@ -273,7 +294,7 @@ export default function AgentCreate() {
   routingFilters.forEach(({ key, value }) => { if (key && value) routingFilter[key] = value; });
 
   function canNext() {
-    if (step === 0) return employeeName.trim().length > 0;
+    if (step === 0) return employeeName.trim().length > 0 && (!domainLocked || domainOptions.length > 0);
     if (step === 1) return finalType.trim().length > 0;
     if (step === 2) return promptText.trim().length > 0;
     if (step === 3) return maxRetries >= 1 && llmModel.trim().length > 0;
@@ -307,10 +328,14 @@ export default function AgentCreate() {
     // Step 1: Persona
     setEmployeeName(s.employee_name || "");
     setDesignation(s.designation || "");
-    setDomain(s.domain || "finance");
+    const suggestedDomain = s.domain || "finance";
+    const nextDomain = domainLocked && !domainOptions.includes(suggestedDomain)
+      ? (domainOptions[0] ?? suggestedDomain)
+      : suggestedDomain;
+    setDomain(nextDomain);
 
     // Step 2: Role
-    const domainTypes = AGENT_TYPES[s.domain] || [];
+    const domainTypes = AGENT_TYPES[nextDomain] || [];
     if (domainTypes.includes(s.agent_type)) {
       setAgentType(s.agent_type);
       setUseCustomType(false);
@@ -347,6 +372,8 @@ export default function AgentCreate() {
         designation: designation.trim() || undefined,
         avatar_url: avatarUrl.trim() || undefined,
         domain,
+        // Only admins choose; the backend makes every non-admin agent personal.
+        visibility: isAdmin ? visibility : undefined,
         company_id: selectedCompanyId || undefined,
         agent_type: finalType,
         specialization: specialization.trim() || undefined,
@@ -387,6 +414,19 @@ export default function AgentCreate() {
         <h2 className="text-2xl font-bold">Create Virtual Employee</h2>
         <Button variant="outline" onClick={() => navigate("/dashboard/agents")}>Back</Button>
       </div>
+
+      {!isAdmin && (
+        <div data-testid="personal-agent-note" className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
+          <p className="font-medium">Personal agent — only you and tenant admins can see it</p>
+          <p className="text-xs mt-1">
+            {!domainLocked
+              ? "You can build it in any domain."
+              : domainOptions.length > 0
+                ? `It will be created in your ${humanize(domainOptions[0])} domain.`
+                : "Your account has no assigned domain yet. Ask a tenant admin to assign one before creating an agent."}
+          </p>
+        </div>
+      )}
 
       {/* Progress bar â€” only show when past NL step */}
       {step >= 0 && (
@@ -502,10 +542,34 @@ export default function AgentCreate() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Domain *</label>
-                  <select value={domain} onChange={(e) => { setDomain(e.target.value); setAgentType(AGENT_TYPES[e.target.value][0]); }} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                    {DOMAINS.map((d) => <option key={d} value={d}>{humanize(d)}</option>)}
+                  <select
+                    data-testid="agent-domain"
+                    value={domain}
+                    disabled={domainLocked}
+                    onChange={(e) => { setDomain(e.target.value); setAgentType(AGENT_TYPES[e.target.value]?.[0] ?? ""); }}
+                    className={`border rounded px-3 py-2 text-sm w-full mt-1${domainLocked ? " bg-muted" : ""}`}
+                  >
+                    {domainOptions.map((d) => <option key={d} value={d}>{humanize(d)}</option>)}
                   </select>
+                  {domainLocked && (
+                    <p className="text-xs text-muted-foreground mt-1">Your role can create agents only in your own domain.</p>
+                  )}
                 </div>
+                {isAdmin && (
+                  <div>
+                    <label className="text-sm font-medium">Visibility</label>
+                    <select
+                      data-testid="agent-visibility"
+                      value={visibility}
+                      onChange={(e) => setVisibility(e.target.value === "personal" ? "personal" : "tenant")}
+                      className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    >
+                      <option value="tenant">Shared with tenant</option>
+                      <option value="personal">Personal</option>
+                    </select>
+                    <p className="text-xs text-muted-foreground mt-1">Personal agents are visible only to you and other tenant admins.</p>
+                  </div>
+                )}
               </>
             )}
 
@@ -521,7 +585,7 @@ export default function AgentCreate() {
                     <input type="text" value={customType} onChange={(e) => setCustomType(e.target.value)} placeholder="e.g. customer_success" className="border rounded px-3 py-2 text-sm w-full" />
                   ) : (
                     <select value={agentType} onChange={(e) => setAgentType(e.target.value)} className="border rounded px-3 py-2 text-sm w-full">
-                      {AGENT_TYPES[domain].map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
+                      {(AGENT_TYPES[domain] ?? []).map((t) => <option key={t} value={t}>{humanize(t)}</option>)}
                     </select>
                   )}
                 </div>
@@ -935,6 +999,7 @@ export default function AgentCreate() {
                       <Badge>{humanize(domain)}</Badge>
                       <Badge variant="outline">{humanize(finalType)}</Badge>
                       <Badge variant="secondary">Shadow</Badge>
+                      <Badge variant="outline" data-testid="review-visibility">{isAdmin && visibility === "tenant" ? "Shared" : "Personal"}</Badge>
                     </div>
                   </div>
                 </div>

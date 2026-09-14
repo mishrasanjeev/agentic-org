@@ -44,6 +44,7 @@ async def scoped_test_chat_agent(
     domain: str,
     tenant_id: str | uuid.UUID,
     company_id: str | uuid.UUID,
+    caller: object | None = None,  # bug sheet 2026-09-14 row 30: chat threads the ownership Caller
 ) -> tuple[str, None, None, list[str]]:
     """Return a deterministic company-scoped chat agent without a DB read."""
     uuid.UUID(str(tenant_id))

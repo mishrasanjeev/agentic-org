@@ -324,6 +324,34 @@ async def send_push_notification_for_user(
     return result
 
 
+async def _approval_agent_scope(tenant_id: str, item_id: str) -> tuple[str, str | None] | None:
+    """``(visibility, owner_user_id)`` of a committed HITL item's agent, or None."""
+    import uuid
+
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+    from core.models.hitl import HITLQueue
+
+    try:
+        tid = uuid.UUID(str(tenant_id))
+        hid = uuid.UUID(str(item_id))
+    except (TypeError, ValueError):
+        return None
+    async with get_tenant_session(tid) as session:
+        row = (
+            await session.execute(
+                select(Agent.visibility, Agent.owner_user_id)
+                .join(HITLQueue, HITLQueue.agent_id == Agent.id)
+                .where(HITLQueue.id == hid, HITLQueue.tenant_id == tid)
+            )
+        ).one_or_none()
+    if row is None:
+        return None
+    return str(row[0] or "tenant"), (str(row[1]) if row[1] else None)
+
+
 async def notify_approval_created(
     tenant_id: str,
     *,
@@ -331,6 +359,8 @@ async def notify_approval_created(
     agent_name: str = "",
     action: str = "",
     user_ids: list[str] | None = None,
+    agent_visibility: str | None = None,
+    agent_owner_user_id: str | None = None,
 ) -> dict[str, int]:
     """Push "approval needed" to the users who can act on a new HITL item.
 
@@ -338,10 +368,25 @@ async def notify_approval_created(
     user with a per-user subscription in the tenant is notified (approval
     visibility is still enforced server-side by ``/approvals``). Never
     raises — approval creation must not fail because push is down.
+
+    Bug sheet 2026-09-14 row 30: an item for a ``personal`` agent is pushed
+    to the agent's owner only (nobody when ownerless). Callers should pass
+    ``agent_visibility``/``agent_owner_user_id``; when they do not, the
+    committed item's agent is looked up, and an item whose agent cannot be
+    resolved is not pushed at all (fail closed).
     """
     totals = {"sent": 0, "failed": 0, "stale_removed": 0}
     try:
-        targets = user_ids if user_ids is not None else await _subscribed_user_ids(tenant_id)
+        if agent_visibility is None:
+            scope = await _approval_agent_scope(tenant_id, item_id)
+            if scope is None:
+                _log.warning("approval_push_skipped_unknown_agent_scope", tenant_id=tenant_id)
+                return totals
+            agent_visibility, agent_owner_user_id = scope
+        if agent_visibility == "personal":
+            targets = [str(agent_owner_user_id)] if agent_owner_user_id else []
+        else:
+            targets = user_ids if user_ids is not None else await _subscribed_user_ids(tenant_id)
         title = "Approval needed"
         body = f"{agent_name or 'An agent'} needs approval" + (f": {action}" if action else "")
         data = {"url": "/dashboard/approvals", "approval_id": str(item_id)}

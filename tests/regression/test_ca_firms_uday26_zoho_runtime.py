@@ -136,6 +136,13 @@ async def test_dispatch_gate_returns_actionable_connector_not_ready_error() -> N
         def scalar_one_or_none(self):
             return None
 
+        # bug sheet 2026-09-14 rows 17/22: dispatch now also loads personal connectors (none here).
+        def scalars(self):
+            return self
+
+        def all(self):
+            return []
+
     class _EmptyTenantSession:
         async def execute(self, _stmt):
             return _Result()

@@ -450,8 +450,9 @@ class TestPushPerUser:
         with patch("core.push.sender.get_vapid_keys", return_value=("pub", "priv")), patch(
             "pywebpush.webpush"
         ) as mock_push:
+            # bug sheet 2026-09-14 row 30: a shared-agent item still fans out to subscribers.
             totals = asyncio.run(
-                sender.notify_approval_created("tenant-1", item_id="h1", agent_name="AP")
+                sender.notify_approval_created("tenant-1", item_id="h1", agent_name="AP", agent_visibility="tenant")
             )
         assert totals["sent"] == 2 and mock_push.call_count == 2
         payloads = [c.kwargs["data"] for c in mock_push.call_args_list]
@@ -461,8 +462,11 @@ class TestPushPerUser:
         from core.push import sender
 
         with patch("core.push.sender.get_vapid_keys", side_effect=RuntimeError("no vapid")):
+            # bug sheet 2026-09-14 row 30: explicit shared scope so the vapid failure path runs.
             totals = asyncio.run(
-                sender.notify_approval_created("tenant-1", item_id="h1", user_ids=["alice"])
+                sender.notify_approval_created(
+                    "tenant-1", item_id="h1", user_ids=["alice"], agent_visibility="tenant"
+                )
             )
         assert totals == {"sent": 0, "failed": 0, "stale_removed": 0}
 

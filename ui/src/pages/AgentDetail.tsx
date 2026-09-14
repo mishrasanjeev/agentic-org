@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
 import api, { agentsApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { agentDomainsForUser, canManageAgent, isAdminUser, isDomainLocked } from "@/lib/roles";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
 import {
   agentLlmProviders,
@@ -156,6 +158,7 @@ function formatRunOutput(output: unknown): string {
 export default function AgentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [agent, setAgent] = useState<Agent | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "config" | "prompt" | "shadow" | "cost" | "scopes" | "learning" | "voice">("overview");
@@ -246,6 +249,25 @@ export default function AgentDetail() {
     }
   }
 
+  // Bug sheet 2026-09-14 rows 17-19/52: only admins move an agent between
+  // tenant-shared and personal; the backend returns 403 for anyone else.
+  async function handleVisibilityChange(next: "tenant" | "personal") {
+    if (
+      next === "personal" &&
+      !window.confirm("Make this agent personal? Only its owner and tenant admins will be able to see it.")
+    ) return;
+    setActionLoading("visibility");
+    setActionError(null);
+    try {
+      await api.patch(`/agents/${id}`, { visibility: next });
+      void fetchAgent(true);
+    } catch (err: unknown) {
+      setActionError(errorDetailToMessage(err, "Visibility change failed"));
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
   function openRunDialog() {
     setRunTask("");
     setActionError(null);
@@ -307,6 +329,12 @@ export default function AgentDetail() {
     : "";
 
   const displayName = agent.employee_name || agent.name;
+  // Mutations are allowed for admins and the owner of a personal agent
+  // (core/ownership.py). Run, chat and feedback stay available to viewers.
+  const isAdmin = isAdminUser(user);
+  const canManage = canManageAgent(user, agent);
+  const isPersonal = agent.visibility === "personal";
+  const ownedByMe = isPersonal && !!agent.owner_user_id && agent.owner_user_id === user?.user_id;
 
   return (
     <div className="space-y-6">
@@ -333,6 +361,13 @@ export default function AgentDetail() {
             )}
             {agent.is_builtin && <Badge variant="outline" className="mt-1">Built-in</Badge>}
             <div className="flex flex-wrap gap-1.5 mt-2">
+              <Badge
+                variant={isPersonal ? "secondary" : "outline"}
+                className="text-[10px]"
+                data-testid="agent-visibility-badge"
+              >
+                {isPersonal ? (ownedByMe ? "Personal · owned by you" : "Personal") : "Shared"}
+              </Badge>
               <Badge variant="secondary" className="text-[10px]">LangGraph</Badge>
               {(agent as any).config?.grantex?.grantex_did && (
                 <Badge variant="outline" className="text-[10px] font-mono">{(agent as any).config.grantex.grantex_did}</Badge>
@@ -345,6 +380,8 @@ export default function AgentDetail() {
         </div>
         <div className="flex flex-col items-end gap-2">
           <div className="flex gap-2">
+            {canManage && (
+            <>
             {agent.status === "paused" ? (
               <Button variant="outline" size="sm" onClick={handleResume} disabled={actionLoading !== null}>
                 {actionLoading === "resume" ? "Resuming..." : "Resume"}
@@ -377,6 +414,19 @@ export default function AgentDetail() {
                 {actionLoading === "delete" ? "Deleting..." : "Delete Agent"}
               </Button>
             )}
+            </>
+            )}
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="agent-visibility-toggle"
+                onClick={() => void handleVisibilityChange(isPersonal ? "tenant" : "personal")}
+                disabled={actionLoading !== null}
+              >
+                {actionLoading === "visibility" ? "Saving..." : isPersonal ? "Share with tenant" : "Make personal"}
+              </Button>
+            )}
             <Button
               variant="default"
               size="sm"
@@ -393,6 +443,11 @@ export default function AgentDetail() {
               Chat with Agent
             </Button>
           </div>
+          {!canManage && (
+            <p className="text-xs text-muted-foreground" data-testid="agent-readonly-note">
+              View only: you can run this agent, but only its owner or a tenant admin can change it.
+            </p>
+          )}
           {actionError && <p className="text-xs text-destructive">{actionError}</p>}
           {actionNotice && <p className="text-xs text-emerald-600">{actionNotice}</p>}
         </div>
@@ -444,13 +499,13 @@ export default function AgentDetail() {
         ))}
       </div>
 
-      {activeTab === "overview" && <OverviewTab agent={agent} onUpdated={fetchAgent} />}
-      {activeTab === "config" && <ConfigTab agent={agent} onUpdated={() => fetchAgent(true)} />}
-      {activeTab === "prompt" && <PromptTab agent={agent} onUpdated={() => fetchAgent(true)} />}
-      {activeTab === "shadow" && <ShadowTab agent={agent} onUpdated={() => fetchAgent(true)} />}
+      {activeTab === "overview" && <OverviewTab agent={agent} onUpdated={fetchAgent} canManage={canManage} />}
+      {activeTab === "config" && <ConfigTab agent={agent} onUpdated={() => fetchAgent(true)} canManage={canManage} />}
+      {activeTab === "prompt" && <PromptTab agent={agent} onUpdated={() => fetchAgent(true)} canManage={canManage} />}
+      {activeTab === "shadow" && <ShadowTab agent={agent} onUpdated={() => fetchAgent(true)} canManage={canManage} />}
       {activeTab === "cost" && <CostTab agent={agent} />}
       {activeTab === "scopes" && <ScopesTab agent={agent} />}
-      {activeTab === "learning" && <LearningTab agent={agent} />}
+      {activeTab === "learning" && <LearningTab agent={agent} canManage={canManage} />}
       {activeTab === "voice" && <VoiceTab agent={agent} />}
 
       <Suspense fallback={null}>
@@ -505,7 +560,7 @@ export default function AgentDetail() {
 }
 
 /* â”€â”€â”€ Overview Tab â”€â”€â”€ */
-function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void }) {
+function OverviewTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => void; canManage: boolean }) {
   const [editingParent, setEditingParent] = useState(false);
   const [parentCandidates, setParentCandidates] = useState<Agent[]>([]);
   const [selectedParentId, setSelectedParentId] = useState(agent.parent_agent_id || "");
@@ -566,7 +621,7 @@ function OverviewTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => void
         <div className="pt-2 border-t">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-xs uppercase tracking-wide">Reports To (Org Chart)</span>
-            {!editingParent && (
+            {!editingParent && canManage && (
               <Button variant="outline" size="sm" onClick={() => { setSelectedParentId(agent.parent_agent_id || ""); setEditingParent(true); }}>
                 Edit
               </Button>
@@ -826,7 +881,7 @@ function ExplainerPanel({ agentId }: { agentId: string }) {
 }
 
 /* â”€â”€â”€ Learning Tab (Feedback + Amendments) â”€â”€â”€ */
-function LearningTab({ agent }: { agent: Agent }) {
+function LearningTab({ agent, canManage }: { agent: Agent; canManage: boolean }) {
   const [feedback, setFeedback] = useState<any[]>([]);
   const [amendments, setAmendments] = useState<string[]>([]);
   const [analyzing, setAnalyzing] = useState(false);
@@ -909,9 +964,11 @@ function LearningTab({ agent }: { agent: Agent }) {
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle className="text-sm font-semibold">Learned Rules (Amendments)</CardTitle>
-            <Button variant="outline" size="sm" onClick={triggerAnalysis} disabled={analyzing}>
-              {analyzing ? "Analyzing..." : "Analyze Feedback"}
-            </Button>
+            {canManage && (
+              <Button variant="outline" size="sm" onClick={triggerAnalysis} disabled={analyzing}>
+                {analyzing ? "Analyzing..." : "Analyze Feedback"}
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -920,14 +977,16 @@ function LearningTab({ agent }: { agent: Agent }) {
               {amendments.map((a, idx) => (
                 <div key={idx} className="flex items-start justify-between bg-muted/40 rounded px-3 py-2">
                   <span className="text-sm flex-1">{a}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-2 text-xs"
-                    onClick={() => dismissAmendment(idx)}
-                  >
-                    Dismiss
-                  </Button>
+                  {canManage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-2 text-xs"
+                      onClick={() => dismissAmendment(idx)}
+                    >
+                      Dismiss
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>
@@ -939,7 +998,7 @@ function LearningTab({ agent }: { agent: Agent }) {
           )}
 
           {/* Analysis result */}
-          {analysisResult && analysisResult.amendment && (
+          {canManage && analysisResult && analysisResult.amendment && (
             <div className="border border-primary/30 rounded-lg p-3 bg-primary/5 space-y-2">
               <p className="text-sm font-medium">Suggested Amendment:</p>
               <p className="text-sm">{analysisResult.amendment}</p>
@@ -1002,7 +1061,17 @@ function LearningTab({ agent }: { agent: Agent }) {
 }
 
 /* â”€â”€ï¿½ï¿½ Config Tab â”€â”€â”€ */
-function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
+function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
+  const { user } = useAuth();
+  // Same domain-lock rule as AgentCreate: developers and admins pick any
+  // domain; other roles stay in their own. The current domain stays listed
+  // so a legacy row still renders its value.
+  const domainLocked = isDomainLocked(user);
+  const allowedDomains = agentDomainsForUser(user);
+  const domainChoices = !agent.domain || allowedDomains.includes(agent.domain)
+    ? allowedDomains
+    : [agent.domain, ...allowedDomains];
+  const [editDomain, setEditDomain] = useState(agent.domain || "");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1029,6 +1098,7 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
   function startEditing() {
     setEditLlmProvider(agent.llm_provider || inferProviderForModel(llmRegistry, agent.llm_model));
     setEditLlmModel(agent.llm_model || "");
+    setEditDomain(agent.domain || "");
     setEditMaxRetries(agent.max_retries ?? 3);
     setEditHitlCondition(agent.hitl_condition || "");
     setEditConfidenceFloor(agent.confidence_floor != null ? Math.round(agent.confidence_floor * 100) : 70);
@@ -1044,6 +1114,9 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
         confidence_floor: editConfidenceFloor / 100,
         max_retries: editMaxRetries,
       };
+      if (editDomain && editDomain !== agent.domain) {
+        payload.domain = editDomain;
+      }
       if (editLlmModel.trim()) {
         payload.llm = { model: editLlmModel.trim(), provider: editLlmProvider.trim() || undefined };
       }
@@ -1080,7 +1153,7 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
       <CardHeader>
         <div className="flex justify-between items-center">
           <CardTitle className="text-sm font-semibold">Agent Configuration</CardTitle>
-          {!editing && (
+          {!editing && canManage && (
             <Button variant="outline" size="sm" onClick={startEditing}>
               Edit
             </Button>
@@ -1090,6 +1163,21 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
       <CardContent className="space-y-4">
         {editing ? (
           <div className="space-y-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">Domain</label>
+              <select
+                data-testid="config-domain"
+                value={editDomain}
+                disabled={domainLocked}
+                onChange={(e) => setEditDomain(e.target.value)}
+                className={`border rounded px-3 py-1.5 text-sm${domainLocked ? " bg-muted" : ""}`}
+              >
+                {domainChoices.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+
             {/* LLM Provider + Model (shared registry, sheet #34) */}
             <div className="flex flex-col gap-1">
               <label className="text-sm text-muted-foreground">LLM Provider</label>
@@ -1230,7 +1318,7 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
 }
 
 /* â”€â”€â”€ Prompt Tab â”€â”€â”€ */
-function PromptTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
+function PromptTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
   const [history, setHistory] = useState<PromptEditHistoryEntry[]>([]);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(agent.system_prompt_text || "");
@@ -1277,8 +1365,8 @@ function PromptTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Badge variant="secondary">Editable</Badge>
-                {!editing && (
+                <Badge variant="secondary">{canManage ? "Editable" : "View only"}</Badge>
+                {!editing && canManage && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -1292,7 +1380,7 @@ function PromptTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
           </div>
         </CardHeader>
         <CardContent>
-          {editing && !isLocked ? (
+          {editing && !isLocked && canManage ? (
             <div className="space-y-3">
               <textarea
                 value={editText}
@@ -1364,7 +1452,7 @@ function PromptTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
 }
 
 /* â”€â”€â”€ Shadow Tab â”€â”€â”€ */
-function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promise<void> }) {
+function ShadowTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: () => Promise<void>; canManage: boolean }) {
   const [generating, setGenerating] = useState(false);
   const [retesting, setRetesting] = useState(false);
   const [genResult, setGenResult] = useState<{ type: "success" | "error"; msg: string } | null>(null);
@@ -1579,7 +1667,7 @@ function ShadowTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
                   Stop
                 </Button>
               )}
-              {sampleCount > 0 && (
+              {sampleCount > 0 && canManage && (
                 <Button
                   variant="outline"
                   size="sm"

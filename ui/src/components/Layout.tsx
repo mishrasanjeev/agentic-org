@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES } from "../lib/roles";
 
 const LANGUAGES = [
   { code: "en", label: "EN" },
@@ -18,7 +19,9 @@ const NotificationBell = lazy(() => import("./NotificationBell"));
 
 // Nav labels use i18n keys (nav.<key>).
 // See ui/src/locales/en.json and hi.json for translations.
-const ALL_NAV = [
+// Agents, Org Chart, Approvals and Connectors follow the shared role lists in
+// lib/roles.ts so nav and route guards cannot drift (bug sheet 2026-09-14).
+const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: readonly string[] }> = [
   { path: "/dashboard", labelKey: "nav.dashboard", label: "Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/partner", labelKey: "nav.partner", label: "Partner Dashboard", roles: ["admin", "cfo", "coo", "auditor"] },
   { path: "/dashboard/companies", labelKey: "nav.companies", label: "Companies", roles: ["admin", "cfo", "coo", "auditor"] },
@@ -34,11 +37,11 @@ const ALL_NAV = [
   { path: "/dashboard/cbo", labelKey: "nav.cbo", label: "CBO Dashboard", roles: ["admin"] },
   { path: "/dashboard/abm", labelKey: "nav.abm", label: "ABM", roles: ["admin", "cmo"] },
   { path: "/dashboard/observatory", labelKey: "nav.observatory", label: "Observatory", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
+  { path: "/dashboard/agents", labelKey: "nav.agents", label: "Agents", roles: AGENT_CREATOR_ROLES },
+  { path: "/dashboard/org-chart", labelKey: "nav.orgChart", label: "Org Chart", roles: AGENT_CREATOR_ROLES },
   { path: "/dashboard/workflows", labelKey: "nav.workflows", label: "Workflows", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
-  { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: ["admin"] },
+  { path: "/dashboard/approvals", labelKey: "nav.approvals", label: "Approvals", roles: APPROVAL_ROLES },
+  { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
   { path: "/dashboard/agents/from-sop", labelKey: "nav.createFromSop", label: "Create from SOP", roles: ["admin"] },
