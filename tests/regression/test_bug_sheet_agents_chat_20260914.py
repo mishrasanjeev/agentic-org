@@ -478,6 +478,23 @@ class TestGenerateAgentDomainGate:
         assert resp.json()["detail"]["error"] == "llm_provider_not_configured"
         assert session.added == []
 
+    def test_provider_failure_is_structured_502_not_opaque_500(self, app):
+        """Integration replay: with a key present but rejected by the provider
+        (google.genai ClientError 400), generate escaped as an E1001 500."""
+        gen = AsyncMock(side_effect=RuntimeError("400 INVALID_ARGUMENT. API key not valid"))
+        session = _FakeSession(None)
+        with (
+            _cfo(app) as c,
+            patch("core.agent_generator.generate_agent_config", gen),
+            patch("api.v1.agents.get_tenant_session", side_effect=_session_factory(session)),
+        ):
+            resp = c.post("/api/v1/agents/generate", json={"description": "onboard every new employee", "deploy": True})
+        assert resp.status_code == 502
+        body = resp.json()["detail"]
+        assert body["error"] == "llm_generation_failed"
+        assert "API key" not in body["message"]
+        assert session.added == []
+
     def test_cfo_can_deploy_finance_agent_and_it_gets_no_static_tools(self, app):
         """#46 sibling: a generated agent has no connector, so it gets no
         tools — not the generator's statically-filled suggestion either."""

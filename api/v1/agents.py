@@ -2391,6 +2391,21 @@ async def generate_agent(
         ) from exc
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    # enterprise-gate: broad-except-ok reason=upstream-llm-failure-returns-explicit-502-without-provider-detail
+    except Exception as exc:
+        # The provider rejected or failed the call (invalid key, quota,
+        # outage): an upstream dependency failure, not an internal error.
+        # Log the provider error; never echo it (it can carry key hints).
+        logger.warning("agent_generate_llm_call_failed", error_type=type(exc).__name__)
+        raise HTTPException(
+            502,
+            detail={
+                "error": "llm_generation_failed",
+                "message": "The AI provider could not generate an agent right now. Check AI settings and retry.",
+            },
+        ) from exc
 
     suggestions = result.get("suggestions", [])
     if not suggestions:
