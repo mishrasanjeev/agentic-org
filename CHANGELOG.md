@@ -5,6 +5,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Container scanning of both the API and console images on every pull
+  request, push to `main` and nightly (previously the API image only, nightly
+  only), with a pinned Trivy 0.74.0, dated exceptions in `.trivyignore.yaml`
+  and a CycloneDX SBOM artifact per image. See "Container scanning" in
+  `CONTRIBUTING.md`. The console image's seven base-image `libuuid` findings
+  are tracked in `FINDINGS.md` with exceptions expiring 2026-10-14.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

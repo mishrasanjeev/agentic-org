@@ -75,6 +75,28 @@ npm run dev    # http://localhost:5173
 - Use `pytest-asyncio` for async tests
 - Mock external services, not internal modules
 
+### Container scanning
+
+`.github/workflows/container-scan.yml` builds the API (`Dockerfile`) and console
+(`Dockerfile.ui`) images on every pull request, push to `main` and nightly,
+scans each with [Trivy](https://trivy.dev/) 0.74.0 and uploads a CycloneDX SBOM
+per image (`agenticorg-api-sbom`, `agenticorg-ui-sbom`). The scan fails on HIGH
+or CRITICAL vulnerabilities that have a fixed version. Run it locally:
+
+```bash
+docker build -t agenticorg-api:scan .
+bash scripts/scan-container.sh image agenticorg-api:scan agenticorg-api.cdx.json
+bash scripts/test-scan-container.sh   # scanner self-test
+```
+
+**Exceptions.** Fix a finding when you can: refresh the pinned base image
+digest (`scripts/refresh_image_digests.sh`), update the dependency, or keep the
+package out of the runtime image. When a fix has to wait, add an entry to
+`.trivyignore.yaml` with the vulnerability `id`, the exact package `purls`, a
+`statement` naming the `FINDINGS.md` entry that tracks the fix, and an
+`expired_at` date no more than 30 days out. An expired entry stops applying and
+the scan fails again.
+
 ## Agent Development
 
 ### Creating a New Agent
