@@ -25,6 +25,7 @@ from langgraph.errors import GraphInterrupt
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
+from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
 from core.pii.redactor import PIIRedactor
 
@@ -276,20 +277,24 @@ async def run_agent(
     # Build the graph. The tool wrappers share ``pii_token_map`` so the
     # model's tokenized tool arguments are restored before the connector
     # call and connector results are re-masked before returning to the LLM.
-    graph = build_agent_graph(
-        system_prompt=amended_prompt,
-        authorized_tools=authorized_tools,
-        llm_model=llm_model,
-        confidence_floor=confidence_floor,
-        hitl_condition=hitl_condition,
-        connector_config=connector_config,
-        connector_names=connector_names,
-        tenant_id=tenant_id,
-        company_id=company_id,
-        domain=domain,
-        pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
-        llm_provider=llm_provider,
-    )
+    credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
+    try:
+        graph = build_agent_graph(
+            system_prompt=amended_prompt,
+            authorized_tools=authorized_tools,
+            llm_model=llm_model,
+            confidence_floor=confidence_floor,
+            hitl_condition=hitl_condition,
+            connector_config=connector_config,
+            connector_names=connector_names,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            domain=domain,
+            pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
+            llm_provider=llm_provider,
+        )
+    finally:
+        reset_prefetched_llm_credential(credential_token)
 
     # Compile with checkpointer
     compiled = graph.compile(checkpointer=_checkpointer)
@@ -573,19 +578,23 @@ async def resume_agent(
     """
     from langgraph.types import Command
 
-    graph = build_agent_graph(
-        system_prompt=system_prompt,
-        authorized_tools=authorized_tools,
-        llm_model=llm_model,
-        confidence_floor=confidence_floor,
-        hitl_condition=hitl_condition,
-        connector_config=connector_config,
-        connector_names=connector_names,
-        tenant_id=tenant_id,
-        company_id=company_id,
-        domain=domain,
-        llm_provider=llm_provider,
-    )
+    credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
+    try:
+        graph = build_agent_graph(
+            system_prompt=system_prompt,
+            authorized_tools=authorized_tools,
+            llm_model=llm_model,
+            confidence_floor=confidence_floor,
+            hitl_condition=hitl_condition,
+            connector_config=connector_config,
+            connector_names=connector_names,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            domain=domain,
+            llm_provider=llm_provider,
+        )
+    finally:
+        reset_prefetched_llm_credential(credential_token)
     compiled = graph.compile(checkpointer=_checkpointer)
 
     config = {"configurable": {"thread_id": thread_id}}
