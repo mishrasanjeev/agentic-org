@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # Secret scanning with gitleaks.
 #
 #   scripts/scan-secrets.sh range <base> <head>   scan the commits in base..head
