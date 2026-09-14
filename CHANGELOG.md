@@ -18,6 +18,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   and a CycloneDX SBOM artifact per image. See "Container scanning" in
   `CONTRIBUTING.md`. The console image's seven base-image `libuuid` findings
   are tracked in `FINDINGS.md` with exceptions expiring 2026-10-14.
+- One-command local stack: `make dev` builds and starts Postgres, Redis,
+  MinIO, migrations, the API, the worker and the console from
+  `docker-compose.dev.yml` (base images pinned by digest, ports bound to
+  127.0.0.1, no credentials needed), waits for health and runs a smoke test.
+  `make down`, `make clean`, `make logs` and `make ps` manage it. See
+  `docs/quickstart-local.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
