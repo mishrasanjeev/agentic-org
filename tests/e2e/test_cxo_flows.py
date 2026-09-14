@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -122,7 +122,12 @@ def client(app):
             "grantex:scopes": ["agenticorg:admin"],
         }
 
-    with patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
+    # The synthetic "e2e-user" has no users row. Since #1263 the middleware
+    # checks legacy-token session state against the database and fails closed
+    # on a missing user (401 "Session is no longer valid"); session
+    # revocation has dedicated coverage, so these flow tests stub it.
+    session_ok = patch("auth.grantex_middleware.check_user_session_state", AsyncMock(return_value=None))
+    with session_ok, patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate):
         with patch("auth.grantex_middleware.extract_tenant_id", return_value=test_tenant_id):
             with patch("auth.grantex_middleware.extract_scopes", return_value=["agenticorg:admin"]):
                 # raise_server_exceptions=True so server tracebacks surface
@@ -142,6 +147,21 @@ def client(app):
 # service containers (see .github/workflows/deploy.yml), so these run
 # unconditionally. For local development, bring up compose or export
 # AGENTICORG_DATABASE_URL / AGENTICORG_REDIS_URL to point at any pair.
+
+
+
+def _chat_company_id(client) -> str:
+    """Chat is company-scoped since #990 (400 without company_id)."""
+    token = uuid.uuid4().int
+    letters = "".join(chr(ord("A") + (token >> (5 * i)) % 26) for i in range(6))
+    pan = f"{letters[:5]}{token % 10000:04d}{letters[5]}"  # unique per call; PAN shape AAAAA9999A
+    resp = client.post("/api/v1/companies", json={
+        "name": f"E2E Chat Co {uuid.uuid4().hex[:8]}",
+        "pan": pan,
+        "industry": "Services",
+    })
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -176,6 +196,7 @@ class TestCFOJourney:
         canned-fallback forced 0.6/0.7 — it was asserting a lie.
         """
         resp = client.post("/api/v1/chat/query", json={
+            "company_id": _chat_company_id(client),
             "query": "What is our accounts receivable aging and cash flow position?"
         })
         assert resp.status_code == 200
@@ -338,6 +359,7 @@ class TestCMOJourney:
         no marketing agent is configured on this environment.
         """
         resp = client.post("/api/v1/chat/query", json={
+            "company_id": _chat_company_id(client),
             "query": "Show me the latest SEO rankings and campaign conversion rates"
         })
         assert resp.status_code == 200
