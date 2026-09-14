@@ -65,7 +65,7 @@ dependencies = [
     "httpx>=0.28.0",
     # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
     # canonicalisation and constant-time validation to the maintained SDK.
-    "twilio>=9.11.0",
+    "twilio>=9.11.1",
     # Billing checkout is a production request path. Keep the Stripe SDK in
     # base deps so Docker's `pip install .[v4]` image can create Checkout
     # Sessions when STRIPE_SECRET_KEY and price IDs are configured.
