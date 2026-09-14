@@ -1,0 +1,144 @@
+# Local development stack: `make dev` (see docs/quickstart-local.md).
+#
+# Needs only Docker and make. Every base image is pinned by digest; ports bind
+# to 127.0.0.1 and can be moved with the AGENTICORG_DEV_*_PORT variables. The
+# credentials below are development-only placeholders; production and staging
+# reject them.
+#
+# No model credentials are needed to start the stack. Completions made through
+# core/llm/router.py use the deterministic fake LLM
+# (core/test_doubles/fake_llm.py), honoured only in development and test
+# environments. LangGraph agent runs build their model through
+# core/langgraph/llm_factory.py, which the fake does not cover; running agents
+# locally without a model provider needs the model stub service.
+
+name: agenticorg-dev
+
+x-backend-env: &backend-env
+  AGENTICORG_ENV: development
+  AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
+  AGENTICORG_REDIS_URL: redis://redis:6379/0
+  AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
+  AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
+  AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
+  AGENTICORG_PII_MASKING: "true"
+  AGENTICORG_TEST_FAKE_LLM: "1"
+
+x-backend-build: &backend-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    environment:
+      POSTGRES_DB: agenticorg
+      POSTGRES_USER: agenticorg
+      POSTGRES_PASSWORD: agenticorg_dev
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agenticorg -d agenticorg"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: agenticorg
+      MINIO_ROOT_PASSWORD: agenticorg_dev
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # One-shot, idempotent schema bootstrap/upgrade (Alembic is the schema authority).
+  migrate:
+    build: *backend-build
+    image: agenticorg-api:dev
+    environment: *backend-env
+    command: python scripts/alembic_migrate.py
+    restart: "no"
+    healthcheck:
+      disable: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: agenticorg-api:dev
+    pull_policy: never
+    environment: *backend-env
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_API_PORT:-8000}:8000"
+    networks:
+      default:
+        # ui/nginx.conf proxies /api and /ws to agenticorg-api:8000.
+        aliases: [agenticorg-api]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    image: agenticorg-api:dev
+    pull_policy: never
+    environment: *backend-env
+    command: >-
+      celery -A core.tasks.celery_app worker --loglevel=info --concurrency=2
+      -Q celery,reports,maintenance,workflows,delivery,rpa
+    healthcheck:
+      # The image healthcheck probes the API port, which a worker never serves.
+      test: ["CMD-SHELL", "celery -A core.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 10 >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      start_period: 40s
+      retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    image: agenticorg-ui:dev
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:
