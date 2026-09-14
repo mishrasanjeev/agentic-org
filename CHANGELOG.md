@@ -5,6 +5,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- New source files must carry `SPDX-License-Identifier: Apache-2.0` in their
+  first five lines; enforced on pull requests and in `scripts/preflight.sh`.
+  Existing files are unaffected. See "Licence headers" in `CONTRIBUTING.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

@@ -164,6 +164,14 @@ verify_false_scan() {
 }
 
 # ---------------------------------------------------------------------------
+# 5b. SPDX licence headers — new source files on this branch, the same check
+#     the CI unit-tests job runs on pull requests.
+# ---------------------------------------------------------------------------
+license_header_check() {
+  python scripts/check_license_headers.py --base "$(git merge-base origin/main HEAD)" --head HEAD
+}
+
+# ---------------------------------------------------------------------------
 # 6. Enterprise stability release gates: broad exceptions, process-local
 #    state, stub-success paths, route metadata, and Alembic heads.
 # ---------------------------------------------------------------------------
@@ -274,6 +282,7 @@ run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
+run_step "licence headers (new)"  license_header_check
 run_step "enterprise stability"   enterprise_stability_gate
 run_step "pytest (CI unit suites)" pytest_check
 run_step "ui eslint"              ui_lint
