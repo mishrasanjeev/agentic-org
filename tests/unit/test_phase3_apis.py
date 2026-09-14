@@ -97,6 +97,10 @@ def client(app, hermetic_chat_runtime, hermetic_company_runtime):
             "sub": "test-user",
             "agenticorg:tenant_id": test_tenant_id,
             "agenticorg:scopes": admin_scopes,
+            # An admin session carries role=admin. Without it the session is
+            # domain-less (fail-closed, sheet #26) and chat refuses every
+            # classified domain before routing (sheet #53, 2026-09-14).
+            "role": "admin",
         }
 
     async def _noop_auth_failure(*_args, **_kwargs):

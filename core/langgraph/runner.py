@@ -39,6 +39,76 @@ MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
 # In-memory checkpointer for now — will switch to PostgreSQL in production
 _checkpointer = MemorySaver()
 
+# Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
+# $0.60/1M output averaged). Not per-provider pricing — an estimate only.
+_BLENDED_COST_PER_1K_TOKENS_USD = 0.000375
+
+
+def _message_token_total(msg: Any) -> int:
+    """Token total for one AI message from LangChain or Gemini metadata."""
+    # LangChain standard: usage_metadata (works for OpenAI, Anthropic)
+    usage = getattr(msg, "usage_metadata", None)
+    if usage:
+        # usage_metadata can be a dict or object depending on provider
+        if isinstance(usage, dict):
+            return usage.get("total_tokens", 0) or (
+                (usage.get("input_tokens", 0) or 0) + (usage.get("output_tokens", 0) or 0)
+            )
+        return getattr(usage, "total_tokens", 0) or (
+            (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
+        )
+    # Gemini/Google GenAI: response_metadata carries token counts
+    resp_meta = getattr(msg, "response_metadata", None) or {}
+    if not isinstance(resp_meta, dict):
+        return 0
+    usage_meta = resp_meta.get("usage_metadata") or resp_meta.get("token_usage") or {}
+    if not isinstance(usage_meta, dict):
+        return 0
+    return (
+        usage_meta.get("total_token_count", 0)
+        or usage_meta.get("total_tokens", 0)
+        or (
+            (usage_meta.get("prompt_token_count", 0) or usage_meta.get("input_tokens", 0) or 0)
+            + (usage_meta.get("candidates_token_count", 0) or usage_meta.get("output_tokens", 0) or 0)
+        )
+    )
+
+
+def _sum_usage(messages: Any) -> tuple[int, float]:
+    """Return ``(llm_tokens_used, llm_cost_usd)`` summed over AI messages.
+
+    Bug sheet #36 (2026-09-14): shared by the completed, HITL-interrupted
+    and resumed paths so an interrupted run reports the tokens its
+    ``reason`` node already spent instead of a hardcoded 0.
+    """
+    tokens_used = 0
+    for msg in messages or []:
+        if isinstance(msg, AIMessage):
+            tokens_used += int(_message_token_total(msg) or 0)
+    cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
+    return tokens_used, cost_usd
+
+
+def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
+    """Extract ``hitl_trigger`` from LangGraph interrupt payloads.
+
+    Accepts the ``__interrupt__`` list (``Interrupt`` objects), raw dict
+    payloads, and ``GraphInterrupt.args`` (which nests the sequence).
+    """
+    pending = list(interrupts or [])
+    while pending:
+        item = pending.pop(0)
+        if isinstance(item, list | tuple):
+            pending.extend(item)
+            continue
+        payload = getattr(item, "value", item)
+        if isinstance(payload, dict):
+            trigger = payload.get("hitl_trigger") or payload.get("trigger", "")
+            if trigger:
+                return str(trigger)
+    return ""
+
+
 REFERENCE_RESOLUTION_GUIDANCE = """
 
 <tool_reference_resolution>
@@ -85,6 +155,7 @@ async def run_agent(
     connector_names: list[str] | None = None,
     thread_id: str | None = None,
     company_id: str | None = None,
+    llm_provider: str | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -105,6 +176,9 @@ async def run_agent(
         grant_token: Grantex grant JWT for authorization.
         connector_config: Config for connectors (auth, secrets).
         thread_id: Conversation thread ID for checkpointing.
+        llm_provider: Explicit catalog provider id (``agent.llm_provider``,
+            else ``llm_config["provider"]``). ``None`` keeps the legacy
+            model-name inference.
 
     Returns:
         Dict with: status, output, confidence, reasoning_trace,
@@ -214,6 +288,7 @@ async def run_agent(
         company_id=company_id,
         domain=domain,
         pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
+        llm_provider=llm_provider,
     )
 
     # Compile with checkpointer
@@ -258,45 +333,17 @@ async def run_agent(
         latency_ms = int((time.perf_counter() - t0) * 1000)
         await meter_agent_run(tenant_id)  # billing usage counter; best-effort
 
-        # Extract token usage from AI messages
-        tokens_used = 0
-        for msg in result.get("messages", []):
-            if isinstance(msg, AIMessage):
-                # LangChain standard: usage_metadata (works for OpenAI, Anthropic)
-                usage = getattr(msg, "usage_metadata", None)
-                if usage:
-                    # usage_metadata can be a dict or object depending on provider
-                    if isinstance(usage, dict):
-                        total = usage.get("total_tokens", 0) or (
-                            (usage.get("input_tokens", 0) or 0) + (usage.get("output_tokens", 0) or 0)
-                        )
-                    else:
-                        total = getattr(usage, "total_tokens", 0) or (
-                            (getattr(usage, "input_tokens", 0) or 0) + (getattr(usage, "output_tokens", 0) or 0)
-                        )
-                    tokens_used += total
-                    continue
-                # Gemini/Google GenAI: response_metadata carries token counts
-                resp_meta = getattr(msg, "response_metadata", None) or {}
-                if isinstance(resp_meta, dict):
-                    usage_meta = resp_meta.get("usage_metadata") or resp_meta.get("token_usage") or {}
-                    if isinstance(usage_meta, dict):
-                        total = (
-                            usage_meta.get("total_token_count", 0)
-                            or usage_meta.get("total_tokens", 0)
-                            or (
-                                (usage_meta.get("prompt_token_count", 0) or usage_meta.get("input_tokens", 0) or 0)
-                                + (
-                                    usage_meta.get("candidates_token_count", 0)
-                                    or usage_meta.get("output_tokens", 0)
-                                    or 0
-                                )
-                            )
-                        )
-                        tokens_used += total
+        # Extract token usage from AI messages (blended cost estimate)
+        tokens_used, cost_usd = _sum_usage(result.get("messages", []))
 
-        # Estimate cost (Gemini 2.5 Flash pricing: $0.15/1M input, $0.60/1M output)
-        cost_usd = round(tokens_used * 0.000375 / 1000, 6) if tokens_used else 0
+        # Bug sheet #36 (2026-09-14): on LangGraph >= 1.x a top-level
+        # ``ainvoke`` does NOT raise GraphInterrupt for ``interrupt()`` — it
+        # returns the checkpointed state with an ``__interrupt__`` entry.
+        # Without this check a HITL-paused run was reported as
+        # ``completed`` with an empty ``hitl_trigger`` and no thread_id.
+        interrupts = result.get("__interrupt__") or []
+        if interrupts:
+            logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
 
         # --- Step 6: PII de-anonymization (after LLM) ---
         if pii_token_map:
@@ -353,7 +400,7 @@ async def run_agent(
                 logger.debug("content_safety_check_skipped", error=str(_cs_exc))
 
         # --- Step 8: Generate explanation (skip for hitl_triggered) ---
-        run_status = result.get("status", "completed")
+        run_status = "hitl_triggered" if interrupts else result.get("status", "completed")
         explanation: dict[str, Any] = {}
         if run_status in ("completed", "failed"):
             try:
@@ -381,14 +428,14 @@ async def run_agent(
         # cross-module rename. ``tool_calls_log`` stays the canonical
         # internal name.
         tool_log = result.get("tool_calls_log", [])
-        return {
+        response: dict[str, Any] = {
             "status": run_status,
             "output": result.get("output", {}),
             "confidence": result.get("confidence", 0.0),
             "reasoning_trace": result.get("reasoning_trace", []),
             "tool_calls_log": tool_log,
             "tool_calls": tool_log,
-            "hitl_trigger": result.get("hitl_trigger", ""),
+            "hitl_trigger": result.get("hitl_trigger", "") or _hitl_trigger_from_interrupts(interrupts),
             "error": result.get("error", ""),
             "explanation": explanation,
             "content_safety": content_safety_result,
@@ -398,11 +445,16 @@ async def run_agent(
                 "llm_cost_usd": cost_usd,
             },
         }
+        if interrupts:
+            # The resume endpoint needs the checkpoint thread to continue.
+            response["thread_id"] = config["configurable"]["thread_id"]
+        return response
 
     except GraphInterrupt as gi:
-        # LangGraph interrupt() raises GraphInterrupt when HITL pauses the graph.
-        # Retrieve the latest checkpoint state so we can extract hitl_trigger,
-        # confidence, output, etc. that were set before the interrupt.
+        # Older LangGraph / subgraph invocation raises GraphInterrupt when
+        # HITL pauses the graph. Retrieve the latest checkpoint state so we
+        # can extract hitl_trigger, confidence, output, etc. that were set
+        # before the interrupt.
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
 
@@ -417,16 +469,16 @@ async def run_agent(
         hitl_trigger = state_values.get("hitl_trigger", "")
         # If we still don't have hitl_trigger, extract from the interrupt payload
         if not hitl_trigger and gi.args:
-            for interruption in gi.args:
-                if isinstance(interruption, dict):
-                    hitl_trigger = interruption.get("hitl_trigger") or interruption.get("trigger", "")
-                    if hitl_trigger:
-                        break
+            hitl_trigger = _hitl_trigger_from_interrupts(gi.args)
+
+        # Bug sheet #36: the ``reason`` node already spent tokens before the
+        # gate paused the run — report them instead of a hardcoded 0.
+        tokens_used, cost_usd = _sum_usage(state_values.get("messages", []))
 
         # BUG-11 dual-emit (see comment above): keep both keys.
         hitl_tool_log = state_values.get("tool_calls_log", [])
         return {
-            "status": state_values.get("status", "hitl_triggered"),
+            "status": "hitl_triggered",
             "output": state_values.get("output", {}),
             "confidence": state_values.get("confidence", 0.0),
             "reasoning_trace": state_values.get("reasoning_trace", []),
@@ -437,8 +489,8 @@ async def run_agent(
             "thread_id": config["configurable"]["thread_id"],
             "performance": {
                 "total_latency_ms": latency_ms,
-                "llm_tokens_used": 0,
-                "llm_cost_usd": 0,
+                "llm_tokens_used": tokens_used,
+                "llm_cost_usd": cost_usd,
             },
         }
 
@@ -512,6 +564,7 @@ async def resume_agent(
     tenant_id: str | None = None,
     company_id: str | None = None,
     domain: str | None = None,
+    llm_provider: str | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -531,21 +584,33 @@ async def resume_agent(
         tenant_id=tenant_id,
         company_id=company_id,
         domain=domain,
+        llm_provider=llm_provider,
     )
     compiled = graph.compile(checkpointer=_checkpointer)
 
     config = {"configurable": {"thread_id": thread_id}}
 
+    t0 = time.perf_counter()
     try:
         result = await compiled.ainvoke(  # type: ignore[call-overload]
             Command(resume=decision),
             config=config,
         )
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        # Bug sheet #36: the resumed state carries every AI message on the
+        # thread, so this is the whole-thread usage (pre-interrupt reasoning
+        # included), not just the post-resume delta.
+        tokens_used, cost_usd = _sum_usage(result.get("messages", []))
         return {
             "status": result.get("status", "completed"),
             "output": result.get("output", {}),
             "confidence": result.get("confidence", 0.0),
             "reasoning_trace": result.get("reasoning_trace", []),
+            "performance": {
+                "total_latency_ms": latency_ms,
+                "llm_tokens_used": tokens_used,
+                "llm_cost_usd": cost_usd,
+            },
         }
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:

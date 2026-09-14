@@ -110,7 +110,7 @@ async def put_config(
     """
     tid = _uuid.UUID(tenant_id)
     claims = getattr(request.state, "claims", {}) or {}
-    actor_id = str(claims.get("sub") or claims.get("user_id") or "unknown")
+    actor_id = str(claims.get("agenticorg:user_id") or claims.get("sub") or "unknown")
 
     async with get_tenant_session(tid) as session:
         row = await session.get(GovernanceConfig, tid)

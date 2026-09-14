@@ -115,6 +115,15 @@ EMBEDDING_CATALOG: tuple[EmbeddingModel, ...] = (
 )
 
 
+# Providers that ``core/langgraph/llm_factory.py`` can dispatch for a
+# single agent. ``azure_openai`` is catalogued for tenant-level settings
+# but has no per-agent runtime builder yet, so pinning it on an agent is
+# rejected at create/update time instead of failing on the first run.
+AGENT_RUNTIME_LLM_PROVIDERS: frozenset[str] = frozenset(
+    {"gemini", "openai", "anthropic", "openai_compatible"}
+)
+
+
 # ─── Lookup helpers ──────────────────────────────────────────────────
 
 
@@ -143,6 +152,41 @@ def find_llm(provider: str, model: str) -> LLMModel | None:
         ):
             return entry
     return None
+
+
+def validate_llm_selection(provider: str, model: str) -> tuple[str, str]:
+    """Return the normalised ``(provider, model)`` pair or raise ``ValueError``.
+
+    Bug sheet 2026-09-14 #31: an agent used to carry only ``llm_model`` and
+    the runtime guessed the provider from the model name, silently mapping
+    any unknown name to the Gemini default. When a caller pins a provider
+    explicitly, the pair must be consistent with the catalog *before* it is
+    persisted so the mismatch surfaces as a 422 at create/update time
+    instead of a wrong-provider call (or silent downgrade) at run time.
+    ``openai_compatible`` is the wildcard entry: any non-empty model name is
+    accepted because the admin's endpoint owns the model list.
+    """
+    clean_provider = (provider or "").strip().lower()
+    clean_model = (model or "").strip()
+    if not clean_provider:
+        raise ValueError("llm.provider must not be empty")
+    if clean_provider not in llm_providers():
+        raise ValueError(
+            f"Unknown llm.provider {clean_provider!r}. Valid: {list(llm_providers())}."
+        )
+    if not clean_model:
+        raise ValueError(f"llm.model must be set when llm.provider={clean_provider!r}")
+    if find_llm(clean_provider, clean_model) is None:
+        raise ValueError(
+            f"llm.model {clean_model!r} is not a {clean_provider!r} model. "
+            f"Valid: {list(llm_models_for(clean_provider))}."
+        )
+    if clean_provider not in AGENT_RUNTIME_LLM_PROVIDERS:
+        raise ValueError(
+            f"llm.provider {clean_provider!r} cannot be pinned on an agent yet. "
+            f"Valid: {sorted(AGENT_RUNTIME_LLM_PROVIDERS)}."
+        )
+    return clean_provider, clean_model
 
 
 def find_embedding(provider: str, model: str) -> EmbeddingModel | None:

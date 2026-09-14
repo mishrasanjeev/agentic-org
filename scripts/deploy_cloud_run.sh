@@ -501,6 +501,9 @@ update_service_no_traffic() {
   local label="$5"
   local image_digest="$6"
   local env_name="$7"
+  shift 7
+  # Remaining args are passed to gcloud verbatim (worker/beat --command/--args).
+  local extra_args=("$@")
   local before
   local after
 
@@ -510,7 +513,8 @@ update_service_no_traffic() {
     --region="$GCP_REGION" \
     --image="$image" \
     --update-env-vars="$env_vars" \
-    --no-traffic
+    --no-traffic \
+    ${extra_args[@]+"${extra_args[@]}"}
 
   after="$(latest_created_revision "$svc")"
   if [[ -z "$after" ]]; then
@@ -634,7 +638,15 @@ deploy_background_service() {
   local svc="$1"
   local label="$2"
   local new_revision=""
-  if ! update_service_no_traffic new_revision "$svc" "$API_IMAGE" "$BACKGROUND_UPDATE_ENV_VARS" "$label" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA"; then
+  local entrypoint=""
+  # The API image's CMD is uvicorn; pin the container command so a service
+  # created from that image runs the worker/beat entrypoint, not the API.
+  case "$label" in
+    worker) entrypoint="scripts/run_worker.py" ;;
+    beat) entrypoint="scripts/run_beat.py" ;;
+    *) echo "::error::Unknown background service label '$label' (expected worker|beat)." >&2; return 1 ;;
+  esac
+  if ! update_service_no_traffic new_revision "$svc" "$API_IMAGE" "$BACKGROUND_UPDATE_ENV_VARS" "$label" "$API_IMAGE_DIGEST" "AGENTICORG_GIT_SHA" --command=python "--args=$entrypoint"; then
     return 1
   fi
   echo "Staged $label revision: $new_revision"
@@ -662,10 +674,13 @@ Manual traffic commands:
   gcloud run services update-traffic "$API_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --to-revisions="$api_revision=100"
   gcloud run services update-traffic "$UI_SERVICE" --project="$GCP_PROJECT_ID" --region="$GCP_REGION" --to-revisions="$ui_revision=100"
 EOF
-  local svc
-  for svc in $WORKER_SERVICE $BEAT_SERVICE; do
-    echo "  gcloud run services update \"$svc\" --project=\"$GCP_PROJECT_ID\" --region=\"$GCP_REGION\" --image=\"$API_IMAGE\" --update-env-vars=\"$BACKGROUND_UPDATE_ENV_VARS\""
-  done
+  # Worker/beat must keep their pinned entrypoint (the image CMD is uvicorn).
+  if [[ -n "$WORKER_SERVICE" ]]; then
+    echo "  gcloud run services update \"$WORKER_SERVICE\" --project=\"$GCP_PROJECT_ID\" --region=\"$GCP_REGION\" --image=\"$API_IMAGE\" --update-env-vars=\"$BACKGROUND_UPDATE_ENV_VARS\" --command=python --args=scripts/run_worker.py"
+  fi
+  if [[ -n "$BEAT_SERVICE" ]]; then
+    echo "  gcloud run services update \"$BEAT_SERVICE\" --project=\"$GCP_PROJECT_ID\" --region=\"$GCP_REGION\" --image=\"$API_IMAGE\" --update-env-vars=\"$BACKGROUND_UPDATE_ENV_VARS\" --command=python --args=scripts/run_beat.py"
+  fi
 }
 
 # 1. Resolve commit.

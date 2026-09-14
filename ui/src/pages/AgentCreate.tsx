@@ -4,6 +4,13 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import api, { extractApiError, promptTemplatesApi, agentsApi } from "@/lib/api";
+import {
+  agentLlmProviders,
+  formatLlmOption,
+  isFreeTextModelProvider,
+  selectableModels,
+  useLlmRegistry,
+} from "@/lib/llm-registry";
 import type { Agent, PromptTemplate } from "@/types";
 
 const DOMAINS = ["finance", "hr", "marketing", "ops", "backoffice", "comms"];
@@ -101,7 +108,12 @@ export default function AgentCreate() {
   const [confidenceFloor, setConfidenceFloor] = useState(0.88);
   const [hitlCondition, setHitlCondition] = useState("confidence < 0.88");
   const [maxRetries, setMaxRetries] = useState(3);
+  // Sheet #34: provider + model come from the shared catalog registry so the
+  // picker cannot offer ids the backend rejects; provider is sent explicitly.
+  const [llmProvider, setLlmProvider] = useState("gemini");
   const [llmModel, setLlmModel] = useState("gemini-2.5-flash");
+  const { registry: llmRegistry } = useLlmRegistry();
+  const llmModelOptions = selectableModels(llmRegistry, llmProvider);
   const [llmRouting, setLlmRouting] = useState("auto");
   const [authorizedTools, setAuthorizedTools] = useState<string[]>([]);
   const [availableTools, setAvailableTools] = useState<string[]>([]);
@@ -346,7 +358,11 @@ export default function AgentCreate() {
         hitl_policy: { condition: hitlCondition },
         max_retries: maxRetries,
         initial_status: "shadow",
-        llm: { model: llmModel, fallback_model: "gemini-2.5-flash-preview-05-20" },
+        llm: {
+          model: llmModel.trim(),
+          provider: llmProvider.trim() || undefined,
+          fallback_model: "gemini-2.5-flash-preview-05-20",
+        },
         llm_routing: llmRouting,
         parent_agent_id: parentAgentId || undefined,
         reporting_to: reportingTo || undefined,
@@ -581,19 +597,55 @@ export default function AgentCreate() {
             {step === 3 && (
               <>
                 <div>
+                  <label className="text-sm font-medium">LLM Provider</label>
+                  {llmRegistry ? (
+                    <select
+                      data-testid="llm-provider"
+                      value={llmProvider}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setLlmProvider(next);
+                        setLlmModel(isFreeTextModelProvider(next) ? "" : (selectableModels(llmRegistry, next)[0]?.model ?? ""));
+                      }}
+                      className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    >
+                      {agentLlmProviders(llmRegistry).map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      data-testid="llm-provider"
+                      value={llmProvider}
+                      onChange={(e) => setLlmProvider(e.target.value)}
+                      placeholder="gemini / openai / anthropic / openai_compatible (blank = infer from model)"
+                      className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    />
+                  )}
+                </div>
+                <div>
                   <label className="text-sm font-medium">LLM Model</label>
-                  <select value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
-                    <option value="gemini-2.5-flash">Gemini 2.5 Flash (default)</option>
-                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (requires API key)</option>
-                    <option value="claude-opus-4-20250514">Claude Opus 4 (requires API key)</option>
-                    <option value="gpt-4o">GPT-4o (requires API key)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini (requires API key)</option>
-                  </select>
+                  {llmRegistry && !isFreeTextModelProvider(llmProvider) && llmModelOptions.length > 0 ? (
+                    <select data-testid="llm-model" value={llmModel} onChange={(e) => setLlmModel(e.target.value)} className="border rounded px-3 py-2 text-sm w-full mt-1">
+                      {llmModelOptions.map((m) => (
+                        <option key={m.model} value={m.model}>{formatLlmOption(m)}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      data-testid="llm-model"
+                      value={llmModel}
+                      onChange={(e) => setLlmModel(e.target.value)}
+                      placeholder={isFreeTextModelProvider(llmProvider) ? "Model name served by your endpoint" : "Model id"}
+                      className="border rounded px-3 py-2 text-sm w-full mt-1"
+                    />
+                  )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {llmModel.includes("claude") || llmModel.includes("gpt")
-                      ? "This model requires an API key. If not configured, the agent will fall back to Gemini."
-                      : "Gemini is always available â€” no additional API key needed."}
+                    {llmProvider && llmProvider !== "gemini"
+                      ? "This provider needs a BYO API key under Settings > AI Credentials (openai_compatible also needs base_url). Runs fail with a clear error until it is configured."
+                      : "Gemini is always available - no additional API key needed."}
                   </p>
                 </div>
                 <div>
@@ -892,6 +944,7 @@ export default function AgentCreate() {
                   <div><span className="text-muted-foreground">Confidence Floor:</span> {(confidenceFloor * 100).toFixed(0)}%</div>
                   <div><span className="text-muted-foreground">HITL Condition:</span> {hitlCondition}</div>
                   <div><span className="text-muted-foreground">Max Retries:</span> {maxRetries}</div>
+                  <div><span className="text-muted-foreground">LLM Provider:</span> {llmProvider || "inferred from model"}</div>
                   <div><span className="text-muted-foreground">LLM Model:</span> {llmModel}</div>
                   {reportingTo && <div><span className="text-muted-foreground">Reports To:</span> {reportingTo}</div>}
                   {specialization && <div className="col-span-2"><span className="text-muted-foreground">Specialization:</span> {specialization}</div>}

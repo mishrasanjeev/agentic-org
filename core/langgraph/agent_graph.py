@@ -234,6 +234,7 @@ def build_agent_graph(
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
+    llm_provider: str | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -249,6 +250,9 @@ def build_agent_graph(
             resolved names here so ``list_invoices`` only matches the
             agent's authorized connectors instead of falling through to
             any globally-registered connector with the same tool name.
+        llm_provider: Explicit catalog provider id pinned on the agent
+            (``agents.llm_provider``, else ``llm_config["provider"]``).
+            ``None`` keeps the legacy model-name inference for old rows.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -265,12 +269,25 @@ def build_agent_graph(
         pii_token_map=pii_token_map,
     )
 
+    # Bug sheet #14 (2026-09-14): ``ToolNode`` dispatches by exact name. A
+    # model that spells a registered ``gmail__send_email`` as
+    # ``gmail.send_email`` / ``gmail:send_email`` (or the bare
+    # ``send_email`` when that is unambiguous) got "is not a valid tool".
+    # ``reason`` rewrites tool-call names through this alias map as soon as
+    # the model answers, so scope validation, execution, the checkpoint and
+    # the tool-call log all see the registered name. Names outside the map
+    # still fail closed inside ToolNode.
+    tool_aliases = _tool_call_alias_map(tools)
+
     # LLM is created lazily on first call to avoid API key validation at build time
     _llm_cache: dict[str, Any] = {}
 
     def _get_llm():
         if "instance" not in _llm_cache:
-            llm = create_chat_model(model=llm_model)
+            # Bug sheet 2026-09-14 #31/#38: the pinned provider and tenant must
+            # reach the factory, otherwise ``o1-mini`` falls back to Gemini and
+            # ``openai_compatible`` never resolves the tenant's base_url.
+            llm = create_chat_model(model=llm_model, tenant_id=tenant_id or None, provider=llm_provider)
             _llm_cache["instance"] = llm.bind_tools(tools) if tools else llm
         return _llm_cache["instance"]
 
@@ -287,6 +304,8 @@ def build_agent_graph(
 
         trace.append(f"Calling LLM ({llm_model or 'default'})")
         response = await _get_llm().ainvoke(messages)
+        if isinstance(response, AIMessage) and response.tool_calls:
+            response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")
 
         return {"messages": [response], "reasoning_trace": trace}
@@ -533,6 +552,74 @@ def build_agent_graph(
 
 
 # --- Helper functions ---
+
+
+def _tool_call_alias_map(tools: list[Any]) -> dict[str, str]:
+    """Map alternate tool-call spellings to the registered tool name.
+
+    Bug sheet #14 (2026-09-14). For a tool registered as
+    ``gmail__send_email`` (connector ``gmail``, tool ``send_email`` from
+    the adapter's metadata) this yields ``gmail:send_email``,
+    ``gmail.send_email`` and — only when no other tool claims it — the
+    bare ``send_email``. Registered names always win over aliases and an
+    alias claimed by two tools is dropped, so nothing dispatches
+    ambiguously.
+    """
+    registered = {str(getattr(t, "name", "")) for t in tools}
+    aliases: dict[str, str] = {}
+    conflicts: set[str] = set()
+    for tool in tools:
+        name = str(getattr(tool, "name", ""))
+        meta = getattr(tool, "metadata", None) or {}
+        connector = meta.get("connector") if isinstance(meta, dict) else None
+        bare = meta.get("tool") if isinstance(meta, dict) else None
+        if not (connector and bare) and "__" in name:
+            connector, bare = name.split("__", 1)
+        if not (connector and bare):
+            continue
+        for alt in (f"{connector}:{bare}", f"{connector}.{bare}", f"{connector}__{bare}", bare):
+            if alt == name or alt in registered:
+                continue
+            if alt in aliases and aliases[alt] != name:
+                conflicts.add(alt)
+            else:
+                aliases[alt] = name
+    for alt in conflicts:
+        aliases.pop(alt, None)
+    return aliases
+
+
+def _rewrite_tool_call_names(message: AIMessage, aliases: dict[str, str]) -> AIMessage:
+    """Return ``message`` with aliased tool-call names replaced by the registered name.
+
+    Returns the same object when nothing changes. Anthropic-style
+    ``tool_use`` content blocks are rewritten alongside ``tool_calls`` so
+    the history sent back to the provider stays consistent.
+    """
+    if not aliases:
+        return message
+    renamed: dict[str, str] = {}
+    new_calls: list[Any] = []
+    for tc in message.tool_calls:
+        if isinstance(tc, dict):
+            requested = tc.get("name")
+            target = aliases.get(requested) if isinstance(requested, str) else None
+            if target and target != requested:
+                logger.info("tool_call_name_aliased", requested=requested, resolved=target)
+                tc = {**tc, "name": target}
+                renamed[str(tc.get("id"))] = target
+        new_calls.append(tc)
+    if not renamed:
+        return message
+    content: Any = message.content
+    if isinstance(content, list):
+        content = [
+            {**block, "name": renamed[str(block.get("id"))]}
+            if isinstance(block, dict) and block.get("type") == "tool_use" and str(block.get("id")) in renamed
+            else block
+            for block in content
+        ]
+    return message.model_copy(update={"tool_calls": new_calls, "content": content})
 
 
 def _parse_json_output(content: str | list | Any) -> dict[str, Any]:

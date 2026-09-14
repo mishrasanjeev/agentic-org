@@ -14,9 +14,9 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
-from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS, _DOMAIN_DEFAULT_TOOLS
+from api.v1.agents import _enforce_domain_access, _pinned_llm_provider, _record_cost_ledger
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
 from core.models.agent import Agent
@@ -121,12 +121,9 @@ async def _find_agent_for_domain(
             agent = result.scalar_one_or_none()
             if agent:
                 display = agent.employee_name or agent.name
-                tools = agent.authorized_tools or []
-                if not tools:
-                    tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
-                        agent.agent_type,
-                        _DOMAIN_DEFAULT_TOOLS.get(db_domain, []),
-                    )
+                # An agent with no tools gets none — no static type/domain
+                # defaults (bug sheet #46, 2026-09-14).
+                tools = list(agent.authorized_tools or [])
                 return display, str(agent.id), agent.agent_type, tools
     # enterprise-gate: broad-except-ok reason=chat-agent-display-read-model-falls-back-to-static-names
     except Exception:
@@ -142,8 +139,7 @@ async def _find_agent_for_domain(
         "communications": "Comms Agent (Arjun)",
     }
     fallback_name = fallback_agents.get(domain, "General Assistant")
-    fallback_tools = _DOMAIN_DEFAULT_TOOLS.get(db_domain, [])
-    return fallback_name, None, None, fallback_tools
+    return fallback_name, None, None, []
 
 
 # ---------------------------------------------------------------------------
@@ -477,10 +473,9 @@ async def _record_chat_hitl(
                     trigger_type="chat_policy",
                     priority="high",
                     assignee_role=domain or "admin",
-                    decision_options={
-                        "options": ["approve", "reject", "override"],
-                        "context": context,
-                    },
+                    # Bug sheet #44 (2026-09-14): context is stored once, in
+                    # ``context`` (which carries ``output``), not duplicated here.
+                    decision_options={"options": ["approve", "reject", "override"]},
                     context=context,
                     expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
@@ -527,6 +522,40 @@ class ChatMessage(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+async def _load_agent_llm_provider(tenant_id: str, company_id: _uuid.UUID, agent_id: str) -> str | None:
+    """Provider pin for a keyword-routed agent (sheet #31, 2026-09-14).
+
+    ``_find_agent_for_domain`` returns only display fields, so the pin is
+    read here. A read failure is a 503 rather than a silent unpinned run on
+    whatever provider the model name happens to resolve to.
+    """
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid, company_id) as session:
+            agent = (
+                await session.execute(
+                    select(Agent).where(
+                        Agent.id == _uuid.UUID(agent_id),
+                        Agent.tenant_id == tid,
+                        Agent.company_id == company_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if agent is None:
+                return None
+            return _pinned_llm_provider(getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None))
+    except (OSError, RuntimeError, SQLAlchemyError) as exc:
+        _log.error("chat_agent_provider_lookup_failed", agent_id=agent_id, error=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "chat_agent_execution_failed",
+                "message": "The agent's model configuration could not be read. Retry shortly.",
+                "agent_id": agent_id,
+            },
+        ) from exc
+
+
 @router.post("/chat/query", response_model=ChatQueryResponse)
 @route_meta(
     auth_required=True,
@@ -540,6 +569,7 @@ async def chat_query(
     body: ChatQueryRequest,
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Accept a natural-language query, route to domain agent, return answer."""
     from api.v1.agents import _require_company_for_tenant
@@ -547,54 +577,60 @@ async def chat_query(
     company_uuid = await _require_company_for_tenant(tenant_id, body.company_id)
     agent_connector_ids: list[str] = []
     agent_system_prompt = ""
+    agent_llm_provider: str | None = None
     # If the caller specified an agent_id, look it up directly instead of
-    # relying on keyword-based domain classification.
+    # relying on keyword-based domain classification. An id that does not
+    # resolve to an agent the caller may see is a 404 — never a silent
+    # fallback to keyword routing (bug sheet #53, 2026-09-14).
     if body.agent_id:
         try:
             aid = _uuid.UUID(body.agent_id)
-            tid = _uuid.UUID(tenant_id)
-            async with get_tenant_session(tid, company_uuid) as session:
-                agent = (await session.execute(
-                    select(Agent).where(
-                        Agent.id == aid,
-                        Agent.tenant_id == tid,
-                        Agent.company_id == company_uuid,
-                    )
-                )).scalar_one_or_none()
-                if agent:
-                    domain = agent.domain or "general"
-                    agent_name = agent.employee_name or agent.name
-                    agent_id: str | None = str(agent.id)
-                    agent_type = agent.agent_type
-                    agent_tools = agent.authorized_tools or []
-                    agent_connector_ids = list(agent.connector_ids or [])
-                    agent_system_prompt = agent.system_prompt_text or ""
-                    if not agent_tools:
-                        agent_tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
-                            agent.agent_type,
-                            _DOMAIN_DEFAULT_TOOLS.get(domain, []),
-                        )
-                else:
-                    domain = _classify_domain(body.query)
-                    agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
-                        domain,
-                        tenant_id,
-                        company_uuid,
-                    )
         except ValueError:
-            domain = _classify_domain(body.query)
-            agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
-                domain,
-                tenant_id,
-                company_uuid,
+            raise HTTPException(404, "Agent not found") from None
+        tid = _uuid.UUID(tenant_id)
+        async with get_tenant_session(tid, company_uuid) as session:
+            agent = (await session.execute(
+                select(Agent).where(
+                    Agent.id == aid,
+                    Agent.tenant_id == tid,
+                    Agent.company_id == company_uuid,
+                )
+            )).scalar_one_or_none()
+            if agent is None:
+                raise HTTPException(404, "Agent not found")
+            _enforce_domain_access(agent, user_domains)
+            domain = agent.domain or "general"
+            agent_name = agent.employee_name or agent.name
+            agent_id: str | None = str(agent.id)
+            agent_type = agent.agent_type
+            # An agent with no tools gets none — no static type/domain
+            # defaults (bug sheet #46, 2026-09-14).
+            agent_tools = list(agent.authorized_tools or [])
+            agent_connector_ids = list(agent.connector_ids or [])
+            agent_system_prompt = agent.system_prompt_text or ""
+            agent_llm_provider = _pinned_llm_provider(
+                getattr(agent, "llm_provider", None), getattr(agent, "llm_config", None)
             )
     else:
         domain = _classify_domain(body.query)
+        # Keyword routing must not hand a domain-limited caller an agent
+        # outside their domains (bug sheet #53, 2026-09-14). Refuse before
+        # the lookup so the answer does not reveal whether such an agent
+        # exists; "general" (no keyword hit) is only refused if it would
+        # actually pick an out-of-domain agent.
+        picked_domain = _DOMAIN_TO_DB_DOMAIN.get(domain, domain)
+        domain_denied = isinstance(user_domains, list) and picked_domain not in user_domains
+        if domain_denied and domain != "general":
+            raise HTTPException(403, f"You do not have access to the '{picked_domain}' domain.")
         agent_name, agent_id, agent_type, agent_tools = await _find_agent_for_domain(
             domain,
             tenant_id,
             company_uuid,
         )
+        if agent_id and domain_denied:
+            raise HTTPException(403, f"You do not have access to the '{picked_domain}' domain.")
+        if agent_id:
+            agent_llm_provider = await _load_agent_llm_provider(tenant_id, company_uuid, agent_id)
     # Start without a fixed confidence — it gets set from the real
     # agent signal below. Initializing to a constant here was exactly
     # what kept user-visible confidence pinned at 60% on reopen TC_003
@@ -724,10 +760,10 @@ async def chat_query(
             },
         ) from exc
 
-    # Resolve authorized_tools: prefer agent's tools from DB lookup (BUG #2)
-    resolved_tools = agent_tools or _AGENT_TYPE_DEFAULT_TOOLS.get(
-        resolved_agent_type, _DOMAIN_DEFAULT_TOOLS.get(domain, [])
-    )
+    # Resolve authorized_tools: the agent's own tools from the DB lookup
+    # (BUG #2). No static type/domain fallback — an agent with no tools
+    # runs with none (bug sheet #46, 2026-09-14).
+    resolved_tools = list(agent_tools or [])
 
     # Try to execute via LangGraph if an agent was found in DB
     answer: str | None = None
@@ -754,12 +790,23 @@ async def chat_query(
                 authorized_tools=resolved_tools,
                 task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
                 llm_model="",
+                llm_provider=agent_llm_provider,
                 confidence_floor=0.88,
                 grant_token=grant_token,
                 connector_config=connector_config,
                 connector_names=connector_names,
                 company_id=str(company_uuid),
             )
+            # Bug sheet #28 (2026-09-14): every chat turn with a known agent
+            # is a task for the cost ledger, even when no tokens were
+            # reported. A ledger failure is logged, never a chat failure.
+            if not await _record_cost_ledger(
+                _uuid.UUID(tenant_id),
+                _uuid.UUID(agent_id),
+                lg_result.get("performance") or {},
+                count_zero_usage_task=True,
+            ):
+                _log.warning("chat_cost_ledger_write_failed", agent_id=agent_id)
             hitl_trigger = lg_result.get("hitl_trigger") or None
             if lg_result.get("status") in ("completed", "hitl_triggered") and lg_result.get("output"):
                 output = lg_result["output"]

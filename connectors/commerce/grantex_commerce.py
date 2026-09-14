@@ -12,6 +12,7 @@ import httpx
 
 from connectors.framework.base_connector import BaseConnector
 from core.commerce.sales_guardrails import normalize_grantex_error, validate_payment_action
+from core.config import grantex_base_url_for_env
 
 TOOL_ALIAS_TO_GRANTEX: dict[str, str] = {
     "merchant_get_profile": "merchant.get_profile",
@@ -42,7 +43,9 @@ class GrantexCommerceConnector(BaseConnector):
     name = "grantex_commerce"
     category = "commerce"
     auth_type = "grantex_bearer"
-    base_url = os.getenv("GRANTEX_COMMERCE_BASE_URL") or os.getenv("GRANTEX_BASE_URL", "https://api.grantex.dev")
+    # Per-environment Grantex origin (bug sheet 2026-09-14 #13) unless an
+    # explicit commerce override is set.
+    base_url = os.getenv("GRANTEX_COMMERCE_BASE_URL") or grantex_base_url_for_env()
     rate_limit_rpm = 600
     timeout_ms = 10000
 

@@ -126,14 +126,11 @@ def test_bug_last_no_deprecated_gemini_in_agent_ui() -> None:
     available to new users``. The model came from the hardcoded
     LLM_OPTIONS list in the UI.
     """
-    src = (REPO / "ui" / "src" / "pages" / "AgentDetail.tsx").read_text(
-        encoding="utf-8"
-    )
-
-    # Find the LLM_OPTIONS array
-    m = re.search(r"LLM_OPTIONS\s*=\s*\[([^\]]+)\]", src)
-    assert m, "LLM_OPTIONS array must exist on AgentDetail page"
-    options = m.group(1)
+    # Bug sheet 2026-09-14 #34: the hardcoded LLM_OPTIONS list was the
+    # source of drift (and of this bug). Both agent pages now render the
+    # backend catalog via useLlmRegistry, so pin the catalog instead and
+    # forbid any model-id literal from creeping back into the pages.
+    from core.ai_providers.catalog import LLM_CATALOG
 
     deprecated = [
         "gemini-2.0-flash",       # retired by Google
@@ -141,19 +138,21 @@ def test_bug_last_no_deprecated_gemini_in_agent_ui() -> None:
         "claude-3-opus",          # superseded by claude-4
         "claude-3-sonnet",        # superseded by claude-4
     ]
+    catalog_models = {m.model for m in LLM_CATALOG}
     for dep in deprecated:
-        # Strict word boundary so `gemini-2.0-flash` (bare) is rejected but
-        # `gemini-2.0-flash-exp` would not be (in case it ever returns).
-        # The dropdown is freeform so wrapping in quotes is the easy match.
-        assert f'"{dep}"' not in options, (
-            f"LLM_OPTIONS must not list deprecated model {dep!r} — Google/"
+        assert dep not in catalog_models, (
+            f"catalog must not list deprecated model {dep!r} — Google/"
             "Anthropic returns 404 NOT_FOUND for retired model IDs"
         )
-
-    # And at least one current Gemini 2.5 entry must be present
-    assert "gemini-2.5" in options, (
-        "LLM_OPTIONS must offer at least one Gemini 2.5 model"
+    assert any(m.startswith("gemini-2.5") for m in catalog_models), (
+        "catalog must offer at least one Gemini 2.5 model"
     )
+    for page in ("AgentDetail.tsx", "AgentCreate.tsx"):
+        src = (REPO / "ui" / "src" / "pages" / page).read_text(encoding="utf-8")
+        assert "useLlmRegistry" in src, f"{page} must render the backend LLM catalog"
+        assert "LLM_OPTIONS" not in src, f"{page} must not reintroduce a hardcoded model list"
+        for dep in deprecated:
+            assert f'"{dep}"' not in src, f"{page} must not hardcode deprecated model {dep!r}"
 
 
 # ---------------------------------------------------------------------------

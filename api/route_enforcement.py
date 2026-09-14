@@ -103,6 +103,9 @@ _FAIL_CLOSED_CLASS_PREFIXES = ("auth-", "public-", "demo-")
 # (read scope, write scope) from core.rbac.ROLE_SCOPES.
 SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "agents": ("agents:read", "agents:write"),
+    # Chat executes agents (bug sheet #53, 2026-09-14): a query needs the
+    # same write scope as ``POST /agents/{id}/run``; history is a read.
+    "chat": ("agents:read", "agents:write"),
     "workflows": ("workflows:read", "workflows:write"),
     "workflow_variants": ("workflows:read", "workflows:write"),
     "approvals": ("approvals:read", "approvals:write"),

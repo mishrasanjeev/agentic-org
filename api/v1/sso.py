@@ -249,7 +249,9 @@ async def sso_callback(
 
     # Establish the same cookie-first browser session used by password and
     # Google login. Never expose bearer material to browser JavaScript.
-    ui_base = settings.ui_base_url if hasattr(settings, "ui_base_url") else ""
+    # AGENTICORG_UI_BASE_URL: the UI may be served from another origin than
+    # the API (Cloud Run splits them); empty means same-origin.
+    ui_base = (settings.ui_base_url or "").rstrip("/")
     target = return_to or "/dashboard"
     if not target.startswith("/") or target.startswith("//"):
         target = "/dashboard"

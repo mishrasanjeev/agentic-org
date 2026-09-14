@@ -14,7 +14,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import func, select, update
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import (
     get_current_tenant,
@@ -424,6 +424,7 @@ def _agent_to_dict(agent: Agent) -> dict:
         "system_prompt_ref": agent.system_prompt_ref,
         "prompt_variables": agent.prompt_variables,
         "llm_model": agent.llm_model,
+        "llm_provider": getattr(agent, "llm_provider", None),
         "llm_fallback": agent.llm_fallback,
         "llm_config": agent.llm_config,
         "confidence_floor": float(agent.confidence_floor),
@@ -691,9 +692,13 @@ def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
     Codex 2026-04-22 audit gap #9 — the prompt audit trail did not record
-    who made the change. Claims carry either ``user_id`` (canonical) or
-    ``sub`` (email). Return a UUID when the claim is UUID-shaped;
-    otherwise None so a malformed claim doesn't blow up the update path.
+    who made the change. Human sessions carry the local ``User.id`` as
+    ``agenticorg:user_id``; ``user_id`` is accepted as a legacy spelling.
+    ``sub`` is deliberately NOT consulted (bug sheet #24, 2026-09-14): it
+    is an e-mail for local logins and an OIDC subject for SSO, and a
+    UUID-shaped OIDC subject is not a local user id. Return None when no
+    usable claim is present so a malformed claim doesn't blow up the
+    update path.
 
     Tolerant of non-dict inputs (e.g., the Depends() sentinel in direct-
     call tests) — any non-dict is treated as "no user", which is the
@@ -701,7 +706,7 @@ def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """
     if not isinstance(user, dict) or not user:
         return None
-    for key in ("user_id", "sub"):
+    for key in ("agenticorg:user_id", "user_id"):
         raw = user.get(key)
         if not raw:
             continue
@@ -709,6 +714,22 @@ def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
             return _uuid.UUID(str(raw))
         except (TypeError, ValueError):
             continue
+    return None
+
+
+def _pinned_llm_provider(llm_provider: object, llm_config: object) -> str | None:
+    """Catalog provider pinned on an agent: the column, else ``llm_config.provider``.
+
+    Anything that is not a non-empty string (unset column, legacy config,
+    a test double) means "no pin" so the runner resolves as it did before
+    the column existed (sheet #31, 2026-09-14).
+    """
+    if isinstance(llm_provider, str) and llm_provider.strip():
+        return llm_provider.strip()
+    if isinstance(llm_config, dict):
+        cfg_provider = llm_config.get("provider")
+        if isinstance(cfg_provider, str) and cfg_provider.strip():
+            return cfg_provider.strip()
     return None
 
 
@@ -790,7 +811,10 @@ def _derive_default_tools(
     When ``connector_names`` is provided but yields no intersection
     (a connector the type has no mapped defaults for), we fall back to
     the union of the connectors' tools.  When no ``connector_names`` are
-    given, we return the static defaults.
+    given, the agent gets NO tools (bug sheet #46, 2026-09-14): the
+    static defaults describe what a connector *could* offer, and handing
+    them to an agent with nothing linked advertised a tool surface that
+    the gateway could never execute.
 
     This is the single source of truth used by both ``POST /agents``
     auto-population and ``GET /agents/default-tools/{type}``.
@@ -803,7 +827,7 @@ def _derive_default_tools(
     )
 
     if not connector_names:
-        return list(static_defaults)
+        return []
 
     connector_index = _build_tool_index(connector_names=connector_names)
     connector_tool_names = set(connector_index.keys())
@@ -816,6 +840,70 @@ def _derive_default_tools(
     # a static mapping for. Return the connector tools directly so the
     # agent at least sees something runnable.
     return sorted(connector_tool_names)
+
+
+async def _record_cost_ledger(
+    tid: _uuid.UUID,
+    agent_id: _uuid.UUID,
+    perf: dict,
+    *,
+    count_zero_usage_task: bool = False,
+) -> bool:
+    """Upsert today's ``AgentCostLedger`` row (unique on tenant+agent+date).
+
+    Shared by ``POST /agents/{id}/run`` and ``POST /chat/query`` (bug sheet
+    #28, 2026-09-14: interactive chat turns never reached the ledger, so
+    budgets and cost dashboards under-counted every agent used from chat).
+
+    Returns False after logging when the write fails; callers decide how
+    to surface that (run flags ``budget_tracking_failed``, chat continues).
+    With ``count_zero_usage_task`` a turn that reported no tokens still
+    counts as a task; otherwise zero-usage runs write nothing (legacy).
+    """
+    try:
+        perf = perf if isinstance(perf, dict) else {}
+        cost_usd = float(perf.get("llm_cost_usd") or 0)
+        tokens_used = int(perf.get("llm_tokens_used") or 0)
+    except (TypeError, ValueError):
+        # A malformed usage report still counts the task; it just carries no
+        # tokens/cost rather than failing the caller.
+        cost_usd, tokens_used = 0.0, 0
+    if cost_usd <= 0 and tokens_used <= 0 and not count_zero_usage_task:
+        return True
+    try:
+        today = datetime.now(UTC).date()
+        async with get_tenant_session(tid) as session:
+            existing = await session.execute(
+                select(AgentCostLedger).where(
+                    AgentCostLedger.agent_id == agent_id,
+                    AgentCostLedger.tenant_id == tid,
+                    AgentCostLedger.period_date == today,
+                )
+            )
+            ledger = existing.scalar_one_or_none()
+            if ledger:
+                ledger.token_count = (ledger.token_count or 0) + tokens_used
+                ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
+                ledger.task_count = (ledger.task_count or 0) + 1
+            else:
+                session.add(
+                    AgentCostLedger(
+                        agent_id=agent_id,
+                        tenant_id=tid,
+                        cost_usd=cost_usd,
+                        token_count=tokens_used,
+                        task_count=1,
+                        period_date=today,
+                    )
+                )
+    except (OSError, RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.error(
+            "cost_ledger_write_failed",
+            agent_id=str(agent_id),
+            error=str(exc),
+        )
+        return False
+    return True
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -1333,8 +1421,9 @@ async def get_default_tools(
     - If ``connector_ids`` is supplied (comma-separated connector names,
       tolerant of the ``registry-<name>`` UI prefix), defaults are
       intersected with the tools those connectors actually expose.
-    - Otherwise the static ``_AGENT_TYPE_DEFAULT_TOOLS`` /
-      ``_DOMAIN_DEFAULT_TOOLS`` fallback is returned.
+    - Otherwise the list is empty (bug sheet #46, 2026-09-14): with no
+      connector linked there is nothing the gateway could execute, so the
+      static type/domain maps are never handed out on their own.
 
     ``tenant_id`` is required so the route sits behind the same auth gate
     as the rest of ``/agents`` and the tenant-scoping is explicit.
@@ -1362,9 +1451,18 @@ async def get_default_tools(
     idempotency="not-idempotent-agent-create",
     audit_event="agents.create",
 )
-async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_tenant)):
+async def create_agent(
+    body: AgentCreate,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+):
     tid = _uuid.UUID(tenant_id)
     company_uuid = _parse_company_id(body.company_id)
+    # Bug sheet #32/#50 (2026-09-14): the route is admin-only today, but the
+    # target domain is still checked server-side so a domain-limited caller
+    # can never create an agent outside their domain if the gate loosens.
+    if isinstance(user_domains, list) and body.domain and body.domain not in user_domains:
+        raise HTTPException(403, f"You do not have access to the '{body.domain}' domain.")
 
     initial_status = body.initial_status or "shadow"
 
@@ -1492,6 +1590,7 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             system_prompt_text=body.system_prompt_text,
             prompt_variables=body.prompt_variables,
             llm_model=body.llm.model,
+            llm_provider=body.llm.provider,
             llm_fallback=body.llm.fallback_model,
             llm_config=(
                 {**body.llm.model_dump(), "routing": body.llm_routing}
@@ -1525,7 +1624,15 @@ async def create_agent(body: AgentCreate, tenant_id: str = Depends(get_current_t
             connector_ids=connector_ids,
         )
         session.add(agent)
-        await session.flush()  # populate agent.id
+        try:
+            await session.flush()  # populate agent.id
+        except IntegrityError as exc:
+            # (tenant_id, agent_type, employee_name, version) is unique; a
+            # repeat create surfaced as an opaque E1001 500.
+            raise HTTPException(
+                409,
+                f"An agent named '{agent.employee_name}' of type '{agent.agent_type}' already exists",
+            ) from exc
 
         # Create initial AgentVersion snapshot
         version_row = AgentVersion(
@@ -1794,6 +1901,7 @@ async def delegate_to_agent(
     agent_id: UUID,
     body: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Set up Grantex delegation from parent to child agent.
 
@@ -1809,6 +1917,7 @@ async def delegate_to_agent(
         child = result.scalar_one_or_none()
         if not child:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(child, user_domains)
         if not child.parent_agent_id:
             raise HTTPException(400, "Agent has no parent — cannot set up delegation")
 
@@ -2055,6 +2164,7 @@ async def import_agents_csv(
 async def generate_agent(
     body: dict,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Generate agent config from a natural-language description.
 
@@ -2064,6 +2174,7 @@ async def generate_agent(
     is True, also creates the agent in shadow mode using the top suggestion.
     """
     from core.agent_generator import generate_agent_config
+    from core.llm.router import LLMProviderConfigurationError
 
     description = body.get("description", "")
     deploy = body.get("deploy", False)
@@ -2077,6 +2188,17 @@ async def generate_agent(
 
     try:
         result = await generate_agent_config(description)
+    except LLMProviderConfigurationError as exc:
+        # No tenant/platform LLM credentials: a configuration state the
+        # operator can fix, not an internal error. Previously this escaped
+        # as an opaque E1001 500 (bug sheet 2026-09-14 #50 local replay).
+        raise HTTPException(
+            503,
+            detail={
+                "error": "llm_provider_not_configured",
+                "message": "No LLM provider is configured for this workspace. Configure one in AI settings and retry.",
+            },
+        ) from exc
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc
 
@@ -2093,14 +2215,22 @@ async def generate_agent(
     if deploy and suggestions:
         top = suggestions[0]
         tid = _uuid.UUID(tenant_id)
+        # Bug sheet #32/#50 (2026-09-14): the domain is LLM-chosen and the
+        # route is reachable with agents:write, so a CFO could deploy an HR
+        # agent. Fail closed on the caller's domain list.
+        target_domain = top.get("domain", "")
+        if isinstance(user_domains, list) and target_domain not in user_domains:
+            raise HTTPException(403, f"You do not have access to the '{target_domain}' domain.")
 
-        # Build tools list
-        tools = top.get("suggested_tools", [])
-        if not tools:
-            tools = _AGENT_TYPE_DEFAULT_TOOLS.get(
-                top.get("agent_type", ""),
-                _DOMAIN_DEFAULT_TOOLS.get(top.get("domain", ""), []),
-            )
+        # Build tools list. A generated agent is created with no connector
+        # linked, so the #46 rule applies exactly as in
+        # ``_derive_default_tools(..., connector_names=None)``: no tools.
+        # ``suggested_tools`` is filled from the static type map by the
+        # generator, so granting it would re-introduce the unexecutable
+        # tool surface (bug sheet #46, 2026-09-14). The suggestion stays in
+        # the preview response for the user to grant once a connector is
+        # linked.
+        tools = _derive_default_tools(top.get("agent_type", ""), target_domain, None)
 
         async with get_tenant_session(tid) as session:
             if company_uuid is not None:
@@ -2123,9 +2253,11 @@ async def generate_agent(
                 system_prompt_text=top.get("system_prompt", ""),
                 prompt_variables={},
                 llm_model="gemini-2.5-flash",
+                llm_provider="gemini",
                 llm_fallback="gemini-2.5-flash-preview-05-20",
                 llm_config={
                     "model": "gemini-2.5-flash",
+                    "provider": "gemini",
                     "fallback_model": "gemini-2.5-flash-preview-05-20",
                 },
                 confidence_floor=Decimal(str(top.get("confidence_floor", 0.88))),
@@ -2264,10 +2396,15 @@ async def replace_agent(
             agent.system_prompt_text = new_prompt_text
         agent.prompt_variables = body.prompt_variables
         agent.llm_model = body.llm.model
+        agent.llm_provider = body.llm.provider
         agent.llm_fallback = body.llm.fallback_model
         agent.llm_config = body.llm.model_dump()
         agent.confidence_floor = Decimal(str(body.confidence_floor))
-        agent.hitl_condition = body.hitl_policy.condition
+        # ``hitl_policy`` has a default_factory, so a PUT that omits it
+        # silently reset the condition to "confidence < 0.88" (bug sheet
+        # #50, 2026-09-14). Only overwrite when the caller sent it.
+        if "hitl_policy" in body.model_fields_set:
+            agent.hitl_condition = body.hitl_policy.condition
         agent.max_retries = body.max_retries
         agent.authorized_tools = body.authorized_tools
         agent.output_schema = body.output_schema
@@ -2377,8 +2514,14 @@ async def update_agent(
                 f"You do not have access to the '{update_data['domain']}' domain.",
             )
 
-        # Prompt lock: reject prompt edits on active agents
-        prompt_changing = "system_prompt_text" in update_data or "system_prompt" in update_data
+        # Prompt lock: reject prompt edits on active agents. Amendments are
+        # appended to the effective prompt, so they are locked too (bug
+        # sheet #45 residual, 2026-09-14).
+        prompt_changing = (
+            "system_prompt_text" in update_data
+            or "system_prompt" in update_data
+            or "prompt_amendments" in update_data
+        )
         if prompt_changing and agent.status == "active":
             raise HTTPException(
                 409,
@@ -2391,6 +2534,10 @@ async def update_agent(
 
         if "name" in update_data:
             agent.name = update_data["name"]
+        # Validated above but never assigned before 2026-09-14 (bug sheet
+        # #52): a legitimate domain change silently no-op'd.
+        if "domain" in update_data:
+            agent.domain = update_data["domain"]
         if "system_prompt" in update_data:
             agent.system_prompt_ref = update_data["system_prompt"]
         if "system_prompt_text" in update_data:
@@ -2455,6 +2602,9 @@ async def update_agent(
             agent.confidence_floor = Decimal(str(update_data["confidence_floor"]))
         if "llm" in update_data and update_data["llm"] is not None:
             agent.llm_model = update_data["llm"]["model"]
+            # Sheet #31: an llm patch re-pins (or clears) the provider so a
+            # stale provider can never disagree with the new model.
+            agent.llm_provider = update_data["llm"].get("provider")
             agent.llm_fallback = update_data["llm"].get("fallback_model")
             agent.llm_config = update_data["llm"]
         # Persona fields
@@ -2517,6 +2667,7 @@ async def run_agent(
     agent_id: UUID,
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Instantiate agent from registry and execute against user input."""
     if payload is None:
@@ -2530,6 +2681,7 @@ async def run_agent(
         agent_row = result.scalar_one_or_none()
         if not agent_row:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent_row, user_domains)
         if agent_row.status == "retired":
             raise HTTPException(409, "Cannot run a retired agent")
         if _active_agent_below_production_floor(agent_row):
@@ -2941,6 +3093,7 @@ async def run_agent(
                     "context": payload.get("context", {}),
                 },
                 llm_model=agent_config.get("llm_model", ""),
+                llm_provider=_pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
                 confidence_floor=float(review_learning["effective_confidence_floor"]),
                 hitl_condition=(
                     ""
@@ -3042,10 +3195,9 @@ async def run_agent(
                 ),
                 priority="high" if task_confidence < 0.7 else "normal",
                 assignee_role=agent_config.get("domain", "admin"),
-                decision_options={
-                    "options": ["approve", "reject", "override"],
-                    "context": task_output,
-                },
+                # Bug sheet #44 (2026-09-14): the output lives once, in
+                # ``context["output"]`` — no duplicate under decision_options.
+                decision_options={"options": ["approve", "reject", "override"]},
                 context={
                     "correlation_id": correlation_id,
                     "run_id": msg_id,
@@ -3054,6 +3206,7 @@ async def run_agent(
                     "confidence": task_confidence,
                     "reasoning_trace": task_trace,
                     "trigger": hitl_trigger,
+                    "output": task_output,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
             )
@@ -3127,46 +3280,12 @@ async def run_agent(
             await session.commit()
 
     # 6d. Record cost in ledger (upsert — unique on tenant+agent+date)
-    cost_usd = perf.get("llm_cost_usd", 0)
-    tokens_used = perf.get("llm_tokens_used", 0)
-    if cost_usd > 0 or tokens_used > 0:
-        try:
-            today = datetime.now(UTC).date()
-            async with get_tenant_session(tid) as session:
-                existing = await session.execute(
-                    select(AgentCostLedger).where(
-                        AgentCostLedger.agent_id == agent_id,
-                        AgentCostLedger.tenant_id == tid,
-                        AgentCostLedger.period_date == today,
-                    )
-                )
-                ledger = existing.scalar_one_or_none()
-                if ledger:
-                    ledger.token_count = (ledger.token_count or 0) + tokens_used
-                    ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
-                    ledger.task_count = (ledger.task_count or 0) + 1
-                else:
-                    session.add(
-                        AgentCostLedger(
-                            agent_id=agent_id,
-                            tenant_id=tid,
-                            cost_usd=cost_usd,
-                            token_count=tokens_used,
-                            task_count=1,
-                            period_date=today,
-                        )
-                    )
-        except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
-            logger.error(
-                "cost_ledger_write_failed",
-                agent_id=str(agent_id),
-                error=str(exc),
-            )
-            # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
-            # Flag the result so downstream consumers (HITL, dashboards) know
-            # that budget tracking is unreliable for this run.
-            task_trace.append(f"WARNING: cost ledger write failed — {exc}")
-            hitl_trigger = hitl_trigger or "budget_tracking_failed"
+    if not await _record_cost_ledger(tid, agent_id, perf):
+        # AGENT-BUDGET-014: Cost ledger failures must not be silently ignored.
+        # Flag the result so downstream consumers (HITL, dashboards) know
+        # that budget tracking is unreliable for this run.
+        task_trace.append("WARNING: cost ledger write failed — see cost_ledger_write_failed log")
+        hitl_trigger = hitl_trigger or "budget_tracking_failed"
 
     # 7. Return result — canonical AgentRunResult shape.
     # See docs/api/agent-run-contract.md. `task_id` stays as a deprecated
@@ -3667,6 +3786,7 @@ async def rollback_agent(agent_id: UUID, tenant_id: str = Depends(get_current_te
         agent.hitl_condition = prev_version.hitl_policy.get("condition", agent.hitl_condition)
         agent.llm_config = prev_version.llm_config
         agent.llm_model = prev_version.llm_config.get("model", agent.llm_model)
+        agent.llm_provider = prev_version.llm_config.get("provider")
         agent.llm_fallback = prev_version.llm_config.get("fallback_model", agent.llm_fallback)
         agent.confidence_floor = prev_version.confidence_floor
         agent.version = prev_version.version
@@ -3756,6 +3876,7 @@ async def clone_agent(
             system_prompt_text=body.overrides.get("system_prompt_text", parent.system_prompt_text),
             prompt_variables=body.overrides.get("prompt_variables", parent.prompt_variables),
             llm_model=parent.llm_model,
+            llm_provider=parent.llm_provider,
             llm_fallback=parent.llm_fallback,
             llm_config=parent.llm_config,
             confidence_floor=Decimal(str(body.overrides.get("confidence_floor", parent.confidence_floor))),
@@ -3793,7 +3914,13 @@ async def clone_agent(
             org_level=body.overrides.get("org_level", parent.org_level),
         )
         session.add(clone)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            raise HTTPException(
+                409,
+                f"An agent named '{clone.employee_name}' of type '{clone.agent_type}' already exists",
+            ) from exc
 
         # Create initial version snapshot for clone
         version_row = AgentVersion(
@@ -3829,10 +3956,17 @@ async def clone_agent(
 async def get_prompt_history(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Return prompt edit audit trail for an agent."""
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
         result = await session.execute(
             select(PromptEditHistory)
             .where(
@@ -3871,6 +4005,7 @@ async def get_prompt_history(
 async def get_agent_budget(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Return current budget usage for an agent."""
     tid = _uuid.UUID(tenant_id)
@@ -3879,6 +4014,7 @@ async def get_agent_budget(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
         cost_controls = agent.cost_controls or {}
         monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0)
@@ -3942,6 +4078,7 @@ async def submit_agent_feedback(
     body: AgentFeedbackSubmit,
     tenant_id: str = Depends(get_current_tenant),
     user: dict = Depends(get_current_user),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Submit feedback (thumbs up/down, correction, HITL reject) for an agent run.
 
@@ -3952,11 +4089,12 @@ async def submit_agent_feedback(
 
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        exists = await session.execute(
-            select(Agent.id).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        )
-        if exists.scalar_one_or_none() is None:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if agent is None:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
     result = await submit_feedback(
         agent_id=str(agent_id),
@@ -3990,9 +4128,19 @@ async def list_agent_feedback(
     limit: int = 50,
     offset: int = 0,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """List feedback entries for an agent (paginated)."""
     from core.feedback.collector import list_feedback
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
     entries = await list_feedback(
         agent_id=str(agent_id),
@@ -4016,6 +4164,7 @@ async def list_agent_feedback(
 async def get_latest_explanation(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Derive a real, human-readable explanation of the agent's most recent
     run from stored `AgentTaskResult` data.
@@ -4043,6 +4192,12 @@ async def get_latest_explanation(
 
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
         row = (
             await session.execute(
                 select(AgentTaskResult)
@@ -4125,9 +4280,19 @@ async def get_latest_explanation(
 async def analyze_agent_feedback(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Trigger feedback analysis to generate prompt amendment suggestions."""
     from core.feedback.analyzer import analyze_feedback
+
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if agent is None:
+            raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
     result = await analyze_feedback(
         agent_id=str(agent_id),
@@ -4149,6 +4314,7 @@ async def analyze_agent_feedback(
 async def list_agent_amendments(
     agent_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """List current prompt amendments (learned rules) for an agent."""
     tid = _uuid.UUID(tenant_id)
@@ -4159,6 +4325,7 @@ async def list_agent_amendments(
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
+        _enforce_domain_access(agent, user_domains)
 
         # prompt_amendments is a JSONB list on the agent record
         raw = getattr(agent, "prompt_amendments", None) or []

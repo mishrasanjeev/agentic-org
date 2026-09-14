@@ -228,9 +228,11 @@ class TestDurableSubscriptions:
         from alembic.script import ScriptDirectory
 
         script = ScriptDirectory.from_config(Config("alembic.ini"))
-        # v6z19 (fresh-database repair for the same two tables) is the
-        # single head and chains off v6z18.
-        assert script.get_heads() == ["v6z19_repair_billing_cdc"]
+        # v6z19 (fresh-database repair for the same two tables) chains off
+        # v6z18. Later migrations may sit above it; pin the single-head
+        # invariant and the chain, not the identity of the current head.
+        assert len(script.get_heads()) == 1
+        assert "v6z19_repair_billing_cdc" in {r.revision for r in script.walk_revisions()}
         assert script.get_revision("v6z19_repair_billing_cdc").down_revision == "v6z18_billing_cdc_state"
         rev = script.get_revision("v6z18_billing_cdc_state")
         assert rev.down_revision == "v6z17_sessions_dsar"

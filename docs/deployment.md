@@ -81,6 +81,23 @@ Important behavior:
 - `--traffic manual` stages revisions only and prints exact traffic commands.
 - `--dry-run` prints planned service updates, migration behavior, and traffic
   actions without touching Cloud Run.
+- Worker and beat (`WORKER_SERVICE` / `BEAT_SERVICE`) roll on the API image
+  with `--command=python --args=scripts/run_worker.py` (resp.
+  `scripts/run_beat.py`) pinned, because the image's default CMD is uvicorn.
+
+Logs: every process (API, worker, beat) emits one JSON object per line via
+`core/logging_config.py` (`AGENTICORG_LOG_FORMAT=json|console`,
+`AGENTICORG_LOG_LEVEL`). Each API log line carries the `request_id` echoed on
+the `X-Request-ID` response header (a valid caller-supplied value is kept);
+Celery tasks enqueued during a request inherit the same `request_id`. SQL echo
+is off unless `AGENTICORG_DB_ECHO=1`.
+
+Grantex issuer: the Grantex origin (SDK base URL + JWKS host) resolves per
+environment in `core/config.py`. `AGENTICORG_ENV=staging|stage|preview|uat`
+uses `https://api-staging.grantex.dev`; production, development and local use
+`https://api.grantex.dev`. An explicit `GRANTEX_BASE_URL` overrides the origin
+and `AGENTICORG_GRANTEX_ISSUER` overrides the expected `iss`;
+`AGENTICORG_GRANTEX_AUDIENCE` is required in strict runtimes.
 
 The helper accepts manifest-list and platform digests from Artifact Registry by
 inspecting image manifests, then verifies that Cloud Run revision containers

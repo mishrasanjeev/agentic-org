@@ -162,6 +162,7 @@ async def test_auth_me_uses_verified_tenant_context_not_ambient_cookie() -> None
     )
     tenant = SimpleNamespace(
         id=tenant_id,
+        name="Member Org",
         settings={"onboarding_complete": True},
     )
     user_result = MagicMock()
@@ -194,6 +195,8 @@ async def test_auth_me_uses_verified_tenant_context_not_ambient_cookie() -> None
     assert profile["tenant_id"] == str(tenant_id)
     assert profile["email"] == user.email
     assert profile["onboarding_complete"] is True
+    # Bug sheet 2026-09-14 #27: the header shows the verified tenant's name.
+    assert profile["org_name"] == "Member Org"
     assert seen_tenants == [tenant_id]
 
 

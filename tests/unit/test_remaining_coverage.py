@@ -2256,10 +2256,21 @@ class TestAPIDeps:
         assert get_user_domains(request) == ["finance", "hr"]
 
     def test_get_user_domains_none(self):
+        """QA sheet 2026-09-14 #26: a human session with no domain claim and
+        no role fails closed to ``[]`` (was ``None`` == every domain)."""
         from api.deps import get_user_domains
 
         request = MagicMock()
         request.state.claims = {}
+        request.state.auth_mode = "legacy"
+        assert get_user_domains(request) == []
+
+    def test_get_user_domains_machine_credentials_stay_unrestricted(self):
+        from api.deps import get_user_domains
+
+        request = MagicMock()
+        request.state.claims = {"sub": "apikey:abc"}
+        request.state.auth_mode = "api_key"
         assert get_user_domains(request) is None
 
     def test_get_user_role(self):

@@ -2,6 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api, { extractApiError } from "@/lib/api";
+import {
+  formatLlmOption,
+  isFreeTextModelProvider,
+  selectableModels,
+  type LlmRegistryItem,
+} from "@/lib/llm-registry";
 
 /**
  * Tenant AI config — per-tenant LLM + embedding model selection.
@@ -15,15 +21,6 @@ import api, { extractApiError } from "@/lib/api";
  * The pickers are populated from GET /tenant-ai-settings/registry so
  * only catalog-approved (provider, model) combinations can be chosen.
  */
-
-interface LlmRegistryItem {
-  model: string;
-  context_window: number;
-  max_output_tokens: number;
-  supports_tools: boolean;
-  supports_vision: boolean;
-  notes: string;
-}
 
 interface EmbeddingRegistryItem {
   model: string;
@@ -138,8 +135,10 @@ export default function AIConfig() {
     }
   }
 
-  const llmModels =
-    registry && form.llm_provider ? registry.llm[form.llm_provider] || [] : [];
+  // Sheet #37: openai_compatible's only catalog entry is the "*" wildcard,
+  // so its model (and fallback) are free text instead of a one-item select.
+  const llmFreeText = isFreeTextModelProvider(form.llm_provider);
+  const llmModels = selectableModels(registry ? registry.llm : null, form.llm_provider);
   const embeddingModels =
     registry && form.embedding_provider
       ? registry.embedding[form.embedding_provider] || []
@@ -182,6 +181,7 @@ export default function AIConfig() {
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Provider</label>
                   <select
+                    data-testid="llm-provider-select"
                     className="w-full border rounded px-2 py-1.5 text-sm bg-background"
                     value={form.llm_provider}
                     onChange={(e) => setForm({ ...form, llm_provider: e.target.value, llm_model: "", llm_fallback_model: "" })}
@@ -194,35 +194,58 @@ export default function AIConfig() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Model</label>
-                  <select
-                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
-                    value={form.llm_model}
-                    onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
-                    disabled={!form.llm_provider}
-                  >
-                    <option value="">— Select —</option>
-                    {llmModels.map((m) => (
-                      <option key={m.model} value={m.model}>
-                        {m.model} · ctx {m.context_window.toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
+                  {llmFreeText ? (
+                    <input
+                      type="text"
+                      data-testid="llm-model-input"
+                      className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                      value={form.llm_model}
+                      onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
+                      placeholder="Model name served by your endpoint"
+                    />
+                  ) : (
+                    <select
+                      data-testid="llm-model-select"
+                      className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                      value={form.llm_model}
+                      onChange={(e) => setForm({ ...form, llm_model: e.target.value })}
+                      disabled={!form.llm_provider}
+                    >
+                      <option value="">— Select —</option>
+                      {llmModels.map((m) => (
+                        <option key={m.model} value={m.model}>
+                          {formatLlmOption(m)}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Fallback model</label>
-                  <select
-                    className="w-full border rounded px-2 py-1.5 text-sm bg-background"
-                    value={form.llm_fallback_model}
-                    onChange={(e) => setForm({ ...form, llm_fallback_model: e.target.value })}
-                    disabled={!form.llm_provider}
-                  >
-                    <option value="">— None —</option>
-                    {llmModels.map((m) => (
-                      <option key={m.model} value={m.model}>{m.model}</option>
-                    ))}
-                  </select>
+                  {llmFreeText ? (
+                    <input
+                      type="text"
+                      data-testid="llm-fallback-input"
+                      className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                      value={form.llm_fallback_model}
+                      onChange={(e) => setForm({ ...form, llm_fallback_model: e.target.value })}
+                      placeholder="Optional fallback model name"
+                    />
+                  ) : (
+                    <select
+                      className="w-full border rounded px-2 py-1.5 text-sm bg-background"
+                      value={form.llm_fallback_model}
+                      onChange={(e) => setForm({ ...form, llm_fallback_model: e.target.value })}
+                      disabled={!form.llm_provider}
+                    >
+                      <option value="">— None —</option>
+                      {llmModels.map((m) => (
+                        <option key={m.model} value={m.model}>{m.model}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs font-medium text-muted-foreground">Routing policy</label>

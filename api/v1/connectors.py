@@ -1521,6 +1521,21 @@ async def update_connector(
                 updates["base_url"],
             )
             _assert_public_base_url(updates["base_url"] or "")
+        new_name = updates.get("name")
+        if new_name and new_name != connector.name:
+            # (tenant_id, name) is unique; without this pre-check a rename
+            # onto an existing connector surfaced as an unhandled
+            # IntegrityError (HTTP 500) instead of the same 409 create uses.
+            dup = await session.execute(
+                select(Connector.id).where(
+                    Connector.tenant_id == tid,
+                    Connector.name == new_name,
+                    Connector.id != conn_id,
+                    Connector.status != "deleted",
+                )
+            )
+            if dup.scalar_one_or_none() is not None:
+                raise HTTPException(409, f"Connector '{new_name}' already exists")
         for field, value in updates.items():
             if field in _blocked_fields:
                 continue

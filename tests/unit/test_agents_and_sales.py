@@ -196,6 +196,8 @@ class TestAgentToDict:
             "id", "company_id", "name", "agent_type", "domain", "status", "version",
             "description", "system_prompt_ref", "prompt_variables",
             "llm_model", "llm_fallback", "llm_config",
+            # Bug sheet 2026-09-14 #31: explicit provider pin.
+            "llm_provider",
             "confidence_floor", "hitl_condition", "max_retries",
             "retry_backoff", "authorized_tools", "output_schema",
             "parent_agent_id", "shadow_comparison_agent_id",

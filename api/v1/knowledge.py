@@ -455,6 +455,37 @@ async def _db_store_doc(tenant_id: str, doc: dict[str, Any]) -> None:
         session.add(db_doc)
 
 
+async def _db_set_doc_status(
+    tenant_id: str,
+    doc_id: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Persist the final index status of a mirrored ``documents`` row."""
+    from uuid import UUID as _UUID
+
+    from sqlalchemy import update as _update
+
+    from core.database import get_tenant_session
+    from core.models.document import Document
+
+    tid = _UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        row = await session.get(Document, _UUID(doc_id))
+        if row is None:
+            return
+        meta = dict(row.metadata_ or {})
+        if error:
+            meta["ingestion_error"] = error
+        else:
+            meta.pop("ingestion_error", None)
+        await session.execute(
+            _update(Document)
+            .where(Document.id == row.id, Document.tenant_id == tid)
+            .values(status=status, metadata_=meta)
+        )
+
+
 async def _db_list_docs(tenant_id: str) -> list[dict[str, Any]]:
     """List documents from PostgreSQL."""
     from uuid import UUID as _UUID
@@ -783,9 +814,11 @@ async def upload_document(
             logger.info("knowledge_upload_ragflow", doc_id=rf_doc_id, filename=doc["filename"])
         except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_upload_failed_fallback_db", error=str(exc))
-            doc["status"] = DOC_STATUS_INDEXED
-    else:
-        doc["status"] = DOC_STATUS_INDEXED
+    # QA sheet 2026-09-14 #48: without a RAGFlow index the row stays
+    # ``processing`` until the native pgvector ingestion below succeeds;
+    # a failed ingestion is persisted as ``failed`` instead of ``indexed``,
+    # so search and the document list never advertise unindexed content.
+    native_index_pending = doc["status"] != DOC_STATUS_INDEXED
 
     # Session 5 TC-013: always mirror metadata to Postgres so the document
     # list survives a RAGFlow outage or a RAGFlow-side search lag. Without
@@ -832,8 +865,16 @@ async def upload_document(
             doc_id=doc["document_id"],
             chunks_indexed=ingest_result.chunks_indexed,
             embedding_model=ingest_result.embedding_model,
+            errors=ingest_result.errors,
         )
-        ingestion_status = "indexed"
+        if ingest_result.chunks_indexed > 0:
+            ingestion_status = "indexed"
+        else:
+            # ingest_document reports extraction/chunking/embedding failures
+            # as a result with zero chunks instead of raising. Zero chunks
+            # means nothing is searchable, so never call that "indexed".
+            ingestion_status = "failed"
+            ingestion_error = (ingest_result.errors or ["no_chunks_indexed"])[0]
     except UnsupportedMimeType as exc:
         # Defensive fallback. Extraction preflight above should make this
         # unreachable, but keep a truthful partial-index result if an
@@ -859,6 +900,24 @@ async def upload_document(
         )
         ingestion_status = "failed"
         ingestion_error = type(exc).__name__
+
+    if native_index_pending:
+        doc["status"] = DOC_STATUS_INDEXED if ingestion_status == "indexed" else DOC_STATUS_FAILED
+        try:
+            await _db_set_doc_status(tenant_id, doc["document_id"], doc["status"], ingestion_error)
+        except _DB_WRITE_ERRORS as exc:
+            logger.error("db_set_doc_status_failed", doc_id=doc["document_id"], error=str(exc))
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "document_status_persist_failed",
+                    "message": (
+                        "The document was stored but its index status could not be "
+                        "recorded. Retry before treating this document as searchable."
+                    ),
+                    "document_id": doc["document_id"],
+                },
+            ) from exc
 
     return DocumentOut(
         document_id=doc["document_id"],
@@ -1138,7 +1197,7 @@ async def _native_semantic_search(
                         "       COALESCE(metadata->>'content_text', '') AS content_text "
                         "FROM documents "
                         "WHERE tenant_id = :tid "
-                        "  AND status != 'deleted' "
+                        "  AND status = 'indexed' "
                         "  AND metadata->>'content_text' IS NOT NULL "
                         "  AND metadata->>'content_text' ILIKE :like "
                         "LIMIT :k"

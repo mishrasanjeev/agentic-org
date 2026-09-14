@@ -11,6 +11,7 @@ interface AuthUser {
   role: string;
   domain: string;
   tenant_id: string;
+  org_name?: string | null;
   onboardingComplete?: boolean;
 }
 

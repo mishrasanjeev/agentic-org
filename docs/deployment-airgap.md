@@ -93,7 +93,7 @@ curl -X POST http://localhost:8000/api/v1/chat \
 # Tag and push all images to your internal registry
 REGISTRY=registry.internal.local
 
-for img in agenticorg/api agenticorg/ui ollama/ollama pgvector/pgvector:pg16 redis:7-alpine minio/minio; do
+for img in agenticorg/api agenticorg/ui ollama/ollama pgvector/pgvector:pg16 redis:7-alpine quay.io/minio/minio; do
   docker tag $img $REGISTRY/$img
   docker push $REGISTRY/$img
 done

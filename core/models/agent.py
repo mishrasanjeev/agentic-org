@@ -71,6 +71,10 @@ class Agent(BaseModel):
     llm_model: Mapped[str] = mapped_column(
         String(100), nullable=False, default="claude-3-5-sonnet-20241022"
     )
+    # Bug sheet 2026-09-14 #31: explicit provider pin (catalog id such as
+    # ``gemini`` / ``anthropic`` / ``openai_compatible``). NULL on legacy
+    # rows means "infer from the model name" (pre-v6z20 behaviour).
+    llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     llm_fallback: Mapped[str | None] = mapped_column(String(100), nullable=True)
     llm_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     confidence_floor: Mapped[Decimal] = mapped_column(

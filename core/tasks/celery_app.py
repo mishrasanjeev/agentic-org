@@ -8,9 +8,12 @@ the platform uses via ``core.config.Settings``).
 from __future__ import annotations
 
 import os
+from typing import Any
 
+import structlog.contextvars
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import before_task_publish, setup_logging, task_postrun, task_prerun
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
@@ -156,6 +159,68 @@ app.conf.beat_schedule = {
 
 # ── Auto-discover tasks from the core.tasks package ─────────────────
 app.autodiscover_tasks(["core.tasks"])
+
+
+# ── Structured logging + request correlation (bug sheet 2026-09-14 #8) ─
+# Celery replaces the root logger's handlers at worker/beat startup unless
+# something is connected to ``setup_logging``; route it through the same
+# single-line JSON configuration the API uses.
+REQUEST_ID_HEADER = "request_id"
+# enterprise-gate: process-local-ok reason=per-worker-process-contextvar-reset-tokens-keyed-by-task-id
+_task_context_tokens: dict[str, Any] = {}
+
+
+@setup_logging.connect
+def _configure_celery_logging(**_kwargs: Any) -> None:
+    from core.logging_config import configure_logging
+
+    configure_logging()
+
+
+@before_task_publish.connect
+def propagate_request_id_to_task(headers: dict[str, Any] | None = None, **_kwargs: Any) -> None:
+    """Copy the caller's ``request_id`` contextvar into the task message headers."""
+    if headers is None:
+        return
+    request_id = structlog.contextvars.get_contextvars().get("request_id")
+    if request_id and not headers.get(REQUEST_ID_HEADER):
+        headers[REQUEST_ID_HEADER] = str(request_id)
+
+
+def _request_id_from_task(task: Any, task_id: str) -> str:
+    request = getattr(task, "request", None)
+    for source in (request, getattr(request, "headers", None)):
+        get = getattr(source, "get", None)
+        if callable(get):
+            value = get(REQUEST_ID_HEADER)
+            if value:
+                return str(value)
+    return str(task_id)
+
+
+@task_prerun.connect
+def bind_task_log_context(task_id: str = "", task: Any = None, **_kwargs: Any) -> None:
+    """Bind ``request_id`` (propagated header, else the task id) + task name."""
+    tokens = structlog.contextvars.bind_contextvars(
+        request_id=_request_id_from_task(task, task_id),
+        task_id=str(task_id),
+        task_name=str(getattr(task, "name", "") or ""),
+    )
+    _task_context_tokens[str(task_id)] = tokens
+
+
+@task_postrun.connect
+def clear_task_log_context(task_id: str = "", **_kwargs: Any) -> None:
+    """Restore the pre-task context (a bare worker context becomes empty again)."""
+    tokens = _task_context_tokens.pop(str(task_id), None)
+    if tokens is None:
+        structlog.contextvars.clear_contextvars()
+        return
+    try:
+        structlog.contextvars.reset_contextvars(**tokens)
+    except ValueError:
+        # Token created in another context (thread pool hand-off): fail safe.
+        structlog.contextvars.clear_contextvars()
 
 
 # ── Foundation #7 PR-E: hermetic-CI seam ────────────────────────────

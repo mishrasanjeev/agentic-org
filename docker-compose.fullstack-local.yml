@@ -1,0 +1,38 @@
+# docker-compose.fullstack-local.yml — run the COMPLETE containerized stack
+# (postgres, redis, minio, migrate, api, worker, beat) on a workstation that
+# already has services bound to 5432/6379/8000/9000.
+#
+#   docker compose -p agenticorg_fullstack \
+#     -f docker-compose.yml -f docker-compose.fullstack-local.yml up -d
+#
+# Stateful services get Docker-assigned host ports (read them back with
+# `docker compose ... port <svc> <port>`); the API is published on 8010.
+# App services reuse the image built by `docker compose build api`
+# (agenticorg-api:latest) and bind-mount the source, so a code-only change
+# does not force the 15-minute dependency rebuild. Rebuild after editing
+# pyproject.toml / Dockerfile.
+x-app-image: &app-image
+  image: agenticorg-api:latest
+  pull_policy: never
+
+services:
+  migrate:
+    <<: *app-image
+  worker:
+    <<: *app-image
+  beat:
+    <<: *app-image
+  postgres:
+    ports: !override
+      - "5432"
+  redis:
+    ports: !override
+      - "6379"
+  minio:
+    ports: !override
+      - "9000"
+      - "9001"
+  api:
+    <<: *app-image
+    ports: !override
+      - "8010:8000"

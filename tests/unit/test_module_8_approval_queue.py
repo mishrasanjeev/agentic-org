@@ -27,8 +27,9 @@ Pinned contracts:
   decision, the current user acts on behalf of the delegator;
   decision_by records the actual decider AND the delegated_from.
 - Role hierarchy is closed: staff=10, manager=20, auditor=25,
-  cfo/chro/cmo/coo/cbo=30, ceo=50, admin=100. Adding a new
-  role MUST be deliberate (otherwise unknown roles map to
+  cfo/chro/cmo/coo/cbo=30, ceo=50, admin=100, plus the rbac.py
+  provisioned roles merchant/domain_lead=30, analyst/developer=10.
+  Adding a new role MUST be deliberate (otherwise unknown roles map to
   level 0 and silently lose all approval authority).
 """
 
@@ -223,6 +224,12 @@ def test_tc_hitl_006_role_hierarchy_pinned_with_documented_levels() -> None:
         '"cbo": 30,',
         '"ceo": 50,',
         '"admin": 100,',
+        # QA sheet 2026-09-14 #25/#33: every role core/rbac.py can mint
+        # must have a level, or its approvers get "unknown role".
+        '"merchant": 30,',
+        '"domain_lead": 30,',
+        '"analyst": 10,',
+        '"developer": 10,',
     ):
         assert entry in src, f"_ROLE_HIERARCHY missing entry: {entry}"
 

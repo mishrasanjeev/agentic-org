@@ -4,7 +4,7 @@ export interface Agent {
   version: string; confidence_floor: number; shadow_sample_count: number;
   shadow_accuracy_current: number | null; created_at: string;
   description?: string; hitl_condition?: string; authorized_tools?: string[];
-  llm_model?: string; max_retries?: number; retry_backoff?: string;
+  llm_model?: string; llm_provider?: string | null; max_retries?: number; retry_backoff?: string;
   shadow_min_samples?: number; shadow_accuracy_floor?: number;
   cost_controls?: {
     monthly_cap_usd?: number;

@@ -6,6 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
 import api, { agentsApi } from "@/lib/api";
 import { extractReadableAgentOutput } from "@/lib/agent-output";
+import {
+  agentLlmProviders,
+  formatLlmOption,
+  inferProviderForModel,
+  isFreeTextModelProvider,
+  selectableModels,
+  useLlmRegistry,
+} from "@/lib/llm-registry";
 import type { Agent, PromptEditHistoryEntry } from "@/types";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -998,6 +1006,7 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editLlmProvider, setEditLlmProvider] = useState(agent.llm_provider || "");
   const [editLlmModel, setEditLlmModel] = useState(agent.llm_model || "");
   const [editMaxRetries, setEditMaxRetries] = useState(agent.max_retries ?? 3);
   const [editHitlCondition, setEditHitlCondition] = useState(agent.hitl_condition || "");
@@ -1005,31 +1014,20 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
     agent.confidence_floor != null ? Math.round(agent.confidence_floor * 100) : 70
   );
 
-  // Uday 2026-04-26 (BUG, gemini-2.0-flash deprecated):
-  // gemini-2.0-flash returned 404 NOT_FOUND ("no longer available to new
-  // users") on agent runs because the dropdown listed it as an option.
-  // Refreshed to the current generally-available models as of Apr 2026:
-  //   - Gemini 2.5 (flash + pro)
-  //   - GPT-4o family + o1/o3 reasoning models
-  //   - Claude Opus/Sonnet/Haiku 4.x
-  //   - Llama 3.3 70B
-  // Any older entry the user previously saved (e.g. gemini-2.0-flash on a
-  // pre-existing agent) is preserved by `editLlmModel` initial state, so
-  // they can still see and replace it from this list.
-  const LLM_OPTIONS = [
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
-    "gemini-2.5-flash-preview-05-20",
-    "gpt-4o",
-    "gpt-4o-mini",
-    "o3-mini",
-    "claude-opus-4-5",
-    "claude-sonnet-4-5",
-    "claude-haiku-4-5",
-    "llama-3.3-70b",
-  ];
+  // Uday 2026-04-26 (gemini-2.0-flash deprecated) and bug sheet 2026-09-14
+  // #34: the model list used to be hardcoded here and drifted from
+  // core/ai_providers/catalog.py (e.g. "claude-opus-4-5" is not a catalog
+  // id). Provider + model now come from the shared registry and the
+  // provider is saved explicitly. An older value the user previously saved
+  // is preserved by `editLlmModel` initial state (free-text fallback) so it
+  // can still be seen and replaced.
+  const { registry: llmRegistry } = useLlmRegistry();
+  const llmModelOptions = selectableModels(llmRegistry, editLlmProvider);
+  const llmModelIsSelect =
+    !!llmRegistry && !!editLlmProvider && !isFreeTextModelProvider(editLlmProvider) && llmModelOptions.length > 0;
 
   function startEditing() {
+    setEditLlmProvider(agent.llm_provider || inferProviderForModel(llmRegistry, agent.llm_model));
     setEditLlmModel(agent.llm_model || "");
     setEditMaxRetries(agent.max_retries ?? 3);
     setEditHitlCondition(agent.hitl_condition || "");
@@ -1046,8 +1044,8 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
         confidence_floor: editConfidenceFloor / 100,
         max_retries: editMaxRetries,
       };
-      if (editLlmModel) {
-        payload.llm = { model: editLlmModel };
+      if (editLlmModel.trim()) {
+        payload.llm = { model: editLlmModel.trim(), provider: editLlmProvider.trim() || undefined };
       }
       if (editHitlCondition) {
         payload.hitl_policy = { condition: editHitlCondition };
@@ -1069,6 +1067,7 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
   }
 
   const configRows: Array<{ label: string; value: string }> = [
+    { label: "LLM Provider", value: agent.llm_provider || "Inferred from model" },
     { label: "LLM Model", value: agent.llm_model || "Not specified" },
     { label: "Max Retries", value: agent.max_retries != null ? String(agent.max_retries) : "Default" },
     { label: "Retry Backoff", value: agent.retry_backoff || "Default" },
@@ -1091,19 +1090,64 @@ function ConfigTab({ agent, onUpdated }: { agent: Agent; onUpdated: () => Promis
       <CardContent className="space-y-4">
         {editing ? (
           <div className="space-y-4">
-            {/* LLM Model */}
+            {/* LLM Provider + Model (shared registry, sheet #34) */}
+            <div className="flex flex-col gap-1">
+              <label className="text-sm text-muted-foreground">LLM Provider</label>
+              {llmRegistry ? (
+                <select
+                  data-testid="llm-provider"
+                  value={editLlmProvider}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setEditLlmProvider(next);
+                    if (isFreeTextModelProvider(next)) {
+                      setEditLlmModel("");
+                    } else if (next) {
+                      const models = selectableModels(llmRegistry, next);
+                      if (!models.some((m) => m.model === editLlmModel)) setEditLlmModel(models[0]?.model ?? "");
+                    }
+                  }}
+                  className="border rounded px-3 py-1.5 text-sm"
+                >
+                  <option value="">Infer from model name (legacy)</option>
+                  {agentLlmProviders(llmRegistry).map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  data-testid="llm-provider"
+                  value={editLlmProvider}
+                  onChange={(e) => setEditLlmProvider(e.target.value)}
+                  placeholder="gemini / openai / anthropic / openai_compatible"
+                  className="border rounded px-3 py-1.5 text-sm"
+                />
+              )}
+            </div>
             <div className="flex flex-col gap-1">
               <label className="text-sm text-muted-foreground">LLM Model</label>
-              <select
-                value={editLlmModel}
-                onChange={(e) => setEditLlmModel(e.target.value)}
-                className="border rounded px-3 py-1.5 text-sm"
-              >
-                <option value="">Default (Gemini)</option>
-                {LLM_OPTIONS.map((model) => (
-                  <option key={model} value={model}>{model}</option>
-                ))}
-              </select>
+              {llmModelIsSelect ? (
+                <select
+                  data-testid="llm-model"
+                  value={editLlmModel}
+                  onChange={(e) => setEditLlmModel(e.target.value)}
+                  className="border rounded px-3 py-1.5 text-sm"
+                >
+                  {llmModelOptions.map((m) => (
+                    <option key={m.model} value={m.model}>{formatLlmOption(m)}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  data-testid="llm-model"
+                  value={editLlmModel}
+                  onChange={(e) => setEditLlmModel(e.target.value)}
+                  placeholder={isFreeTextModelProvider(editLlmProvider) ? "Model name served by your endpoint" : "Leave blank for default (Gemini)"}
+                  className="border rounded px-3 py-1.5 text-sm"
+                />
+              )}
             </div>
 
             {/* Max Retries */}

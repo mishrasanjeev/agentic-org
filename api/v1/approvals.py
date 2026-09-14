@@ -34,6 +34,15 @@ _ROLE_HIERARCHY: dict[str, int] = {
     "cbo": 30,
     "ceo": 50,
     "admin": 100,  # admin can VIEW all but DECIDE only on assigned (see decide endpoint)
+    # Roles provisioned by core/rbac.py (invite / SSO defaults) that the
+    # original map omitted (QA sheet 2026-09-14 #25/#33). They resolved to
+    # level 0, so every decision by these users failed with "unknown role".
+    # analyst/developer hold approvals:read only and are still stopped by
+    # scope enforcement; the level exists so the denial reason is honest.
+    "merchant": 30,
+    "domain_lead": 30,
+    "analyst": 10,
+    "developer": 10,
 }
 
 
@@ -339,6 +348,12 @@ async def decide(
     user_name = user_claims.get("name") or user_claims.get("email") or "unknown"
     if not user_id_str:
         raise HTTPException(401, "Cannot identify user — missing 'sub' claim")
+    # Password/Google/SSO tokens all carry ``agenticorg:user_id`` (User.id);
+    # a bare ``sub`` is an email and can never be a UUID.
+    try:
+        user_uuid: _uuid.UUID | None = _uuid.UUID(user_id_str)
+    except (ValueError, TypeError):
+        user_uuid = None
 
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -385,14 +400,14 @@ async def decide(
                 from core.models.delegation import UserDelegation
                 from core.models.user import User as UserModel
 
-                if user_id_str:
+                if user_uuid is not None:
                     now = _dt.now(_UTC)
                     deleg_rows = await session.execute(
                         select(UserDelegation, UserModel.role)
                         .join(UserModel, UserModel.id == UserDelegation.delegator_id)
                         .where(
                             UserDelegation.tenant_id == tid,
-                            UserDelegation.delegate_id == _uuid.UUID(user_id_str),
+                            UserDelegation.delegate_id == user_uuid,
                             UserDelegation.revoked_at.is_(None),
                             UserDelegation.starts_at <= now,
                         )
@@ -425,10 +440,9 @@ async def decide(
             raise HTTPException(403, f"Cannot decide on this approval: {reason}")
 
         # Apply decision with full attribution
-        try:
-            user_uuid = _uuid.UUID(user_id_str)
+        if user_uuid is not None:
             item.decision_by = user_uuid
-        except (ValueError, TypeError):
+        else:
             # Non-UUID sub claim — store None but log
             _log.warning("hitl_decide_non_uuid_user", user_id=user_id_str)
 

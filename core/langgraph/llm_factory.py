@@ -17,6 +17,7 @@ import socket
 import structlog
 from langchain_core.language_models import BaseChatModel
 
+from core.ai_providers.catalog import find_llm, validate_llm_selection
 from core.llm.router import LLMProviderConfigurationError, smart_router
 
 logger = structlog.get_logger()
@@ -44,6 +45,7 @@ def create_chat_model(
     query: str = "",
     routing_config: dict | None = None,
     tenant_id: str | None = None,
+    provider: str | None = None,
 ) -> BaseChatModel:
     """Create a LangChain ChatModel, optionally using smart routing.
 
@@ -69,7 +71,15 @@ def create_chat_model(
         query: The user query / task text.  Passed to the router for
                complexity classification when routing is enabled.
         routing_config: Optional dict from the agent's ``llm_config``
-                        (may contain ``routing`` key).
+                        (may contain ``routing`` and ``provider`` keys).
+        provider: Explicit catalog provider id (``gemini`` / ``openai`` /
+                  ``anthropic`` / ``openai_compatible``). Bug sheet
+                  2026-09-14 #31: when set (directly or via
+                  ``routing_config["provider"]``) the provider is never
+                  inferred from the model name and an unknown model is
+                  never downgraded to the Gemini default — a mismatch
+                  raises ``ValueError``. ``None`` keeps the legacy
+                  inference for rows that predate ``agents.llm_provider``.
 
     Returns:
         A LangChain ``BaseChatModel`` ready for ``.ainvoke()``.
@@ -77,6 +87,7 @@ def create_chat_model(
     routing_config = routing_config or {}
     routing_mode = routing_config.get("routing", os.getenv("AGENTICORG_LLM_ROUTING", "auto"))
     llm_mode = _get_llm_mode()
+    provider = _normalise_provider(provider or routing_config.get("provider"))
 
     # ── Handle explicit ollama:/vllm: prefixes regardless of mode ────
     if model.startswith("ollama:"):
@@ -123,15 +134,34 @@ def create_chat_model(
             # so "disabled" routing can fall back to it
             cfg = {**routing_config, "llm_model": model}
             routed_model = smart_router.route(query=query, config=cfg)
-            if routed_model:
+            if routed_model and provider and find_llm(provider, routed_model) is None:
+                # A pinned provider must not be crossed by tier routing.
+                logger.info(
+                    "smart_routing_ignored_provider_pinned",
+                    provider=provider,
+                    routed_model=routed_model,
+                    model=model,
+                )
+            elif routed_model:
                 model = routed_model
         # enterprise-gate: broad-except-ok reason=smart-routing-failure-falls-back-to-explicit-model
         except Exception as exc:  # noqa: BLE001
             logger.warning("smart_routing_failed", error=str(exc), fallback=model)
             # Fall through to normal model resolution
 
+    if provider:
+        # Explicit provider pins dispatch: validate the pair against the
+        # catalog (ValueError on mismatch) instead of substring-guessing.
+        provider, resolved = validate_llm_selection(provider, model)
+        return _build_model(resolved, temperature, max_tokens, tenant_id=tenant_id, provider=provider)
+
     resolved = _resolve_model(model)
     return _build_model(resolved, temperature, max_tokens, tenant_id=tenant_id)
+
+
+def _normalise_provider(value: object) -> str | None:
+    clean = str(value or "").strip().lower()
+    return clean or None
 
 
 def _build_ollama_model(model_name: str, temperature: float, max_tokens: int) -> BaseChatModel:
@@ -164,14 +194,16 @@ def _build_vllm_model(model_name: str, temperature: float, max_tokens: int) -> B
     )
 
 
-def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
-    """Resolve the API key for a cloud LLM provider.
+def _resolve_cloud_credential(provider: str, tenant_id: str | None = None):
+    """Resolve the tenant-aware credential record for a cloud LLM provider.
 
     S0-08 (PR-2): the earlier version read ``os.getenv(...)`` directly.
     Route through the tenant-aware resolver so BYO tokens and the
     tenant's ``ai_fallback_policy`` take effect. On any resolver error
-    we fall back to the env var so callers that run outside a tenant
-    context (cron, boot probes) still function.
+    we return ``None`` so callers that run outside a tenant context
+    (cron, boot probes) surface a clear provider-not-configured error.
+    Returns the full ``ResolvedCredential`` because ``openai_compatible``
+    also needs the non-secret ``provider_config.base_url``.
     """
     from core.ai_providers.resolver import (
         ProviderNotConfigured,
@@ -179,17 +211,139 @@ def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
     )
 
     try:
-        resolved = get_provider_credential_sync(tenant_id, provider, "llm")
-        return resolved.secret
+        return get_provider_credential_sync(tenant_id, provider, "llm")
     except ProviderNotConfigured:
-        # No tenant BYO and no platform env — let the caller's client
-        # library surface the usual "missing API key" error so the
-        # symptom is actionable.
-        return ""
+        # No tenant BYO and no platform env — let the caller raise the
+        # provider-specific configuration error so the symptom is actionable.
+        return None
     # enterprise-gate: broad-except-ok reason=llm-key-resolver-failure-returns-provider-unavailable
     except Exception as exc:
         logger.warning("llm_key_resolve_failed", provider=provider, error=str(exc))
-        return ""
+        return None
+
+
+def _resolve_cloud_api_key(provider: str, tenant_id: str | None = None) -> str:
+    """Resolve the API key for a cloud LLM provider ("" when unavailable)."""
+    resolved = _resolve_cloud_credential(provider, tenant_id)
+    return resolved.secret if resolved is not None else ""
+
+
+def _build_gemini_model(
+    model_name: str, temperature: float, max_tokens: int, tenant_id: str | None
+) -> BaseChatModel:
+    api_key = _resolve_cloud_api_key("gemini", tenant_id)
+    if not api_key:
+        raise LLMProviderConfigurationError("Gemini provider is not configured")
+
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    return ChatGoogleGenerativeAI(
+        model=model_name,
+        temperature=temperature,
+        max_output_tokens=max_tokens,
+        google_api_key=api_key,
+    )
+
+
+def _build_anthropic_model(
+    model_name: str, temperature: float, max_tokens: int, tenant_id: str | None
+) -> BaseChatModel:
+    api_key = _resolve_cloud_api_key("anthropic", tenant_id)
+    if not api_key:
+        raise LLMProviderConfigurationError("Anthropic provider is not configured")
+
+    from langchain_anthropic import ChatAnthropic
+
+    return ChatAnthropic(  # type: ignore[call-arg]
+        model_name=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        anthropic_api_key=api_key,
+    )
+
+
+def _build_openai_model(
+    model_name: str, temperature: float, max_tokens: int, tenant_id: str | None
+) -> BaseChatModel:
+    api_key = _resolve_cloud_api_key("openai", tenant_id)
+    if not api_key:
+        raise LLMProviderConfigurationError("OpenAI provider is not configured")
+
+    from langchain_openai import ChatOpenAI
+
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        openai_api_key=api_key,
+    )
+
+
+def _build_openai_compatible_model(
+    model_name: str, temperature: float, max_tokens: int, tenant_id: str | None
+) -> BaseChatModel:
+    """Bug sheet 2026-09-14 #38: dispatch for the catalog's ``openai_compatible`` provider.
+
+    ``base_url`` comes from the tenant's saved BYO credential
+    (``tenant_ai_credentials.provider_config.base_url`` — the record the
+    AI Credentials save path validates as a public HTTPS host and the
+    health probe exercises). There is no platform env fallback for this
+    provider, so a tenant without that credential fails closed with a
+    clear configuration error rather than hitting the wrong endpoint.
+    The health probe treats ``base_url`` as the endpoint root
+    (``{base_url}/v1/models``), so the ``/v1`` prefix is appended here
+    when the admin did not include it.
+    """
+    resolved = _resolve_cloud_credential("openai_compatible", tenant_id)
+    if resolved is None or not resolved.secret:
+        raise LLMProviderConfigurationError(
+            "openai_compatible provider is not configured: register a BYO credential "
+            "with provider_config.base_url under AI Credentials"
+        )
+    base_url = str((resolved.provider_config or {}).get("base_url") or "").strip().rstrip("/")
+    if not base_url:
+        raise LLMProviderConfigurationError(
+            "openai_compatible provider requires provider_config.base_url on the tenant AI credential"
+        )
+    if not base_url.lower().startswith("https://"):
+        raise LLMProviderConfigurationError(
+            "openai_compatible provider_config.base_url must be an https:// endpoint"
+        )
+    if not base_url.endswith("/v1"):
+        base_url = base_url + "/v1"
+
+    from langchain_openai import ChatOpenAI
+
+    logger.info("building_openai_compatible_model", model=model_name, base_url=base_url)
+    return ChatOpenAI(
+        model=model_name,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        openai_api_key=resolved.secret,
+        openai_api_base=base_url,
+    )
+
+
+def _build_provider_model(
+    provider: str,
+    model_name: str,
+    temperature: float,
+    max_tokens: int,
+    tenant_id: str | None,
+) -> BaseChatModel:
+    """Dispatch strictly by catalog provider id (no model-name inference)."""
+    if provider == "gemini":
+        return _build_gemini_model(model_name, temperature, max_tokens, tenant_id)
+    if provider == "anthropic":
+        return _build_anthropic_model(model_name, temperature, max_tokens, tenant_id)
+    if provider == "openai":
+        return _build_openai_model(model_name, temperature, max_tokens, tenant_id)
+    if provider == "openai_compatible":
+        return _build_openai_compatible_model(model_name, temperature, max_tokens, tenant_id)
+    raise LLMProviderConfigurationError(
+        f"LLM provider {provider!r} has no runtime dispatch; "
+        "use gemini, anthropic, openai or openai_compatible"
+    )
 
 
 def _build_model(
@@ -197,6 +351,7 @@ def _build_model(
     temperature: float,
     max_tokens: int,
     tenant_id: str | None = None,
+    provider: str | None = None,
 ) -> BaseChatModel:
     """Instantiate the correct LangChain ChatModel for *resolved* model name.
 
@@ -205,7 +360,13 @@ def _build_model(
     take effect. Sync-over-async via a short-lived threadpool —
     expensive per call only when the resolver cache misses (60-120s
     TTL).
+
+    When ``provider`` is given the dispatch is by provider id only. The
+    substring inference below is the legacy path for rows without an
+    explicit provider.
     """
+    if provider:
+        return _build_provider_model(provider, resolved, temperature, max_tokens, tenant_id)
 
     # Local models via Ollama (OpenAI-compatible API)
     if _is_ollama_model(resolved):
@@ -217,62 +378,18 @@ def _build_model(
 
     # Cloud: Gemini
     if "gemini" in resolved:
-        api_key = _resolve_cloud_api_key("gemini", tenant_id)
-        if not api_key:
-            raise LLMProviderConfigurationError("Gemini provider is not configured")
-
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        return ChatGoogleGenerativeAI(
-            model=resolved,
-            temperature=temperature,
-            max_output_tokens=max_tokens,
-            google_api_key=api_key,
-        )
+        return _build_gemini_model(resolved, temperature, max_tokens, tenant_id)
 
     # Cloud: Claude
     if "claude" in resolved:
-        api_key = _resolve_cloud_api_key("anthropic", tenant_id)
-        if not api_key:
-            raise LLMProviderConfigurationError("Anthropic provider is not configured")
-
-        from langchain_anthropic import ChatAnthropic
-
-        return ChatAnthropic(  # type: ignore[call-arg]
-            model_name=resolved,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            anthropic_api_key=api_key,
-        )
+        return _build_anthropic_model(resolved, temperature, max_tokens, tenant_id)
 
     # Cloud: GPT
     if "gpt" in resolved:
-        api_key = _resolve_cloud_api_key("openai", tenant_id)
-        if not api_key:
-            raise LLMProviderConfigurationError("OpenAI provider is not configured")
-
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=resolved,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            openai_api_key=api_key,
-        )
+        return _build_openai_model(resolved, temperature, max_tokens, tenant_id)
 
     # Default fallback — Gemini Flash (free)
-    api_key = _resolve_cloud_api_key("gemini", tenant_id)
-    if not api_key:
-        raise LLMProviderConfigurationError("Gemini provider is not configured")
-
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
-        temperature=temperature,
-        max_output_tokens=max_tokens,
-        google_api_key=api_key,
-    )
+    return _build_gemini_model("gemini-2.5-flash", temperature, max_tokens, tenant_id)
 
 
 def _resolve_model(model: str) -> str:
