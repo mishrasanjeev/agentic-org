@@ -5,6 +5,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Secret scanning with gitleaks 8.30.1 on every pull request, every push to
+  `main` and weekly over the full history, plus a pre-commit hook and a
+  `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
+  scanning" in `CONTRIBUTING.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

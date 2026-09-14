@@ -33,6 +33,7 @@ SKIP_MYPY=${SKIP_MYPY:-0}
 SKIP_MODULE_COV=${SKIP_MODULE_COV:-0}
 SKIP_CONSISTENCY=${SKIP_CONSISTENCY:-0}
 SKIP_TAG_CHECK=${SKIP_TAG_CHECK:-0}
+SKIP_SECRETS=${SKIP_SECRETS:-0}
 
 if [[ "${1:-}" == "--fast" ]]; then
   FAST=1
@@ -126,6 +127,21 @@ bandit_check() {
     return 0
   fi
   python -m bandit -r core/ connectors/ api/ auth/ -ll -q
+}
+
+# ---------------------------------------------------------------------------
+# 3b. Secret scan — the commits this branch adds on top of origin/main, with
+#     the same pinned gitleaks and script as .github/workflows/secret-scan.yml.
+#     Fails closed when gitleaks is missing; install it or SKIP_SECRETS=1.
+# ---------------------------------------------------------------------------
+secret_scan() {
+  if [[ "$SKIP_SECRETS" == "1" ]]; then
+    echo "[preflight] skipped (SKIP_SECRETS=1)"
+    return 0
+  fi
+  local base
+  base=$(git merge-base origin/main HEAD)
+  bash scripts/scan-secrets.sh range "$base" HEAD
 }
 
 # ---------------------------------------------------------------------------
@@ -272,6 +288,7 @@ run_step "branch safety"          branch_check
 run_step "ruff (whole tree)"      ruff_check
 run_step "mypy (whole tree)"      mypy_check
 run_step "bandit (api/auth/core)" bandit_check
+run_step "secret scan (branch)"   secret_scan
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
 run_step "enterprise stability"   enterprise_stability_gate

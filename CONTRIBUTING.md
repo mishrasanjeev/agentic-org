@@ -34,6 +34,41 @@ cp .env.example .env
 pytest tests/unit/
 ```
 
+### Secret scanning
+
+Every pull request, every push to `main` and a weekly full-history run are
+scanned with [gitleaks](https://github.com/gitleaks/gitleaks) 8.30.1
+(`.github/workflows/secret-scan.yml`). `scripts/preflight.sh` runs the same
+scan over your branch. Install gitleaks 8.30.1 locally, then install the hooks
+once per clone:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+Run the checks by hand:
+
+```bash
+bash scripts/scan-secrets.sh range "$(git merge-base origin/main HEAD)" HEAD
+bash scripts/scan-secrets.sh history
+bash scripts/test-scan-secrets.sh     # scanner self-test
+```
+
+The scanner fails closed: a missing or different gitleaks version, an unknown
+mode or an unresolvable commit is an error, not a pass.
+
+If a scan reports a finding:
+
+1. **A live credential** — revoke or rotate it first, then remove it from the
+   branch. Rewriting history does not un-leak a pushed secret; rotation does.
+   Report it privately as described in [SECURITY.md](SECURITY.md).
+2. **A placeholder** (a test fixture or documentation example) — prefer
+   changing it so it no longer looks like a credential. If it must stay,
+   append `gitleaks:allow` as a comment on that line, or add its fingerprint
+   (printed with the finding) to `.gitleaksignore` and say why in the pull
+   request.
+
 ### UI Development
 
 ```bash

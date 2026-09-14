@@ -1,0 +1,31 @@
+# Findings triaged as placeholders when secret scanning was introduced
+# (2026-09-14): test fixtures, documentation examples, idempotency keys,
+# TTL argument names and release-evidence digests. None is a live credential.
+#
+# One fingerprint per line: <commit>:<file>:<rule>:<line>. Only add an entry
+# after confirming the value is not a live credential. A live credential is
+# rotated first and then removed; it is never silenced here. See
+# CONTRIBUTING.md ("Secret scanning").
+090c01b88c90ef000c011db950418f29265b48cf:docs/api-reference.md:generic-api-key:365
+0a68dd115b3e3625543b22ff1ddaa108cc137a81:ui/scripts/seo-generators.test.mjs:generic-api-key:155
+120629bc6ffe6486de5f3523d546f30381d4cf6f:docs/reports/commerce-agent-real-staging-evidence.md:generic-api-key:37
+1da0e33a56cdd99c3ee236af05e409efcfbacba2:tests/integration/conftest.py:generic-api-key:38
+31496ae0c25c87a60422e9c13e9b091c9ced7f44:agentic-org-scope-enforcement-fix.md:generic-api-key:770
+31496ae0c25c87a60422e9c13e9b091c9ced7f44:tests/unit/test_scope_enforcement.py:generic-api-key:283
+33d01b795beeaf2a51eb85a0f4570ed894719823:ui/scripts/seo-generators.test.mjs:generic-api-key:155
+5c28a8d3fb272ee588a54bb387e0e4c2f642071a:docs/reports/commerce-agent-real-staging-evidence.md:generic-api-key:37
+6542bdd7db067a0b96fc28e9643979cda9ef8bcd:tests/unit/test_cmo_chaos_failure_modes.py:generic-api-key:42
+6542bdd7db067a0b96fc28e9643979cda9ef8bcd:tests/unit/test_cmo_e2e_scenarios.py:generic-api-key:40
+7cb8504c20af5b1f9d3bc23fbacc20b4ad7f6117:tests/regression/test_billing_stripe_runtime_prereqs.py:stripe-access-token:20
+7cb8504c20af5b1f9d3bc23fbacc20b4ad7f6117:tests/regression/test_billing_stripe_runtime_prereqs.py:stripe-access-token:41
+7cc7bc6f54bf477a851c094c56a61786480ac8f1:tests/integration/conftest.py:generic-api-key:38
+80d46441614a92a746ed05823211582b980b8b28:tests/unit/test_cmo_chaos_failure_modes.py:generic-api-key:42
+80d46441614a92a746ed05823211582b980b8b28:tests/unit/test_cmo_e2e_scenarios.py:generic-api-key:40
+a3adaf306e8a636831c61834bed568a51480f2c5:docs/reports/oacp-runtime-launch-evidence.local.json:generic-api-key:101
+c0fa94080081b3ea32b3e638346bb3be03a9e2eb:api/v1/auth.py:generic-api-key:459
+c0fa94080081b3ea32b3e638346bb3be03a9e2eb:api/v1/org.py:generic-api-key:194
+cc26072867db1855c25d72bdf23985f8220c5e1e:tests/regression/test_billing_stripe_runtime_prereqs.py:stripe-access-token:20
+cc26072867db1855c25d72bdf23985f8220c5e1e:tests/regression/test_billing_stripe_runtime_prereqs.py:stripe-access-token:41
+cc778fc6e9c6659cbaf9db08445053e552bb39ba:api/v1/auth.py:generic-api-key:459
+cc778fc6e9c6659cbaf9db08445053e552bb39ba:api/v1/org.py:generic-api-key:194
+e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-staging-evidence.md:generic-api-key:37
