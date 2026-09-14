@@ -24,6 +24,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   127.0.0.1, no credentials needed), waits for health and runs a smoke test.
   `make down`, `make clean`, `make logs` and `make ps` manage it. See
   `docs/quickstart-local.md`.
+- `ScriptedChatModel` and the `scripted_model` test fixture: fixed tool-call
+  sequences for testing agent graph mechanics (tools, interrupts, resume)
+  without model text. A script that is overrun, calls an unbound tool or is
+  left partly unused fails the test. See `docs/hermetic_test_doubles.md`.
 - Record and replay for model calls (`AGENTICORG_MODEL_MODE` =
   `live`/`record`/`replay`) covering LangGraph agents and `LLMRouter`
   completions. Cassettes are keyed by a hash of the rendered request, so a

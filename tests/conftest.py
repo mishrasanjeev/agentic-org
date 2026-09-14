@@ -188,3 +188,27 @@ def model_cassette(request):
     name = "".join(ch if ch.isalnum() or ch in "-_." else "_" for ch in request.node.name)
     with cassette_scope(CASSETTE_ROOT / module / name) as directory:
         yield directory
+
+
+@pytest.fixture
+def scripted_model(monkeypatch):
+    """Install scripted model turns where agent graphs build their model.
+
+    Call it with a list of steps (``tool_call(...)``, ``final(...)`` or a
+    callable taking the messages); it returns the ``ScriptedChatModel``. The
+    test fails if the graph asks for more turns than scripted or leaves steps
+    unused. See core/test_doubles/scripted_model.py.
+    """
+    from core.test_doubles.scripted_model import ScriptedChatModel
+
+    installed: list[ScriptedChatModel] = []
+
+    def install(steps):
+        model = ScriptedChatModel(steps=steps)
+        installed.append(model)
+        monkeypatch.setattr("core.langgraph.agent_graph.create_chat_model", lambda *a, **k: model)
+        return model
+
+    yield install
+    for model in installed:
+        model.assert_consumed()
