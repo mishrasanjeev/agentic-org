@@ -1,0 +1,64 @@
+name: Container Scan
+
+# Builds the API and console images, scans each with a pinned Trivy and
+# publishes a CycloneDX SBOM per image. Fails on HIGH or CRITICAL
+# vulnerabilities that have a fixed version, except dated entries in
+# .trivyignore.yaml. See CONTRIBUTING.md ("Container scanning").
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "30 19 * * *"   # nightly, alongside the other security scans
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan ${{ matrix.image.name }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: api
+            dockerfile: Dockerfile
+          - name: ui
+            dockerfile: Dockerfile.ui
+    env:
+      TRIVY_VERSION: 0.74.0
+      TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install pinned Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" trivy
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Self-test the scanner
+        if: matrix.image.name == 'api'
+        run: bash scripts/test-scan-container.sh
+      - name: Build ${{ matrix.image.name }} image
+        run: docker build -f "${{ matrix.image.dockerfile }}" -t "agenticorg-${{ matrix.image.name }}:scan" .
+      - name: Scan image and write SBOM
+        run: >-
+          bash scripts/scan-container.sh image
+          "agenticorg-${{ matrix.image.name }}:scan"
+          "agenticorg-${{ matrix.image.name }}.cdx.json"
+      - name: Upload SBOM
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: agenticorg-${{ matrix.image.name }}-sbom
+          path: agenticorg-${{ matrix.image.name }}.cdx.json
+          if-no-files-found: ignore

@@ -1,0 +1,42 @@
+# Accepted container-scan exceptions for scripts/scan-container.sh.
+#
+# Every entry names the exact package (purl), says why it is accepted and
+# expires. An expired entry stops applying and the scan fails again, so an
+# exception is renewed deliberately or the finding is fixed. See
+# CONTRIBUTING.md ("Container scanning") and FINDINGS.md.
+vulnerabilities:
+  - id: CVE-2026-53612
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-53613
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-53614
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-76642
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-78408
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-78409
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14
+  - id: CVE-2026-78410
+    purls:
+      - "pkg:apk/alpine/libuuid@2.42.1-r0?arch=x86_64&distro=3.24.1"
+    statement: "util-linux libuuid in the pinned nginx:alpine base of the console image (Dockerfile.ui); fixed by moving the digest to a build with libuuid 2.42.3-r1 or later. FINDINGS.md A-1."
+    expired_at: 2026-10-14

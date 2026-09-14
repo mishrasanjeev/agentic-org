@@ -65,27 +65,12 @@ jobs:
           npm ci
           npm audit --audit-level=moderate
 
-  docker-scan:
-    name: Container Image Scan
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Build API image
-        run: docker build -t agenticorg-api:scan .
-
-      - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: "agenticorg-api:scan"
-          format: "table"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: true
-          exit-code: "1"
+  # Container images are scanned by container-scan.yml, which runs on pull
+  # requests, pushes to main and nightly.
 
   summary:
     name: Security Report
-    needs: [python-audit, npm-audit, docker-scan]
+    needs: [python-audit, npm-audit]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -99,7 +84,7 @@ jobs:
           echo "|---------|--------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| Python dependency/SAST audit | ${{ needs.python-audit.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Node dependency audit | ${{ needs.npm-audit.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Container Trivy scan | ${{ needs.docker-scan.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Container scan | see the Container Scan workflow |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail when any security job fails
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

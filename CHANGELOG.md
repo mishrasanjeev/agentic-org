@@ -12,6 +12,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - New source files must carry `SPDX-License-Identifier: Apache-2.0` in their
   first five lines; enforced on pull requests and in `scripts/preflight.sh`.
   Existing files are unaffected. See "Licence headers" in `CONTRIBUTING.md`.
+- Container scanning of both the API and console images on every pull
+  request, push to `main` and nightly (previously the API image only, nightly
+  only), with a pinned Trivy 0.74.0, dated exceptions in `.trivyignore.yaml`
+  and a CycloneDX SBOM artifact per image. See "Container scanning" in
+  `CONTRIBUTING.md`. The console image's seven base-image `libuuid` findings
+  are tracked in `FINDINGS.md` with exceptions expiring 2026-10-14.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
