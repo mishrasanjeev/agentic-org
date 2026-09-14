@@ -20,8 +20,11 @@ owner is deleted keeps ``visibility='personal'`` with no owner, which makes
 it visible to tenant admins only (fail closed), never to other users.
 
 Idempotent and guarded: each statement runs only when its table exists and
-uses ``IF NOT EXISTS`` / constraint-name checks, so a re-run or a database
-already shaped by ``metadata.create_all`` is a no-op. Adding nullable
+uses ``IF NOT EXISTS`` checks. Foreign keys are guarded by *column* (any FK
+already on the column), not by name: ``scripts/alembic_migrate.py`` bootstraps
+an empty database with ``metadata.create_all`` before upgrading, and a
+name-only guard would add a structurally duplicate FK that the index gate
+rejects. The ORM declares the same constraint names for consistency. Adding nullable
 columns and a column with a constant default is metadata-only on
 PostgreSQL 11+, so the migration takes no long table rewrite.
 """
@@ -52,7 +55,10 @@ def upgrade() -> None:
                         CHECK (visibility IN ('tenant', 'personal'));
                 END IF;
                 IF to_regclass('public.users') IS NOT NULL AND NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'fk_agents_owner_user_id'
+                    SELECT 1 FROM pg_constraint c
+                    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+                    WHERE c.conrelid = 'public.agents'::regclass AND c.contype = 'f'
+                      AND a.attname = 'owner_user_id'
                 ) THEN
                     ALTER TABLE agents ADD CONSTRAINT fk_agents_owner_user_id
                         FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -68,7 +74,10 @@ def upgrade() -> None:
             IF to_regclass('public.connectors') IS NOT NULL THEN
                 ALTER TABLE connectors ADD COLUMN IF NOT EXISTS owner_user_id UUID;
                 IF to_regclass('public.users') IS NOT NULL AND NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'fk_connectors_owner_user_id'
+                    SELECT 1 FROM pg_constraint c
+                    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+                    WHERE c.conrelid = 'public.connectors'::regclass AND c.contype = 'f'
+                      AND a.attname = 'owner_user_id'
                 ) THEN
                     ALTER TABLE connectors ADD CONSTRAINT fk_connectors_owner_user_id
                         FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL;
@@ -81,7 +90,10 @@ def upgrade() -> None:
             IF to_regclass('public.hitl_queue') IS NOT NULL THEN
                 ALTER TABLE hitl_queue ADD COLUMN IF NOT EXISTS requested_by_user_id UUID;
                 IF to_regclass('public.users') IS NOT NULL AND NOT EXISTS (
-                    SELECT 1 FROM pg_constraint WHERE conname = 'fk_hitl_queue_requested_by_user_id'
+                    SELECT 1 FROM pg_constraint c
+                    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = ANY (c.conkey)
+                    WHERE c.conrelid = 'public.hitl_queue'::regclass AND c.contype = 'f'
+                      AND a.attname = 'requested_by_user_id'
                 ) THEN
                     ALTER TABLE hitl_queue ADD CONSTRAINT fk_hitl_queue_requested_by_user_id
                         FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE SET NULL;

@@ -132,6 +132,14 @@ class TestUserDomainsFailClosed:
         assert get_user_domains(_req({"sub": "someone@x.io"})) == []
         assert get_user_domains(_req({}, auth_mode=None)) == []
 
+    def test_admin_scope_without_role_claim_is_unrestricted(self) -> None:
+        """CI integration replay: a role-less token holding agenticorg:admin
+        collapsed to [] and could not decide 'platform' approvals or see
+        prompt templates."""
+        from api.deps import get_user_domains
+
+        assert get_user_domains(_req({"grantex:scopes": ["agenticorg:admin"]})) is None
+
     def test_machine_credentials_keep_scope_bounded_access(self) -> None:
         from api.deps import get_user_domains
 

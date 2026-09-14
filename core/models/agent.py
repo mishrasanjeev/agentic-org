@@ -89,7 +89,8 @@ class Agent(BaseModel):
     # shared and admin-managed; 'personal' agents belong to owner_user_id.
     # Rules live in core/ownership.py.
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL", name="fk_agents_owner_user_id"),
+        nullable=True,
     )
     visibility: Mapped[str] = mapped_column(
         String(20), nullable=False, default="tenant", server_default="tenant"

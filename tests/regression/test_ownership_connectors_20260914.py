@@ -143,6 +143,9 @@ def _client(app, *, role: str, user_id: uuid.UUID, scopes: list[str], sub: str =
         patch("auth.grantex_middleware.record_auth_failure", side_effect=_noop),
         patch("auth.grantex_middleware.clear_auth_failures", side_effect=_noop),
         patch("auth.grantex_middleware.validate_token", side_effect=_fake_validate),
+        # Authorization tests use synthetic users; session revocation has its own
+        # coverage. With a live DB (CI integration job) the lookup would 401.
+        patch("auth.grantex_middleware.check_user_session_state", AsyncMock(return_value=None)),
         patch("auth.grantex_middleware.extract_tenant_id", return_value=TENANT),
         patch("auth.grantex_middleware.extract_scopes", return_value=scopes),
         patch("core.auth_state.check_window_rate", AsyncMock(return_value=False)),

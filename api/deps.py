@@ -121,6 +121,11 @@ def get_user_domains(request: Request) -> list[str] | None:
         return claims.get("agenticorg:domains")
     if getattr(request.state, "auth_mode", None) in {"api_key", "grantex"}:
         return None
+    scopes = getattr(request.state, "scopes", None) or claims.get("grantex:scopes") or []
+    if any(str(scope).startswith("agenticorg:admin") for scope in scopes):
+        # The admin scope already bypasses every scope check (require_scope);
+        # a role-less admin token must not collapse to "no domains".
+        return None
     role = claims.get("role")
     if not role:
         return []

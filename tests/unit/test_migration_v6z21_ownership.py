@@ -40,8 +40,10 @@ def test_v6z21_is_guarded_idempotent_reversible_and_single_head() -> None:
     assert "ADD COLUMN IF NOT EXISTS requested_by_user_id UUID" in up
     assert "CHECK (visibility IN ('tenant', 'personal'))" in up
     assert up.count("ON DELETE SET NULL") == 3
-    # Constraint creation is name-guarded so a re-run does not error.
-    assert up.count("SELECT 1 FROM pg_constraint WHERE conname") == 4
+    # The CHECK is name-guarded; FKs are guarded by column so an ORM-bootstrapped
+    # database (auto-named FK) never gets a structurally duplicate FK.
+    assert up.count("SELECT 1 FROM pg_constraint WHERE conname") == 1
+    assert up.count("AND c.contype = 'f'") == 3
     # FK columns must lead an index (scripts/check_database_indexes.py gate).
     assert "ON agents (owner_user_id, tenant_id)" in up
     assert "ON connectors (owner_user_id, tenant_id)" in up
@@ -65,3 +67,14 @@ def test_orm_matches_migration_columns() -> None:
     assert Agent.__table__.c.visibility.nullable is False
     assert Connector.__table__.c.owner_user_id.nullable is True
     assert HITLQueue.__table__.c.requested_by_user_id.nullable is True
+    fk_names = {
+        fk.name
+        for table in (Agent.__table__, Connector.__table__, HITLQueue.__table__)
+        for fk in table.foreign_keys
+        if fk.parent.name in {"owner_user_id", "requested_by_user_id"}
+    }
+    assert fk_names == {
+        "fk_agents_owner_user_id",
+        "fk_connectors_owner_user_id",
+        "fk_hitl_queue_requested_by_user_id",
+    }
