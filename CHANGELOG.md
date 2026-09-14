@@ -5,6 +5,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Connectors and agents can ship as separate packages through the
+  `agenticorg.connectors` and `agenticorg.agents` entry-point groups
+  (`agenticorg.providers` and `agenticorg.workflows` are discovered and
+  rejected until their registries exist). Off by default
+  (`AGENTICORG_PLUGIN_LOADING`); only distributions in
+  `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
+  priority; every rejection is logged with a reason and counted in
+  `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
