@@ -53,7 +53,7 @@ httpx==0.28.1
 dnspython==2.8.0
 # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
 # canonicalisation and validation to the maintained SDK.
-twilio==9.11.0
+twilio==9.11.1
 # Billing checkout SDK. Required in the production API image whenever
 # STRIPE_SECRET_KEY and Stripe price IDs are configured.
 stripe==15.6.1
