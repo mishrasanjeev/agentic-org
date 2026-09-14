@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+# Smoke test for the local development stack (docker-compose.dev.yml).
+#
+# Asserts that the API answers its liveness endpoint directly, that the console
+# serves its health page, and that the console proxies /api to the API. Fails
+# with the failing URL and response when any check does not pass.
+set -euo pipefail
+
+api="http://127.0.0.1:${AGENTICORG_DEV_API_PORT:-8000}"
+ui="http://127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3000}"
+attempts="${SMOKE_ATTEMPTS:-60}"
+
+check() {
+  local name="$1" url="$2" expect="$3" body=""
+  for _ in $(seq 1 "$attempts"); do
+    if body="$(curl -fsS --max-time 5 "$url" 2>/dev/null)" && grep -q "$expect" <<<"$body"; then
+      echo "ok   ${name}  ${url}"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "FAIL ${name}  ${url}: expected '${expect}', got: ${body:-<no response>}" >&2
+  return 1
+}
+
+check "api liveness"                  "$api/api/v1/health/liveness" '"status": *"alive"'
+check "api readiness (db + redis)"    "$api/api/v1/health"          '"status": *"healthy"'
+check "console health"                "$ui/health"                  '^ok$'
+check "console -> api proxy"          "$ui/api/v1/health/liveness"  '"status": *"alive"'
+echo "dev stack smoke test: ok"
