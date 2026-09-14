@@ -5,6 +5,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Record and replay for model calls (`AGENTICORG_MODEL_MODE` =
+  `live`/`record`/`replay`) covering LangGraph agents and `LLMRouter`
+  completions. Cassettes are keyed by a hash of the rendered request, so a
+  prompt, tool or tool-output change misses loudly instead of replaying stale
+  text; replay never falls back to a live call and both non-live modes are
+  refused outside local and test runtimes. Tests opt in with the
+  `model_cassette` fixture and replay by default in CI. Production behaviour
+  is unchanged when the variable is unset. See
+  `docs/testing/record-replay.md` and ADR 0008.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
