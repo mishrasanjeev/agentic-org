@@ -111,6 +111,36 @@ same check over your branch:
 python scripts/check_license_headers.py --base origin/main
 ```
 
+### Vendor-neutral names
+
+Code, tests, fixtures, documentation, commit messages, branch names and pull
+requests never name a commercial verification, KYB/KYC, identity-data or
+sanctions-screening vendor. Interfaces are built from the domain; the mock
+provider is `mock` and documentation and examples use `acme_kyb`.
+
+`scripts/check_denylist.py` enforces this. It splits the added lines of a
+change, its file paths, commit messages and branch name (and, in CI, the pull
+request title and description) into words, and compares salted SHA-256 hashes
+of every run of up to a few consecutive words against `config/denylist.sha256`.
+Spacing, punctuation, case and accents do not matter: `Acme Verify`,
+`acme_verify` and `AcmeVerify` are the same term. Only the salt and the hashes
+are committed; the plaintext list is kept outside the repository by the
+maintainers. Failures give the location, not the matched words. The check fails
+closed when git or the hash file misbehaves.
+
+```bash
+python scripts/check_denylist.py scan --base origin/main   # this branch (also part of make check)
+python scripts/check_denylist.py audit                     # every tracked file
+```
+
+The **Vendor Denylist** workflow runs `scan` on every pull request (including
+title and description edits) and on pushes to `main`. If it flags a word that
+is not a vendor name, tell a maintainer rather than working around it. To change
+the list, a maintainer edits the private terms file and regenerates the hashes
+(`python scripts/check_denylist.py build --keep-salt --terms-file <path outside
+the repository>`, which refuses a terms file inside the working tree and
+prints only a count), then commits `config/denylist.sha256`.
+
 ### Python (Backend)
 
 - **Linter**: `ruff check .` (zero violations required)

@@ -160,3 +160,17 @@ Remove an entry in the pull request that fixes it.
   `core.autocrlf=false` is unaffected.
 - **Fix:** add `.gitattributes` with `*.sh text eol=lf` (and the same for
   other files executed inside Linux containers), then renormalise.
+
+## A-15 — Existing files name commercial screening and business-data vendors
+
+- **Found:** `python scripts/check_denylist.py audit` when adding the vendor
+  denylist (2026-09-15).
+- **What:** six tracked lines predate the vendor-neutral rule and name
+  commercial vendors: two in `connectors/ops/sanctions_api.py`, one each in
+  `core/agents/packs/insurance/prompts/underwriting_analyst.prompt.txt`,
+  `docs/PRD_CxO_v5.0.md`, `docs/connector_production_readiness.md` and
+  `scripts/generate_connectors.py`. The pull request check only looks at added
+  lines, so these pass today but fail as soon as someone edits them.
+- **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
+  and description become configuration or `acme_kyb`-style examples; the prompt
+  and documents drop the vendor names), then confirm `audit` exits 0.

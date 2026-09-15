@@ -79,11 +79,12 @@ build takes several minutes.
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
 | `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis (the CI integration job) |
-| `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, `pip-audit` of the project and both requirements files |
+| `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files |
 
 Each check is also a target of its own (`make check-ruff`, `check-mypy`,
 `check-bandit`, `check-secrets`, `check-licence-headers`, `check-schemas`,
-`check-pip-audit`). `check-secrets` and `check-licence-headers` compare against
+`check-denylist`, `check-pip-audit`). `check-secrets`, `check-licence-headers`
+and `check-denylist` compare against
 `BASE_REF` (default `origin/main`) and fail if it does not resolve, so fetch
 first in a fresh clone. `check-pip-audit` needs network access to the
 vulnerability database.
