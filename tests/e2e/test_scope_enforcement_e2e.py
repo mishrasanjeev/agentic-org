@@ -11,6 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+
 BASE_URL = os.getenv("AGENTICORG_E2E_BASE_URL", "http://localhost:8000")
 TOKEN = os.getenv("AGENTICORG_E2E_TOKEN", "")
 
@@ -75,6 +77,7 @@ class TestE2ETokenAuthToToolExecution:
                 tool_name="get_contact",
                 params={"contact_id": "contact-123"},
                 grant_token="grantex-valid-read-token",
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
 
         # Tool executed successfully
@@ -128,6 +131,7 @@ class TestE2EScopeDenied:
                 tool_name="process_refund",
                 params={"charge_id": "ch_123"},
                 grant_token="grantex-read-only-token",
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
 
         # Should return structured error

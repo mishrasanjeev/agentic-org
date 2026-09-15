@@ -37,10 +37,13 @@ def pg(db_engine: AsyncEngine, monkeypatch):
 
     class _Pg:
         db_url = url
+        sessions = staticmethod(async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False))
 
         async def ensure_schema(self) -> None:
             async with engine.begin() as conn:
-                await conn.run_sync(ORMBase.metadata.create_all, tables=[FeatureFlag.__table__])
+                from core.models.audit import AuditLog
+
+                await conn.run_sync(ORMBase.metadata.create_all, tables=[FeatureFlag.__table__, AuditLog.__table__])
 
         async def add(self, tenant_id: uuid.UUID | None, flag_key: str, enabled: bool = True) -> None:
             await self.ensure_schema()
@@ -90,17 +93,40 @@ async def test_operator_script_sets_and_clears_an_authority_flag(pg):
     await pg.ensure_schema()
     try:
         parser = authority_flags.build_parser()
-        args = parser.parse_args(["set", ge.FLAG_WARN, "--tenant", str(tenant)])
-        assert await authority_flags.run(args, pg.db_url) == 0
+        args = parser.parse_args(["set", ge.FLAG_WARN, "--tenant", str(tenant), "--operator", "integration-test"])
+        assert await authority_flags.run(args) == 0
         assert await resolve_enforcement_mode(tenant) is EnforcementMode.WARN
 
         feature_flags.clear_cache()
-        args = parser.parse_args(["clear", ge.FLAG_WARN, "--tenant", str(tenant)])
-        assert await authority_flags.run(args, pg.db_url) == 0
+        args = parser.parse_args(["clear", ge.FLAG_WARN, "--tenant", str(tenant), "--operator", "integration-test"])
+        assert await authority_flags.run(args) == 0
         assert await resolve_enforcement_mode(tenant) is EnforcementMode.OFF
 
-        refused = parser.parse_args(["set", "new_workflow_builder", "--tenant", str(tenant)])
-        assert await authority_flags.run(refused, pg.db_url) == 2
+        from sqlalchemy import select
+
+        from core.models.audit import AuditLog
+
+        async with pg.sessions() as session:
+            audits = (
+                (
+                    await session.execute(
+                        select(AuditLog).where(
+                            AuditLog.tenant_id == tenant, AuditLog.event_type == "feature_flag.authority_changed"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert sorted((a.action, a.actor_id, a.outcome) for a in audits) == [
+            ("clear", "integration-test", "applied"),
+            ("set", "integration-test", "applied"),
+        ]
+
+        refused = parser.parse_args(
+            ["set", "new_workflow_builder", "--tenant", str(tenant), "--operator", "integration-test"]
+        )
+        assert await authority_flags.run(refused) == 2
     finally:
         await pg.cleanup(ge.FLAG_WARN)
 

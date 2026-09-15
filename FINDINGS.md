@@ -421,20 +421,6 @@ Remove an entry in the pull request that fixes it.
   not a known role, and have `_can_decide` deny (with a reason) when the
   assignee role is unknown.
 
-## A-34 — A wall-clock assertion in the identifier recogniser tests fails under coverage
-
-- **Found:** the CI `unit-tests` job on a local-stack pull request (2026-09-15).
-- **What:** `tests/unit/test_pii_international_recognizers.py::test_resolve_overlaps_keeps_the_longest_and_scales`
-  asserts that `resolve_overlaps` handles 16,000 matches in under 0.5 seconds
-  of wall-clock time. The unit job runs with `--cov=.`, whose line tracing
-  slows the loop; on a shared runner it took 0.72 seconds and failed, then
-  passed on a rerun of the same commit. The test is flaky rather than the
-  code slow.
-- **Fix:** assert the algorithmic property instead (for example, count
-  comparisons, or compare the time for 16,000 matches with the time for 1,600
-  and require roughly linear growth), or mark the timing check to run without
-  coverage.
-
 ## A-37 — Legacy scope validation calls the blocking `enforce` on the event loop
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
@@ -474,6 +460,39 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** have `evaluate` preserve a `failed` status set by scope validation
   (or set `grant_denial` from the legacy path too), and update the tests that
   describe the legacy result.
+
+## A-40 — A built-in connector is tied to one commercial screening provider
+
+- **Found:** `scripts/check_denylist.py audit` while removing vendor names
+  from prompts and docs (2026-09-15).
+- **What:** `connectors/ops/sanctions_api.py` (connector `sanctions_api`) and
+  its generator entry in `scripts/generate_connectors.py` integrate with one
+  commercial sanctions-screening provider: the module docstring and
+  `base_url` name it. The release rules say no specific commercial
+  verification or screening provider ships in this repository, and PRD §2
+  lists that as a non-goal. The connector is live, so removing it breaks any
+  tenant that configured it.
+- **Fix:** move the connector into its own package that registers through the
+  `agenticorg.connectors` entry point (plugin loading, F-6), keep
+  `sanctions_api` resolvable during a deprecation window with a startup
+  warning for tenants that use it, then delete the in-repo module and its
+  generator entry. New screening integrations go through the
+  `VerificationProvider` interface instead.
+
+## A-41 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
+
+- **Found:** binding caller tokens on every run route (PRD F-1b review,
+  2026-09-15).
+- **What:** registered Grantex scopes and `enforce` decide per connector and
+  permission level (`tool:<connector>:<read|write|delete|admin>`), not per
+  tool, so a grant that covers one write tool on a connector covers every
+  write tool on it. A2A (`POST /a2a/tasks`) and MCP (`POST /mcp/call`) run an
+  agent *type* with that type's default tool list rather than a stored
+  agent's `authorized_tools`, so the tools such a call can reach are decided
+  by the type, and only the connector-level grant limits them.
+- **Fix:** register per-tool scopes (or a tool allow-list in the grant) and
+  have `enforce` check the tool; run A2A and MCP calls with the shared agent's
+  stored `authorized_tools` instead of the type defaults.
 
 ## A-42 — The Grantex Python SDK's `agents.update` calls a route the auth service does not serve
 

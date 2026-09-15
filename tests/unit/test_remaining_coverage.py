@@ -39,6 +39,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+
 # =============================================================================
 # 1. scaling.cost_ledger — CostLedger
 # =============================================================================
@@ -1267,7 +1269,7 @@ class TestToolGateway:
         gateway.register_connector("oracle", connector)
 
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}, run_grant=NO_RUN_GRANT_FOR_TESTS
         )
         assert result == {"result": "ok"}
 
@@ -1275,7 +1277,7 @@ class TestToolGateway:
     @patch("core.tool_gateway.gateway.check_scope", return_value=(False, "no_matching_scope"))
     async def test_execute_scope_denied(self, mock_scope, gateway):
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}, run_grant=NO_RUN_GRANT_FOR_TESTS
         )
         assert "error" in result
         assert result["error"]["code"] == "E1007"
@@ -1297,6 +1299,7 @@ class TestToolGateway:
             "create_payment",
             {"amount": 100},
             grant_token=grant_token,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result == {
@@ -1330,6 +1333,7 @@ class TestToolGateway:
                 "create_payment",
                 {"amount": 100},
                 grant_token="verified-grant",
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
 
         assert result == {"result": "ok"}
@@ -1347,7 +1351,8 @@ class TestToolGateway:
     @patch("core.tool_gateway.gateway.check_scope", return_value=(False, "cap_exceeded:1000"))
     async def test_execute_cap_exceeded(self, mock_scope, gateway):
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:write:po:capped:1000"], "oracle", "create_po", {}, amount=2000
+            "t1", "a1", ["tool:oracle:write:po:capped:1000"], "oracle", "create_po", {}, amount=2000,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         assert result["error"]["code"] == "E1008"
 
@@ -1358,7 +1363,7 @@ class TestToolGateway:
             allowed=False, retry_after_seconds=5.0
         )
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}, run_grant=NO_RUN_GRANT_FOR_TESTS
         )
         assert result["error"]["code"] == "E1003"
 
@@ -1371,6 +1376,7 @@ class TestToolGateway:
         result = await gateway.execute(
             "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {},
             idempotency_key="key-1",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         assert result == {"cached": True}
 
@@ -1378,7 +1384,7 @@ class TestToolGateway:
     @patch("core.tool_gateway.gateway.check_scope", return_value=(True, "scope_match"))
     async def test_execute_connector_not_found(self, mock_scope, gateway):
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:read:po"], "missing_connector", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "missing_connector", "get_po", {}, run_grant=NO_RUN_GRANT_FOR_TESTS
         )
         assert result["error"]["code"] == "E1005"
 
@@ -1391,7 +1397,7 @@ class TestToolGateway:
         gateway.register_connector("oracle", connector)
 
         result = await gateway.execute(
-            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}
+            "t1", "a1", ["tool:oracle:read:po"], "oracle", "get_po", {}, run_grant=NO_RUN_GRANT_FOR_TESTS
         )
         assert result["error"]["code"] == "E1001"
         assert "API down" in result["error"]["message"]

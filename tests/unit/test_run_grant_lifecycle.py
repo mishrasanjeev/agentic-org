@@ -403,3 +403,62 @@ def test_sealed_checkpoints_do_not_contain_the_grant_token_in_clear():
         kind, blob = serializer.dumps_typed(state)
         assert b"placeholder-grant-in-state" not in blob
         assert serializer.loads_typed((kind, blob))["grant_token"] == "placeholder-grant-in-state"
+
+
+def test_run_grant_ttl_below_five_minutes_is_refused():
+    from pydantic import ValidationError
+
+    from core.config import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(grants_run_token_ttl_seconds=299)
+    assert Settings.model_fields["grants_run_token_ttl_seconds"].default == 900
+
+
+async def test_the_mint_lock_map_never_exceeds_its_bound(monkeypatch):
+    from auth import token_pool as tp
+
+    monkeypatch.setattr(tp, "_LOCKS_MAX", 3)
+    pool = TokenPool()
+    held = [pool._mint_lock(f"key-{n}") for n in range(3)]
+    for lock in held:
+        await lock.acquire()
+    # All entries held: a new key gets an unshared lock and the map stays at the bound.
+    extra = pool._mint_lock("key-extra")
+    assert len(pool._mint_locks) == 3 and not extra.locked()
+    held[0].release()
+    # An unlocked entry is evicted to make room.
+    pool._mint_lock("key-new")
+    assert len(pool._mint_locks) == 3
+    assert any(key[1] == "key-new" for key in pool._mint_locks)
+
+
+async def test_the_revocation_listener_restarts_after_a_redis_failure(monkeypatch):
+    import redis.asyncio as aioredis
+
+    from auth import token_pool as tp
+
+    monkeypatch.setattr(tp, "_REVOCATION_RETRY_MIN_SECONDS", 0.0)
+    attempts: list[int] = []
+    stop = asyncio.Event()
+
+    class _PubSub:
+        async def subscribe(self, channel: str) -> None:
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise aioredis.ConnectionError("redis down")
+
+        async def listen(self):
+            stop.set()
+            await asyncio.sleep(3600)
+            yield {}
+
+    pool = TokenPool()
+    pool.redis = MagicMock()
+    pool.redis.pubsub.return_value = _PubSub()
+    task = asyncio.create_task(pool._supervise_revocations())
+    await asyncio.wait_for(stop.wait(), timeout=2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(attempts) == 3

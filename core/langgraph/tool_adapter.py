@@ -732,7 +732,7 @@ async def execute_agent_tool(
     authorized_tools: list[str],
     grant_token: str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
-    run_grant: RunGrant | None = None,
+    run_grant: RunGrant | None,
     agent_id: str = "",
     runtime: str = "base_agent",
     agent_type: str = "",
@@ -751,6 +751,9 @@ async def execute_agent_tool(
 
     PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
     replaces the legacy ``grant_token`` check (``auth/grant_enforcement.py``).
+    ``run_grant`` is required so the grant check cannot be left out by
+    omission; only tests that exercise the legacy checks alone pass
+    ``auth.run_grants.NO_RUN_GRANT_FOR_TESTS``.
     """
     if pseudonymiser is not None:
         try:

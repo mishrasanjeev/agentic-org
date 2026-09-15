@@ -31,6 +31,7 @@ and tenants are log fields only. The grant token itself is never logged.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import uuid
 from collections.abc import Callable
@@ -236,20 +237,76 @@ def _count_mode_fallback(outcome: str) -> None:
         logger.warning("grant_enforcement_metric_failed", error_type=type(exc).__name__)
 
 
-def classify_enforce_result(result: Any) -> tuple[DenialReason, str]:
+# ── Compatibility: Grantex SDKs without reason codes (0.5.x) ─────────────
+# Grantex 0.5.0 and 0.5.1 return only a message in ``EnforceResult.reason``.
+# Each pattern below matches exactly one message ``Grantex.enforce`` builds in
+# those releases (grantex/_client.py), anchored on the connector and tool of
+# the call being checked, and maps it to the reason and sub-reason the 0.6 SDK
+# returns as ``reason_code``/``sub_reason`` for the same denial. Remove this
+# table once the pinned SDK returns reason codes.
+_SDK_05_MESSAGES: tuple[tuple[str, DenialReason, str], ...] = (
+    (r"Token verification failed: Signature has expired", DenialReason.TOKEN_INVALID, "expired"),
+    (r"Token verification failed: .+", DenialReason.TOKEN_INVALID, ""),
+    (
+        r"No manifest loaded for connector '{connector}'\. Load a manifest first\.",
+        DenialReason.MANIFEST_UNKNOWN_TOOL,
+        "unknown_connector",
+    ),
+    (
+        r"Unknown tool '{tool}' on connector '{connector}'\. Tool not found in manifest\.",
+        DenialReason.MANIFEST_UNKNOWN_TOOL,
+        "unknown_tool",
+    ),
+    (r"No scope grants access to connector '{connector}'\.", DenialReason.TOOL_NOT_GRANTED, ""),
+    (
+        r"(read|write|delete|admin) scope does not permit (read|write|delete|admin) operations on {connector}\.",
+        DenialReason.PERMISSION_INSUFFICIENT,
+        "",
+    ),
+    (r"Amount \S+ exceeds budget cap of \S+ on {connector}\.", DenialReason.CAP_EXCEEDED, "amount_cap"),
+    # 0.5.1 only:
+    (
+        r"Amount must be a finite number to enforce a budget cap on {connector}\.",
+        DenialReason.CAP_EXCEEDED,
+        "invalid_amount",
+    ),
+    (
+        r"A capped scope on {connector} carries a malformed cap; refusing to authorize amount \S+\.",
+        DenialReason.CAP_EXCEEDED,
+        "malformed_cap",
+    ),
+)
+
+
+def _classify_sdk_05_message(message: str, *, connector: str, tool: str) -> tuple[DenialReason, str]:
+    """Compatibility fallback for SDKs without reason codes: exact 0.5.x messages only."""
+    for pattern, reason, sub_reason in _SDK_05_MESSAGES:
+        compiled = pattern.format(connector=re.escape(connector), tool=re.escape(tool))
+        if re.fullmatch(compiled, message, flags=re.DOTALL):
+            return reason, sub_reason
+    return DenialReason.UNCLASSIFIED, "unknown_message"
+
+
+def classify_enforce_result(result: Any, *, connector: str = "", tool: str = "") -> tuple[DenialReason, str]:
     """Map a denied Grantex ``EnforceResult`` to ``(reason, sub_reason)``.
 
-    Uses the SDK's ``reason_code`` / ``sub_reason`` exactly. A result without a
-    code (an SDK older than reason codes) or with a code this module does not
-    know is ``unclassified`` - still a denial, never read as an allow.
+    Primary source: the SDK's ``reason_code`` / ``sub_reason``, used exactly
+    (Grantex 0.6 SDK onwards); an unknown code is ``unclassified``. An SDK
+    without reason codes (0.5.x) falls back to matching the exact messages it
+    builds (``_SDK_05_MESSAGES``); a message that matches none is
+    ``unclassified``. Every outcome is still a denial, never read as an allow.
     """
+    has_code_field = hasattr(result, "reason_code")
     code = str(getattr(result, "reason_code", "") or "").strip()
-    sub_reason = str(getattr(result, "sub_reason", "") or "").strip()[:_SUB_REASON_MAX]
-    if not code:
+    if code:
+        sub_reason = str(getattr(result, "sub_reason", "") or "").strip()[:_SUB_REASON_MAX]
+        if code in _SDK_REASON_CODES:
+            return DenialReason(code), sub_reason
+        return DenialReason.UNCLASSIFIED, "unknown_reason_code"
+    if has_code_field:
+        # A reason-code SDK that denied without a code: do not guess from text.
         return DenialReason.UNCLASSIFIED, "no_reason_code"
-    if code in _SDK_REASON_CODES:
-        return DenialReason(code), sub_reason
-    return DenialReason.UNCLASSIFIED, "unknown_reason_code"
+    return _classify_sdk_05_message(str(getattr(result, "reason", "") or ""), connector=connector, tool=tool)
 
 
 def record_denial(
@@ -331,7 +388,7 @@ async def check_tool_grant(
             denial = Denial(DenialReason.ENFORCEMENT_UNAVAILABLE, type(exc).__name__)
         else:
             if not bool(getattr(result, "allowed", False)):
-                reason, sub_reason = classify_enforce_result(result)
+                reason, sub_reason = classify_enforce_result(result, connector=connector, tool=tool)
                 detail = str(getattr(result, "reason", "") or "")[:200] if reason is DenialReason.UNCLASSIFIED else ""
                 denial = Denial(reason, sub_reason, str(getattr(result, "grant_id", "") or ""), detail)
 

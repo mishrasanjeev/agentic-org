@@ -52,6 +52,8 @@ RUN_GRANT_MIN_REMAINING_FLOOR_SECONDS = 120
 RUN_GRANT_MIN_REMAINING_FRACTION = 0.1
 _LOCAL_CACHE_MAX = 1_024
 _LOCKS_MAX = 4_096
+_REVOCATION_RETRY_MIN_SECONDS = 1.0
+_REVOCATION_RETRY_MAX_SECONDS = 60.0
 
 
 def min_remaining_seconds(ttl_seconds: int) -> int:
@@ -164,16 +166,27 @@ class TokenPool:
         return client
 
     async def _supervise_revocations(self) -> None:
-        try:
-            if self.redis is None:
-                return
-            pubsub = self.redis.pubsub()
-            await pubsub.subscribe("agenticorg:token:revoke")
-            await self._listen_revocations(pubsub)
-        except asyncio.CancelledError:
-            raise
-        except (aioredis.RedisError, OSError) as exc:
-            logger.warning("token_pool_revocation_listener_stopped", error_type=type(exc).__name__)
+        """Keep the revocation listener running, restarting it after Redis failures.
+
+        Backs off from 1 s to 60 s between attempts; stops only when cancelled
+        (``close``) or when the pool has no Redis client.
+        """
+        delay = _REVOCATION_RETRY_MIN_SECONDS
+        while self.redis is not None:
+            try:
+                pubsub = self.redis.pubsub()
+                await pubsub.subscribe("agenticorg:token:revoke")
+                delay = _REVOCATION_RETRY_MIN_SECONDS
+                await self._listen_revocations(pubsub)
+                logger.warning("token_pool_revocation_listener_ended")
+            except asyncio.CancelledError:
+                raise
+            except (aioredis.RedisError, OSError) as exc:
+                logger.warning(
+                    "token_pool_revocation_listener_failed", error_type=type(exc).__name__, retry_in_seconds=delay
+                )
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, _REVOCATION_RETRY_MAX_SECONDS)
 
     async def get_token(self, agent_id: str) -> str | None:
         """Get cached token for an agent."""
@@ -240,16 +253,26 @@ class TokenPool:
         return f"grant:run:{tenant_id}:{agent_id}:{digest}"
 
     def _mint_lock(self, cache_key: str) -> asyncio.Lock:
+        """Per-key lock so concurrent runs mint once; the map never exceeds ``_LOCKS_MAX``.
+
+        Unlocked entries are evicted oldest first. When every entry is held
+        (more concurrent mints than the bound) the caller gets an unshared
+        lock: memory stays bounded and, at worst, that key mints twice.
+        """
         key = (id(asyncio.get_running_loop()), cache_key)
         lock = self._mint_locks.get(key)
-        if lock is None:
-            while len(self._mint_locks) >= _LOCKS_MAX:
-                oldest, oldest_lock = next(iter(self._mint_locks.items()))
-                if oldest_lock.locked():
+        if lock is not None:
+            return lock
+        if len(self._mint_locks) >= _LOCKS_MAX:
+            for stale in [k for k, held in self._mint_locks.items() if not held.locked()]:
+                self._mint_locks.pop(stale, None)
+                if len(self._mint_locks) < _LOCKS_MAX:
                     break
-                self._mint_locks.pop(oldest)
-            lock = asyncio.Lock()
+        lock = asyncio.Lock()
+        if len(self._mint_locks) < _LOCKS_MAX:
             self._mint_locks[key] = lock
+        else:
+            logger.warning("run_grant_mint_lock_map_full", size=len(self._mint_locks))
         return lock
 
     async def _cached_run_grant(self, cache_key: str) -> RunGrantToken | None:
