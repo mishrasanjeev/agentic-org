@@ -390,6 +390,7 @@ async def test_tool_gateway_restores_arguments_and_refuses_unrestorable_ones(
         "connector_name": "gmail",
         "tool_name": "send_email",
         "pseudonymiser": session,
+        "run_grant": NO_RUN_GRANT_FOR_TESTS,
     }
 
     refused = await gateway.execute(**arguments, params={"to": "[[EMAIL_ADDRESS_2:ffffff]]"})
@@ -460,6 +461,7 @@ async def test_agent_tool_dispatch_without_a_gateway_refuses_unrestorable_argume
         domain=None,
         authorized_tools=["gmail:send_email"],
         pseudonymiser=session,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     assert result == {"error": {"code": "E1012", "message": "pseudonym_restore_failed: unknown_pseudonym"}}
     assert connector_calls == []

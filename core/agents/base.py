@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import time
@@ -11,7 +12,7 @@ from typing import Any
 import structlog
 
 from auth.grant_enforcement import EnforcementMode
-from auth.run_grants import RunGrant, refresh_run_grant, resolve_run_grant
+from auth.run_grants import NO_CALLER, CallerGrant, RunGrant, refresh_run_grant, resolve_run_grant
 from core.llm.router import LLMResponse, llm_router
 from core.pii import pseudonymiser as pseudonymisation
 from core.schemas.messages import (
@@ -39,6 +40,15 @@ def _with_pseudonymiser(pseudonymiser: pseudonymisation.PseudonymSession | None)
 
 
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
+
+
+def _gateway_takes_run_grant(gateway: Any) -> bool:
+    """Whether ``gateway.execute`` accepts ``run_grant`` (``ToolGateway`` requires it)."""
+    try:
+        parameters = inspect.signature(gateway.execute).parameters.values()
+    except (TypeError, ValueError):
+        return True
+    return any(p.name == "run_grant" or p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
 
 
 class BaseAgent:
@@ -80,6 +90,15 @@ class BaseAgent:
         # PRD F-1: the grant this agent's tool calls are checked against,
         # resolved on the first tool call (``_run_grant_for_calls``).
         self._run_grant: RunGrant | None = None
+        # The Grantex token of the request (or workflow run) that started this
+        # agent, when it authenticated with one: every tool call must be
+        # allowed by it as well (``bind_caller``).
+        self.caller_grant: CallerGrant = NO_CALLER
+
+    def bind_caller(self, caller: CallerGrant) -> None:
+        """Check this agent's tool calls against ``caller`` too (set before the first call)."""
+        self.caller_grant = caller
+        self._run_grant = None
 
     @property
     def system_prompt(self) -> str:
@@ -585,9 +604,11 @@ class BaseAgent:
         # context is absent because its optional parameters default to None.
         if self.company_id:
             gateway_args.update(company_id=self.company_id, domain=self.domain)
-        if run_grant.mode is not EnforcementMode.OFF:
-            # Only passed when enforcement is on, so gateways that predate
-            # ``run_grant`` keep working unchanged in ``off``.
+        # ``ToolGateway.execute`` requires ``run_grant`` (in ``off`` it runs the
+        # legacy checks only). A gateway whose ``execute`` predates it keeps
+        # working unchanged in ``off``; in warn and deny it is always passed,
+        # so such a gateway fails rather than skipping the grant check.
+        if run_grant.mode is not EnforcementMode.OFF or _gateway_takes_run_grant(self.tool_gateway):
             gateway_args["run_grant"] = run_grant
             gateway_args["agent_type"] = str(self.agent_type or "")
         gateway_args.update(_with_pseudonymiser(pseudonymiser))
@@ -606,6 +627,7 @@ class BaseAgent:
                 agent_id=str(self.agent_id or ""),
                 supplied_token=getattr(self, "grant_token", None) or "",
                 runtime="base_agent",
+                **getattr(self, "caller_grant", NO_CALLER).resolve_kwargs(),
             )
         else:
             self._run_grant = await refresh_run_grant(self._run_grant)

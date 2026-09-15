@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -24,7 +24,13 @@ from api.deps import (
 )
 from api.route_metadata import route_meta
 from auth.grant_enforcement import EnforcementMode, resolve_enforcement_mode
-from auth.run_grants import RunGrant, direct_tool_call_permitted, resolve_run_grant
+from auth.run_grants import (
+    CALLER_GRANT_KEY,
+    RunGrant,
+    caller_grant_from_request,
+    direct_tool_call_permitted,
+    resolve_run_grant,
+)
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -2985,6 +2991,7 @@ async def update_agent(
 )
 async def run_agent(
     agent_id: UUID,
+    request: Request,
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
@@ -3173,13 +3180,17 @@ async def run_agent(
 
     # PRD F-1: resolve the run's grant and ``grants.enforce_closed`` mode once
     # for both the deterministic shadow route and the LangGraph run. In ``off``
-    # the legacy token above is passed through unchanged.
+    # the legacy token above is passed through unchanged. A request that
+    # authenticated with a Grantex token is bound to it: every tool call must
+    # be allowed by that token as well as by the agent's grant.
+    run_caller = caller_grant_from_request(request)
     run_grant = await resolve_run_grant(
         tenant_id=tenant_id,
         agent_id=str(agent_id),
         supplied_token=grant_token,
         grantex_config=grantex_config if isinstance(grantex_config, dict) else {},
         runtime="langgraph",
+        **run_caller.resolve_kwargs(),
     )
 
     # 5a. Budget check (if cost controls configured)
@@ -3580,6 +3591,11 @@ async def run_agent(
                 "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
                 "domain": agent_config.get("domain", "ops"),
             }
+            # A run bound to a caller token stays bound after approval: the
+            # resume has no token, so its tool calls are refused (PRD F-1).
+            caller_marker = run_caller.marker()
+            if caller_marker is not None:
+                resume_spec[RESUME_SPEC_KEY][CALLER_GRANT_KEY] = caller_marker
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,

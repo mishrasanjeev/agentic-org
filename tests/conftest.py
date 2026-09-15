@@ -102,10 +102,15 @@ def _hermetic_authority_flag_store(request, monkeypatch):
     Grant enforcement (``auth/grant_enforcement.py``) fails closed to ``deny``
     when the feature-flag table cannot be read, and unit tests run without a
     database. An empty store keeps the deployment default (``off``) in force,
-    exactly as for a deployment with no flag rows. Tests marked
-    ``real_flag_store`` (the Postgres integration tests) read the real store.
+    exactly as for a deployment with no flag rows. Tests under
+    ``tests/integration`` and tests marked ``real_flag_store`` or
+    ``real_flag_lookup`` read the real store.
     """
-    if request.node.get_closest_marker("real_flag_store"):
+    if (
+        "integration" in request.node.path.parts
+        or request.node.get_closest_marker("real_flag_store")
+        or request.node.get_closest_marker("real_flag_lookup")
+    ):
         yield
         return
     from core import feature_flags

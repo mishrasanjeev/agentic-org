@@ -38,9 +38,9 @@ flags (`pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
 `core/feature_flags.py`). Operators manage them with database access:
 
 ```
-python scripts/authority_flags.py set grants.enforce_closed.warn --tenant <tenant id>
-python scripts/authority_flags.py set grants.enforce_closed.deny --global
-python scripts/authority_flags.py clear grants.enforce_closed.deny --tenant <tenant id>
+python scripts/authority_flags.py set grants.enforce_closed.warn --tenant <tenant id> --operator <name>
+python scripts/authority_flags.py set grants.enforce_closed.deny --global --operator <name>
+python scripts/authority_flags.py clear grants.enforce_closed.deny --tenant <tenant id> --operator <name>
 python scripts/authority_flags.py list --tenant <tenant id>
 ```
 
@@ -97,7 +97,7 @@ Minting needs:
 |---|---|
 | `GRANTEX_API_KEY` | Grantex SDK key (already required) |
 | `GRANTEX_ROOT_GRANT_TOKEN` | Root grant the per-run grants are delegated from. A credential: inject it from the secret manager, never commit it |
-| `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS` | Lifetime requested for a per-run grant (default 900, 60–86400; Grantex caps it at the root grant's expiry) |
+| `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS` | Lifetime requested for a per-run grant (default 900, 300–86400; Grantex caps it at the root grant's expiry, and a grant with less than two minutes left is used for one run but never shared) |
 
 When no token can be resolved the run still starts and each tool call it makes
 is recorded as `grant_missing` with a sub-reason:
@@ -109,6 +109,7 @@ is recorded as `grant_missing` with a sub-reason:
 | `mint_failed` | Grantex refused or failed the delegation (for example an expired root grant) |
 | `lookup_failed` | The agent's Grantex registration could not be read |
 | `no_agent` | The call is not made by a stored agent, so there is nothing to resolve a grant for (see Coverage) |
+| `caller_token_unavailable` | The run was started with a caller Grantex token that is not available to the resumed run (refused in warn too; see Coverage) |
 
 The token itself is never logged or put in a metric.
 
@@ -136,12 +137,19 @@ and increments `agenticorg_grant_enforcement_denials_total{mode, reason}`.
 | `purpose_not_allowed`, `decision_required`, `decision_invalid`, `region_mismatch` | Purpose, decision-grant and region checks (Grantex manifest 0.6) |
 | `manifest_unknown_tool` | No manifest for the connector (`unknown_connector`) or the tool is not in it (`unknown_tool`) |
 | `enforcement_unavailable` | The check itself could not run (`sub_reason` is the error type, for example `ValueError` when `GRANTEX_API_KEY` is missing) |
-| `unclassified` | Grantex denied without a reason code this platform knows (`no_reason_code` for an SDK older than reason codes, `unknown_reason_code` otherwise). Still a denial; the event carries Grantex's text as `sdk_reason` |
+| `unclassified` | Grantex denied in a way this platform cannot map: an unknown reason code (`unknown_reason_code`), a reason-code SDK that gave none (`no_reason_code`), or a 0.5.x message that matches none of the known ones (`unknown_message`). Still a denial; the event carries Grantex's text as `sdk_reason` |
 
-Reasons are the Grantex SDK's `reason_code` values, used exactly; the
-platform never infers a reason from the SDK's message text. The pinned SDK
-(`grantex==0.5.0`) predates reason codes, so until it is upgraded every
-Grantex denial is recorded as `unclassified`.
+Reasons come from the Grantex SDK's `reason_code` and `sub_reason`, used
+exactly, when the SDK returns them (the Grantex 0.6 SDK onwards). The pinned SDK
+(`grantex==0.5.1`) predates reason codes, so a compatibility table in
+`auth/grant_enforcement.py` maps the exact denial messages 0.5.x builds - and
+only those - to the same reasons: token verification failures to
+`token_invalid` (`expired` for an expired token), a missing manifest or tool to
+`manifest_unknown_tool`, no scope for the connector to `tool_not_granted`, a
+lower permission to `permission_insufficient` and the amount-cap messages to
+`cap_exceeded`. Any other message is `unclassified`. Reason codes become exact,
+and cover purposes, decisions and regions, once the Grantex 0.6 SDK is
+published and pinned; the table is then removed.
 
 `runtime` says which path made the call (see Coverage).
 
@@ -152,12 +160,12 @@ call in the tenant's mode:
 
 | Entry point | How the grant is resolved | `runtime` |
 |---|---|---|
-| `POST /agents/{id}/run` | the agent's grant, resolved once for the run | `langgraph`; `deterministic_tds` for the shadow TDS route |
+| `POST /agents/{id}/run` | the agent's grant, resolved once for the run; a caller Grantex token is bound as for chat | `langgraph`; `deterministic_tds` for the shadow TDS route |
 | Chat (`POST /chat/query`) | the routed agent's grant; a caller Grantex token issued to that agent is used as it, a caller token for any other agent must **also** allow every call | `langgraph`; `deterministic_tds` for the TDS route |
 | A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the grant of the shared agent of that type the route takes connector bindings from; a caller token is bound the same way as for chat | `langgraph` |
-| Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first | `langgraph` |
+| Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first; the Twilio voice webhook is signed by the telephony provider and carries no Grantex token | `langgraph` |
 | `core.langgraph.runner.resume_agent` | resolved again on resume; in warn/deny the fresh token replaces the checkpointed one | `langgraph` |
-| Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline | `BaseAgent` resolves the agent's grant on its first tool call; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
+| Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline (`process-lead`, `followups/run`, `seed-prospects`, `import-csv`, `process-inbox`) | `BaseAgent` resolves the agent's grant on its first tool call, bound to the caller token of the request that started the run; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
 | Workflow `connector_tool` steps | none — the step is not made by an agent | `workflow_connector_tool` |
 
 Paths that cannot resolve a grant are not exempt: a workflow `connector_tool`
@@ -175,6 +183,22 @@ run agent's grant in the tenant's mode. A caller can therefore never run
 another agent - or an A2A/MCP agent type with its default tools - on the
 strength of its own scopes. A denial by the caller token is logged with
 `grant_source=caller`.
+
+This holds on every route that starts a run: `POST /agents/{id}/run`, chat,
+A2A, MCP, `POST /workflows/{id}/run` (agent, collaboration, parallel,
+connector and sub-workflow steps) and the sales pipeline routes. Grantex agent
+tokens skip the route scope checks, so this binding is what keeps them to
+their own grant.
+
+**A binding outlives the request, the token does not.** A workflow run started
+with a caller token keeps the token in memory for the execution the request
+started, and records only the caller's agent id in the run state
+(`grant_caller`); an agent run that pauses for approval records it in the
+approval's resume spec. When such a run is resumed later - after an approval,
+a delay or an event - the token is not available, so in warn and deny every
+tool call of the resumed run is refused as `grant_missing` with sub-reason
+`caller_token_unavailable`. `off` is unchanged. Start runs that must survive a
+pause with a user session or API key rather than an agent token.
 
 In the `ToolGateway` the grant check runs first and then every legacy check
 runs exactly as in `off`, including strict enforcement of a token passed to the

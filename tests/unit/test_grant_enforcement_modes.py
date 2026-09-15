@@ -230,10 +230,14 @@ def test_enforce_reason_codes_map_exactly_to_the_denial_vocabulary(reason_code, 
     assert classify_enforce_result(result) == (reason, sub_reason)
 
 
-def test_result_without_reason_codes_is_unclassified_even_when_its_text_names_a_reason():
-    # An SDK older than reason codes: the text is not parsed for a reason.
+def test_result_without_reason_codes_is_classified_from_its_exact_message():
+    # An SDK older than reason codes (0.5.x): only its exact messages map.
     result = SimpleNamespace(allowed=False, reason="No scope grants access to connector 'hubspot'.")
-    assert classify_enforce_result(result) == (DenialReason.UNCLASSIFIED, "no_reason_code")
+    assert classify_enforce_result(result, connector="hubspot", tool="list_contacts") == (
+        DenialReason.TOOL_NOT_GRANTED,
+        "",
+    )
+    assert classify_enforce_result(result, connector="salesforce", tool="query")[0] is DenialReason.UNCLASSIFIED
 
 
 # ── Per-call checks ──────────────────────────────────────────────────────

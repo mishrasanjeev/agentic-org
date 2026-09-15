@@ -108,7 +108,7 @@ dependencies = [
     # of these versions and refuses to start the Postgres store with any other.
     "langgraph-checkpoint-postgres==3.1.2",
     "langgraph-checkpoint==4.2.0",
-    "grantex>=0.5.0",
+    "grantex>=0.5.1",
     "langsmith>=0.12.4",
     "pypdf>=6.18.1",
     # Canonical document extraction. The production image below ships the
@@ -230,6 +230,22 @@ extend-immutable-calls = ["fastapi.Depends", "Depends"]
 # rewrap.py: row-level inputs land as bind params; table/column
 # names are constants from the migration source.
 "core/crypto/migration_helpers.py" = ["S608"]
+
+[tool.coverage.run]
+# pytest's basetemp, cache and scratch directories live inside the checkout
+# (see addopts below). Files tests write there are deleted afterwards, so a
+# measured one makes `coverage report` fail with "No source for code" and
+# leaves the release-acceptance coverage gate without a TOTAL.
+omit = [
+    "codex-pytest-basetemp/*",
+    "codex-pytest-temp/*",
+    "codex-pytest-cache/*",
+    "codex-pytest-artifacts/*",
+    "*/codex-pytest-basetemp/*",
+    "*/codex-pytest-temp/*",
+    "*/codex-pytest-cache/*",
+    "*/codex-pytest-artifacts/*",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
