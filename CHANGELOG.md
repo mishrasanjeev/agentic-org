@@ -50,6 +50,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- Recognisers for United States SSN, ITIN and EIN, United Kingdom National
+  Insurance and Companies House numbers, European VAT numbers and IBANs
+  (`core/pii/international_recognizers.py`), alongside the Indian ones. IBANs
+  must pass mod 97 and VAT numbers their national check digits where the
+  scheme has one (17 country prefixes); shapes that are otherwise ordinary
+  numbers are only recognised next to a label such as "SSN" or "company
+  number". Nothing uses them yet, so behaviour is unchanged; pre-model
+  pseudonymisation builds on them.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy
