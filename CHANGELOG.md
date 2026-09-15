@@ -64,6 +64,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   generated SDK clients.
 - Connector harness and voice integration fixtures no longer emit avoidable
   async/Pydantic deprecation warnings.
+- Agent default tool lists (`_AGENT_TYPE_DEFAULT_TOOLS` and
+  `_DOMAIN_DEFAULT_TOOLS` in `api/v1/agents.py`, and the agent generator's
+  copy) no longer name 20 tools that no connector registers, such as
+  `get_post_analytics`, `schedule_social_post`, `slack_send_message` and
+  `search_content_fulltext`. Those names were never bound at run time but
+  were shown in the tool picker, MCP/A2A discovery and generated agents.
+  Nothing is added in their place. `seo_strategist` is left with no default
+  tools, so `POST /mcp/call` for `agenticorg_seo_strategist` now answers 400
+  "No tools configured" instead of running an agent with no tools.
 
 ## [4.0.0] — 2026-04-05
 

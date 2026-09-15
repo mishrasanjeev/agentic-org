@@ -64,6 +64,10 @@ from core.schemas.api import (
 
 MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
+# Every name here must be a tool a native connector registers
+# (``_build_tool_index``); a name nothing registers can never run and only
+# misleads the agent's prompt and the tool picker. Do not add a name to make
+# a prompt's tool reference pass — change the prompt instead.
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Commerce
     "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
@@ -83,7 +87,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "search_bills",
         "get_bill_by_id",
         "create_order",
-        "check_order_status",
     ],
     "ar_collections": [
         "create_invoice",
@@ -119,7 +122,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_invoices",
         "fetch_bank_statement",
         "get_balance",
-        "search_content_fulltext",
     ],
     "fpa_agent": [
         # Tools the agent actually calls — see core/agents/finance/fpa_agent.py.
@@ -129,7 +131,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_trial_balance",
         "list_invoices",
         "get_balance",
-        "get_campaign_performance_metrics",
         "get_project_metrics",
     ],
     "treasury": [
@@ -145,7 +146,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_vendors",
         "create_vendor",
         "create_ap_invoice",
-        "check_order_status",
         "list_invoices",
         "get_profit_loss",
     ],
@@ -167,9 +167,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "talent_acquisition": [
         "post_job",
         "search_candidates",
-        "get_applications",
         "schedule_interview",
-        "send_offer",
         "send_inmail",
     ],
     "onboarding_agent": [
@@ -177,13 +175,11 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "provision_user",
         "assign_group",
         "create_page",
-        "schedule_social_post",
     ],
     "payroll_engine": [
         "run_payroll",
         "get_payslip",
         "get_attendance",
-        "post_leave",
         "file_24q_return",
     ],
     "performance_coach": [
@@ -193,7 +189,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "add_comment",
     ],
     "ld_coordinator": [
-        "search_content_fulltext",
         "create_page",
         "get_employee",
         "schedule_interview",
@@ -206,10 +201,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     # Marketing
     "content_factory": [
-        "schedule_social_post",
-        "get_post_analytics",
-        "manage_publishing_queue",
-        "approve_draft_post",
         "create_page",
     ],
     "campaign_pilot": [
@@ -220,12 +211,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_analytics",
         "get_stats",
     ],
-    "seo_strategist": [
-        "get_campaign_performance_metrics",
-        "get_search_term_report",
-        "search_content_fulltext",
-        "get_post_analytics",
-    ],
+    # Every tool this list used to name was unregistered; it stays empty
+    # rather than gaining tools nobody chose for it.
+    "seo_strategist": [],
     "crm_intelligence": [
         "list_contacts",
         "search_contacts",
@@ -240,9 +228,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_owners",
     ],
     "brand_monitor": [
-        "get_post_analytics",
         "get_campaign_performance",
-        "schedule_social_post",
         "search_contacts",
     ],
     "email_marketing": [
@@ -256,7 +242,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "social_media": [
         "create_tweet",
         "create_update",
-        "get_post_analytics",
         "list_channel_videos",
         "get_campaign_insights",
     ],
@@ -278,8 +263,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "support_triage": [
         "create_ticket",
         "update_ticket",
-        "escalate_to_group",
-        "get_sla_breach_status",
         "get_csat_score",
         "apply_macro",
         "send_message",
@@ -293,7 +276,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_project_metrics",
     ],
     "contract_intelligence": [
-        "search_content_fulltext",
         "create_page",
         "search_issues",
         "get_page_tree",
@@ -307,33 +289,26 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "it_operations": [
         "create_incident",
-        "trigger_alert_with_context",
         "acknowledge_incident",
-        "manage_on_call_schedule",
-        "run_automated_runbook",
         "send_message",
         "post_alert",
     ],
     # Backoffice
     "legal_ops": [
-        "search_content_fulltext",
         "create_page",
         "search_issues",
         "get_page_tree",
-        "manage_space_permissions",
     ],
     "risk_sentinel": [
         "get_access_log",
         "create_incident",
         "get_compliance_notice",
         "search_issues",
-        "generate_postmortem_doc",
     ],
     "facilities_agent": [
         "create_ticket",
         "update_ticket",
         "create_issue",
-        "get_sla_breach_status",
     ],
     # Comms
     "email_agent": [
@@ -343,11 +318,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "notification_agent": [
         "send_email",
-        "create_calendar_event",
-        "slack_send_message",
     ],
     "chat_agent": [
-        "slack_send_message",
         "send_email",
         "read_inbox",
     ],
@@ -382,19 +354,14 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
         "post_job",
     ],
     "marketing": [
-        "get_campaign_performance_metrics",
-        "schedule_social_post",
         "list_contacts",
-        "get_post_analytics",
     ],
     "ops": [
         "create_ticket",
         "search_issues",
         "create_incident",
-        "get_sla_breach_status",
     ],
     "backoffice": [
-        "search_content_fulltext",
         "create_page",
         "search_issues",
         "get_access_log",
@@ -402,8 +369,6 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "comms": [
         "send_email",
         "read_inbox",
-        "slack_send_message",
-        "create_calendar_event",
     ],
 }
 
