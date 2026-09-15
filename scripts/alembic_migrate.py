@@ -58,6 +58,12 @@ REQUIRED_RUNTIME_TABLES = frozenset(
         # only the v6z19 repair creates them; a green upgrade must prove it.
         "billing_subscriptions",
         "cdc_triggers",
+        # Agent checkpoint store (v6z22, no ORM model). The Postgres
+        # checkpointer refuses to start without them.
+        "checkpoint_migrations",
+        "checkpoints",
+        "checkpoint_blobs",
+        "checkpoint_writes",
     }
 )
 

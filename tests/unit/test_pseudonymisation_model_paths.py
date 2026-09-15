@@ -189,7 +189,7 @@ async def test_langgraph_no_raw_identifier_reaches_the_model_and_tools_receive_r
     # 5. The map is stored under the server's thread id, not the request's case id.
     [(tenant, key)] = store.rows
     assert tenant == case.TENANT_ID
-    assert key.startswith("agent-f5:") and key != case.CASE_ID
+    assert key.startswith(f"tenant:{case.TENANT_ID}:") and key != case.CASE_ID
 
 
 async def test_langgraph_tool_call_with_an_unrestorable_pseudonym_is_refused_audited_and_not_sent(
@@ -267,7 +267,11 @@ async def test_langgraph_resume_is_refused_when_the_stored_map_cannot_be_read(
         hitl_condition="total > 500000",
         tenant_id=case.TENANT_ID,
     )
-    assert resumed == {"status": "failed", "error": "pseudonymisation_unavailable: map_unreadable"}
+    assert resumed == {
+        "status": "failed",
+        "error": "pseudonymisation_unavailable: map_unreadable",
+        "reason": "pseudonymisation_unavailable",
+    }
 
 
 async def test_langgraph_run_is_refused_before_any_model_call_when_the_map_store_fails(
@@ -641,7 +645,11 @@ async def test_langgraph_resume_is_refused_when_the_map_row_is_missing(
         hitl_condition="total > 500000",
         tenant_id=case.TENANT_ID,
     )
-    assert resumed == {"status": "failed", "error": "pseudonymisation_unavailable: map_missing"}
+    assert resumed == {
+        "status": "failed",
+        "error": "pseudonymisation_unavailable: map_missing",
+        "reason": "pseudonymisation_unavailable",
+    }
 
 
 async def test_langgraph_resume_returns_failed_when_the_checkpoint_cannot_be_read(
@@ -651,16 +659,20 @@ async def test_langgraph_resume_returns_failed_when_the_checkpoint_cannot_be_rea
 ) -> None:
     from core.langgraph import runner
 
-    async def unreadable(config: Any) -> Any:
-        raise RuntimeError("checkpoint store unavailable")
+    class UnreadableCheckpoints:
+        async def aget_tuple(self, config: Any) -> Any:
+            raise RuntimeError("checkpoint store unavailable")
 
-    monkeypatch.setattr(runner._checkpointer, "aget_tuple", unreadable)
+    async def checkpointer() -> Any:
+        return UnreadableCheckpoints()
+
+    monkeypatch.setattr(runner, "get_checkpointer", checkpointer)
     resumed = await runner.resume_agent(
         agent_id="agent-f5",
-        thread_id="agent-f5:0a1b2c3d",
+        thread_id=f"tenant:{case.TENANT_ID}:run:0a1b2c3d",
         decision={"action": "approve"},
         system_prompt=case.system_prompt(),
         authorized_tools=[],
         tenant_id=case.TENANT_ID,
     )
-    assert resumed == {"status": "failed", "error": "checkpoint store unavailable"}
+    assert resumed == {"status": "failed", "error": "checkpoint store unavailable", "reason": "resume_failed"}
