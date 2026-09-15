@@ -1,0 +1,159 @@
+{
+  "key": "gb-clean-brightwater",
+  "scenarios": [
+    "clean"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Brightwater Lantern Works Ltd",
+    "trading_names": [
+      "Brightwater Lanterns"
+    ],
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000001"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "1 Example Street"
+      ],
+      "locality": "Exampleton",
+      "region": null,
+      "postal_code": "ZZ99 9ZZ",
+      "country": "GB"
+    },
+    "website": "https://brightwater-lanterns.example.com",
+    "declared_activity": "manufacturing_lighting",
+    "declared_owners": [
+      {
+        "name": "Orla Venncastle",
+        "kind": "person",
+        "date_of_birth": "1971-04",
+        "nationalities": [
+          "GB"
+        ],
+        "ownership_pct": 60,
+        "identifiers": []
+      },
+      {
+        "name": "Tamsin Wrenfield",
+        "kind": "person",
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "ownership_pct": 40,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-gb-00000001",
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000001"
+      }
+    ],
+    "legal_name": "Brightwater Lantern Works Ltd",
+    "registry_status": "active",
+    "entity_type": "private_limited_company",
+    "incorporated_on": "2019-05-20",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "1 Example Street"
+      ],
+      "locality": "Exampleton",
+      "region": null,
+      "postal_code": "ZZ99 9ZZ",
+      "country": "GB"
+    },
+    "officers": [
+      {
+        "name": "Orla Venncastle",
+        "role": "director",
+        "appointed_on": "2019-05-20",
+        "resigned_on": null,
+        "date_of_birth": "1971-04",
+        "nationalities": [
+          "GB"
+        ]
+      },
+      {
+        "name": "Tamsin Wrenfield",
+        "role": "secretary",
+        "appointed_on": "2019-05-20",
+        "resigned_on": null,
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-orla-venncastle",
+        "kind": "person",
+        "name": "Orla Venncastle",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 50,
+          "max": 75
+        },
+        "voting_pct": {
+          "min": 50,
+          "max": 75
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1971-04",
+        "nationalities": [
+          "GB"
+        ],
+        "started_on": "2019-06-01"
+      },
+      {
+        "node_id": "psn-tamsin-wrenfield",
+        "kind": "person",
+        "name": "Tamsin Wrenfield",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 25,
+          "max": 50
+        },
+        "voting_pct": null,
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "started_on": "2019-06-01"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "brightwater-lanterns.example.com",
+    "registered_on": "2019-06",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Hand-finished brass lanterns, made in our workshop since 2019."
+      }
+    ]
+  }
+}

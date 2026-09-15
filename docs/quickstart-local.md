@@ -23,6 +23,7 @@ When it finishes:
 | API | <http://127.0.0.1:8000> (`/api/v1/health`, `/docs`) |
 | Postgres | `127.0.0.1:5432`, database/user `agenticorg`, password `agenticorg_dev` |
 | Redis | `127.0.0.1:6379` |
+| Mock verification provider | <http://127.0.0.1:8081> (`/healthz`) |
 | OIDC stub | <http://127.0.0.1:9400> (`/.well-known/openid-configuration`) |
 
 All ports bind to `127.0.0.1` only.
@@ -38,6 +39,12 @@ All ports bind to `127.0.0.1` only.
 - **api** — the FastAPI application
 - **worker** — the Celery worker for workflows, reports and delivery
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
+- **mock-provider** — the fixture-backed `mock` verification provider as a
+  separate HTTP service; the API and worker reach it at
+  `http://mock-provider:8080` (`AGENTICORG_MOCK_PROVIDER_URL`). Its fault
+  injection and event endpoints stay off unless you start the stack with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`. See
+  `docs/providers/mock-provider.md`
 - **oidc-stub** — a development OpenID Connect provider with step-up; see
   [Development identity provider](#development-identity-provider)
 
@@ -201,7 +208,7 @@ If a port is already taken, override it for the whole session:
 ```bash
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
 AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
-AGENTICORG_DEV_OIDC_PORT=19400 make dev
+AGENTICORG_DEV_OIDC_PORT=19400 AGENTICORG_DEV_MOCK_PROVIDER_PORT=18081 make dev
 ```
 
 Use the same variables with `make ps`, `make logs` and the smoke test.

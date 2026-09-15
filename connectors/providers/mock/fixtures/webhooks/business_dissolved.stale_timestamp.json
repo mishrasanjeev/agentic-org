@@ -1,0 +1,11 @@
+{
+  "description": "Correctly signed, but an hour old: outside the five-minute tolerance.",
+  "verify_at": 1788253200,
+  "headers": {
+    "X-Mock-Event-Id": "evt-webhook-fixture-0001",
+    "X-Mock-Timestamp": "1788249600",
+    "X-Mock-Signature": "v1=7062ff04c979be255d1153afa536b3120e6609d1c505f2e966ae715f8864fb00"
+  },
+  "body": "{\"event_id\":\"evt-webhook-fixture-0001\",\"event_type\":\"business.dissolved\",\"monitor_id\":null,\"occurred_at\":\"2026-09-01T08:59:30Z\",\"provider\":\"mock\",\"subject\":{\"identifiers\":[{\"scheme\":\"gb_company_number\",\"value\":\"00000004\"}],\"jurisdiction\":\"GB\",\"provider\":\"mock\",\"provider_ref\":\"mock-gb-00000004\"}}",
+  "expected": "rejected"
+}

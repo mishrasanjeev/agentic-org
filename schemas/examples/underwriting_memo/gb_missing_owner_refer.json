@@ -1,0 +1,138 @@
+{
+  "schema_version": "1.0.0",
+  "memo_id": "memo_0001",
+  "case_id": "case_0001",
+  "created_at": "2026-09-01T09:10:00Z",
+  "subject": {
+    "provider": "mock",
+    "provider_ref": "mock-gb-00000001",
+    "jurisdiction": "GB",
+    "identifiers": [{"scheme": "gb_company_number", "value": "00000001"}]
+  },
+  "sections": [
+    {
+      "section_id": "registry",
+      "status": "complete",
+      "findings": [],
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:profile",
+          "field": "company_status",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "section_id": "ownership",
+      "status": "complete",
+      "findings": [
+        {
+          "code": "missing_owner",
+          "severity": "medium",
+          "statement": "Declared owner Ansel Pikeworth does not appear in the ownership graph at or above 25%.",
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:company:00000001:owners",
+              "field": "items",
+              "retrieved_at": "2026-09-01T09:00:00Z",
+              "excerpt_ref": null
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:owners",
+          "field": "items",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "section_id": "screening",
+      "status": "partial",
+      "findings": [
+        {
+          "code": "screening_hit",
+          "severity": "low",
+          "statement": "One probable false-positive sanctions hit is awaiting analyst review.",
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "names[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": "excerpt:mock-watchlist-0007"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:screening:scr-0000000000000001",
+          "field": "hits",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "section_id": "web_presence",
+      "status": "not_available",
+      "not_available_reason": "capability_not_supported",
+      "findings": [],
+      "evidence": []
+    }
+  ],
+  "policy_result": {
+    "schema_version": "1.0.0",
+    "policy": {
+      "policy_id": "business_onboarding_uk",
+      "version": "1.2.0",
+      "example": true,
+      "reviewed_by": null
+    },
+    "inputs_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+    "score": 40,
+    "tier": "medium",
+    "reasons": [
+      {
+        "rule_id": "ownership_reconciled",
+        "tier": "medium",
+        "reason": "Declared owners do not reconcile with the ownership graph",
+        "score": 40,
+        "inputs": {"ownership.missing_owners": 1}
+      }
+    ]
+  },
+  "recommendation": {
+    "proposed": "refer",
+    "basis": "policy_result",
+    "requires_human_decision": true
+  },
+  "missing_items": [
+    {"item": "owner_evidence", "reason": "Evidence of Ansel Pikeworth's ownership is needed to reconcile declared owners."}
+  ],
+  "excerpts": [
+    {
+      "excerpt_ref": "excerpt:mock-watchlist-0007",
+      "provider": "mock",
+      "record_id": "mock:watchlist:entry:0007",
+      "media_type": "text/plain",
+      "sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+    }
+  ],
+  "provenance": {
+    "agent": "business_underwriter",
+    "agent_version": "0.1.0",
+    "prompt_version": "2026-09-01",
+    "model_id": "scripted-model",
+    "model_confidence": null
+  }
+}

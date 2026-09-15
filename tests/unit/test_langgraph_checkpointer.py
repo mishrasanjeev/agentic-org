@@ -510,7 +510,12 @@ async def test_delete_tenant_checkpoints_removes_only_that_tenants_threads() -> 
 async def test_runner_compiles_graphs_with_the_configured_store() -> None:
     from core.langgraph import runner
 
-    sentinel = object()
+    class _Store:
+        # resume_agent reads the checkpoint (its pseudonym case) before compiling.
+        async def aget_tuple(self, config: Any) -> None:
+            return None
+
+    sentinel = _Store()
     fake_graph = type("G", (), {})()
     compiled_with: list[Any] = []
 

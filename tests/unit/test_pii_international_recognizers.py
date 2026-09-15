@@ -74,7 +74,6 @@ def test_us_ssn_itin_and_ein_are_recognised(text: str, entity: str, value: str) 
     [
         ("National Insurance number QQ 12 34 56 C", ir.UK_NINO, "QQ 12 34 56 C"),
         ("nino: qq123456a", ir.UK_NINO, "qq123456a"),
-        ("allocated prefixes need no label: AB 00 00 00 A", ir.UK_NINO, "AB 00 00 00 A"),
         ("Company number 00000001", ir.UK_COMPANY_NUMBER, "00000001"),
         ("Companies House no. SC000001", ir.UK_COMPANY_NUMBER, "SC000001"),
         ("registered_number=OC000001", ir.UK_COMPANY_NUMBER, "OC000001"),
@@ -161,7 +160,7 @@ def test_vat_number_with_wrong_check_digits_is_rejected_even_with_a_label() -> N
         "Martin paid 123456789 yen",
         "DE 2026 roadmap, IT 12345678901 is not Luhn-valid",
         "Aadhaar style 1234 5678 9012",
-        "GB82 WEST 1234 5698 7654 33",
+        "GB29 ZZZZ 0000 0000 0000 02",
         "vat included; amount 000000011",
         "The SSN field is blank; balance 000 000 0001",
     ],
@@ -289,3 +288,59 @@ def test_iban_generator_matches_module_validator() -> None:
         iban = _iban(country, "0" * (length - 8) + _digits(rng, 4))
         assert iban_is_valid(iban), iban
         assert re.fullmatch(r"[A-Z]{2}\d{2}0+\d{4}", iban)
+
+
+# ── Case, allocation and scale ──────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("prefix", "allocated"),
+    [("AB", True), ("ab", True), ("QQ", False), ("ZZ", False), ("TN", False), ("DA", False), ("AO", False)],
+)
+def test_nino_prefix_allocation_rule(prefix: str, allocated: bool) -> None:
+    assert ir._nino_prefix_allocated(prefix) is allocated
+
+
+def test_nino_with_an_allocated_prefix_needs_no_label_in_either_case(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Treat the reserved HMRC example prefix as allocated so no issuable number is used here.
+    monkeypatch.setattr(ir, "_nino_prefix_allocated", lambda prefix: True)
+    assert _only("reference qq 12 34 56 c attached").text == "qq 12 34 56 c"
+    assert _only("reference QQ123456C attached").text == "QQ123456C"
+
+
+@pytest.mark.parametrize(
+    ("text", "entity", "value"),
+    [
+        (
+            "pay to " + _iban("DE", "000000000000000001").lower(),
+            ir.IBAN_CODE,
+            _iban("DE", "000000000000000001").lower(),
+        ),
+        ("pay to gb29 zzzz 0000 0000 0000 01", ir.IBAN_CODE, "gb29 zzzz 0000 0000 0000 01"),
+        ("supplier de000000011 registered", ir.EU_VAT, "de000000011"),
+        ("supplier nl000000012b01 registered", ir.EU_VAT, "nl000000012b01"),
+    ],
+)
+def test_lower_case_iban_and_vat_numbers_are_recognised_without_a_label(text: str, entity: str, value: str) -> None:
+    match = _only(text)
+    assert (match.entity_type, match.text) == (entity, value)
+
+
+def test_lower_case_country_words_with_failing_checksums_are_not_recognised() -> None:
+    assert find_identifiers("it 12345678901 and de 123456789 and gb29 zzzz 0000 0000 0000 02") == []
+
+
+def test_resolve_overlaps_keeps_the_longest_and_scales(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    match = ir.IdentifierMatch
+    small = [match(0, 4, "A", "xxxx"), match(2, 10, "B", "x" * 8), match(10, 12, "C", "xx"), match(11, 13, "D", "xx")]
+    assert [m.entity_type for m in ir.resolve_overlaps(small)] == ["B", "C"]
+
+    many = [match(i * 3, i * 3 + 2, "A", "xx") for i in range(8000)]
+    many += [match(i * 3 + 1, i * 3 + 3, "B", "xx") for i in range(8000)]
+    started = time.perf_counter()
+    kept = ir.resolve_overlaps(many)
+    elapsed = time.perf_counter() - started
+    assert len(kept) == 8000 and all(m.entity_type == "A" for m in kept)
+    assert elapsed < 0.5, f"resolve_overlaps took {elapsed:.2f}s for 16,000 matches"
