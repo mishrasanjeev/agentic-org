@@ -362,8 +362,11 @@ def case_key(server_id: str) -> str:
 async def pseudonymisation_enabled(tenant_id: str | uuid.UUID | None) -> bool:
     """Whether ``pseudonymisation.pre_model`` is on for this tenant (off by default and without a tenant).
 
-    Raises ``PseudonymisationError("flag_lookup_failed")`` when the flag
-    cannot be read: an unknown value must not silently send raw data.
+    The flag is an operator-managed authority flag: its global row and the
+    tenant's row are read separately and pseudonymisation is on when either
+    enables it, so a tenant row can never switch off an operator's global
+    setting. Raises ``PseudonymisationError("flag_lookup_failed")`` when the
+    flag cannot be read: an unknown value must not silently send raw data.
     """
     if not tenant_id:
         return False
@@ -372,13 +375,17 @@ async def pseudonymisation_enabled(tenant_id: str | uuid.UUID | None) -> bool:
     except ValueError:
         return False
     # Local import avoids a database import for callers without a tenant.
-    from core.feature_flags import FeatureFlagLookupError, is_enabled_strict  # noqa: PLC0415
+    from core.feature_flags import FeatureFlagLookupError, load_flag_rows_strict, row_enabled  # noqa: PLC0415
 
     try:
-        return await is_enabled_strict(FLAG_KEY, tenant_id=tenant_uuid)
+        rows = await load_flag_rows_strict(FLAG_KEY, tenant_id=tenant_uuid)
     except FeatureFlagLookupError as exc:
         _unavailable_total.labels(reason="flag_lookup_failed").inc()
         raise PseudonymisationError("flag_lookup_failed") from exc
+    subject = str(tenant_uuid)
+    return row_enabled(FLAG_KEY, rows.global_row, subject_id=subject) or row_enabled(
+        FLAG_KEY, rows.tenant_row, subject_id=subject
+    )
 
 
 def with_model_guidance(system_prompt: str) -> str:
