@@ -5,9 +5,9 @@ The wheel publishes ``testing/provider_conformance`` as ``agenticorg.testing.pro
 (``[tool.hatch.build.targets.wheel.force-include]`` in ``pyproject.toml``). This test lays out every
 package the wheel contains exactly as the wheel does, then runs
 ``provider_example/conformance_example.py`` - which imports only the published name - with pytest in
-a separate process, from a directory outside the repository, with only that layout on
-``PYTHONPATH`` and never the repository root. It runs the mock in-process and over HTTP in strict
-mode, so a skipped check fails.
+a separate process, outside the repository's pytest configuration, with only that layout on
+``PYTHONPATH``: the suite and the interface must be imported from the layout, never from the
+repository. It runs the mock in-process and over HTTP in strict mode, so a skipped check fails.
 """
 
 from __future__ import annotations
@@ -86,7 +86,10 @@ REPO = Path({repo!r}).resolve()
 def test_everything_is_imported_from_the_published_layout():
     assert Path(suite.__file__).resolve().is_relative_to(SITE)
     assert Path(interface.__file__).resolve().is_relative_to(SITE)
-    assert all(Path(entry or ".").resolve() != REPO for entry in sys.path)
+    # An editable install of the repository may add its root to sys.path; the layout must come first.
+    entries = [Path(entry or ".").resolve() for entry in sys.path]
+    assert SITE in entries
+    assert REPO not in entries[: entries.index(SITE)]
 """
 
 
@@ -94,6 +97,16 @@ def test_everything_is_imported_from_the_published_layout():
 def test_an_external_package_runs_the_published_suite_strictly_and_the_mock_passes(tmp_path: Path) -> None:
     site = tmp_path / "site"
     project = tmp_path / "acme_kyb_package"
+    try:
+        _run_external_package(site, project)
+    finally:
+        # The copied packages live under the test's temporary directory, which can sit inside the
+        # repository (pytest basetemp); remove them so later source-scanning tests do not see them.
+        shutil.rmtree(site, ignore_errors=True)
+        shutil.rmtree(project, ignore_errors=True)
+
+
+def _run_external_package(site: Path, project: Path) -> None:
     published_layout(site)
     project.mkdir()
     shutil.copy2(EXAMPLE, project / "test_conformance.py")
