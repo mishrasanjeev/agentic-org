@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0.0",
+  "provider": "mock",
+  "subject": {
+    "provider": "mock",
+    "provider_ref": "mock-gb-00000001",
+    "jurisdiction": "GB",
+    "identifiers": [{"scheme": "gb_company_number", "value": "00000001"}]
+  },
+  "subject_node_id": "biz-00000001",
+  "as_of": "2026-09-01T09:00:00Z",
+  "completeness": "complete",
+  "nodes": [
+    {
+      "node_id": "biz-00000001",
+      "kind": "business",
+      "name": "Brightwater Lantern Works Ltd",
+      "jurisdiction": "GB",
+      "identifiers": [{"scheme": "gb_company_number", "value": "00000001"}],
+      "date_of_birth": null,
+      "nationalities": [],
+      "address": {
+        "lines": ["1 Example Street"],
+        "locality": "Exampleton",
+        "region": null,
+        "postal_code": "ZZ99 9ZZ",
+        "country": "GB"
+      },
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:profile",
+          "field": "company_name",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "node_id": "psn-orla-venncastle",
+      "kind": "person",
+      "name": "Orla Venncastle",
+      "jurisdiction": null,
+      "identifiers": [],
+      "date_of_birth": "1971-04",
+      "nationalities": ["GB"],
+      "address": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:psc:1",
+          "field": "name",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "node_id": "psn-tamsin-quellbridge",
+      "kind": "person",
+      "name": "Tamsin Quellbridge",
+      "jurisdiction": null,
+      "identifiers": [],
+      "date_of_birth": "1983-11",
+      "nationalities": ["GB", "IE"],
+      "address": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:psc:2",
+          "field": "name",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "from_node_id": "psn-orla-venncastle",
+      "to_node_id": "biz-00000001",
+      "relationship": "shareholding",
+      "share_pct": {"min": 50, "max": 75},
+      "voting_pct": {"min": 50, "max": 75},
+      "started_on": "2019-06-01",
+      "ended_on": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:psc:1",
+          "field": "natures_of_control[0]",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": "excerpt:mock-00000001-psc-1"
+        }
+      ]
+    },
+    {
+      "from_node_id": "psn-tamsin-quellbridge",
+      "to_node_id": "biz-00000001",
+      "relationship": "shareholding",
+      "share_pct": {"min": 25, "max": 50},
+      "voting_pct": null,
+      "started_on": "2019-06-01",
+      "ended_on": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:company:00000001:psc:2",
+          "field": "natures_of_control[0]",
+          "retrieved_at": "2026-09-01T09:00:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "provider": "mock",
+      "record_id": "mock:company:00000001:psc",
+      "field": "items",
+      "retrieved_at": "2026-09-01T09:00:00Z",
+      "excerpt_ref": null
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/common/1.0.0",
+  "title": "Governed case common definitions",
+  "description": "Definitions shared by the governed-case domain schemas. Not a document type on its own.",
+  "$defs": {
+    "schema_version": {
+      "description": "Semantic version of the schema the document was written against. Major version 1.",
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$"
+    },
+    "timestamp": {
+      "description": "RFC 3339 timestamp with an explicit offset.",
+      "type": "string",
+      "format": "date-time"
+    },
+    "provider_name": {
+      "description": "Registered name of a verification provider, e.g. mock or acme_kyb.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "identifier_token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:\\-]*$"
+    },
+    "sha256_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "excerpt_ref": {
+      "description": "Reference to a stored excerpt shown to the human reviewer. The excerpt itself is never inlined.",
+      "type": "string",
+      "pattern": "^excerpt:[A-Za-z0-9._:\\-]{1,128}$"
+    },
+    "evidence": {
+      "description": "One upstream record behind an assertion.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "record_id", "field", "retrieved_at", "excerpt_ref"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/provider_name"},
+        "record_id": {
+          "description": "The provider's identifier for the record the value came from.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "field": {
+          "description": "Dotted path of the field within that record.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+|\\[[0-9]+\\])*$",
+          "maxLength": 256
+        },
+        "retrieved_at": {"$ref": "#/$defs/timestamp"},
+        "excerpt_ref": {
+          "description": "Stored excerpt for the reviewer, or null when the record has none.",
+          "oneOf": [{"$ref": "#/$defs/excerpt_ref"}, {"type": "null"}]
+        }
+      }
+    },
+    "evidence_list": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/evidence"}
+    },
+    "country_code": {
+      "description": "ISO 3166-1 alpha-2 country code.",
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "jurisdiction": {
+      "description": "ISO 3166-1 alpha-2 country, optionally with an ISO 3166-2 subdivision, e.g. GB or US-DE.",
+      "type": "string",
+      "pattern": "^[A-Z]{2}(-[A-Z0-9]{1,3})?$"
+    },
+    "partial_date": {
+      "description": "A calendar date that may be known only to the year or month.",
+      "type": "string",
+      "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$"
+    },
+    "identifier": {
+      "description": "A registry or tax identifier. scheme is a lower-case vocabulary term such as gb_company_number, us_ein or us_state_file_number.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "value"],
+      "properties": {
+        "scheme": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+        "value": {"type": "string", "minLength": 1, "maxLength": 64}
+      }
+    },
+    "address": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lines", "country"],
+      "properties": {
+        "lines": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {"type": "string", "minLength": 1, "maxLength": 256}
+        },
+        "locality": {"type": ["string", "null"], "maxLength": 128},
+        "region": {"type": ["string", "null"], "maxLength": 128},
+        "postal_code": {"type": ["string", "null"], "maxLength": 32},
+        "country": {"$ref": "#/$defs/country_code"}
+      }
+    },
+    "registry_status": {
+      "description": "Normalised registry status of a business.",
+      "type": "string",
+      "enum": ["active", "inactive", "dissolved", "in_insolvency", "unknown"]
+    },
+    "business_ref": {
+      "description": "A business as identified by one provider.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "provider_ref", "jurisdiction"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/provider_name"},
+        "provider_ref": {"$ref": "#/$defs/identifier_token"},
+        "jurisdiction": {"$ref": "#/$defs/jurisdiction"},
+        "identifiers": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/identifier"}
+        }
+      }
+    },
+    "party_kind": {
+      "type": "string",
+      "enum": ["person", "business"]
+    },
+    "section_status": {
+      "description": "How much of a section could be produced. not_available means the provider does not offer the capability.",
+      "type": "string",
+      "enum": ["complete", "partial", "not_available", "error"]
+    },
+    "risk_tier": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "blocked"]
+    }
+  }
+}

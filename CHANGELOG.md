@@ -45,6 +45,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
   `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
+- Governed-case domain schemas (JSON Schema 2020-12, versioned `$id`s):
+  `business_case`, `ownership_graph`, `screening_result`,
+  `screening_disposition`, `policy_result`, `underwriting_memo` and
+  `case_push`, with shared definitions in `common`. Every memo section and
+  finding cites `evidence[]` of `{provider, record_id, field, retrieved_at,
+  excerpt_ref}`. `core/domain_schemas.py` validates documents and fails closed
+  with a reason code. A new `tests/contract/` suite, added to the CI unit job
+  and `scripts/preflight.sh`, validates every fixture in `schemas/examples/`,
+  fails on a fixture without a schema, and checks that documentation code
+  examples match the tests they come from. The schemas are not seeded into
+  tenant schema registries. See `docs/schemas/domain-schemas.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

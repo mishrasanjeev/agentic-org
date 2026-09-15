@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/policy_result/1.0.0",
+  "title": "Policy result",
+  "description": "The deterministic evaluation of one versioned policy over a case's evidence fields. Identical inputs produce an identical document, so it carries no evaluation timestamp; the case records when it was evaluated.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy", "inputs_digest", "score", "tier", "reasons"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_id", "version", "example", "reviewed_by"],
+      "properties": {
+        "policy_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,127}$"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "example": {
+          "description": "true for a shipped example policy that has not been reviewed for real use.",
+          "type": "boolean"
+        },
+        "reviewed_by": {"type": ["string", "null"], "maxLength": 256}
+      }
+    },
+    "inputs_digest": {
+      "description": "SHA-256 over the canonical JSON of the evidence fields the policy read.",
+      "$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/sha256_digest"
+    },
+    "score": {"type": "number", "minimum": 0},
+    "tier": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/risk_tier"},
+    "reasons": {
+      "description": "Every rule that fired, in evaluation order.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/reason"}
+    }
+  },
+  "$defs": {
+    "reason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "tier", "reason", "inputs"],
+      "properties": {
+        "rule_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,127}$"},
+        "tier": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/risk_tier"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 512},
+        "score": {"type": ["number", "null"]},
+        "inputs": {
+          "description": "The evidence field values the rule read, keyed by dotted field path.",
+          "type": "object",
+          "propertyNames": {"pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"},
+          "additionalProperties": {"type": ["string", "number", "boolean", "null"]}
+        }
+      }
+    }
+  }
+}
