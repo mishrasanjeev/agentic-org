@@ -13,10 +13,16 @@ before a model call (``build_agent_graph(context_guard=...)``). A match raises
 attacker text to the model.
 
 Matching ignores case, whitespace, punctuation and JSON escaping, and also
-looks for any copied run of 40 or more letters and digits from a long passage, so a reformatted or partial
-copy is still caught. Strings shorter than 8 letters or digits, and strings
-that are exactly a schema vocabulary value, are replaced by the builder but
-not searched for, to avoid false alarms on ordinary words.
+looks for any copied run of 40 or more letters and digits from a long
+passage, so a reformatted or partial copy is still caught.
+
+Registered strings shorter than 8 letters and digits, and strings that are
+exactly a schema vocabulary value, are not searched for. The guard matches
+substrings of the whole prompt, so a short needle such as ``Retail`` or
+``Ltd`` would match ordinary words in system prompts and fail legitimate runs.
+Such strings are still always replaced by ``build_model_context`` (exact
+match), and a string that short cannot carry more than a single word; the
+guard is the backstop for longer text that reaches a prompt by another route.
 """
 
 from __future__ import annotations
@@ -36,7 +42,11 @@ WINDOW_CHARS = 32
 WINDOW_STEP = 8
 LEAK_REASON = "untrusted_content_in_model_context"
 
-_SAFE_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_.:-]{0,63}")
+# Strings a model may see verbatim: short snake_case identifiers (enum values)
+# and ISO dates. No ``:``, ``.``, ``/`` or spaces, so a value cannot be shaped
+# like a role marker, a dotted instruction or a sentence.
+_SAFE_TOKEN_RE = re.compile(r"[a-z][a-z0-9_]{0,31}")
+_ISO_DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
 _KEY_RE = re.compile(r"[a-z][a-z0-9_]{0,63}")
 _JSON_ESCAPE_RE = re.compile(r"\\(u[0-9a-fA-F]{4}|[\"\\/bfnrt])")
 _SIMPLE_ESCAPES = {'"': '"', "\\": "\\", "/": "/", "b": " ", "f": " ", "n": " ", "r": " ", "t": " "}
@@ -160,7 +170,7 @@ def _render(value: Any, path: str, untrusted: UntrustedTextRegistry) -> Any:
             raise UntrustedContextError(f"{path}: non-finite number")
         return value
     if isinstance(value, str):
-        if untrusted.is_untrusted(value) or not _SAFE_TOKEN_RE.fullmatch(value):
+        if untrusted.is_untrusted(value) or not (_SAFE_TOKEN_RE.fullmatch(value) or _ISO_DATE_RE.fullmatch(value)):
             return {"untrusted_ref": path}
         return value
     if isinstance(value, Mapping):
@@ -178,8 +188,9 @@ def _render(value: Any, path: str, untrusted: UntrustedTextRegistry) -> Any:
 def build_model_context(evidence: Mapping[str, Any], *, untrusted: UntrustedTextRegistry) -> str:
     """Render case evidence as JSON a model may see, with untrusted text replaced by references.
 
-    Numbers, booleans, ``null`` and enum-like tokens (lower-case letters,
-    digits and ``_ . : -``, up to 64 characters) are kept; any other string,
+    Numbers, booleans, ``null``, ISO dates and enum-like tokens (a lower-case
+    letter then up to 31 lower-case letters, digits or underscores) are kept;
+    any other string,
     and any string registered as untrusted, becomes
     ``{"untrusted_ref": "<dotted.path>"}``. Keys must be snake_case
     identifiers. The result is checked against the registry before it is

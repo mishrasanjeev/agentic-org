@@ -2,7 +2,7 @@
 """Sandboxed extraction worker. Runs in its own process; never imported to extract in-process.
 
 The parent (``core.extraction.sandbox``) starts this file by path with
-``python -I -B`` and a minimal environment, writes one JSON request to stdin
+``python -I -S -B`` and a minimal environment, writes one JSON request to stdin
 and reads one JSON response from stdout. This module uses the standard library
 only and imports nothing from the application, so it can run isolated.
 
@@ -163,6 +163,24 @@ _DENIED_EVENTS = frozenset(
         "urllib.Request",
         "http.client.connect",
         "webbrowser.open",
+        "os.remove",
+        "os.rename",
+        "os.truncate",
+        "os.rmdir",
+        "os.mkdir",
+        "os.link",
+        "os.symlink",
+        "os.chmod",
+        "os.chown",
+        "os.utime",
+        "os.kill",
+        "os.killpg",
+        "signal.pthread_kill",
+        "shutil.rmtree",
+        "shutil.copyfile",
+        "shutil.copytree",
+        "shutil.move",
+        "shutil.chown",
     }
 )
 _WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
@@ -213,11 +231,157 @@ def _set_rlimits(
     return applied
 
 
-_SECCOMP_DENY: dict[str, tuple[int, tuple[int, ...]]] = {
-    # machine: (AUDIT_ARCH, (socket, socketpair, execve, execveat, ptrace, io_uring_setup/enter/register))
-    "x86_64": (0xC000003E, (41, 53, 59, 322, 101, 425, 426, 427)),
-    "aarch64": (0xC00000B7, (198, 199, 221, 281, 117, 425, 426, 427)),
+# Linux system call numbers per machine. Everything not listed is allowed.
+_SECCOMP_TABLES: dict[str, dict[str, Any]] = {
+    "x86_64": {
+        "arch": 0xC000003E,  # AUDIT_ARCH_X86_64
+        "seccomp": 317,
+        "deny": (
+            41,
+            53,  # socket, socketpair
+            59,
+            322,  # execve, execveat
+            57,
+            58,  # fork, vfork
+            101,
+            310,
+            311,  # ptrace, process_vm_readv, process_vm_writev
+            424,
+            434,
+            438,  # pidfd_send_signal, pidfd_open, pidfd_getfd
+            425,
+            426,
+            427,  # io_uring_setup, io_uring_enter, io_uring_register
+            85,
+            87,
+            263,
+            82,
+            264,
+            316,  # creat, unlink, unlinkat, rename, renameat, renameat2
+            83,
+            258,
+            84,
+            86,
+            265,
+            88,
+            266,  # mkdir, mkdirat, rmdir, link, linkat, symlink, symlinkat
+            76,
+            77,
+            133,
+            259,  # truncate, ftruncate, mknod, mknodat
+            90,
+            91,
+            268,
+            452,
+            92,
+            93,
+            94,
+            260,  # chmod, fchmod, fchmodat, fchmodat2, chown, fchown, lchown, fchownat
+            165,
+            166,
+            155,
+            272,
+            308,  # mount, umount2, pivot_root, unshare, setns
+        ),
+        "enosys": (435, 437),  # clone3, openat2: arguments are behind a pointer; libc falls back
+        "clone": 56,
+        "own_pid": (62, 200, 234),  # kill, tkill, tgkill: only this process
+        "open_flags_arg1": (2,),  # open(path, flags, mode)
+        "open_flags_arg2": (257,),  # openat(dirfd, path, flags, mode)
+    },
+    "aarch64": {
+        "arch": 0xC00000B7,  # AUDIT_ARCH_AARCH64
+        "seccomp": 277,
+        "deny": (
+            198,
+            199,  # socket, socketpair
+            221,
+            281,  # execve, execveat
+            117,
+            270,
+            271,  # ptrace, process_vm_readv, process_vm_writev
+            424,
+            434,
+            438,  # pidfd_send_signal, pidfd_open, pidfd_getfd
+            425,
+            426,
+            427,  # io_uring_setup, io_uring_enter, io_uring_register
+            35,
+            38,
+            276,
+            34,
+            37,
+            36,  # unlinkat, renameat, renameat2, mkdirat, linkat, symlinkat
+            45,
+            46,
+            33,  # truncate, ftruncate, mknodat
+            52,
+            53,
+            452,
+            54,
+            55,  # fchmod, fchmodat, fchmodat2, fchownat, fchown
+            40,
+            39,
+            41,
+            97,
+            268,  # mount, umount2, pivot_root, unshare, setns
+        ),
+        "enosys": (435, 437),  # clone3, openat2
+        "clone": 220,
+        "own_pid": (129, 130, 131),  # kill, tkill, tgkill
+        "open_flags_arg1": (),
+        "open_flags_arg2": (56,),  # openat
+    },
 }
+_CLONE_THREAD = 0x00010000
+# O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND (same values on x86-64 and arm64).
+_OPEN_WRITE_FLAGS = 0x1 | 0x2 | 0x40 | 0x200 | 0x400
+
+
+def _seccomp_program(table: dict[str, Any], pid: int) -> list[tuple[int, int, int, int]]:
+    """Assemble the BPF filter. Jumps name labels and are resolved to forward offsets."""
+    ld, jeq, jge, jset, ret = 0x20, 0x15, 0x35, 0x45, 0x06
+    allow, eacces, enosys = 0x7FFF0000, 0x00050000 | 13, 0x00050000 | 38
+    nr, arch, arg0, arg1, arg2 = 0, 4, 16, 24, 32  # offsets in struct seccomp_data (low 32 bits)
+
+    code: list[tuple[int, Any, Any, int]] = [
+        (ld, None, None, arch),
+        (jeq, None, "deny", table["arch"]),
+        (ld, None, None, nr),
+        (jge, "deny", None, 0x40000000),  # x32 system calls
+    ]
+    code += [(jeq, "enosys", None, number) for number in table["enosys"]]
+    code += [(jeq, "deny", None, number) for number in table["deny"]]
+    code.append((jeq, "clone", None, table["clone"]))
+    code += [(jeq, "own_pid", None, number) for number in table["own_pid"]]
+    code += [(jeq, "open_arg1", None, number) for number in table["open_flags_arg1"]]
+    code += [(jeq, "open_arg2", None, number) for number in table["open_flags_arg2"]]
+    code.append((ret, None, None, allow))
+    labels: dict[str, int] = {}
+    labels["clone"] = len(code)
+    code += [(ld, None, None, arg0), (jset, "allow", "deny", _CLONE_THREAD)]  # threads only
+    labels["own_pid"] = len(code)
+    code += [(ld, None, None, arg0), (jeq, "allow", "deny", pid)]
+    labels["open_arg1"] = len(code)
+    code += [(ld, None, None, arg1), (jset, "deny", "allow", _OPEN_WRITE_FLAGS)]
+    labels["open_arg2"] = len(code)
+    code += [(ld, None, None, arg2), (jset, "deny", "allow", _OPEN_WRITE_FLAGS)]
+    labels["allow"] = len(code)
+    code.append((ret, None, None, allow))
+    labels["deny"] = len(code)
+    code.append((ret, None, None, eacces))
+    labels["enosys"] = len(code)
+    code.append((ret, None, None, enosys))
+
+    def offset(index: int, target: Any) -> int:
+        if target is None:
+            return 0
+        distance = labels[target] - (index + 1)
+        if not 0 <= distance <= 255:
+            raise ValueError("seccomp jump out of range")
+        return distance
+
+    return [(op, offset(i, jt), offset(i, jf), k) for i, (op, jt, jf, k) in enumerate(code)]
 
 
 def _linux_isolation() -> list[str]:  # pragma: no cover - worker process only
@@ -232,10 +396,9 @@ def _linux_isolation() -> list[str]:  # pragma: no cover - worker process only
     if libc.unshare(clone_newuser | clone_newnet) == 0 or libc.unshare(clone_newnet) == 0:
         active.append("netns")
 
-    machine = platform.machine().lower()
-    if machine not in _SECCOMP_DENY:
+    table = _SECCOMP_TABLES.get(platform.machine().lower())
+    if table is None:
         return active
-    arch, denied = _SECCOMP_DENY[machine]
 
     class SockFilter(ctypes.Structure):
         _fields_ = [("code", ctypes.c_uint16), ("jt", ctypes.c_uint8), ("jf", ctypes.c_uint8), ("k", ctypes.c_uint32)]
@@ -243,26 +406,15 @@ def _linux_isolation() -> list[str]:  # pragma: no cover - worker process only
     class SockFprog(ctypes.Structure):
         _fields_ = [("len", ctypes.c_uint16), ("filter", ctypes.POINTER(SockFilter))]
 
-    ld_abs, jeq, jge, ret = 0x20, 0x15, 0x35, 0x06
-    allow, deny = 0x7FFF0000, 0x00050000 | 13  # SECCOMP_RET_ERRNO | EACCES
-    count = len(denied)
-    # Layout: [0] load arch, [1] arch check, [2] load nr, [3] x32 check,
-    # [4..4+count) denied numbers, [4+count] allow, [5+count] deny.
-    program = [
-        (ld_abs, 0, 0, 4),
-        (jeq, 0, count + 3, arch),
-        (ld_abs, 0, 0, 0),
-        (jge, count + 1, 0, 0x40000000),
-    ]
-    for index, number in enumerate(denied):
-        program.append((jeq, count - index, 0, number))
-    program += [(ret, 0, 0, allow), (ret, 0, 0, deny)]
+    program = _seccomp_program(table, os.getpid())
     filters = (SockFilter * len(program))(*[SockFilter(*item) for item in program])
     fprog = SockFprog(len(program), filters)
-    pr_set_no_new_privs, pr_set_seccomp, seccomp_mode_filter = 38, 22, 2
-    if libc.prctl(pr_set_no_new_privs, 1, 0, 0, 0) == 0 and (
-        libc.prctl(pr_set_seccomp, seccomp_mode_filter, ctypes.byref(fprog), 0, 0) == 0
-    ):
+    pr_set_no_new_privs, seccomp_set_mode_filter, seccomp_filter_flag_tsync = 38, 1, 1
+    if libc.prctl(pr_set_no_new_privs, 1, 0, 0, 0) != 0:
+        return active
+    # seccomp(2) with TSYNC applies the filter to every thread or fails as a whole.
+    result = libc.syscall(table["seccomp"], seccomp_set_mode_filter, seccomp_filter_flag_tsync, ctypes.byref(fprog))
+    if result == 0:
         active.append("seccomp")
     return active
 
@@ -273,8 +425,8 @@ def _install_sandbox(
     active: list[str] = []
     try:
         active.extend(_linux_isolation())
-    except (OSError, AttributeError, ValueError):
-        pass
+    except (OSError, AttributeError, TypeError, ValueError):
+        pass  # the layer is simply not reported; callers that require it fail closed
     if _set_rlimits(cpu_seconds):
         active.append("rlimits")
     if audit_hook:
@@ -697,18 +849,28 @@ def _handle(request: Any) -> dict[str, Any]:
     return _extract_key_value(kind, text, content_type)
 
 
+PROBE_DELETE_TARGET = "sandbox-probe-delete.tmp"
+PROBE_RENAME_TARGET = "sandbox-probe-rename.tmp"
+
+
 def _probe(*, audit_hook: bool) -> dict[str, Any]:  # pragma: no cover - worker process only
-    """Report which isolation layers are active and whether escapes are refused."""
+    """Report which isolation layers are active and whether escapes are refused.
+
+    The parent creates the two target files in the worker's empty working
+    directory before starting a probe.
+    """
     isolation = _install_sandbox(cpu_seconds=10, audit_hook=audit_hook)
     checks: dict[str, str] = {}
 
     def attempt(name: str, action: Any) -> None:
         try:
-            action()
+            outcome = action()
+        except AttributeError:
+            checks[name] = "skipped:unsupported"
         except (OSError, RuntimeError, ValueError) as exc:
             checks[name] = f"denied:{type(exc).__name__}"
         else:
-            checks[name] = "allowed"
+            checks[name] = outcome or "allowed"
 
     import socket  # noqa: PLC0415
 
@@ -730,20 +892,55 @@ def _probe(*, audit_hook: bool) -> dict[str, Any]:  # pragma: no cover - worker 
 
         subprocess.run([sys.executable, "-c", "pass"], check=True, timeout=5)  # noqa: S603
 
+    def fork() -> None:
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        os.waitpid(pid, 0)
+
+    def signal_parent() -> str | None:
+        if os.name != "posix":
+            return "skipped:unsupported"  # os.kill on Windows terminates the target
+        os.kill(os.getppid(), 0)  # signal 0 checks permission and delivers nothing
+        return None
+
     def write_file() -> None:
-        with open("sandbox-probe.tmp", "w", encoding="utf-8") as handle:
+        with open("sandbox-probe-write.tmp", "w", encoding="utf-8") as handle:
             handle.write("x")
+
+    def delete_file() -> str | None:
+        if not os.path.exists(PROBE_DELETE_TARGET):
+            return "skipped:no_target"
+        os.unlink(PROBE_DELETE_TARGET)
+        return None
+
+    def rename_file() -> str | None:
+        if not os.path.exists(PROBE_RENAME_TARGET):
+            return "skipped:no_target"
+        os.rename(PROBE_RENAME_TARGET, PROBE_RENAME_TARGET + ".moved")
+        return None
 
     if audit_hook or {"netns", "seccomp"} & set(isolation):
         attempt("socket_connect", connect)
         attempt("raw_socket", raw_socket)
         attempt("name_resolution", resolve)
         attempt("process_spawn", spawn)
+        attempt("process_fork", fork)
+        attempt("signal_other_process", signal_parent)
     else:
-        # Never make a real network attempt from a probe that has nothing to stop it.
-        for name in ("socket_connect", "raw_socket", "name_resolution", "process_spawn"):
+        # Never make a real network or process attempt from a probe with nothing to stop it.
+        for name in (
+            "socket_connect",
+            "raw_socket",
+            "name_resolution",
+            "process_spawn",
+            "process_fork",
+            "signal_other_process",
+        ):
             checks[name] = "skipped:no_isolation"
     attempt("file_write", write_file)
+    attempt("file_delete", delete_file)
+    attempt("file_rename", rename_file)
     return {"v": PROTOCOL_VERSION, "ok": True, "isolation": isolation, "checks": checks}
 
 
