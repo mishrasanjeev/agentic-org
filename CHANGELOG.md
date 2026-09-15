@@ -73,6 +73,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   Nothing is added in their place. `seo_strategist` is left with no default
   tools, so `POST /mcp/call` for `agenticorg_seo_strategist` now answers 400
   "No tools configured" instead of running an agent with no tools.
+- Default tools that several connectors register now name the connector the
+  agent's prompt uses, so they no longer resolve to whichever connector was
+  imported first: `create_issue` is `jira:create_issue` for `vendor_manager`
+  and `facilities_agent` (it resolved to GitHub), `query` and
+  `search_contacts` are `salesforce:` for `abm` (it resolved to QuickBooks and
+  HubSpot), and `get_analytics`, `create_page`, `send_email`,
+  `create_campaign`, `create_incident` and `get_compliance_notice` are
+  qualified for the agents that name LinkedIn Ads, Confluence, SendGrid or
+  Gmail, Mailchimp, ServiceNow or GSTN. Accounting and HRMS tools shared by
+  interchangeable systems (`get_trial_balance`, `get_employee`, ...) stay bare
+  and resolve through the connectors linked to the agent.
+  `GET /agents/default-tools/{type}` keeps a qualified default only when its
+  connector is linked, and Grantex scopes for a qualified tool now name that
+  connector (`tool:jira:execute:create_issue`); an unknown connector never
+  matches.
 
 ## [4.0.0] — 2026-04-05
 
