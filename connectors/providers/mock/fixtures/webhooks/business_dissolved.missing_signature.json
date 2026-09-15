@@ -1,0 +1,10 @@
+{
+  "description": "No signature header.",
+  "verify_at": 1788253200,
+  "headers": {
+    "X-Mock-Event-Id": "evt-webhook-fixture-0001",
+    "X-Mock-Timestamp": "1788253170"
+  },
+  "body": "{\"event_id\":\"evt-webhook-fixture-0001\",\"event_type\":\"business.dissolved\",\"monitor_id\":null,\"occurred_at\":\"2026-09-01T08:59:30Z\",\"provider\":\"mock\",\"subject\":{\"identifiers\":[{\"scheme\":\"gb_company_number\",\"value\":\"00000004\"}],\"jurisdiction\":\"GB\",\"provider\":\"mock\",\"provider_ref\":\"mock-gb-00000004\"}}",
+  "expected": "rejected"
+}

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/screening_result/1.0.0",
+  "title": "Screening result",
+  "description": "The outcome of screening one person or business against sanctions, politically exposed person, watchlist, enforcement and adverse media sources. A hit is a candidate match, not a finding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "screening_id", "provider", "subject_kind", "subject", "screened_at", "list_types", "hits", "evidence"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "screening_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "provider": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/provider_name"},
+    "subject_kind": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/party_kind"},
+    "subject": {"$ref": "#/$defs/subject"},
+    "screened_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "list_types": {
+      "description": "The source categories that were actually checked.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/list_type"}
+    },
+    "hits": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/hit"}
+    },
+    "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+  },
+  "$defs": {
+    "list_type": {
+      "type": "string",
+      "enum": ["sanctions", "pep", "watchlist", "enforcement", "adverse_media"]
+    },
+    "subject": {
+      "description": "The identifiers that were submitted for screening.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "date_of_birth": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "nationalities": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/country_code"}
+        },
+        "jurisdiction": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/jurisdiction"},
+            {"type": "null"}
+          ]
+        },
+        "address": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/address"},
+            {"type": "null"}
+          ]
+        },
+        "identifiers": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier"}
+        }
+      }
+    },
+    "hit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hit_id", "list_type", "source", "matched_name", "aliases", "dates_of_birth", "nationalities", "addresses", "associated_entities", "evidence"],
+      "properties": {
+        "hit_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+        "list_type": {"$ref": "#/$defs/list_type"},
+        "source": {
+          "description": "The list or publication the entry comes from.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "properties": {
+            "name": {"type": "string", "minLength": 1, "maxLength": 256},
+            "authority": {"type": ["string", "null"], "maxLength": 256},
+            "jurisdiction": {
+              "oneOf": [
+                {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/jurisdiction"},
+                {"type": "null"}
+              ]
+            }
+          }
+        },
+        "entry_kind": {
+          "oneOf": [{"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/party_kind"}, {"type": "null"}]
+        },
+        "matched_name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "aliases": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "dates_of_birth": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"}
+        },
+        "nationalities": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/country_code"}
+        },
+        "addresses": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/address"}
+        },
+        "associated_entities": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "listed_on": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "name_similarity": {
+          "description": "Similarity of the submitted name to the matched name or alias, 0 to 1, when the source computes one.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence": {
+          "$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list",
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

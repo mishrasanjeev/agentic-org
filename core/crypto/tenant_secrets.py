@@ -69,6 +69,23 @@ async def _resolve_kek(tenant_id: uuid.UUID) -> str:
     return os.getenv("AGENTICORG_PLATFORM_KEK", "")
 
 
+async def resolve_tenant_kek(tenant_id: uuid.UUID) -> str:
+    """The KEK resource ``encrypt_for_tenant`` would use ("" means legacy Fernet).
+
+    For callers that must not open a second database session while holding
+    one, such as a row lock: resolve first, then ``encrypt_with_kek``.
+    """
+    return await _resolve_kek(tenant_id)
+
+
+def encrypt_with_kek(plaintext: str, kek: str) -> str:
+    """Encrypt with a KEK from ``resolve_tenant_kek``. Synchronous (KMS is gRPC); call via ``asyncio.to_thread``."""
+    if kek:
+        return _ENVELOPE_PREFIX + encrypt_to_string(plaintext.encode(), kek)
+    # Fallback — legacy Fernet
+    return _legacy_encrypt(plaintext)
+
+
 async def encrypt_for_tenant(plaintext: str, tenant_id: uuid.UUID) -> str:
     """Return a ciphertext string for storage.
 
@@ -76,11 +93,7 @@ async def encrypt_for_tenant(plaintext: str, tenant_id: uuid.UUID) -> str:
     otherwise falls back to legacy Fernet so this is safe to drop into
     existing call sites.
     """
-    kek = await _resolve_kek(tenant_id)
-    if kek:
-        return _ENVELOPE_PREFIX + encrypt_to_string(plaintext.encode(), kek)
-    # Fallback — legacy Fernet
-    return _legacy_encrypt(plaintext)
+    return encrypt_with_kek(plaintext, await _resolve_kek(tenant_id))
 
 
 def decrypt_for_tenant(ciphertext: str) -> str:
