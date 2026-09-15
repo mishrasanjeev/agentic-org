@@ -208,7 +208,10 @@ test.describe("Approvals — Production Flow", () => {
     await page.goto("/dashboard/approvals");
     await page.waitForLoadState("networkidle");
     await expect(page.getByText("Approval").first()).toBeVisible({ timeout: 10000 });
-    const mainText = await page.locator("main").textContent() || "";
+    // innerText is what the page renders. textContent also returns the
+    // collapsed "Reasoning Trace" JSON, i.e. verbatim agent output, which may
+    // legitimately contain the text "NaN" (production run 34882967171).
+    const mainText = await page.locator("main").innerText() || "";
     expect(mainText).not.toContain("NaN");
   });
 
@@ -222,7 +225,7 @@ test.describe("Approvals — Production Flow", () => {
       await decidedTab.click();
       await page.waitForLoadState("networkidle");
       // Page should remain functional
-      const mainText = await page.locator("main").textContent() || "";
+      const mainText = await page.locator("main").innerText() || "";
       expect(mainText).not.toContain("NaN");
     }
   });
@@ -234,7 +237,7 @@ test.describe("Approvals — Production Flow", () => {
     if (await selectEl.isVisible({ timeout: 5000 }).catch(() => false)) {
       await selectEl.selectOption("critical");
       await page.waitForLoadState("networkidle");
-      const mainText = await page.locator("main").textContent() || "";
+      const mainText = await page.locator("main").innerText() || "";
       expect(mainText).not.toContain("NaN");
     }
   });
@@ -445,7 +448,7 @@ test.describe("Data Integrity — All Pages", () => {
     for (const p of allDashboardPages) {
       await page.goto(p);
       await page.waitForLoadState("networkidle");
-      const text = await page.locator("main").textContent() || "";
+      const text = await page.locator("main").innerText() || "";
       expect(text, `NaN found on ${p}`).not.toContain("NaN");
       expect(text, `undefined found on ${p}`).not.toContain("undefined");
     }

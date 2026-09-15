@@ -788,7 +788,8 @@ test.describe("Proactive Regression - Similar Issues", () => {
   // Approvals page loads without crash
   test("approvals page loads without crash", async ({ page }) => {
     await goTo(page, "/dashboard/approvals");
-    const body = (await page.locator("body").textContent()) || "";
+    // Rendered text: the collapsed "Reasoning Trace" holds verbatim agent output.
+    const body = (await page.locator("body").innerText()) || "";
     expect(body).not.toContain("Something went wrong");
     expect(body).not.toMatch(/\bNaN\b/);
   });

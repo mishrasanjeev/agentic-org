@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+import math
 from typing import Any
 
 import structlog
@@ -404,6 +405,10 @@ def build_agent_graph(
 
         # Use LLM-reported confidence if present, otherwise compute from signals
         confidence = _extract_confidence(output, content_length=len(content))
+        # json.loads accepts bare NaN/Infinity. Null them only after the
+        # confidence read (which fails closed on them), so HITL conditions see
+        # null (unevaluable -> review) and the output stays storable in JSONB.
+        output = _replace_non_finite(output)
 
         # Adjust based on tool execution signals
         if tool_msg_count > 0:
@@ -661,6 +666,17 @@ def _parse_json_output(content: str | list | Any) -> dict[str, Any]:
     return {"raw_output": parsed, "status": "completed"}
 
 
+def _replace_non_finite(value: Any) -> Any:
+    """Return *value* with NaN/Infinity floats (at any depth) replaced by None."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _replace_non_finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_replace_non_finite(item) for item in value]
+    return value
+
+
 def _extract_confidence(output: dict[str, Any], content_length: int = 0) -> float:
     """Extract or compute confidence score.
 
@@ -676,12 +692,18 @@ def _extract_confidence(output: dict[str, Any], content_length: int = 0) -> floa
     raw = output.get("confidence") or output.get("agent_confidence")
     if raw is not None:
         try:
-            return max(0.0, min(1.0, float(raw)))
+            value = float(raw)
         except (ValueError, TypeError):
             mapping = {"high": 0.95, "medium": 0.75, "low": 0.5}
             mapped = mapping.get(str(raw).lower().strip())
             if mapped is not None:
                 return mapped
+        else:
+            # NaN/Infinity is not a confidence. ``min(1.0, nan)`` is 1.0, which
+            # skipped human review; an unusable self-report fails closed.
+            if not math.isfinite(value):
+                return 0.0
+            return max(0.0, min(1.0, value))
 
     # Compute confidence from structural signals
     # Base: 0.6 (neutral)

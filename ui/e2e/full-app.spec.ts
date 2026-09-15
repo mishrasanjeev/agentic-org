@@ -188,8 +188,9 @@ test.describe("Full App — Dashboard (Auth Required)", () => {
         .isVisible()
         .catch(() => false);
       expect(notFound, `${path} shows 404`).toBe(false);
-      // No NaN in content
-      const mainText = await page.locator("main").textContent() || "";
+      // No NaN in rendered content (textContent would include collapsed agent
+      // payloads such as the approval "Reasoning Trace" JSON).
+      const mainText = await page.locator("main").innerText() || "";
       expect(mainText, `NaN on ${path}`).not.toContain("NaN");
     }
   });
