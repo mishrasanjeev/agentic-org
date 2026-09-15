@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, NotRequired
 
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
@@ -26,6 +26,8 @@ class AgentState(TypedDict):
         tool_calls_log: Record of tool calls made (connector, tool, latency, status).
         hitl_trigger: If set, the condition that triggered HITL escalation.
         error: Error details if status is "failed".
+        grant_denial: Set when grant enforcement refused a tool call (PRD F-1
+            deny mode): reason, sub_reason, grant_id, connector and tool.
     """
 
     messages: Annotated[list, add_messages]
@@ -41,3 +43,4 @@ class AgentState(TypedDict):
     tool_calls_log: list[dict[str, Any]]
     hitl_trigger: str
     error: str
+    grant_denial: NotRequired[dict[str, str]]

@@ -3518,6 +3518,7 @@ async def run_agent(
                 "reasoning_trace": task_trace[:10],
                 "runtime": "langgraph",
                 "has_hitl": bool(hitl_trigger),
+                **({"grant_denial": lg_result["grant_denial"]} if lg_result.get("grant_denial") else {}),
             },
         )
         session.add(audit_entry)
@@ -3659,6 +3660,9 @@ async def run_agent(
         "error": task_error or None,
         "review_learning": review_learning,
     }
+    if lg_result.get("grant_denial"):
+        # PRD F-1 deny: the reason code for the refused tool call.
+        response["grant_denial"] = lg_result["grant_denial"]
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response

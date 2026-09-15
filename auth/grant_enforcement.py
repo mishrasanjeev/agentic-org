@@ -11,8 +11,8 @@ when the check fails depends on the enforcement mode:
     The call goes ahead. Each call that *would* be denied is logged as a
     ``grant_enforcement_would_deny`` event and counted.
 ``deny``
-    The call is refused with a reason code, logged as
-    ``grant_enforcement_denied`` and counted.
+    The call is refused with a reason code that reaches the run result and
+    audit trail, logged as ``grant_enforcement_denied`` and counted.
 
 The mode is the deployment default (``AGENTICORG_GRANTS_ENFORCE_CLOSED``)
 raised by the tenant's ``grants.enforce_closed.warn`` /
@@ -46,11 +46,6 @@ logger = structlog.get_logger()
 FLAG_WARN = "grants.enforce_closed.warn"
 FLAG_DENY = "grants.enforce_closed.deny"
 
-# Deny mode is switched on by a separate change that also surfaces the reason
-# code in the run result and audit trail. Until then a requested ``deny``
-# (deployment default or tenant flag) runs as ``warn`` and says so.
-DENY_MODE_AVAILABLE = False
-
 
 class EnforcementMode(StrEnum):
     OFF = "off"
@@ -79,6 +74,16 @@ class Denial:
     reason: DenialReason
     sub_reason: str = ""
     grant_id: str = ""
+
+    def as_dict(self, *, connector: str, tool: str) -> dict[str, str]:
+        """The reason code as surfaced in run results and audit rows."""
+        return {
+            "reason": self.reason.value,
+            "sub_reason": self.sub_reason,
+            "grant_id": self.grant_id,
+            "connector": connector,
+            "tool": tool,
+        }
 
 
 @dataclass(frozen=True)
@@ -160,17 +165,6 @@ def deployment_default_mode() -> EnforcementMode:
     return EnforcementMode(settings.grants_enforce_closed)
 
 
-def _cap_deny(mode: EnforcementMode, *, tenant_id: str) -> EnforcementMode:
-    if mode is EnforcementMode.DENY and not DENY_MODE_AVAILABLE:
-        logger.error(
-            "grant_enforcement_deny_unavailable",
-            tenant_id=tenant_id,
-            effective_mode=EnforcementMode.WARN.value,
-        )
-        return EnforcementMode.WARN
-    return mode
-
-
 async def resolve_enforcement_mode(tenant_id: str | uuid.UUID | None) -> EnforcementMode:
     """Effective ``grants.enforce_closed`` mode for a tenant.
 
@@ -187,7 +181,7 @@ async def resolve_enforcement_mode(tenant_id: str | uuid.UUID | None) -> Enforce
         tid = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(tenant_key)
     except ValueError:
         # No tenant to look flags up for (internal callers, tests).
-        return _cap_deny(default, tenant_id=tenant_key)
+        return default
 
     try:
         if await is_enabled_strict(FLAG_DENY, tenant_id=tid):
@@ -207,10 +201,10 @@ async def resolve_enforcement_mode(tenant_id: str | uuid.UUID | None) -> Enforce
             last_known_mode=remembered.value if remembered is not None else "",
             effective_mode=mode.value,
         )
-        return _cap_deny(mode, tenant_id=tenant_key)
+        return mode
 
     _remember(tenant_key, mode)
-    return _cap_deny(mode, tenant_id=tenant_key)
+    return mode
 
 
 def classify_enforce_reason(reason: str) -> tuple[DenialReason, str]:

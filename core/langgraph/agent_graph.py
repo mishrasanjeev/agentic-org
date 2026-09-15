@@ -318,6 +318,7 @@ async def _enforce_tool_grants(
             ],
             "status": "failed",
             "error": f"grant_denied: {reason}",
+            "grant_denial": check.denial.as_dict(connector=connector_name, tool=actual_tool_name),
         }
 
     return {}
@@ -530,6 +531,19 @@ def build_agent_graph(
             trace.append("Confidence capped to 0.5 (output_incomplete)")
 
         trace.append(f"Confidence: {confidence:.3f}")
+        grant_denial = state.get("grant_denial")
+        if grant_denial:
+            # PRD F-1 deny: the run stops at the refused tool call and must be
+            # reported as failed with the reason code, not as completed.
+            trace.append(f"Tool call refused by grant enforcement: {grant_denial.get('reason', '')}")
+            return {
+                "output": output,
+                "confidence": 0.0,
+                "status": "failed",
+                "error": state.get("error") or f"grant_denied: {grant_denial.get('reason', '')}",
+                "reasoning_trace": trace,
+                "tool_calls_log": tool_calls_log,
+            }
         try:
             from observability.metrics import confidence_avg
 

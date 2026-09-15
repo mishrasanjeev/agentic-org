@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed — breaking for tenants that turn it on
+- `grants.enforce_closed` can now be set to `deny` (tenant flag
+  `grants.enforce_closed.deny` or `AGENTICORG_GRANTS_ENFORCE_CLOSED=deny`).
+  **This will refuse tool calls that have been quietly succeeding:** scope
+  enforcement was effectively off on the common path, so an agent without a
+  resolvable grant, or with one that does not cover a tool, now fails the
+  run instead of calling the tool. Run the tenant in `warn` first and review
+  `scripts/grant_enforcement_report.py`. A refused call fails the run with
+  `error` `grant_denied: <reason>`; run results gain an optional
+  `grant_denial` object, which `POST /agents/{id}/run` also returns and
+  writes to its audit row. Default stays `off`; nothing changes unless a
+  tenant or the deployment opts in. Rollback: disable the tenant's deny flag
+  or reset the deployment default. See the runbook in
+  `docs/operations/grant-enforcement.md`.
+
 ### Added
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
@@ -62,8 +77,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   caller or configured on the agent stays enforced as before) but is logged as
   `grant_enforcement_would_deny` and counted in
   `agenticorg_grant_enforcement_denials_total{mode,reason}`, including runs
-  with no grant at all (`grant_missing`). `deny` is not switchable yet and
-  runs as `warn`. See `docs/operations/grant-enforcement.md`.
+  with no grant at all (`grant_missing`). See
+  `docs/operations/grant-enforcement.md`.
 - Grant enforcement now covers every agent run entry point: chat, A2A and
   MCP (the caller's Grantex token, else the type's shared agent), voice and
   per-type wrappers through the runner, `resume_agent`, and workflow agent

@@ -13,7 +13,7 @@ covers how the check is switched on, what it records and how to read it.
 |---|---|---|
 | `off` (default) | Legacy behaviour: no check without a token; a configured token is enforced as before | nothing new |
 | `warn` | Runs, unless the token was supplied by the caller or configured on the agent (those were already enforced in `off`, so they stay enforced) | `grant_enforcement_would_deny` log event, counter with `mode="warn"`; a refused call is `grant_enforcement_denied` with `mode="deny"` |
-| `deny` | Not available yet — a requested `deny` runs as `warn` and logs `grant_enforcement_deny_unavailable` | — |
+| `deny` | Refused with a reason code: the run fails, the result carries `grant_denial`, the run's audit row records it | `grant_enforcement_denied` log event, counter with `mode="deny"` |
 
 ## Choosing the mode
 
@@ -45,7 +45,7 @@ hour per process) and logs `grant_enforcement_mode_lookup_failed`.
 
 ## Where the run's grant comes from
 
-In `warn` (and later `deny`) each run resolves a grant token, first match wins:
+In `warn` and `deny` each run resolves a grant token, first match wins:
 
 1. `supplied` — a token the caller already holds;
 2. `agent_config` — the agent's legacy `config.grantex.grant_token`;
@@ -127,3 +127,80 @@ report for these before moving a tenant to deny.
 In the `ToolGateway`, a call warn allows without the grant covering it still
 goes through the gateway's legacy scope checks, so warn never skips a check
 `off` makes.
+
+## What a denial looks like (deny)
+
+A refused tool call stops the run before the connector is called.
+
+- **LangGraph runs** (`POST /agents/{id}/run`, chat, A2A, MCP, voice): status
+  `failed`, `error` `grant_denied: <reason>`, and a `grant_denial` object in
+  the run result — `reason`, `sub_reason`, `grant_id`, `connector`, `tool`.
+  `POST /agents/{id}/run` returns `grant_denial` in its response and writes it
+  into the details of the run's `agent.run` audit row.
+- **`BaseAgent` runs** (workflow steps, collaboration, sales) and the tool
+  gateway: the tool result is
+  `{"error": {"code": "E1007", "message": "grant_denied: <reason>", "reason": ..., "sub_reason": ...}}`
+  and the step fails. The gateway also writes a `scope_denied` audit row with
+  the reason, sub-reason and grant id.
+
+## Runbook
+
+### 1. Put a tenant in warn and read the warnings
+
+Enable `grants.enforce_closed.warn` for the tenant (see "Choosing the mode").
+Every tool call the grant would deny is logged. In Cloud Logging:
+
+```
+jsonPayload.event="grant_enforcement_would_deny"
+jsonPayload.tenant_id="<tenant id>"
+```
+
+Watch `sum by (reason) (rate(agenticorg_grant_enforcement_denials_total{mode="warn"}[1h]))`
+for the whole deployment. Common patterns:
+
+| You see | Usually means | Do |
+|---|---|---|
+| `grant_missing` / `minting_unconfigured` | `GRANTEX_ROOT_GRANT_TOKEN` or `GRANTEX_API_KEY` not set | Configure the root grant |
+| `grant_missing` / `agent_not_registered` | Agent created without a Grantex registration | Re-register the agent |
+| `grant_missing` / `mint_failed` | Root grant expired or revoked, or Grantex unreachable | Rotate the root grant; check Grantex |
+| `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-7) | Give the step a stored agent or accept it fails in deny |
+| `tool_not_granted` on every call of an agent | Registered scopes the grant cannot satisfy (FINDINGS A-4) | Fix the registration scopes |
+| `permission_insufficient` | The agent is registered for `read` but calls a write tool | Decide whether the agent should have the permission |
+| `manifest_unknown_tool` | No Grantex manifest for the connector or tool | Add a manifest (`GRANTEX_MANIFESTS_DIR`) |
+| `enforcement_unavailable` | The check could not run | Fix the error named in `sub_reason` |
+
+### 2. Produce the per-tenant report
+
+`scripts/grant_enforcement_report.py` counts `grant_enforcement_would_deny` and
+`grant_enforcement_denied` events per tenant, by reason and by
+(connector, tool, reason, agent type), with first and last seen times. It reads
+raw JSON log lines or a Cloud Logging export:
+
+```
+gcloud logging read 'jsonPayload.event=~"^grant_enforcement_"' --freshness=7d --format=json   | python scripts/grant_enforcement_report.py --tenant <tenant id> -
+python scripts/grant_enforcement_report.py --format json api.log
+```
+
+### 3. Flip the tenant to deny
+
+Flip only when, over at least a week of representative traffic in warn:
+
+- the report shows no `grant_missing` for agents the tenant relies on, and
+- every remaining `would_deny` row is a call that *should* be refused.
+
+Then enable `grants.enforce_closed.deny` for the tenant (leave the warn flag
+as it is; deny wins). The change applies to runs that start after the flag
+cache expires (up to 30 seconds per process). Watch
+`agenticorg_grant_enforcement_denials_total{mode="deny"}` and failed runs for
+the tenant.
+
+### 4. Roll back
+
+- One tenant: disable (or delete) the tenant's `grants.enforce_closed.deny`
+  flag. With the warn flag still on the tenant returns to warn; delete both to
+  return to `off`.
+- The whole deployment: set `AGENTICORG_GRANTS_ENFORCE_CLOSED` back to `warn`
+  or `off` and redeploy. Tenant `deny` flags still apply, because flags can only
+  make a tenant stricter; disable them too for a full rollback.
+- Runs already refused are not retried automatically; re-run them after the
+  rollback.

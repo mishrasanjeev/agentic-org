@@ -471,6 +471,8 @@ async def run_agent(
         if interrupts:
             # The resume endpoint needs the checkpoint thread to continue.
             response["thread_id"] = config["configurable"]["thread_id"]
+        if result.get("grant_denial"):
+            response["grant_denial"] = result["grant_denial"]
         return response
 
     except GraphInterrupt as gi:
