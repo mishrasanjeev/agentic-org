@@ -142,6 +142,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg.providers` entry-point group (still behind
   `AGENTICORG_PLUGIN_LOADING` and the allowlist; natives keep priority). See
   ADR 0009 and `docs/providers/plugin-packages.md`.
+- The `mock` verification provider (`connectors/providers/mock`), registered
+  natively: twelve synthetic US and UK businesses covering clean cases, a
+  missing and an undeclared owner, probable false-positive and true-match
+  screening hits, a dissolved company, a thin file with no registry match, and
+  adversarial text in website copy, a company name and a screening alias.
+  Configurable latency, failure injection and pending polls, deterministic
+  under a seed; HMAC-signed webhook events (including company dissolved) with
+  recorded genuine and forged deliveries. It runs in-process or as a separate
+  HTTP service with a client provider; `make dev` now starts it as
+  `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081;
+  fault-injection and event endpoints only with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) and points the API and worker at
+  it. It runs only when `AGENTICORG_ENV` is explicitly local, development or
+  test; elsewhere the registry neither lists nor creates it. See `docs/providers/mock-provider.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

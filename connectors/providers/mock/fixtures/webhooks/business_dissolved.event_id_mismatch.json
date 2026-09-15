@@ -1,0 +1,11 @@
+{
+  "description": "A valid signature over the body, but the event id header names a different event.",
+  "verify_at": 1788253200,
+  "headers": {
+    "X-Mock-Event-Id": "evt-webhook-fixture-9999",
+    "X-Mock-Timestamp": "1788253170",
+    "X-Mock-Signature": "v1=d2142fd195bbe54d7ab8fd6694c9c88376129f000b6fb5d06d9b300763f4ea0d"
+  },
+  "body": "{\"event_id\":\"evt-webhook-fixture-0001\",\"event_type\":\"business.dissolved\",\"monitor_id\":null,\"occurred_at\":\"2026-09-01T08:59:30Z\",\"provider\":\"mock\",\"subject\":{\"identifiers\":[{\"scheme\":\"gb_company_number\",\"value\":\"00000004\"}],\"jurisdiction\":\"GB\",\"provider\":\"mock\",\"provider_ref\":\"mock-gb-00000004\"}}",
+  "expected": "rejected"
+}
