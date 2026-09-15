@@ -6,7 +6,7 @@
   ],
   "rollback_doc": "Drop voice_calls before application traffic is enabled. The table is new in this revision, so rollback does not transform or discard pre-existing ciphertext.",
   "dry_run": false,
-  "started_at": "2026-09-13T01:50:58.179584+00:00",
+  "started_at": "2026-09-15T02:53:33.946668+00:00",
   "row_counts": {
     "voice_calls": 0
   },
@@ -18,5 +18,5 @@
   },
   "pre_count": 0,
   "post_count": 0,
-  "completed_at": "2026-09-13T01:50:58.182994+00:00"
+  "completed_at": "2026-09-15T02:53:33.980128+00:00"
 }

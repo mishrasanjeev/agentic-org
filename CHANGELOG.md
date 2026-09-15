@@ -64,6 +64,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   thread belongs to the row's tenant). The thread id is never returned by the
   API or accepted from a request, and resuming a thread outside the caller's
   tenant is refused (`checkpoint_thread_tenant_mismatch`).
+- Approving a paused standalone agent run can resume it from its checkpoint,
+  behind the per-tenant feature flag `approvals.resume_agent_runs` (default
+  off; decisions behave as before). With the flag on, an `approve` or `reject`
+  decision resumes the run in the background under the approval's tenant,
+  using the parameters recorded when the run paused. The outcome is recorded
+  in the approval's `context.checkpoint_resume`, in an `agent.run.resumed`
+  audit event and in `agenticorg_agent_run_resumes_total{outcome}`, and a
+  finished run's checkpoints are deleted. Any other decision leaves the run
+  paused. A resume is refused, with a reason code, when the checkpoint is
+  missing, not at the approval gate, undecryptable or outside the tenant.
+  Approval API responses no longer include the server-only
+  `context._checkpoint_resume` key; no other response field changes. See
+  "Agent runs paused for approval" in `docs/RUNBOOKS.md` for the flag,
+  reason codes and checkpoint retention.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
