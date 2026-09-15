@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0.0",
+  "case_id": "case_0001",
+  "purpose": "aml.cdd.onboarding",
+  "state": "awaiting_decision",
+  "created_at": "2026-09-01T08:55:00Z",
+  "updated_at": "2026-09-01T09:10:00Z",
+  "application": {
+    "legal_name": "Brightwater Lantern Works Ltd",
+    "trading_names": ["Brightwater Lanterns"],
+    "jurisdiction": "GB",
+    "identifiers": [{"scheme": "gb_company_number", "value": "00000001"}],
+    "registered_address": {
+      "lines": ["1 Example Street"],
+      "locality": "Exampleton",
+      "region": null,
+      "postal_code": "ZZ99 9ZZ",
+      "country": "GB"
+    },
+    "website": "https://brightwater-lanterns.example.com",
+    "declared_activity": "manufacturing_lighting",
+    "declared_owners": [
+      {
+        "name": "Orla Venncastle",
+        "kind": "person",
+        "date_of_birth": "1971-04",
+        "nationalities": ["GB"],
+        "ownership_pct": 60,
+        "identifiers": []
+      },
+      {
+        "name": "Ansel Pikeworth",
+        "kind": "person",
+        "date_of_birth": null,
+        "nationalities": ["GB"],
+        "ownership_pct": 40,
+        "identifiers": []
+      }
+    ]
+  },
+  "subject": {
+    "provider": "mock",
+    "provider_ref": "mock-gb-00000001",
+    "jurisdiction": "GB",
+    "identifiers": [{"scheme": "gb_company_number", "value": "00000001"}]
+  },
+  "decision": null
+}

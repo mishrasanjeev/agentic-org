@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/screening_disposition/1.0.0",
+  "title": "Screening disposition",
+  "description": "A proposed outcome for one screening hit, with a per-identifier comparison and cited evidence. A disposition is only ever proposed by an agent; accepting or overriding it is a human review, and nothing in this release closes a hit automatically.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "disposition_id", "case_id", "screening_id", "hit_id", "proposed_by", "proposed_at", "comparisons", "proposed_outcome", "confidence_band", "rationale", "evidence", "review"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "disposition_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "case_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "screening_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "hit_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "proposed_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "agent_version", "prompt_version"],
+      "properties": {
+        "agent": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+        "agent_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "prompt_version": {"type": "string", "minLength": 1, "maxLength": 64}
+      }
+    },
+    "proposed_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "comparisons": {
+      "description": "Exactly one comparison for each of name, date_of_birth, nationality, address and associated_entities; an identifier that cannot be compared is recorded as not_comparable.",
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/comparison"},
+      "allOf": [
+        {"contains": {"properties": {"identifier": {"const": "name"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "date_of_birth"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "nationality"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "address"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "associated_entities"}}}, "minContains": 1, "maxContains": 1}
+      ]
+    },
+    "proposed_outcome": {"$ref": "#/$defs/outcome"},
+    "confidence_band": {
+      "description": "Metadata for the reviewer. Never a gate.",
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 4000},
+    "evidence": {
+      "$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list",
+      "minItems": 1
+    },
+    "review": {
+      "description": "null until a human analyst reviews the proposal.",
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/review"}]
+    }
+  },
+  "$defs": {
+    "outcome": {
+      "type": "string",
+      "enum": ["true_match", "false_positive", "insufficient_information"]
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identifier", "subject_value", "hit_value", "result", "evidence"],
+      "properties": {
+        "identifier": {
+          "type": "string",
+          "enum": ["name", "date_of_birth", "nationality", "address", "associated_entities"]
+        },
+        "subject_value": {"type": ["string", "null"], "maxLength": 1024},
+        "hit_value": {"type": ["string", "null"], "maxLength": 1024},
+        "result": {
+          "type": "string",
+          "enum": ["match", "partial_match", "mismatch", "not_comparable"]
+        },
+        "note": {"type": ["string", "null"], "maxLength": 1000},
+        "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "final_outcome", "analyst_id", "reviewed_at"],
+      "properties": {
+        "action": {"type": "string", "enum": ["accepted", "overridden"]},
+        "final_outcome": {"$ref": "#/$defs/outcome"},
+        "analyst_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "reviewed_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+        "reason": {"type": ["string", "null"], "maxLength": 4000}
+      },
+      "if": {"properties": {"action": {"const": "overridden"}}},
+      "then": {
+        "required": ["reason"],
+        "properties": {"reason": {"type": "string", "minLength": 1}}
+      }
+    }
+  }
+}

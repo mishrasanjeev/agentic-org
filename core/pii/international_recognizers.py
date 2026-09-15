@@ -22,6 +22,8 @@ without the NLP stack. To limit false positives each match needs one of:
   prefix the IRS does not issue, NINOs with a reserved prefix, and VAT
   numbers for countries whose check digit is not verified here.
 
+Letters in IBANs, VAT numbers and NINOs are matched in either case.
+
 Issuance rules (for example SSN area ``000``) are deliberately not applied:
 this module decides what to mask, and a mistyped or never-issued number in a
 recognisable shape is still masked.
@@ -30,6 +32,8 @@ recognisable shape is still masked.
 from __future__ import annotations
 
 import re
+import string
+from bisect import bisect_right
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
@@ -150,13 +154,16 @@ def _find_us(text: str) -> Iterable[IdentifierMatch]:
 
 # ── United Kingdom ─────────────────────────────────────────────────────────
 
-# HMRC never allocates D, F, I, Q, U or V as the first letter, D, F, I, O, Q,
-# U or V as the second, or the prefixes below.
-_NINO_ALLOCATED = re.compile(
-    r"(?<![\w-])([A-CEGHJ-PR-TW-Z][A-CEGHJ-NPR-TW-Z]) ?(\d{2}) ?(\d{2}) ?(\d{2}) ?([A-D])(?![\w-])"
-)
-_NINO_ANY_PREFIX = re.compile(r"(?<![\w-])([A-Z]{2}) ?(\d{2}) ?(\d{2}) ?(\d{2}) ?([A-D])(?![\w-])", re.IGNORECASE)
+_NINO = re.compile(r"(?<![\w-])([A-Z]{2}) ?(\d{2}) ?(\d{2}) ?(\d{2}) ?([A-D])(?![\w-])", re.IGNORECASE)
 _NINO_UNALLOCATED_PREFIXES = frozenset({"BG", "GB", "KN", "NK", "NT", "TN", "ZZ"})
+
+
+def _nino_prefix_allocated(prefix: str) -> bool:
+    """HMRC never allocates D, F, I, Q, U or V first, D, F, I, O, Q, U or V second, or the reserved pairs."""
+    upper = prefix.upper()
+    return upper[0] not in "DFIQUV" and upper[1] not in "DFIOQUV" and upper not in _NINO_UNALLOCATED_PREFIXES
+
+
 _NINO_CONTEXT = _context_pattern("nino", "national insurance", "ni number", "ni no")
 
 _COMPANY_PREFIXES = (
@@ -179,11 +186,8 @@ _COMPANY_CONTEXT = _context_pattern(
 
 
 def _find_uk(text: str) -> Iterable[IdentifierMatch]:
-    for match in _NINO_ALLOCATED.finditer(text):
-        if match[1] not in _NINO_UNALLOCATED_PREFIXES:
-            yield IdentifierMatch(match.start(), match.end(), UK_NINO, match[0])
-    for match in _NINO_ANY_PREFIX.finditer(text):
-        if _has_context(text, match.start(), _NINO_CONTEXT):
+    for match in _NINO.finditer(text):
+        if _nino_prefix_allocated(match[1]) or _has_context(text, match.start(), _NINO_CONTEXT):
             yield IdentifierMatch(match.start(), match.end(), UK_NINO, match[0])
     for match in _UK_COMPANY_NUMBER.finditer(text):
         if _has_context(text, match.start(), _COMPANY_CONTEXT):
@@ -204,12 +208,13 @@ IBAN_LENGTHS: dict[str, int] = {
     "TL": 23, "TN": 24, "TR": 26, "UA": 29, "VA": 22, "VG": 24, "XK": 20,
 }  # fmt: skip
 
-_IBAN_START = re.compile(r"(?<![A-Za-z0-9])([A-Z]{2})\d{2}")
+_IBAN_START = re.compile(r"(?<![A-Za-z0-9])([A-Za-z]{2})\d{2}")
+_ASCII_ALNUM = frozenset(string.ascii_letters + string.digits)
 
 
 def iban_is_valid(value: str) -> bool:
-    """Return whether ``value`` (spaces allowed) is a well-formed IBAN whose mod-97 check passes."""
-    compact = value.replace(" ", "")
+    """Return whether ``value`` (spaces allowed, either case) is a well-formed IBAN whose mod-97 check passes."""
+    compact = value.replace(" ", "").upper()
     if not re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]+", compact):
         return False
     if IBAN_LENGTHS.get(compact[:2]) != len(compact):
@@ -219,14 +224,14 @@ def iban_is_valid(value: str) -> bool:
 
 
 def _take_compact(text: str, start: int, count: int) -> int | None:
-    """End offset after ``count`` upper-case alphanumerics from ``start``, allowing single spaces between them.
+    """End offset after ``count`` ASCII alphanumerics from ``start``, allowing single spaces between them.
 
     Returns ``None`` when fewer characters are available or the value runs on
     into further alphanumerics without a separator.
     """
     taken, index, length = 0, start, len(text)
     while taken < count:
-        if index < length and (text[index].isdigit() or "A" <= text[index] <= "Z"):
+        if index < length and text[index] in _ASCII_ALNUM:
             taken += 1
             index += 1
         elif taken and index + 1 < length and text[index] == " " and text[index + 1].isalnum():
@@ -240,7 +245,7 @@ def _take_compact(text: str, start: int, count: int) -> int | None:
 
 def _find_iban(text: str) -> Iterable[IdentifierMatch]:
     for match in _IBAN_START.finditer(text):
-        length = IBAN_LENGTHS.get(match[1])
+        length = IBAN_LENGTHS.get(match[1].upper())
         if length is None:
             continue
         end = _take_compact(text, match.start(), length)
@@ -377,7 +382,7 @@ _VAT_FORMATS: dict[str, re.Pattern[str]] = {
     }.items()
 }
 
-_VAT_START = re.compile(rf"(?<![A-Za-z0-9])({'|'.join(sorted(_VAT_FORMATS))})[ -]?(?=[0-9A-Z])")
+_VAT_START = re.compile(rf"(?<![A-Za-z0-9])({'|'.join(sorted(_VAT_FORMATS))})[ -]?(?=[0-9A-Z])", re.IGNORECASE)
 _VAT_CONTEXT = _context_pattern(
     "vat", "tva", "iva", "btw", "mwst", "ust", "ust-idnr", "umsatzsteuer", "moms", "alv", "dph", "ddv",
     "pdv", "fpa", "pvm", "pvn", "nif", "nipc", "cif", "partita", "tax number", "tax id",
@@ -391,7 +396,7 @@ def vat_is_valid(value: str) -> bool | None:
     they are right, and ``None`` when the shape is right but this module has
     no check-digit rule for that country or form.
     """
-    compact = re.sub(r"[ .-]", "", value)
+    compact = re.sub(r"[ .-]", "", value).upper()
     country, body = compact[:2], compact[2:]
     shape = _VAT_FORMATS.get(country)
     if shape is None or not shape.fullmatch(body):
@@ -410,11 +415,11 @@ def _vat_run_ends(text: str, start: int) -> list[int]:
     index, length, taken = start, len(text), 0
     while index < length and taken <= 14:
         char = text[index]
-        if char.isdigit() or "A" <= char <= "Z" or char in "+*":
+        if char in _ASCII_ALNUM or char in "+*":
             index += 1
             taken += 1
             continue
-        if char in " ." and index + 1 < length and (text[index + 1].isdigit() or "A" <= text[index + 1] <= "Z"):
+        if char in " ." and index + 1 < length and text[index + 1] in _ASCII_ALNUM:
             ends.append(index)
             index += 1
             continue
@@ -438,12 +443,25 @@ def _find_vat(text: str) -> Iterable[IdentifierMatch]:
 
 
 def resolve_overlaps(matches: Iterable[IdentifierMatch]) -> list[IdentifierMatch]:
-    """Keep the longest of any overlapping matches (earliest first on ties), in text order."""
+    """Keep the longest of any overlapping matches (earliest first on ties), in text order.
+
+    O(n log n) comparisons: kept matches never overlap, so ordered by start they
+    are also ordered by end, and only the neighbours either side of a candidate
+    can overlap it.
+    """
+    starts: list[int] = []
+    ends: list[int] = []
     kept: list[IdentifierMatch] = []
     for candidate in sorted(matches, key=lambda m: (-(m.end - m.start), m.start)):
-        if all(candidate.end <= other.start or candidate.start >= other.end for other in kept):
-            kept.append(candidate)
-    return sorted(kept, key=lambda m: m.start)
+        index = bisect_right(starts, candidate.start)
+        if index and ends[index - 1] > candidate.start:
+            continue
+        if index < len(starts) and starts[index] < candidate.end:
+            continue
+        starts.insert(index, candidate.start)
+        ends.insert(index, candidate.end)
+        kept.insert(index, candidate)
+    return kept
 
 
 def find_identifiers(text: str) -> list[IdentifierMatch]:

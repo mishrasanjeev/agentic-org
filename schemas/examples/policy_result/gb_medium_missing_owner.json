@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0.0",
+  "policy": {
+    "policy_id": "business_onboarding_uk",
+    "version": "1.2.0",
+    "example": true,
+    "reviewed_by": null
+  },
+  "inputs_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+  "score": 40,
+  "tier": "medium",
+  "reasons": [
+    {
+      "rule_id": "ownership_reconciled",
+      "tier": "medium",
+      "reason": "Declared owners do not reconcile with the ownership graph",
+      "score": 40,
+      "inputs": {"ownership.missing_owners": 1}
+    }
+  ]
+}

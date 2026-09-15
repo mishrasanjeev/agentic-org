@@ -28,6 +28,8 @@ import asyncpg
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = PROJECT_ROOT / "schemas"
+# Same value as core.domain_schemas.SCHEMA_BASE_URI; this script runs without the app on sys.path.
+DOMAIN_SCHEMA_BASE_URI = "https://agenticorg.ai/schemas/"
 
 DEFAULT_TENANT = {
     "name": "Default Org",
@@ -189,12 +191,29 @@ async def _ensure_admin(conn: asyncpg.Connection, tenant_id: str) -> str:
     return uid
 
 
+def tenant_entity_schema_files(schemas_dir: Path = SCHEMAS_DIR) -> list[Path]:
+    """Entity schemas seeded into each tenant's schema registry.
+
+    The governed-case domain schemas (``$id`` under
+    ``https://agenticorg.ai/schemas/``) are platform contracts, not
+    tenant-editable entity schemas, so they are not seeded.
+    """
+    selected: list[Path] = []
+    for path in sorted(schemas_dir.glob("*.schema.json")):
+        document = json.loads(path.read_text(encoding="utf-8"))
+        identifier = document.get("$id") if isinstance(document, dict) else None
+        if isinstance(identifier, str) and identifier.startswith(DOMAIN_SCHEMA_BASE_URI):
+            continue
+        selected.append(path)
+    return selected
+
+
 async def _seed_schemas(conn: asyncpg.Connection, tenant_id: str) -> None:
     """Load all *.schema.json files into schema_registry with is_default=True."""
     import uuid as _uuid
 
     tid = _uuid.UUID(tenant_id)
-    schema_files = sorted(SCHEMAS_DIR.glob("*.schema.json"))
+    schema_files = tenant_entity_schema_files()
     if not schema_files:
         print("  WARNING: No schema files found in schemas/")
         return

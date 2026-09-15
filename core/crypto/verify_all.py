@@ -185,6 +185,11 @@ _SCANNERS: list[tuple[str, str]] = [
         "voice_calls.transcript_encrypted",
         "core.models.voice_call:VoiceCall:transcript_encrypted",
     ),
+    # PRD F-5 — per-case pseudonym maps (core.pii.pseudonymiser).
+    (
+        "case_pseudonym_maps.mapping_encrypted",
+        "core.models.case_pseudonym_map:CasePseudonymMap:mapping_encrypted",
+    ),
 ]
 
 
