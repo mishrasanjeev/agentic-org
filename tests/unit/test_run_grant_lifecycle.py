@@ -183,6 +183,13 @@ async def test_init_never_fails_or_blocks_when_redis_is_down(monkeypatch):
     await pool.close()
 
 
+async def test_init_survives_a_redis_client_that_cannot_be_created():
+    pool = TokenPool()
+    with patch("redis.asyncio.from_url", side_effect=ConnectionError("no redis")):
+        await pool.init()
+    assert pool.redis is None and pool._revocation_task is None
+
+
 def test_api_lifespan_starts_and_closes_the_token_pool():
     from api import main
 
