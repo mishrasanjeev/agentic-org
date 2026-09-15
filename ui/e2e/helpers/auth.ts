@@ -14,7 +14,7 @@
  * All three patterns came up in `ca-firms.spec.ts` and the fixes are
  * generic. Use these helpers in every regression spec.
  */
-import type { Page, Locator } from "@playwright/test";
+import { test, type Page, type Locator } from "@playwright/test";
 
 export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 export const E2E_TOKEN = process.env.E2E_TOKEN || "";
@@ -51,6 +51,48 @@ export const DEMO_ROLE_CREDENTIALS = {
     password: process.env.AGENTICORG_DEMO_AUDITOR_PASSWORD || "local-e2e-auditor-123!",
   },
 } as const;
+
+type DemoAccount = keyof typeof DEMO_ROLE_CREDENTIALS | "user";
+
+const DEMO_PASSWORD_ENV: Record<DemoAccount, string> = {
+  user: "AGENTICORG_DEMO_USER_PASSWORD",
+  ceo: "AGENTICORG_DEMO_CEO_PASSWORD",
+  cfo: "AGENTICORG_DEMO_CFO_PASSWORD",
+  chro: "AGENTICORG_DEMO_CHRO_PASSWORD",
+  cmo: "AGENTICORG_DEMO_CMO_PASSWORD",
+  coo: "AGENTICORG_DEMO_COO_PASSWORD",
+  auditor: "AGENTICORG_DEMO_AUDITOR_PASSWORD",
+};
+
+function targetsLocalStack(): boolean {
+  try {
+    return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(APP).hostname);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Precondition for specs that log in as the seeded demo users.
+ *
+ * The default demo passwords above exist only in the local Docker stack. Any
+ * other target (production) must supply them through the
+ * ``AGENTICORG_DEMO_*_PASSWORD`` env vars. Without them the spec fails loudly,
+ * matching ``requireAuth``. A pipeline that knowingly has no demo accounts sets
+ * ``E2E_DEMO_ROLES=unavailable``: those tests are then skipped with this reason
+ * in the report, and the workflow prints a warning, so the gap stays visible.
+ */
+export function requireDemoRoleCredentials(accounts: readonly DemoAccount[]): void {
+  if (targetsLocalStack()) return;
+  const missing = accounts.map((a) => DEMO_PASSWORD_ENV[a]).filter((name) => !process.env[name]);
+  if (missing.length === 0) return;
+  const reason = `demo-role credentials not configured for ${APP}: set ${missing.join(", ")}`;
+  if (process.env.E2E_DEMO_ROLES === "unavailable") {
+    test.skip(true, reason);
+    return;
+  }
+  throw new Error(reason);
+}
 
 /**
  * Assert that the suite has authentication available. Throws if not.

@@ -19,7 +19,12 @@
  * All other TCs use the demo accounts seeded by the platform.
  */
 import { expect, test } from "@playwright/test";
-import { DEMO_ROLE_CREDENTIALS, clearSession, setSessionToken } from "./helpers/auth";
+import {
+  DEMO_ROLE_CREDENTIALS,
+  clearSession,
+  requireDemoRoleCredentials,
+  setSessionToken,
+} from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
@@ -31,6 +36,7 @@ const DEMO = DEMO_ROLE_CREDENTIALS;
 // ---------------------------------------------------------------------------
 
 test("TC-AUTH-001 demo CEO login lands on dashboard", async ({ page }) => {
+  requireDemoRoleCredentials(["ceo"]);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').fill(DEMO.ceo.email);
   await page.locator('input[type="password"]').fill(DEMO.ceo.password);
@@ -47,6 +53,7 @@ test("TC-AUTH-001 demo CEO login lands on dashboard", async ({ page }) => {
 
 for (const [role, creds] of Object.entries(DEMO)) {
   test(`TC-AUTH-002 demo ${role} login lands on dashboard`, async ({ page }) => {
+    requireDemoRoleCredentials([role as keyof typeof DEMO]);
     test.setTimeout(60_000);
     await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
     await page.locator('input[type="email"]').fill(creds.email);
@@ -121,6 +128,7 @@ test("TC-AUTH-005 signup creates a new org and lands on onboarding", async ({ pa
 });
 
 test("TC-AUTH-006 signup with duplicate email is rejected", async ({ page }) => {
+  requireDemoRoleCredentials(["ceo"]);
   test.skip(
     process.env.QA_ALLOW_PROD_SIGNUP !== "1",
     "Requires creating a real org in prod first. Opt in via QA_ALLOW_PROD_SIGNUP=1.",
@@ -219,6 +227,7 @@ test("TC-AUTH-009 Google sign-in button is visible (or absent without error)", a
 // ---------------------------------------------------------------------------
 
 test("TC-AUTH-010 logout clears session and redirects protected routes", async ({ page }) => {
+  requireDemoRoleCredentials(["ceo"]);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').fill(DEMO.ceo.email);
   await page.locator('input[type="password"]').fill(DEMO.ceo.password);
@@ -274,6 +283,7 @@ for (const route of PROTECTED_ROUTES) {
 // ---------------------------------------------------------------------------
 
 test("TC-AUTH-013 auditor cannot navigate to agent-creation / settings / connectors", async ({ page }) => {
+  requireDemoRoleCredentials(["auditor"]);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').fill(DEMO.auditor.email);
   await page.locator('input[type="password"]').fill(DEMO.auditor.password);
@@ -322,6 +332,7 @@ test("TC-AUTH-013 auditor cannot navigate to agent-creation / settings / connect
 // ---------------------------------------------------------------------------
 
 test("TC-AUTH-014 CFO reaches the agent wizard for a personal agent with a locked domain", async ({ page }) => {
+  requireDemoRoleCredentials(["cfo"]);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[type="email"]').fill(DEMO.cfo.email);
   await page.locator('input[type="password"]').fill(DEMO.cfo.password);
