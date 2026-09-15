@@ -130,6 +130,38 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
+## A-13 — Test runs rewrite tracked files
+
+- **Found:** running `make test` and `make test-integration` in a fresh clone
+  (2026-09-15).
+- **What:** two suites write into tracked files, so every local run dirties
+  the working tree and the changes are easy to commit by accident.
+  `tests/integration/test_alembic_e2e.py` runs the real migrations, and
+  `core/crypto/migration_helpers.py` writes each encrypted-column migration's
+  audit record to `migrations/audit/<revision>.json` in the checkout
+  (`v6z12_voice_runtime.json` gets new `started_at`/`completed_at`).
+  `tests/unit/test_check_module_coverage.py` runs
+  `scripts/check_module_coverage.py`, which rewrites the tracked
+  `coverage_report.json`.
+- **Fix:** let both output locations be overridden (environment variables the
+  tests point at a temporary directory), or have the tests restore the files;
+  keep the committed records as they are.
+
+## A-14 — Shell scripts break on Windows checkouts with `core.autocrlf=true`
+
+- **Found:** running `make test-integration` from a Windows worktree
+  (2026-09-15).
+- **What:** `.gitattributes` fixes line endings only for
+  `core/policy/examples/*.yaml`, so Git for Windows' default
+  `core.autocrlf=true` checks shell scripts out with CRLF endings.
+  Bash inside the Linux containers then rejects them:
+  `tests/regression/test_bug_sheet_platform_20260914.py::test_deploy_script_pins_worker_and_beat_entrypoints`
+  fails on `bash -n scripts/deploy_cloud_run.sh`, and the scripts `make`
+  runs in containers would fail the same way. A clone made with
+  `core.autocrlf=false` is unaffected.
+- **Fix:** add `.gitattributes` with `*.sh text eol=lf` (and the same for
+  other files executed inside Linux containers), then renormalise.
+
 ## A-19 — Approval step conditions that fail to evaluate are skipped
 
 - **Found:** reading `core/approvals/policy_engine.py` while adding the case

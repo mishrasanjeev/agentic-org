@@ -67,6 +67,68 @@ Production and staging configuration rejects them.
 | `make logs` | follow logs from every service |
 | `make down` | stop the stack, keep data |
 | `make clean` | stop the stack and delete its volumes (fresh database next time) |
+| `make test` | unit, contract and integration tests |
+| `make check` | lint, types, security scans, schema validation, licence headers |
+| `make e2e` | browser end-to-end suite against the running stack |
+
+## Tests and checks
+
+`make test` and `make check` run inside the `agenticorg-tools` image
+(`Dockerfile.tools`: Python 3.12 like CI, the project's runtime and dev
+dependencies, pip-audit and the pinned gitleaks). The checkout is mounted into
+the container, so editing code never needs a rebuild; the image is rebuilt from
+cache only when `pyproject.toml` or `requirements-dev.txt` changes. The first
+build takes several minutes.
+
+| Command | Runs |
+|---|---|
+| `make test` | `tests/unit`, `tests/security` and the contract suites `tests/contract` and `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
+| `make test-unit` | the unit suites only, no coverage floor |
+| `make test-contract` | the contract suites only |
+| `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
+| `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, `pip-audit` of the project and both requirements files |
+
+Each check is also a target of its own (`make check-ruff`, `check-mypy`,
+`check-bandit`, `check-secrets`, `check-licence-headers`, `check-schemas`,
+`check-pip-audit`). `check-secrets` and `check-licence-headers` compare against
+`BASE_REF` (default `origin/main`) and fail if it does not resolve, so fetch
+first in a fresh clone. `check-pip-audit` needs network access to the
+vulnerability database.
+
+The integration suites start the stack's `postgres` and `redis` services if
+they are not running, and use a separate database, `agenticorg_test`, dropped
+and recreated at the start of every run, plus Redis index 15. Your development
+data is never touched: `scripts/reset_test_database.py` refuses any database
+whose name does not end in `_test`.
+
+Useful variables:
+
+- `PYTEST_ARGS="-x -k approvals"` adds arguments to every pytest run.
+- `UNIT_SUITES`, `CONTRACT_SUITES` and `INTEGRATION_SUITES` replace the suite
+  lists, for example
+  `make test-integration INTEGRATION_SUITES=tests/integration/test_api_integration.py`.
+- `RUNNER=local PYTHON=.venv/bin/python` runs tests and checks with a local
+  interpreter instead of the container. It needs `pip install -e ".[dev]"`,
+  `pip-audit` and gitleaks 8.30.1; integration tests then reach the stack's
+  Postgres and Redis on their published ports.
+
+Test output (`coverage.xml`, pytest scratch directories) is written into the
+checkout and owned by your user.
+
+## Browser end-to-end tests
+
+With the stack up (`make dev`), `make e2e` runs the Playwright suite
+`ui/e2e/dev-stack.config.ts` in the official Playwright image (pinned to the
+version in `ui/package-lock.json`) on the stack's network, against the console
+service. It checks that the console serves the sign-in page and proxies the
+API, that a signed-out visitor is sent to sign-in and that unknown credentials
+are rejected. It refuses to start when the stack is not healthy.
+
+The console's locked npm dependencies are installed into a container-only
+volume on the first run. Reports go to `ui/playwright-report/dev-stack` and
+failure traces to `ui/test-results/dev-stack`. Pass extra Playwright arguments
+with `E2E_ARGS="--grep sign-in"` or another config with `E2E_CONFIG`; the other
+configs under `ui/` target hosted environments and need credentials.
 
 ## Changing ports
 
@@ -89,3 +151,9 @@ Use the same variables with `make ps`, `make logs` and the smoke test.
   console's nginx resolves the API as `agenticorg-api`; make sure you started
   the stack with `make dev` rather than starting the `ui` service alone.
 - **Start from an empty database.** `make clean && make dev`.
+- **Windows.** Use GNU make from Git Bash and clone with
+  `git clone -c core.autocrlf=false ...`: shell scripts checked out with CRLF
+  line endings fail inside the Linux containers. On Docker Desktop the
+  mounted checkout does not support every file operation a Linux filesystem
+  does, and `tests/regression/test_claude_mistakes.py::test_self_visible_to_pytest`
+  (which runs pytest in a subprocess) fails there while passing on Linux.

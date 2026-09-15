@@ -168,7 +168,38 @@ services:
       api:
         condition: service_healthy
 
+  # Test and check runner for `make test` and `make check`; `make dev` never
+  # starts it. The checkout is mounted, so code changes need no rebuild.
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    image: agenticorg-tools:dev
+    working_dir: /src
+    volumes:
+      - .:/src
+    healthcheck:
+      disable: true
+
+  # Playwright runner for `make e2e`, against the console on this network.
+  e2e:
+    profiles: [e2e]
+    image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    working_dir: /src
+    environment:
+      BASE_URL: http://ui
+      CI: "true"
+    volumes:
+      - .:/src
+      # Container-only dependencies, kept apart from any host ui/node_modules.
+      - e2e-node-modules:/src/ui/node_modules
+    ipc: host
+    healthcheck:
+      disable: true
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  e2e-node-modules:
