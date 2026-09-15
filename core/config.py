@@ -179,6 +179,17 @@ class Settings(BaseSettings):
     # Env: AGENTICORG_HITL_CONDITION_VALIDATION.
     hitl_condition_validation: Literal["off", "warn", "reject"] = "off"
 
+    # LangGraph checkpoint store (core/langgraph/checkpointer.py). "memory"
+    # keeps paused runs in process memory, lost on restart; "postgres" stores
+    # them encrypted in the Alembic-managed checkpoint tables and refuses to
+    # run agents when that store is unreachable (no fallback to memory).
+    # Env: AGENTICORG_LANGGRAPH_CHECKPOINTER, AGENTICORG_LANGGRAPH_CHECKPOINT_*.
+    langgraph_checkpointer: Literal["memory", "postgres"] = "memory"
+    # Empty derives the libpq URL from db_url.
+    langgraph_checkpoint_db_url: str = ""
+    langgraph_checkpoint_pool_max_size: int = Field(default=5, ge=1, le=100)
+    langgraph_checkpoint_connect_timeout_seconds: float = Field(default=10.0, ge=0.5, le=120.0)
+
     # Platform behaviour
     pii_masking: bool = True
     data_region: str = "IN"

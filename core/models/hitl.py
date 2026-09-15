@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import TIMESTAMP, CheckConstraint, ForeignKey, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +20,13 @@ class HITLQueue(BaseModel):
             "tenant_id",
             "status",
             text("created_at DESC"),
+        ),
+        # Migration v6z23: a checkpoint thread can only be stored on its own
+        # tenant's row (core/langgraph/thread_ids.py).
+        CheckConstraint(
+            "checkpoint_thread_id IS NULL OR "
+            "starts_with(checkpoint_thread_id, 'tenant:' || tenant_id::text || ':')",
+            name="ck_hitl_queue_checkpoint_thread_tenant",
         ),
     )
 
@@ -44,6 +51,10 @@ class HITLQueue(BaseModel):
         nullable=True,
     )
     context: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    # Migration v6z23: the server-generated, tenant-prefixed LangGraph thread
+    # of the paused standalone run. Never returned by the API and never taken
+    # from a request; the only way to reach a checkpoint.
+    checkpoint_thread_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     decision: Mapped[str | None] = mapped_column(String(100), nullable=True)
     decision_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True

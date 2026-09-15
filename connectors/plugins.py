@@ -9,13 +9,13 @@ entry points in one of these groups::
 
 - ``agenticorg.connectors`` - a ``BaseConnector`` subclass
 - ``agenticorg.agents`` - a ``BaseAgent`` subclass
-- ``agenticorg.providers`` and ``agenticorg.workflows`` - discovered, but
-  rejected until those registries exist
+- ``agenticorg.providers`` - a ``VerificationProvider`` subclass
+- ``agenticorg.workflows`` - discovered, but rejected until that registry exists
 
 Loading is off unless ``AGENTICORG_PLUGIN_LOADING`` is true, and only
 distributions named in ``AGENTICORG_PLUGIN_ALLOWLIST`` are imported: loading
 an entry point runs that package's code. Plugins load after native
-registration and never replace a native connector or agent of the same name.
+registration and never replace a native connector, agent or provider of the same name.
 A plugin that is not allowlisted, fails to import, has the wrong type or
 collides with a native name is rejected with a logged reason; the rest still
 load and the application still starts. See
@@ -40,7 +40,7 @@ PROVIDERS_GROUP = "agenticorg.providers"
 AGENTS_GROUP = "agenticorg.agents"
 WORKFLOWS_GROUP = "agenticorg.workflows"
 PLUGIN_GROUPS = (CONNECTORS_GROUP, PROVIDERS_GROUP, AGENTS_GROUP, WORKFLOWS_GROUP)
-_UNSUPPORTED_GROUPS = frozenset({PROVIDERS_GROUP, WORKFLOWS_GROUP})
+_UNSUPPORTED_GROUPS = frozenset({WORKFLOWS_GROUP})
 
 _plugin_load_total = Counter(
     "agenticorg_plugin_load_total",
@@ -99,8 +99,19 @@ def _register_agent(obj: Any) -> str:
     return str(obj.agent_type)
 
 
+def _register_provider(obj: Any) -> str:
+    # Importing the registry registers the native providers first.
+    from connectors.providers.registry import ProviderRegistry, ProviderRegistryError  # noqa: PLC0415
+
+    try:
+        return ProviderRegistry.register_plugin(obj)
+    except ProviderRegistryError as exc:
+        raise _PluginRejectedError(exc.reason, exc.detail) from exc
+
+
 _REGISTRARS: dict[str, Callable[[Any], str]] = {
     CONNECTORS_GROUP: _register_connector,
+    PROVIDERS_GROUP: _register_provider,
     AGENTS_GROUP: _register_agent,
 }
 

@@ -169,7 +169,7 @@ def test_native_agent_keeps_priority_over_a_plugin_with_the_same_type() -> None:
     assert AgentRegistry.get_by_type(native_type) is native
 
 
-@pytest.mark.parametrize("group", ["agenticorg.providers", "agenticorg.workflows"])
+@pytest.mark.parametrize("group", ["agenticorg.workflows"])
 def test_groups_without_a_registry_are_rejected_explicitly(group: str) -> None:
     ep = _EntryPoint("thing", "acme-kyb", lambda: object)
     results = plugins.load_plugins(enabled=True, allowlist={"acme-kyb"}, entry_points=_discovery({group: [ep]}))
