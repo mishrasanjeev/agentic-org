@@ -57,6 +57,7 @@ OUTCOME_COMPLETED = "completed"
 OUTCOME_REJECTED = "rejected"
 OUTCOME_REFUSED = "refused"
 OUTCOME_FAILED = "failed"
+OUTCOME_SKIPPED = "skipped"
 
 agent_run_resumes_total = Counter(
     "agenticorg_agent_run_resumes_total",
@@ -83,7 +84,18 @@ async def should_resume(item: HITLQueue, tenant_id: uuid.UUID) -> bool:
         return False
     from core.feature_flags import is_enabled
 
-    return await is_enabled(RESUME_FLAG, tenant_id=tenant_id, default=False)
+    if await is_enabled(RESUME_FLAG, tenant_id=tenant_id, default=False):
+        return True
+    # The flag is off, or its lookup failed (is_enabled falls back to the
+    # default): the run stays paused. Say so, since nothing else will.
+    agent_run_resumes_total.labels(outcome=OUTCOME_SKIPPED).inc()
+    logger.warning(
+        "agent_run_resume_skipped",
+        hitl_id=str(item.id),
+        reason="resume_flag_off_or_unavailable",
+        flag=RESUME_FLAG,
+    )
+    return False
 
 
 def public_context(context: dict[str, Any] | None) -> dict[str, Any] | None:

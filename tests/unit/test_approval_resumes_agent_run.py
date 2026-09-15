@@ -112,11 +112,47 @@ def test_only_approve_and_reject_decisions_resume(status: str, decision: str, ex
 
 async def test_flag_defaults_off_and_is_read_per_tenant() -> None:
     item = _paused_item(_agent())
-    with patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)) as flag:
+    skipped = ar.agent_run_resumes_total.labels(outcome="skipped")
+    before = skipped._value.get()
+    with (
+        patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)) as flag,
+        patch.object(ar.logger, "warning") as warn,
+    ):
         assert await ar.should_resume(item, TENANT_UUID) is False
     flag.assert_awaited_once_with("approvals.resume_agent_runs", tenant_id=TENANT_UUID, default=False)
+    # A paused run left paused because the flag is off or unreadable is visible.
+    assert skipped._value.get() == before + 1
+    assert warn.call_args.args[0] == "agent_run_resume_skipped"
+    assert warn.call_args.kwargs["reason"] == "resume_flag_off_or_unavailable"
+
     with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)):
         assert await ar.should_resume(item, TENANT_UUID) is True
+    assert skipped._value.get() == before + 1
+
+
+async def test_a_failed_flag_lookup_skips_the_resume_loudly() -> None:
+    from core import feature_flags
+
+    feature_flags.clear_cache()
+    item = _paused_item(_agent())
+    skipped = ar.agent_run_resumes_total.labels(outcome="skipped")
+    before = skipped._value.get()
+
+    @asynccontextmanager
+    async def _broken_session(*_a: Any, **_k: Any):
+        raise ConnectionError("flag store unavailable")
+        yield
+
+    try:
+        with (
+            patch("core.feature_flags.get_tenant_session", _broken_session),
+            patch.object(ar.logger, "warning") as warn,
+        ):
+            assert await ar.should_resume(item, TENANT_UUID) is False
+    finally:
+        feature_flags.clear_cache()
+    assert skipped._value.get() == before + 1
+    assert warn.call_args.args[0] == "agent_run_resume_skipped"
 
 
 @pytest.mark.parametrize(
