@@ -16,6 +16,7 @@ Acceptance criteria covered here:
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,7 +30,7 @@ from auth.grant_enforcement import (
     EnforcementMode,
     GrantCallContext,
     check_tool_grant,
-    classify_enforce_reason,
+    classify_enforce_result,
     resolve_enforcement_mode,
 )
 from auth.run_grants import RunGrant
@@ -46,13 +47,28 @@ def _reset_mode_cache():
 
 
 def _flags(**enabled: bool):
-    """Fake ``is_enabled_strict`` answering from a {flag_key: bool} map."""
-    values = {ge.FLAG_WARN: enabled.get("warn", False), ge.FLAG_DENY: enabled.get("deny", False)}
+    """Fake ``load_flag_rows_strict``: tenant rows from a {"warn"|"deny": bool} map."""
+    return _rows(tenant=enabled)
 
-    async def _strict(flag_key: str, **_: Any) -> bool:
-        return values[flag_key]
 
-    return _strict
+def _rows(*, tenant: dict[str, bool] | None = None, global_: dict[str, bool] | None = None):
+    """Fake ``load_flag_rows_strict`` with independent tenant and global rows.
+
+    A key missing from a map has no row; ``False`` is a disabled row.
+    """
+    from core.feature_flags import FlagRows
+
+    names = {ge.FLAG_WARN: "warn", ge.FLAG_DENY: "deny"}
+
+    def _row(values: dict[str, bool] | None, flag_key: str):
+        if values is None or names[flag_key] not in values:
+            return None
+        return {"enabled": values[names[flag_key]], "rollout_percentage": 100}
+
+    async def _load(flag_key: str, **_: Any):
+        return FlagRows(global_row=_row(global_, flag_key), tenant_row=_row(tenant, flag_key))
+
+    return _load
 
 
 def _counter_value(mode: str, reason: str) -> float:
@@ -66,33 +82,33 @@ def _counter_value(mode: str, reason: str) -> float:
 
 async def test_mode_defaults_to_off_without_tenant_flags(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    with patch("core.feature_flags.is_enabled_strict", _flags()):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags()):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.OFF
 
 
 async def test_deployment_default_applies_when_tenant_has_no_flags(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
-    with patch("core.feature_flags.is_enabled_strict", _flags()):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags()):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
 
 
 async def test_tenant_warn_flag_overrides_off_default(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    with patch("core.feature_flags.is_enabled_strict", _flags(warn=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(warn=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
 
 
 async def test_deny_flag_wins_over_warn_flag(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
     monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
-    with patch("core.feature_flags.is_enabled_strict", _flags(warn=True, deny=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(warn=True, deny=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
 
 
 async def test_requested_deny_runs_as_warn_until_deny_is_available(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
     monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", False)
-    with patch("core.feature_flags.is_enabled_strict", _flags(deny=True)), capture_logs() as logs:
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(deny=True)), capture_logs() as logs:
         mode = await resolve_enforcement_mode(TENANT)
     assert mode is EnforcementMode.WARN
     assert any(entry["event"] == "grant_enforcement_deny_unavailable" for entry in logs)
@@ -101,10 +117,10 @@ async def test_requested_deny_runs_as_warn_until_deny_is_available(monkeypatch):
 async def test_tenant_flags_cannot_weaken_the_deployment_default(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "deny")
     monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
-    with patch("core.feature_flags.is_enabled_strict", _flags(warn=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(warn=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
-    with patch("core.feature_flags.is_enabled_strict", _flags()):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags()):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
 
 
@@ -113,7 +129,7 @@ async def test_unreadable_flag_store_falls_back_to_deployment_default(monkeypatc
 
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
     failing = AsyncMock(side_effect=FeatureFlagLookupError("down"))
-    with patch("core.feature_flags.is_enabled_strict", failing), capture_logs() as logs:
+    with patch("core.feature_flags.load_flag_rows_strict", failing), capture_logs() as logs:
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
     assert any(entry["event"] == "grant_enforcement_mode_lookup_failed" for entry in logs)
 
@@ -122,17 +138,17 @@ async def test_unreadable_flag_store_keeps_the_tenants_last_known_stricter_mode(
     from core.feature_flags import FeatureFlagLookupError
 
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    with patch("core.feature_flags.is_enabled_strict", _flags(warn=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(warn=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
     failing = AsyncMock(side_effect=FeatureFlagLookupError("down"))
-    with patch("core.feature_flags.is_enabled_strict", failing):
+    with patch("core.feature_flags.load_flag_rows_strict", failing):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
 
 
 async def test_mode_without_a_tenant_is_the_deployment_default(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
     strict = AsyncMock()
-    with patch("core.feature_flags.is_enabled_strict", strict):
+    with patch("core.feature_flags.load_flag_rows_strict", strict):
         assert await resolve_enforcement_mode("") is EnforcementMode.WARN
     strict.assert_not_awaited()
 
@@ -152,6 +168,7 @@ def test_deployment_mode_defaults_to_off():
     assert Settings.model_fields["grants_enforce_closed"].default == "off"
 
 
+@pytest.mark.real_flag_store
 async def test_strict_flag_lookup_raises_when_the_flag_store_is_unreadable():
     from core import feature_flags
 
@@ -166,14 +183,13 @@ async def test_strict_flag_lookup_raises_when_the_flag_store_is_unreadable():
     try:
         with patch("core.feature_flags.get_tenant_session", _broken_session):
             with pytest.raises(feature_flags.FeatureFlagLookupError):
-                await feature_flags.is_enabled_strict(ge.FLAG_DENY, tenant_id=uuid.UUID(TENANT))
-            # The lenient evaluator keeps its documented default on the same failure,
-            # and its cached failure still reads as unknown to a strict lookup.
+                await feature_flags.load_flag_rows_strict(ge.FLAG_DENY, tenant_id=uuid.UUID(TENANT))
+            # The lenient evaluator keeps its documented default on the same failure.
             assert await feature_flags.is_enabled(ge.FLAG_DENY, tenant_id=uuid.UUID(TENANT)) is False
+            # A failed strict read is never cached: the next read probes the store again.
             with pytest.raises(feature_flags.FeatureFlagLookupError):
-                await feature_flags.is_enabled_strict(ge.FLAG_DENY, tenant_id=uuid.UUID(TENANT))
-        # The outage is not re-probed on every call while the failure is cached.
-        assert len(attempts) == 1
+                await feature_flags.load_flag_rows_strict(ge.FLAG_DENY, tenant_id=uuid.UUID(TENANT))
+        assert len(attempts) == 3
     finally:
         feature_flags.clear_cache()
 
@@ -182,38 +198,56 @@ async def test_strict_flag_lookup_raises_when_the_flag_store_is_unreadable():
 
 
 @pytest.mark.parametrize(
-    ("sdk_reason", "reason", "sub_reason"),
+    ("reason_code", "sdk_sub_reason", "reason", "sub_reason"),
     [
-        ("Token verification failed: Signature has expired", DenialReason.TOKEN_INVALID, "expired"),
-        ("Token verification failed: Not enough segments", DenialReason.TOKEN_INVALID, "verification_failed"),
-        ("token_revoked", DenialReason.GRANT_REVOKED, ""),
+        ("token_invalid", "", DenialReason.TOKEN_INVALID, ""),
         (
-            "No manifest loaded for connector 'unknown'. Load a manifest first.",
-            DenialReason.MANIFEST_UNKNOWN_TOOL,
-            "connector_unknown",
+            "token_invalid",
+            "malformed_authorization_details",
+            DenialReason.TOKEN_INVALID,
+            "malformed_authorization_details",
         ),
-        (
-            "Unknown tool 'x' on connector 'hubspot'. Tool not found in manifest.",
-            DenialReason.MANIFEST_UNKNOWN_TOOL,
-            "tool_unknown",
-        ),
-        ("No scope grants access to connector 'hubspot'.", DenialReason.TOOL_NOT_GRANTED, ""),
-        ("read scope does not permit write operations on hubspot.", DenialReason.PERMISSION_INSUFFICIENT, ""),
-        ("Amount 900 exceeds budget cap of 500 on stripe.", DenialReason.CAP_EXCEEDED, ""),
-        ("something new", DenialReason.TOOL_NOT_GRANTED, "unclassified"),
-        ("", DenialReason.TOOL_NOT_GRANTED, "unclassified"),
+        ("grant_revoked", "", DenialReason.GRANT_REVOKED, ""),
+        ("manifest_unknown_tool", "unknown_connector", DenialReason.MANIFEST_UNKNOWN_TOOL, "unknown_connector"),
+        ("manifest_unknown_tool", "unknown_tool", DenialReason.MANIFEST_UNKNOWN_TOOL, "unknown_tool"),
+        ("tool_not_granted", "", DenialReason.TOOL_NOT_GRANTED, ""),
+        ("permission_insufficient", "", DenialReason.PERMISSION_INSUFFICIENT, ""),
+        ("cap_exceeded", "amount", DenialReason.CAP_EXCEEDED, "amount"),
+        ("purpose_not_allowed", "", DenialReason.PURPOSE_NOT_ALLOWED, ""),
+        ("decision_required", "", DenialReason.DECISION_REQUIRED, ""),
+        ("decision_invalid", "expired", DenialReason.DECISION_INVALID, "expired"),
+        ("region_mismatch", "", DenialReason.REGION_MISMATCH, ""),
+        ("something_new", "", DenialReason.UNCLASSIFIED, "unknown_reason_code"),
+        ("", "", DenialReason.UNCLASSIFIED, "no_reason_code"),
     ],
 )
-def test_enforce_reasons_map_to_the_denial_vocabulary(sdk_reason, reason, sub_reason):
-    assert classify_enforce_reason(sdk_reason) == (reason, sub_reason)
+def test_enforce_reason_codes_map_exactly_to_the_denial_vocabulary(reason_code, sdk_sub_reason, reason, sub_reason):
+    result = SimpleNamespace(
+        allowed=False, reason="text is ignored", reason_code=reason_code, sub_reason=sdk_sub_reason
+    )
+    assert classify_enforce_result(result) == (reason, sub_reason)
+
+
+def test_result_without_reason_codes_is_unclassified_even_when_its_text_names_a_reason():
+    # An SDK older than reason codes: the text is not parsed for a reason.
+    result = SimpleNamespace(allowed=False, reason="No scope grants access to connector 'hubspot'.")
+    assert classify_enforce_result(result) == (DenialReason.UNCLASSIFIED, "no_reason_code")
 
 
 # ── Per-call checks ──────────────────────────────────────────────────────
 
 
-def _client(allowed: bool, reason: str = "", grant_id: str = "grnt_placeholder") -> MagicMock:
+def _client(
+    allowed: bool, reason_code: str = "", grant_id: str = "grnt_placeholder", sub_reason: str = ""
+) -> MagicMock:
     client = MagicMock()
-    client.enforce.return_value = MagicMock(allowed=allowed, reason=reason, grant_id=grant_id)
+    client.enforce.return_value = SimpleNamespace(
+        allowed=allowed,
+        reason=reason_code.replace("_", " "),
+        reason_code="" if allowed else reason_code,
+        sub_reason=sub_reason,
+        grant_id=grant_id,
+    )
     return client
 
 
@@ -250,39 +284,39 @@ async def test_allowed_call_records_nothing():
 DENIAL_CASES = [
     pytest.param(None, None, DenialReason.GRANT_MISSING, "mint_failed", id="grant_missing"),
     pytest.param(
-        _client(False, "No scope grants access to connector 'hubspot'."),
+        _client(False, "tool_not_granted"),
         None,
         DenialReason.TOOL_NOT_GRANTED,
         "",
         id="tool_not_granted",
     ),
     pytest.param(
-        _client(False, "read scope does not permit write operations on hubspot."),
+        _client(False, "permission_insufficient"),
         None,
         DenialReason.PERMISSION_INSUFFICIENT,
         "",
         id="permission_insufficient",
     ),
-    pytest.param(_client(False, "grant revoked"), None, DenialReason.GRANT_REVOKED, "", id="grant_revoked"),
+    pytest.param(_client(False, "grant_revoked"), None, DenialReason.GRANT_REVOKED, "", id="grant_revoked"),
     pytest.param(
-        _client(False, "Token verification failed: bad signature"),
+        _client(False, "token_invalid"),
         None,
         DenialReason.TOKEN_INVALID,
-        "verification_failed",
+        "",
         id="token_invalid",
     ),
     pytest.param(
-        _client(False, "Amount 9 exceeds budget cap of 1 on hubspot."),
+        _client(False, "cap_exceeded"),
         None,
         DenialReason.CAP_EXCEEDED,
         "",
         id="cap_exceeded",
     ),
     pytest.param(
-        _client(False, "Unknown tool 'x' on connector 'hubspot'."),
+        _client(False, "manifest_unknown_tool", sub_reason="unknown_tool"),
         None,
         DenialReason.MANIFEST_UNKNOWN_TOOL,
-        "tool_unknown",
+        "unknown_tool",
         id="manifest_unknown_tool",
     ),
     pytest.param(
@@ -439,7 +473,7 @@ async def test_node_checks_the_connector_the_tool_is_registered_under():
 async def test_warn_mode_node_records_scope_denial_but_lets_the_call_run():
     from core.langgraph.agent_graph import validate_tool_scopes
 
-    client = _client(False, "read scope does not permit write operations on salesforce.")
+    client = _client(False, "permission_insufficient")
     grant = RunGrant(mode=EnforcementMode.WARN, token=PLACEHOLDER_TOKEN, source="minted")
     with (
         patch("core.langgraph.agent_graph.get_grantex_client", return_value=client),
@@ -460,7 +494,7 @@ async def test_warn_mode_node_records_scope_denial_but_lets_the_call_run():
 async def test_warn_mode_never_weakens_a_token_the_legacy_path_already_enforced():
     from core.langgraph.agent_graph import validate_tool_scopes
 
-    client = _client(False, "No scope grants access to connector 'salesforce'.")
+    client = _client(False, "tool_not_granted")
     index = {"create_lead": ("salesforce", "Create a lead")}
     for source in ("supplied", "agent_config"):
         grant = RunGrant(mode=EnforcementMode.WARN, token=PLACEHOLDER_TOKEN, source=source)
