@@ -1,0 +1,38 @@
+{
+  "key": "us-thin-file-brambleway",
+  "scenarios": [
+    "thin_file"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Brambleway Home Goods",
+    "trading_names": [],
+    "jurisdiction": "US-WA",
+    "identifiers": [],
+    "registered_address": {
+      "lines": [
+        "600 Example Court"
+      ],
+      "locality": "Exampleton",
+      "region": "WA",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": "https://brambleway-home.example.com",
+    "declared_activity": "retail_home_goods",
+    "declared_owners": [
+      {
+        "name": "Posy Candlewick",
+        "kind": "person",
+        "date_of_birth": null,
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": null,
+  "web": null
+}

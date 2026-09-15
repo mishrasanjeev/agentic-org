@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/business_case/1.0.0",
+  "title": "Business case",
+  "description": "One business application under review: what the applicant declared, what it resolved to, and where the case is in its lifecycle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "case_id", "purpose", "state", "created_at", "updated_at", "application", "subject", "decision"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "case_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "purpose": {
+      "description": "Grant purpose the case is processed under, e.g. aml.cdd.onboarding or x-acme.vendor_review.",
+      "type": "string",
+      "pattern": "^([a-z][a-z0-9_]*|x-[a-z0-9][a-z0-9\\-]*)(\\.[a-z][a-z0-9_]*)+$"
+    },
+    "state": {
+      "type": "string",
+      "enum": ["submitted", "in_progress", "awaiting_decision", "decided", "withdrawn", "failed"]
+    },
+    "created_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "updated_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "application": {"$ref": "#/$defs/application"},
+    "subject": {
+      "description": "The business the application resolved to, or null before resolution or when no registry match exists.",
+      "oneOf": [
+        {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/business_ref"},
+        {"type": "null"}
+      ]
+    },
+    "decision": {
+      "description": "The human decision, or null until one is recorded.",
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/decision"}]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"const": "decided"}}},
+      "then": {"properties": {"decision": {"$ref": "#/$defs/decision"}}},
+      "else": {"properties": {"decision": {"type": "null"}}}
+    }
+  ],
+  "$defs": {
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["legal_name", "jurisdiction", "identifiers", "declared_owners"],
+      "properties": {
+        "legal_name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "trading_names": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1, "maxLength": 512}
+        },
+        "jurisdiction": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/jurisdiction"},
+        "identifiers": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier"}
+        },
+        "registered_address": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/address"},
+            {"type": "null"}
+          ]
+        },
+        "website": {"type": ["string", "null"], "format": "uri", "maxLength": 2048},
+        "declared_activity": {
+          "description": "Activity category the applicant declared, as a lower-case vocabulary term.",
+          "type": ["string", "null"],
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "declared_owners": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/declared_owner"}
+        }
+      }
+    },
+    "declared_owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "kind": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/party_kind"},
+        "date_of_birth": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "nationalities": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/country_code"}
+        },
+        "ownership_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100},
+        "identifiers": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier"}
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "approvers", "decided_at"],
+      "properties": {
+        "outcome": {"type": "string", "enum": ["approve", "decline"]},
+        "approvers": {
+          "description": "One entry per decision grant consumed; two with different subjects where four-eyes applies.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["approver", "decision_grant_id"],
+            "properties": {
+              "approver": {"type": "string", "minLength": 1, "maxLength": 256},
+              "decision_grant_id": {"type": "string", "minLength": 1, "maxLength": 256}
+            }
+          }
+        },
+        "decided_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"}
+      }
+    }
+  }
+}

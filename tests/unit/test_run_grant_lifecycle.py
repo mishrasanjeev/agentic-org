@@ -128,6 +128,18 @@ async def test_a_short_lived_grant_is_used_once_but_never_shared(root_grant):
     assert client.grants.delegate.call_count == 2
 
 
+async def test_a_delegation_without_an_expiry_is_refused_rather_than_minted_per_call(root_grant):
+    from auth.token_pool import GrantMintError
+
+    client = MagicMock()
+    client.grants.delegate.return_value = {"grantToken": "placeholder-no-expiry", "grantId": "grnt_x"}
+    pool = TokenPool(grantex_client_factory=lambda: client)
+    pool.lazy_redis = False
+    with pytest.raises(GrantMintError) as err:
+        await pool.get_run_grant_token(tenant_id=TENANT, agent_id=AGENT, grantex_agent_id="ag_1", scopes=SCOPES)
+    assert err.value.sub_reason == "mint_failed"
+
+
 def test_the_in_process_cache_is_bounded(root_grant, monkeypatch):
     from auth import token_pool as tp
 
