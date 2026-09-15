@@ -293,7 +293,7 @@ async def test_resume_replaces_the_checkpointed_token_with_a_fresh_grant():
         )
     assert resolve.await_args.kwargs["agent_id"] == AGENT
     assert build.call_args.kwargs["run_grant"] is grant
-    assert captured["command"].update == {"grant_token": PLACEHOLDER_TOKEN}
+    assert captured["command"].update == {"grant_token": PLACEHOLDER_TOKEN, "grant_denial": {}}
 
 
 async def test_resume_in_off_mode_leaves_the_checkpointed_state_alone():
