@@ -5,6 +5,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- `make seed` (`scripts/seed_dev.py`): an idempotent development tenant with
+  Approver A and Approver B (the OIDC stub's identities, matched by email), a
+  disabled `dev-oidc` sign-in configuration for the stub, two sample agents in
+  shadow mode with no tools, and a two-step four-eyes approval policy. Fixed
+  ids make repeated runs a no-op; a conflicting existing row fails the run
+  without writes; it refuses non-development runtimes. Optional
+  `AGENTICORG_SEED_PASSWORD` enables email sign-in. See "Development data" in
+  `docs/quickstart-local.md`.
 - Development OpenID Connect provider in the local stack (`oidc-stub`,
   `tools/oidc_stub`): discovery, JWKS, authorization code with mandatory PKCE,
   token and userinfo endpoints, and step-up through `acr_values`, `max_age`
