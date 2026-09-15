@@ -36,7 +36,7 @@ agents:
     llm_model: gpt-4o
     confidence_floor: 0.85
     prompt_file: prompts/supply_chain_optimizer.prompt.txt
-    hitl_condition: high_value_procurement
+    hitl_condition: "supply_chain_summary.total_po_value > 30000 OR supply_chain_summary.vendor_flags > 0"
     system_prompt_suffix: >
       Optimize inventory levels and reorder points.
       Evaluate supplier lead times and suggest alternative sources.
