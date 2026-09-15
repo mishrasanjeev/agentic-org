@@ -435,7 +435,7 @@ Remove an entry in the pull request that fixes it.
   and require roughly linear growth), or mark the timing check to run without
   coverage.
 
-## A-35 — A built-in connector is tied to one commercial screening provider
+## A-40 — A built-in connector is tied to one commercial screening provider
 
 - **Found:** `scripts/check_denylist.py audit` while removing vendor names
   from prompts and docs (2026-09-15).

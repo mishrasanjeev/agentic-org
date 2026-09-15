@@ -113,7 +113,7 @@ This document categorizes every connector by production readiness and lists exac
 | **ServiceNow** | SANDBOX FIRST | REST + OAuth2. Create OAuth Application in ServiceNow instance. Use Personal Developer Instance (free) for testing at developer.servicenow.com. **Action needed:** Some table APIs require specific roles — confirm scoped app permissions. |
 | **PagerDuty** | READY | API key from pagerduty.com → Configuration → API Access Keys. REST v2. |
 | **MCA Portal** | BLOCKED | Government portal (Ministry of Corporate Affairs). Needs: DIN, DSC, MCA registration. **Action needed:** Same challenge as EPFO — government portal auth with captcha/OTP. Uses DSCAdapter for signing. |
-| **Sanctions API** | READY | API key from the screening provider's developer settings. KYC/AML screening. See FINDINGS A-35 on the provider-specific connector. |
+| **Sanctions API** | READY | API key from the screening provider's developer settings. KYC/AML screening. See FINDINGS A-40 on the provider-specific connector. |
 
 ### Ops Summary
 - **Ready now:** 5 (Jira, Confluence, Zendesk, PagerDuty, Sanctions)
