@@ -20,6 +20,8 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 COMPOSE ?= docker compose -f docker-compose.dev.yml
+# scripts/dev_stack_smoke.sh runs one check inside the api container through it.
+export COMPOSE
 RUNNER ?= docker
 PYTHON ?= python
 # Branch point for the checks that look only at this branch's changes.
