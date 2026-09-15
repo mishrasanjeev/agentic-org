@@ -65,6 +65,10 @@ from core.schemas.api import (
 
 MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
+# Every name here must be a tool a native connector registers
+# (``_build_tool_index``); a name nothing registers can never run and only
+# misleads the agent's prompt and the tool picker. Do not add a name to make
+# a prompt's tool reference pass — change the prompt instead.
 _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     # Commerce
     "commerce_sales_agent": list(GRANTEX_COMMERCE_DEFAULT_TOOLS),
@@ -84,7 +88,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "search_bills",
         "get_bill_by_id",
         "create_order",
-        "check_order_status",
     ],
     "ar_collections": [
         "create_invoice",
@@ -120,7 +123,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_invoices",
         "fetch_bank_statement",
         "get_balance",
-        "search_content_fulltext",
     ],
     "fpa_agent": [
         # Tools the agent actually calls — see core/agents/finance/fpa_agent.py.
@@ -130,7 +132,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_trial_balance",
         "list_invoices",
         "get_balance",
-        "get_campaign_performance_metrics",
         "get_project_metrics",
     ],
     "treasury": [
@@ -146,7 +147,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_vendors",
         "create_vendor",
         "create_ap_invoice",
-        "check_order_status",
         "list_invoices",
         "get_profit_loss",
     ],
@@ -168,23 +168,19 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "talent_acquisition": [
         "post_job",
         "search_candidates",
-        "get_applications",
         "schedule_interview",
-        "send_offer",
         "send_inmail",
     ],
     "onboarding_agent": [
         "create_employee",
         "provision_user",
         "assign_group",
-        "create_page",
-        "schedule_social_post",
+        "confluence:create_page",
     ],
     "payroll_engine": [
         "run_payroll",
         "get_payslip",
         "get_attendance",
-        "post_leave",
         "file_24q_return",
     ],
     "performance_coach": [
@@ -194,8 +190,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "add_comment",
     ],
     "ld_coordinator": [
-        "search_content_fulltext",
-        "create_page",
+        "confluence:create_page",
         "get_employee",
         "schedule_interview",
     ],
@@ -207,26 +202,19 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     # Marketing
     "content_factory": [
-        "schedule_social_post",
-        "get_post_analytics",
-        "manage_publishing_queue",
-        "approve_draft_post",
-        "create_page",
+        "confluence:create_page",
     ],
     "campaign_pilot": [
         "search_campaigns",
         "get_campaign_performance",
         "mutate_campaign_budget",
         "get_search_terms",
-        "get_analytics",
+        "linkedin_ads:get_analytics",
         "get_stats",
     ],
-    "seo_strategist": [
-        "get_campaign_performance_metrics",
-        "get_search_term_report",
-        "search_content_fulltext",
-        "get_post_analytics",
-    ],
+    # Every tool this list used to name was unregistered; it stays empty
+    # rather than gaining tools nobody chose for it.
+    "seo_strategist": [],
     "crm_intelligence": [
         "list_contacts",
         "search_contacts",
@@ -241,14 +229,12 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_owners",
     ],
     "brand_monitor": [
-        "get_post_analytics",
         "get_campaign_performance",
-        "schedule_social_post",
         "search_contacts",
     ],
     "email_marketing": [
-        "send_email",
-        "create_campaign",
+        "sendgrid:send_email",
+        "mailchimp:create_campaign",
         "send_campaign",
         "get_campaign_report",
         "add_list_member",
@@ -257,14 +243,13 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "social_media": [
         "create_tweet",
         "create_update",
-        "get_post_analytics",
         "list_channel_videos",
         "get_campaign_insights",
     ],
     "abm": [
-        "query",
-        "search_contacts",
-        "get_analytics",
+        "salesforce:query",
+        "salesforce:search_contacts",
+        "linkedin_ads:get_analytics",
         "get_campaign_performance",
         "create_campaign",
     ],
@@ -279,8 +264,6 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "support_triage": [
         "create_ticket",
         "update_ticket",
-        "escalate_to_group",
-        "get_sla_breach_status",
         "get_csat_score",
         "apply_macro",
         "send_message",
@@ -288,67 +271,56 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "vendor_manager": [
         "search_issues",
-        "create_issue",
+        "jira:create_issue",
         "add_comment",
-        "create_page",
+        "confluence:create_page",
         "get_project_metrics",
     ],
     "contract_intelligence": [
-        "search_content_fulltext",
-        "create_page",
+        "confluence:create_page",
         "search_issues",
         "get_page_tree",
     ],
     "compliance_guard": [
-        "get_compliance_notice",
+        "gstn:get_compliance_notice",
         "get_access_log",
         "search_issues",
         "create_incident",
         "send_message",
     ],
     "it_operations": [
-        "create_incident",
-        "trigger_alert_with_context",
+        "servicenow:create_incident",
         "acknowledge_incident",
-        "manage_on_call_schedule",
-        "run_automated_runbook",
         "send_message",
         "post_alert",
     ],
     # Backoffice
     "legal_ops": [
-        "search_content_fulltext",
-        "create_page",
+        "confluence:create_page",
         "search_issues",
         "get_page_tree",
-        "manage_space_permissions",
     ],
     "risk_sentinel": [
         "get_access_log",
         "create_incident",
         "get_compliance_notice",
         "search_issues",
-        "generate_postmortem_doc",
     ],
     "facilities_agent": [
         "create_ticket",
         "update_ticket",
-        "create_issue",
-        "get_sla_breach_status",
+        "jira:create_issue",
     ],
     # Comms
     "email_agent": [
-        "send_email",
+        "gmail:send_email",
         "read_inbox",
         "search_emails",
     ],
     "notification_agent": [
         "send_email",
-        "create_calendar_event",
-        "slack_send_message",
     ],
     "chat_agent": [
-        "slack_send_message",
         "send_email",
         "read_inbox",
     ],
@@ -383,19 +355,14 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
         "post_job",
     ],
     "marketing": [
-        "get_campaign_performance_metrics",
-        "schedule_social_post",
         "list_contacts",
-        "get_post_analytics",
     ],
     "ops": [
         "create_ticket",
         "search_issues",
         "create_incident",
-        "get_sla_breach_status",
     ],
     "backoffice": [
-        "search_content_fulltext",
         "create_page",
         "search_issues",
         "get_access_log",
@@ -403,8 +370,6 @@ _DOMAIN_DEFAULT_TOOLS: dict[str, list[str]] = {
     "comms": [
         "send_email",
         "read_inbox",
-        "slack_send_message",
-        "create_calendar_event",
     ],
 }
 
@@ -908,6 +873,27 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
     return [t for t in tools if t not in index]
 
 
+def _enforce_hitl_condition_on_save(condition: str | None, *, surface: str) -> None:
+    """Refuse a HITL condition outside the grammar when validation rejects.
+
+    Mode comes from ``AGENTICORG_HITL_CONDITION_VALIDATION`` (off by default;
+    ``warn`` logs and counts instead of refusing).
+    """
+    from core.config import settings
+    from core.langgraph.hitl_condition import screen_condition_on_save
+
+    failure = screen_condition_on_save(condition, mode=settings.hitl_condition_validation, surface=surface)
+    if failure is not None:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_hitl_condition",
+                "reason": failure.reason,
+                "message": f"HITL condition cannot be evaluated: {failure.detail}",
+            },
+        )
+
+
 def _tool_ref_matches(tool_ref: str, expected_tool: str) -> bool:
     raw = str(tool_ref or "").strip()
     expected = str(expected_tool or "").strip()
@@ -974,8 +960,18 @@ def _derive_default_tools(
 
     connector_index = _build_tool_index(connector_names=connector_names)
     connector_tool_names = set(connector_index.keys())
+    # A connector-qualified default (``jira:create_issue``) survives only
+    # when that connector is among ``connector_names`` and registers the
+    # tool; an unknown connector or tool never matches (fail closed).
+    qualified_names = (
+        set(_build_tool_index(connector_names=connector_names, include_connector_aliases=True))
+        if any(":" in t for t in static_defaults)
+        else set()
+    )
 
-    intersected = [t for t in static_defaults if t in connector_tool_names]
+    intersected = [
+        t for t in static_defaults if (t in qualified_names if ":" in t else t in connector_tool_names)
+    ]
     if intersected:
         return intersected
 
@@ -1625,6 +1621,7 @@ async def create_agent(
     caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
+    _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_create")
     # Bug sheet 2026-09-14 rows 19/22/32/50: agents:write (route family) plus
     # the ownership rules. Admins create shared agents; permitted roles create
     # personal agents they own, inside their domains (developers: any domain).
@@ -2432,6 +2429,9 @@ async def generate_agent(
         if not effective_caller.is_admin and not target_domain:
             raise HTTPException(403, "The generated agent has no domain; only a tenant admin can deploy it.")
         visibility, owner_user_id = resolve_new_agent_ownership(effective_caller, None, target_domain)
+        _enforce_hitl_condition_on_save(
+            top.get("hitl_condition", "confidence < 0.88"), surface="agents_generate"
+        )
 
         # Build tools list. A generated agent is created with no connector
         # linked, so the #46 rule applies exactly as in
@@ -2582,6 +2582,8 @@ async def replace_agent(
     PromptEditHistory record with edited_by populated.
     """
     tid = _uuid.UUID(tenant_id)
+    if "hitl_policy" in body.model_fields_set:
+        _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_replace")
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
@@ -2744,6 +2746,8 @@ async def update_agent(
         require_agent_mutable(agent, effective_caller)
 
         update_data = body.model_dump(exclude_unset=True)
+        if isinstance(update_data.get("hitl_policy"), dict):
+            _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
         if "domain" in update_data:
             check_agent_domain_change(agent, update_data["domain"], effective_caller)
         # Rows 19/22: only an admin may change visibility; 'tenant' clears the

@@ -172,6 +172,12 @@ class Settings(BaseSettings):
     # Lifetime requested for a per-run grant delegated from the root grant
     # (auth/token_pool.py). Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
     grants_run_token_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
+    # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
+    # when an agent or SOP config is saved: "off" accepts them as before,
+    # "warn" accepts them but logs and counts them, "reject" answers 422 with
+    # the parse reason. Any other value fails startup.
+    # Env: AGENTICORG_HITL_CONDITION_VALIDATION.
+    hitl_condition_validation: Literal["off", "warn", "reject"] = "off"
 
     # Platform behaviour
     pii_masking: bool = True
