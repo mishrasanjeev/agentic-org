@@ -3465,6 +3465,26 @@ async def run_agent(
         paused_thread_id = run_thread_id if lg_result.get("thread_id") == run_thread_id else None
         if paused_thread_id is None:
             logger.warning("agent_run_hitl_without_checkpoint_thread", agent_id=str(agent_id))
+        # The exact graph parameters of this run, so a resume after approval
+        # re-evaluates the approval gate as it paused (core/approvals/agent_run_resume.py).
+        # Server-only: stripped from every approval API response.
+        resume_spec: dict[str, Any] = {}
+        if paused_thread_id is not None:
+            from core.approvals.agent_run_resume import RESUME_SPEC_KEY
+
+            resume_spec[RESUME_SPEC_KEY] = {
+                # Same expressions as the langgraph_run call above.
+                "confidence_floor": float(review_learning["effective_confidence_floor"]),
+                "hitl_condition": (
+                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
+                ),
+                "authorized_tools": list(authorized_tools or []),
+                "connector_names": connector_names_for_tools,
+                "llm_model": agent_config.get("llm_model", ""),
+                "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+                "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
+                "domain": agent_config.get("domain", "ops"),
+            }
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
@@ -3492,6 +3512,7 @@ async def run_agent(
                     "reasoning_trace": task_trace,
                     "trigger": hitl_trigger,
                     "output": task_output,
+                    **resume_spec,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
                 checkpoint_thread_id=paused_thread_id,

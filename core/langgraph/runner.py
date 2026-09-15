@@ -24,7 +24,12 @@ from langgraph.errors import GraphInterrupt
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
-from core.langgraph.checkpointer import BACKEND_POSTGRES, configured_backend, get_checkpointer
+from core.langgraph.checkpointer import (
+    BACKEND_POSTGRES,
+    CheckpointIntegrityError,
+    configured_backend,
+    get_checkpointer,
+)
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
 from core.langgraph.thread_ids import (
@@ -593,6 +598,7 @@ async def resume_agent(
     company_id: str | None = None,
     domain: str | None = None,
     llm_provider: str | None = None,
+    require_paused: bool = False,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -602,6 +608,11 @@ async def resume_agent(
     ``thread_id`` must be scoped to ``tenant_id``; otherwise the resume is
     refused before any checkpoint is read. Without a tenant only the memory
     backend proceeds (legacy callers).
+
+    ``require_paused``: refuse unless the thread has a checkpoint waiting at
+    the approval gate (``checkpoint_not_found`` / ``checkpoint_not_paused``).
+    Resuming a thread with no checkpoint would otherwise start a new, empty run.
+    Refusals and failures carry a ``reason`` code.
     """
     from langgraph.types import Command
 
@@ -640,6 +651,16 @@ async def resume_agent(
 
     t0 = time.perf_counter()
     try:
+        if require_paused:
+            snapshot = await compiled.aget_state(config)  # type: ignore[arg-type]
+            refusal = ""
+            if snapshot is None or not snapshot.values:
+                refusal = "checkpoint_not_found"
+            elif "hitl_gate" not in (snapshot.next or ()):
+                refusal = "checkpoint_not_paused"
+            if refusal:
+                logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
+                return {"status": "failed", "error": refusal, "reason": refusal}
         result = await compiled.ainvoke(  # type: ignore[call-overload]
             Command(resume=decision),
             config=config,
@@ -663,7 +684,8 @@ async def resume_agent(
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
-        return {"status": "failed", "error": str(e)}
+        reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
+        return {"status": "failed", "error": str(e), "reason": reason}
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:
