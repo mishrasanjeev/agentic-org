@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Reusable screening disposition (PRD A-8). Start it for a governed case whose
+# screening produced hits - after a re-screen or a monitoring alert, for
+# example. Requires the governed_cases.enabled flag. Nothing here closes a hit:
+# the analyst accepts or overrides each proposal through
+# POST /api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review.
+name: screening_disposition
+version: "1.0"
+description: >
+  Proposes a disposition for each undisposed screening hit on a governed case -
+  per-identifier comparison, cited evidence, rationale, proposed outcome and a
+  confidence band - and queues the proposals for a screening analyst.
+domain: operations
+
+trigger:
+  type: api_event
+  event_type: governed_case.screening_hits
+  description: "Payload carries case_ref"
+
+timeout_hours: 72
+
+steps:
+  - id: propose_dispositions
+    name: Propose screening dispositions
+    type: case_agent
+    agent: screening_disposition
+    action: dispose_screening_hits
+    case_ref: $case_ref
+
+  - id: analyst_review
+    name: Screening analyst accepts or overrides each proposal
+    type: human_in_loop
+    depends_on: [propose_dispositions]
+    assignee_role: screening_analyst
+    decision_options: [reviewed, escalate]
+    timeout_hours: 48

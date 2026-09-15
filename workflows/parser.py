@@ -10,6 +10,7 @@ import yaml
 class WorkflowParser:
     VALID_STEP_TYPES = {
         "agent",
+        "case_agent",
         "condition",
         "human_in_loop",
         "parallel",

@@ -4068,6 +4068,204 @@
     "tenant_required": true
   },
   {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "list_governed_cases",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases api/v1/governed_cases.py:list_governed_cases",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 138,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.create",
+    "auth_required": true,
+    "function": "submit_case",
+    "idempotency": "not-idempotent-case-creation",
+    "key": "POST /api/v1/governed-cases api/v1/governed_cases.py:submit_case",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 108,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "governed_case_stats",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases/stats api/v1/governed_cases.py:governed_case_stats",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/stats",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 155,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_governed_case",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases/{case_ref} api/v1/governed_cases.py:get_governed_case",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 168,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_governed_case_record",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases/{case_ref}/case-record api/v1/governed_cases.py:get_governed_case_record",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/case-record",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 203,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.decision",
+    "auth_required": true,
+    "function": "decide_governed_case",
+    "idempotency": "state-machine-refuses-a-second-decision",
+    "key": "POST /api/v1/governed-cases/{case_ref}/decision api/v1/governed_cases.py:decide_governed_case",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/decision",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 284,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.information_request_proposed",
+    "auth_required": true,
+    "function": "propose_information_request",
+    "idempotency": "proposal-digest-deduplicates",
+    "key": "POST /api/v1/governed-cases/{case_ref}/information-requests api/v1/governed_cases.py:propose_information_request",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/information-requests",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 344,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.information_request_approved",
+    "auth_required": true,
+    "function": "approve_information_request",
+    "idempotency": "write-once-approval",
+    "key": "POST /api/v1/governed-cases/{case_ref}/information-requests/{proposal_sha256}/approve api/v1/governed_cases.py:approve_information_request",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/information-requests/{proposal_sha256}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 376,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.investigate",
+    "auth_required": true,
+    "function": "start_investigation",
+    "idempotency": "state-machine-refuses-a-second-start",
+    "key": "POST /api/v1/governed-cases/{case_ref}/investigate api/v1/governed_cases.py:start_investigation",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/investigate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 228,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.disposition_review",
+    "auth_required": true,
+    "function": "review_screening_disposition",
+    "idempotency": "write-once-review",
+    "key": "POST /api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review api/v1/governed_cases.py:review_screening_disposition",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 309,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.withdraw",
+    "auth_required": true,
+    "function": "withdraw_case",
+    "idempotency": "state-machine-refuses-a-second-withdrawal",
+    "key": "POST /api/v1/governed-cases/{case_ref}/withdraw api/v1/governed_cases.py:withdraw_case",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/withdraw",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 261,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-readiness-probe",
     "auth_required": false,
     "function": "health_readiness",

@@ -5,6 +5,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Governed business cases (`core/cases/`, PRD A-8), behind the per-tenant
+  flag `governed_cases.enabled` (default off; unreadable counts as off): case
+  lifecycle `submitted`/`in_progress`/`awaiting_decision`/`decided`/
+  `withdrawn`/`failed` with version-guarded transitions recorded in
+  `governed_case_transitions`; a runtime that runs the Business Onboarding
+  Underwriter and Screening Disposition agents for a case and stores the memo,
+  policy result, screening results, dispositions and agent case records;
+  decisions recorded only with verified decision grants (the shipped verifier
+  refuses everything with `decision_required` until decision grants land).
+  New workflow step type `case_agent` and example workflows
+  `workflows/examples/business_onboarding.yaml` and `screening_disposition.yaml`.
+  New API under `/api/v1/governed-cases` (submit, list, stats, detail, case
+  record, investigate, withdraw, decision, disposition review, information
+  requests). Migration `v6z25_governed_cases` adds two tables with row-level
+  security. Metric `agenticorg_governed_case_transitions_total{from_state,to_state}`.
+  Settings `AGENTICORG_CASE_PROVIDER`, `AGENTICORG_CASE_POLICY_DIR`,
+  `AGENTICORG_CASE_LLM_MODEL`. See `docs/governance/case-lifecycle.md`.
 - Screening Disposition reference agent (`core/agents/screening_disposition/`,
   PRD A-7 / US-3): for one screening hit it re-screens the subject through
   the provider tool gateway to confirm the hit, compares name, date of birth,
