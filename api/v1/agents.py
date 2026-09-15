@@ -3337,11 +3337,6 @@ async def run_agent(
             if fixture.get("expected_tool"):
                 incoming_inputs["shadow_expected_tool"] = str(fixture["expected_tool"])
 
-    run_llm_provider = _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config"))
-    run_confidence_floor = float(review_learning["effective_confidence_floor"])
-    run_hitl_condition = (
-        "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
-    )
     try:
         if locals().get("_shadow_route_taken"):
             # lg_result already populated by the deterministic route
@@ -3361,9 +3356,13 @@ async def run_agent(
                     "context": payload.get("context", {}),
                 },
                 llm_model=agent_config.get("llm_model", ""),
-                llm_provider=run_llm_provider,
-                confidence_floor=run_confidence_floor,
-                hitl_condition=run_hitl_condition,
+                llm_provider=_pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+                confidence_floor=float(review_learning["effective_confidence_floor"]),
+                hitl_condition=(
+                    ""
+                    if review_learning["confidence_condition_suppressed"]
+                    else agent_config.get("hitl_condition", "")
+                ),
                 grant_token=grant_token,
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
@@ -3470,12 +3469,15 @@ async def run_agent(
             from core.approvals.agent_run_resume import RESUME_SPEC_KEY
 
             resume_spec[RESUME_SPEC_KEY] = {
-                "confidence_floor": run_confidence_floor,
-                "hitl_condition": run_hitl_condition,
+                # Same expressions as the langgraph_run call above.
+                "confidence_floor": float(review_learning["effective_confidence_floor"]),
+                "hitl_condition": (
+                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
+                ),
                 "authorized_tools": list(authorized_tools or []),
                 "connector_names": connector_names_for_tools,
                 "llm_model": agent_config.get("llm_model", ""),
-                "llm_provider": run_llm_provider,
+                "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
                 "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
                 "domain": agent_config.get("domain", "ops"),
             }
