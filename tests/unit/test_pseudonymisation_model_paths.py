@@ -30,6 +30,7 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.pii.pseudonymiser import PseudonymMap
 from core.test_doubles.pseudonym_store import InMemoryPseudonymMapStore
 from core.test_doubles.scripted_model import final, tool_call
@@ -411,7 +412,11 @@ async def test_graph_pseudonymises_every_message_immediately_before_the_model_ca
     session = await open_session(case.TENANT_ID, case.CASE_ID)
     model = scripted_model([final({"status": "completed", "confidence": 0.95})])
     graph = build_agent_graph(
-        system_prompt=case.system_prompt(), authorized_tools=[], confidence_floor=0.5, pseudonymiser=session
+        system_prompt=case.system_prompt(),
+        authorized_tools=[],
+        confidence_floor=0.5,
+        pseudonymiser=session,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     state = {
         "messages": [

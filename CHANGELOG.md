@@ -299,6 +299,39 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   default tool list names an unregistered tool. It runs with no baseline and
   fails closed if the registry cannot be loaded. See "Prompt tool references"
   in `CONTRIBUTING.md`.
+- Grant enforcement modes for agent tool calls (`grants.enforce_closed`:
+  `off`, `warn`, `deny`). The mode is the strictest of
+  `AGENTICORG_GRANTS_ENFORCE_CLOSED` (default `off`, which keeps today's
+  behaviour) and the global and tenant rows of the
+  `grants.enforce_closed.warn` / `.deny` flags, each read on its own. In
+  `warn`, runs from `POST /agents/{id}/run` and other callers of the LangGraph
+  runner resolve a grant per run — the caller's token, the agent's configured
+  token, or one the token pool now mints by delegating from
+  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent (cached
+  per tenant, agent and scope set, refreshed before it expires, at most one
+  mint per key per process) — and every tool call that grant would deny still
+  runs (a token supplied by the caller or configured on the agent stays
+  enforced as before) but is logged as `grant_enforcement_would_deny` and
+  counted in `agenticorg_grant_enforcement_denials_total{mode,reason}` with
+  the Grantex SDK's reason (exact messages of the pinned 0.5.x SDK mapped to
+  the Appendix B reasons until the Grantex 0.6 SDK with reason codes is
+  published), including runs with no grant at all
+  (`grant_missing`). If the flag table cannot be read and the process has no
+  recent mode for the tenant, the run falls back to the strictest mode.
+  `deny` is not switchable yet and runs as `warn`. See
+  `docs/operations/grant-enforcement.md`.
+- The Grantex SDK pin moves from `grantex==0.5.0` to `grantex==0.5.1`
+  (amount and malformed-cap checks in `enforce`; no API change).
+- **Break:** the authority flags (`grants.enforce_closed.*`,
+  `pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
+  `decisions.required`, `caps.enforce`) can no longer be created, changed or
+  deleted through `/api/v1/feature-flags`; the API answers
+  `403 flag_key_reserved`. Platform operators manage them with
+  `scripts/authority_flags.py`.
+- **Break (Python API):** `core.langgraph.agent_graph.build_agent_graph` and
+  every `build_*_graph` builder in `core/langgraph/agents/` take a required
+  keyword `run_grant`, so a graph can no longer be built with grant
+  enforcement silently left off.
 
 ### Fixed
 - Four shipped industry-pack agents no longer send every run to human review.

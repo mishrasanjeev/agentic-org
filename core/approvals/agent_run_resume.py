@@ -82,17 +82,31 @@ async def should_resume(item: HITLQueue, tenant_id: uuid.UUID) -> bool:
         return False
     if resume_command(item.status, item.decision, item.decision_notes) is None:
         return False
-    from core.feature_flags import is_enabled
+    from core.feature_flags import FeatureFlagLookupError, load_flag_rows_strict, row_enabled
 
-    if await is_enabled(RESUME_FLAG, tenant_id=tenant_id, default=False):
-        return True
-    # The flag is off, or its lookup failed (is_enabled falls back to the
-    # default): the run stays paused. Say so, since nothing else will.
+    # An operator-managed authority flag: the global and tenant rows are read
+    # separately. A global row that disables resuming wins; otherwise the
+    # tenant row decides, else the global row. An unreadable flag store keeps
+    # the run paused.
+    reason = "resume_flag_off"
+    try:
+        rows = await load_flag_rows_strict(RESUME_FLAG, tenant_id=tenant_id)
+    except FeatureFlagLookupError:
+        reason = "resume_flag_unavailable"
+    else:
+        subject = str(tenant_id)
+        if rows.global_row is not None and not row_enabled(RESUME_FLAG, rows.global_row, subject_id=subject):
+            reason = "resume_flag_disabled_globally"
+        elif row_enabled(
+            RESUME_FLAG, rows.tenant_row if rows.tenant_row is not None else rows.global_row, subject_id=subject
+        ):
+            return True
+    # The run stays paused. Say so, since nothing else will.
     agent_run_resumes_total.labels(outcome=OUTCOME_SKIPPED).inc()
     logger.warning(
         "agent_run_resume_skipped",
         hitl_id=str(item.id),
-        reason="resume_flag_off_or_unavailable",
+        reason=reason,
         flag=RESUME_FLAG,
     )
     return False
