@@ -1,0 +1,11 @@
+Business application (synthetic fixture)
+Legal name: Larkspur Tile Works Ltd
+Trading name: Larkspur Tiles
+Company number: 00000003
+Jurisdiction: uk
+Business activity: Retail tile shop and fitting
+Number of owners: 2
+Owner: Ada Placeholder
+Owner: Ben Placeholder
+Website: https://www.larkspur-tiles.example.com/
+Tax identifier: 00-0000001
