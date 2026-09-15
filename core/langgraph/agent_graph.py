@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import structlog
@@ -338,6 +338,7 @@ def build_agent_graph(
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
     run_grant: RunGrant | None = None,
+    context_guard: Callable[[Sequence[Any]], None] | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -359,6 +360,12 @@ def build_agent_graph(
         run_grant: The run's resolved grant and ``grants.enforce_closed``
             mode (``auth/run_grants.py``). ``None`` is ``off``: scope
             validation keeps its legacy behaviour.
+        context_guard: Called with the full message list before every model
+            call; raising stops the run before anything is sent. Governed case
+            agents pass ``UntrustedTextRegistry.guard_messages`` so untrusted
+            source text can never reach the model
+            (``docs/security/untrusted-content.md``). ``None`` keeps the
+            existing behaviour.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -413,6 +420,8 @@ def build_agent_graph(
         if not messages or not isinstance(messages[0], SystemMessage):
             messages = [SystemMessage(content=system_prompt), *messages]
 
+        if context_guard is not None:
+            context_guard(messages)
         trace.append(f"Calling LLM ({llm_model or 'default'})")
         response = await _get_llm().ainvoke(messages)
         if isinstance(response, AIMessage) and response.tool_calls:
