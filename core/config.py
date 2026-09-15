@@ -161,6 +161,13 @@ class Settings(BaseSettings):
     plugin_loading: bool = False
     plugin_allowlist: str = ""
 
+    # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
+    # when an agent or SOP config is saved: "off" accepts them as before,
+    # "warn" accepts them but logs and counts them, "reject" answers 422 with
+    # the parse reason. Any other value fails startup.
+    # Env: AGENTICORG_HITL_CONDITION_VALIDATION.
+    hitl_condition_validation: Literal["off", "warn", "reject"] = "off"
+
     # LangGraph checkpoint store (core/langgraph/checkpointer.py). "memory"
     # keeps paused runs in process memory, lost on restart; "postgres" stores
     # them encrypted in the Alembic-managed checkpoint tables and refuses to

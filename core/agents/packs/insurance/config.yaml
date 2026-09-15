@@ -19,7 +19,7 @@ agents:
     domain: finance
     tools: [knowledge_base_search, composio:salesforce:get_account, composio:salesforce:get_opportunity, composio:salesforce:update_record]
     llm_model: gpt-4o
-    hitl_condition: high_value_or_complex_risk
+    hitl_condition: "underwriting_summary.authority_status != 'within' OR underwriting_summary.recommendation != 'bind' OR underwriting_summary.risk_score < 40"
     confidence_floor: 0.90
     prompt_file: prompts/underwriting_analyst.prompt.txt
     system_prompt_suffix: >
@@ -31,7 +31,7 @@ agents:
     domain: finance
     tools: [composio:salesforce:get_claim, composio:salesforce:update_record, knowledge_base_search]
     llm_model: gpt-4o
-    hitl_condition: high_value_or_fraud_indicator
+    hitl_condition: "claims_summary.loss_amount > 2500 OR claims_summary.reserve > 30000 OR claims_summary.fraud_score > 60 OR claims_summary.coverage_verified != True"
     confidence_floor: 0.92
     prompt_file: prompts/claims_adjudicator.prompt.txt
     system_prompt_suffix: >
@@ -43,7 +43,7 @@ agents:
     domain: ops
     tools: [composio:salesforce:get_account, composio:salesforce:update_record, composio:stripe:get_subscription, composio:stripe:update_subscription]
     llm_model: gpt-4o
-    hitl_condition: cancellation_or_major_endorsement
+    hitl_condition: "policy_summary.action not in ['issuance', 'renewal', 'billing']"
     confidence_floor: 0.90
     prompt_file: prompts/policy_manager.prompt.txt
     system_prompt_suffix: >
