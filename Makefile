@@ -30,7 +30,7 @@ BASE_REF ?= origin/main
 PYTEST_ARGS ?=
 
 UNIT_SUITES ?= tests/unit tests/security
-CONTRACT_SUITES ?= tests/connector_harness
+CONTRACT_SUITES ?= tests/contract tests/connector_harness
 INTEGRATION_SUITES ?= tests/integration tests/regression
 COVERAGE_FLOOR ?= 55
 # `make coverage-gate`: changed lines (diff-cover) and each new module.
