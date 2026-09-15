@@ -1,0 +1,125 @@
+{
+  "key": "us-clean-hollowbrook",
+  "scenarios": [
+    "clean"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Hollowbrook Tool and Die LLC",
+    "trading_names": [],
+    "jurisdiction": "US-DE",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000001"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000001"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "100 Example Avenue",
+        "Suite 5"
+      ],
+      "locality": "Exampleville",
+      "region": "DE",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": "https://hollowbrook-tools.example.com",
+    "declared_activity": "industrial_machining",
+    "declared_owners": [
+      {
+        "name": "Wendeline Ashgrove",
+        "kind": "person",
+        "date_of_birth": "1966",
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-us-de-0000001",
+    "jurisdiction": "US-DE",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000001"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000001"
+      }
+    ],
+    "legal_name": "Hollowbrook Tool and Die LLC",
+    "registry_status": "active",
+    "entity_type": "limited_liability_company",
+    "incorporated_on": "2011-03-14",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "100 Example Avenue",
+        "Suite 5"
+      ],
+      "locality": "Exampleville",
+      "region": "DE",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "officers": [
+      {
+        "name": "Wendeline Ashgrove",
+        "role": "manager",
+        "appointed_on": "2011-03-14",
+        "resigned_on": null,
+        "date_of_birth": "1966-05",
+        "nationalities": [
+          "US"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-wendeline-ashgrove",
+        "kind": "person",
+        "name": "Wendeline Ashgrove",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1966-05",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2011-03-14"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "hollowbrook-tools.example.com",
+    "registered_on": "2011-04",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Hollowbrook Tool and Die makes precision dies and fixtures for regional manufacturers. Call 555-0101."
+      }
+    ]
+  }
+}

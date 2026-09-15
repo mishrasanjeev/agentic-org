@@ -13,7 +13,7 @@
 #   - alembic revision-id length (varchar(32) cap)
 #   - accidental `verify=False` / `# noqa: S501` that ruff misses
 #   - pytest over the same suites the CI unit-tests job runs
-#     (regression + unit + connector_harness + security) with the CI
+#     (regression + unit + contract + connector_harness + security) with the CI
 #     global coverage floor
 #   - ui: eslint + tsc --noEmit + vitest + build (the CI frontend jobs)
 #
@@ -206,12 +206,12 @@ enterprise_stability_gate() {
 
 # ---------------------------------------------------------------------------
 # 7. Pytest — the same suites and coverage floor as the CI unit-tests job:
-#    tests/unit/ tests/connector_harness/ tests/security/ tests/regression/
+#    tests/unit/ tests/contract/ tests/connector_harness/ tests/security/ tests/regression/
 #    with --cov-fail-under=55. Runs with coverage so the module-coverage
 #    check below has .coverage to read; SKIP_MODULE_COV=1 opts back into the
 #    --no-cov fast path.
 # ---------------------------------------------------------------------------
-PYTEST_SUITES=(tests/unit/ tests/connector_harness/ tests/security/ tests/regression/)
+PYTEST_SUITES=(tests/unit/ tests/contract/ tests/connector_harness/ tests/security/ tests/regression/)
 pytest_check() {
   if [[ "$SKIP_PYTEST" == "1" ]]; then
     echo "[preflight] skipped (SKIP_PYTEST=1)"
