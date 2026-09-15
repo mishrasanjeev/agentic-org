@@ -31,14 +31,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pip-audit bandit
 
-      - name: pip-audit project metadata
-        run: python -m pip_audit -s pypi --desc on --timeout 60 .
-
-      - name: pip-audit production requirements
-        run: python -m pip_audit -s pypi --desc on --timeout 60 -r requirements.txt
-
-      - name: pip-audit v4 optional requirements
-        run: python -m pip_audit -s pypi --desc on --timeout 60 -r requirements-v4.txt
+      # Project metadata, production and v4 requirements; fails on any
+      # vulnerability without a dated exception in
+      # config/pip-audit-exceptions.toml (CONTRIBUTING.md, "Dependency audit
+      # exceptions"), and on expired exceptions.
+      - name: pip-audit with reviewed exceptions
+        run: python scripts/run_pip_audit.py
 
       - name: Bandit SAST
         run: python -m bandit -r core api auth connectors workflows -ll
