@@ -28,6 +28,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph import checkpointer as cp
 from core.langgraph.thread_ids import new_thread_id, thread_belongs_to_tenant
 from core.test_doubles.scripted_model import final
@@ -234,7 +235,11 @@ def test_interrupted_run_resumes_to_completion_after_a_process_restart(
 
             try:
                 graph = build_agent_graph(
-                    system_prompt="scripted", authorized_tools=[], confidence_floor=0.5, hitl_condition="total > 500000"
+                    system_prompt="scripted",
+                    authorized_tools=[],
+                    confidence_floor=0.5,
+                    hitl_condition="total > 500000",
+                    run_grant=NO_RUN_GRANT_FOR_TESTS,
                 )
                 compiled = graph.compile(checkpointer=await cp.get_checkpointer())
                 return await compiled.aget_state({"configurable": {"thread_id": thread_id}})
