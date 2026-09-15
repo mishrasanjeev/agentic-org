@@ -39,7 +39,98 @@ Remove an entry in the pull request that fixes it.
   or make preflight mirror the lint job's minimal environment. The first
   catches real type errors; the second only restores agreement.
 
-## A-4 — Approval step conditions that fail to evaluate are skipped
+## A-7 — Six built-in agent prompts are never loaded
+
+- **Found:** aligning prompts with default tools (PRD F-3, 2026-09-15).
+- **What:** the run, A2A and MCP paths load a built-in prompt with
+  `importlib.import_module(f"core.langgraph.agents.{agent_type}")`
+  (`api/v1/agents.py` run path, `api/v1/a2a.py`, `api/v1/mcp.py:_load_agent_prompt`).
+  The modules for agent types `abm`, `treasury`, `rev_rec` and `fixed_assets`
+  are `abm_agent.py`, `treasury_agent.py`, `rev_rec_agent.py` and
+  `fixed_assets_agent.py`, so the import fails and those agents run on the
+  one-line generic placeholder instead of `abm_agent.prompt.txt`,
+  `treasury_agent.prompt.txt`, `rev_rec_agent.prompt.txt` and
+  `fixed_assets_agent.prompt.txt`. `sales_agent.prompt.txt` and
+  `nexus_orchestrator.prompt.txt` have no loader at all (only the claims
+  linter reads the first).
+- **Fix:** resolve the module by an explicit agent-type → module map (or the
+  `_agent` suffix) in one shared helper used by all three paths, fail loudly
+  when a built-in type has no prompt, and wire or delete the two orphan
+  prompts. `scripts/check_prompt_tools.py` already maps `<type>_agent` stems
+  to `<type>`.
+
+## A-8 — The three default-tool sources disagree and still name dead tools
+
+- **Found:** removing unregistered tools from `_AGENT_TYPE_DEFAULT_TOOLS`
+  (PRD F-3, 2026-09-15).
+- **What:** default tools live in `api/v1/agents.py`
+  (`_AGENT_TYPE_DEFAULT_TOOLS`), `core/agent_generator.py` (its own copy) and
+  each `core/langgraph/agents/*.py` module (`DEFAULT_TOOLS`,
+  `AP_PROCESSOR_TOOLS`, ...), which `build_*_graph` binds when no tools are
+  passed. For 27 of 37 agent types the three lists differ. The F-3 change
+  removed unregistered names from the first two (and from `fpa_agent.py`,
+  which a test pins equal), but the modules still name tools no connector
+  registers, for example `check_order_status` (ap_processor,
+  expense_manager), `get_post_analytics` (social_media, brand_monitor,
+  content_factory, seo_strategist), `read_email`/`draft_email` (email_agent),
+  `send_notification` (notification_agent) and `read_messages` (chat_agent).
+- **Fix:** make `api/v1/agents.py` the only source (the generator and the
+  modules import it), then delete the copies; update
+  `tests/unit/test_new_agents.py` and `tests/unit/test_langgraph_runtime.py`,
+  which pin the module lists.
+
+## A-9 — Prompt token-scope lines name connectors and permissions agents lack
+
+- **Found:** PRD F-3 cites `risk_sentinel.prompt.txt:4` (2026-09-15).
+- **What:** the `Token scope:` line of most built-in prompts lists
+  connector/permission pairs that are neither registered tools nor in the
+  agent's defaults, e.g. `ocr(r:extract)` and `banking_api(w:queue_payment)`
+  in `ap_processor`, `jira(w:create_issue)` and `sanctions_api(r:batch_screen)`
+  in `risk_sentinel`, `outlook(...)` in `email_agent`. The model reads them as
+  capabilities. `scripts/check_prompt_tools.py` checks tool calls only and
+  skips these lines because they are not tool names.
+- **Fix:** rewrite each token-scope line from the agent's default tools
+  (`connector(tool, ...)`) and extend the check to parse and verify it.
+
+## A-10 — Default-tool derivation widens to every tool of a linked connector
+
+- **Found:** removing unregistered defaults (PRD F-3, 2026-09-15).
+- **What:** `_derive_default_tools` (`api/v1/agents.py`) returns every tool of
+  the linked connectors when none of the agent type's defaults intersect
+  them. `seo_strategist` now has no defaults, so linking any connector grants
+  all of its tools, including writes; any agent linked to a connector outside
+  its defaults gets the same.
+- **Fix:** return an empty list (or only read tools) when nothing intersects
+  and let the user choose tools explicitly; update
+  `tests/unit/test_agent_default_tools_endpoint.py` accordingly.
+
+## A-11 — Console permission badge misreads connector-qualified tools
+
+- **Found:** qualifying ambiguous default tools (PRD F-3, 2026-09-15).
+- **What:** `getToolPermission` in `ui/src/pages/AgentCreate.tsx` and
+  `ui/src/pages/AgentDetail.tsx` matches the name prefix (`create_`,
+  `delete_`, ...), so `jira:create_issue`, `zoho_books:create_bill` or
+  `grantex_commerce:cart_create` show as READ and the "minimal scope set"
+  preview understates write access. The tool picker can also offer the bare
+  `create_issue` beside an already-selected `jira:create_issue`.
+- **Fix:** strip the connector prefix before classifying (or use the backend's
+  `classify_action`), and treat `connector:tool` and `tool` as the same entry
+  in the picker when the connector is linked.
+
+## A-12 — Industry pack prompts call tools nothing registers
+
+- **Found:** running the prompt tool parser over `core/agents/packs` (2026-09-15).
+- **What:** the insurance, legal and manufacturing pack prompts call
+  `knowledge_base_search()`, which no connector registers, and the CA
+  `tds_compliance` prompt calls bare `calculate_tds()` (registered by both
+  `income_tax_india` and `zoho_books`) and `get_vendor_details()`.
+  `scripts/check_prompt_tools.py` covers `core/agents/prompts` only, because
+  pack agents also use `composio:` tools that are discovered over the network.
+- **Fix:** register a knowledge-search tool or rewrite those steps, qualify
+  the CA names, and extend the check to pack prompts against each pack's
+  `tools:` list, treating `composio:` names as declared.
+
+## A-19 — Approval step conditions that fail to evaluate are skipped
 
 - **Found:** reading `core/approvals/policy_engine.py` while adding the case
   policy engine (2026-09-15).
