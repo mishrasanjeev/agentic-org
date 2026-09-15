@@ -29,3 +29,7 @@ cc26072867db1855c25d72bdf23985f8220c5e1e:tests/regression/test_billing_stripe_ru
 cc778fc6e9c6659cbaf9db08445053e552bb39ba:api/v1/auth.py:generic-api-key:459
 cc778fc6e9c6659cbaf9db08445053e552bb39ba:api/v1/org.py:generic-api-key:194
 e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-staging-evidence.md:generic-api-key:37
+
+# Non-production test keys retained on purpose for testing (triaged
+# 2026-09-15). Baselined by fingerprint only; the values are not repeated here.
+39a25f24bbc3fccdcb41674a0664f861316edadc:docs/V4_9_0_REQUIREMENTS.md:generic-api-key:19

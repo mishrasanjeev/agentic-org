@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, model_validator
@@ -159,6 +160,13 @@ class Settings(BaseSettings):
     # Env: AGENTICORG_PLUGIN_LOADING, AGENTICORG_PLUGIN_ALLOWLIST (comma list).
     plugin_loading: bool = False
     plugin_allowlist: str = ""
+
+    # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
+    # when an agent or SOP config is saved: "off" accepts them as before,
+    # "warn" accepts them but logs and counts them, "reject" answers 422 with
+    # the parse reason. Any other value fails startup.
+    # Env: AGENTICORG_HITL_CONDITION_VALIDATION.
+    hitl_condition_validation: Literal["off", "warn", "reject"] = "off"
 
     # Platform behaviour
     pii_masking: bool = True
