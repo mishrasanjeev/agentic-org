@@ -136,7 +136,13 @@ class TokenPool:
         Never blocks on or fails because of Redis: the client connects on first
         use and the listener runs in the background, logging if it stops.
         """
-        self.redis = self._new_redis_client()
+        try:
+            self.redis = self._new_redis_client()
+        except (aioredis.RedisError, OSError, ValueError) as exc:
+            # Stay lazy: run grants are still minted (and cached in process)
+            # without Redis, and a later call creates the client again.
+            logger.warning("token_pool_redis_unavailable_at_start", error_type=type(exc).__name__)
+            return
         if self._revocation_task is None or self._revocation_task.done():
             self._revocation_task = asyncio.create_task(self._supervise_revocations())
 

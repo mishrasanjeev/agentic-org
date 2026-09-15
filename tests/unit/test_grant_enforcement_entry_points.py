@@ -285,7 +285,7 @@ async def test_resume_replaces_the_checkpointed_token_with_a_fresh_grant():
     ):
         await runner.resume_agent(
             agent_id=AGENT,
-            thread_id="t-1",
+            thread_id=runner._run_thread_id(TENANT, "t-1", AGENT),
             decision={"action": "approve"},
             system_prompt="scripted",
             authorized_tools=[],
@@ -314,7 +314,12 @@ async def test_resume_in_off_mode_leaves_the_checkpointed_state_alone():
         patch.object(runner, "prefetch_llm_credential", AsyncMock(return_value=None)),
     ):
         await runner.resume_agent(
-            agent_id=AGENT, thread_id="t-1", decision={}, system_prompt="s", authorized_tools=[], tenant_id=TENANT
+            agent_id=AGENT,
+            thread_id=runner._run_thread_id(TENANT, "t-1", AGENT),
+            decision={},
+            system_prompt="s",
+            authorized_tools=[],
+            tenant_id=TENANT,
         )
     assert captured["command"].update is None
 
