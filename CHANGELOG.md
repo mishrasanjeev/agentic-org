@@ -20,7 +20,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `docs/operations/grant-enforcement.md`. **Do not switch a tenant to `deny`
   yet if its agents rely on minted grants:** agents are registered with
   `execute` scopes that Grantex's check cannot satisfy, so a minted grant
-  denies every call today (FINDINGS A-26); the warn-mode report shows this as
+  denies every call today (FINDINGS A-29); the warn-mode report shows this as
   `tool_not_granted` on every call.
 
 ### Added
