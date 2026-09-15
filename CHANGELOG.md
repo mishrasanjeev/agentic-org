@@ -156,6 +156,49 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
   `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
+- Agent runs paused for human approval can be checkpointed in Postgres
+  instead of process memory: `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres`
+  (default `memory`, unchanged behaviour). A new migration
+  (`v6z22_langgraph_checkpoints`) creates the LangGraph checkpoint tables;
+  they are not created at runtime. Checkpoint data is encrypted with the
+  credential-vault keyring and bound to its thread, so a blob copied into
+  another thread is refused; no channel value is stored in plaintext. With
+  the Postgres store selected and unreachable, its schema missing or stale,
+  its keyring malformed, or an unverified checkpoint library installed, the
+  API refuses to start and agent runs fail (the run endpoint returns
+  `503 agent_checkpoint_store_unavailable`); nothing falls back to memory.
+  Celery workers open the store on their first agent run, so a store outage
+  fails those runs but never stops a worker from starting. Refusals are
+  counted in `agenticorg_checkpointer_unavailable_total` by reason. A keyring
+  change needs a restart of the API and workers.
+  `core.langgraph.checkpointer.delete_tenant_checkpoints` removes a tenant's
+  checkpoints for offboarding. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool`
+  3.3.1 as direct dependencies and pins `langgraph-checkpoint-postgres` 3.1.2
+  and `langgraph-checkpoint` 4.2.0 exactly (previously `>=3.1.2` and
+  unpinned).
+- Agent runs checkpoint under a server-generated thread id prefixed with the
+  run's tenant (`tenant:<tenant id>:run:<random>`). A run paused for approval
+  records that thread on its approval row (`hitl_queue.checkpoint_thread_id`,
+  migration `v6z23_hitl_checkpoint_thread`, with a check constraint that the
+  thread belongs to the row's tenant). The thread id is never returned by the
+  API or accepted from a request, and resuming a thread outside the caller's
+  tenant is refused (`checkpoint_thread_tenant_mismatch`).
+- Approving a paused standalone agent run can resume it from its checkpoint,
+  behind the per-tenant feature flag `approvals.resume_agent_runs` (default
+  off; decisions behave as before). With the flag on, an `approve` or `reject`
+  decision resumes the run in the background under the approval's tenant,
+  using the parameters recorded when the run paused. The outcome is recorded
+  in the approval's `context.checkpoint_resume`, in an `agent.run.resumed`
+  audit event and in `agenticorg_agent_run_resumes_total{outcome}`, and a
+  finished run's checkpoints are deleted. Any other decision leaves the run
+  paused; an approve or reject left paused because the flag is off or cannot
+  be read is logged (`agent_run_resume_skipped`) and counted as
+  `outcome="skipped"`. A resume is refused, with a reason code, when the checkpoint is
+  missing, not at the approval gate, undecryptable or outside the tenant.
+  Approval responses gain `context.checkpoint_resume` for resumed runs; the
+  resume parameters stored with a paused run are never returned. See
+  "Agent runs paused for approval" in `docs/RUNBOOKS.md` for the flag,
+  reason codes and checkpoint retention.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

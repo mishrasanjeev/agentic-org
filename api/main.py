@@ -97,8 +97,13 @@ configure_logging()
 async def lifespan(app: FastAPI):
     from connectors.plugins import load_configured_plugins
     from core.database import init_db
+    from core.langgraph.checkpointer import close_checkpointer, open_checkpointer
 
     await init_db()
+    # A configured Postgres checkpoint store that cannot be reached, or whose
+    # schema is not migrated, stops startup here instead of degrading to
+    # process memory (core/langgraph/checkpointer.py).
+    await open_checkpointer()
 
     # Native connectors and agents register at import; plugins load after them
     # so a plugin can never replace a native implementation.
@@ -141,6 +146,7 @@ async def lifespan(app: FastAPI):
     from core.database import close_db
 
     await close_health_resources()
+    await close_checkpointer()
     await close_db()
 
 
