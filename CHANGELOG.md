@@ -5,6 +5,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Vendor-name denylist: `scripts/check_denylist.py` fails a change whose added
+  lines, file paths, commit messages, branch name or pull request title and
+  description name a denylisted verification, identity-data or screening
+  vendor. Terms are matched through salted SHA-256 hashes in
+  `config/denylist.sha256` (80 terms; the plain list is not committed, though
+  the salted hashes are not secret), independent of case, spacing, punctuation
+  and a term glued to the end of a word. Runs in the new Vendor Denylist workflow
+  and in `make check`; `audit` checks the whole tree. See "Vendor-neutral
+  names" in `CONTRIBUTING.md`.
 - `make test`, `make check` and `make e2e`. `make test` runs the unit and
   contract suites with the 55% coverage floor, then the integration and
   regression suites against the local stack's Postgres and Redis in a separate `agenticorg_test`

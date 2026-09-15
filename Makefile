@@ -6,7 +6,7 @@
 #   make logs    follow the stack's logs
 #   make ps      show service status
 #   make test    unit + contract + integration tests (the same suites as CI)
-#   make check   lint, types, security scans, schema validation, licence headers
+#   make check   lint, types, security scans, schema validation, vendor denylist, licence headers
 #   make e2e     browser end-to-end suite against the running stack
 #
 # `make test` and `make check` run in the agenticorg-tools image (Python 3.12,
@@ -64,7 +64,7 @@ E2E_ARGS ?=
 
 .PHONY: help dev down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db \
-	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-pip-audit \
+	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
 	e2e
 
 help:
@@ -74,7 +74,7 @@ help:
 	@echo "make logs    follow logs"
 	@echo "make ps      service status"
 	@echo "make test    unit + contract + integration tests (or test-unit, test-contract, test-integration)"
-	@echo "make check   ruff, mypy, bandit, gitleaks, licence headers, schemas, pip-audit"
+	@echo "make check   ruff, mypy, bandit, gitleaks, licence headers, schemas, vendor denylist, pip-audit"
 	@echo "make e2e     Playwright suite against the running stack (needs make dev)"
 
 dev:
@@ -123,7 +123,7 @@ test-integration: tools-image test-db
 
 # ── Checks ───────────────────────────────────────────────────────────────────
 
-check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-pip-audit
+check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit
 	@echo "make check: all checks passed"
 
 check-ruff: tools-image
@@ -145,6 +145,10 @@ check-licence-headers: tools-image
 
 check-schemas: tools-image
 	$(TOOLS) $(PY) scripts/check_schemas.py
+
+# Vendor names in this branch's lines, paths, commit messages and branch name.
+check-denylist: tools-image
+	$(TOOLS) $(PY) scripts/check_denylist.py scan --base "$(BASE_REF)" --head HEAD
 
 check-pip-audit: tools-image
 	$(TOOLS) $(PY) -m pip_audit --desc on --timeout 60 .
