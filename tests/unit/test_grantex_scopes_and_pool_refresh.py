@@ -177,3 +177,105 @@ def test_the_pool_no_longer_uses_the_unserved_oauth_grant_type():
 
     assert "delegate_agent_token" not in inspect.getsource(token_pool.TokenPool._refresh_after).split('"""')[-1]
     assert not hasattr(token_pool, "grantex_client")
+
+
+# ── Backfill command ─────────────────────────────────────────────────────
+
+
+class _Rows:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _Rows:
+        return self
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+
+class _TenantSession:
+    def __init__(self, agents: list[Any], writes: list[Any]) -> None:
+        self.agents = agents
+        self.writes = writes
+
+    async def __aenter__(self) -> _TenantSession:
+        return self
+
+    async def __aexit__(self, *_: Any) -> None:
+        return None
+
+    async def execute(self, statement: Any) -> _Rows:
+        from sqlalchemy.sql.dml import Update
+
+        if isinstance(statement, Update):
+            self.writes.append(statement)
+        return _Rows(self.agents)
+
+
+def _run_backfill(argv: list[str], agents: list[Any], client: Any, capsys) -> tuple[int, list[Any], list[str]]:
+    import asyncio
+    import json
+    import uuid
+    from unittest.mock import patch
+
+    from scripts import refresh_grantex_scopes as script
+
+    writes: list[Any] = []
+    tenant = uuid.UUID(int=0x1F7A)
+    with (
+        patch("auth.grantex_registration._get_grantex_client", return_value=client),
+        patch("core.database.get_tenant_session", lambda *_a, **_k: _TenantSession(agents, writes)),
+        patch("api.v1.agents._resolve_connector_configs", AsyncMock(return_value=({}, ["hubspot"]))),
+        patch.object(script, "_tenant_ids", AsyncMock(return_value=[tenant])),
+    ):
+        code = asyncio.run(script.run(script.build_parser().parse_args(argv)))
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    return code, writes, lines
+
+
+def _agent(scopes: list[str], grantex_agent_id: str = "ag_1") -> Any:
+    import uuid
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        domain="sales",
+        authorized_tools=["list_contacts"],
+        config={"grantex": {"grantex_agent_id": grantex_agent_id, "grantex_scopes": scopes}},
+        connector_ids=["registry-hubspot"],
+        company_id=None,
+    )
+
+
+def test_backfill_command_reports_without_apply(capsys):
+    client = MagicMock()
+    code, writes, lines = _run_backfill(
+        ["--tenant", "00000000-0000-0000-0000-000000001f7a"],
+        [_agent(["tool:hubspot:execute:list_contacts"])],
+        client,
+        capsys,
+    )
+    assert code == 0 and writes == []
+    assert lines[0]["outcome"] == "would_update" and lines[-1]["summary"] == {"would_update": 1}
+    client.agents.update.assert_not_called()
+
+
+def test_backfill_command_applies_and_counts_failures(capsys):
+    client = MagicMock()
+    client.agents.update.side_effect = [None, RuntimeError("refused")]
+    agents = [_agent(["tool:hubspot:execute:list_contacts"]), _agent(["tool:hubspot:execute:list_contacts"], "ag_2")]
+    code, writes, lines = _run_backfill(["--all-tenants", "--apply"], agents, client, capsys)
+    assert code == 1
+    assert [line.get("outcome") for line in lines[:2]] == ["updated", "grantex_failed"]
+    assert len(writes) == 1
+
+
+def test_backfill_command_needs_a_grantex_key(capsys):
+    import asyncio
+    from unittest.mock import patch
+
+    from scripts import refresh_grantex_scopes as script
+
+    with patch("auth.grantex_registration._get_grantex_client", return_value=None):
+        assert asyncio.run(script.run(script.build_parser().parse_args(["--all-tenants"]))) == 2
+    assert "GRANTEX_API_KEY" in capsys.readouterr().err
