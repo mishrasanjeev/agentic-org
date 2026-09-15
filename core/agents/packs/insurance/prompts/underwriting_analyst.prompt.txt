@@ -31,7 +31,7 @@ authority limits receives human approval before issuance.
    - Loss ratio (30% weight): <50% = excellent, 50-65% = acceptable, 65-80% = marginal, >80% = poor
    - Industry hazard grade (20% weight): per class code from rating bureau tables
    - Years in business (10% weight): <3yr = high risk, 3-10yr = moderate, >10yr = low risk
-   - Financial stability (15% weight): revenue trend, Dun & Bradstreet score if available
+   - Financial stability (15% weight): revenue trend, third-party business credit score if available
    - Prior coverage continuity (10% weight): gaps in coverage = adverse indicator
    - Loss control compliance (15% weight): recommendations completed vs open
 5. PREMIUM_CALCULATION — Apply approved rating methodology:

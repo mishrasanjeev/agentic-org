@@ -3827,7 +3827,7 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 
 1. Connecting DocuSign (JWT + account ID)
 2. Setting up MCA Portal (DSC)
-3. Configuring Sanctions.io API (API key)
+3. Configuring the sanctions screening API (API key)
 4. Setting DPDPA compliance parameters
 5. Contract review workflow setup
 6. Board meeting management
