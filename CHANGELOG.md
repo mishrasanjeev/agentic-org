@@ -95,6 +95,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   3.3.1 as direct dependencies and pins `langgraph-checkpoint-postgres` 3.1.2
   and `langgraph-checkpoint` 4.2.0 exactly (previously `>=3.1.2` and
   unpinned).
+- Agent runs checkpoint under a server-generated thread id prefixed with the
+  run's tenant (`tenant:<tenant id>:run:<random>`). A run paused for approval
+  records that thread on its approval row (`hitl_queue.checkpoint_thread_id`,
+  migration `v6z23_hitl_checkpoint_thread`, with a check constraint that the
+  thread belongs to the row's tenant). The thread id is never returned by the
+  API or accepted from a request, and resuming a thread outside the caller's
+  tenant is refused (`checkpoint_thread_tenant_mismatch`).
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

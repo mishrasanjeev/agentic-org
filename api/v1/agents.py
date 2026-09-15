@@ -3145,6 +3145,11 @@ async def run_agent(
     # 5b. Execute via LangGraph runner
     from core.langgraph.checkpointer import CheckpointerUnavailableError
     from core.langgraph.runner import run_agent as langgraph_run
+    from core.langgraph.thread_ids import new_thread_id
+
+    # Server-generated and tenant-prefixed; the only copy a later resume can
+    # use is the one stored on the approval row below (F-2).
+    run_thread_id = new_thread_id(tid)
 
     # Ramesh/Uday CA Firms 2026-04-27: Shadow accuracy was stuck at
     # ~40% because the agent's connector_ids never got resolved into
@@ -3366,6 +3371,7 @@ async def run_agent(
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
+                thread_id=run_thread_id,
             )
     except CheckpointerUnavailableError as exc:
         # Postgres checkpoint store configured but unusable: refuse the run
@@ -3455,6 +3461,10 @@ async def run_agent(
 
     # 6b. Create HITL queue entry if HITL was triggered
     if hitl_trigger:
+        # The runner echoes the thread only when the graph is paused on it.
+        paused_thread_id = run_thread_id if lg_result.get("thread_id") == run_thread_id else None
+        if paused_thread_id is None:
+            logger.warning("agent_run_hitl_without_checkpoint_thread", agent_id=str(agent_id))
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
@@ -3484,6 +3494,7 @@ async def run_agent(
                     "output": task_output,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
+                checkpoint_thread_id=paused_thread_id,
             )
             session.add(hitl_entry)
         from core.push.sender import notify_approval_created
