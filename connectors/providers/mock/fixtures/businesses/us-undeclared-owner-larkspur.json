@@ -1,0 +1,146 @@
+{
+  "key": "us-undeclared-owner-larkspur",
+  "scenarios": [
+    "undeclared_owner"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Larkspur Veterinary Supply Inc",
+    "trading_names": [],
+    "jurisdiction": "US-NY",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000004"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000004"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "400 Example Street"
+      ],
+      "locality": "Example City",
+      "region": "NY",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": "https://larkspur-vet-supply.example.com",
+    "declared_activity": "wholesale_veterinary_supplies",
+    "declared_owners": [
+      {
+        "name": "Imogen Saltonstall",
+        "kind": "person",
+        "date_of_birth": "1977-09",
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-us-ny-0000004",
+    "jurisdiction": "US-NY",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000004"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000004"
+      }
+    ],
+    "legal_name": "Larkspur Veterinary Supply Inc",
+    "registry_status": "active",
+    "entity_type": "corporation",
+    "incorporated_on": "2013-02-27",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "400 Example Street"
+      ],
+      "locality": "Example City",
+      "region": "NY",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "officers": [
+      {
+        "name": "Imogen Saltonstall",
+        "role": "director",
+        "appointed_on": "2013-02-27",
+        "resigned_on": null,
+        "date_of_birth": "1977-09",
+        "nationalities": [
+          "US"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-imogen-saltonstall",
+        "kind": "person",
+        "name": "Imogen Saltonstall",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 55,
+          "max": 55
+        },
+        "voting_pct": {
+          "min": 55,
+          "max": 55
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1977-09",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2013-02-27"
+      },
+      {
+        "node_id": "psn-caspian-wrexford",
+        "kind": "person",
+        "name": "Caspian Wrexford",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 45,
+          "max": 45
+        },
+        "voting_pct": {
+          "min": 45,
+          "max": 45
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1969-01",
+        "nationalities": [
+          "US",
+          "CA"
+        ],
+        "started_on": "2019-07-01"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "larkspur-vet-supply.example.com",
+    "registered_on": "2013-03",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Larkspur supplies clinics with surgical consumables and animal nutrition products."
+      }
+    ]
+  }
+}

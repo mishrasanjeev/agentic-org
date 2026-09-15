@@ -341,6 +341,11 @@ class TokenPool:
         if not isinstance(token, str) or not token:
             raise GrantMintError("mint_failed", "grant delegation returned no grant token")
         grant_id = str(data.get("grantId") or data.get("grant_id") or "")
+        expires_at = _parse_expiry(data.get("expiresAt") or data.get("expires_at"))
+        if expires_at is None:
+            # Without an expiry the grant could never be cached or refreshed on
+            # time, so every call would mint again. Refuse it instead.
+            raise GrantMintError("mint_failed", "grant delegation returned no usable expiry")
         logger.info(
             "run_grant_minted",
             grantex_agent_id=grantex_agent_id,
@@ -350,7 +355,7 @@ class TokenPool:
         return RunGrantToken(
             token=token,
             grant_id=grant_id,
-            expires_at=_parse_expiry(data.get("expiresAt") or data.get("expires_at")),
+            expires_at=expires_at,
             source="minted",
             ttl_seconds=ttl_seconds,
         )

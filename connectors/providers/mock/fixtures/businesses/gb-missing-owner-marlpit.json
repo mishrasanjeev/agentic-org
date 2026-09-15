@@ -1,0 +1,129 @@
+{
+  "key": "gb-missing-owner-marlpit",
+  "scenarios": [
+    "missing_owner",
+    "probable_false_positive"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Marlpit Orchard Cider Company Ltd",
+    "trading_names": [],
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000002"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "2 Example Lane"
+      ],
+      "locality": "Exampleford",
+      "region": null,
+      "postal_code": "ZZ99 9ZY",
+      "country": "GB"
+    },
+    "website": "https://marlpit-cider.example.com",
+    "declared_activity": "beverage_production",
+    "declared_owners": [
+      {
+        "name": "Tamsin Quellbridge",
+        "kind": "person",
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "ownership_pct": 60,
+        "identifiers": []
+      },
+      {
+        "name": "Ansel Pikeworth",
+        "kind": "person",
+        "date_of_birth": null,
+        "nationalities": [
+          "GB"
+        ],
+        "ownership_pct": 40,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-gb-00000002",
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000002"
+      }
+    ],
+    "legal_name": "Marlpit Orchard Cider Company Ltd",
+    "registry_status": "active",
+    "entity_type": "private_limited_company",
+    "incorporated_on": "2017-09-01",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "2 Example Lane"
+      ],
+      "locality": "Exampleford",
+      "region": null,
+      "postal_code": "ZZ99 9ZY",
+      "country": "GB"
+    },
+    "officers": [
+      {
+        "name": "Tamsin Quellbridge",
+        "role": "director",
+        "appointed_on": "2017-09-01",
+        "resigned_on": null,
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-tamsin-quellbridge",
+        "kind": "person",
+        "name": "Tamsin Quellbridge",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "started_on": "2017-09-01"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "marlpit-cider.example.com",
+    "registered_on": "2017-10",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Small-batch cider pressed from our own orchard."
+      }
+    ]
+  }
+}

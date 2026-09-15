@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "screening_id": "scr-0000000000000001",
+  "provider": "mock",
+  "subject_kind": "person",
+  "subject": {
+    "name": "Tamsin Quellbridge",
+    "date_of_birth": "1983-11",
+    "nationalities": ["GB", "IE"],
+    "jurisdiction": null,
+    "address": null,
+    "identifiers": []
+  },
+  "screened_at": "2026-09-01T09:05:00Z",
+  "list_types": ["sanctions", "pep", "watchlist"],
+  "hits": [
+    {
+      "hit_id": "hit-0000000000000001",
+      "list_type": "sanctions",
+      "source": {
+        "name": "Mock Consolidated Restrictive Measures List",
+        "authority": "Mock Treasury Office",
+        "jurisdiction": "ZZ"
+      },
+      "entry_kind": "person",
+      "matched_name": "Tamsin Quelbridge",
+      "aliases": ["T. Quelbridge"],
+      "dates_of_birth": ["1958-02-14"],
+      "nationalities": ["ZZ"],
+      "addresses": [],
+      "associated_entities": ["Northwind Glassblowing Collective"],
+      "listed_on": "2014-03-01",
+      "name_similarity": 0.94,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:watchlist:entry:0007",
+          "field": "names[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": "excerpt:mock-watchlist-0007"
+        }
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "provider": "mock",
+      "record_id": "mock:screening:scr-0000000000000001",
+      "field": "hits",
+      "retrieved_at": "2026-09-01T09:05:00Z",
+      "excerpt_ref": null
+    }
+  ]
+}
