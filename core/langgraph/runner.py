@@ -30,8 +30,12 @@ from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
 from core.pii.redactor import PIIRedactor
+from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
+
+# Graph state carries the run's grant token; keep it out of LangSmith traces.
+install_trace_redaction()
 
 # Resource limits — prevent runaway agents from exhausting budget or the
 # checkpoint store. Tuned to cover the 99th percentile of legitimate runs;

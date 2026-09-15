@@ -20,20 +20,35 @@ looked up or minted, so behaviour is exactly the legacy one.
 
 from __future__ import annotations
 
+import time
 import uuid
-from collections.abc import Mapping
-from dataclasses import dataclass, field
-from typing import Any
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
+from typing import Any, Final
 
 import structlog
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext, check_tool_grant, resolve_enforcement_mode
+from auth.grant_enforcement import (
+    EnforcementMode,
+    GrantCallContext,
+    GrantCheck,
+    check_tool_grant,
+    resolve_enforcement_mode,
+)
 
 logger = structlog.get_logger()
 
 
 # Token sources the legacy (``off``) path already enforced strictly.
 LEGACY_ENFORCED_SOURCES = frozenset({"supplied", "agent_config"})
+# Token sources the pool can refresh before they expire.
+POOL_SOURCES = frozenset({"minted", "pool_cache"})
+
+# Graph builders take ``run_grant`` as a required keyword so enforcement can
+# never be left off by omission. Tests that exercise graph mechanics without
+# enforcement pass this named sentinel; production code never does (a test in
+# tests/unit/test_grant_enforcement_modes.py scans for it).
+NO_RUN_GRANT_FOR_TESTS: Final[None] = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +58,14 @@ class RunGrant:
     source: str = ""
     grant_id: str = ""
     missing_sub_reason: str = ""
+    # Pool-issued grants carry what is needed to obtain a fresh one before
+    # this one expires (``refresh_run_grant``).
+    expires_at: float | None = None
+    ttl_seconds: int = 0
+    tenant_id: str = ""
+    agent_id: str = ""
+    grantex_agent_id: str = ""
+    scopes: tuple[str, ...] = ()
 
     @property
     def call_mode(self) -> EnforcementMode:
@@ -140,7 +163,82 @@ async def resolve_run_grant(
     except Exception as exc:
         logger.error("grant_resolution_pool_error", error_type=type(exc).__name__, agent_id=agent)
         return _missing("mint_failed")
-    return RunGrant(mode=mode, token=grant.token, source=grant.source, grant_id=grant.grant_id)
+    return RunGrant(
+        mode=mode,
+        token=grant.token,
+        source=grant.source,
+        grant_id=grant.grant_id,
+        expires_at=grant.expires_at,
+        ttl_seconds=grant.ttl_seconds,
+        tenant_id=tenant,
+        agent_id=agent,
+        grantex_agent_id=str(grantex_config.get("grantex_agent_id") or ""),
+        scopes=tuple(scopes),
+    )
+
+
+async def refresh_run_grant(run_grant: RunGrant) -> RunGrant:
+    """Return a pool-issued grant with enough lifetime left for the next call.
+
+    Grants that did not come from the pool, or still have at least the
+    minimum remaining lifetime, are returned unchanged. When a fresh grant
+    cannot be obtained the current one is kept: if it has expired, Grantex
+    verification refuses it (``token_invalid``), so this never widens access.
+    """
+    if run_grant.mode is EnforcementMode.OFF or run_grant.source not in POOL_SOURCES:
+        return run_grant
+    from auth.token_pool import GrantMintError, min_remaining_seconds, token_pool
+
+    if run_grant.expires_at is not None and run_grant.expires_at - time.time() >= min_remaining_seconds(
+        run_grant.ttl_seconds
+    ):
+        return run_grant
+    try:
+        fresh = await token_pool.get_run_grant_token(
+            tenant_id=run_grant.tenant_id,
+            agent_id=run_grant.agent_id,
+            grantex_agent_id=run_grant.grantex_agent_id,
+            scopes=list(run_grant.scopes),
+            ttl_seconds=run_grant.ttl_seconds or None,
+        )
+    except GrantMintError as exc:
+        logger.warning("run_grant_refresh_failed", sub_reason=exc.sub_reason, agent_id=run_grant.agent_id)
+        return run_grant
+    # enterprise-gate: broad-except-ok reason=refresh-failure-keeps-current-grant-which-verification-still-checks
+    except Exception as exc:
+        logger.error("run_grant_refresh_error", error_type=type(exc).__name__, agent_id=run_grant.agent_id)
+        return run_grant
+    logger.info("run_grant_refreshed", grant_id=fresh.grant_id, agent_id=run_grant.agent_id)
+    return replace(
+        run_grant,
+        token=fresh.token,
+        source=fresh.source,
+        grant_id=fresh.grant_id,
+        expires_at=fresh.expires_at,
+        ttl_seconds=fresh.ttl_seconds,
+    )
+
+
+async def check_run_grant(
+    run_grant: RunGrant,
+    *,
+    connector: str,
+    tool: str,
+    context: GrantCallContext,
+    amount: float | None = None,
+    client_factory: Callable[[], Any] | None = None,
+) -> GrantCheck:
+    """Check one tool call against a run grant in ``warn`` or ``deny`` mode."""
+    return await check_tool_grant(
+        mode=run_grant.call_mode,
+        grant_token=run_grant.token,
+        connector=connector,
+        tool=tool,
+        context=context,
+        amount=amount,
+        missing_sub_reason=run_grant.missing_sub_reason,
+        client_factory=client_factory,
+    )
 
 
 async def direct_tool_call_permitted(
@@ -160,9 +258,8 @@ async def direct_tool_call_permitted(
     """
     if run_grant.mode is EnforcementMode.OFF:
         return True
-    check = await check_tool_grant(
-        mode=run_grant.call_mode,
-        grant_token=run_grant.token,
+    check = await check_run_grant(
+        run_grant,
         connector=connector,
         tool=tool,
         context=GrantCallContext(
@@ -172,6 +269,5 @@ async def direct_tool_call_permitted(
             runtime=runtime,
             grant_source=run_grant.source,
         ),
-        missing_sub_reason=run_grant.missing_sub_reason,
     )
     return check.dispatch_allowed
