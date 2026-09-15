@@ -247,3 +247,36 @@ async def test_the_client_sends_the_remaining_deadline() -> None:
     with pytest.raises(NotFound):
         await probe.ownership(BRIGHTWATER, deadline=Deadline.after(2))
     assert 1000 < int(seen[0]) <= 2000
+
+
+@pytest.mark.parametrize(
+    ("raised", "error"),
+    [
+        (httpx.ConnectError("refused"), ProviderUnavailable),
+        (httpx.RemoteProtocolError("peer closed"), ProviderUnavailable),
+        (httpx.UnsupportedProtocol("ftp"), ProviderUnavailable),
+        (httpx.ProxyError("proxy"), ProviderUnavailable),
+        (httpx.ReadTimeout("slow"), ProviderTimeout),
+        (httpx.PoolTimeout("pool"), ProviderTimeout),
+        (httpx.DecodingError("gzip"), ProviderResponseInvalid),
+        (httpx.TooManyRedirects("loop"), ProviderResponseInvalid),
+        (httpx.InvalidURL("bad"), ProviderUnavailable),
+        (httpx.StreamConsumed(), ProviderUnavailable),
+    ],
+)
+async def test_every_request_error_maps_into_the_taxonomy(raised: Exception, error: type[Exception]) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if isinstance(raised, httpx.RequestError):
+            raised.request = request
+        raise raised
+
+    failing = MockHttpProvider("http://mock-provider.invalid", config=_config(), transport=httpx.MockTransport(handler))
+    with pytest.raises(error):
+        await failing.ownership(BRIGHTWATER, deadline=deadline())
+
+
+async def test_page_content_crosses_the_service_but_stays_redacted_afterwards(client: MockHttpProvider) -> None:
+    glintmoor = BusinessRef(provider="mock", provider_ref="mock-us-az-0000007", jurisdiction="US-AZ")
+    presence = await client.web_presence(glintmoor, deadline=deadline())
+    assert any("ignore all previous instructions" in p.content.unsafe_value() for p in presence.pages if p.content)
+    assert "ignore all previous instructions" not in presence.model_dump_json()

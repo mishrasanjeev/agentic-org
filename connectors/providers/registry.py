@@ -5,6 +5,10 @@ Native providers (shipped in this repository) register when this module is impor
 providers are added afterwards by ``connectors.plugins`` from the ``agenticorg.providers``
 entry-point group and can never replace a native provider of the same name.
 
+A native provider may be unavailable in the current environment (the mock outside local and test);
+it is then left out of :meth:`ProviderRegistry.names` and :meth:`ProviderRegistry.create` refuses it
+with ``unavailable``.
+
 Creating a provider fails closed: an unknown name, a factory that raises or returns something
 that is not a well-formed :class:`VerificationProvider` raises :class:`ProviderRegistryError` with
 a reason code.
@@ -18,7 +22,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from connectors.framework.verification_provider import Capability, VerificationProvider
-from connectors.providers.mock import create_mock_provider
+from connectors.providers.mock import create_mock_provider, mock_provider_available
 
 ProviderFactory = Callable[[], VerificationProvider]
 
@@ -37,6 +41,11 @@ class ProviderRegistration:
     name: str
     factory: ProviderFactory
     source: Literal["native", "plugin"]
+    #: Whether the provider can be created in this environment; ``None`` means always.
+    available: Callable[[], bool] | None = None
+
+    def is_available(self) -> bool:
+        return self.available is None or bool(self.available())
 
 
 def _well_formed_identity(name: Any, capabilities: Any) -> str | None:
@@ -52,13 +61,15 @@ class ProviderRegistry:
     _providers: ClassVar[dict[str, ProviderRegistration]] = {}
 
     @classmethod
-    def register_native(cls, name: str, factory: ProviderFactory) -> None:
+    def register_native(
+        cls, name: str, factory: ProviderFactory, *, available: Callable[[], bool] | None = None
+    ) -> None:
         if not _NAME.match(name):
             raise ProviderRegistryError("invalid_name", f"provider name must match {_NAME.pattern}, got {name!r}")
         existing = cls._providers.get(name)
         if existing is not None and existing.factory is not factory:
             raise ProviderRegistryError("name_conflict", f"provider {name!r} is already registered")
-        cls._providers[name] = ProviderRegistration(name=name, factory=factory, source="native")
+        cls._providers[name] = ProviderRegistration(name=name, factory=factory, source="native", available=available)
 
     @classmethod
     def register_plugin(cls, provider_cls: Any) -> str:
@@ -88,14 +99,17 @@ class ProviderRegistry:
         return cls._providers.get(name)
 
     @classmethod
-    def names(cls) -> list[str]:
-        return sorted(cls._providers)
+    def names(cls, *, include_unavailable: bool = False) -> list[str]:
+        """Providers that can be created here; ``include_unavailable`` also lists ones this environment refuses."""
+        return sorted(name for name, r in cls._providers.items() if include_unavailable or r.is_available())
 
     @classmethod
     def create(cls, name: str) -> VerificationProvider:
         registration = cls._providers.get(name)
         if registration is None:
             raise ProviderRegistryError("unknown_provider", f"no provider named {name!r}")
+        if not registration.is_available():
+            raise ProviderRegistryError("unavailable", f"provider {name!r} cannot be created in this environment")
         try:
             provider = registration.factory()
         # enterprise-gate: broad-except-ok reason=provider-factory-failure-is-reported-as-construction-failed
@@ -116,12 +130,14 @@ class ProviderRegistry:
 
 #: Native providers, registered on import. ``connectors.plugins`` imports this module before
 #: registering plugins, so natives are always present first.
-NATIVE_PROVIDERS: tuple[tuple[str, ProviderFactory], ...] = (("mock", create_mock_provider),)
+NATIVE_PROVIDERS: tuple[tuple[str, ProviderFactory, Callable[[], bool] | None], ...] = (
+    ("mock", create_mock_provider, mock_provider_available),
+)
 
 
 def register_native_providers() -> None:
-    for name, factory in NATIVE_PROVIDERS:
-        ProviderRegistry.register_native(name, factory)
+    for name, factory, available in NATIVE_PROVIDERS:
+        ProviderRegistry.register_native(name, factory, available=available)
 
 
 register_native_providers()

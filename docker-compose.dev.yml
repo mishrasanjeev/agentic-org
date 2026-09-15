@@ -132,14 +132,17 @@ services:
   # The mock verification provider as its own service, so the provider seam is
   # exercised over the network (connectors/providers/mock). It refuses to start
   # unless AGENTICORG_ENV is local, development or test. Its /v1/admin endpoints
-  # (fault injection, provider events) are enabled here for local testing.
+  # (fault injection, provider events) answer only when
+  # AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true is set for `make dev`.
   mock-provider:
     image: agenticorg-api:dev
     pull_policy: never
     environment:
-      <<: *backend-env
-      AGENTICORG_MOCK_PROVIDER_ADMIN: "true"
+      # Only what the mock needs: no database, cache or application secret.
+      AGENTICORG_ENV: development
       AGENTICORG_MOCK_PROVIDER_SEED: "0"
+      # Fault injection and signed-event endpoints; off unless explicitly enabled.
+      AGENTICORG_MOCK_PROVIDER_ADMIN: "${AGENTICORG_DEV_MOCK_PROVIDER_ADMIN:-false}"
     command: ["uvicorn", "connectors.providers.mock.service:app", "--host", "0.0.0.0", "--port", "8080"]
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_MOCK_PROVIDER_PORT:-8081}:8080"

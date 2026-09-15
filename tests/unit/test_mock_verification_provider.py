@@ -173,7 +173,7 @@ async def test_hostile_website_text_is_delivered_only_as_untrusted_text() -> Non
     mock = provider()
     presence = await mock.web_presence(mock.ref_for("us-hostile-web-glintmoor"), deadline=deadline())
     contents = [page.content for page in presence.pages if page.content is not None]
-    assert any("ignore all previous instructions" in c.value for c in contents)
+    assert any("ignore all previous instructions" in c.unsafe_value() for c in contents)
     assert all("ignore all previous instructions" not in f"{c} {c!r}" for c in contents)
     assert all(page.content_sha256 and page.excerpt_ref for page in presence.pages)
 
@@ -498,7 +498,14 @@ def test_the_registry_refuses_the_mock_outside_local_and_test(
         create_mock_provider()
     with pytest.raises(ProviderRegistryError) as caught:
         ProviderRegistry.create("mock")
-    assert caught.value.reason == "construction_failed"
+    assert caught.value.reason == "unavailable"
+    assert "mock" not in ProviderRegistry.names()
+    assert "mock" in ProviderRegistry.names(include_unavailable=True)
+
+
+def test_the_mock_is_listed_where_it_can_be_created(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AGENTICORG_ENV", "test")
+    assert "mock" in ProviderRegistry.names()
 
 
 def test_mock_is_registered_natively_and_a_plugin_cannot_replace_it(monkeypatch: pytest.MonkeyPatch) -> None:
