@@ -24,9 +24,15 @@ from langgraph.errors import GraphInterrupt
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
-from core.langgraph.checkpointer import get_checkpointer
+from core.langgraph.checkpointer import BACKEND_POSTGRES, configured_backend, get_checkpointer
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
+from core.langgraph.thread_ids import (
+    CheckpointThreadError,
+    canonical_tenant_id,
+    scoped_thread_id,
+    thread_belongs_to_tenant,
+)
 from core.pii.redactor import PIIRedactor
 
 logger = structlog.get_logger()
@@ -85,6 +91,19 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
             tokens_used += int(_message_token_total(msg) or 0)
     cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
     return tokens_used, cost_usd
+
+
+def _run_thread_id(tenant_id: str, thread_id: str | None, agent_id: str) -> str:
+    """Checkpoint thread for a run, always under the run's tenant prefix.
+
+    Only the memory backend keeps the legacy unscoped id, and only for callers
+    without a tenant; the Postgres backend refuses them (core/langgraph/thread_ids.py).
+    """
+    if canonical_tenant_id(tenant_id) is not None:
+        return scoped_thread_id(tenant_id, thread_id)
+    if configured_backend() == BACKEND_POSTGRES:
+        raise CheckpointThreadError("checkpoint_thread_tenant_invalid")
+    return thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}"
 
 
 def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
@@ -173,7 +192,10 @@ async def run_agent(
         hitl_condition: Additional HITL condition expression.
         grant_token: Grantex grant JWT for authorization.
         connector_config: Config for connectors (auth, secrets).
-        thread_id: Conversation thread ID for checkpointing.
+        thread_id: Checkpoint thread. The API passes a server-generated,
+            tenant-prefixed id (``thread_ids.new_thread_id``); any other id is
+            namespaced under ``tenant_id``, and one scoped to another tenant
+            is refused.
         llm_provider: Explicit catalog provider id (``agent.llm_provider``,
             else ``llm_config["provider"]``). ``None`` keeps the legacy
             model-name inference.
@@ -188,6 +210,8 @@ async def run_agent(
     limit_block = await gate_agent_run(tenant_id)
     if limit_block is not None:
         return limit_block
+
+    run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
 
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
@@ -320,7 +344,7 @@ async def run_agent(
     # Config for checkpointing
     config = {
         "configurable": {
-            "thread_id": thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}",
+            "thread_id": run_thread_id,
         }
     }
 
@@ -574,8 +598,22 @@ async def resume_agent(
 
     Uses LangGraph's Command(resume=...) to continue from the
     interrupt point with the human's decision.
+
+    ``thread_id`` must be scoped to ``tenant_id``; otherwise the resume is
+    refused before any checkpoint is read. Without a tenant only the memory
+    backend proceeds (legacy callers).
     """
     from langgraph.types import Command
+
+    if canonical_tenant_id(tenant_id) is not None or configured_backend() == BACKEND_POSTGRES:
+        if not thread_belongs_to_tenant(thread_id, tenant_id):
+            reason = (
+                "checkpoint_thread_tenant_mismatch"
+                if canonical_tenant_id(tenant_id) is not None
+                else "checkpoint_thread_tenant_invalid"
+            )
+            logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
+            return {"status": "failed", "error": reason, "reason": reason}
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
