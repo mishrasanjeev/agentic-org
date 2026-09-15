@@ -409,6 +409,7 @@ async def test_flag_defaults_off_when_no_flag_row_exists(monkeypatch: pytest.Mon
     feature_flags.clear_cache()
 
 
+@pytest.mark.real_flag_lookup
 async def test_a_flag_lookup_failure_refuses_instead_of_turning_pseudonymisation_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

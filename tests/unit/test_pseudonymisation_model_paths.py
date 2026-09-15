@@ -562,6 +562,7 @@ async def test_router_synthesis_pseudonymises_structured_tool_results_by_field(
     assert result.output["tool_results"][0]["result"]["record"] == record
 
 
+@pytest.mark.real_flag_lookup
 async def test_langgraph_run_is_refused_when_the_flag_cannot_be_read(
     scripted_model: Any,
     monkeypatch: pytest.MonkeyPatch,
@@ -584,6 +585,7 @@ async def test_langgraph_run_is_refused_when_the_flag_cannot_be_read(
     feature_flags.clear_cache()
 
 
+@pytest.mark.real_flag_lookup
 async def test_router_agent_is_refused_when_the_flag_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
     from core import feature_flags
     from core.agents.base import BaseAgent
