@@ -638,7 +638,7 @@ async def test_template_skills_connectors_tools_and_kb_generate_launchable_workf
         "domain": "ops",
         "employee_name": "Ananya Rao",
         "designation": "Contract Intelligence Lead",
-        "suggested_tools": ["get_page_tree", "create_page", "search_issues"],
+        "suggested_tools": ["get_page_tree", "confluence:create_page", "search_issues"],
         "system_prompt": (
             "You inspect contract renewal requests, search approved knowledge bases, "
             "prepare source-grounded summaries, and open follow-up issues for human review."
@@ -678,7 +678,7 @@ async def test_template_skills_connectors_tools_and_kb_generate_launchable_workf
                 "type": "agent",
                 "title": "Search approved contract KB",
                 "agent_type": "contract_intelligence",
-                "authorized_tools": ["get_page_tree", "create_page"],
+                "authorized_tools": ["get_page_tree", "confluence:create_page"],
                 "connectors": ["confluence"],
                 "knowledge_sources": ["kb_contracts"],
             },
@@ -687,7 +687,7 @@ async def test_template_skills_connectors_tools_and_kb_generate_launchable_workf
                 "type": "agent",
                 "title": "Inspect vendor issue history",
                 "agent_type": "vendor_manager",
-                "authorized_tools": ["search_issues", "create_issue"],
+                "authorized_tools": ["search_issues", "jira:create_issue"],
                 "connectors": ["jira"],
                 "depends_on": ["search_contract_kb"],
             },
