@@ -96,7 +96,7 @@ def test_campaign_pilot_defaults_bind_real_connectors() -> None:
     from core.langgraph.tool_adapter import _build_tool_index
 
     defaults = _AGENT_TYPE_DEFAULT_TOOLS["campaign_pilot"]
-    index = _build_tool_index()
+    index = _build_tool_index(include_connector_aliases=True)
     assert defaults
     assert [tool for tool in defaults if tool not in index] == []
     assert _AGENT_TYPE_DEFAULT_CONNECTOR_IDS["campaign_pilot"] == [
