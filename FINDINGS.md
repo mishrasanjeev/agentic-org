@@ -85,16 +85,3 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** pass the masked output and trace to the explainer on the legacy path
   too (as the pseudonymised path now does), and decide per caller whether its
   input can hold personal data; route those through a pseudonymisation session.
-
-## A-7 — LangGraph HITL resume is not reachable from the API
-
-- **Found:** adding map reload to `core.langgraph.runner.resume_agent`
-  (2026-09-15).
-- **What:** no API route calls `core.langgraph.runner.resume_agent`
-  (`POST /agents/{id}/resume` in `api/v1/agents.py` is agent lifecycle, not a
-  HITL decision), so a paused LangGraph run cannot be continued. Resume
-  support for pseudonymised runs is covered by tests but only reachable once
-  this is wired, together with the durable checkpointer (PRD F-2).
-- **Fix:** wire the HITL decision endpoint to `resume_agent` with the
-  server-held thread id, as part of the F-2 / checkpoint-isolation work.
-

@@ -108,9 +108,9 @@ def _pseudonymisation_failed(exc: pseudonymisation.PseudonymisationError) -> dic
     }
 
 
-async def _checkpoint_pseudonym_case_id(config: dict[str, Any]) -> str | None:
+async def _checkpoint_pseudonym_case_id(checkpointer: Any, config: dict[str, Any]) -> str | None:
     """The pseudonym case recorded in a thread's checkpoint, if the run was pseudonymised."""
-    saved = await _checkpointer.aget_tuple(config)  # type: ignore[arg-type]
+    saved = await checkpointer.aget_tuple(config)
     if saved is None:
         return None
     value = (saved.checkpoint.get("channel_values") or {}).get("pseudonym_case_id")
@@ -663,7 +663,7 @@ async def resume_agent(
     # A run started with pseudonymisation holds tokens in its checkpoint: its
     # map is required to resume, whatever the flag says now.
     pseudonymiser: pseudonymisation.PseudonymSession | None = None
-    case_id = await _checkpoint_pseudonym_case_id(config)
+    case_id = await _checkpoint_pseudonym_case_id(_checkpointer, config)
     if case_id is not None:
         try:
             pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id)
