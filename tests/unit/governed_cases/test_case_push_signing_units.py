@@ -178,3 +178,33 @@ async def test_the_sweep_is_a_no_op_until_enabled(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(config.settings, "case_push_sweep_enabled", False)
     assert case_push_tasks.sweep_case_pushes.run() == {"skipped": "case_push_sweep_disabled"}
+
+
+async def test_the_delivery_task_dispatches_one_tenant_or_all(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core import config
+    from core.cases import push
+    from core.tasks import case_push_tasks
+
+    calls: list[object] = []
+
+    class FakeDispatcher:
+        async def dispatch_tenant(self, tenant_id: uuid.UUID) -> push.DispatchReport:
+            calls.append(tenant_id)
+            return push.DispatchReport(delivered=1)
+
+        async def dispatch_all(self) -> push.DispatchReport:
+            calls.append("all")
+            return push.DispatchReport(retried=2, dead_lettered=1)
+
+    monkeypatch.setattr(push, "CasePushDispatcher", FakeDispatcher)
+    tenant = uuid.UUID(int=9)
+    assert await case_push_tasks._dispatch(str(tenant)) == {"delivered": 1, "retried": 0, "dead_lettered": 0}
+    assert await case_push_tasks._dispatch(None) == {"delivered": 0, "retried": 2, "dead_lettered": 1}
+    assert calls == [tenant, "all"]
+
+    ran: list[object] = []
+    monkeypatch.setattr(case_push_tasks, "run_async", lambda coroutine: ran.append(coroutine.close()) or {"ok": True})
+    monkeypatch.setattr(config.settings, "case_push_sweep_enabled", True)
+    assert case_push_tasks.sweep_case_pushes.run() == {"ok": True}
+    assert case_push_tasks.dispatch_case_pushes.run(str(tenant)) == {"ok": True}
+    assert len(ran) == 2

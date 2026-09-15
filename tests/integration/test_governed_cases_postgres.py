@@ -505,3 +505,82 @@ async def test_case_api_is_hidden_while_the_flag_is_off(client: Any, auth_header
         assert created.status_code == 404
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_case_api_refusals_withdrawal_and_information_requests(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    from api.main import app
+    from api.v1 import governed_cases as routes
+
+    scripted_model([_respond, _respond])
+    runtime = _runtime()
+    app.dependency_overrides[routes.get_case_runtime] = lambda: runtime
+    base = "/api/v1/governed-cases"
+    try:
+        fixture = MockProvider().fixture("us-missing-owner-cinderpath").application
+        unsupported = await client.post(
+            base, json={"application": {**fixture, "jurisdiction": "FR"}}, headers=auth_headers
+        )
+        assert unsupported.status_code == 422 and unsupported.json()["error"]["reason"] == "policy_not_configured"
+        invalid = await client.post(
+            base, json={"application": {"legal_name": "Example Ltd", "jurisdiction": "GB"}}, headers=auth_headers
+        )
+        assert invalid.status_code == 422 and invalid.json()["error"]["reason"] == "application_invalid"
+        assert (await client.get(f"{base}?state=approved", headers=auth_headers)).status_code == 422
+        assert (await client.get(f"{base}/case_{'f' * 24}", headers=auth_headers)).status_code == 404
+        assert (await client.get(f"{base}/not-a-case-ref/case-record", headers=auth_headers)).status_code == 404
+
+        created = (await client.post(base, json={"application": fixture}, headers=auth_headers)).json()
+        case_ref = created["case_ref"]
+        early = await client.post(
+            f"{base}/{case_ref}/information-requests",
+            json={"template_id": "onboarding_missing_items", "template_version": "1.0.0"},
+            headers=auth_headers,
+        )
+        assert early.status_code == 409
+        assert (await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)).status_code == 202
+        again = await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)
+        assert again.status_code == 202  # re-investigation from awaiting_decision is allowed
+        detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
+        assert detail["memo"]["recommendation"]["proposed"] == "request_information"
+        assert (
+            await client.post(
+                f"{base}/{case_ref}/screening-dispositions/hit-unknown/review",
+                json={"action": "accepted", "final_outcome": "false_positive"},
+                headers=auth_headers,
+            )
+        ).status_code == 404
+
+        wrong_template = await client.post(
+            f"{base}/{case_ref}/information-requests",
+            json={"template_id": "free_text_letter", "template_version": "1.0.0"},
+            headers=auth_headers,
+        )
+        assert wrong_template.status_code == 422 and wrong_template.json()["error"]["reason"] == "template_not_approved"
+        proposed = await client.post(
+            f"{base}/{case_ref}/information-requests",
+            json={"template_id": "onboarding_missing_items", "template_version": "1.0.0"},
+            headers=auth_headers,
+        )
+        assert proposed.status_code == 201, proposed.text
+        digest = proposed.json()["proposal_sha256"]
+        assert (
+            await client.post(f"{base}/{case_ref}/information-requests/sha256:{'0' * 64}/approve", headers=auth_headers)
+        ).status_code == 404
+        approved = await client.post(f"{base}/{case_ref}/information-requests/{digest}/approve", headers=auth_headers)
+        assert approved.status_code == 200, approved.text
+        assert approved.json()["request"]["approved_by"].startswith("user:")
+        twice = await client.post(f"{base}/{case_ref}/information-requests/{digest}/approve", headers=auth_headers)
+        assert twice.status_code == 409 and twice.json()["error"]["reason"] == "information_request_not_pending"
+
+        withdrawn = await client.post(f"{base}/{case_ref}/withdraw", headers=auth_headers)
+        assert withdrawn.status_code == 200 and withdrawn.json()["state"] == "withdrawn"
+        assert (await client.post(f"{base}/{case_ref}/withdraw", headers=auth_headers)).status_code == 409
+        assert (await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)).status_code == 409
+        refused = await client.post(f"{base}/{case_ref}/decision", json={"outcome": "approve"}, headers=auth_headers)
+        assert refused.status_code == 409
+        record = (await client.get(f"{base}/{case_ref}/case-record", headers=auth_headers)).json()
+        assert record["decision"] is None and len(record["agent_records"]) == 2
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
