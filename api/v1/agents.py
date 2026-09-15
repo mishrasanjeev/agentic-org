@@ -907,6 +907,27 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
     return [t for t in tools if t not in index]
 
 
+def _enforce_hitl_condition_on_save(condition: str | None, *, surface: str) -> None:
+    """Refuse a HITL condition outside the grammar when validation rejects.
+
+    Mode comes from ``AGENTICORG_HITL_CONDITION_VALIDATION`` (off by default;
+    ``warn`` logs and counts instead of refusing).
+    """
+    from core.config import settings
+    from core.langgraph.hitl_condition import screen_condition_on_save
+
+    failure = screen_condition_on_save(condition, mode=settings.hitl_condition_validation, surface=surface)
+    if failure is not None:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "invalid_hitl_condition",
+                "reason": failure.reason,
+                "message": f"HITL condition cannot be evaluated: {failure.detail}",
+            },
+        )
+
+
 def _tool_ref_matches(tool_ref: str, expected_tool: str) -> bool:
     raw = str(tool_ref or "").strip()
     expected = str(expected_tool or "").strip()
@@ -1624,6 +1645,7 @@ async def create_agent(
     caller: Caller | None = Depends(caller_from_request),
 ):
     tid = _uuid.UUID(tenant_id)
+    _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_create")
     # Bug sheet 2026-09-14 rows 19/22/32/50: agents:write (route family) plus
     # the ownership rules. Admins create shared agents; permitted roles create
     # personal agents they own, inside their domains (developers: any domain).
@@ -2431,6 +2453,9 @@ async def generate_agent(
         if not effective_caller.is_admin and not target_domain:
             raise HTTPException(403, "The generated agent has no domain; only a tenant admin can deploy it.")
         visibility, owner_user_id = resolve_new_agent_ownership(effective_caller, None, target_domain)
+        _enforce_hitl_condition_on_save(
+            top.get("hitl_condition", "confidence < 0.88"), surface="agents_generate"
+        )
 
         # Build tools list. A generated agent is created with no connector
         # linked, so the #46 rule applies exactly as in
@@ -2581,6 +2606,8 @@ async def replace_agent(
     PromptEditHistory record with edited_by populated.
     """
     tid = _uuid.UUID(tenant_id)
+    if "hitl_policy" in body.model_fields_set:
+        _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_replace")
     async with get_tenant_session(tid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
         agent = result.scalar_one_or_none()
@@ -2743,6 +2770,8 @@ async def update_agent(
         require_agent_mutable(agent, effective_caller)
 
         update_data = body.model_dump(exclude_unset=True)
+        if isinstance(update_data.get("hitl_policy"), dict):
+            _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
         if "domain" in update_data:
             check_agent_domain_change(agent, update_data["domain"], effective_caller)
         # Rows 19/22: only an admin may change visibility; 'tenant' clears the

@@ -27,7 +27,11 @@ INSURANCE_PACK: dict[str, Any] = {
                 "composio:salesforce:update_record",
             ],
             "llm_model": "gpt-4o",
-            "hitl_condition": "high_value_or_complex_risk",
+            "hitl_condition": (
+                "underwriting_summary.authority_status != 'within'"
+                " OR underwriting_summary.recommendation != 'bind'"
+                " OR underwriting_summary.risk_score < 40"
+            ),
             "confidence_floor": 0.90,
         },
         {
@@ -43,7 +47,12 @@ INSURANCE_PACK: dict[str, Any] = {
                 "knowledge_base_search",
             ],
             "llm_model": "gpt-4o",
-            "hitl_condition": "high_value_or_fraud_indicator",
+            "hitl_condition": (
+                "claims_summary.loss_amount > 2500"
+                " OR claims_summary.reserve > 30000"
+                " OR claims_summary.fraud_score > 60"
+                " OR claims_summary.coverage_verified != True"
+            ),
             "confidence_floor": 0.92,
         },
         {
@@ -60,7 +69,7 @@ INSURANCE_PACK: dict[str, Any] = {
                 "composio:stripe:update_subscription",
             ],
             "llm_model": "gpt-4o",
-            "hitl_condition": "cancellation_or_major_endorsement",
+            "hitl_condition": "policy_summary.action not in ['issuance', 'renewal', 'billing']",
             "confidence_floor": 0.90,
         },
         {

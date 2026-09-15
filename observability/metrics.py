@@ -102,3 +102,11 @@ agent_budget_pct = Gauge(
     "Agent budget utilization percentage",
     ["agent_type"],
 )
+
+# ── HITL conditions ─────────────────────────────────────────────────
+
+hitl_condition_parse_failures_total = Counter(
+    "agenticorg_hitl_condition_parse_failures_total",
+    "HITL conditions outside the supported grammar, by stage, reason code and outcome",
+    ["stage", "reason", "outcome"],
+)

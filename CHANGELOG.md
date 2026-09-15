@@ -50,8 +50,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- HITL conditions can be checked when they are saved
+  (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
+  `off`). Agent create, replace, update, generate-and-deploy and SOP deploy
+  answer `422 invalid_hitl_condition` with a reason code (`syntax_error`,
+  `unsupported_syntax`, `unsupported_operator`, `not_a_comparison`) in
+  `reject`; `warn` accepts the condition but logs and counts it. Parse
+  failures at save and at run time are counted in
+  `agenticorg_hitl_condition_parse_failures_total` (labels `stage`, `reason`,
+  `outcome`). **Break when set to `reject`:** a bare label such as
+  `needs_review` must be written as a comparison (`needs_review == True`).
+  See `docs/hitl-conditions.md`.
 
 ### Fixed
+- Four shipped industry-pack agents no longer send every run to human review.
+  Their HITL conditions were bare labels (`high_value_or_complex_risk`,
+  `high_value_or_fraud_indicator`, `cancellation_or_major_endorsement`,
+  `high_value_procurement`) that name no output key, so the fail-closed
+  evaluator triggered on each run. They are now expressions over the keys in
+  each prompt's output format; see `docs/hitl-conditions.md` for the
+  thresholds. Agents already installed keep the old label until the pack is
+  re-synced.
 - The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report
   healthy. Their Docker healthcheck probed `localhost`, which resolves to
   `::1` in the nginx:alpine base while nginx listens on IPv4, so the
