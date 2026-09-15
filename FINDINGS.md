@@ -497,3 +497,18 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** give workflows a principal — register the workflow definition (or
   require a stored agent on every step) as a Grantex agent with scopes for its
   connector steps, and resolve the step's grant from it.
+
+## A-41 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
+
+- **Found:** binding caller tokens on every run route (PRD F-1b review,
+  2026-09-15).
+- **What:** registered Grantex scopes and `enforce` decide per connector and
+  permission level (`tool:<connector>:<read|write|delete|admin>`), not per
+  tool, so a grant that covers one write tool on a connector covers every
+  write tool on it. A2A (`POST /a2a/tasks`) and MCP (`POST /mcp/call`) run an
+  agent *type* with that type's default tool list rather than a stored
+  agent's `authorized_tools`, so the tools such a call can reach are decided
+  by the type, and only the connector-level grant limits them.
+- **Fix:** register per-tool scopes (or a tool allow-list in the grant) and
+  have `enforce` check the tool; run A2A and MCP calls with the shared agent's
+  stored `authorized_tools` instead of the type defaults.
