@@ -90,7 +90,8 @@ class ToolGateway:
         company_id: str | None = None,
         domain: ActionDomain | str | None = None,
         capability_authorization: CapabilityAuthorization | None = None,
-        run_grant: RunGrant | None = None,
+        *,
+        run_grant: RunGrant | None,
         agent_type: str = "",
         pseudonymiser: PseudonymSession | None = None,
     ) -> dict[str, Any]:
@@ -104,7 +105,9 @@ class ToolGateway:
         (``auth/grant_enforcement.py``) runs first, and then every legacy check
         below runs exactly as in ``off`` - including strict enforcement of a
         token passed to the gateway - so enforcement never skips or downgrades
-        a check ``off`` makes.
+        a check ``off`` makes. ``run_grant`` is required so the grant check
+        cannot be left out by omission; only tests that exercise the legacy
+        checks alone pass ``auth.run_grants.NO_RUN_GRANT_FOR_TESTS``.
         """
         start_time = time.monotonic()
 

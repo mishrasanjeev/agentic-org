@@ -332,6 +332,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   every `build_*_graph` builder in `core/langgraph/agents/` take a required
   keyword `run_grant`, so a graph can no longer be built with grant
   enforcement silently left off.
+- **Break (Python API):** `core.langgraph.tool_adapter.execute_agent_tool` and
+  `core.tool_gateway.gateway.ToolGateway.execute` take a required keyword
+  `run_grant` as well. `BaseAgent` passes its run grant in every mode; tests
+  that exercise only the legacy checks pass
+  `auth.run_grants.NO_RUN_GRANT_FOR_TESTS`, which production code may not use.
 - Grant enforcement now covers every agent run entry point: chat, A2A and
   MCP (the run agent's grant; a caller Grantex token issued to another agent
   must also allow every call), voice and

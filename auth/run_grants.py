@@ -46,10 +46,12 @@ LEGACY_ENFORCED_SOURCES = frozenset({"supplied", "agent_config"})
 # Token sources the pool can refresh before they expire.
 POOL_SOURCES = frozenset({"minted", "pool_cache"})
 
-# Graph builders take ``run_grant`` as a required keyword so enforcement can
-# never be left off by omission. Tests that exercise graph mechanics without
-# enforcement pass this named sentinel; production code never does (a test in
-# tests/unit/test_grant_enforcement_modes.py scans for it).
+# Graph builders, ``core.langgraph.tool_adapter.execute_agent_tool`` and
+# ``ToolGateway.execute`` take ``run_grant`` as a required keyword so
+# enforcement can never be left off by omission. Tests that exercise graph
+# mechanics or the legacy tool checks without enforcement pass this named
+# sentinel (the legacy path); production code never does (a test in
+# tests/unit/test_run_grant_lifecycle.py scans for it).
 NO_RUN_GRANT_FOR_TESTS: Final[None] = None
 
 
