@@ -23,6 +23,8 @@ x-backend-env: &backend-env
   AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
   AGENTICORG_PII_MASKING: "true"
   AGENTICORG_TEST_FAKE_LLM: "1"
+  # The registered "mock" verification provider calls the mock-provider service.
+  AGENTICORG_MOCK_PROVIDER_URL: http://mock-provider:8080
 
 x-backend-build: &backend-build
   context: .
@@ -124,6 +126,34 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # The mock verification provider as its own service, so the provider seam is
+  # exercised over the network (connectors/providers/mock). It refuses to start
+  # unless AGENTICORG_ENV is local, development or test. Its /v1/admin endpoints
+  # (fault injection, provider events) answer only when
+  # AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true is set for `make dev`.
+  mock-provider:
+    image: agenticorg-api:dev
+    pull_policy: never
+    environment:
+      # Only what the mock needs: no database, cache or application secret.
+      AGENTICORG_ENV: development
+      AGENTICORG_MOCK_PROVIDER_SEED: "0"
+      # Fault injection and signed-event endpoints; off unless explicitly enabled.
+      AGENTICORG_MOCK_PROVIDER_ADMIN: "${AGENTICORG_DEV_MOCK_PROVIDER_ADMIN:-false}"
+    command: ["uvicorn", "connectors.providers.mock.service:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_MOCK_PROVIDER_PORT:-8081}:8080"
+    healthcheck:
+      # The image healthcheck probes the API port, which this service does not serve.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      # migrate builds the shared image.
       migrate:
         condition: service_completed_successfully
 

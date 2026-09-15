@@ -1,0 +1,110 @@
+{
+  "key": "gb-dissolved-ashcombe",
+  "scenarios": [
+    "dissolved"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Ashcombe Print Finishers Ltd",
+    "trading_names": [],
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000004"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "4 Example Mews"
+      ],
+      "locality": "Exampleham",
+      "region": null,
+      "postal_code": "ZZ99 9ZW",
+      "country": "GB"
+    },
+    "website": null,
+    "declared_activity": "printing_services",
+    "declared_owners": [
+      {
+        "name": "Lucan Merriweather-Hale",
+        "kind": "person",
+        "date_of_birth": "1958-07",
+        "nationalities": [
+          "GB"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-gb-00000004",
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000004"
+      }
+    ],
+    "legal_name": "Ashcombe Print Finishers Ltd",
+    "registry_status": "dissolved",
+    "entity_type": "private_limited_company",
+    "incorporated_on": "2008-10-06",
+    "dissolved_on": "2025-11-30",
+    "registered_address": {
+      "lines": [
+        "4 Example Mews"
+      ],
+      "locality": "Exampleham",
+      "region": null,
+      "postal_code": "ZZ99 9ZW",
+      "country": "GB"
+    },
+    "officers": [
+      {
+        "name": "Lucan Merriweather-Hale",
+        "role": "director",
+        "appointed_on": "2008-10-06",
+        "resigned_on": "2025-11-30",
+        "date_of_birth": "1958-07",
+        "nationalities": [
+          "GB"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-lucan-merriweather-hale",
+        "kind": "person",
+        "name": "Lucan Merriweather-Hale",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1958-07",
+        "nationalities": [
+          "GB"
+        ],
+        "started_on": "2008-10-06"
+      }
+    ],
+    "monitor_events": [
+      {
+        "event_id": "evt-mock-gb-00000004-dissolved",
+        "event_type": "business.dissolved",
+        "occurred_at": "2025-11-30T00:00:00Z"
+      }
+    ]
+  },
+  "web": null
+}

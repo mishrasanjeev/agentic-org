@@ -1,0 +1,123 @@
+{
+  "key": "us-false-positive-oakhollow",
+  "scenarios": [
+    "probable_false_positive"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Oakhollow Bakery Cooperative",
+    "trading_names": [],
+    "jurisdiction": "US-OR",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000005"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000005"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "500 Example Lane"
+      ],
+      "locality": "Exampleport",
+      "region": "OR",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": "https://oakhollow-bakery.example.com",
+    "declared_activity": "food_production",
+    "declared_owners": [
+      {
+        "name": "Jorund Halvessen",
+        "kind": "person",
+        "date_of_birth": "1990-03",
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-us-or-0000005",
+    "jurisdiction": "US-OR",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000005"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000005"
+      }
+    ],
+    "legal_name": "Oakhollow Bakery Cooperative",
+    "registry_status": "active",
+    "entity_type": "cooperative",
+    "incorporated_on": "2021-04-01",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "500 Example Lane"
+      ],
+      "locality": "Exampleport",
+      "region": "OR",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "officers": [
+      {
+        "name": "Jorund Halvessen",
+        "role": "director",
+        "appointed_on": "2021-04-01",
+        "resigned_on": null,
+        "date_of_birth": "1990-03",
+        "nationalities": [
+          "US"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-jorund-halvessen",
+        "kind": "person",
+        "name": "Jorund Halvessen",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1990-03",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2021-04-01"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "oakhollow-bakery.example.com",
+    "registered_on": "2021-05",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "A worker-owned bakery making sourdough and rye loaves since 2021."
+      }
+    ]
+  }
+}

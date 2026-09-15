@@ -81,6 +81,43 @@ def _reset_fake_doubles_between_tests():
     yield
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers",
+        "real_flag_lookup: read pseudonymisation.pre_model from the database outside tests/integration",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _pseudonymisation_flag_unset_outside_integration_tests(request, monkeypatch):
+    """Report ``pseudonymisation.pre_model`` as unset (no flag row) outside the integration suite.
+
+    The flag is read strictly: a failed lookup refuses the agent run instead
+    of treating the flag as off. Unit, regression and security tests do not
+    provision the feature-flag table (CI runs them without a database, and the
+    integration job runs the regression suite after tests that reset the
+    schema), so every agent run would be refused. They get the value a tenant
+    without the flag sees. Tests under ``tests/integration`` read the real
+    table, and tests of the lookup-failure path opt out with
+    ``@pytest.mark.real_flag_lookup``. Other flags are untouched.
+    """
+    if "integration" in request.node.path.parts or request.node.get_closest_marker("real_flag_lookup"):
+        yield
+        return
+    from core import feature_flags
+    from core.pii.pseudonymiser import FLAG_KEY
+
+    query_flag = feature_flags._query_flag
+
+    async def unset_without_database(tenant_id, flag_key):
+        if flag_key == FLAG_KEY:
+            return None
+        return await query_flag(tenant_id, flag_key)
+
+    monkeypatch.setattr(feature_flags, "_query_flag", unset_without_database)
+    yield
+
+
 @pytest.fixture
 def workflow_company_scope(monkeypatch):
     """Provide a valid, exactly-owned company scope to workflow unit tests."""
