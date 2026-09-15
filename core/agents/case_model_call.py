@@ -102,7 +102,7 @@ async def call_case_model(
         final = await graph.compile().ainvoke(state)
     except (UntrustedContentLeakError, CassetteError, asyncio.CancelledError):
         raise
-    # enterprise-gate: broad-except-ok reason=model-outage-omits-prose-deterministic-document-still-complete
+    # enterprise-gate: broad-except-ok reason=model-failure-degrades-to-a-document-without-prose
     except Exception as exc:
         logger.warning("case_model_call_skipped", agent=agent, reason="model_call_failed", error=type(exc).__name__)
         return CaseModelResult(None, "model_call_failed", session is not None, restore)
