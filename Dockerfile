@@ -18,6 +18,8 @@ COPY scaling/ scaling/
 COPY observability/ observability/
 COPY audit/ audit/
 COPY schemas/ schemas/
+# pyproject.toml force-includes the provider conformance suite into the wheel.
+COPY testing/ testing/
 COPY migrations/ migrations/
 RUN pip install --upgrade pip && pip install --no-cache-dir ".[v4]"
 

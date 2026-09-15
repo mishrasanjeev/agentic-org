@@ -20,7 +20,9 @@ class ProviderConformanceSuite:
 
     @pytest.fixture
     def conformance_target(self) -> ConformanceTarget:
-        pytest.fail("override the conformance_target fixture to return a ConformanceTarget")
+        message = "override the conformance_target fixture to return a ConformanceTarget"
+        pytest.fail(message)
+        raise AssertionError(message)  # pytest.fail never returns; this keeps type checkers without pytest honest
 
     @staticmethod
     def _run(name: str, target: ConformanceTarget) -> None:
