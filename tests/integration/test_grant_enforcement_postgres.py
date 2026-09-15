@@ -20,7 +20,7 @@ from auth.grant_enforcement import EnforcementMode, resolve_enforcement_mode
 from core import feature_flags
 from core.models.feature_flag import FeatureFlag
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+pytestmark = [pytest.mark.asyncio(loop_scope="session"), pytest.mark.real_flag_store]
 
 
 @pytest.fixture
@@ -105,8 +105,8 @@ async def test_tenant_flags_never_weaken_a_deny_deployment_default(flag_rows, mo
 async def test_unreachable_flag_store_keeps_the_last_known_mode(flag_rows, monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
     tenant = uuid.uuid4()
-    await flag_rows(tenant, ge.FLAG_DENY)
-    assert await resolve_enforcement_mode(tenant) is EnforcementMode.DENY
+    await flag_rows(tenant, ge.FLAG_WARN)
+    assert await resolve_enforcement_mode(tenant) is EnforcementMode.WARN
 
     # Point the flag store at a closed port: the strict read must fail, and the
     # tenant must not drop to the ``off`` deployment default.
@@ -125,8 +125,9 @@ async def test_unreachable_flag_store_keeps_the_last_known_mode(flag_rows, monke
     monkeypatch.setattr(feature_flags, "get_tenant_session", _broken_session)
     try:
         with pytest.raises(feature_flags.FeatureFlagLookupError):
-            await feature_flags.is_enabled_strict(ge.FLAG_DENY, tenant_id=tenant)
-        assert await resolve_enforcement_mode(tenant) is EnforcementMode.DENY
+            await feature_flags.load_flag_rows_strict(ge.FLAG_WARN, tenant_id=tenant)
+        # The remembered warn applies, not the deny used when nothing is known.
+        assert await resolve_enforcement_mode(tenant) is EnforcementMode.WARN
     finally:
         await broken.dispose()
         monkeypatch.undo()

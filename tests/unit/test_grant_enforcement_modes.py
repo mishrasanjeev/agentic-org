@@ -126,7 +126,6 @@ async def test_unreadable_flag_store_with_no_known_mode_fails_closed_to_deny(mon
     from observability.metrics import grant_enforcement_mode_fallbacks_total
 
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
     counter = grant_enforcement_mode_fallbacks_total.labels(outcome="deny")
     before = counter._value.get()
     failing = AsyncMock(side_effect=FeatureFlagLookupError("down"))

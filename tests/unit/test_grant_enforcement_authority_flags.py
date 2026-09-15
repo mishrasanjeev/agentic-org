@@ -31,7 +31,6 @@ TENANT = str(uuid.UUID(int=0x1F2A))
 @pytest.fixture(autouse=True)
 def _reset(monkeypatch):
     ge.clear_mode_cache()
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
     yield
     ge.clear_mode_cache()

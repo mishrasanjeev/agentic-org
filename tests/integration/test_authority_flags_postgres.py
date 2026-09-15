@@ -61,7 +61,6 @@ def pg(db_engine: AsyncEngine, monkeypatch):
                     await session.execute(delete(FeatureFlag).where(FeatureFlag.flag_key == key))
             await engine.dispose()
 
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
     feature_flags.clear_cache()
     ge.clear_mode_cache()

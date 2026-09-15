@@ -44,12 +44,15 @@ def _reset_mode_cache():
 
 
 def _flags(**enabled: bool):
+    from core.feature_flags import FlagRows
+
     values = {ge.FLAG_WARN: enabled.get("warn", False), ge.FLAG_DENY: enabled.get("deny", False)}
 
-    async def _strict(flag_key: str, **_: Any) -> bool:
-        return values[flag_key]
+    async def _rows(flag_key: str, **_: Any) -> FlagRows:
+        row = {"enabled": True, "rollout_percentage": 100} if values[flag_key] else None
+        return FlagRows(global_row=None, tenant_row=row)
 
-    return _strict
+    return _rows
 
 
 # ── Deny can be switched on ──────────────────────────────────────────────
@@ -57,13 +60,13 @@ def _flags(**enabled: bool):
 
 async def test_tenant_deny_flag_switches_the_tenant_to_deny(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    with patch("core.feature_flags.is_enabled_strict", _flags(deny=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags(deny=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
 
 
 async def test_deny_deployment_default_applies_to_every_tenant(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "deny")
-    with patch("core.feature_flags.is_enabled_strict", _flags()):
+    with patch("core.feature_flags.load_flag_rows_strict", _flags()):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
     assert await resolve_enforcement_mode("") is EnforcementMode.DENY
 
@@ -94,7 +97,11 @@ async def _graph_run(run_grant: RunGrant, steps: list[Any], scripted_model: Any)
     executed = AsyncMock(return_value={"id": "msg-1", "status": "sent"})
     client = MagicMock()
     client.enforce.return_value = MagicMock(
-        allowed=False, reason="No scope grants access to connector 'gmail'.", grant_id="grnt_placeholder"
+        allowed=False,
+        reason="No scope grants access to connector 'gmail'.",
+        reason_code="tool_not_granted",
+        sub_reason="",
+        grant_id="grnt_placeholder",
     )
     with (
         patch("core.langgraph.tool_adapter._execute_connector_tool", new=executed),
