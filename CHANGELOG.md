@@ -50,6 +50,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- Grant enforcement modes for agent tool calls (`grants.enforce_closed`:
+  `off`, `warn`, `deny`). `AGENTICORG_GRANTS_ENFORCE_CLOSED` sets the
+  deployment default (`off`, which keeps today's behaviour); the
+  `grants.enforce_closed.warn` / `.deny` feature flags make a tenant stricter.
+  In `warn`, runs from `POST /agents/{id}/run` and other callers of the
+  LangGraph runner resolve a grant per run — the caller's token, the agent's
+  configured token, or one the token pool now mints by delegating from
+  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent — and
+  every tool call that grant would deny still runs (a token supplied by the
+  caller or configured on the agent stays enforced as before) but is logged as
+  `grant_enforcement_would_deny` and counted in
+  `agenticorg_grant_enforcement_denials_total{mode,reason}`, including runs
+  with no grant at all (`grant_missing`). `deny` is not switchable yet and
+  runs as `warn`. See `docs/operations/grant-enforcement.md`.
 
 ### Fixed
 - The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report

@@ -1,17 +1,28 @@
-"""Redis-backed token pool for agent tokens."""
+"""Redis-backed token pool for agent tokens.
+
+Besides caching and refreshing agent tokens, the pool obtains the *first*
+grant token for an agent run (``get_run_grant_token``): it delegates a
+short-lived grant to the agent's registered Grantex agent from the platform
+root grant, scoped to the agent's registered scopes, and caches it per tenant,
+agent and scope set until shortly before it expires.
+"""
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import redis.asyncio as aioredis
 import structlog
 
 from auth.grantex import grantex_client
-from core.config import settings
+from core.config import external_keys, settings
 
 logger = structlog.get_logger()
 
@@ -19,14 +30,52 @@ logger = structlog.get_logger()
 # given an agent_id. Users must register a callback via set_agent_config_resolver().
 AgentConfigResolver = Callable[[str], Awaitable[dict[str, Any]]]
 
+# A cached run grant is reused only while it has at least this long to live.
+RUN_GRANT_MIN_REMAINING_SECONDS = 60
+
+
+class GrantMintError(RuntimeError):
+    """No run grant could be obtained. ``sub_reason`` is a fixed short code."""
+
+    def __init__(self, sub_reason: str, message: str) -> None:
+        super().__init__(message)
+        self.sub_reason = sub_reason
+
+
+@dataclass(frozen=True)
+class RunGrantToken:
+    token: str
+    grant_id: str
+    expires_at: float | None  # epoch seconds; None when Grantex did not say
+    source: str  # "pool_cache" | "minted"
+
+    def __repr__(self) -> str:  # never print the token
+        return f"RunGrantToken(grant_id={self.grant_id!r}, expires_at={self.expires_at!r}, source={self.source!r})"
+
+
+def _default_grantex_client() -> Any:
+    from core.langgraph.grantex_auth import get_grantex_client
+
+    return get_grantex_client()
+
+
+def _parse_expiry(value: Any) -> float | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
 
 class TokenPool:
     """Cache and manage agent tokens in Redis."""
 
-    def __init__(self):
+    def __init__(self, grantex_client_factory: Callable[[], Any] | None = None):
         self.redis: aioredis.Redis | None = None
         self._refresh_tasks: dict[str, asyncio.Task] = {}
         self._agent_config_resolver: AgentConfigResolver | None = None
+        self._grantex_client_factory = grantex_client_factory or _default_grantex_client
 
     def set_agent_config_resolver(self, resolver: AgentConfigResolver) -> None:
         """Register a callback to look up agent config (agent_type, scopes) by agent_id.
@@ -66,6 +115,121 @@ class TokenPool:
         )
         # Schedule refresh at 50% TTL
         self._schedule_refresh(agent_id, ttl // 2)
+
+    async def get_run_grant_token(
+        self,
+        *,
+        tenant_id: str,
+        agent_id: str,
+        grantex_agent_id: str,
+        scopes: list[str],
+        ttl_seconds: int | None = None,
+    ) -> RunGrantToken:
+        """Return a grant token for one agent run, minting the first one if needed.
+
+        Raises ``GrantMintError`` when no token can be obtained; callers decide
+        what that means for the run (it is never a silent allow).
+        """
+        if not tenant_id or not agent_id:
+            raise GrantMintError("lookup_failed", "tenant and agent are required to obtain a run grant")
+        if not grantex_agent_id or not scopes:
+            raise GrantMintError("agent_not_registered", "agent has no registered Grantex agent id or scopes")
+
+        cache_key = self._run_grant_cache_key(tenant_id, agent_id, grantex_agent_id, scopes)
+        cached = await self._read_run_grant(cache_key)
+        if cached is not None:
+            return cached
+
+        minted = await self._mint_run_grant(
+            grantex_agent_id=grantex_agent_id,
+            scopes=scopes,
+            ttl_seconds=ttl_seconds or settings.grants_run_token_ttl_seconds,
+        )
+        await self._store_run_grant(cache_key, minted)
+        return minted
+
+    @staticmethod
+    def _run_grant_cache_key(tenant_id: str, agent_id: str, grantex_agent_id: str, scopes: list[str]) -> str:
+        digest = hashlib.sha256(
+            json.dumps([grantex_agent_id, sorted(scopes)], separators=(",", ":")).encode()
+        ).hexdigest()[:24]
+        return f"grant:run:{tenant_id}:{agent_id}:{digest}"
+
+    async def _read_run_grant(self, cache_key: str) -> RunGrantToken | None:
+        if not self.redis:
+            return None
+        try:
+            raw = await self.redis.get(cache_key)
+        except (aioredis.RedisError, OSError) as exc:
+            # A cache miss only means minting a fresh grant.
+            logger.warning("run_grant_cache_read_failed", error_type=type(exc).__name__)
+            return None
+        if not raw:
+            return None
+        try:
+            data = json.loads(raw)
+            token = str(data["token"])
+            expires_at = float(data["expires_at"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not token or expires_at - time.time() < RUN_GRANT_MIN_REMAINING_SECONDS:
+            return None
+        return RunGrantToken(
+            token=token,
+            grant_id=str(data.get("grant_id") or ""),
+            expires_at=expires_at,
+            source="pool_cache",
+        )
+
+    async def _store_run_grant(self, cache_key: str, grant: RunGrantToken) -> None:
+        if not self.redis or grant.expires_at is None:
+            return
+        ttl = int(grant.expires_at - time.time()) - RUN_GRANT_MIN_REMAINING_SECONDS
+        if ttl <= 0:
+            return
+        payload = json.dumps({"token": grant.token, "grant_id": grant.grant_id, "expires_at": grant.expires_at})
+        try:
+            await self.redis.setex(cache_key, ttl, payload)
+        except (aioredis.RedisError, OSError) as exc:
+            logger.warning("run_grant_cache_write_failed", error_type=type(exc).__name__)
+
+    async def _mint_run_grant(self, *, grantex_agent_id: str, scopes: list[str], ttl_seconds: int) -> RunGrantToken:
+        root_grant = external_keys.grantex_root_grant_token.strip()
+        if not root_grant:
+            raise GrantMintError("minting_unconfigured", "GRANTEX_ROOT_GRANT_TOKEN is not configured")
+        try:
+            client = self._grantex_client_factory()
+        except (ImportError, RuntimeError, ValueError) as exc:
+            raise GrantMintError("minting_unconfigured", f"Grantex client unavailable: {type(exc).__name__}") from exc
+        try:
+            response = await asyncio.to_thread(
+                client.grants.delegate,
+                parent_grant_token=root_grant,
+                sub_agent_id=grantex_agent_id,
+                scopes=list(scopes),
+                expires_in=f"{max(1, ttl_seconds // 60)}m",
+            )
+        # enterprise-gate: broad-except-ok reason=delegation-failure-raises-grant-mint-error-never-an-allow
+        except Exception as exc:
+            raise GrantMintError("mint_failed", f"grant delegation failed: {type(exc).__name__}") from exc
+
+        data = response if isinstance(response, dict) else {}
+        token = data.get("grantToken") or data.get("grant_token")
+        if not isinstance(token, str) or not token:
+            raise GrantMintError("mint_failed", "grant delegation returned no grant token")
+        grant_id = str(data.get("grantId") or data.get("grant_id") or "")
+        logger.info(
+            "run_grant_minted",
+            grantex_agent_id=grantex_agent_id,
+            grant_id=grant_id,
+            scopes_count=len(scopes),
+        )
+        return RunGrantToken(
+            token=token,
+            grant_id=grant_id,
+            expires_at=_parse_expiry(data.get("expiresAt") or data.get("expires_at")),
+            source="minted",
+        )
 
     async def revoke_token(self, agent_id: str) -> None:
         """Revoke token and broadcast to all pool nodes."""

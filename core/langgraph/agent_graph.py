@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+from collections.abc import Mapping
 from typing import Any
 
 import structlog
@@ -24,6 +25,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
+from auth.grant_enforcement import EnforcementMode, GrantCallContext, check_tool_grant
+from auth.run_grants import RunGrant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import (
@@ -151,7 +154,11 @@ def _tool_message_indicates_failure(msg_content: str | None) -> bool:
     return False
 
 
-async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
+async def validate_tool_scopes(
+    state: AgentState,
+    tool_refs: Mapping[str, tuple[str, str]] | None = None,
+    run_grant: RunGrant | None = None,
+) -> dict[str, Any]:
     """Enforce Grantex scopes before tool execution.
 
     Uses grantex.enforce() which:
@@ -161,7 +168,16 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
 
     No online API calls — enforce() validates the JWT signature locally
     using the cached JWKS key set.
+
+    PRD F-1: the run's ``grants.enforce_closed`` mode (``run_grant.mode``)
+    decides what a missing or insufficient grant means. ``off`` (or no
+    ``run_grant``) is the legacy path below, unchanged. ``warn`` and ``deny``
+    go through ``_enforce_tool_grants``, checking ``state["grant_token"]``.
+    ``tool_refs`` maps registered tool names to ``(connector, tool)``.
     """
+    if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
+        return await _enforce_tool_grants(state, run_grant, tool_refs or {})
+
     messages = state["messages"]
     grant_token = state.get("grant_token", "")
     if not grant_token:
@@ -225,6 +241,88 @@ async def validate_tool_scopes(state: AgentState) -> dict[str, Any]:
     return {}  # All tool calls approved
 
 
+async def _enforce_tool_grants(
+    state: AgentState,
+    run_grant: RunGrant,
+    tool_refs: Mapping[str, tuple[str, str]],
+) -> dict[str, Any]:
+    """Check every requested tool call against the run grant (warn / deny).
+
+    Every call that the grant does not cover — no grant, invalid or revoked
+    token, tool or permission not granted, enforcement unavailable — is
+    recorded. In ``warn`` the calls then run — unless the token was supplied
+    by the caller or configured on the agent, which the legacy path already
+    enforced (``RunGrant.call_mode``); in ``deny`` the first such call stops
+    the batch with its reason code.
+    """
+    messages = state["messages"]
+    if not messages:
+        return {}
+    last_ai = messages[-1]
+    if not isinstance(last_ai, AIMessage) or not last_ai.tool_calls:
+        return {}
+
+    context = GrantCallContext(
+        tenant_id=str(state.get("tenant_id") or ""),
+        agent_id=str(state.get("agent_id") or ""),
+        agent_type=str(state.get("agent_type") or ""),
+        runtime="langgraph",
+        grant_source=run_grant.source,
+    )
+    index: dict[str, tuple[str, str]] | None = None
+
+    for tc in last_ai.tool_calls:
+        if isinstance(tc, dict):
+            tool_name = tc.get("name", "")
+            args = tc.get("args") or {}
+        else:
+            tool_name = getattr(tc, "name", "")
+            args = getattr(tc, "args", None) or {}
+        if not tool_name:
+            continue
+
+        ref = tool_refs.get(tool_name)
+        if ref is None:
+            if index is None:
+                try:
+                    index = _build_tool_index(include_connector_aliases=True)
+                # enterprise-gate: broad-except-ok reason=index-failure-falls-back-to-unknown-connector-enforce-denies
+                except Exception as exc:
+                    logger.warning("grant_enforcement_tool_index_failed", error_type=type(exc).__name__)
+                    index = {}
+            match = index.get(tool_name)
+            ref = (match[0] if match else "unknown", _actual_tool_name(tool_name))
+        connector_name, actual_tool_name = ref
+
+        amount = args.get("amount") if isinstance(args, dict) else None
+        check = await check_tool_grant(
+            mode=run_grant.call_mode,
+            grant_token=state.get("grant_token"),
+            connector=connector_name,
+            tool=actual_tool_name,
+            context=context,
+            amount=amount if isinstance(amount, int | float) and not isinstance(amount, bool) else None,
+            missing_sub_reason=run_grant.missing_sub_reason,
+            client_factory=get_grantex_client,
+        )
+        if check.dispatch_allowed or check.denial is None:
+            continue
+
+        reason = check.denial.reason.value
+        return {
+            "messages": [
+                AIMessage(
+                    content=f"Access denied ({reason}). Tool '{actual_tool_name}' on '{connector_name}' "
+                    "is not permitted by this agent's grant."
+                )
+            ],
+            "status": "failed",
+            "error": f"grant_denied: {reason}",
+        }
+
+    return {}
+
+
 def build_agent_graph(
     system_prompt: str,
     authorized_tools: list[str],
@@ -239,6 +337,7 @@ def build_agent_graph(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
+    run_grant: RunGrant | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -257,6 +356,9 @@ def build_agent_graph(
         llm_provider: Explicit catalog provider id pinned on the agent
             (``agents.llm_provider``, else ``llm_config["provider"]``).
             ``None`` keeps the legacy model-name inference for old rows.
+        run_grant: The run's resolved grant and ``grants.enforce_closed``
+            mode (``auth/run_grants.py``). ``None`` is ``off``: scope
+            validation keeps its legacy behaviour.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -526,7 +628,12 @@ def build_agent_graph(
     graph.add_edge(START, "reason")
 
     if tools:
-        graph.add_node("validate_scopes", validate_tool_scopes)
+        tool_refs = _tool_grant_refs(tools)
+
+        async def validate_scopes(state: AgentState) -> dict[str, Any]:
+            return await validate_tool_scopes(state, tool_refs, run_grant)
+
+        graph.add_node("validate_scopes", validate_scopes)
         graph.add_conditional_edges(
             "reason",
             should_use_tools,
@@ -561,6 +668,19 @@ def build_agent_graph(
 
 
 # --- Helper functions ---
+
+
+def _tool_grant_refs(tools: list[Any]) -> dict[str, tuple[str, str]]:
+    """Registered tool name -> ``(connector, tool)`` from the adapter's metadata."""
+    refs: dict[str, tuple[str, str]] = {}
+    for tool in tools:
+        meta = getattr(tool, "metadata", None) or {}
+        connector = meta.get("connector") if isinstance(meta, dict) else None
+        bare = meta.get("tool") if isinstance(meta, dict) else None
+        name = str(getattr(tool, "name", ""))
+        if name and isinstance(connector, str) and connector and isinstance(bare, str) and bare:
+            refs[name] = (connector, bare)
+    return refs
 
 
 def _tool_call_alias_map(tools: list[Any]) -> dict[str, str]:

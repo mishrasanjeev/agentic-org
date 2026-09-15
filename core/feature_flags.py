@@ -46,8 +46,16 @@ logger = structlog.get_logger()
 # Key: (tenant_id_str, flag_key)
 _CACHE_TTL_SECONDS = 30
 _CACHE_MAX_SIZE = 2_048
+# Cached in place of a row when the flag store could not be read. ``is_enabled``
+# treats it like an absent row; ``is_enabled_strict`` raises for it until the
+# entry expires, so an outage is not re-probed on every call.
+_LOOKUP_FAILED: Any = object()
 # enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-feature-flag-cache
 _cache: dict[tuple[str, str], tuple[dict[str, Any] | None, float]] = {}
+
+
+class FeatureFlagLookupError(RuntimeError):
+    """The flag store could not be read, so the flag's value is unknown."""
 
 
 def _bucket(flag_key: str, subject_id: str) -> int:
@@ -77,17 +85,23 @@ def _store_cache(
 
 
 async def _load_flag(
-    tenant_id: uuid.UUID | None, flag_key: str
+    tenant_id: uuid.UUID | None, flag_key: str, *, strict: bool = False
 ) -> dict[str, Any] | None:
     """Fetch a flag from DB with a tiny in-process cache.
 
     Returns the row as a dict (enabled, rollout_percentage) or None.
+    With ``strict`` a failed lookup raises ``FeatureFlagLookupError``
+    instead of reading as an absent row.
     """
     cache_key = (str(tenant_id) if tenant_id else "_global", flag_key)
     cached = _cache.get(cache_key)
     now = time.monotonic()
     if cached is not None and cached[1] > now:
-        return cached[0]
+        if cached[0] is not _LOOKUP_FAILED:
+            return cached[0]
+        if strict:
+            raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read")
+        return None
 
     row: dict[str, Any] | None = None
     try:
@@ -121,10 +135,13 @@ async def _load_flag(
                         "enabled": flag.enabled,
                         "rollout_percentage": flag.rollout_percentage,
                     }
-    # enterprise-gate: broad-except-ok reason=feature-flag-lookup-failure-uses-callsite-default
-    except Exception:
+    # enterprise-gate: broad-except-ok reason=feature-flag-lookup-failure-uses-callsite-default-or-raises-when-strict
+    except Exception as exc:
         logger.debug("feature_flag_lookup_failed", flag_key=flag_key)
-        row = None
+        _store_cache(cache_key, _LOOKUP_FAILED, now + _CACHE_TTL_SECONDS)
+        if strict:
+            raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read") from exc
+        return None
 
     _store_cache(cache_key, row, now + _CACHE_TTL_SECONDS)
     return row
@@ -139,6 +156,34 @@ async def is_enabled(
 ) -> bool:
     """Return True if the flag is enabled for this subject."""
     row = await _load_flag(tenant_id, flag_key)
+    return _evaluate(flag_key, row, tenant_id=tenant_id, user_id=user_id, default=default)
+
+
+async def is_enabled_strict(
+    flag_key: str,
+    *,
+    tenant_id: uuid.UUID | None = None,
+    user_id: uuid.UUID | None = None,
+    default: bool = False,
+) -> bool:
+    """Like ``is_enabled`` but raises ``FeatureFlagLookupError`` when the flag
+    store cannot be read.
+
+    For authority decisions, where "the flag is off" and "we could not tell"
+    must not look the same.
+    """
+    row = await _load_flag(tenant_id, flag_key, strict=True)
+    return _evaluate(flag_key, row, tenant_id=tenant_id, user_id=user_id, default=default)
+
+
+def _evaluate(
+    flag_key: str,
+    row: dict[str, Any] | None,
+    *,
+    tenant_id: uuid.UUID | None,
+    user_id: uuid.UUID | None,
+    default: bool,
+) -> bool:
     if row is None:
         return default
     if not row["enabled"]:

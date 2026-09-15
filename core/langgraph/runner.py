@@ -22,6 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
+from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
@@ -157,6 +158,7 @@ async def run_agent(
     thread_id: str | None = None,
     company_id: str | None = None,
     llm_provider: str | None = None,
+    run_grant: RunGrant | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -175,6 +177,10 @@ async def run_agent(
         confidence_floor: Minimum confidence before HITL.
         hitl_condition: Additional HITL condition expression.
         grant_token: Grantex grant JWT for authorization.
+        run_grant: The run's resolved grant and ``grants.enforce_closed``
+            mode, when the caller already resolved it. Otherwise it is
+            resolved here from ``tenant_id``/``agent_id`` with
+            ``grant_token`` as the supplied token (``auth/run_grants.py``).
         connector_config: Config for connectors (auth, secrets).
         thread_id: Conversation thread ID for checkpointing.
         llm_provider: Explicit catalog provider id (``agent.llm_provider``,
@@ -191,6 +197,16 @@ async def run_agent(
     limit_block = await gate_agent_run(tenant_id)
     if limit_block is not None:
         return limit_block
+
+    # PRD F-1: resolve the grant the run's tool calls are checked against.
+    # In ``off`` this passes ``grant_token`` through untouched.
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph",
+        )
 
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
@@ -292,6 +308,7 @@ async def run_agent(
             domain=domain,
             pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
             llm_provider=llm_provider,
+            run_grant=run_grant,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
@@ -308,7 +325,7 @@ async def run_agent(
         "agent_type": agent_type,
         "domain": domain,
         "tenant_id": tenant_id,
-        "grant_token": grant_token,
+        "grant_token": run_grant.token,
         "confidence": 0.0,
         "status": "running",
         "output": {},

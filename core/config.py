@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import Field, model_validator
@@ -160,6 +161,18 @@ class Settings(BaseSettings):
     plugin_loading: bool = False
     plugin_allowlist: str = ""
 
+    # Grant enforcement on agent tool calls (auth/grant_enforcement.py,
+    # docs/operations/grant-enforcement.md). Deployment default for
+    # ``grants.enforce_closed``: ``off`` keeps the legacy behaviour, ``warn``
+    # allows and records every call that would be denied, ``deny`` refuses it.
+    # Tenants override it with the ``grants.enforce_closed.warn`` and
+    # ``grants.enforce_closed.deny`` feature flags. An unknown value fails
+    # startup. Env: AGENTICORG_GRANTS_ENFORCE_CLOSED.
+    grants_enforce_closed: Literal["off", "warn", "deny"] = "off"
+    # Lifetime requested for a per-run grant delegated from the root grant
+    # (auth/token_pool.py). Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
+    grants_run_token_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
+
     # Platform behaviour
     pii_masking: bool = True
     data_region: str = "IN"
@@ -254,6 +267,10 @@ class ExternalKeys(BaseSettings):
     grantex_token_server: str = ""
     grantex_api_key: str = ""  # Grantex SDK API key
     grantex_base_url: str = "https://api.grantex.dev"  # Configurable for self-hosted
+    # Root grant the platform delegates per-run agent grants from
+    # (auth/token_pool.py). A credential: set it from a secret manager.
+    # Env: GRANTEX_ROOT_GRANT_TOKEN.
+    grantex_root_grant_token: str = ""
     langsmith_api_key: str = ""
     langsmith_project: str = "agenticorg-production"
     otel_exporter_otlp_endpoint: str = ""

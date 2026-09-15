@@ -23,6 +23,7 @@ from api.deps import (
     require_tenant_admin,
 )
 from api.route_metadata import route_meta
+from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -3100,6 +3101,17 @@ async def run_agent(
     if grantex_config:
         grant_token = grantex_config.get("grant_token", "")
 
+    # PRD F-1: resolve the run's grant and ``grants.enforce_closed`` mode once
+    # for both the deterministic shadow route and the LangGraph run. In ``off``
+    # the legacy token above is passed through unchanged.
+    run_grant = await resolve_run_grant(
+        tenant_id=tenant_id,
+        agent_id=str(agent_id),
+        supplied_token=grant_token,
+        grantex_config=grantex_config if isinstance(grantex_config, dict) else {},
+        runtime="langgraph",
+    )
+
     # 5a. Budget check (if cost controls configured)
     cost_controls = agent_config.get("cost_controls", {})
     monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if cost_controls else 0
@@ -3271,6 +3283,21 @@ async def run_agent(
         # the same helper for #440 / BUG-17 closure; here we reuse it
         # for the shadow path. Gated on fixture_tool_authorized above.
         if fixture.get("deterministic_route") == "tds" and fixture.get("prompt"):
+            # The deterministic route invokes zoho_books.calculate_tds
+            # directly, so it takes the same grant check as a graph tool call
+            # (PRD F-1). When refused, fall through to the graph, which checks
+            # again.
+            if not await direct_tool_call_permitted(
+                run_grant,
+                connector="zoho_books",
+                tool="calculate_tds",
+                tenant_id=tenant_id,
+                agent_id=str(agent_id),
+                agent_type=str(agent_config.get("agent_type") or ""),
+                runtime="deterministic_tds",
+            ):
+                fixture = {**fixture, "deterministic_route": ""}
+        if fixture.get("deterministic_route") == "tds" and fixture.get("prompt"):
             try:
                 from api.v1._tds_routing import try_tds_deterministic_route
 
@@ -3358,6 +3385,7 @@ async def run_agent(
                     else agent_config.get("hitl_condition", "")
                 ),
                 grant_token=grant_token,
+                run_grant=run_grant,
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
