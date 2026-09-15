@@ -5,6 +5,65 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Governed business cases (`core/cases/`, PRD A-8), behind the per-tenant
+  flag `governed_cases.enabled` (default off; unreadable counts as off): case
+  lifecycle `submitted`/`in_progress`/`awaiting_decision`/`decided`/
+  `withdrawn`/`failed` with version-guarded transitions recorded in
+  `governed_case_transitions`; a runtime that runs the Business Onboarding
+  Underwriter and Screening Disposition agents for a case and stores the memo,
+  policy result, screening results, dispositions and agent case records;
+  decisions recorded only with verified decision grants (the shipped verifier
+  refuses everything with `decision_required` until decision grants land).
+  New workflow step type `case_agent` and example workflows
+  `workflows/examples/business_onboarding.yaml` and `screening_disposition.yaml`.
+  New API under `/api/v1/governed-cases` (submit, list, stats, detail, case
+  record, investigate, withdraw, decision, disposition review, information
+  requests). Migration `v6z25_governed_cases` adds two tables with row-level
+  security. Metric `agenticorg_governed_case_transitions_total{from_state,to_state}`.
+  Settings `AGENTICORG_CASE_PROVIDER`, `AGENTICORG_CASE_POLICY_DIR`,
+  `AGENTICORG_CASE_LLM_MODEL`. See `docs/governance/case-lifecycle.md`.
+- Screening Disposition reference agent (`core/agents/screening_disposition/`,
+  PRD A-7 / US-3): for one screening hit it re-screens the subject through
+  the provider tool gateway to confirm the hit, compares name, date of birth,
+  nationality, address and associated entities, and proposes `true_match`,
+  `false_positive` or `insufficient_information` with a confidence band by
+  fixed rules, producing a schema-valid, cited `screening_disposition` with
+  `review: null`. The model writes the rationale from comparison results only;
+  a rationale that states another outcome, talks of closing the hit or repeats
+  untrusted text is replaced by a template rationale. No automatic closure in
+  any configuration: the tool set is read-only screening and no closing tool
+  can be configured. `apply_review` records an analyst's acceptance or
+  override (reason required, analyst identity from the authenticated session,
+  written once). Metric
+  `agenticorg_screening_dispositions_proposed_total{outcome,band}`. Shared
+  `core/agents/case_model_call.py` makes the guarded, pseudonymised prose call
+  for both reference agents. Nothing in the platform runs the agent yet. See
+  `docs/agents/screening-disposition.md`.
+- Business Onboarding Underwriter reference agent
+  (`core/agents/business_underwriter/`, PRD A-7): resolves an application
+  through a verification provider, starts verification and polls while it is
+  pending, reconciles ownership against declared owners (`missing_owner`,
+  `undeclared_owner` at a configurable threshold, 25% by default), screens
+  every party, analyses web presence only through the sandboxed extractor,
+  evaluates the deterministic policy and assembles a schema-valid, cited
+  `underwriting_memo` with a policy-gated recommendation and a missing-items
+  list. The model writes section summaries only, from codes and counts, behind
+  the untrusted-content guard and (when `pseudonymisation.pre_model` is on)
+  pseudonymisation; each summary is checked against its section's citations.
+  Every memo evidence entry is checked against the records returned in the run,
+  and the run fails closed otherwise. A capability the provider does not offer
+  yields a `not_available` section. Prompts are versioned and pinned by
+  SHA-256, recorded with every tool call's request and response hashes in the
+  case record. Requests for more information use approved templates released
+  only by a human approval bound to the proposal digest. New provider tool
+  gateway (`core/tool_gateway/provider_gateway.py`) holds read tools only and
+  takes the run's grant check as an authorizer that fails closed. Metrics
+  `agenticorg_provider_calls_total{capability,outcome}`,
+  `agenticorg_provider_call_duration_seconds{capability}` and
+  `agenticorg_case_agent_runs_total{agent,outcome}`. New
+  `core.policy.document.policy_result_document`. Nothing in the platform runs
+  the agent yet, so existing behaviour is unchanged. See
+  `docs/agents/business-underwriter.md`.
 - **Coverage gate (pull requests):** 75% of changed lines (diff-cover) and 75%
   of every new Python module (`scripts/check_new_module_coverage.py`; a new
   module no test imports counts as 0%), on top of the existing 55% total and

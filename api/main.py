@@ -46,6 +46,7 @@ from api.v1 import (
     evals,
     feature_flags,
     governance,
+    governed_cases,
     health,
     integrations_status,
     invoices,
@@ -269,6 +270,7 @@ app.include_router(tenant_ai_credentials.router, prefix="/api/v1", tags=["Tenant
 app.include_router(tenant_ai_settings.router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(tenant_ai_settings.registry_router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
+app.include_router(governed_cases.router, prefix="/api/v1", tags=["Governed Cases"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
 app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])

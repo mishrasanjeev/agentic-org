@@ -438,3 +438,41 @@ Remove an entry in the pull request that fixes it.
   warning for tenants that use it, then delete the in-repo module and its
   generator entry. New screening integrations go through the
   `VerificationProvider` interface instead.
+
+## A-37 — Example onboarding policies read evidence no provider supplies
+
+- **Found:** running the Business Onboarding Underwriter against every mock
+  fixture (2026-09-15).
+- **What:** `core/policy/examples/business_onboarding_uk.yaml` rule
+  `filings_overdue` reads `verification.overdue_filings`, but no field of the
+  provider-neutral interface (`connectors/framework/verification_types.py`)
+  reports filing status, so the rule fires as indeterminate on every UK case.
+  `web_presence_activity_mismatch` in both examples is also indeterminate
+  whenever the declared activity term has no extractor activity category (10 of
+  12 mock fixtures). With the UK `score_thresholds.high: 60`, a clean UK case
+  with one screening hit reaches `high` on unresolved evidence alone.
+- **Fix:** either add filing status to `BusinessVerification` (a domain concept
+  most registries publish) or drop the rule from the example; publish a mapping
+  from declared activity vocabulary to extractor categories.
+
+## A-38 — An empty web presence carries no evidence to cite
+
+- **Found:** assembling memo sections for businesses with no website
+  (2026-09-15).
+- **What:** `WebPresence.evidence` may be empty, and the mock provider returns
+  no evidence when a business has no web record
+  (`connectors/providers/mock/provider.py::web_presence`). The absence of a web
+  presence therefore cannot be cited on its own; the underwriter cites the
+  resolved registry record instead.
+- **Fix:** require at least one evidence entry on `WebPresence` (the search that
+  found nothing) in the interface and the conformance suite.
+
+## A-39 — Example policies test registry statuses the interface never returns
+
+- **Found:** comparing policy operands with `RegistryStatus` (2026-09-15).
+- **What:** `registry_dissolved` in the UK example matches
+  `[dissolved, liquidation]` and in the US example `[dissolved, revoked]`, but
+  `RegistryStatus` has `in_insolvency` and no `liquidation` or `revoked`, so a
+  business in insolvency is `high` (via `registry_active`), never `blocked`.
+- **Fix:** match `in_insolvency` in the examples, or have the policy loader
+  check `verification.status` operands against the interface vocabulary.
