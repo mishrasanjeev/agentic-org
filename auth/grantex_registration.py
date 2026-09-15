@@ -10,11 +10,38 @@ When an agent is created in AgenticOrg, this module:
 from __future__ import annotations
 
 import os
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, Final
 
 import structlog
 
 logger = structlog.get_logger()
+
+
+# Most scopes one Grantex agent registration carries.
+MAX_AGENT_SCOPES: Final = 100
+
+
+class ScopeLimitExceededError(ValueError):
+    """An agent's tools map to more distinct Grantex scopes than a registration can carry."""
+
+    def __init__(self, count: int) -> None:
+        super().__init__(
+            f"the agent's authorized tools map to {count} distinct Grantex scopes; "
+            f"at most {MAX_AGENT_SCOPES} can be registered - remove tools or split the agent"
+        )
+        self.count = count
+
+
+def bounded_scopes(scopes: Iterable[str]) -> list[str]:
+    """``scopes`` without duplicates (first occurrence kept), at most ``MAX_AGENT_SCOPES``.
+
+    Raises ``ScopeLimitExceededError`` rather than silently dropping scopes.
+    """
+    unique = list(dict.fromkeys(s for s in scopes if isinstance(s, str) and s))
+    if len(unique) > MAX_AGENT_SCOPES:
+        raise ScopeLimitExceededError(len(unique))
+    return unique
 
 
 def _get_grantex_client():

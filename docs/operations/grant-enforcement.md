@@ -65,9 +65,13 @@ In `warn` and `deny` each run resolves a grant token, first match wins:
 2. `agent_config` — the agent's legacy `config.grantex.grant_token`;
 3. `pool_cache` / `minted` — a per-run grant from `auth/token_pool.py`: the
    pool delegates a grant from the platform root grant to the agent's
-   registered Grantex agent (`config.grantex.grantex_agent_id`), limited to its
-   registered scopes (`config.grantex.grantex_scopes`), and caches it per
-   tenant, agent and scope set.
+   registered Grantex agent (`config.grantex.grantex_agent_id`), limited to the
+   stored scopes (`config.grantex.grantex_scopes`) that the agent's Grantex
+   registration also carries (read with `agents.get` on each mint; a stored
+   scope the registration lacks is dropped and logged as
+   `run_grant_scopes_not_registered`), and caches it per tenant, agent and
+   scope set. An unreadable registration is `mint_failed`; no scope in common
+   is `agent_not_registered`.
 
 Lifetime and bounds of pool grants:
 
@@ -202,9 +206,25 @@ Agents are registered on Grantex with one scope per authorized tool,
 `tool:{connector}:{permission}:{tool}`, where `permission` is the level the
 connector's Grantex manifest declares (`read`, `write`, `delete`, `admin`), or
 `read`/`write` from the tool name when there is no manifest, plus
-`agenticorg:{domain}:read`. `PATCH /agents/{id}` recomputes them when the
-authorized tools change. Grantex compares the highest level a grant holds for
-a connector with the level the tool needs.
+`agenticorg:{domain}:read`, without duplicates and at most 100. Grantex
+compares the highest level a grant holds for a connector with the level the
+tool needs.
+
+`PATCH /agents/{id}` recomputes them when the authorized tools change. For an
+agent registered on Grantex the new scopes go to its registration first
+(`agents.update`), and are stored only once Grantex accepted them; otherwise
+the whole PATCH is refused and nothing changes:
+
+| HTTP | `detail.reason_code` | Cause |
+|---|---|---|
+| 422 | `scope_limit_exceeded` | The tools map to more than 100 distinct scopes |
+| 503 | `scope_computation_failed` | The agent's connector bindings could not be read to compute the scopes |
+| 503 | `grantex_unconfigured` | No Grantex client is configured (`GRANTEX_API_KEY`) |
+| 502 | `grantex_update_failed` | Grantex refused or failed the update |
+
+Each refusal is also logged as `grantex_scopes_refresh_failed` with the reason
+code. An agent with no Grantex registration stores the recomputed scopes as
+before.
 
 Agents registered before this mapping carry `...:execute:...` scopes, which
 grant nothing. Re-scope them (report first, then apply):
@@ -214,9 +234,14 @@ python scripts/refresh_grantex_scopes.py --tenant <tenant id>
 python scripts/refresh_grantex_scopes.py --tenant <tenant id> --apply
 ```
 
-The script updates the agent on Grantex, then `config.grantex.grantex_scopes`;
-it is idempotent and prints one JSON line per agent. Then re-read the
-warn-mode report before switching the tenant to `deny`.
+The script skips deleted agents, updates each agent on Grantex, then writes
+only `config.grantex.grantex_scopes` (so a concurrent change to the rest of
+the agent's config is kept); it is idempotent and prints one JSON line per
+agent. A failure for one agent is reported on its line and the run continues:
+`grantex_failed`, `storage_failed` (Grantex has the new scopes, storage the old
+ones - re-run), `scope_limit_exceeded` (more than 100 scopes; nothing changed)
+or `connector_lookup_failed`. The exit status is 1 when any agent failed. Then
+re-read the warn-mode report before switching the tenant to `deny`.
 
 ## Runbook
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import re as _re
@@ -2851,6 +2852,7 @@ async def update_agent(
         # Track prompt changes for audit
         old_prompt = agent.system_prompt_text
         change_reason = update_data.pop("change_reason", None)
+        pending_grantex_scopes: list[str] | None = None
 
         if "name" in update_data:
             agent.name = update_data["name"]
@@ -2882,8 +2884,13 @@ async def update_agent(
             # every Zoho call once the agent received a real grant
             # token. Recompute scopes in the same transaction so the
             # two fields cannot drift apart again.
+            #
+            # PRD F-1: for an agent registered on Grantex the new scopes are
+            # pushed to its registration (below, after every other change is
+            # validated) and stored only once Grantex accepted them.
+            grantex_agent_id = str(((agent.config or {}).get("grantex") or {}).get("grantex_agent_id") or "")
             try:
-                from auth.grantex_registration import _tools_to_scopes
+                from auth.grantex_registration import ScopeLimitExceededError, _tools_to_scopes, bounded_scopes
 
                 # Pass connector names (post-PATCH if the same call also
                 # changed connector_ids, otherwise the existing list) so
@@ -2905,12 +2912,40 @@ async def update_agent(
                     agent.domain,
                     connector_names=resolved_names or None,
                 )
-                cfg = dict(agent.config or {})
-                grx = dict(cfg.get("grantex") or {})
-                grx["grantex_scopes"] = refreshed_scopes
-                cfg["grantex"] = grx
-                agent.config = cfg
-            except (RuntimeError, SQLAlchemyError, TypeError, ValueError):
+                if grantex_agent_id:
+                    pending_grantex_scopes = bounded_scopes(refreshed_scopes)
+                else:
+                    cfg = dict(agent.config or {})
+                    grx = dict(cfg.get("grantex") or {})
+                    grx["grantex_scopes"] = refreshed_scopes
+                    cfg["grantex"] = grx
+                    agent.config = cfg
+            except ScopeLimitExceededError as exc:
+                raise HTTPException(
+                    422,
+                    detail={
+                        "error": "grantex_scope_refresh_failed",
+                        "reason_code": "scope_limit_exceeded",
+                        "message": str(exc),
+                    },
+                ) from exc
+            except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+                if grantex_agent_id:
+                    # The registration would keep scopes for the old tools.
+                    logger.warning(
+                        "grantex_scopes_refresh_failed",
+                        agent_id=str(agent_id),
+                        tenant_id=tenant_id,
+                        reason_code="scope_computation_failed",
+                    )
+                    raise HTTPException(
+                        503,
+                        detail={
+                            "error": "grantex_scope_refresh_failed",
+                            "reason_code": "scope_computation_failed",
+                            "message": "Could not compute the agent's Grantex scopes; nothing was changed.",
+                        },
+                    ) from exc
                 logger.warning(
                     "grantex_scopes_refresh_skipped",
                     agent_id=str(agent_id),
@@ -2970,7 +3005,68 @@ async def update_agent(
             )
             session.add(audit)
 
+        if pending_grantex_scopes is not None:
+            await _push_grantex_scopes(agent, pending_grantex_scopes, tenant_id=tenant_id)
+
     return {"id": str(agent_id), "updated": True}
+
+
+async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str) -> None:
+    """Update a registered agent's scopes on Grantex, then store them on the agent.
+
+    Grantex is called off the event loop and first; the scopes are stored only
+    after it accepted them. Any failure raises (``reason_code``
+    ``grantex_unconfigured`` or ``grantex_update_failed``), so the request's
+    transaction rolls back and the agent keeps the tools and scopes it had.
+    Unchanged scopes are stored without calling Grantex.
+    """
+    from auth.grantex_registration import _get_grantex_client
+
+    cfg = dict(agent.config or {})
+    grx = dict(cfg.get("grantex") or {})
+    grantex_agent_id = str(grx.get("grantex_agent_id") or "")
+    stored = [s for s in grx.get("grantex_scopes") or [] if isinstance(s, str)]
+    if sorted(stored) != sorted(scopes):
+        client = _get_grantex_client()
+        if client is None:
+            logger.warning(
+                "grantex_scopes_refresh_failed",
+                agent_id=str(agent.id),
+                tenant_id=tenant_id,
+                reason_code="grantex_unconfigured",
+            )
+            raise HTTPException(
+                503,
+                detail={
+                    "error": "grantex_scope_refresh_failed",
+                    "reason_code": "grantex_unconfigured",
+                    "message": "The agent is registered on Grantex but no Grantex client is configured; "
+                    "nothing was changed.",
+                },
+            )
+        try:
+            await asyncio.to_thread(client.agents.update, grantex_agent_id, scopes=list(scopes))
+        # enterprise-gate: broad-except-ok reason=grantex-update-failure-rolls-back-the-patch-with-a-reason
+        except Exception as exc:
+            logger.warning(
+                "grantex_scopes_refresh_failed",
+                agent_id=str(agent.id),
+                tenant_id=tenant_id,
+                reason_code="grantex_update_failed",
+                error_type=type(exc).__name__,
+            )
+            raise HTTPException(
+                502,
+                detail={
+                    "error": "grantex_scope_refresh_failed",
+                    "reason_code": "grantex_update_failed",
+                    "message": "Grantex did not accept the agent's new scopes; nothing was changed.",
+                },
+            ) from exc
+        logger.info("grantex_scopes_refreshed", agent_id=str(agent.id), scopes_count=len(scopes))
+    grx["grantex_scopes"] = list(scopes)
+    cfg["grantex"] = grx
+    agent.config = cfg
 
 
 # ── POST /agents/{id}/run ────────────────────────────────────────────────────

@@ -3,8 +3,8 @@
 Besides caching and refreshing agent tokens, the pool obtains the *first*
 grant token for an agent run (``get_run_grant_token``): it delegates a
 short-lived grant to the agent's registered Grantex agent from the platform
-root grant, scoped to the agent's registered scopes, and caches it per tenant,
-agent and scope set.
+root grant, scoped to the agent's stored scopes that its Grantex registration
+also carries, and caches it per tenant, agent and scope set.
 
 Lifetime and bounds of delegated run grants:
 
@@ -321,6 +321,37 @@ class TokenPool:
         except (aioredis.RedisError, OSError) as exc:
             logger.warning("run_grant_cache_write_failed", error_type=type(exc).__name__)
 
+    @staticmethod
+    async def _registered_scopes(client: Any, grantex_agent_id: str, scopes: list[str]) -> list[str]:
+        """The stored ``scopes`` the agent's Grantex registration also carries, in stored order.
+
+        Stored scopes can differ from the registration (rows written before
+        ``PATCH /agents/{id}`` pushed scopes to Grantex, or edited directly), so
+        only scopes both sides hold are delegated. An unreadable registration
+        is ``mint_failed``; no scope in common is ``agent_not_registered``.
+        """
+        try:
+            registration = await asyncio.to_thread(client.agents.get, grantex_agent_id)
+        # enterprise-gate: broad-except-ok reason=registration-read-failure-raises-grant-mint-error-never-an-allow
+        except Exception as exc:
+            raise GrantMintError("mint_failed", f"agent registration unreadable: {type(exc).__name__}") from exc
+        registered_raw = getattr(registration, "scopes", None)
+        if not isinstance(registered_raw, list | tuple):
+            raise GrantMintError("mint_failed", "agent registration returned no scope list")
+        registered = {s for s in registered_raw if isinstance(s, str)}
+        stored = list(dict.fromkeys(scopes))
+        delegated = [s for s in stored if s in registered]
+        if len(delegated) < len(stored):
+            logger.warning(
+                "run_grant_scopes_not_registered",
+                grantex_agent_id=grantex_agent_id,
+                stored_count=len(stored),
+                delegated_count=len(delegated),
+            )
+        if not delegated:
+            raise GrantMintError("agent_not_registered", "none of the agent's stored scopes are registered on Grantex")
+        return delegated
+
     async def _mint_run_grant(self, *, grantex_agent_id: str, scopes: list[str], ttl_seconds: int) -> RunGrantToken:
         root_grant = external_keys.grantex_root_grant_token.strip()
         if not root_grant:
@@ -329,12 +360,13 @@ class TokenPool:
             client = self._grantex_client_factory()
         except (ImportError, RuntimeError, ValueError) as exc:
             raise GrantMintError("minting_unconfigured", f"Grantex client unavailable: {type(exc).__name__}") from exc
+        delegated_scopes = await self._registered_scopes(client, grantex_agent_id, scopes)
         try:
             response = await asyncio.to_thread(
                 client.grants.delegate,
                 parent_grant_token=root_grant,
                 sub_agent_id=grantex_agent_id,
-                scopes=list(scopes),
+                scopes=delegated_scopes,
                 expires_in=f"{max(1, ttl_seconds // 60)}m",
             )
         # enterprise-gate: broad-except-ok reason=delegation-failure-raises-grant-mint-error-never-an-allow
@@ -355,7 +387,7 @@ class TokenPool:
             "run_grant_minted",
             grantex_agent_id=grantex_agent_id,
             grant_id=grant_id,
-            scopes_count=len(scopes),
+            scopes_count=len(delegated_scopes),
         )
         return RunGrantToken(
             token=token,

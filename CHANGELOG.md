@@ -361,7 +361,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   connector's Grantex manifest instead of `...:execute:...`, which Grantex's
   permission check never satisfies, so grants delegated for them allowed
   nothing. `scripts/refresh_grantex_scopes.py` re-scopes agents registered
-  before (report only by default; `--apply` updates Grantex, then storage).
+  before (report only by default; `--apply` updates Grantex, then only
+  `config.grantex.grantex_scopes`; deleted agents are skipped and a failure
+  for one agent is reported without stopping the run).
+- `PATCH /agents/{id}` updates a registered agent's scopes on Grantex before
+  storing them, and refuses the change with a `reason_code` when Grantex
+  cannot take them (`grantex_update_failed`, `grantex_unconfigured`,
+  `scope_computation_failed`, or `scope_limit_exceeded` above 100 scopes).
+  Previously it stored scopes the registration did not have.
+- The token pool delegates only the stored scopes the agent's Grantex
+  registration also carries.
 - The token pool refreshes agent tokens by delegating from the root grant
   (`grants.delegate`) instead of an OAuth grant type the Grantex auth service
   does not serve.
