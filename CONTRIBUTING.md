@@ -166,6 +166,25 @@ the scan fails again.
 3. Register in `core/agents/registry.py`
 4. Add authorized tool scopes in agent config
 5. Write tests covering all processing steps
+
+### Prompt tool references
+
+Every tool a built-in prompt tells the model to call (`call x(...)`, `x()`, or a
+snake_case `x(...)` outside the `Token scope:` block) must be registered by a
+connector and be in that agent type's list in `_AGENT_TYPE_DEFAULT_TOOLS`
+(`api/v1/agents.py`); every name in the default lists must be registered, and a
+`connector:tool` name must resolve to that connector. A prompt maps to the agent
+type named by its file stem, or by the stem without `_agent`.
+
+```bash
+python scripts/check_prompt_tools.py
+```
+
+It runs in CI, in `scripts/preflight.sh` and as
+`tests/unit/test_prompt_tool_references.py`, with no baseline. When it fails,
+rewrite the prompt step to use a tool the agent has, or to work from the task
+input and escalate to human review when the data is missing. Do not add tools
+to a default list to make a prompt pass.
 
 ### Agent Lifecycle Rules
 
