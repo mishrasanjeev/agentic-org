@@ -39,8 +39,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `docs/testing/record-replay.md` and ADR 0008.
 - Connectors and agents can ship as separate packages through the
   `agenticorg.connectors` and `agenticorg.agents` entry-point groups
-  (`agenticorg.providers` and `agenticorg.workflows` are discovered and
-  rejected until their registries exist). Off by default
+  (`agenticorg.workflows` is discovered and rejected until its registry
+  exists). Off by default
   (`AGENTICORG_PLUGIN_LOADING`); only distributions in
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
@@ -56,6 +56,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   fails on a fixture without a schema, and checks that documentation code
   examples match the tests they come from. The schemas are not seeded into
   tenant schema registries. See `docs/schemas/domain-schemas.md`.
+- `VerificationProvider` (`connectors/framework/verification_provider.py`):
+  one provider-neutral interface for business resolution, verification,
+  ownership, person and business screening, web presence and monitoring.
+  Providers declare a `Capability` set and callers degrade an undeclared
+  capability to `not_available` (`call_capability`); verification is
+  start-and-poll with `Pending` as a value; every I/O method takes a
+  `Deadline`; errors form a closed taxonomy with reason codes; webhook
+  verification returns `None` for anything unverifiable. Typed domain values
+  serialise to the published schemas. Providers register in
+  `connectors/providers/registry.py`, and plugin packages add them through the
+  `agenticorg.providers` entry-point group (still behind
+  `AGENTICORG_PLUGIN_LOADING` and the allowlist; natives keep priority). See
+  ADR 0009 and `docs/providers/plugin-packages.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

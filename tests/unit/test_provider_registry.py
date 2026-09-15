@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The providers registry."""
+"""The providers registry and loading providers from the ``agenticorg.providers`` entry-point group."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from connectors import plugins
 from connectors.framework.verification_provider import Capability, VerificationProvider
 from connectors.providers.registry import ProviderRegistry, ProviderRegistryError
 
@@ -103,3 +105,57 @@ def test_a_factory_returning_a_malformed_provider_fails_closed(factory: Callable
     with pytest.raises(ProviderRegistryError) as caught:
         ProviderRegistry.create("acme_kyb")
     assert caught.value.reason == "invalid_provider"
+
+
+# --- entry-point loading ------------------------------------------------------------------------
+
+
+@dataclass
+class _Dist:
+    name: str
+
+
+class _EntryPoint:
+    def __init__(self, name: str, dist: str, target: Callable[[], Any]) -> None:
+        self.name = name
+        self.dist = _Dist(dist)
+        self._target = target
+        self.loaded = False
+
+    def load(self) -> Any:
+        self.loaded = True
+        return self._target()
+
+
+def _providers_group(*eps: _EntryPoint) -> Callable[..., list[_EntryPoint]]:
+    return lambda *, group: list(eps) if group == plugins.PROVIDERS_GROUP else []
+
+
+def test_allowlisted_provider_plugin_is_registered() -> None:
+    ep = _EntryPoint("acme_kyb", "acme-kyb-agenticorg", lambda: AcmeKybProvider)
+    results = plugins.load_plugins(enabled=True, allowlist={"acme-kyb-agenticorg"}, entry_points=_providers_group(ep))
+    assert [(r.loaded, r.reason, r.detail) for r in results] == [(True, "loaded", "acme_kyb")]
+    registration = ProviderRegistry.get("acme_kyb")
+    assert registration is not None and registration.source == "plugin"
+
+
+def test_provider_plugin_outside_the_allowlist_is_not_imported() -> None:
+    ep = _EntryPoint("acme_kyb", "acme-kyb-agenticorg", lambda: AcmeKybProvider)
+    results = plugins.load_plugins(enabled=True, allowlist=set(), entry_points=_providers_group(ep))
+    assert results[0].reason == "not_allowlisted" and ep.loaded is False
+    assert ProviderRegistry.get("acme_kyb") is None
+
+
+def test_provider_plugin_of_the_wrong_type_is_rejected() -> None:
+    ep = _EntryPoint("acme_kyb", "acme-kyb-agenticorg", lambda: object)
+    results = plugins.load_plugins(enabled=True, allowlist={"acme-kyb-agenticorg"}, entry_points=_providers_group(ep))
+    assert results[0].reason == "invalid_type"
+
+
+def test_native_provider_keeps_priority_over_a_provider_plugin() -> None:
+    ProviderRegistry.register_native("acme_kyb", AcmeKybProvider)
+    impostor = type("Impostor", (AcmeKybProvider,), {})
+    ep = _EntryPoint("impostor", "acme-kyb-agenticorg", lambda: impostor)
+    results = plugins.load_plugins(enabled=True, allowlist={"acme-kyb-agenticorg"}, entry_points=_providers_group(ep))
+    assert results[0].reason == "name_conflict"
+    assert ProviderRegistry.create("acme_kyb").__class__ is AcmeKybProvider
