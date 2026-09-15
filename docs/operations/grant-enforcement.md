@@ -153,8 +153,8 @@ call in the tenant's mode:
 | Entry point | How the grant is resolved | `runtime` |
 |---|---|---|
 | `POST /agents/{id}/run` | the agent's grant, resolved once for the run | `langgraph`; `deterministic_tds` for the shadow TDS route |
-| Chat (`POST /chat/query`) | the caller's Grantex token, else the routed agent's grant | `langgraph`; `deterministic_tds` for the TDS route |
-| A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the caller's Grantex token, else the grant of the shared agent of that type the route takes connector bindings from | `langgraph` |
+| Chat (`POST /chat/query`) | the routed agent's grant; a caller Grantex token issued to that agent is used as it, a caller token for any other agent must **also** allow every call | `langgraph`; `deterministic_tds` for the TDS route |
+| A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the grant of the shared agent of that type the route takes connector bindings from; a caller token is bound the same way as for chat | `langgraph` |
 | Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first | `langgraph` |
 | `core.langgraph.runner.resume_agent` | resolved again on resume; in warn/deny the fresh token replaces the checkpointed one | `langgraph` |
 | Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline | `BaseAgent` resolves the agent's grant on its first tool call; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
@@ -166,6 +166,16 @@ a type with no shared agent all have no grant, so each tool call is recorded as
 `grant_missing` (`no_agent`) in warn and refused in deny. Check the warn-mode
 report for these before moving a tenant to deny.
 
-In the `ToolGateway`, a call warn allows without the grant covering it still
-goes through the gateway's legacy scope checks, so warn never skips a check
-`off` makes.
+**Caller tokens never stand in for the run agent.** A Grantex token a request
+authenticated with belongs to the agent it was issued to
+(`agenticorg:agent_id`). When that is the agent the run executes as, it is the
+run grant. Otherwise the run agent's own grant is resolved as usual and every
+tool call must be allowed by both: the caller token strictly (as before), the
+run agent's grant in the tenant's mode. A caller can therefore never run
+another agent - or an A2A/MCP agent type with its default tools - on the
+strength of its own scopes. A denial by the caller token is logged with
+`grant_source=caller`.
+
+In the `ToolGateway` the grant check runs first and then every legacy check
+runs exactly as in `off`, including strict enforcement of a token passed to the
+gateway, so enforcement never skips or downgrades a check `off` makes.

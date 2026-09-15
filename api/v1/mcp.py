@@ -219,7 +219,8 @@ async def call_tool(
         tenant_id=tenant_id,
         agent_type=agent_type,
         company_id=company_uuid,
-        supplied_token=grant_token,
+        caller_token=grant_token,
+        caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
         runtime="mcp",
     )
 

@@ -11,7 +11,7 @@ from typing import Any
 import structlog
 
 from auth.grant_enforcement import EnforcementMode
-from auth.run_grants import RunGrant, resolve_run_grant
+from auth.run_grants import RunGrant, refresh_run_grant, resolve_run_grant
 from core.llm.router import LLMResponse, llm_router
 from core.schemas.messages import (
     DecisionOption,
@@ -516,6 +516,7 @@ class BaseAgent:
                 grant_token=getattr(self, "grant_token", None),
                 run_grant=run_grant,
                 agent_id=str(self.agent_id or ""),
+                agent_type=str(self.agent_type or ""),
             )
 
         gateway_args: dict[str, Any] = {
@@ -536,10 +537,16 @@ class BaseAgent:
             # Only passed when enforcement is on, so gateways that predate
             # ``run_grant`` keep working unchanged in ``off``.
             gateway_args["run_grant"] = run_grant
+            gateway_args["agent_type"] = str(self.agent_type or "")
         return await self.tool_gateway.execute(**gateway_args)
 
     async def _run_grant_for_calls(self) -> RunGrant:
-        """Resolve (once per agent instance) the grant tool calls are checked against."""
+        """Resolve (once per agent instance) the grant tool calls are checked against.
+
+        A pool-issued grant is refreshed before each call once it falls below
+        the minimum remaining lifetime, so long runs never call with an
+        expiring grant.
+        """
         if self._run_grant is None:
             self._run_grant = await resolve_run_grant(
                 tenant_id=self.tenant_id,
@@ -547,6 +554,8 @@ class BaseAgent:
                 supplied_token=getattr(self, "grant_token", None) or "",
                 runtime="base_agent",
             )
+        else:
+            self._run_grant = await refresh_run_grant(self._run_grant)
         return self._run_grant
 
     def _make_result(

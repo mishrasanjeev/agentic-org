@@ -66,6 +66,12 @@ class RunGrant:
     agent_id: str = ""
     grantex_agent_id: str = ""
     scopes: tuple[str, ...] = ()
+    # A Grantex token the caller authenticated with that belongs to a
+    # different agent than the one this run executes. Every tool call must be
+    # allowed by BOTH this token and the run agent's grant (``check_run_grant``),
+    # so a caller can never borrow another agent's tools or grant.
+    caller_token: str = field(default="", repr=False)
+    caller_agent_id: str = ""
 
     @property
     def call_mode(self) -> EnforcementMode:
@@ -109,14 +115,56 @@ async def resolve_run_grant(
     grantex_config: Mapping[str, Any] | None = None,
     mode: EnforcementMode | None = None,
     runtime: str = "",
+    caller_token: str | None = "",
+    caller_agent_id: str | None = "",
 ) -> RunGrant:
-    """Resolve the enforcement mode and grant token for one agent run."""
+    """Resolve the enforcement mode and grant token for one agent run.
+
+    ``supplied_token`` belongs to the run agent. ``caller_token`` is a Grantex
+    token the request authenticated with, issued to ``caller_agent_id``: when
+    that is the run agent it is used as the run grant; otherwise the run
+    agent's own grant is resolved as usual and the caller token is kept
+    alongside it, so both must allow every tool call.
+    """
     if mode is None:
         mode = await resolve_enforcement_mode(tenant_id)
     supplied = (supplied_token or "").strip()
+    caller = (caller_token or "").strip()
 
     if mode is EnforcementMode.OFF:
-        return RunGrant(mode=mode, token=supplied_token or "", source="supplied" if supplied else "")
+        legacy_token = supplied_token or caller_token or ""
+        return RunGrant(mode=mode, token=legacy_token, source="supplied" if legacy_token.strip() else "")
+    if caller and not supplied and caller_agent_id and str(caller_agent_id) == str(agent_id or ""):
+        supplied, caller = caller, ""
+    grant = await _resolve_run_agent_grant(
+        mode=mode,
+        tenant_id=tenant_id,
+        agent_id=agent_id,
+        supplied=supplied,
+        grantex_config=grantex_config,
+        runtime=runtime,
+    )
+    if caller:
+        logger.info(
+            "grant_resolution_caller_token_bound",
+            mode=mode.value,
+            agent_id=str(agent_id or ""),
+            caller_agent_id=str(caller_agent_id or ""),
+            runtime=runtime,
+        )
+        grant = replace(grant, caller_token=caller, caller_agent_id=str(caller_agent_id or ""))
+    return grant
+
+
+async def _resolve_run_agent_grant(
+    *,
+    mode: EnforcementMode,
+    tenant_id: str | None,
+    agent_id: str | None,
+    supplied: str,
+    grantex_config: Mapping[str, Any] | None,
+    runtime: str,
+) -> RunGrant:
     if supplied:
         return RunGrant(mode=mode, token=supplied, source="supplied")
 
@@ -233,7 +281,24 @@ async def check_run_grant(
     amount: float | None = None,
     client_factory: Callable[[], Any] | None = None,
 ) -> GrantCheck:
-    """Check one tool call against a run grant in ``warn`` or ``deny`` mode."""
+    """Check one tool call against a run grant in ``warn`` or ``deny`` mode.
+
+    With a ``caller_token`` the call must be allowed by the caller's token
+    first - always strictly, because the legacy path enforced caller tokens
+    strictly - and then by the run agent's grant in the run's mode.
+    """
+    if run_grant.caller_token:
+        caller_check = await check_tool_grant(
+            mode=EnforcementMode.DENY,
+            grant_token=run_grant.caller_token,
+            connector=connector,
+            tool=tool,
+            context=replace(context, grant_source="caller"),
+            amount=amount,
+            client_factory=client_factory,
+        )
+        if not caller_check.dispatch_allowed:
+            return caller_check
     return await check_tool_grant(
         mode=run_grant.call_mode,
         grant_token=run_grant.token,

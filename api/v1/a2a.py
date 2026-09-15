@@ -237,7 +237,8 @@ async def create_task(
             tenant_id=tenant_id,
             agent_type=body.agent_type,
             company_id=company_uuid,
-            supplied_token=grant_token,
+            caller_token=grant_token,
+            caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
             runtime="a2a",
         )
         result = await langgraph_run(

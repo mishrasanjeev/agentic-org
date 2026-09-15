@@ -736,12 +736,14 @@ async def chat_query(
         # to the LLM and let the user get an answer somehow.
         _log.warning("chat_tds_route_helper_raised", error=str(exc), exc_info=True)
         det = None
-    # PRD F-1: the chat run's grant — the caller's, else the routed agent's.
+    # PRD F-1: the chat run's grant is the routed agent's; a caller Grantex
+    # token for another agent must also allow every tool call.
     # Resolved once for the deterministic TDS route and the LangGraph run.
     run_grant = await resolve_run_grant(
         tenant_id=tenant_id,
         agent_id=agent_id or "",
-        supplied_token=getattr(request.state, "grant_token", None),
+        caller_token=getattr(request.state, "grant_token", None),
+        caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
         runtime="chat",
     )
     if det is not None and not await direct_tool_call_permitted(

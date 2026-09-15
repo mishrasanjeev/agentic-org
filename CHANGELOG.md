@@ -135,12 +135,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   keyword `run_grant`, so a graph can no longer be built with grant
   enforcement silently left off.
 - Grant enforcement now covers every agent run entry point: chat, A2A and
-  MCP (the caller's Grantex token, else the type's shared agent), voice and
+  MCP (the run agent's grant; a caller Grantex token issued to another agent
+  must also allow every call), voice and
   per-type wrappers through the runner, `resume_agent`, and workflow agent
   steps, collaboration steps, workflow resume and the sales pipeline through
   `BaseAgent` and the tool gateway. Workflow `connector_tool` steps have no
-  agent and therefore no grant: recorded in `warn`, refused in `deny`.
-  `off` is unchanged.
+  agent and therefore no grant: recorded in `warn`, refused in `deny`. In
+  warn and deny the tool gateway runs the grant check and all of its legacy
+  checks. `off` is unchanged.
 
 ### Fixed
 - Four shipped industry-pack agents no longer send every run to human review.
