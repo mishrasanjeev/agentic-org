@@ -5,6 +5,36 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Untrusted content extractor (`core/extraction/`): websites, registry
+  documents and applicant uploads are parsed in a separate worker process
+  with no network access and a wall-clock limit (on Linux a seccomp filter is
+  required by default; an audit hook, resource limits and a network namespace
+  are added where available) and return typed, length-capped,
+  character-class-constrained fields only. Excerpts are stored separately and
+  cited by `excerpt_ref`. Timeouts, crashes, oversized or off-schema output
+  fail closed with a reason code and no fields. `build_model_context` renders
+  evidence for a model with untrusted text replaced by references, and the
+  new optional `build_agent_graph(context_guard=...)` stops a run before any
+  model call that would carry untrusted text. Metrics
+  `agenticorg_extraction_total{kind,outcome}` and
+  `agenticorg_extraction_duration_seconds{kind}`. Nothing calls the extractor
+  yet and `context_guard` defaults to `None`, so existing behaviour is
+  unchanged. PDF and office documents are refused, not parsed. See
+  `docs/security/untrusted-content.md`.
+- Deterministic case policy engine (`core/policy/`): versioned YAML policies
+  evaluated over a case's evidence fields into a tier (`low` < `medium` <
+  `high` < `blocked`), a score and ordered reasons naming the rules that fired,
+  with the policy version, file hash and inputs recorded in every result. No
+  model is involved and model confidence is never an input. Policies load
+  strictly and fail closed at load with a reason code; missing evidence moves
+  a case towards the stricter tier. A policy can only be marked `production`
+  with `reviewed_by`, and loading an example policy logs a warning. Ships
+  `business_onboarding_us` and `business_onboarding_uk` **examples, which
+  require a compliance owner's review before any real use**. Metrics
+  `agenticorg_policy_evaluations_total{tier,policy_status}` and
+  `agenticorg_policy_load_total{outcome,reason}`. Nothing calls the engine
+  yet, so existing behaviour is unchanged. See `docs/policies/authoring.md`
+  and ADR 0011.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
@@ -50,13 +80,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (default `memory`, unchanged behaviour). A new migration
   (`v6z22_langgraph_checkpoints`) creates the LangGraph checkpoint tables;
   they are not created at runtime. Checkpoint data is encrypted with the
-  credential-vault keyring; no channel value is stored in plaintext. With the
-  Postgres store selected and unreachable, or its schema missing or stale,
-  the API refuses to start and agent runs fail (the run endpoint returns
+  credential-vault keyring and bound to its thread, so a blob copied into
+  another thread is refused; no channel value is stored in plaintext. With
+  the Postgres store selected and unreachable, its schema missing or stale,
+  its keyring malformed, or an unverified checkpoint library installed, the
+  API refuses to start and agent runs fail (the run endpoint returns
   `503 agent_checkpoint_store_unavailable`); nothing falls back to memory.
-  Refusals are counted in `agenticorg_checkpointer_unavailable_total` by
-  reason. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool` 3.3.1 as direct
-  dependencies.
+  Celery workers open the store on their first agent run, so a store outage
+  fails those runs but never stops a worker from starting. Refusals are
+  counted in `agenticorg_checkpointer_unavailable_total` by reason. A keyring
+  change needs a restart of the API and workers.
+  `core.langgraph.checkpointer.delete_tenant_checkpoints` removes a tenant's
+  checkpoints for offboarding. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool`
+  3.3.1 as direct dependencies and pins `langgraph-checkpoint-postgres` 3.1.2
+  and `langgraph-checkpoint` 4.2.0 exactly (previously `>=3.1.2` and
+  unpinned).
 - Agent runs checkpoint under a server-generated thread id prefixed with the
   run's tenant (`tenant:<tenant id>:run:<random>`). A run paused for approval
   records that thread on its approval row (`hitl_queue.checkpoint_thread_id`,
@@ -69,6 +107,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- Recognisers for United States SSN, ITIN and EIN, United Kingdom National
+  Insurance and Companies House numbers, European VAT numbers and IBANs
+  (`core/pii/international_recognizers.py`), alongside the Indian ones. IBANs
+  must pass mod 97 and VAT numbers their national check digits where the
+  scheme has one (17 country prefixes); shapes that are otherwise ordinary
+  numbers are only recognised next to a label such as "SSN" or "company
+  number". Nothing uses them yet, so behaviour is unchanged; pre-model
+  pseudonymisation builds on them.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy
