@@ -37,11 +37,14 @@ import inspect
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from core.config import external_keys, is_relaxed_env, settings
+
+if TYPE_CHECKING:
+    from core.pii.pseudonymiser import PseudonymSession
 
 logger = structlog.get_logger()
 
@@ -505,8 +508,18 @@ class LLMRouter:
         temperature: float | None = None,
         max_tokens: int = 4096,
         tenant_id: str | None = None,
+        pseudonymiser: PseudonymSession | None = None,
     ) -> LLMResponse:
-        """Send completion request with automatic failover."""
+        """Send completion request with automatic failover.
+
+        With ``pseudonymiser`` (flag ``pseudonymisation.pre_model``) every
+        message, the system prompt included, is pseudonymised before the
+        primary or fallback model sees it. The response keeps the tokens; the
+        caller restores them at the tool boundary and in its final output. A
+        pseudonymisation failure raises before any model is called.
+        """
+        if pseudonymiser is not None:
+            messages = await pseudonymiser.pseudonymise_router_messages(messages)
         model = model_override or self.primary_model
         temp = temperature if temperature is not None else self.temperature
         # Only forward tenant_id when set so existing _call_model call shapes stay stable.

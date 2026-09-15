@@ -43,6 +43,7 @@ from core.models.capability_readiness import (
 from core.models.capability_readiness import (
     CapabilityReadinessRecord as CapabilityReadinessRecord,
 )
+from core.models.case_pseudonym_map import CasePseudonymMap as CasePseudonymMap
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument

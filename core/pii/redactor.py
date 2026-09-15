@@ -311,6 +311,17 @@ class PIIRedactor:
             logger.debug("pii_redacted", entities_found=len(token_map))
         return text, token_map
 
+    def find_entities(self, text: str, entities: list[str]) -> list[tuple[int, int, str]]:
+        """``(start, end, entity_type)`` spans the NLP analyser finds, regardless of mode.
+
+        Empty when the analyser is not installed (relaxed runtimes only; strict
+        runtimes refuse to construct the redactor without it).
+        """
+        if self._analyzer is None or not text:
+            return []
+        results = self._analyzer.analyze(text=text, language="en", entities=entities)
+        return [(result.start, result.end, result.entity_type) for result in results]
+
     def deanonymize(self, text: str, token_map: dict[str, str]) -> str:
         """Restore original PII values in *text* using *token_map*.
 

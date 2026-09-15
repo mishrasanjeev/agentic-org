@@ -25,7 +25,8 @@ class TestAgentState:
         assert "grant_token" in fields
         assert "hitl_trigger" in fields
         assert "output" in fields
-        assert len(fields) == 13
+        assert "pseudonym_case_id" in fields
+        assert len(fields) == 14
 
 
 # ═══════════════════════════════════════════════════════════════════════════
