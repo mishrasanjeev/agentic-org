@@ -85,7 +85,7 @@ def _read(evidence: Mapping[str, Any], segments: tuple[str, ...]) -> Any:
             if not isinstance(node, Mapping) or segment not in node:
                 return _MISSING
             node = node[segment]
-    # enterprise-gate: broad-except-ok reason=unreadable-evidence-fires-rule-towards-stricter-tier
+    # enterprise-gate: broad-except-ok reason=unreadable-evidence-fails-closed-rule-fires-as-indeterminate
     except Exception as exc:
         # Evidence that cannot be read must not stop evaluation or pass: the
         # path is recorded as unusable and every rule reading it fires.
