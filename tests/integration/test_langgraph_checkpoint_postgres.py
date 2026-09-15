@@ -262,6 +262,94 @@ def test_unencrypted_checkpoint_rows_are_refused(
     assert exc_info.value.reason == "checkpoint_not_encrypted"
 
 
+def _count_sql(schema: str, table: str) -> Any:
+    from psycopg import sql
+
+    return sql.SQL("SELECT count(*) FROM {schema}.{table} WHERE thread_id = %s").format(
+        schema=sql.Identifier(schema), table=sql.Identifier(table)
+    )
+
+
+TENANT_A = "0000000a-0000-4000-8000-00000000000a"
+TENANT_B = "0000000b-0000-4000-8000-00000000000b"
+
+
+def _pause_two_tenants(scratch_schema: str, monkeypatch: pytest.MonkeyPatch, scripted_model: Any) -> tuple[dict, dict]:
+    _apply_migration(scratch_schema)
+    _use_store(monkeypatch, scratch_schema)
+    scripted_model([final({"status": "completed", "confidence": 0.95, "total": 750000})] * 2)
+    config_a = {"configurable": {"thread_id": f"tenant:{TENANT_A}:run:{uuid.uuid4().hex}"}}
+    config_b = {"configurable": {"thread_id": f"tenant:{TENANT_B}:run:{uuid.uuid4().hex}"}}
+
+    async def _pause() -> None:
+        try:
+            saver = await cp.get_checkpointer()
+            for config in (config_a, config_b):
+                await _graph().compile(checkpointer=saver).ainvoke(_initial_state(), config)
+        finally:
+            await cp.close_checkpointer()
+
+    _run(_pause())
+    return config_a, config_b
+
+
+def test_blob_copied_to_another_tenants_thread_is_refused(
+    scratch_schema: str, monkeypatch: pytest.MonkeyPatch, scripted_model: Any
+) -> None:
+    config_a, config_b = _pause_two_tenants(scratch_schema, monkeypatch, scripted_model)
+    with _sync_conn() as conn:
+        # Tenant A's encrypted grant token written over tenant B's, byte for byte.
+        conn.execute(
+            _in_schema(
+                "UPDATE {schema}.checkpoint_blobs AS b SET type = a.type, blob = a.blob "
+                "FROM {schema}.checkpoint_blobs AS a "
+                "WHERE a.thread_id = %s AND b.thread_id = %s "
+                "AND a.channel = 'grant_token' AND b.channel = 'grant_token'",
+                scratch_schema,
+            ),
+            (config_a["configurable"]["thread_id"], config_b["configurable"]["thread_id"]),
+        )
+
+    async def _load(config: dict) -> Any:
+        try:
+            return await _graph().compile(checkpointer=await cp.get_checkpointer()).aget_state(config)
+        finally:
+            await cp.close_checkpointer()
+
+    with pytest.raises(cp.CheckpointIntegrityError) as exc_info:
+        _run(_load(config_b))
+    assert exc_info.value.reason == "checkpoint_binding_mismatch"
+    # The source thread is untouched and still loads.
+    assert _run(_load(config_a)).values["grant_token"] == GRANT_SENTINEL
+
+
+def test_tenant_offboarding_deletes_only_that_tenants_checkpoints(
+    scratch_schema: str, monkeypatch: pytest.MonkeyPatch, scripted_model: Any
+) -> None:
+    config_a, config_b = _pause_two_tenants(scratch_schema, monkeypatch, scripted_model)
+
+    async def _delete() -> int:
+        try:
+            return await cp.delete_tenant_checkpoints(TENANT_A)
+        finally:
+            await cp.close_checkpointer()
+
+    assert _run(_delete()) == 1
+    with _sync_conn() as conn:
+        counts = {
+            table: {
+                thread: conn.execute(
+                    _count_sql(scratch_schema, table),
+                    (config["configurable"]["thread_id"],),
+                ).fetchone()[0]
+                for thread, config in (("a", config_a), ("b", config_b))
+            }
+            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
+        }
+    assert all(per_thread["a"] == 0 for per_thread in counts.values()), counts
+    assert all(per_thread["b"] > 0 for per_thread in counts.values()), counts
+
+
 def test_missing_or_stale_checkpoint_schema_is_refused(scratch_schema: str, monkeypatch: pytest.MonkeyPatch) -> None:
     _use_store(monkeypatch, scratch_schema)
 

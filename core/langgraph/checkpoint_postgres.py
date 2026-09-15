@@ -11,14 +11,20 @@ channel values inline into the ``checkpoints.checkpoint`` JSONB column,
 bypassing the serializer. Agent state carries the grant token as a string, so
 the stock saver would persist a bearer credential in plaintext.
 ``SealedAsyncPostgresSaver`` sends every channel value through the (encrypting)
-serializer into ``checkpoint_blobs`` instead. The override mirrors ``aput`` of
-langgraph-checkpoint-postgres 3.1.2; ``tests/unit/test_langgraph_checkpointer.py``
-pins that version so an upgrade is reviewed against this copy.
+serializer into ``checkpoint_blobs`` instead, and binds every serializer call
+to the thread and namespace it reads or writes (``checkpoint_binding``).
+
+The overrides mirror langgraph-checkpoint-postgres 3.1.2 and import a private
+type of langgraph-checkpoint 4.2.0. Both are pinned exactly in pyproject and
+requirements, and ``open_sealed_saver`` refuses to start
+(``checkpoint_library_unverified``) with any other installed version.
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 import psycopg
@@ -27,6 +33,8 @@ from langgraph.checkpoint.base import (
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
+    CheckpointTuple,
+    DeltaChannelHistory,
     get_serializable_checkpoint_metadata,
 )
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -36,9 +44,24 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, PoolTimeout
 
-from core.langgraph.checkpointer import CheckpointerUnavailableError
+from core.langgraph.checkpointer import CheckpointerUnavailableError, checkpoint_binding
 
 CHECKPOINT_TABLES = ("checkpoint_migrations", "checkpoints", "checkpoint_blobs", "checkpoint_writes")
+# The exact versions SealedAsyncPostgresSaver was written and tested against.
+VERIFIED_LIBRARY_VERSIONS = {"langgraph-checkpoint-postgres": "3.1.2", "langgraph-checkpoint": "4.2.0"}
+
+
+def verify_library_versions() -> None:
+    """Refuse to run the sealed saver on a checkpoint library it was not verified against."""
+    for package, expected in VERIFIED_LIBRARY_VERSIONS.items():
+        try:
+            installed = version(package)
+        except PackageNotFoundError:
+            installed = "missing"
+        if installed != expected:
+            raise CheckpointerUnavailableError(
+                "checkpoint_library_unverified", f"{package} is {installed}, verified {expected}"
+            )
 
 
 class SealedAsyncPostgresSaver(AsyncPostgresSaver):
@@ -98,6 +121,59 @@ class SealedAsyncPostgresSaver(AsyncPostgresSaver):
             )
         return next_config
 
+    # Every serializer call happens inside a binding to the thread it belongs to.
+
+    def _dump_blobs(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        values: dict[str, Any],
+        versions: ChannelVersions,
+    ) -> list[tuple[str, str, str, str, str, bytes | None]]:
+        with checkpoint_binding(thread_id, checkpoint_ns):
+            return super()._dump_blobs(thread_id, checkpoint_ns, values, versions)
+
+    def _dump_writes(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        task_id: str,
+        task_path: str,
+        writes: Sequence[tuple[str, Any]],
+    ) -> list[tuple[str, str, str, str, str, int, str, str, bytes]]:
+        with checkpoint_binding(thread_id, checkpoint_ns):
+            return super()._dump_writes(thread_id, checkpoint_ns, checkpoint_id, task_id, task_path, writes)
+
+    async def _load_checkpoint_tuple(self, value: Any) -> CheckpointTuple:
+        # asyncio.to_thread (used for the pending writes) copies this context.
+        with checkpoint_binding(value["thread_id"], value["checkpoint_ns"]):
+            return await super()._load_checkpoint_tuple(value)
+
+    async def aget_delta_channel_history(
+        self, *, config: RunnableConfig, channels: Sequence[str]
+    ) -> Mapping[str, DeltaChannelHistory]:
+        configurable = config["configurable"]
+        with checkpoint_binding(configurable["thread_id"], configurable.get("checkpoint_ns", "")):
+            return await super().aget_delta_channel_history(config=config, channels=channels)
+
+
+async def delete_threads_with_prefix(pool: AsyncConnectionPool[Any], prefix: str) -> int:
+    """Delete every checkpoint row whose thread id starts with ``prefix``. Returns the threads removed."""
+    async with pool.connection() as conn, conn.transaction(), conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(DISTINCT thread_id) AS threads FROM checkpoints WHERE starts_with(thread_id, %s)",
+            (prefix,),
+        )
+        row = await cur.fetchone()
+        for statement in (
+            "DELETE FROM checkpoint_writes WHERE starts_with(thread_id, %s)",
+            "DELETE FROM checkpoint_blobs WHERE starts_with(thread_id, %s)",
+            "DELETE FROM checkpoints WHERE starts_with(thread_id, %s)",
+        ):
+            await cur.execute(statement, (prefix,))
+    return int(row["threads"]) if row else 0
+
 
 async def _verify_schema(pool: AsyncConnectionPool[Any], expected_version: int) -> None:
     async with pool.connection() as conn, conn.cursor() as cur:
@@ -135,6 +211,7 @@ async def open_sealed_saver(
 
     Raises ``CheckpointerUnavailableError``; the pool is closed on every failure.
     """
+    verify_library_versions()
     pool: AsyncConnectionPool[Any] = AsyncConnectionPool(
         conninfo,
         min_size=1,

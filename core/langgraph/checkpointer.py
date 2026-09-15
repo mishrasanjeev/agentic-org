@@ -8,24 +8,38 @@
 * ``postgres``: checkpoints live in the tables created by the
   ``v6z22_langgraph_checkpoints`` Alembic revision, reached through a psycopg
   connection pool. Every channel value is serialized and encrypted with the
-  credential-vault keyring before it is written (``SealedSerializer``), and a
-  checkpoint that is not encrypted, or does not decrypt, is refused.
+  credential-vault keyring before it is written (``SealedSerializer``). The
+  encrypted payload is bound to its thread and namespace, so a blob copied to
+  another thread (another tenant) is refused; so is a checkpoint that is not
+  encrypted or does not decrypt.
 
-The Postgres backend fails closed. If the pool cannot connect or the schema is
-missing or at the wrong version, ``CheckpointerUnavailableError`` is raised
-with a reason code: at API startup (``api/main.py`` lifespan), at worker
-startup (``core/tasks/celery_app.py``) and on every later attempt to run an
-agent. It never falls back to process memory.
+The Postgres backend fails closed. If the installed checkpoint library is not
+the verified version, the keyring is invalid, the pool cannot connect, or the
+schema is missing or at the wrong version, ``CheckpointerUnavailableError`` is
+raised with a reason code: at API startup (``api/main.py`` lifespan) and on
+every attempt to run an agent. It never falls back to process memory.
 
 The pool is bound to the event loop that opened it. The API opens it in the
-lifespan loop and each Celery worker process in its persistent
-``core.tasks.async_runner`` loop; a caller on any other live loop gets
-``checkpoint_event_loop_mismatch`` rather than a pool it cannot use.
+lifespan loop. Celery workers open it lazily, on the first agent run, in the
+worker process's persistent ``core.tasks.async_runner`` loop: opening it in
+``worker_process_init`` would block the child past Celery's start-up
+deadline whenever the store is slow, and an outage would kill every worker.
+A caller on any other live loop gets ``checkpoint_event_loop_mismatch``
+rather than a pool it cannot use.
+
+The keyring is read when the store opens: a keyring change needs a restart of
+the API and every worker.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
+import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -34,8 +48,7 @@ import structlog
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.serde.base import CipherProtocol
-from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+from langgraph.checkpoint.serde.base import CipherProtocol, SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from prometheus_client import Counter
 
@@ -63,7 +76,7 @@ class CheckpointerUnavailableError(RuntimeError):
 
 
 class CheckpointIntegrityError(ValueError):
-    """A stored checkpoint is not encrypted or does not decrypt. ``reason`` is a stable code."""
+    """A stored checkpoint is refused (unencrypted, undecryptable or bound elsewhere). ``reason`` is a stable code."""
 
     def __init__(self, reason: str) -> None:
         self.reason = reason
@@ -92,20 +105,71 @@ class VaultKeyringCipher(CipherProtocol):
             raise CheckpointIntegrityError("checkpoint_decrypt_failed") from exc
 
 
-class SealedSerializer(EncryptedSerializer):
-    """``EncryptedSerializer`` that refuses to load anything that was stored unencrypted."""
+# The (thread_id, checkpoint_ns) the saver is currently writing or reading.
+_BINDING: ContextVar[bytes | None] = ContextVar("agenticorg_checkpoint_binding", default=None)
+_BINDING_SIZE = hashlib.sha256().digest_size
+
+
+@contextmanager
+def checkpoint_binding(thread_id: str, checkpoint_ns: str) -> Iterator[None]:
+    """Bind serializer calls inside the block to one thread and namespace."""
+    digest = hashlib.sha256(
+        b"agenticorg-checkpoint-v1\x00" + thread_id.encode("utf-8") + b"\x00" + checkpoint_ns.encode("utf-8")
+    ).digest()
+    token = _BINDING.set(digest)
+    try:
+        yield
+    finally:
+        _BINDING.reset(token)
+
+
+def _current_binding() -> bytes:
+    binding = _BINDING.get()
+    if binding is None:
+        raise CheckpointIntegrityError("checkpoint_binding_missing")
+    return binding
+
+
+class SealedSerializer(SerializerProtocol):
+    """Encrypting serializer that binds each payload to its thread and refuses anything else.
+
+    The thread binding (a SHA-256 of thread id and namespace) is encrypted
+    together with the serialized value, so Fernet's MAC covers it: a blob moved
+    to another thread decrypts but fails the binding check.
+    """
+
+    def __init__(self, cipher: VaultKeyringCipher, serde: SerializerProtocol | None = None) -> None:
+        self.cipher = cipher
+        self.serde = serde or JsonPlusSerializer()
+
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        binding = _current_binding()
+        type_name, data = self.serde.dumps_typed(obj)
+        ciphername, ciphertext = self.cipher.encrypt(binding + data)
+        return f"{type_name}+{ciphername}", ciphertext
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
-        type_name = data[0]
+        type_name, ciphertext = data
         if "+" not in type_name:
             raise CheckpointIntegrityError("checkpoint_not_encrypted")
-        return super().loads_typed(data)
+        inner_type, ciphername = type_name.split("+", 1)
+        binding = _current_binding()
+        plaintext = self.cipher.decrypt(ciphername, ciphertext)
+        if len(plaintext) < _BINDING_SIZE or not hmac.compare_digest(plaintext[:_BINDING_SIZE], binding):
+            raise CheckpointIntegrityError("checkpoint_binding_mismatch")
+        return self.serde.loads_typed((inner_type, plaintext[_BINDING_SIZE:]))
 
 
 def sealed_serializer() -> SealedSerializer:
+    """Serializer over the current credential-vault keyring. A malformed keyring is refused."""
     from core.crypto.credential_vault import _load_keyring
 
-    return SealedSerializer(VaultKeyringCipher([key for _kid, key in _load_keyring()]), JsonPlusSerializer())
+    try:
+        keys = [key for _kid, key in _load_keyring()]
+        return SealedSerializer(VaultKeyringCipher(keys), JsonPlusSerializer())
+    except (ValueError, TypeError) as exc:
+        # The message can quote a keyring entry; keep only the type.
+        raise CheckpointerUnavailableError("checkpoint_encryption_key_invalid", type(exc).__name__) from exc
 
 
 def checkpoint_conninfo(db_url: str) -> str:
@@ -158,6 +222,22 @@ def _lock_for(loop: asyncio.AbstractEventLoop) -> asyncio.Lock:
     return _open_lock[1]
 
 
+def _store_for_loop(loop: asyncio.AbstractEventLoop) -> _OpenStore | None:
+    """The open store if it belongs to ``loop``; refuses a store owned by another live loop."""
+    global _postgres_store
+    store = _postgres_store
+    if store is None or store.loop is loop:
+        return store
+    if not store.loop.is_closed():
+        raise _refuse(
+            CheckpointerUnavailableError("checkpoint_event_loop_mismatch", "the pool belongs to another event loop")
+        )
+    # The loop that owned the pool is gone and its connections with it.
+    logger.warning("langgraph_checkpointer_discarded", reason="owning_event_loop_closed")
+    _postgres_store = None
+    return None
+
+
 async def open_checkpointer() -> BaseCheckpointSaver:
     """Open the configured backend on the running loop and return its saver."""
     global _memory_saver, _postgres_store
@@ -168,8 +248,9 @@ async def open_checkpointer() -> BaseCheckpointSaver:
 
     loop = asyncio.get_running_loop()
     async with _lock_for(loop):
-        if _postgres_store is not None and _postgres_store.loop is loop:
-            return _postgres_store.saver
+        store = _store_for_loop(loop)
+        if store is not None:
+            return store.saver
         try:
             from core.langgraph.checkpoint_postgres import open_sealed_saver
 
@@ -190,36 +271,59 @@ async def open_checkpointer() -> BaseCheckpointSaver:
 
 
 async def get_checkpointer() -> BaseCheckpointSaver:
-    """Return the saver for the configured backend. Never substitutes another backend."""
-    global _postgres_store
+    """Return the saver for the configured backend, opening it on first use. Never substitutes another backend."""
     if configured_backend() != BACKEND_POSTGRES:
         return await open_checkpointer()
-    store = _postgres_store
+    store = _store_for_loop(asyncio.get_running_loop())
     if store is not None:
-        loop = asyncio.get_running_loop()
-        if store.loop is loop:
-            return store.saver
-        if not store.loop.is_closed():
-            raise _refuse(
-                CheckpointerUnavailableError(
-                    "checkpoint_event_loop_mismatch", "the pool belongs to another running event loop"
-                )
-            )
-        # The loop that owned the pool is gone and its connections with it.
-        _postgres_store = None
-    # Not opened in this process yet (a solo worker, a script): open it now.
+        return store.saver
+    # Not opened in this process yet (a worker's first run, a script): open it now.
     return await open_checkpointer()
 
 
-async def close_checkpointer() -> None:
-    """Close the Postgres pool opened by this process, if any."""
+async def close_checkpointer(timeout_seconds: float = 10.0) -> None:
+    """Close the Postgres pool opened by this process, if any, on the loop that owns it."""
     global _postgres_store
     store = _postgres_store
-    _postgres_store = None
     if store is None:
         return
-    if store.loop is not asyncio.get_running_loop():
-        logger.warning("langgraph_checkpointer_close_skipped", reason="checkpoint_event_loop_mismatch")
+    current = asyncio.get_running_loop()
+    if store.loop is current:
+        _postgres_store = None
+        await store.pool.close()
+    elif store.loop.is_closed():
+        _postgres_store = None
+        logger.warning("langgraph_checkpointer_discarded", reason="owning_event_loop_closed")
         return
-    await store.pool.close()
+    elif store.loop.is_running():
+        # Owned by a loop running in another thread: close it there.
+        _postgres_store = None
+        future = asyncio.run_coroutine_threadsafe(store.pool.close(), store.loop)
+        await asyncio.wait_for(asyncio.wrap_future(future), timeout=timeout_seconds)
+    else:
+        logger.error(
+            "langgraph_checkpointer_close_refused",
+            reason="checkpoint_event_loop_mismatch",
+            detail="the owning event loop is idle in this thread; close the store from that loop",
+        )
+        return
     logger.info("langgraph_checkpointer_closed", backend=BACKEND_POSTGRES)
+
+
+async def delete_tenant_checkpoints(tenant_id: str) -> int:
+    """Delete every checkpoint thread of ``tenant_id`` (tenant offboarding). Returns the threads removed."""
+    # Thread ids are "tenant:<canonical uuid>:..." (core/langgraph/thread_ids.py).
+    tenant = str(uuid.UUID(str(tenant_id)))
+    prefix = f"tenant:{tenant}:"
+    saver = await get_checkpointer()
+    if isinstance(saver, MemorySaver):
+        threads = [thread for thread in list(saver.storage) if thread.startswith(prefix)]
+        for thread in threads:
+            await saver.adelete_thread(thread)
+        return len(threads)
+    from core.langgraph.checkpoint_postgres import delete_threads_with_prefix
+
+    store = _postgres_store
+    if store is None:
+        raise _refuse(CheckpointerUnavailableError("checkpoint_store_unreachable", "store closed during delete"))
+    return await delete_threads_with_prefix(store.pool, prefix)
