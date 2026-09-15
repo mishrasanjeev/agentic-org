@@ -42,9 +42,11 @@ def _events(logs: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
     return [entry for entry in logs if entry["event"] == name]
 
 
-def _client(allowed: bool, reason: str = "") -> MagicMock:
+def _client(allowed: bool, reason_code: str = "") -> MagicMock:
     client = MagicMock()
-    client.enforce.return_value = MagicMock(allowed=allowed, reason=reason, grant_id="grnt_placeholder")
+    client.enforce.return_value = MagicMock(
+        allowed=allowed, reason=reason_code, reason_code=reason_code, sub_reason="", grant_id="grnt_placeholder"
+    )
     return client
 
 
@@ -211,7 +213,7 @@ async def test_gateway_warn_mode_records_the_missing_grant_and_keeps_legacy_scop
 
 async def test_gateway_deny_mode_refuses_before_the_connector():
     grant = RunGrant(mode=EnforcementMode.DENY, token=PLACEHOLDER_TOKEN, source="minted")
-    client = _client(False, "read scope does not permit write operations on hubspot.")
+    client = _client(False, "permission_insufficient")
     result, connector, logs = await _gateway_call(grant, agent_scopes=["tool:hubspot:admin"], client=client)
     assert result["error"]["code"] == "E1007"
     assert result["error"]["message"] == "grant_denied: permission_insufficient"
@@ -220,9 +222,9 @@ async def test_gateway_deny_mode_refuses_before_the_connector():
     assert [e["reason"] for e in _events(logs, "grant_enforcement_denied")] == ["permission_insufficient"]
 
 
-async def test_gateway_deny_mode_runs_a_call_the_grant_covers():
+async def test_gateway_deny_mode_runs_a_call_the_grant_and_legacy_scopes_cover():
     grant = RunGrant(mode=EnforcementMode.DENY, token=PLACEHOLDER_TOKEN, source="minted")
-    result, connector, _ = await _gateway_call(grant, agent_scopes=[], client=_client(True))
+    result, connector, _ = await _gateway_call(grant, agent_scopes=["tool:hubspot:read:contact"], client=_client(True))
     assert result == {"id": "c-1"} and len(connector.calls) == 1
 
 
@@ -362,19 +364,20 @@ async def test_resume_through_a_real_checkpoint_enforces_the_fresh_grant(scripte
 # ── Routes that resolve before running (chat, A2A, MCP) ──────────────────
 
 
-async def test_type_routes_prefer_the_callers_grant():
+async def test_type_routes_use_a_caller_token_issued_to_the_type_agent():
     from api.v1 import agents
 
-    select = AsyncMock(side_effect=AssertionError("must not look up an agent"))
+    row = MagicMock(id=uuid.UUID(AGENT), config={"grantex": {"grantex_agent_id": "ag_1", "grantex_scopes": ["s"]}})
     with (
         patch.object(agents, "resolve_enforcement_mode", AsyncMock(return_value=EnforcementMode.WARN)),
-        patch.object(agents, "_select_agent_for_type", select),
+        patch.object(agents, "_select_agent_for_type", AsyncMock(return_value=row)),
     ):
         grant = await agents._resolve_run_grant_for_type(
             tenant_id=TENANT,
             agent_type="ap_processor",
             company_id=None,
-            supplied_token=PLACEHOLDER_TOKEN,
+            caller_token=PLACEHOLDER_TOKEN,
+            caller_agent_id=AGENT,
             runtime="a2a",
         )
     assert (grant.token, grant.source, grant.mode) == (PLACEHOLDER_TOKEN, "supplied", EnforcementMode.WARN)
@@ -391,11 +394,17 @@ async def test_type_routes_resolve_the_grant_of_the_agent_the_type_runs_as():
         patch.object(agents, "resolve_run_grant", resolve),
     ):
         grant = await agents._resolve_run_grant_for_type(
-            tenant_id=TENANT, agent_type="ap_processor", company_id=None, supplied_token="", runtime="mcp"
+            tenant_id=TENANT,
+            agent_type="ap_processor",
+            company_id=None,
+            caller_token="",
+            caller_agent_id="",
+            runtime="mcp",
         )
     assert grant.token == PLACEHOLDER_TOKEN
     assert resolve.await_args.kwargs["agent_id"] == AGENT
     assert resolve.await_args.kwargs["grantex_config"] == {"grantex_agent_id": "ag_1", "grantex_scopes": ["s"]}
+    assert resolve.await_args.kwargs["caller_token"] == ""
 
 
 async def test_type_routes_without_a_matching_agent_have_no_grant():
@@ -406,14 +415,24 @@ async def test_type_routes_without_a_matching_agent_have_no_grant():
         patch.object(agents, "_select_agent_for_type", AsyncMock(return_value=None)),
     ):
         missing = await agents._resolve_run_grant_for_type(
-            tenant_id=TENANT, agent_type="ap_processor", company_id=None, supplied_token="", runtime="a2a"
+            tenant_id=TENANT,
+            agent_type="ap_processor",
+            company_id=None,
+            caller_token="",
+            caller_agent_id="",
+            runtime="a2a",
         )
     with (
         patch.object(agents, "resolve_enforcement_mode", AsyncMock(return_value=EnforcementMode.WARN)),
         patch.object(agents, "_select_agent_for_type", AsyncMock(side_effect=RuntimeError("db down"))),
     ):
         failed = await agents._resolve_run_grant_for_type(
-            tenant_id=TENANT, agent_type="ap_processor", company_id=None, supplied_token="", runtime="a2a"
+            tenant_id=TENANT,
+            agent_type="ap_processor",
+            company_id=None,
+            caller_token="",
+            caller_agent_id="",
+            runtime="a2a",
         )
     assert (missing.token, missing.missing_sub_reason) == ("", "no_agent")
     assert (failed.token, failed.missing_sub_reason) == ("", "lookup_failed")
@@ -427,7 +446,12 @@ async def test_type_routes_in_off_mode_pass_the_callers_token_through_without_lo
         patch.object(agents, "_select_agent_for_type", AsyncMock(side_effect=AssertionError("no lookup in off"))),
     ):
         grant = await agents._resolve_run_grant_for_type(
-            tenant_id=TENANT, agent_type="ap_processor", company_id=None, supplied_token="", runtime="a2a"
+            tenant_id=TENANT,
+            agent_type="ap_processor",
+            company_id=None,
+            caller_token="",
+            caller_agent_id="",
+            runtime="a2a",
         )
     assert (grant.mode, grant.token) == (EnforcementMode.OFF, "")
 

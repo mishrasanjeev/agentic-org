@@ -14,17 +14,18 @@ when the check fails depends on the enforcement mode:
     The call is refused with a reason code that reaches the run result and
     audit trail, logged as ``grant_enforcement_denied`` and counted.
 
-The mode is the deployment default (``AGENTICORG_GRANTS_ENFORCE_CLOSED``)
-raised by the tenant's ``grants.enforce_closed.warn`` /
-``grants.enforce_closed.deny`` feature flags; deny wins over warn. Tenant flags
-are managed by tenant admins, so they can only make enforcement stricter than
-the deployment default, never weaker. See
+The mode is the strictest of the deployment default
+(``AGENTICORG_GRANTS_ENFORCE_CLOSED``), the global rows and the tenant's rows
+of the ``grants.enforce_closed.warn`` / ``grants.enforce_closed.deny`` feature
+flags; deny wins over warn. Global and tenant rows are read separately, so a
+tenant row can never hide an operator's global row, and the keys are reserved
+for platform operators (``api/v1/feature_flags.py`` refuses them). See
 ``docs/operations/grant-enforcement.md``.
 
-Reasons come from a fixed vocabulary (PRD Appendix B plus ``grant_missing``,
-``token_invalid`` and ``enforcement_unavailable``) so they can be metric
-labels. Sub-reasons, grant ids, tools and tenants are log fields only. The
-grant token itself is never logged.
+Reasons come from a fixed vocabulary - the Grantex SDK's ``reason_code`` values
+(PRD Appendix B) plus ``grant_missing``, ``enforcement_unavailable`` and
+``unclassified`` - so they can be metric labels. Sub-reasons, grant ids, tools
+and tenants are log fields only. The grant token itself is never logged.
 """
 
 from __future__ import annotations
@@ -57,16 +58,42 @@ _STRICTNESS = {EnforcementMode.OFF: 0, EnforcementMode.WARN: 1, EnforcementMode.
 
 
 class DenialReason(StrEnum):
-    """Why a tool call is (or would be) denied. Low cardinality by design."""
+    """Why a tool call is (or would be) denied. Low cardinality by design.
 
-    GRANT_MISSING = "grant_missing"
-    TOKEN_INVALID = "token_invalid"
-    GRANT_REVOKED = "grant_revoked"
+    The first ten are the Grantex SDK's ``DenialReason`` codes, used verbatim.
+    """
+
+    PURPOSE_NOT_ALLOWED = "purpose_not_allowed"
     TOOL_NOT_GRANTED = "tool_not_granted"
     PERMISSION_INSUFFICIENT = "permission_insufficient"
     CAP_EXCEEDED = "cap_exceeded"
+    DECISION_REQUIRED = "decision_required"
+    DECISION_INVALID = "decision_invalid"
+    GRANT_REVOKED = "grant_revoked"
+    REGION_MISMATCH = "region_mismatch"
     MANIFEST_UNKNOWN_TOOL = "manifest_unknown_tool"
+    TOKEN_INVALID = "token_invalid"
+    GRANT_MISSING = "grant_missing"
     ENFORCEMENT_UNAVAILABLE = "enforcement_unavailable"
+    UNCLASSIFIED = "unclassified"
+
+
+# Grantex SDK codes this module maps one to one.
+_SDK_REASON_CODES = frozenset(
+    {
+        DenialReason.PURPOSE_NOT_ALLOWED,
+        DenialReason.TOOL_NOT_GRANTED,
+        DenialReason.PERMISSION_INSUFFICIENT,
+        DenialReason.CAP_EXCEEDED,
+        DenialReason.DECISION_REQUIRED,
+        DenialReason.DECISION_INVALID,
+        DenialReason.GRANT_REVOKED,
+        DenialReason.REGION_MISMATCH,
+        DenialReason.MANIFEST_UNKNOWN_TOOL,
+        DenialReason.TOKEN_INVALID,
+    }
+)
+_SUB_REASON_MAX = 64
 
 
 @dataclass(frozen=True)
@@ -74,6 +101,9 @@ class Denial:
     reason: DenialReason
     sub_reason: str = ""
     grant_id: str = ""
+    # Grantex's human-readable reason, kept only for unclassified denials so
+    # operators can see what the SDK said. Never contains the token.
+    detail: str = ""
 
     def as_dict(self, *, connector: str, tool: str) -> dict[str, str]:
         """The reason code as surfaced in run results and audit rows."""
@@ -109,23 +139,6 @@ class GrantCallContext:
     runtime: str = ""
     grant_source: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
-
-
-def parse_mode(value: Any) -> EnforcementMode:
-    """Read a mode carried in agent state or config.
-
-    A missing value is ``off``: state written before this feature existed, or
-    by a caller that never resolved a mode, keeps the legacy behaviour. An
-    unrecognised value is ``deny`` — it cannot be trusted to mean anything
-    weaker.
-    """
-    if value is None or value == "":
-        return EnforcementMode.OFF
-    try:
-        return EnforcementMode(str(value).strip().lower())
-    except ValueError:
-        logger.error("grant_enforcement_mode_unrecognised", value=str(value)[:32])
-        return EnforcementMode.DENY
 
 
 def _stricter(a: EnforcementMode, b: EnforcementMode) -> EnforcementMode:
@@ -166,14 +179,16 @@ def deployment_default_mode() -> EnforcementMode:
 
 
 async def resolve_enforcement_mode(tenant_id: str | uuid.UUID | None) -> EnforcementMode:
-    """Effective ``grants.enforce_closed`` mode for a tenant.
+    """Effective ``grants.enforce_closed`` mode for a tenant. Never raises.
 
-    The stricter of the deployment default and the tenant's flags (``deny``
-    flag, else ``warn`` flag). When the flag store cannot be read the result
-    is the stricter of the deployment default and the tenant's last resolved
-    mode, and the failure is logged. Never raises.
+    The strictest of the deployment default, the global flag rows and the
+    tenant's flag rows. Rows are evaluated independently (a tenant row cannot
+    hide a global row). When the flag store cannot be read the result is the
+    stricter of the deployment default and the tenant's last mode resolved in
+    the past hour by this process; with no such mode it is ``deny``
+    (``flag_store_unreadable``). Every fallback is logged and counted.
     """
-    from core.feature_flags import FeatureFlagLookupError, is_enabled_strict
+    from core.feature_flags import FeatureFlagLookupError, load_flag_rows_strict, row_enabled
 
     default = deployment_default_mode()
     tenant_key = str(tenant_id or "")
@@ -184,53 +199,57 @@ async def resolve_enforcement_mode(tenant_id: str | uuid.UUID | None) -> Enforce
         return default
 
     try:
-        if await is_enabled_strict(FLAG_DENY, tenant_id=tid):
-            requested = EnforcementMode.DENY
-        elif await is_enabled_strict(FLAG_WARN, tenant_id=tid):
-            requested = EnforcementMode.WARN
-        else:
-            requested = EnforcementMode.OFF
-        mode = _stricter(default, requested)
+        mode = default
+        for flag_key, flag_mode in ((FLAG_WARN, EnforcementMode.WARN), (FLAG_DENY, EnforcementMode.DENY)):
+            rows = await load_flag_rows_strict(flag_key, tenant_id=tid)
+            if row_enabled(flag_key, rows.global_row, subject_id=tenant_key) or row_enabled(
+                flag_key, rows.tenant_row, subject_id=tenant_key
+            ):
+                mode = _stricter(mode, flag_mode)
     except FeatureFlagLookupError:
         remembered = _recall(tenant_key)
-        mode = _stricter(default, remembered) if remembered is not None else default
-        logger.warning(
+        if remembered is not None:
+            mode, outcome = _stricter(default, remembered), "last_known"
+        else:
+            mode, outcome = EnforcementMode.DENY, "deny"
+        logger.error(
             "grant_enforcement_mode_lookup_failed",
+            reason_code="flag_store_unreadable",
             tenant_id=tenant_key,
             deployment_default=default.value,
             last_known_mode=remembered.value if remembered is not None else "",
             effective_mode=mode.value,
         )
+        _count_mode_fallback(outcome)
         return mode
 
     _remember(tenant_key, mode)
     return mode
 
 
-def classify_enforce_reason(reason: str) -> tuple[DenialReason, str]:
-    """Map a Grantex ``EnforceResult.reason`` to ``(reason, sub_reason)``.
+def _count_mode_fallback(outcome: str) -> None:
+    try:
+        from observability.metrics import grant_enforcement_mode_fallbacks_total
 
-    Unrecognised text is still a denial (``tool_not_granted`` /
-    ``unclassified``); it is never read as an allow.
+        grant_enforcement_mode_fallbacks_total.labels(outcome=outcome).inc()
+    except (ImportError, ValueError) as exc:
+        logger.warning("grant_enforcement_metric_failed", error_type=type(exc).__name__)
+
+
+def classify_enforce_result(result: Any) -> tuple[DenialReason, str]:
+    """Map a denied Grantex ``EnforceResult`` to ``(reason, sub_reason)``.
+
+    Uses the SDK's ``reason_code`` / ``sub_reason`` exactly. A result without a
+    code (an SDK older than reason codes) or with a code this module does not
+    know is ``unclassified`` - still a denial, never read as an allow.
     """
-    text = (reason or "").strip().lower()
-    if "revoked" in text:
-        return DenialReason.GRANT_REVOKED, ""
-    if text.startswith("token verification failed") or any(
-        marker in text for marker in ("expired", "signature", "invalid", "malformed")
-    ):
-        return DenialReason.TOKEN_INVALID, "expired" if "expired" in text else "verification_failed"
-    if "no manifest loaded" in text:
-        return DenialReason.MANIFEST_UNKNOWN_TOOL, "connector_unknown"
-    if "unknown tool" in text or "not found in manifest" in text:
-        return DenialReason.MANIFEST_UNKNOWN_TOOL, "tool_unknown"
-    if "no scope grants access" in text:
-        return DenialReason.TOOL_NOT_GRANTED, ""
-    if "does not permit" in text:
-        return DenialReason.PERMISSION_INSUFFICIENT, ""
-    if "exceeds budget cap" in text:
-        return DenialReason.CAP_EXCEEDED, ""
-    return DenialReason.TOOL_NOT_GRANTED, "unclassified"
+    code = str(getattr(result, "reason_code", "") or "").strip()
+    sub_reason = str(getattr(result, "sub_reason", "") or "").strip()[:_SUB_REASON_MAX]
+    if not code:
+        return DenialReason.UNCLASSIFIED, "no_reason_code"
+    if code in _SDK_REASON_CODES:
+        return DenialReason(code), sub_reason
+    return DenialReason.UNCLASSIFIED, "unknown_reason_code"
 
 
 def record_denial(
@@ -257,6 +276,7 @@ def record_denial(
         grant_source=context.grant_source,
         connector=connector,
         tool=tool,
+        **({"sdk_reason": denial.detail} if denial.detail else {}),
         **context.extra,
     )
     try:
@@ -311,8 +331,9 @@ async def check_tool_grant(
             denial = Denial(DenialReason.ENFORCEMENT_UNAVAILABLE, type(exc).__name__)
         else:
             if not bool(getattr(result, "allowed", False)):
-                reason, sub_reason = classify_enforce_reason(str(getattr(result, "reason", "") or ""))
-                denial = Denial(reason, sub_reason, str(getattr(result, "grant_id", "") or ""))
+                reason, sub_reason = classify_enforce_result(result)
+                detail = str(getattr(result, "reason", "") or "")[:200] if reason is DenialReason.UNCLASSIFIED else ""
+                denial = Denial(reason, sub_reason, str(getattr(result, "grant_id", "") or ""), detail)
 
     if denial is None:
         return GrantCheck(dispatch_allowed=True)

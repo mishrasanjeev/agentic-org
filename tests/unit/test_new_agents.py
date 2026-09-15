@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Agent specification table — single source of truth for expected values
 # ═══════════════════════════════════════════════════════════════════════════
@@ -203,7 +205,7 @@ class TestAgentBuildGraph:
     def test_build_graph_returns_graph(self, agent_type, spec):
         import importlib
         mod = importlib.import_module(spec["module"])
-        graph = mod.build_graph()
+        graph = mod.build_graph(run_grant=NO_RUN_GRANT_FOR_TESTS)
         compiled = graph.compile()
         nodes = list(compiled.get_graph().nodes.keys())
         assert "reason" in nodes
@@ -213,7 +215,7 @@ class TestAgentBuildGraph:
     def test_build_graph_has_execute_tools_node(self, agent_type, spec):
         import importlib
         mod = importlib.import_module(spec["module"])
-        graph = mod.build_graph()
+        graph = mod.build_graph(run_grant=NO_RUN_GRANT_FOR_TESTS)
         compiled = graph.compile()
         nodes = list(compiled.get_graph().nodes.keys())
         # All agents have tools, so execute_tools should exist

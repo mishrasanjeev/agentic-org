@@ -23,8 +23,8 @@ import structlog
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext, check_tool_grant
-from auth.run_grants import RunGrant
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
 from core.config import is_strict_runtime_env, settings
@@ -734,6 +734,7 @@ async def execute_agent_tool(
     run_grant: RunGrant | None = None,
     agent_id: str = "",
     runtime: str = "base_agent",
+    agent_type: str = "",
 ) -> dict[str, Any]:
     """Governed tool dispatch for ``BaseAgent`` callers without a ToolGateway.
 
@@ -763,19 +764,18 @@ async def execute_agent_tool(
 
     if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
         amount = params.get("amount")
-        check = await check_tool_grant(
-            mode=run_grant.call_mode,
-            grant_token=run_grant.token or grant_token,
+        check = await check_run_grant(
+            run_grant,
             connector=connector_name,
             tool=tool_name,
             amount=amount if isinstance(amount, int | float) and not isinstance(amount, bool) else None,
             context=GrantCallContext(
                 tenant_id=str(tenant_id or ""),
                 agent_id=agent_id,
+                agent_type=agent_type,
                 runtime=runtime,
                 grant_source=run_grant.source,
             ),
-            missing_sub_reason=run_grant.missing_sub_reason,
         )
         if not check.dispatch_allowed and check.denial is not None:
             return {

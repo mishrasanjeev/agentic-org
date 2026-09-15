@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -46,16 +47,8 @@ logger = structlog.get_logger()
 # Key: (tenant_id_str, flag_key)
 _CACHE_TTL_SECONDS = 30
 _CACHE_MAX_SIZE = 2_048
-# Cached in place of a row when the flag store could not be read. ``is_enabled``
-# treats it like an absent row; ``is_enabled_strict`` raises for it until the
-# entry expires, so an outage is not re-probed on every call.
-_LOOKUP_FAILED: Any = object()
 # enterprise-gate: process-local-ok reason=bounded-ttl-db-backed-feature-flag-cache
 _cache: dict[tuple[str, str], tuple[dict[str, Any] | None, float]] = {}
-
-
-class FeatureFlagLookupError(RuntimeError):
-    """The flag store could not be read, so the flag's value is unknown."""
 
 
 def _bucket(flag_key: str, subject_id: str) -> int:
@@ -85,23 +78,17 @@ def _store_cache(
 
 
 async def _load_flag(
-    tenant_id: uuid.UUID | None, flag_key: str, *, strict: bool = False
+    tenant_id: uuid.UUID | None, flag_key: str
 ) -> dict[str, Any] | None:
     """Fetch a flag from DB with a tiny in-process cache.
 
     Returns the row as a dict (enabled, rollout_percentage) or None.
-    With ``strict`` a failed lookup raises ``FeatureFlagLookupError``
-    instead of reading as an absent row.
     """
     cache_key = (str(tenant_id) if tenant_id else "_global", flag_key)
     cached = _cache.get(cache_key)
     now = time.monotonic()
     if cached is not None and cached[1] > now:
-        if cached[0] is not _LOOKUP_FAILED:
-            return cached[0]
-        if strict:
-            raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read")
-        return None
+        return cached[0]
 
     row: dict[str, Any] | None = None
     try:
@@ -135,13 +122,10 @@ async def _load_flag(
                         "enabled": flag.enabled,
                         "rollout_percentage": flag.rollout_percentage,
                     }
-    # enterprise-gate: broad-except-ok reason=feature-flag-lookup-failure-uses-callsite-default-or-raises-when-strict
-    except Exception as exc:
+    # enterprise-gate: broad-except-ok reason=feature-flag-lookup-failure-uses-callsite-default
+    except Exception:
         logger.debug("feature_flag_lookup_failed", flag_key=flag_key)
-        _store_cache(cache_key, _LOOKUP_FAILED, now + _CACHE_TTL_SECONDS)
-        if strict:
-            raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read") from exc
-        return None
+        row = None
 
     _store_cache(cache_key, row, now + _CACHE_TTL_SECONDS)
     return row
@@ -156,34 +140,6 @@ async def is_enabled(
 ) -> bool:
     """Return True if the flag is enabled for this subject."""
     row = await _load_flag(tenant_id, flag_key)
-    return _evaluate(flag_key, row, tenant_id=tenant_id, user_id=user_id, default=default)
-
-
-async def is_enabled_strict(
-    flag_key: str,
-    *,
-    tenant_id: uuid.UUID | None = None,
-    user_id: uuid.UUID | None = None,
-    default: bool = False,
-) -> bool:
-    """Like ``is_enabled`` but raises ``FeatureFlagLookupError`` when the flag
-    store cannot be read.
-
-    For authority decisions, where "the flag is off" and "we could not tell"
-    must not look the same.
-    """
-    row = await _load_flag(tenant_id, flag_key, strict=True)
-    return _evaluate(flag_key, row, tenant_id=tenant_id, user_id=user_id, default=default)
-
-
-def _evaluate(
-    flag_key: str,
-    row: dict[str, Any] | None,
-    *,
-    tenant_id: uuid.UUID | None,
-    user_id: uuid.UUID | None,
-    default: bool,
-) -> bool:
     if row is None:
         return default
     if not row["enabled"]:
@@ -200,6 +156,91 @@ def _evaluate(
         # No stable subject — treat as a coin flip at flag-key level.
         subject = "__anon__"
     return _bucket(flag_key, subject) < pct
+
+
+# Flags that decide what agents are allowed to do. Tenant admins must not be
+# able to set, change or delete them through the tenant feature-flag API: a
+# tenant row could otherwise switch an operator's enforcement off. Platform
+# operators manage them with ``scripts/authority_flags.py``. A key is reserved
+# when it equals one of these or starts with one of them followed by ".".
+RESERVED_FLAG_KEYS: tuple[str, ...] = (
+    "grants.enforce_closed",
+    "pseudonymisation.pre_model",
+    "approvals.resume_agent_runs",
+    "decisions.required",
+    "caps.enforce",
+)
+
+
+def is_reserved_flag_key(flag_key: str) -> bool:
+    """True for authority flags only platform operators may manage."""
+    key = (flag_key or "").strip().lower()
+    return any(key == reserved or key.startswith(reserved + ".") for reserved in RESERVED_FLAG_KEYS)
+
+
+class FeatureFlagLookupError(RuntimeError):
+    """The flag store could not be read, so the flag's value is unknown."""
+
+
+@dataclass(frozen=True)
+class FlagRows:
+    """The global and tenant rows for one flag key, read independently."""
+
+    global_row: dict[str, Any] | None
+    tenant_row: dict[str, Any] | None
+
+
+def row_enabled(flag_key: str, row: dict[str, Any] | None, *, subject_id: str) -> bool:
+    """Evaluate one flag row (``enabled`` and rollout) for a stable subject."""
+    if row is None or not row["enabled"]:
+        return False
+    pct = int(row.get("rollout_percentage", 100))
+    if pct >= 100:
+        return True
+    if pct <= 0:
+        return False
+    return _bucket(flag_key, subject_id or "__anon__") < pct
+
+
+async def load_flag_rows_strict(flag_key: str, *, tenant_id: uuid.UUID) -> FlagRows:
+    """Read a flag's global row and the tenant's row separately.
+
+    For authority decisions: unlike ``is_enabled`` a tenant row does not hide
+    the global row, and a store that cannot be read raises
+    ``FeatureFlagLookupError`` instead of reading as "absent". Only successful
+    reads are cached.
+    """
+    cache_key = (f"rows:{tenant_id}", flag_key)
+    cached = _cache.get(cache_key)
+    now = time.monotonic()
+    if cached is not None and cached[1] > now and cached[0] is not None:
+        return FlagRows(global_row=cached[0]["global"], tenant_row=cached[0]["tenant"])
+
+    def _as_row(flag: FeatureFlag | None) -> dict[str, Any] | None:
+        if flag is None:
+            return None
+        return {"enabled": flag.enabled, "rollout_percentage": flag.rollout_percentage}
+
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            tenant_flag = (
+                await session.execute(
+                    select(FeatureFlag).where(FeatureFlag.tenant_id == tenant_id, FeatureFlag.flag_key == flag_key)
+                )
+            ).scalar_one_or_none()
+            global_flag = (
+                await session.execute(
+                    select(FeatureFlag).where(FeatureFlag.tenant_id.is_(None), FeatureFlag.flag_key == flag_key)
+                )
+            ).scalar_one_or_none()
+            rows = FlagRows(global_row=_as_row(global_flag), tenant_row=_as_row(tenant_flag))
+    # enterprise-gate: broad-except-ok reason=unreadable-flag-store-raises-lookup-error-never-reads-as-absent
+    except Exception as exc:
+        logger.warning("feature_flag_strict_lookup_failed", flag_key=flag_key, error_type=type(exc).__name__)
+        raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read") from exc
+
+    _store_cache(cache_key, {"global": rows.global_row, "tenant": rows.tenant_row}, now + _CACHE_TTL_SECONDS)
+    return rows
 
 
 def clear_cache() -> None:

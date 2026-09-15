@@ -17,31 +17,45 @@ covers how the check is switched on, what it records and how to read it.
 
 ## Choosing the mode
 
-The mode is resolved per tenant at the start of each run as the stricter of:
+The mode is resolved per tenant at the start of each run as the strictest of:
 
 - the deployment default `AGENTICORG_GRANTS_ENFORCE_CLOSED` (`off`, `warn` or
-  `deny`; default `off`; any other value fails startup), and
-- the tenant's flags: `grants.enforce_closed.deny` enabled → `deny`, otherwise
-  `grants.enforce_closed.warn` enabled → `warn`.
+  `deny`; default `off`; any other value fails startup),
+- the global rows of `grants.enforce_closed.warn` and `grants.enforce_closed.deny`, and
+- the tenant's rows of the same two flags.
 
-Both flags live in the existing `feature_flags` table and are managed with
-`POST /api/v1/feature-flags` (tenant admins) or a global row. A tenant row wins
-over the global row, and a rollout percentage is evaluated against the tenant
-id, as for any other flag. Deny wins when both flags are on. Because tenant
-admins manage their own flags, flags only ever make enforcement stricter than
-the deployment default; a tenant cannot opt out of a `warn` or `deny`
-deployment default.
+Each row is evaluated on its own (enabled and rollout percentage, bucketed by
+tenant id), so a tenant row never hides a global row: a global
+`grants.enforce_closed.deny` with a disabled tenant row still resolves to
+`deny`. Deny wins over warn.
 
-For example, to put one tenant in warn mode while the deployment stays `off`:
+**These keys are reserved for platform operators.** `POST` and `DELETE
+/api/v1/feature-flags` refuse them with `403 flag_key_reserved`, even for a
+tenant admin, so nobody inside a tenant can switch enforcement off or delete a
+mode an operator set. The same applies to the programme's other authority
+flags (`pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
+`decisions.required`, `caps.enforce`; see `RESERVED_FLAG_KEYS` in
+`core/feature_flags.py`). Operators manage them with database access:
 
 ```
-POST /api/v1/feature-flags
-{"flag_key": "grants.enforce_closed.warn", "enabled": true, "rollout_percentage": 100}
+python scripts/authority_flags.py set grants.enforce_closed.warn --tenant <tenant id>
+python scripts/authority_flags.py set grants.enforce_closed.deny --global
+python scripts/authority_flags.py clear grants.enforce_closed.deny --tenant <tenant id>
+python scripts/authority_flags.py list --tenant <tenant id>
 ```
 
-If the flag table cannot be read, the run uses the stricter of the deployment
-default and the tenant's last successfully resolved mode (remembered for an
-hour per process) and logs `grant_enforcement_mode_lookup_failed`.
+Changes reach running processes within 30 seconds (the flag cache TTL).
+
+### When the flag table cannot be read
+
+The run uses the stricter of the deployment default and the tenant's last mode
+resolved by that process within the past hour. If the process has no such
+mode (a restart, a new worker, or more than an hour since the last successful
+read) the run resolves to **`deny`**. Either way it logs
+`grant_enforcement_mode_lookup_failed` (`reason_code=flag_store_unreadable`)
+and increments `agenticorg_grant_enforcement_mode_fallbacks_total{outcome}`
+(`last_known` or `deny`). Failed reads are never cached, so the next run
+retries the table.
 
 ## Where the run's grant comes from
 
@@ -53,8 +67,29 @@ In `warn` and `deny` each run resolves a grant token, first match wins:
    pool delegates a grant from the platform root grant to the agent's
    registered Grantex agent (`config.grantex.grantex_agent_id`), limited to its
    registered scopes (`config.grantex.grantex_scopes`), and caches it per
-   tenant, agent and scope set (when the pool's Redis is initialised) until a
-   minute before it expires.
+   tenant, agent and scope set.
+
+Lifetime and bounds of pool grants:
+
+- A cached grant is handed out only while it has at least the larger of 120
+  seconds and 10% of its requested lifetime left. Long runs (LangGraph and
+  `BaseAgent`) ask the pool again before each tool call once the grant they hold
+  falls below that, so a run never carries an expiring grant into a call.
+- The pool does not revoke the grants it mints; they expire (default 15
+  minutes, `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS`). Revoking the root grant
+  on Grantex revokes every grant delegated from it.
+- At most one grant is minted per tenant, agent and scope set per process while
+  a usable one exists: Redis shares grants across API and worker processes, a
+  bounded in-process cache (1,024 entries) covers Redis being unavailable, and a
+  per-key lock stops concurrent runs from minting in parallel.
+- The API creates the pool's Redis client at startup; Celery workers create
+  theirs lazily on first use, so worker start-up never waits on Redis.
+
+The grant token is part of the agent graph state. Checkpoints written by the
+sealed checkpoint store are encrypted as a whole, and when LangSmith tracing is
+enabled through the environment the platform installs a client that replaces
+`grant_token` (and other token keys) with `[redacted]` in traced inputs and
+outputs.
 
 Minting needs:
 
@@ -93,13 +128,20 @@ and increments `agenticorg_grant_enforcement_denials_total{mode, reason}`.
 | Reason | Meaning |
 |---|---|
 | `grant_missing` | The run has no grant token (see sub-reasons above) |
-| `token_invalid` | The token does not verify (`sub_reason=expired` or `verification_failed`) |
+| `token_invalid` | The token does not verify (signature, expiry, issuer, shape) |
 | `grant_revoked` | The grant has been revoked |
-| `tool_not_granted` | No scope grants the tool's connector (`sub_reason=unclassified` when Grantex gave an unrecognised reason) |
+| `tool_not_granted` | No scope grants the tool's connector or tool |
 | `permission_insufficient` | The granted permission does not cover the tool (for example `read` for a write tool) |
-| `cap_exceeded` | The call's amount exceeds the granted cap |
-| `manifest_unknown_tool` | No manifest for the connector (`connector_unknown`) or the tool is not in it (`tool_unknown`) |
+| `cap_exceeded` | A call cap, budget or amount cap would be exceeded |
+| `purpose_not_allowed`, `decision_required`, `decision_invalid`, `region_mismatch` | Purpose, decision-grant and region checks (Grantex manifest 0.6) |
+| `manifest_unknown_tool` | No manifest for the connector (`unknown_connector`) or the tool is not in it (`unknown_tool`) |
 | `enforcement_unavailable` | The check itself could not run (`sub_reason` is the error type, for example `ValueError` when `GRANTEX_API_KEY` is missing) |
+| `unclassified` | Grantex denied without a reason code this platform knows (`no_reason_code` for an SDK older than reason codes, `unknown_reason_code` otherwise). Still a denial; the event carries Grantex's text as `sdk_reason` |
+
+Reasons are the Grantex SDK's `reason_code` values, used exactly; the
+platform never infers a reason from the SDK's message text. The pinned SDK
+(`grantex==0.5.0`) predates reason codes, so until it is upgraded every
+Grantex denial is recorded as `unclassified`.
 
 `runtime` says which path made the call (see Coverage).
 
@@ -111,8 +153,8 @@ call in the tenant's mode:
 | Entry point | How the grant is resolved | `runtime` |
 |---|---|---|
 | `POST /agents/{id}/run` | the agent's grant, resolved once for the run | `langgraph`; `deterministic_tds` for the shadow TDS route |
-| Chat (`POST /chat/query`) | the caller's Grantex token, else the routed agent's grant | `langgraph`; `deterministic_tds` for the TDS route |
-| A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the caller's Grantex token, else the grant of the shared agent of that type the route takes connector bindings from | `langgraph` |
+| Chat (`POST /chat/query`) | the routed agent's grant; a caller Grantex token issued to that agent is used as it, a caller token for any other agent must **also** allow every call | `langgraph`; `deterministic_tds` for the TDS route |
+| A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the grant of the shared agent of that type the route takes connector bindings from; a caller token is bound the same way as for chat | `langgraph` |
 | Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first | `langgraph` |
 | `core.langgraph.runner.resume_agent` | resolved again on resume; in warn/deny the fresh token replaces the checkpointed one | `langgraph` |
 | Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline | `BaseAgent` resolves the agent's grant on its first tool call; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
@@ -124,9 +166,19 @@ a type with no shared agent all have no grant, so each tool call is recorded as
 `grant_missing` (`no_agent`) in warn and refused in deny. Check the warn-mode
 report for these before moving a tenant to deny.
 
-In the `ToolGateway`, a call warn allows without the grant covering it still
-goes through the gateway's legacy scope checks, so warn never skips a check
-`off` makes.
+**Caller tokens never stand in for the run agent.** A Grantex token a request
+authenticated with belongs to the agent it was issued to
+(`agenticorg:agent_id`). When that is the agent the run executes as, it is the
+run grant. Otherwise the run agent's own grant is resolved as usual and every
+tool call must be allowed by both: the caller token strictly (as before), the
+run agent's grant in the tenant's mode. A caller can therefore never run
+another agent - or an A2A/MCP agent type with its default tools - on the
+strength of its own scopes. A denial by the caller token is logged with
+`grant_source=caller`.
+
+In the `ToolGateway` the grant check runs first and then every legacy check
+runs exactly as in `off`, including strict enforcement of a token passed to the
+gateway, so enforcement never skips or downgrades a check `off` makes.
 
 ## What a denial looks like (deny)
 
@@ -163,8 +215,8 @@ for the whole deployment. Common patterns:
 | `grant_missing` / `minting_unconfigured` | `GRANTEX_ROOT_GRANT_TOKEN` or `GRANTEX_API_KEY` not set | Configure the root grant |
 | `grant_missing` / `agent_not_registered` | Agent created without a Grantex registration | Re-register the agent |
 | `grant_missing` / `mint_failed` | Root grant expired or revoked, or Grantex unreachable | Rotate the root grant; check Grantex |
-| `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-16) | Give the step a stored agent or accept it fails in deny |
-| `tool_not_granted` on every call of an agent | Registered scopes the grant cannot satisfy (FINDINGS A-13) | Fix the registration scopes |
+| `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-29) | Give the step a stored agent or accept it fails in deny |
+| `tool_not_granted` on every call of an agent | Registered scopes the grant cannot satisfy (FINDINGS A-26) | Fix the registration scopes |
 | `permission_insufficient` | The agent is registered for `read` but calls a write tool | Decide whether the agent should have the permission |
 | `manifest_unknown_tool` | No Grantex manifest for the connector or tool | Add a manifest (`GRANTEX_MANIFESTS_DIR`) |
 | `enforcement_unavailable` | The check could not run | Fix the error named in `sub_reason` |

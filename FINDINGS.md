@@ -130,7 +130,26 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
-## A-13 — Registered Grantex scopes use a permission `enforce` cannot satisfy
+## A-19 — Approval step conditions that fail to evaluate are skipped
+
+- **Found:** reading `core/approvals/policy_engine.py` while adding the case
+  policy engine (2026-09-15).
+- **What:** `_condition_matches` catches every exception from
+  `workflows.condition_evaluator.evaluate_condition`, logs a warning and
+  returns `False`. `first_applicable_step` and `next_step_after` treat `False`
+  as "this step does not apply", so an approval step whose condition is
+  malformed, references a missing context key or raises for any other reason
+  is silently skipped. In `api/v1/approvals.py` an `advance` with no further
+  applicable step marks the item `decided`, so a broken condition on, for
+  example, a second sign-off step lets the item complete with fewer approvals
+  than the policy requires. This fails open on an authority path.
+- **Fix:** validate step conditions when an approval policy is created or
+  updated (refuse unparseable ones with a reason), and at decision time treat
+  an evaluation error as "step applies" (or refuse the decision with a reason
+  code) rather than skipping it, with a test for a malformed condition on a
+  later step.
+
+## A-26 — Registered Grantex scopes use a permission `enforce` cannot satisfy
 
 - **Found:** wiring per-run grants for `grants.enforce_closed` (PRD F-1,
   2026-09-15).
@@ -149,7 +168,7 @@ Remove an entry in the pull request that fixes it.
   already-registered agents on Grantex (`agents.update`) in a backfill, and
   re-check the warn-mode report before any tenant moves to deny.
 
-## A-14 — The token pool's refresh path calls a grant type Grantex does not serve
+## A-27 — The token pool's refresh path calls a grant type Grantex does not serve
 
 - **Found:** extending `auth/token_pool.py` to obtain the first run token
   (2026-09-15).
@@ -167,7 +186,7 @@ Remove an entry in the pull request that fixes it.
   `grants.delegate` / `tokens.refresh`, and initialise the pool (with a Redis
   client per event loop) where the API and workers start.
 
-## A-15 — Legacy scope validation calls the blocking `enforce` on the event loop
+## A-28 — Legacy scope validation calls the blocking `enforce` on the event loop
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
 - **What:** in `off` mode `core/langgraph/agent_graph.py::validate_tool_scopes`
@@ -178,7 +197,7 @@ Remove an entry in the pull request that fixes it.
   `off` keeps today's behaviour.
 - **Fix:** run the legacy call through `asyncio.to_thread` too.
 
-## A-16 — Workflow connector steps and unstored workflow agents have no grant principal
+## A-29 — Workflow connector steps and unstored workflow agents have no grant principal
 
 - **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
   2026-09-15).

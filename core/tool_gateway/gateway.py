@@ -9,8 +9,8 @@ from typing import Any
 
 import structlog
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext, check_tool_grant
-from auth.run_grants import RunGrant
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant
 from auth.scopes import check_scope
 from core.config import is_strict_runtime_env, settings
 from core.governance.action_policy import (
@@ -90,13 +90,15 @@ class ToolGateway:
         domain: ActionDomain | str | None = None,
         capability_authorization: CapabilityAuthorization | None = None,
         run_grant: RunGrant | None = None,
+        agent_type: str = "",
     ) -> dict[str, Any]:
         """Execute a tool call through the gateway pipeline.
 
         PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
-        (``auth/grant_enforcement.py``) replaces the legacy token check. A call
-        it allows without the grant covering it (warn) still goes through the
-        legacy scope checks below, so warn never skips a check ``off`` makes.
+        (``auth/grant_enforcement.py``) runs first, and then every legacy check
+        below runs exactly as in ``off`` - including strict enforcement of a
+        token passed to the gateway - so enforcement never skips or downgrades
+        a check ``off`` makes.
         """
         start_time = time.monotonic()
 
@@ -138,22 +140,19 @@ class ToolGateway:
 
         # 1. Validate scope via Grantex enforce (manifest-based, offline JWT verification)
         effective_token = grant_token or getattr(self, "_current_grant_token", None)
-        grant_covers_call = False
-        enforcement_on = run_grant is not None and run_grant.mode is not EnforcementMode.OFF
-        if run_grant is not None and enforcement_on:
-            check = await check_tool_grant(
-                mode=run_grant.call_mode,
-                grant_token=run_grant.token or effective_token,
+        if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
+            check = await check_run_grant(
+                run_grant,
                 connector=connector_name,
                 tool=tool_name,
                 amount=amount,
                 context=GrantCallContext(
                     tenant_id=tenant_id,
                     agent_id=agent_id,
+                    agent_type=agent_type,
                     runtime="tool_gateway",
                     grant_source=run_grant.source,
                 ),
-                missing_sub_reason=run_grant.missing_sub_reason,
             )
             if not check.dispatch_allowed and check.denial is not None:
                 if self.audit:
@@ -177,11 +176,8 @@ class ToolGateway:
                         "sub_reason": check.denial.sub_reason,
                     }
                 }
-            grant_covers_call = check.denial is None
 
-        if grant_covers_call:
-            pass
-        elif effective_token and not enforcement_on:
+        if effective_token:
             from core.langgraph.grantex_auth import get_grantex_client
 
             grantex = get_grantex_client()

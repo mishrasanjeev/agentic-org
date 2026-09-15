@@ -16,7 +16,8 @@ from __future__ import annotations
 
 import ast
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from typing import Any
 
 import structlog
@@ -25,8 +26,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext, check_tool_grant
-from auth.run_grants import RunGrant
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant, refresh_run_grant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import (
@@ -295,14 +296,12 @@ async def _enforce_tool_grants(
         connector_name, actual_tool_name = ref
 
         amount = args.get("amount") if isinstance(args, dict) else None
-        check = await check_tool_grant(
-            mode=run_grant.call_mode,
-            grant_token=state.get("grant_token"),
+        check = await check_run_grant(
+            replace(run_grant, token=str(state.get("grant_token") or "")),
             connector=connector_name,
             tool=actual_tool_name,
             context=context,
             amount=amount if isinstance(amount, int | float) and not isinstance(amount, bool) else None,
-            missing_sub_reason=run_grant.missing_sub_reason,
             client_factory=get_grantex_client,
         )
         if check.dispatch_allowed or check.denial is None:
@@ -338,7 +337,9 @@ def build_agent_graph(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
-    run_grant: RunGrant | None = None,
+    context_guard: Callable[[Sequence[Any]], None] | None = None,
+    *,
+    run_grant: RunGrant | None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -357,9 +358,16 @@ def build_agent_graph(
         llm_provider: Explicit catalog provider id pinned on the agent
             (``agents.llm_provider``, else ``llm_config["provider"]``).
             ``None`` keeps the legacy model-name inference for old rows.
-        run_grant: The run's resolved grant and ``grants.enforce_closed``
-            mode (``auth/run_grants.py``). ``None`` is ``off``: scope
-            validation keeps its legacy behaviour.
+        run_grant: Required. The run's resolved grant and
+            ``grants.enforce_closed`` mode (``auth/run_grants.py``). Only tests
+            of graph mechanics pass ``NO_RUN_GRANT_FOR_TESTS`` (``None``), which
+            keeps the legacy scope validation.
+        context_guard: Called with the full message list before every model
+            call; raising stops the run before anything is sent. Governed case
+            agents pass ``UntrustedTextRegistry.guard_messages`` so untrusted
+            source text can never reach the model
+            (``docs/security/untrusted-content.md``). ``None`` keeps the
+            existing behaviour.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -414,6 +422,8 @@ def build_agent_graph(
         if not messages or not isinstance(messages[0], SystemMessage):
             messages = [SystemMessage(content=system_prompt), *messages]
 
+        if context_guard is not None:
+            context_guard(messages)
         trace.append(f"Calling LLM ({llm_model or 'default'})")
         response = await _get_llm().ainvoke(messages)
         if isinstance(response, AIMessage) and response.tool_calls:
@@ -643,9 +653,19 @@ def build_agent_graph(
 
     if tools:
         tool_refs = _tool_grant_refs(tools)
+        grant_holder: list[RunGrant | None] = [run_grant]
 
         async def validate_scopes(state: AgentState) -> dict[str, Any]:
-            return await validate_tool_scopes(state, tool_refs, run_grant)
+            current = grant_holder[0]
+            update: dict[str, Any] = {}
+            if current is not None and current.mode is not EnforcementMode.OFF:
+                # Long runs: swap in a fresh pool grant before this one expires.
+                refreshed = await refresh_run_grant(replace(current, token=str(state.get("grant_token") or "")))
+                if refreshed.token != state.get("grant_token"):
+                    update["grant_token"] = refreshed.token
+                    state = {**state, "grant_token": refreshed.token}  # type: ignore[typeddict-item]
+                grant_holder[0] = current = refreshed
+            return {**update, **await validate_tool_scopes(state, tool_refs, current)}
 
         graph.add_node("validate_scopes", validate_scopes)
         graph.add_conditional_edges(

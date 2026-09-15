@@ -80,6 +80,11 @@ grant_enforcement_denials_total = Counter(
     "Agent tool calls denied, or that would be denied in warn mode, by grant enforcement",
     ["mode", "reason"],
 )
+grant_enforcement_mode_fallbacks_total = Counter(
+    "agenticorg_grant_enforcement_mode_fallbacks_total",
+    "Runs whose grants.enforce_closed mode could not be read from the flag store",
+    ["outcome"],
+)
 
 # ── LLM cost ────────────────────────────────────────────────────────
 

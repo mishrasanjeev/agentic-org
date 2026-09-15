@@ -1162,20 +1162,23 @@ async def _resolve_run_grant_for_type(
     tenant_id: str,
     agent_type: str,
     company_id: str | _uuid.UUID | None,
-    supplied_token: str | None,
+    caller_token: str | None,
+    caller_agent_id: str | None,
     runtime: str,
 ) -> RunGrant:
     """PRD F-1 run grant for routes that run an agent *type* (A2A, MCP).
 
-    The caller's grant wins. Otherwise the grant is resolved for the same
-    shared agent those routes take connector bindings from; with no such
-    agent, or a failed lookup, the run has no grant and every tool call is
-    recorded (warn) or refused (deny).
+    The run executes as the shared agent of that type the routes take
+    connector bindings from, so its grant is that agent's. A caller token
+    issued to that same agent is used as the grant; a caller token for any
+    other agent is kept alongside it and both must allow every tool call. With
+    no such agent, or a failed lookup, the run agent has no grant: every tool
+    call is recorded (warn) or refused (deny).
     """
     mode = await resolve_enforcement_mode(tenant_id)
-    if mode is EnforcementMode.OFF or (supplied_token or "").strip():
+    if mode is EnforcementMode.OFF:
         return await resolve_run_grant(
-            tenant_id=tenant_id, agent_id="", supplied_token=supplied_token, mode=mode, runtime=runtime
+            tenant_id=tenant_id, agent_id="", supplied_token=caller_token, mode=mode, runtime=runtime
         )
     try:
         tid = _uuid.UUID(str(tenant_id))
@@ -1185,17 +1188,23 @@ async def _resolve_run_grant_for_type(
         row = await _select_agent_for_type(tid, agent_type, company_uuid)
     except (RuntimeError, TypeError, ValueError) as exc:
         logger.warning("grant_resolution_type_lookup_failed", agent_type=agent_type, error_type=type(exc).__name__)
-        return RunGrant(mode=mode, source="none", missing_sub_reason="lookup_failed")
-    if row is None:
-        return await resolve_run_grant(tenant_id=tenant_id, agent_id="", mode=mode, runtime=runtime)
-    config = getattr(row, "config", None) or {}
+        return RunGrant(
+            mode=mode,
+            source="none",
+            missing_sub_reason="lookup_failed",
+            caller_token=(caller_token or "").strip(),
+            caller_agent_id=str(caller_agent_id or ""),
+        )
+    config = getattr(row, "config", None) or {} if row is not None else {}
     grantex = config.get("grantex") if isinstance(config, dict) else None
     return await resolve_run_grant(
         tenant_id=tenant_id,
-        agent_id=str(row.id),
-        grantex_config=grantex if isinstance(grantex, dict) else {},
+        agent_id=str(row.id) if row is not None else "",
+        grantex_config=(grantex if isinstance(grantex, dict) else {}) if row is not None else None,
         mode=mode,
         runtime=runtime,
+        caller_token=caller_token,
+        caller_agent_id=caller_agent_id,
     )
 
 
