@@ -124,14 +124,20 @@ async def test_tenant_flags_cannot_weaken_the_deployment_default(monkeypatch):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
 
 
-async def test_unreadable_flag_store_falls_back_to_deployment_default(monkeypatch):
+async def test_unreadable_flag_store_with_no_known_mode_fails_closed_to_deny(monkeypatch):
     from core.feature_flags import FeatureFlagLookupError
+    from observability.metrics import grant_enforcement_mode_fallbacks_total
 
-    monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
+    monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
+    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
+    counter = grant_enforcement_mode_fallbacks_total.labels(outcome="deny")
+    before = counter._value.get()
     failing = AsyncMock(side_effect=FeatureFlagLookupError("down"))
     with patch("core.feature_flags.load_flag_rows_strict", failing), capture_logs() as logs:
-        assert await resolve_enforcement_mode(TENANT) is EnforcementMode.WARN
-    assert any(entry["event"] == "grant_enforcement_mode_lookup_failed" for entry in logs)
+        assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
+    events = [entry for entry in logs if entry["event"] == "grant_enforcement_mode_lookup_failed"]
+    assert [(e["reason_code"], e["effective_mode"]) for e in events] == [("flag_store_unreadable", "deny")]
+    assert counter._value.get() == before + 1
 
 
 async def test_unreadable_flag_store_keeps_the_tenants_last_known_stricter_mode(monkeypatch):
