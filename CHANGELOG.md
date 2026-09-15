@@ -88,6 +88,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   connector is linked, and Grantex scopes for a qualified tool now name that
   connector (`tool:jira:execute:create_issue`); an unknown connector never
   matches.
+- **Behaviour change:** the finance agent prompts (`ap_processor`,
+  `ar_collections`, `close_agent`, `fpa_agent`, `recon_agent`,
+  `tax_compliance`) no longer tell the model to call tools that do not exist
+  (`ocr_extract_invoice`, `gstn_validate`, `erp_get_po`, `erp_get_grn`,
+  `erp_queue_payment`, `erp_get_ar_aging`, `erp_get_transactions`,
+  `banking_api_get_transactions`, ...). Steps now use the agent's registered
+  tools, or read the data from the task input and escalate to human review
+  when it is not there: AP needs the extracted invoice, the GSTIN verification
+  result and the PO/GRN details in the input; close needs sub-ledger balances;
+  FP&A needs the budget; reconciliation needs the GL entries; tax compliance
+  needs the period's transactions. AP no longer sends remittance advice,
+  reconciliation proposes entries instead of posting them, and AR hands Day
+  60+ contact to the collections team.
 
 ## [4.0.0] — 2026-04-05
 
