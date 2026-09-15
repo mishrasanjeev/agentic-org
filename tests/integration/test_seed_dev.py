@@ -95,7 +95,17 @@ async def test_seed_creates_tenant_users_agents_sso_and_four_eyes_policy(engine:
                 {"tid": TENANT_ID},
             )
         ).all()
-        assert [(s.sequence, s.approver_role) for s in steps] == [(1, "underwriter"), (2, "approver")]
+        assert [(s.sequence, s.approver_role) for s in steps] == [(1, "domain_lead"), (2, "domain_lead")]
+        metadata = (
+            await conn.execute(
+                text(
+                    "SELECT s.step_metadata FROM approval_steps s JOIN approval_policies p "
+                    "ON p.id = s.policy_id WHERE p.tenant_id = :tid"
+                ),
+                {"tid": TENANT_ID},
+            )
+        ).scalars().all()
+        assert metadata == [{}, {}], "the seed must not claim a distinct-approver rule nothing enforces"
 
 
 async def test_seed_is_idempotent_and_restores_seeded_fields(engine: AsyncEngine) -> None:
@@ -149,3 +159,28 @@ async def test_conflicting_existing_tenant_fails_without_writing(engine: AsyncEn
     async with engine.connect() as conn:
         name = (await conn.execute(text("SELECT name FROM tenants WHERE id = :id"), {"id": squatter})).scalar_one()
     assert name == "Someone else"
+
+
+async def test_seed_removes_the_retired_policy_it_created_earlier(engine: AsyncEngine) -> None:
+    await seed_dev.seed(DB_URL, ENV)
+    retired_id = seed_dev.seed_id(seed_dev.RETIRED_POLICY_KEY)
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO approval_policies (id, tenant_id, name, description, is_active, created_at, updated_at) "
+                "VALUES (:id, :tid, 'four-eyes-dev', 'retired', TRUE, now(), now())"
+            ),
+            {"id": retired_id, "tid": TENANT_ID},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO approval_steps (id, policy_id, sequence, approver_role, quorum_required, quorum_total, "
+                "mode, step_metadata) VALUES (:id, :pid, 1, 'underwriter', 1, 1, 'sequential', '{}'::jsonb)"
+            ),
+            {"id": uuid.uuid4(), "pid": retired_id},
+        )
+
+    await seed_dev.seed(DB_URL, ENV)
+
+    counts = await _counts(engine)
+    assert (counts["policies"], counts["steps"]) == (1, 2)
