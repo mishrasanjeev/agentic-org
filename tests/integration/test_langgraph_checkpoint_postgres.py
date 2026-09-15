@@ -201,7 +201,11 @@ def test_paused_run_is_stored_encrypted_and_resumes_from_a_new_store(
         raw_blobs = b"".join(
             bytes(row[0]) for row in conn.execute("SELECT blob FROM checkpoint_blobs WHERE blob IS NOT NULL")
         )
-    for secret in (GRANT_SENTINEL, "INV-0001", "750000", "ap_processor"):
+        inline_values = [row[0] for row in conn.execute("SELECT checkpoint->'channel_values' FROM checkpoints")]
+    # No channel value is kept inline (the stock saver would inline every str/int/bool).
+    assert inline_values and all(values == {} for values in inline_values)
+    # Distinctive strings only: numbers can occur by chance in ids, timestamps and ciphertext.
+    for secret in (GRANT_SENTINEL, "INV-0001", "ap_processor"):
         assert secret not in checkpoint_json
         assert secret not in metadata_json
         assert secret.encode() not in raw_blobs
