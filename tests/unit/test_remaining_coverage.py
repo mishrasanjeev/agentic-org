@@ -2497,23 +2497,30 @@ class TestTokenPoolRefresh:
         p.redis.delete.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_refresh_with_resolver_success(self):
-        from auth.token_pool import TokenPool
+    async def test_refresh_with_resolver_success(self, monkeypatch):
+        from datetime import UTC, datetime, timedelta
 
-        p = TokenPool()
+        from auth.token_pool import TokenPool
+        from core.config import external_keys
+
+        monkeypatch.setattr(external_keys, "grantex_root_grant_token", "root-placeholder")
+        client = MagicMock()
+        client.grants.delegate.return_value = {
+            "grantToken": "new-tok",
+            "grantId": "grnt_1",
+            "expiresAt": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        }
+        p = TokenPool(grantex_client_factory=lambda: client)
         p.redis = AsyncMock()
         resolver = AsyncMock(
-            return_value={"agent_type": "finance", "scopes": ["read"], "token_ttl": 3600}
+            return_value={"agent_type": "finance", "grantex_agent_id": "ag_1", "scopes": ["read"], "token_ttl": 3600}
         )
         p.set_agent_config_resolver(resolver)
         p._schedule_refresh = MagicMock()
 
-        with patch("auth.token_pool.grantex_client") as mock_grantex:
-            mock_grantex.delegate_agent_token = AsyncMock(
-                return_value={"access_token": "new-tok", "expires_in": 3600}
-            )
-            await p._refresh_after("agent-1", 0)
-            mock_grantex.delegate_agent_token.assert_called_once()
+        await p._refresh_after("agent-1", 0)
+        client.grants.delegate.assert_called_once()
+        p.redis.setex.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_refresh_with_resolver_failure(self):
