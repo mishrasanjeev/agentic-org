@@ -313,11 +313,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   runs (a token supplied by the caller or configured on the agent stays
   enforced as before) but is logged as `grant_enforcement_would_deny` and
   counted in `agenticorg_grant_enforcement_denials_total{mode,reason}` with
-  the Grantex SDK's reason code, including runs with no grant at all
+  the Grantex SDK's reason (exact messages of the pinned 0.5.x SDK mapped to
+  the Appendix B reasons until the Grantex 0.6 SDK with reason codes is
+  published), including runs with no grant at all
   (`grant_missing`). If the flag table cannot be read and the process has no
   recent mode for the tenant, the run falls back to the strictest mode.
   `deny` is not switchable yet and runs as `warn`. See
   `docs/operations/grant-enforcement.md`.
+- The Grantex SDK pin moves from `grantex==0.5.0` to `grantex==0.5.1`
+  (amount and malformed-cap checks in `enforce`; no API change).
 - **Break:** the authority flags (`grants.enforce_closed.*`,
   `pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
   `decisions.required`, `caps.enforce`) can no longer be created, changed or
