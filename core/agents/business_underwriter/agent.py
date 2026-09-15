@@ -513,7 +513,7 @@ async def _narrate(
     except (UntrustedContentLeakError, CassetteError, asyncio.CancelledError):
         # A leak fails the run closed; a cassette miss is a test-harness error, never a model outage.
         raise
-    # enterprise-gate: broad-except-ok reason=model-outage-omits-narrative-deterministic-memo-still-complete
+    # enterprise-gate: broad-except-ok reason=model-failure-degrades-to-a-memo-without-narrative
     except Exception as exc:
         logger.warning("underwriter_narrative_skipped", reason="model_call_failed", error=type(exc).__name__)
         return NarrativeReport((), (("", "model_call_failed"),), None), session is not None
