@@ -1,0 +1,11 @@
+{
+  "steps": [
+    {
+      "content": {
+        "status": "completed",
+        "confidence": 0.99,
+        "summary": "Scripted development response from the model stub; no model was called."
+      }
+    }
+  ]
+}

@@ -191,6 +191,21 @@ Remove an entry in the pull request that fixes it.
   `api`), or resolve the upstream at request time with a `resolver` directive
   and a variable in `proxy_pass`.
 
+## A-17 — `.dockerignore` cache and bytecode patterns only match the repository root
+
+- **Found:** `make dev` rebuilding the API image's dependency layers after a
+  local pytest run (2026-09-15).
+- **What:** `.dockerignore` lists `__pycache__/`, `*.py[cod]`, `.pytest_cache/`
+  and similar without a `**/` prefix. Docker matches such patterns from the
+  context root only, so `core/**/__pycache__` and other nested bytecode from a
+  developer's test runs are sent in the build context. They change the
+  checksum of `COPY core/ core/` in the builder stage, which reruns the full
+  `pip install` (several minutes) and puts stale `.pyc` files into a locally
+  built image. Clean CI checkouts are unaffected.
+- **Fix:** prefix the cache and bytecode patterns with `**/` (for example
+  `**/__pycache__/`, `**/*.py[cod]`) and confirm with a build after a test run
+  that the builder layers stay cached.
+
 ## A-19 — Approval step conditions that fail to evaluate are skipped
 
 - **Found:** reading `core/approvals/policy_engine.py` while adding the case

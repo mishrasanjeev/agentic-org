@@ -9,8 +9,9 @@
 # core/llm/router.py use the deterministic fake LLM
 # (core/test_doubles/fake_llm.py), honoured only in development and test
 # environments. LangGraph agent runs build their model through
-# core/langgraph/llm_factory.py, which the fake does not cover; running agents
-# locally without a model provider needs the model stub service.
+# core/langgraph/llm_factory.py; an agent whose model is
+# `vllm:scripted/<script>` (or any `vllm:` model with a recorded cassette) is
+# answered by the model-stub service below, with no credentials.
 
 name: agenticorg-dev
 
@@ -25,6 +26,8 @@ x-backend-env: &backend-env
   AGENTICORG_TEST_FAKE_LLM: "1"
   # The registered "mock" verification provider calls the mock-provider service.
   AGENTICORG_MOCK_PROVIDER_URL: http://mock-provider:8080
+  # `vllm:` models go to the OpenAI-compatible model stub (tools/model_stub).
+  VLLM_BASE_URL: http://model-stub:8080
 
 x-backend-build: &backend-build
   context: .
@@ -106,6 +109,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      model-stub:
+        condition: service_healthy
 
   worker:
     image: agenticorg-api:dev
@@ -128,6 +133,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      model-stub:
+        condition: service_healthy
 
   # The mock verification provider as its own service, so the provider seam is
   # exercised over the network (connectors/providers/mock). It refuses to start
@@ -183,6 +190,24 @@ services:
       OIDC_STUB_INTERNAL_URL: http://oidc-stub:9400
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}:9400"
+
+  # OpenAI-compatible model stub (tools/model_stub): `scripted/<name>` models
+  # answer from tools/model_stub/scripts, every other model from cassettes in
+  # tests/cassettes/model_stub. Replay never calls a model; MODEL_STUB_MODE=record
+  # forwards to a real provider and refuses to start without MODEL_RECORD_API_KEY.
+  model-stub:
+    build:
+      context: .
+      dockerfile: tools/model_stub/Dockerfile
+    image: agenticorg-model-stub:dev
+    environment:
+      AGENTICORG_ENV: development
+      MODEL_STUB_MODE: ${MODEL_STUB_MODE:-replay}
+      MODEL_RECORD_API_KEY: ${MODEL_RECORD_API_KEY:-}
+    volumes:
+      - ./tests/cassettes/model_stub:/cassettes
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}:8080"
 
   # Test and check runner for `make test` and `make check`; `make dev` never
   # starts it. The checkout is mounted, so code changes need no rebuild.
