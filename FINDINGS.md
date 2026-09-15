@@ -174,3 +174,18 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
   and description become configuration or `acme_kyb`-style examples; the prompt
   and documents drop the vendor names), then confirm `audit` exits 0.
+
+## A-16 — Re-running `make dev` after an API change breaks the console proxy
+
+- **Found:** re-running `make dev` on a running stack after the API image was
+  rebuilt (2026-09-15).
+- **What:** `ui/nginx.conf` proxies `/api` through an `upstream` block naming
+  `agenticorg-api:8000`, which nginx resolves once at start. Compose recreates
+  the `api` container (new address) but leaves `ui` running, so the console
+  answers `/api/...` with 502 and `scripts/dev_stack_smoke.sh` fails on
+  "console -> api proxy" until `ui` is restarted. A first `make dev` on a clean
+  machine is unaffected.
+- **Fix:** add `restart: true` to the `ui` service's `depends_on.api` entry in
+  `docker-compose.dev.yml` (Compose restarts `ui` whenever it recreates
+  `api`), or resolve the upstream at request time with a `resolver` directive
+  and a variable in `proxy_pass`.

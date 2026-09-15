@@ -138,6 +138,22 @@ services:
       api:
         condition: service_healthy
 
+  # Development OpenID Connect provider with step-up (tools/oidc_stub). The
+  # issuer is the browser-facing URL; other containers reach the token, JWKS
+  # and userinfo endpoints at http://oidc-stub:9400. Refuses to start unless
+  # AGENTICORG_ENV is development, local or test.
+  oidc-stub:
+    build:
+      context: ./tools
+      dockerfile: oidc_stub/Dockerfile
+    image: agenticorg-oidc-stub:dev
+    environment:
+      AGENTICORG_ENV: development
+      OIDC_STUB_PUBLIC_URL: http://127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}
+      OIDC_STUB_INTERNAL_URL: http://oidc-stub:9400
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}:9400"
+
   # Test and check runner for `make test` and `make check`; `make dev` never
   # starts it. The checkout is mounted, so code changes need no rebuild.
   tools:

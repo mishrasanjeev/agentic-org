@@ -108,6 +108,9 @@ scripts/install_hooks.sh
 scripts/check_critical_path_tags.py
 .cloudbuild-ui-deploy.yaml
 docker-compose*.yml
+# Development-only services (identity and model stubs); built from tools/ as
+# their own images and never shipped in the API image.
+tools/
 
 # ── Claude Code session artifacts ─────────────────────────────────
 .claude/

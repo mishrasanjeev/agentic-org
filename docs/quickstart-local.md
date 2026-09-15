@@ -23,6 +23,7 @@ When it finishes:
 | API | <http://127.0.0.1:8000> (`/api/v1/health`, `/docs`) |
 | Postgres | `127.0.0.1:5432`, database/user `agenticorg`, password `agenticorg_dev` |
 | Redis | `127.0.0.1:6379` |
+| OIDC stub | <http://127.0.0.1:9400> (`/.well-known/openid-configuration`) |
 
 All ports bind to `127.0.0.1` only.
 
@@ -37,6 +38,8 @@ All ports bind to `127.0.0.1` only.
 - **api** — the FastAPI application
 - **worker** — the Celery worker for workflows, reports and delivery
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
+- **oidc-stub** — a development OpenID Connect provider with step-up; see
+  [Development identity provider](#development-identity-provider)
 
 Every base image is pinned by digest. The API and worker set
 `AGENTICORG_TEST_FAKE_LLM=1` (see `docs/hermetic_test_doubles.md`), so
@@ -124,13 +127,65 @@ failure traces to `ui/test-results/dev-stack`. Pass extra Playwright arguments
 with `E2E_ARGS="--grep sign-in"` or another config with `E2E_CONFIG`; the other
 configs under `ui/` target hosted environments and need credentials.
 
+## Development identity provider
+
+The **oidc-stub** service (`tools/oidc_stub`) is a small OpenID Connect
+provider for exercising sign-in and step-up locally. It is development-only:
+it refuses to start unless `AGENTICORG_ENV` is `development`, `local` or
+`test`, and also when `AGENTICORG_ENV`, `APP_ENV`, `ENVIRONMENT`, `ENV` or
+`NODE_ENV` names a production-like runtime. Its image is built from `tools/`,
+which the API image excludes.
+
+| Endpoint | |
+|---|---|
+| `/.well-known/openid-configuration` | discovery; `issuer` is `http://127.0.0.1:9400` |
+| `/jwks` | the RS256 signing key (generated at start unless `OIDC_STUB_SIGNING_KEY_FILE` is set) |
+| `/authorize` | authorization code flow; PKCE with `S256` is required |
+| `/token` | `authorization_code` only; codes are single-use and expire after 60 seconds |
+| `/userinfo` | claims for the stub's access tokens |
+
+Other containers use `http://oidc-stub:9400` for `/token`, `/userinfo` and
+`/jwks`, as advertised in discovery; the browser uses the published port.
+
+Users and clients come from `tools/oidc_stub/config.dev.json`:
+
+| User | `sub` | Email | Roles |
+|---|---|---|---|
+| Approver A | `dev-approver-a` | `approver.a@example.com` | underwriter, approver |
+| Approver B | `dev-approver-b` | `approver.b@example.com` | approver |
+
+The `agenticorg-api-dev` client is confidential (development placeholder
+secret in the config file) and `agenticorg-dev-public` is a public client.
+Redirect URIs on `http://127.0.0.1` match on any port, so moving the stack's
+ports does not break them.
+
+`/authorize` shows a sign-in page listing the users; choosing one is the
+authentication (there are no passwords). Tokens carry `acr`, `amr` and
+`auth_time`:
+
+| Request | Sign-in | `acr` | `amr` |
+|---|---|---|---|
+| no `acr_values`, or `urn:agenticorg:acr:basic` | pick a user | `urn:agenticorg:acr:basic` | `["pwd"]` |
+| `acr_values=urn:agenticorg:acr:step-up` | pick a user and confirm the simulated security key | `urn:agenticorg:acr:step-up` | `["pwd", "hwk"]` |
+
+A browser session that already satisfies the request is signed in without a
+prompt. A session that is not stepped up, is older than `max_age`, or meets
+`prompt=login` is asked to authenticate again, and re-authentication must be by
+the same user. `prompt=none` returns `login_required` instead of prompting.
+Unknown `acr_values`, a missing PKCE challenge, an unregistered `redirect_uri`,
+a wrong `code_verifier` or a replayed code are rejected, never downgraded.
+
+The API does not sign users in through the stub yet: its OIDC client only
+accepts HTTPS issuers on public hosts.
+
 ## Changing ports
 
 If a port is already taken, override it for the whole session:
 
 ```bash
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
-AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 make dev
+AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
+AGENTICORG_DEV_OIDC_PORT=19400 make dev
 ```
 
 Use the same variables with `make ps`, `make logs` and the smoke test.
