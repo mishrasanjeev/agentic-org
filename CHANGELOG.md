@@ -6,8 +6,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ### Added
 - `make test`, `make check` and `make e2e`. `make test` runs the unit and
-  contract suites with the 55% coverage floor, then the integration suites
-  against the local stack's Postgres and Redis in a separate `agenticorg_test`
+  contract suites with the 55% coverage floor, then the integration and
+  regression suites against the local stack's Postgres and Redis in a separate `agenticorg_test`
   database that is recreated each run (the development database is never
   touched). `make check` runs ruff, mypy, bandit, gitleaks, the licence-header
   check, JSON Schema validation of `schemas/` and pip-audit. Both run in a new

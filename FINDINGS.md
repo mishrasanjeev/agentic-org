@@ -151,8 +151,9 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** running `make test-integration` from a Windows worktree
   (2026-09-15).
-- **What:** the repository has no `.gitattributes`, so Git for Windows'
-  default `core.autocrlf=true` checks shell scripts out with CRLF endings.
+- **What:** `.gitattributes` fixes line endings only for
+  `core/policy/examples/*.yaml`, so Git for Windows' default
+  `core.autocrlf=true` checks shell scripts out with CRLF endings.
   Bash inside the Linux containers then rejects them:
   `tests/regression/test_bug_sheet_platform_20260914.py::test_deploy_script_pins_worker_and_beat_entrypoints`
   fails on `bash -n scripts/deploy_cloud_run.sh`, and the scripts `make`
