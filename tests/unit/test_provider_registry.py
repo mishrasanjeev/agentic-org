@@ -89,7 +89,8 @@ def test_a_factory_that_raises_fails_closed_with_a_reason() -> None:
     with pytest.raises(ProviderRegistryError) as caught:
         ProviderRegistry.create("needs_config")
     assert caught.value.reason == "construction_failed"
-    assert "ACME_KYB_API_URL is not set" in caught.value.detail
+    assert caught.value.detail == "needs_config: RuntimeError"
+    assert "ACME_KYB_API_URL" not in str(caught.value)
 
 
 @pytest.mark.parametrize(

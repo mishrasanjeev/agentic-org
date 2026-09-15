@@ -34,6 +34,7 @@ from typing import ClassVar, Literal
 import structlog
 
 from connectors.framework.verification_types import (
+    INCLUDE_UNTRUSTED_TEXT,
     SCHEMA_VERSION,
     Address,
     BusinessCandidate,
@@ -319,6 +320,7 @@ async def call_capability[T](
 
 __all__ = [
     "CAPABILITY_METHODS",
+    "INCLUDE_UNTRUSTED_TEXT",
     "SCHEMA_VERSION",
     "Address",
     "BusinessCandidate",
