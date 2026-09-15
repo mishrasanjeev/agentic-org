@@ -97,7 +97,7 @@ Minting needs:
 |---|---|
 | `GRANTEX_API_KEY` | Grantex SDK key (already required) |
 | `GRANTEX_ROOT_GRANT_TOKEN` | Root grant the per-run grants are delegated from. A credential: inject it from the secret manager, never commit it |
-| `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS` | Lifetime requested for a per-run grant (default 900, 60–86400; Grantex caps it at the root grant's expiry) |
+| `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS` | Lifetime requested for a per-run grant (default 900, 300–86400; Grantex caps it at the root grant's expiry, and a grant with less than two minutes left is used for one run but never shared) |
 
 When no token can be resolved the run still starts and each tool call it makes
 is recorded as `grant_missing` with a sub-reason:

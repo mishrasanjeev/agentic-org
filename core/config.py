@@ -170,8 +170,10 @@ class Settings(BaseSettings):
     # startup. Env: AGENTICORG_GRANTS_ENFORCE_CLOSED.
     grants_enforce_closed: Literal["off", "warn", "deny"] = "off"
     # Lifetime requested for a per-run grant delegated from the root grant
-    # (auth/token_pool.py). Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
-    grants_run_token_ttl_seconds: int = Field(default=900, ge=60, le=86_400)
+    # (auth/token_pool.py). At least 300 s: a grant is handed out only with
+    # max(120 s, 10%) left, so a shorter lifetime would mint on nearly every
+    # call. Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
+    grants_run_token_ttl_seconds: int = Field(default=900, ge=300, le=86_400)
     # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
     # when an agent or SOP config is saved: "off" accepts them as before,
     # "warn" accepts them but logs and counts them, "reject" answers 422 with
