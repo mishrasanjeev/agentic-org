@@ -55,6 +55,10 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.52",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.13",
+    # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
+    # extra bundles libpq.
+    "psycopg[binary]>=3.3.5",
+    "psycopg-pool>=3.3.1",
     "alembic>=1.19.2",
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.5",
