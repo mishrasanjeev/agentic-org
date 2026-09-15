@@ -125,6 +125,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   escalation to human review when they are missing. The SEO strategist
   writes ticket-ready recommendations instead of claiming to create Jira
   tickets.
+- **Behaviour change:** the `vendor_manager` and `support_triage` prompts no
+  longer tell the model to call `sanctions_screen`, `gstn_validate` and
+  `mca_get_company_data` (not registered) or `get_ticket` (not in the
+  agent's tools). Vendor onboarding now requires the sanctions screening,
+  GSTIN verification and company registry results in the task input and
+  stops for human review when any is missing; SLA monitoring uses
+  `search_issues` and `get_project_metrics`. Support triage reads the ticket
+  from the task input and uses `apply_macro` / `update_ticket`.
 
 ## [4.0.0] — 2026-04-05
 
