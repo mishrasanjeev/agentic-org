@@ -239,7 +239,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "onboarding_agent": [
         "create_employee", "provision_user", "assign_group",
-        "create_page",
+        "confluence:create_page",
     ],
     "payroll_engine": [
         "run_payroll", "get_payslip", "get_attendance",
@@ -249,7 +249,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "update_performance", "get_employee", "get_org_chart", "add_comment",
     ],
     "ld_coordinator": [
-        "create_page",
+        "confluence:create_page",
         "get_employee", "schedule_interview",
     ],
     "offboarding_agent": [
@@ -257,12 +257,12 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "remove_group", "list_active_sessions",
     ],
     "content_factory": [
-        "create_page",
+        "confluence:create_page",
     ],
     "campaign_pilot": [
         "search_campaigns", "get_campaign_performance",
         "mutate_campaign_budget", "get_search_terms",
-        "get_analytics", "get_stats",
+        "linkedin_ads:get_analytics", "get_stats",
     ],
     "seo_strategist": [],
     "crm_intelligence": [
@@ -276,7 +276,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "search_contacts",
     ],
     "email_marketing": [
-        "send_email", "create_campaign", "send_campaign",
+        "sendgrid:send_email", "mailchimp:create_campaign", "send_campaign",
         "get_campaign_report", "add_list_member", "get_campaign_stats",
     ],
     "social_media": [
@@ -284,7 +284,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "list_channel_videos", "get_campaign_insights",
     ],
     "abm": [
-        "query", "search_contacts", "get_analytics",
+        "salesforce:query", "salesforce:search_contacts", "linkedin_ads:get_analytics",
         "get_campaign_performance", "create_campaign",
     ],
     "competitive_intel": [
@@ -297,24 +297,24 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "send_message", "post_alert",
     ],
     "vendor_manager": [
-        "search_issues", "create_issue", "add_comment",
-        "create_page", "get_project_metrics",
+        "search_issues", "jira:create_issue", "add_comment",
+        "confluence:create_page", "get_project_metrics",
     ],
     "contract_intelligence": [
-        "create_page",
+        "confluence:create_page",
         "search_issues", "get_page_tree",
     ],
     "compliance_guard": [
-        "get_compliance_notice", "get_access_log", "search_issues",
+        "gstn:get_compliance_notice", "get_access_log", "search_issues",
         "create_incident", "send_message",
     ],
     "it_operations": [
-        "create_incident",
+        "servicenow:create_incident",
         "acknowledge_incident",
         "send_message", "post_alert",
     ],
     "legal_ops": [
-        "create_page", "search_issues",
+        "confluence:create_page", "search_issues",
         "get_page_tree",
     ],
     "risk_sentinel": [
@@ -323,9 +323,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "facilities_agent": [
         "create_ticket", "update_ticket",
-        "create_issue",
+        "jira:create_issue",
     ],
-    "email_agent": ["send_email", "read_inbox", "search_emails"],
+    "email_agent": ["gmail:send_email", "read_inbox", "search_emails"],
     "notification_agent": [
         "send_email",
     ],

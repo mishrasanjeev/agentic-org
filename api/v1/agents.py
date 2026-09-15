@@ -174,7 +174,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "create_employee",
         "provision_user",
         "assign_group",
-        "create_page",
+        "confluence:create_page",
     ],
     "payroll_engine": [
         "run_payroll",
@@ -189,7 +189,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "add_comment",
     ],
     "ld_coordinator": [
-        "create_page",
+        "confluence:create_page",
         "get_employee",
         "schedule_interview",
     ],
@@ -201,14 +201,14 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     # Marketing
     "content_factory": [
-        "create_page",
+        "confluence:create_page",
     ],
     "campaign_pilot": [
         "search_campaigns",
         "get_campaign_performance",
         "mutate_campaign_budget",
         "get_search_terms",
-        "get_analytics",
+        "linkedin_ads:get_analytics",
         "get_stats",
     ],
     # Every tool this list used to name was unregistered; it stays empty
@@ -232,8 +232,8 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "search_contacts",
     ],
     "email_marketing": [
-        "send_email",
-        "create_campaign",
+        "sendgrid:send_email",
+        "mailchimp:create_campaign",
         "send_campaign",
         "get_campaign_report",
         "add_list_member",
@@ -246,9 +246,9 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_campaign_insights",
     ],
     "abm": [
-        "query",
-        "search_contacts",
-        "get_analytics",
+        "salesforce:query",
+        "salesforce:search_contacts",
+        "linkedin_ads:get_analytics",
         "get_campaign_performance",
         "create_campaign",
     ],
@@ -270,32 +270,32 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "vendor_manager": [
         "search_issues",
-        "create_issue",
+        "jira:create_issue",
         "add_comment",
-        "create_page",
+        "confluence:create_page",
         "get_project_metrics",
     ],
     "contract_intelligence": [
-        "create_page",
+        "confluence:create_page",
         "search_issues",
         "get_page_tree",
     ],
     "compliance_guard": [
-        "get_compliance_notice",
+        "gstn:get_compliance_notice",
         "get_access_log",
         "search_issues",
         "create_incident",
         "send_message",
     ],
     "it_operations": [
-        "create_incident",
+        "servicenow:create_incident",
         "acknowledge_incident",
         "send_message",
         "post_alert",
     ],
     # Backoffice
     "legal_ops": [
-        "create_page",
+        "confluence:create_page",
         "search_issues",
         "get_page_tree",
     ],
@@ -308,11 +308,11 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "facilities_agent": [
         "create_ticket",
         "update_ticket",
-        "create_issue",
+        "jira:create_issue",
     ],
     # Comms
     "email_agent": [
-        "send_email",
+        "gmail:send_email",
         "read_inbox",
         "search_emails",
     ],
@@ -938,8 +938,18 @@ def _derive_default_tools(
 
     connector_index = _build_tool_index(connector_names=connector_names)
     connector_tool_names = set(connector_index.keys())
+    # A connector-qualified default (``jira:create_issue``) survives only
+    # when that connector is among ``connector_names`` and registers the
+    # tool; an unknown connector or tool never matches (fail closed).
+    qualified_names = (
+        set(_build_tool_index(connector_names=connector_names, include_connector_aliases=True))
+        if any(":" in t for t in static_defaults)
+        else set()
+    )
 
-    intersected = [t for t in static_defaults if t in connector_tool_names]
+    intersected = [
+        t for t in static_defaults if (t in qualified_names if ":" in t else t in connector_tool_names)
+    ]
     if intersected:
         return intersected
 

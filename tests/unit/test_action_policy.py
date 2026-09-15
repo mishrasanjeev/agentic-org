@@ -76,12 +76,14 @@ class TestActionClassification:
             for tool_name in tools
         }
         ambiguous_tools = {
+            "confluence:create_page",
             "create_campaign",
             "create_page",
+            "mailchimp:create_campaign",
             "update_ticket",
         }
 
-        assert len(default_tools) == 115
+        assert len(default_tools) == 123
         assert {tool_name for tool_name in default_tools if classify_action(tool_name) is None} == ambiguous_tools
 
 
