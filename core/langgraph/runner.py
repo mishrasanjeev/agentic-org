@@ -19,14 +19,25 @@ from typing import Any
 
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
+from core.langgraph.checkpointer import (
+    BACKEND_POSTGRES,
+    CheckpointIntegrityError,
+    configured_backend,
+    get_checkpointer,
+)
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
+from core.langgraph.thread_ids import (
+    CheckpointThreadError,
+    canonical_tenant_id,
+    scoped_thread_id,
+    thread_belongs_to_tenant,
+)
 from core.pii.redactor import PIIRedactor
 
 logger = structlog.get_logger()
@@ -36,9 +47,6 @@ logger = structlog.get_logger()
 # see docs/PERFORMANCE.md for baselines.
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
-
-# In-memory checkpointer for now — will switch to PostgreSQL in production
-_checkpointer = MemorySaver()
 
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
@@ -88,6 +96,19 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
             tokens_used += int(_message_token_total(msg) or 0)
     cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
     return tokens_used, cost_usd
+
+
+def _run_thread_id(tenant_id: str, thread_id: str | None, agent_id: str) -> str:
+    """Checkpoint thread for a run, always under the run's tenant prefix.
+
+    Only the memory backend keeps the legacy unscoped id, and only for callers
+    without a tenant; the Postgres backend refuses them (core/langgraph/thread_ids.py).
+    """
+    if canonical_tenant_id(tenant_id) is not None:
+        return scoped_thread_id(tenant_id, thread_id)
+    if configured_backend() == BACKEND_POSTGRES:
+        raise CheckpointThreadError("checkpoint_thread_tenant_invalid")
+    return thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}"
 
 
 def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
@@ -176,7 +197,10 @@ async def run_agent(
         hitl_condition: Additional HITL condition expression.
         grant_token: Grantex grant JWT for authorization.
         connector_config: Config for connectors (auth, secrets).
-        thread_id: Conversation thread ID for checkpointing.
+        thread_id: Checkpoint thread. The API passes a server-generated,
+            tenant-prefixed id (``thread_ids.new_thread_id``); any other id is
+            namespaced under ``tenant_id``, and one scoped to another tenant
+            is refused.
         llm_provider: Explicit catalog provider id (``agent.llm_provider``,
             else ``llm_config["provider"]``). ``None`` keeps the legacy
             model-name inference.
@@ -191,6 +215,8 @@ async def run_agent(
     limit_block = await gate_agent_run(tenant_id)
     if limit_block is not None:
         return limit_block
+
+    run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
 
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
@@ -297,7 +323,9 @@ async def run_agent(
         reset_prefetched_llm_credential(credential_token)
 
     # Compile with checkpointer
-    compiled = graph.compile(checkpointer=_checkpointer)
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    compiled = graph.compile(checkpointer=await get_checkpointer())
 
     initial_state: AgentState = {
         "messages": [
@@ -321,7 +349,7 @@ async def run_agent(
     # Config for checkpointing
     config = {
         "configurable": {
-            "thread_id": thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}",
+            "thread_id": run_thread_id,
         }
     }
 
@@ -570,13 +598,33 @@ async def resume_agent(
     company_id: str | None = None,
     domain: str | None = None,
     llm_provider: str | None = None,
+    require_paused: bool = False,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
     Uses LangGraph's Command(resume=...) to continue from the
     interrupt point with the human's decision.
+
+    ``thread_id`` must be scoped to ``tenant_id``; otherwise the resume is
+    refused before any checkpoint is read. Without a tenant only the memory
+    backend proceeds (legacy callers).
+
+    ``require_paused``: refuse unless the thread has a checkpoint waiting at
+    the approval gate (``checkpoint_not_found`` / ``checkpoint_not_paused``).
+    Resuming a thread with no checkpoint would otherwise start a new, empty run.
+    Refusals and failures carry a ``reason`` code.
     """
     from langgraph.types import Command
+
+    if canonical_tenant_id(tenant_id) is not None or configured_backend() == BACKEND_POSTGRES:
+        if not thread_belongs_to_tenant(thread_id, tenant_id):
+            reason = (
+                "checkpoint_thread_tenant_mismatch"
+                if canonical_tenant_id(tenant_id) is not None
+                else "checkpoint_thread_tenant_invalid"
+            )
+            logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
+            return {"status": "failed", "error": reason, "reason": reason}
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
@@ -595,12 +643,24 @@ async def resume_agent(
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
-    compiled = graph.compile(checkpointer=_checkpointer)
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    compiled = graph.compile(checkpointer=await get_checkpointer())
 
     config = {"configurable": {"thread_id": thread_id}}
 
     t0 = time.perf_counter()
     try:
+        if require_paused:
+            snapshot = await compiled.aget_state(config)  # type: ignore[arg-type]
+            refusal = ""
+            if snapshot is None or not snapshot.values:
+                refusal = "checkpoint_not_found"
+            elif "hitl_gate" not in (snapshot.next or ()):
+                refusal = "checkpoint_not_paused"
+            if refusal:
+                logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
+                return {"status": "failed", "error": refusal, "reason": refusal}
         result = await compiled.ainvoke(  # type: ignore[call-overload]
             Command(resume=decision),
             config=config,
@@ -624,7 +684,8 @@ async def resume_agent(
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
-        return {"status": "failed", "error": str(e)}
+        reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
+        return {"status": "failed", "error": str(e), "reason": reason}
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:
