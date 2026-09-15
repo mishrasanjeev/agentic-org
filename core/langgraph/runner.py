@@ -705,13 +705,16 @@ async def resume_agent(
             return {"status": "failed", "error": reason, "reason": reason}
 
     config = {"configurable": {"thread_id": thread_id}}
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    checkpointer = await get_checkpointer()
 
     # A run started with pseudonymisation holds tokens in its checkpoint: its
     # map is required to resume, whatever the flag says now, and only the
     # tokens in that conversation may be restored.
     pseudonymiser: pseudonymisation.PseudonymSession | None = None
     try:
-        case_id, checkpoint_messages = await _checkpoint_pseudonym_state(await get_checkpointer(), config)
+        case_id, checkpoint_messages = await _checkpoint_pseudonym_state(checkpointer, config)
         if case_id is not None:
             pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id, require_existing=True)
             pseudonymiser.note_issued(checkpoint_messages)
@@ -746,9 +749,7 @@ async def resume_agent(
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
-    # The configured store (core/langgraph/checkpointer.py); raises rather
-    # than falling back to memory when a Postgres store is unavailable.
-    compiled = graph.compile(checkpointer=await get_checkpointer())
+    compiled = graph.compile(checkpointer=checkpointer)
 
     t0 = time.perf_counter()
     try:
