@@ -434,3 +434,21 @@ Remove an entry in the pull request that fixes it.
   comparisons, or compare the time for 16,000 matches with the time for 1,600
   and require roughly linear growth), or mark the timing check to run without
   coverage.
+
+## A-35 — A built-in connector is tied to one commercial screening provider
+
+- **Found:** `scripts/check_denylist.py audit` while removing vendor names
+  from prompts and docs (2026-09-15).
+- **What:** `connectors/ops/sanctions_api.py` (connector `sanctions_api`) and
+  its generator entry in `scripts/generate_connectors.py` integrate with one
+  commercial sanctions-screening provider: the module docstring and
+  `base_url` name it. The release rules say no specific commercial
+  verification or screening provider ships in this repository, and PRD §2
+  lists that as a non-goal. The connector is live, so removing it breaks any
+  tenant that configured it.
+- **Fix:** move the connector into its own package that registers through the
+  `agenticorg.connectors` entry point (plugin loading, F-6), keep
+  `sanctions_api` resolvable during a deprecation window with a startup
+  warning for tenants that use it, then delete the in-repo module and its
+  generator entry. New screening integrations go through the
+  `VerificationProvider` interface instead.
