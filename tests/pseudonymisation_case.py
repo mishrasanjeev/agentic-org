@@ -14,6 +14,7 @@ from typing import Any
 
 TENANT_ID = "00000000-0000-4000-8000-00000000f005"
 OTHER_TENANT_ID = "00000000-0000-4000-8000-00000000f006"
+# A case id a client puts in its request. It must never select a pseudonym map.
 CASE_ID = "case-f5-0001"
 
 

@@ -94,9 +94,9 @@ async def test_map_is_encrypted_at_rest_and_a_new_process_gets_the_same_tokens(
     assert not [raw for raw in case.RAW_VALUES if raw in stored]
     assert entry_count == len(first._map or ())
 
-    restarted = await open_session(tenant_a, case.CASE_ID, store=DatabasePseudonymMapStore())
-    assert restarted.restore_value(masked) == case.task_input()
+    restarted = await open_session(tenant_a, case.CASE_ID, store=DatabasePseudonymMapStore(), require_existing=True)
     assert await restarted.pseudonymise_value(case.task_input()) == masked
+    assert restarted.restore_value(masked) == case.task_input()
 
 
 async def test_concurrent_writers_on_one_case_never_give_a_token_two_values(tenants: tuple[str, str]) -> None:
@@ -176,3 +176,35 @@ async def test_an_unreadable_stored_map_fails_closed(engine: Engine, tenants: tu
     assert excinfo.value.reason == "map_unreadable"
     with pytest.raises(PseudonymisationError):
         await session.pseudonymise_value({"full_name": case.DIRECTOR_NAME})
+
+
+@pytest.mark.parametrize(("pool_size", "max_overflow", "same_case"), [(5, 5, False), (2, 0, False), (2, 0, True)])
+async def test_concurrent_writers_do_not_exhaust_a_bounded_connection_pool(
+    monkeypatch: pytest.MonkeyPatch,
+    tenants: tuple[str, str],
+    pool_size: int,
+    max_overflow: int,
+    same_case: bool,
+) -> None:
+    """Each writer holds one pooled connection at a time: the key is resolved before the row lock is taken."""
+    import core.database as db_mod
+
+    tenant_a, _ = tenants
+    engine = create_async_engine(_DB_URL, pool_size=pool_size, max_overflow=max_overflow, pool_timeout=10)
+    monkeypatch.setattr(db_mod, "async_session_factory", async_sessionmaker(engine, expire_on_commit=False))
+    writers = 10
+    run = uuid.uuid4().hex[:8]
+    sessions = [
+        PseudonymSession(
+            tenant_a, f"case-pool-{run}" if same_case else f"case-pool-{run}-{index}", DatabasePseudonymMapStore()
+        )
+        for index in range(writers)
+    ]
+    try:
+        results = await asyncio.gather(
+            *(s.register_structured({"full_name": f"Placeholder Person {i:02d}"}) for i, s in enumerate(sessions)),
+            return_exceptions=True,
+        )
+    finally:
+        await engine.dispose()
+    assert [r for r in results if isinstance(r, BaseException)] == []

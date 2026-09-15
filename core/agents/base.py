@@ -114,11 +114,12 @@ class BaseAgent:
                 context["available_tools"] = tool_descriptions
 
             # F-5: with ``pseudonymisation.pre_model`` on, the model only sees
-            # the case's pseudonyms; tools restore them and the output is
-            # restored before it is returned.
+            # pseudonyms; tools restore them and the output is restored before
+            # it is returned. The map is keyed by the server-side workflow run,
+            # never by anything in the task.
             pseudonymiser: pseudonymisation.PseudonymSession | None = None
             if await pseudonymisation.pseudonymisation_enabled(self.tenant_id):
-                case_id = pseudonymisation.resolve_case_id(context["task"], fallback=task.workflow_run_id or msg_id)
+                case_id = pseudonymisation.case_key(task.workflow_run_id or msg_id)
                 pseudonymiser = await pseudonymisation.open_session(self.tenant_id, case_id)
                 context = await pseudonymiser.pseudonymise_value(context)
 
@@ -160,8 +161,13 @@ class BaseAgent:
                     )
                 # Feed tool results back to LLM for final synthesis
                 if tool_results:
+                    # Field-aware: ``full_name``, ``dob``, ``address`` ... in a
+                    # structured result are pseudonymised, not only patterns.
+                    model_tool_results = tool_results
+                    if pseudonymiser is not None:
+                        model_tool_results = await pseudonymiser.pseudonymise_value(tool_results)
                     output = await self._synthesize_with_tools(
-                        context, output, tool_results, trace, **_with_pseudonymiser(pseudonymiser)
+                        context, output, model_tool_results, trace, **_with_pseudonymiser(pseudonymiser)
                     )
 
             if pseudonymiser is not None:

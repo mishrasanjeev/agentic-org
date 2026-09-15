@@ -108,13 +108,15 @@ def _pseudonymisation_failed(exc: pseudonymisation.PseudonymisationError) -> dic
     }
 
 
-async def _checkpoint_pseudonym_case_id(checkpointer: Any, config: dict[str, Any]) -> str | None:
-    """The pseudonym case recorded in a thread's checkpoint, if the run was pseudonymised."""
+async def _checkpoint_pseudonym_state(checkpointer: Any, config: dict[str, Any]) -> tuple[str | None, list[Any]]:
+    """The pseudonym case recorded in a thread's checkpoint (if the run was pseudonymised) and its messages."""
     saved = await checkpointer.aget_tuple(config)
     if saved is None:
-        return None
-    value = (saved.checkpoint.get("channel_values") or {}).get("pseudonym_case_id")
-    return value if isinstance(value, str) and value else None
+        return None, []
+    values = saved.checkpoint.get("channel_values") or {}
+    case_id = values.get("pseudonym_case_id")
+    messages = values.get("messages") or []
+    return (case_id if isinstance(case_id, str) and case_id else None), list(messages)
 
 
 def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
@@ -270,18 +272,17 @@ async def run_agent(
 
     run_thread_id = thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}"
 
-    # F-5: with ``pseudonymisation.pre_model`` on for the tenant, the case's
-    # persistent pseudonym map replaces the per-run redaction below. It covers
-    # the system prompt, and every later model turn is pseudonymised again
-    # inside the graph.
+    # F-5: with ``pseudonymisation.pre_model`` on for the tenant, a persistent
+    # pseudonym map replaces the per-run redaction below. It covers the system
+    # prompt, and every later model turn is pseudonymised again inside the
+    # graph. The map is keyed by the server-generated thread id, never by
+    # anything in the request: whoever names a case can read its values back.
     pseudonymiser: pseudonymisation.PseudonymSession | None = None
-    if await pseudonymisation.pseudonymisation_enabled(tenant_id):
-        try:
-            pseudonymiser = await pseudonymisation.open_session(
-                tenant_id, pseudonymisation.resolve_case_id(task_input, fallback=run_thread_id)
-            )
-        except pseudonymisation.PseudonymisationError as exc:
-            return _pseudonymisation_failed(exc)
+    try:
+        if await pseudonymisation.pseudonymisation_enabled(tenant_id):
+            pseudonymiser = await pseudonymisation.open_session(tenant_id, pseudonymisation.case_key(run_thread_id))
+    except pseudonymisation.PseudonymisationError as exc:
+        return _pseudonymisation_failed(exc)
 
     # Build user message FROM ALREADY-REDACTED task_input
     # Apply redaction at the source (each task_input field) so no concatenation
@@ -297,9 +298,8 @@ async def run_agent(
     if pseudonymiser is not None:
         try:
             masked_input = await pseudonymiser.pseudonymise_value(task_input)
-            user_message = await pseudonymiser.pseudonymise_text(_build_user_message(masked_input))
-            amended_prompt = await pseudonymiser.pseudonymise_text(
-                pseudonymisation.with_model_guidance(amended_prompt)
+            user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
+                [_build_user_message(masked_input), pseudonymisation.with_model_guidance(amended_prompt)]
             )
         except pseudonymisation.PseudonymisationError as exc:
             return _pseudonymisation_failed(exc)
@@ -661,15 +661,21 @@ async def resume_agent(
     config = {"configurable": {"thread_id": thread_id}}
 
     # A run started with pseudonymisation holds tokens in its checkpoint: its
-    # map is required to resume, whatever the flag says now.
+    # map is required to resume, whatever the flag says now, and only the
+    # tokens in that conversation may be restored.
     pseudonymiser: pseudonymisation.PseudonymSession | None = None
-    case_id = await _checkpoint_pseudonym_case_id(_checkpointer, config)
-    if case_id is not None:
-        try:
-            pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id)
-        except pseudonymisation.PseudonymisationError as exc:
-            logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
-            return {"status": "failed", "error": f"pseudonymisation_unavailable: {exc.reason}"}
+    try:
+        case_id, checkpoint_messages = await _checkpoint_pseudonym_state(_checkpointer, config)
+        if case_id is not None:
+            pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id, require_existing=True)
+            pseudonymiser.note_issued(checkpoint_messages)
+    except pseudonymisation.PseudonymisationError as exc:
+        logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
+        return {"status": "failed", "error": f"pseudonymisation_unavailable: {exc.reason}"}
+    # enterprise-gate: broad-except-ok reason=checkpoint-read-failure-returns-explicit-failed-status
+    except Exception as e:
+        logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
+        return {"status": "failed", "error": str(e)}
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:

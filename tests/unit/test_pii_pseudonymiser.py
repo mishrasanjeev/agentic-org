@@ -18,7 +18,7 @@ from core.pii.pseudonymiser import (
     PseudonymMap,
     PseudonymRestoreError,
     PseudonymSession,
-    resolve_case_id,
+    case_key,
     structured_values,
 )
 from core.test_doubles.pseudonym_store import InMemoryPseudonymMapStore
@@ -142,6 +142,7 @@ async def test_a_value_keeps_its_token_for_the_whole_case_and_across_sessions() 
 async def test_pseudonymising_twice_changes_nothing() -> None:
     session = await _session()
     once = await session.pseudonymise_text(_rendered(case.task_input()))
+    assert '"full_name": "[[PERSON_' in once
     writes = session._store.writes  # type: ignore[attr-defined]
     assert await session.pseudonymise_text(once) == once
     assert session._store.writes == writes  # type: ignore[attr-defined]
@@ -231,23 +232,112 @@ async def test_a_pseudonym_in_an_argument_name_is_refused() -> None:
         await session.restore_arguments({token: "x"})
 
 
-async def test_restoration_reloads_the_map_once_for_a_token_another_worker_added() -> None:
+async def test_a_token_issued_to_another_conversation_is_not_restored_even_on_the_same_map() -> None:
     store = InMemoryPseudonymMapStore()
-    stale = await _session(store)
-    await stale.pseudonymise_value({"full_name": case.APPLICANT_NAME})
-    worker = await _session(store)
-    token = (await worker.pseudonymise_value({"full_name": case.DIRECTOR_NAME}))["full_name"]
-    assert await stale.restore_arguments({"name": token}) == {"name": case.DIRECTOR_NAME}
+    first = await _session(store)
+    await first.pseudonymise_value({"full_name": case.APPLICANT_NAME})
+    other = await _session(store)
+    token = (await other.pseudonymise_value({"full_name": case.DIRECTOR_NAME}))["full_name"]
+
+    with pytest.raises(PseudonymRestoreError, match="unknown_pseudonym"):
+        await first.restore_arguments({"name": token})
+    assert first.restore_text(f"see {token}") == f"see {token}"
+    assert store.writes == 2  # no reload or extra write was attempted
 
 
-async def test_restoration_is_refused_when_the_map_cannot_be_reloaded() -> None:
+async def test_resuming_marks_only_the_conversations_tokens_as_issued() -> None:
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    store = InMemoryPseudonymMapStore()
+    running = await _session(store)
+    applicant = (await running.pseudonymise_value({"full_name": case.APPLICANT_NAME}))["full_name"]
+    director = (await running.pseudonymise_value({"full_name": case.DIRECTOR_NAME}))["full_name"]
+
+    resumed = await _session(store)
+    # Loaded with both tokens in its map, but nothing is issued to this conversation yet.
+    assert resumed.restore_text(f"{applicant} {director}") == f"{applicant} {director}"
+    resumed.note_issued(
+        [
+            HumanMessage(content=f"About {applicant}"),
+            AIMessage(content="", tool_calls=[{"name": "lookup", "args": {"who": applicant}, "id": "c1"}]),
+        ]
+    )
+    assert await resumed.restore_arguments({"who": applicant}) == {"who": case.APPLICANT_NAME}
+    with pytest.raises(PseudonymRestoreError, match="unknown_pseudonym"):
+        await resumed.restore_arguments({"who": director})
+    assert resumed.restore_text(f"{applicant} {director}") == f"{case.APPLICANT_NAME} {director}"
+
+
+@pytest.mark.parametrize(
+    "damaged",
+    [
+        "[{inner}]",
+        "{inner}",
+        "[[{inner}]",
+        "{{{{{inner}}}}}",
+        "[[ {inner} ]]",
+        "[[{lower}]]",
+        "tag {tag} on its own",
+        "person_1 : {tag}",
+    ],
+)
+async def test_the_case_tag_outside_an_exact_token_is_refused_not_dispatched(damaged: str) -> None:
+    session = await _session()
+    token = (await session.pseudonymise_value({"full_name": case.APPLICANT_NAME}))["full_name"]
+    inner = token[2:-2]
+    argument = damaged.format(inner=inner, lower=inner.lower(), tag=inner.split(":")[1])
+    with pytest.raises(PseudonymRestoreError) as excinfo:
+        await session.restore_arguments({"name": argument})
+    assert excinfo.value.reason in {"malformed_pseudonym", "unknown_pseudonym"}
+
+
+async def test_structured_tool_results_are_pseudonymised_by_field_in_objects_and_json_text() -> None:
+    record = {"record": {"full_name": "Zelda Nobodyson", "address": "2 Sample Road, Nowhereville", "dob": "1900-02-02"}}
+    session = await _session()
+    as_object = json.dumps(await session.pseudonymise_value(record))
+    as_text = await session.pseudonymise_text(json.dumps(record))
+    for raw in ("Zelda Nobodyson", "2 Sample Road, Nowhereville", "1900-02-02"):
+        assert raw not in as_object
+        assert raw not in as_text
+
+
+async def test_many_new_values_in_one_model_call_are_written_to_the_map_once() -> None:
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+
     store = InMemoryPseudonymMapStore()
     session = await _session(store)
-    await session.pseudonymise_value({"full_name": case.APPLICANT_NAME})
-    store.fail_next = "map_store_unavailable"
-    with pytest.raises(PseudonymRestoreError) as excinfo:
-        await session.restore_arguments({"to": f"[[PERSON_7:{session._map.tag}]]"})  # type: ignore[union-attr]
-    assert excinfo.value.reason == "map_store_unavailable"
+    await session.pseudonymise_messages(
+        [
+            SystemMessage(content=case.system_prompt()),
+            HumanMessage(content=f"SSN {case.SSN}, ITIN {case.ITIN}, VAT {case.VAT}"),
+            ToolMessage(content=json.dumps({"full_name": case.APPLICANT_NAME, "iban": case.IBAN}), tool_call_id="c1"),
+        ]
+    )
+    assert store.writes == 1
+    assert len(session._map or ()) == 6
+
+
+async def test_large_batches_are_scanned_off_the_event_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[Any] = []
+    real_to_thread = ps.asyncio.to_thread
+
+    async def spy(function: Any, *args: Any, **kwargs: Any) -> Any:
+        calls.append(function)
+        return await real_to_thread(function, *args, **kwargs)
+
+    monkeypatch.setattr(ps, "_OFF_LOOP_CHARS", 100)
+    monkeypatch.setattr(ps.asyncio, "to_thread", spy)
+    session = await _session()
+    masked = await session.pseudonymise_text("filler " * 30 + f"SSN {case.SSN}")
+    assert case.SSN not in masked
+    assert calls, "detection over a large batch ran on the event loop"
+
+
+async def test_a_resume_with_no_stored_map_is_refused() -> None:
+    with pytest.raises(PseudonymisationError, match="map_missing"):
+        await ps.open_session(
+            case.TENANT_ID, "case-never-written", store=InMemoryPseudonymMapStore(), require_existing=True
+        )
 
 
 async def test_a_store_failure_stops_pseudonymisation_so_no_model_call_is_made() -> None:
@@ -274,23 +364,23 @@ def test_refusal_is_a_tool_error_with_a_reason_code() -> None:
 
 
 @pytest.mark.parametrize(
-    ("task", "expected"),
+    ("server_id", "expected"),
     [
-        ({"case_id": "case-a"}, "case-a"),
-        ({"inputs": {"case_id": "case-b"}}, "case-b"),
-        ({"context": {"case_id": "case-c"}}, "case-c"),
-        ({"inputs": {}}, "thread-1"),
-        (None, "thread-1"),
+        ("agent-f5:0a1b2c3d", "agent-f5:0a1b2c3d"),
+        (
+            "tenant:00000000-0000-4000-8000-00000000f005:run:0a1b",
+            "tenant:00000000-0000-4000-8000-00000000f005:run:0a1b",
+        ),
+        ("voice call/with spaces", "sha256:" + __import__("hashlib").sha256(b"voice call/with spaces").hexdigest()),
     ],
 )
-def test_case_id_comes_from_the_task_or_the_run(task: Any, expected: str) -> None:
-    assert resolve_case_id(task, fallback="thread-1") == expected
+def test_case_key_comes_from_a_server_id_and_hashes_unstorable_ids(server_id: str, expected: str) -> None:
+    assert case_key(server_id) == expected
 
 
-@pytest.mark.parametrize("bad", ["", "has space", "x" * 201, "semi;colon"])
-def test_a_malformed_case_id_is_refused(bad: str) -> None:
+def test_an_empty_case_key_is_refused() -> None:
     with pytest.raises(PseudonymisationError, match="case_id_invalid"):
-        resolve_case_id({"case_id": bad} if bad else {"case_id": None}, fallback=bad)
+        case_key("")
 
 
 async def test_flag_is_off_without_a_valid_tenant_and_reads_the_named_flag(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -300,7 +390,7 @@ async def test_flag_is_off_without_a_valid_tenant_and_reads_the_named_flag(monke
         seen.append((flag_key, tenant_id))
         return True
 
-    monkeypatch.setattr("core.feature_flags.is_enabled", fake_is_enabled)
+    monkeypatch.setattr("core.feature_flags.is_enabled_strict", fake_is_enabled)
     assert await ps.pseudonymisation_enabled(None) is False
     assert await ps.pseudonymisation_enabled("not-a-uuid") is False
     assert await ps.pseudonymisation_enabled(case.TENANT_ID) is True
@@ -313,8 +403,33 @@ async def test_flag_defaults_off_when_no_flag_row_exists(monkeypatch: pytest.Mon
     async def no_row(tenant_id: Any, flag_key: str) -> None:
         return None
 
-    monkeypatch.setattr(feature_flags, "_load_flag", no_row)
+    feature_flags.clear_cache()
+    monkeypatch.setattr(feature_flags, "_query_flag", no_row)
     assert await ps.pseudonymisation_enabled(case.TENANT_ID) is False
+    feature_flags.clear_cache()
+
+
+async def test_a_flag_lookup_failure_refuses_instead_of_turning_pseudonymisation_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core import feature_flags
+
+    attempts: list[str] = []
+
+    def database_down(*args: Any, **kwargs: Any) -> Any:
+        attempts.append("lookup")
+        raise ConnectionError("database unavailable")
+
+    feature_flags.clear_cache()
+    monkeypatch.setattr(feature_flags, "get_tenant_session", database_down)
+    tenant = str(uuid.uuid4())
+    # The lenient lookup caches its failure as "no row"; the strict one must not trust that.
+    assert await feature_flags.is_enabled(ps.FLAG_KEY, tenant_id=uuid.UUID(tenant)) is False
+    for _ in range(2):
+        with pytest.raises(PseudonymisationError, match="flag_lookup_failed"):
+            await ps.pseudonymisation_enabled(tenant)
+    assert attempts == ["lookup", "lookup", "lookup"]  # failures are never served from the cache
+    feature_flags.clear_cache()
 
 
 async def test_stored_ciphertext_is_decoded_through_tenant_decryption(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -11,7 +11,12 @@ Acceptance criteria covered here:
   before the next model turn;
 * a tool call whose pseudonym cannot be restored is refused, never sent;
 * the map survives a pause: a resumed run restores from the stored map, and
-  refuses to resume when the map cannot be read;
+  refuses to resume when the map is missing or cannot be read, or the
+  checkpoint cannot be read;
+* the map is keyed by the server's run id: a case id in the request never
+  reaches another run's map, and tokens from another run are never restored;
+* structured tool results on the router path are pseudonymised by field;
+* a flag that cannot be read refuses the run instead of turning pseudonymisation off;
 * with the flag off nothing changes.
 """
 
@@ -25,6 +30,7 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
+from core.pii.pseudonymiser import PseudonymMap
 from core.test_doubles.pseudonym_store import InMemoryPseudonymMapStore
 from core.test_doubles.scripted_model import final, tool_call
 from tests import pseudonymisation_case as case
@@ -84,6 +90,18 @@ def explanations(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
     monkeypatch.setattr(runner, "generate_explanation", fake_explanation)
     monkeypatch.setattr("core.database.get_tenant_session", no_database)
     return seen
+
+
+@pytest.fixture
+def audits(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Capture audit entries instead of writing them to a database."""
+    entries: list[dict[str, Any]] = []
+
+    async def log(self: Any, **kwargs: Any) -> None:
+        entries.append(kwargs)
+
+    monkeypatch.setattr("core.tool_gateway.audit_logger.AuditLogger.log", log)
+    return entries
 
 
 @pytest.fixture
@@ -168,15 +186,18 @@ async def test_langgraph_no_raw_identifier_reaches_the_model_and_tools_receive_r
     assert result["output"]["summary"] == f"Emailed {case.EMAIL}"
     assert explanations and all(case.EMAIL not in json.dumps(seen) for seen in explanations)
     assert case.EMAIL in json.dumps(result["explanation"])
-    # 5. The case map is stored under the task's case id.
-    assert (case.TENANT_ID, case.CASE_ID) in store.rows
+    # 5. The map is stored under the server's thread id, not the request's case id.
+    [(tenant, key)] = store.rows
+    assert tenant == case.TENANT_ID
+    assert key.startswith("agent-f5:") and key != case.CASE_ID
 
 
-async def test_langgraph_tool_call_with_an_unrestorable_pseudonym_is_refused_and_not_sent(
+async def test_langgraph_tool_call_with_an_unrestorable_pseudonym_is_refused_audited_and_not_sent(
     scripted_model: Any,
     store: InMemoryPseudonymMapStore,
     explanations: list[tuple[Any, Any]],
     connector_calls: list[dict[str, Any]],
+    audits: list[dict[str, Any]],
 ) -> None:
     model = scripted_model(
         [
@@ -191,6 +212,9 @@ async def test_langgraph_tool_call_with_an_unrestorable_pseudonym_is_refused_and
     assert "E1012" in str(tool_message.content)
     assert "pseudonym_restore_failed: unknown_pseudonym" in str(tool_message.content)
     assert result["tool_calls_log"][0]["status"] == "error"
+    assert [(a["action"], a["outcome"], a["details"]["reason"]) for a in audits] == [
+        ("pseudonym_restore_failed", "blocked", "unknown_pseudonym")
+    ]
 
 
 async def test_langgraph_map_survives_a_pause_and_resume_restores_from_the_stored_map(
@@ -338,7 +362,7 @@ async def test_router_no_raw_identifier_reaches_the_recorded_request_and_tools_r
         assert "<pseudonymised_data>" in recorded["request"]["messages"][0]["content"]
     assert connector_calls[0]["params"] == {"to": case.EMAIL, "body": f"SSN {case.SSN} checked"}
     assert result.output["summary"] == f"Emailed {case.EMAIL}"
-    assert (case.TENANT_ID, case.CASE_ID) in store.rows
+    assert list(store.rows) == [(case.TENANT_ID, "wfr-f5")]  # the workflow run, not the task's case_id
 
 
 async def test_tool_gateway_restores_arguments_and_refuses_unrestorable_ones(
@@ -412,6 +436,7 @@ async def test_graph_pseudonymises_every_message_immediately_before_the_model_ca
 async def test_agent_tool_dispatch_without_a_gateway_refuses_unrestorable_arguments(
     store: InMemoryPseudonymMapStore,
     connector_calls: list[dict[str, Any]],
+    audits: list[dict[str, Any]],
 ) -> None:
     from core.langgraph.tool_adapter import execute_agent_tool
     from core.pii.pseudonymiser import open_session
@@ -429,3 +454,211 @@ async def test_agent_tool_dispatch_without_a_gateway_refuses_unrestorable_argume
     )
     assert result == {"error": {"code": "E1012", "message": "pseudonym_restore_failed: unknown_pseudonym"}}
     assert connector_calls == []
+    assert [a["action"] for a in audits] == ["pseudonym_restore_failed"]
+
+
+# ── Review findings: case binding, structured results, flag failures, resume ─
+
+
+async def test_a_case_id_in_the_request_never_reaches_another_runs_map(
+    scripted_model: Any,
+    store: InMemoryPseudonymMapStore,
+    explanations: list[tuple[Any, Any]],
+    connector_calls: list[dict[str, Any]],
+    audits: list[dict[str, Any]],
+) -> None:
+    """A second caller names the first run's case and replays its tokens; nothing is restored or written."""
+
+    def victim_decides(messages: list[BaseMessage]) -> Any:
+        human = next(m for m in messages if isinstance(m, HumanMessage)).content
+        return final({"status": "completed", "confidence": 0.95, "ssn": _token(human, "US_SSN")})
+
+    scripted_model([victim_decides])
+    victim = await _run(authorized_tools=[])
+    assert victim["output"]["ssn"] == case.SSN
+    [(tenant, victim_key)] = store.rows
+    victim_row = store.rows[(tenant, victim_key)]
+    tag = PseudonymMap.from_json(victim_row).tag
+    forged = f"[[US_SSN_1:{tag}]] [[PERSON_1:{tag}]]"
+
+    attacker_task = {
+        "action": "screen_applicant",
+        "case_id": victim_key,
+        "inputs": {"case_id": victim_key, "notes": "reach me at probe@example.com"},
+        "context": {"case_id": victim_key},
+    }
+    attacker_model = scripted_model(
+        [
+            tool_call("gmail__send_email", to=f"[[US_SSN_1:{tag}]]", subject="x", body="y"),
+            final({"status": "completed", "confidence": 0.95, "leak": forged}),
+        ]
+    )
+    attacker = await _run(task_input=attacker_task)
+
+    assert attacker["output"]["leak"] == forged  # never restored
+    assert case.SSN not in json.dumps(attacker, default=str)
+    assert case.APPLICANT_NAME not in json.dumps(attacker, default=str)
+    assert connector_calls == []  # the replayed token was refused, not dispatched
+    assert audits and audits[0]["details"]["reason"] == "unknown_pseudonym"
+    assert store.rows[(tenant, victim_key)] == victim_row  # nothing written into the first run's map
+    assert len(store.rows) == 2
+    assert tag not in _request_text(attacker_model.calls[0]).replace(forged, "")
+
+
+async def test_router_synthesis_pseudonymises_structured_tool_results_by_field(
+    monkeypatch: pytest.MonkeyPatch,
+    store: InMemoryPseudonymMapStore,
+) -> None:
+    from core.agents.base import BaseAgent
+    from core.llm.router import LLMResponse, LLMRouter
+    from core.schemas.messages import TargetAgent, TaskAssignment, TaskInput
+
+    record = {"full_name": "Zelda Nobodyson", "address": "2 Sample Road, Nowhereville", "dob": "1900-02-02"}
+
+    async def fake_execute(connector: str, tool: str, params: dict[str, Any], config: Any, **_: Any) -> dict[str, Any]:
+        return {"status": "ok", "record": record}
+
+    monkeypatch.setattr("core.langgraph.tool_adapter._execute_connector_tool", fake_execute)
+    monkeypatch.setattr("core.langgraph.tool_adapter.load_connector_config", AsyncMock(return_value={}))
+    sent: list[str] = []
+
+    async def provider(self: Any, model: str, messages: list[dict[str, Any]], *args: Any) -> LLMResponse:
+        sent.append(json.dumps(messages))
+        if len(messages) == 2:
+            call = {"connector": "gmail", "tool": "send_email", "params": {"to": "ops"}}
+            return LLMResponse(content=json.dumps({"status": "in_progress", "tool_calls": [call]}), model=model)
+        name = _token(messages[-1]["content"], "PERSON")
+        return LLMResponse(content=json.dumps({"status": "completed", "confidence": 0.95, "who": name}), model=model)
+
+    monkeypatch.setattr(LLMRouter, "_call_provider", provider)
+    monkeypatch.setattr("core.test_doubles.fake_llm.is_active", lambda: False)  # reach the provider double
+    agent = BaseAgent(
+        agent_id="agent-f5",
+        tenant_id=case.TENANT_ID,
+        authorized_tools=["gmail:send_email"],
+        llm_model="gemini-2.5-flash",
+    )
+    agent._system_prompt = "You screen applicants."
+    task = TaskAssignment(
+        message_id="msg-f5",
+        correlation_id="corr-f5",
+        workflow_run_id="wfr-f5-structured",
+        workflow_definition_id="wfd-f5",
+        step_id="screen",
+        step_index=0,
+        total_steps=1,
+        target_agent=TargetAgent(agent_id="agent-f5", agent_type="analyst", agent_token="placeholder"),
+        task=TaskInput(**case.task_input()),
+    )
+
+    result = await agent.execute(task)
+
+    assert result.status == "completed", (result.error, result.reasoning_trace, result.output)
+    assert len(sent) == 2
+    for request in sent:
+        leaked = [raw for raw in (*record.values(), *case.RAW_VALUES) if raw in request]
+        assert not leaked, leaked
+    assert result.output["who"] == record["full_name"]
+    assert result.output["tool_results"][0]["result"]["record"] == record
+
+
+async def test_langgraph_run_is_refused_when_the_flag_cannot_be_read(
+    scripted_model: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    explanations: list[tuple[Any, Any]],
+) -> None:
+    from core import feature_flags
+
+    def database_down(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("database unavailable")
+
+    feature_flags.clear_cache()
+    monkeypatch.setattr(feature_flags, "get_tenant_session", database_down)
+    model = scripted_model([])
+
+    result = await _run()
+
+    assert result["status"] == "failed"
+    assert result["error"] == "pseudonymisation_unavailable: flag_lookup_failed"
+    assert model.calls == []
+    feature_flags.clear_cache()
+
+
+async def test_router_agent_is_refused_when_the_flag_cannot_be_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core import feature_flags
+    from core.agents.base import BaseAgent
+    from core.llm.router import LLMRouter
+    from core.schemas.messages import TargetAgent, TaskAssignment, TaskInput
+
+    def database_down(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("database unavailable")
+
+    feature_flags.clear_cache()
+    monkeypatch.setattr(feature_flags, "get_tenant_session", database_down)
+    provider = AsyncMock()
+    monkeypatch.setattr(LLMRouter, "_call_provider", provider)
+    monkeypatch.setattr("core.test_doubles.fake_llm.is_active", lambda: False)
+    agent = BaseAgent(agent_id="agent-f5", tenant_id=case.TENANT_ID, llm_model="gemini-2.5-flash")
+    task = TaskAssignment(
+        message_id="msg-f5",
+        correlation_id="corr-f5",
+        workflow_run_id="wfr-f5-flag",
+        workflow_definition_id="wfd-f5",
+        step_id="screen",
+        step_index=0,
+        total_steps=1,
+        target_agent=TargetAgent(agent_id="agent-f5", agent_type="analyst", agent_token="placeholder"),
+        task=TaskInput(**case.task_input()),
+    )
+
+    result = await agent.execute(task)
+
+    assert result.status == "failed"
+    assert "flag_lookup_failed" in str(result.error)
+    provider.assert_not_called()
+    feature_flags.clear_cache()
+
+
+async def test_langgraph_resume_is_refused_when_the_map_row_is_missing(
+    scripted_model: Any,
+    store: InMemoryPseudonymMapStore,
+    explanations: list[tuple[Any, Any]],
+) -> None:
+    from core.langgraph.runner import resume_agent
+
+    scripted_model([final({"status": "completed", "confidence": 0.95, "total": 750000})])
+    paused = await _run(authorized_tools=[], hitl_condition="total > 500000")
+    store.rows.clear()
+
+    resumed = await resume_agent(
+        agent_id="agent-f5",
+        thread_id=paused["thread_id"],
+        decision={"action": "approve"},
+        system_prompt=case.system_prompt(),
+        authorized_tools=[],
+        hitl_condition="total > 500000",
+        tenant_id=case.TENANT_ID,
+    )
+    assert resumed == {"status": "failed", "error": "pseudonymisation_unavailable: map_missing"}
+
+
+async def test_langgraph_resume_returns_failed_when_the_checkpoint_cannot_be_read(
+    monkeypatch: pytest.MonkeyPatch,
+    store: InMemoryPseudonymMapStore,
+    explanations: list[tuple[Any, Any]],
+) -> None:
+    from core.langgraph import runner
+
+    async def unreadable(config: Any) -> Any:
+        raise RuntimeError("checkpoint store unavailable")
+
+    monkeypatch.setattr(runner._checkpointer, "aget_tuple", unreadable)
+    resumed = await runner.resume_agent(
+        agent_id="agent-f5",
+        thread_id="agent-f5:0a1b2c3d",
+        decision={"action": "approve"},
+        system_prompt=case.system_prompt(),
+        authorized_tools=[],
+        tenant_id=case.TENANT_ID,
+    )
+    assert resumed == {"status": "failed", "error": "checkpoint store unavailable"}

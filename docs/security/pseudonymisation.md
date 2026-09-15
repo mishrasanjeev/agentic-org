@@ -16,10 +16,11 @@ The flag is off by default. A tenant administrator enables it for their tenant
 through the feature-flag API (`POST /api/v1/feature-flags` with flag key
 `pseudonymisation.pre_model`, `enabled` true and `rollout_percentage` 100).
 
-The flag is read once when a run starts (flag reads are cached for 30 seconds).
-If the flag cannot be read, the run proceeds as if it were off, which means
-the existing redaction described under [With the flag off](#with-the-flag-off)
-still applies.
+The flag is read once when a run starts; successful reads are cached for 30
+seconds. The read is strict: no flag row means off, but a lookup that fails
+(database unavailable) refuses the run with
+`pseudonymisation_unavailable: flag_lookup_failed` rather than treating the
+flag as off, and a failure is never served from the cache.
 
 Roll it out as PRD §10 describes: staging with synthetic traffic first, then
 one internal tenant, watching the metrics below.
@@ -67,12 +68,19 @@ recognisable shape is still masked.
   pseudonymises the task input, the user message and the system prompt before
   they enter the graph state, and the `reason` node pseudonymises every message
   again immediately before each call to the model built by
-  `core/langgraph/llm_factory.py`. Tool results are pseudonymised before they
-  are added to the conversation. The plain-language explanation of a run,
-  which is also written by a model, is given the pseudonymised output and
-  trace.
+  `core/langgraph/llm_factory.py`. Tool results are pseudonymised, by field as
+  well as by pattern, before they are added to the conversation. The
+  plain-language explanation of a run, which is also written by a model, is
+  given the pseudonymised output and trace.
 - `LLMRouter.complete` (`core/llm/router.py`), used by `BaseAgent`: every
   message is pseudonymised before the primary or fallback model is called.
+  `BaseAgent` pseudonymises the task context and the structured tool results
+  (by field) before they are serialised into the prompt.
+
+Text that is a JSON object or array (a serialised tool result) is also
+checked by field. All new values in one model call are written to the map in
+a single write, and large batches are scanned in a worker thread so detection
+does not block the event loop.
 
 The model is told, in a short block appended to the system prompt, to copy
 placeholders exactly, including into tool arguments.
@@ -81,23 +89,35 @@ placeholders exactly, including into tool arguments.
 LangGraph tool wrapper (`core/langgraph/tool_adapter.py`), in
 `execute_agent_tool` and in `ToolGateway.execute`, before authorisation checks
 and dispatch. Run output, reasoning trace, HITL trigger text and the
-explanation are restored before they are returned.
+explanation are restored before they are returned. Only placeholders issued
+into this run's own model conversation are ever restored, in tool arguments or
+in output. A refusal at the tool boundary is audited
+(`pseudonym_restore_failed`, outcome `blocked`) on every path.
 
 ## Stability and storage
 
 A value gets one placeholder for the whole case: the same name has the same
 placeholder in the task, in tool results, in later model turns and after a
-human-in-the-loop pause or a restart. The case is `case_id` in the task (at the
-top level, in `inputs` or in `context`; 1–200 characters of `A-Za-z0-9._:@-`),
-otherwise the run's thread or workflow-run id.
+human-in-the-loop pause or a restart.
+
+**A case is identified only by a server-generated id**: the LangGraph run's
+checkpoint thread, or the `BaseAgent` step's workflow run. A `case_id` in a
+request is ignored. Placeholders restore to the case's values, so letting a
+caller name a case would let them read another case's personal data back
+through the model's output. Placeholders are therefore stable within a run and
+its resumes, not across separate runs; a case that spans runs needs a case id
+the server has authorised for the caller, which this release does not have.
 
 The map is stored in `case_pseudonym_maps`, one row per tenant and case,
 encrypted with `encrypt_for_tenant` (the tenant's BYOK key, the platform key,
 or the vault keyring), under row-level security. Writes take a row lock, so
-two workers on the same case never give one placeholder two values. The run's
+two workers on the same case never give one placeholder two values. The
+tenant's key is resolved before the row lock is taken and encryption runs in a
+worker thread, so each writer holds one pooled connection at a time. The run's
 checkpoint records the case, and resuming reloads the map, even if the flag
-has been turned off since. The table is registered with `verify_all` so key
-retirement sees it.
+has been turned off since, and treats as issued only the placeholders found in
+the checkpointed conversation. The table is registered with `verify_all` so
+key retirement sees it.
 
 The six hex characters in a placeholder are a random tag per case. Text from
 outside the case, such as a web page or a filing, cannot write a placeholder
@@ -107,14 +127,15 @@ that restores to one of the case's values without knowing it.
 
 | Situation | What happens |
 |---|---|
+| The flag cannot be read | No model call is made: `pseudonymisation_unavailable: flag_lookup_failed`. |
 | The map cannot be read or written | No model call is made. A LangGraph run fails with `pseudonymisation_unavailable: <reason>`; a `BaseAgent` step fails with the reason. |
-| A tool argument contains a placeholder that is unknown for the case, belongs to another case, is damaged (for example `[[PERSON_1:3fa9c`), or appears in an argument name | The tool call is refused with `E1012 pseudonym_restore_failed: <reason>` and is never dispatched, with the placeholder or partly restored. The map is reloaded once first, in case another worker on the case added the placeholder. |
-| A resumed run's map cannot be read | The resume fails with `pseudonymisation_unavailable: <reason>`. |
-| A `case_id` is malformed | The run fails with `case_id_invalid` rather than starting a separate map. |
+| A tool argument contains a placeholder not issued in this run's conversation (from another run, or invented), a damaged placeholder (`[[PERSON_1:3fa9c`, `[PERSON_1:3fa9c2]`, `PERSON_1:3fa9c2`, `{{PERSON_1:3fa9c2}}`), the case tag anywhere outside an exact placeholder, or a placeholder in an argument name | The tool call is refused with `E1012 pseudonym_restore_failed: <reason>`, audited, and never dispatched with the placeholder or partly restored. |
+| Output contains a placeholder not issued in this run | It is left as written, never restored. |
+| A resumed run's map is missing or cannot be read, or its checkpoint cannot be read | The resume fails (`pseudonymisation_unavailable: map_missing` or `<reason>`; a checkpoint error returns `failed` with the error). |
 
-Reasons: `map_store_unavailable`, `map_store_failed`, `map_unreadable`,
-`tenant_invalid`, `case_id_invalid`, `unknown_pseudonym`,
-`malformed_pseudonym`, `pseudonym_in_argument_name`,
+Reasons: `flag_lookup_failed`, `map_store_unavailable`, `map_store_failed`,
+`map_unreadable`, `map_missing`, `tenant_invalid`, `case_id_invalid`,
+`unknown_pseudonym`, `malformed_pseudonym`, `pseudonym_in_argument_name`,
 `pseudonymisation_unstable`.
 
 ## Metrics
@@ -125,7 +146,7 @@ All low cardinality; no tenant, case or value is ever a label.
 |---|---|
 | `agenticorg_pii_pseudonymised_total` — distinct values given a placeholder | `entity_type` (the types above, or `other`) |
 | `agenticorg_pii_pseudonym_restore_refused_total` — tool calls refused | `reason` |
-| `agenticorg_pii_pseudonym_store_failures_total` — map reads or writes that failed | `reason` |
+| `agenticorg_pii_pseudonymisation_unavailable_total` — flag or map failures that stopped a model call or a resume | `reason` |
 
 ## Limits
 
@@ -156,6 +177,10 @@ All low cardinality; no tenant, case or value is ever a label.
   arguments with placeholders and pseudonymised results.
 - **Placeholders are case data, not secrets.** Anyone who can read a case's
   model conversation (for example from the checkpoint store) can see its tag.
+- **The case tag in tool data.** A tool argument that happens to contain the
+  case's six-hex tag as a separate word is refused, to catch damaged
+  placeholders; this is rare but possible.
+- **Stability across runs** needs a server-authorised case id (see above).
 
 ## With the flag off
 

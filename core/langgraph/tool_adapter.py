@@ -747,6 +747,7 @@ async def execute_agent_tool(
         try:
             params = await pseudonymiser.restore_arguments(params)
         except PseudonymisationError as exc:
+            await _audit_pseudonym_refusal(tenant_id, connector_name, tool_name, exc.reason)
             return refusal(exc)
     connector_name = _canonical_connector_name(connector_name)
     if not is_tool_authorized(authorized_tools, connector_name, tool_name):
@@ -810,6 +811,37 @@ async def execute_agent_tool(
         company_id=company_id,
         domain=domain,
         capability_authorization=capability_authorization,
+    )
+
+
+async def _audit_pseudonym_refusal(tenant_id: str | None, connector_name: str, tool_name: str, reason: str) -> None:
+    """Audit a tool call refused because its pseudonyms could not be restored, as ``ToolGateway`` does.
+
+    The audit row is written in the tenant's RLS context; a write failure is
+    logged by ``AuditLogger`` and never turns the refusal into a dispatch.
+    """
+    import uuid as _uuid
+
+    from core.database import get_tenant_session
+    from core.tool_gateway.audit_logger import AuditLogger
+
+    session_factory = None
+    if tenant_id:
+        try:
+            tid = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            tid = None
+        if tid is not None:
+
+            def session_factory() -> Any:
+                return get_tenant_session(tid)
+
+    await AuditLogger(session_factory).log(
+        tenant_id=str(tenant_id or ""),
+        tool_name=tool_name,
+        action="pseudonym_restore_failed",
+        outcome="blocked",
+        details={"reason": reason, "connector": connector_name},
     )
 
 
@@ -992,6 +1024,7 @@ def build_tools_for_agent(
                         params = await pseudonymiser.restore_arguments(params)
                     except PseudonymisationError as exc:
                         logger.warning("tool_call_refused_pseudonym", connector=cn, tool=tn, reason=exc.reason)
+                        await _audit_pseudonym_refusal(tenant_id, cn, tn, exc.reason)
                         return refusal(exc)
                 elif pii_token_map:
                     params = _deanonymize_value(params, pii_token_map)
