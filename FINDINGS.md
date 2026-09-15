@@ -236,3 +236,34 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** an admin-only retry endpoint (or scheduled sweep) that re-claims
   approvals in `refused` with a transient reason (`checkpoint_store_unreachable`)
   or `resuming` older than the run timeout, with tests for double-claim safety.
+
+## A-26 — Importing the provider interface loads every connector
+
+- **Found:** building the provider conformance suite (2026-09-15).
+- **What:** `connectors/__init__.py` imports all connector modules at package
+  import. `connectors.framework.verification_provider`, which every provider
+  package and `agenticorg.testing.provider_conformance` import, therefore
+  pulls in every connector and its third-party dependencies, so a provider
+  package's tests need the whole platform's dependency set installed.
+- **Fix:** register native connectors from an explicit function called at
+  application and worker startup (before plugin loading) instead of at
+  package import, or move `connectors/framework` into a package with no
+  import-time side effects. Keep the native-before-plugin ordering test.
+
+## A-27 — mypy skips every module under connectors/
+
+- **Found:** type-checking the provider seam (2026-09-15).
+- **What:** `pyproject.toml` sets `ignore_errors = true` for `connectors.*`,
+  so CI's `mypy .` reports nothing for the new provider interface, registry
+  and mock provider, or for any connector. The new modules were checked
+  separately with a stricter configuration and are clean.
+- **Fix:** replace the blanket override with a per-module list of the legacy
+  connectors that still fail, so new code under `connectors/` is checked.
+
+## A-28 — CLAUDE.md lists the preflight test suites without tests/contract
+
+- **Found:** adding `tests/contract/` to the CI unit job and
+  `scripts/preflight.sh` (2026-09-15).
+- **What:** "Required Before Every Push" in `CLAUDE.md` still lists
+  `pytest tests/regression/ tests/unit/ tests/security/ tests/connector_harness/`.
+- **Fix:** add `tests/contract/` to that line.

@@ -188,6 +188,7 @@ async def test_provider_declaring_only_resolve_and_verify_degrades_ownership_and
     person = vp.PersonSubject(full_name="Orla Venncastle")
     opts = vp.ScreenOptions(idempotency_key="case-0001-screen")
 
+    # docs-snippet: start graceful-degradation
     candidates = await call_capability(
         provider,
         Capability.RESOLVE,
@@ -203,6 +204,7 @@ async def test_provider_declaring_only_resolve_and_verify_degrades_ownership_and
     assert isinstance(candidates, list) and candidates[0].ref == REF
     assert ownership == NotAvailable(Capability.OWNERSHIP)
     assert screening == NotAvailable(Capability.SCREEN_PERSON)
+    # docs-snippet: end graceful-degradation
 
     from core.domain_schemas import iter_errors
 

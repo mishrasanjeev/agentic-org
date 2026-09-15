@@ -104,6 +104,7 @@ def _evidence(record: str, field: str) -> Evidence:
     return Evidence(provider="public_registry", record_id=record, field=field, retrieved_at=RETRIEVED)
 
 
+# docs-snippet: start provider-skeleton
 class PublicRegistrySketch(VerificationProvider):
     """Registry data only: no screening, no web presence. Lookups are synchronous at the source."""
 
@@ -149,6 +150,8 @@ class PublicRegistrySketch(VerificationProvider):
             )
             for p in hits[q.offset : q.offset + q.limit]
         ]
+
+    # docs-snippet: end provider-skeleton
 
     async def verify_business(self, ref: BusinessRef, opts: VerifyOptions, *, deadline: Deadline) -> VerificationHandle:
         self._profile(ref)
@@ -271,6 +274,7 @@ async def test_capabilities_the_registry_does_not_offer_degrade() -> None:
     ref = provider._ref("00000001")
     with pytest.raises(CapabilityNotSupported):
         await provider.web_presence(ref, deadline=Deadline.after(1))
+
     async def never_called() -> None:
         raise AssertionError("an undeclared capability was invoked")
 

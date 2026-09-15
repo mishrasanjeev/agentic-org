@@ -85,4 +85,5 @@ the exception type is logged, never its message, which may carry configuration.
 `ProviderRegistry.create(name)` fails closed with a reason when the name is
 unknown (`unknown_provider`), the constructor raises (`construction_failed`)
 or the instance is malformed (`invalid_provider`). See
-`docs/adr/0009-provider-seam.md` for the interface.
+`docs/providers/writing-a-verification-provider.md` for the interface, the
+conformance suite a provider must pass, and packaging.

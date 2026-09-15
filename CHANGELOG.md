@@ -155,7 +155,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   fault-injection and event endpoints only with
   `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) and points the API and worker at
   it. It runs only when `AGENTICORG_ENV` is explicitly local, development or
-  test; elsewhere the registry neither lists nor creates it. See `docs/providers/mock-provider.md`.
+  test; elsewhere the registry neither lists nor creates it. See
+  `docs/providers/mock-provider.md`.
+- Provider conformance suite, published in the full distribution as
+  `agenticorg.testing.provider_conformance` (source: `testing/provider_conformance`).
+  A provider package subclasses `ProviderConformanceSuite` and supplies a
+  `ConformanceTarget`; twelve checks cover identity, capability honesty,
+  pending-then-result, expired and overrun deadlines (including polls),
+  cancellation, the error taxonomy, webhook verification including forged
+  payloads, webhook replay protection (stale deliveries, stable event ids),
+  pagination of candidates and monitor alerts, idempotency and schema
+  conformance, each failing with a readable reason. `strict=True` turns a
+  skipped check into a failure. The mock provider passes strictly in-process
+  and over HTTP; deliberately broken providers fail each check. Documentation code examples are extracted from tests. See
+  `docs/providers/writing-a-verification-provider.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
