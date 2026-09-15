@@ -171,14 +171,22 @@ async def test_outcomes_are_counted_by_kind_and_outcome() -> None:
 
 async def test_network_process_and_file_escapes_are_denied_inside_the_worker() -> None:
     report = await probe_isolation()
-    assert report["checks"] == {
-        "file_write": report["checks"]["file_write"],
-        "name_resolution": report["checks"]["name_resolution"],
-        "process_spawn": report["checks"]["process_spawn"],
-        "raw_socket": report["checks"]["raw_socket"],
-        "socket_connect": report["checks"]["socket_connect"],
+    assert set(report["checks"]) == {
+        "file_delete",
+        "file_rename",
+        "file_write",
+        "name_resolution",
+        "process_fork",
+        "process_spawn",
+        "raw_socket",
+        "signal_other_process",
+        "socket_connect",
     }
-    assert all(outcome.startswith("denied:") for outcome in report["checks"].values()), report
+    for name, outcome in report["checks"].items():
+        if name in ("process_fork", "signal_other_process") and os.name != "posix":
+            assert outcome == "skipped:unsupported", report
+        else:
+            assert outcome.startswith("denied:"), report
     assert "audit_hook" in report["isolation"]
     if ON_LINUX:
         assert "seccomp" in report["isolation"]
