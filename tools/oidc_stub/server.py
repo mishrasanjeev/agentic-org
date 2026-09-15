@@ -13,7 +13,10 @@ Implements, for development and tests only:
 * step-up: ``acr_values`` containing :data:`ACR_STEP_UP` requires a second
   factor (simulated security key) and yields ``amr: ["pwd", "hwk"]``;
   ``max_age`` and ``prompt=login`` force re-authentication. Tokens always carry
-  ``acr``, ``amr`` and ``auth_time``.
+  ``acr``, ``amr`` and ``auth_time``; ``acr`` and ``amr`` describe how the
+  browser session authenticated, which may be stronger than requested.
+* browser sessions last at most :data:`SESSION_TTL_SECONDS` from sign-in.
+* every query and form parameter may appear once; repeats are rejected.
 
 Passwords are not checked - picking a configured user on the sign-in page is
 the authentication - so ``amr`` describes what a real provider would have
@@ -60,6 +63,8 @@ CODE_TTL_SECONDS = 60
 REQUEST_TTL_SECONDS = 600
 TOKEN_TTL_SECONDS = 900
 SESSION_COOKIE = "oidc_stub_session"
+SESSION_TTL_SECONDS = 8 * 3600
+_MAX_AGE_RE = re.compile(r"[0-9]{1,9}")
 MAX_BODY_BYTES = 64 * 1024
 SUPPORTED_SCOPES = ("openid", "profile", "email")
 _PKCE_RE = re.compile(r"[A-Za-z0-9._~-]{43,128}")
@@ -390,6 +395,8 @@ class OIDCStub:
             del self._pending[request_id]
         for code in [k for k, v in self._codes.items() if now - v.created > CODE_TTL_SECONDS]:
             del self._codes[code]
+        for session_id in [k for k, v in self._sessions.items() if now - v.auth_time >= SESSION_TTL_SECONDS]:
+            del self._sessions[session_id]
 
     def _error_redirect(self, redirect_uri: str, error: str, description: str, state: str | None) -> Response:
         params = {"error": error, "error_description": description, "iss": self.issuer}
@@ -431,7 +438,8 @@ class OIDCStub:
         step_up = ACR_STEP_UP in acr_values
         max_age: int | None = None
         if "max_age" in query:
-            if not query["max_age"].isdigit():
+            # ASCII digits only: str.isdigit() also accepts characters int() rejects.
+            if not _MAX_AGE_RE.fullmatch(query["max_age"]):
                 return fail("invalid_request", "max_age must be a non-negative integer")
             max_age = int(query["max_age"])
         prompts = set(query.get("prompt", "").split())
@@ -498,7 +506,7 @@ class OIDCStub:
             self._sessions[new_session_id] = session
             code = self._issue_code(pending.client_id, pending.redirect_uri, pending.scopes, pending.nonce,
                                     pending.code_challenge, session, now)
-        cookie = f"{SESSION_COOKIE}={new_session_id}; Path=/; HttpOnly; SameSite=Lax"
+        cookie = f"{SESSION_COOKIE}={new_session_id}; Path=/; Max-Age={SESSION_TTL_SECONDS}; HttpOnly; SameSite=Lax"
         location = _with_query(pending.redirect_uri, _code_params(code, pending.state, self.issuer))
         return Response.redirect(location, headers={"Set-Cookie": cookie})
 
@@ -668,6 +676,21 @@ class OIDCStub:
         return jwt.encode(dict(claims), self.key.private_key, algorithm="RS256", headers={"kid": self.key.kid})
 
 
+def single_valued(pairs: list[tuple[str, str]]) -> tuple[dict[str, str], str | None]:
+    """The parameters as a dict, and the first name that appears more than once (or None).
+
+    RFC 6749 section 3.1: request parameters must not be included more than
+    once. Taking the first or the last copy silently would let two parties
+    read one request differently.
+    """
+    params: dict[str, str] = {}
+    for name, value in pairs:
+        if name in params:
+            return params, name
+        params[name] = value
+    return params, None
+
+
 def _code_params(code: str, state: str | None, issuer: str) -> dict[str, str]:
     params = {"code": code, "iss": issuer}
     if state is not None:
@@ -719,17 +742,24 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             morsel = cookie.get(SESSION_COOKIE)
             return morsel.value if morsel else None
 
-        def _form(self) -> dict[str, str] | None:
+        def _form(self) -> tuple[dict[str, str] | None, str | None]:
             if self.headers.get_content_type() != "application/x-www-form-urlencoded":
-                return None
+                return None, None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
-                return None
+                return None, None
             if length < 0 or length > MAX_BODY_BYTES:
-                return None
+                return None, None
             body = self.rfile.read(length).decode("utf-8", "replace")
-            return dict(parse_qsl(body, keep_blank_values=True))
+            return single_valued(parse_qsl(body, keep_blank_values=True))
+
+        def _repeated(self, name: str) -> Response:
+            description = f"parameter {name!r} appears more than once"
+            if urlsplit(self.path).path == "/authorize" and self.command == "GET":
+                markup = _page("Sign-in request rejected", html.escape(description))
+                return Response.html(HTTPStatus.BAD_REQUEST, markup)
+            return Response.json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request", "error_description": description})
 
         def _send(self, response: Response) -> None:
             self.send_response(response.status)
@@ -757,7 +787,11 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             elif parts.path == "/jwks":
                 self._send(Response.json(HTTPStatus.OK, stub.jwks()))
             elif parts.path == "/authorize":
-                self._send(stub.authorize(dict(parse_qsl(parts.query, keep_blank_values=True)), self._session_id()))
+                query, repeated = single_valued(parse_qsl(parts.query, keep_blank_values=True))
+                if repeated is not None:
+                    self._send(self._repeated(repeated))
+                else:
+                    self._send(stub.authorize(query, self._session_id()))
             elif parts.path == "/userinfo":
                 self._send(stub.userinfo(self.headers.get("Authorization")))
             else:
@@ -765,11 +799,13 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
 
         def do_POST(self) -> None:  # noqa: N802 - http.server naming
             path = urlsplit(self.path).path
-            form = self._form()
+            form, repeated = self._form()
             if path not in ("/authorize", "/token", "/userinfo"):
                 self._send(Response.json(HTTPStatus.NOT_FOUND, {"error": "not_found"}))
             elif path == "/userinfo":
                 self._send(stub.userinfo(self.headers.get("Authorization")))
+            elif repeated is not None:
+                self._send(self._repeated(repeated))
             elif form is None:
                 self._send(Response.json(HTTPStatus.BAD_REQUEST, {"error": "invalid_request",
                                                                    "error_description": "expected a form body"}))

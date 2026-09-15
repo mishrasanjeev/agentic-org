@@ -17,11 +17,13 @@ database by mistake.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from urllib.parse import unquote, urlsplit
 
 REQUIRED_SUFFIX = "_test"
 _ALLOWED_SCHEMES = frozenset({"postgresql", "postgresql+asyncpg", "postgresql+psycopg2", "postgres"})
+_SAFE_NAME_RE = re.compile(r"[A-Za-z0-9_]+")
 
 
 class UnsafeDatabaseURLError(ValueError):
@@ -30,18 +32,31 @@ class UnsafeDatabaseURLError(ValueError):
 
 def safe_test_database_name(url: str) -> str:
     """Return the database name in ``url`` if it is safe to drop, else raise."""
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError as exc:
+        raise UnsafeDatabaseURLError(f"URL cannot be parsed: {exc}") from exc
     if parts.scheme not in _ALLOWED_SCHEMES:
         raise UnsafeDatabaseURLError(f"not a Postgres URL (scheme {parts.scheme!r})")
     if not parts.hostname:
         raise UnsafeDatabaseURLError("URL has no host")
-    name = unquote(parts.path.lstrip("/"))
+    if "," in parts.netloc or (port is None and parts.netloc.rstrip("]").endswith(":")):
+        raise UnsafeDatabaseURLError("URL must name exactly one host")
+    # Query parameters (dbname=, database=, options=, host=) and fragments can
+    # redirect a driver to a different database than the path names.
+    if parts.query or parts.fragment or "?" in url or "#" in url:
+        raise UnsafeDatabaseURLError("URL must not carry query parameters or a fragment")
+    raw = parts.path.lstrip("/")
+    if "%" in raw:
+        raise UnsafeDatabaseURLError("database name must not be percent-encoded")
+    name = unquote(raw)
     if not name or "/" in name:
         raise UnsafeDatabaseURLError("URL does not name exactly one database")
+    if not _SAFE_NAME_RE.fullmatch(name):
+        raise UnsafeDatabaseURLError(f"database {name!r} contains characters other than ASCII letters, digits and '_'")
     if not name.endswith(REQUIRED_SUFFIX) or name == REQUIRED_SUFFIX:
         raise UnsafeDatabaseURLError(f"database {name!r} does not end in {REQUIRED_SUFFIX!r}; refusing to drop it")
-    if not all(ch.isalnum() or ch == "_" for ch in name):
-        raise UnsafeDatabaseURLError(f"database {name!r} contains characters other than letters, digits and '_'")
     return name
 
 

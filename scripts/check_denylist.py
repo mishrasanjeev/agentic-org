@@ -2,22 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 """Refuse changes that name a denylisted third-party vendor.
 
-The terms are never stored in the repository. ``config/denylist.sha256`` holds a
-random salt and the salted SHA-256 of each normalised term, so the check can
-recognise a term without the list being readable.
+The plain terms are not stored in the repository. ``config/denylist.sha256``
+holds a random salt and the salted SHA-256 of each normalised term, which keeps
+the names out of the tree, diffs and search results. The hashes are not a
+secret: the salt is committed next to them, so anyone can test a guessed name.
 
 ``scan`` looks at everything a pull request adds: the added lines of the diff,
 the changed file paths, the branch name, the commit messages and any extra
 text files (the CI job passes the pull request title and body). Each input is
 split into word tokens - on punctuation, whitespace, digit boundaries and
-camelCase - and every run of up to ``max-tokens`` consecutive tokens is joined
-without separators, lower-cased and hashed. ``Acme Verify``, ``acme_verify``,
-``AcmeVerify`` and ``ACME-VERIFY`` therefore all match the term ``acme verify``.
+camelCase - and every run of consecutive tokens, up to ``max-tokens`` plus a
+little headroom for inputs that split a term into more pieces than the list
+did, is joined without separators, lower-cased and hashed. ``Acme Verify``,
+``acme_verify``, ``AcmeVerify`` and ``ACME-VERIFY`` therefore all match the term
+``acme verify``. A term glued to the end of a single longer word
+(``myacmeverify``) is caught too: every tail of each word is also tried.
 A match is reported by where it is (file and line, commit, branch or text file
 and word number) rather than by quoting the matched words.
 
-Fails closed (exit 2) when git fails, a ref does not resolve or the hash file
-is missing or malformed. Exit 1 means a term was found; 0 means none.
+Fails closed (exit 2) when git fails, a ref does not resolve, the hash file is
+missing or malformed, or an extra text file is unreadable or not UTF-8. Exit 1 means a term was found; 0 means none.
 
     python scripts/check_denylist.py scan --base origin/main --head HEAD
     python scripts/check_denylist.py audit
@@ -48,12 +52,18 @@ from pathlib import Path
 FORMAT_VERSION = "1"
 DEFAULT_HASH_FILE = Path("config/denylist.sha256")
 _TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+")
-# Long runs of base64/hex with several digits are encoded data (lockfile
-# integrity hashes, digests, keys), not words; splitting them on case and digit
-# boundaries would only produce chance matches.
-_ENCODED_RE = re.compile(r"[A-Za-z0-9+/=]{40,}")
+# Candidates for encoded data (lockfile integrity hashes, digests, keys); see looks_encoded.
+_RUN_RE = re.compile(r"[A-Za-z0-9+/=]{32,}")
+_HEX_RE = re.compile(r"[0-9a-fA-F]{32,}")
 _HEX64_RE = re.compile(r"[0-9a-f]{64}")
 _MAX_TOKENS_LIMIT = 8
+# Extra tokens scanned beyond the longest term, for inputs that split a term
+# into more tokens than the terms file did ("I-Den-Ti-Ty" for a one-token term).
+WINDOW_HEADROOM = 2
+# Shortest tail of a word tried as the start of a term ("my" + "acmeverify").
+MIN_SUFFIX_CHARS = 4
+_ENCODED_MIN_BASE64 = 40
+_ENCODED_MIN_TRANSITIONS = 0.3
 
 
 class DenylistError(RuntimeError):
@@ -63,22 +73,57 @@ class DenylistError(RuntimeError):
 # ── Normalisation and hashing ───────────────────────────────────────────────
 
 
+def _char_class(ch: str) -> int:
+    return 0 if ch.isdigit() else 1 if ch.isupper() else 2 if ch.islower() else 3
+
+
+def looks_encoded(run: str) -> bool:
+    """True for hex digests and base64-like blobs; False for long identifiers.
+
+    Hex needs 32+ hex characters with at least one digit and one letter. Base64
+    needs 40+ characters mixing upper case, lower case and digits with frequent
+    changes of character class, which random data has and long identifiers
+    (``AcmeVerify2024ClientSettings``) do not. Containing digits alone is not
+    enough to skip a run.
+    """
+    if _HEX_RE.fullmatch(run) and any(c.isdigit() for c in run) and any(c.isalpha() for c in run):
+        return True
+    if len(run) < _ENCODED_MIN_BASE64:
+        return False
+    if not (any(c.isupper() for c in run) and any(c.islower() for c in run) and any(c.isdigit() for c in run)):
+        return False
+    body = run.rstrip("=")
+    changes = sum(1 for a, b in zip(body, body[1:], strict=False) if _char_class(a) != _char_class(b))
+    return changes / max(len(body) - 1, 1) >= _ENCODED_MIN_TRANSITIONS
+
+
 def tokens(text: str) -> list[str]:
     """Word tokens of ``text``: accents stripped, split on case and digit boundaries."""
     decomposed = unicodedata.normalize("NFKD", text)
     stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
-    words = _ENCODED_RE.sub(lambda m: " " if sum(ch.isdigit() for ch in m.group()) >= 4 else m.group(), stripped)
+    words = _RUN_RE.sub(lambda m: " " if looks_encoded(m.group()) else m.group(), stripped)
     return [token.lower() for token in _TOKEN_RE.findall(words)]
 
 
 def candidates(text: str, max_tokens: int) -> Iterator[tuple[int, str]]:
-    """Every run of 1..max_tokens consecutive tokens, joined; yields (start index, joined)."""
+    """Joined runs of consecutive tokens that could spell a term; yields (start index, joined).
+
+    A run starts at a token and spans up to ``max_tokens + WINDOW_HEADROOM``
+    tokens. Every tail of a token at least ``MIN_SUFFIX_CHARS`` long is also a
+    candidate on its own, for a term glued to the end of a word.
+    """
     words = tokens(text)
-    for start in range(len(words)):
-        joined = ""
-        for end in range(start, min(start + max_tokens, len(words))):
+    window = max_tokens + WINDOW_HEADROOM
+    for start, first in enumerate(words):
+        joined = first
+        yield start, joined
+        for end in range(start + 1, min(start + window, len(words))):
             joined += words[end]
             yield start, joined
+        # A tail is tried on its own only: joining it to the next words would
+        # match across ordinary word boundaries.
+        for cut in range(1, len(first) - MIN_SUFFIX_CHARS + 1):
+            yield start, first[cut:]
 
 
 def term_key(term: str) -> str:
@@ -99,16 +144,21 @@ class Denylist:
         """Token positions in ``text`` where a denylisted term starts."""
         found: list[int] = []
         for start, key in candidates(text, self.max_tokens):
-            if digest(self.salt, key) in self.hashes and (not found or found[-1] != start):
+            if (not found or found[-1] != start) and digest(self.salt, key) in self.hashes:
                 found.append(start)
         return found
 
 
 def load(path: Path) -> Denylist:
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
+        text = path.read_bytes().decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
         raise DenylistError(f"cannot read hash file {path}: {exc}") from exc
+    return load_text(text, str(path))
+
+
+def load_text(text: str, path: str = "<hash file>") -> Denylist:
+    lines = text.splitlines()
     fields: dict[str, str] = {}
     hashes: set[str] = set()
     for number, raw in enumerate(lines, start=1):
@@ -171,18 +221,29 @@ def added_lines(repo: Path, base: str, head: str) -> Iterator[tuple[str, int, st
     diff = _git(repo, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--text", f"{base}...{head}")
     path = ""
     line_no = 0
+    # A file's header runs from "diff --git" to its first hunk. "+++ " is a
+    # header only there, right after "--- "; inside a hunk the same prefix is
+    # an added line that starts with "++" and is checked like any other.
+    in_header = False
+    previous = ""
     for raw in diff.splitlines():
-        if raw.startswith("+++ "):
+        if raw.startswith("diff --git "):
+            in_header, path = True, ""
+        elif in_header and raw.startswith("+++ ") and previous.startswith("--- "):
             target = raw[4:]
             path = target[2:] if target.startswith("b/") else target
         elif raw.startswith("@@"):
             match = re.match(r"@@ -\S+ \+(\d+)", raw)
             if not match:
                 raise DenylistError(f"unparseable diff hunk header: {raw[:80]}")
+            if not path:
+                raise DenylistError("diff hunk without a file header")
+            in_header = False
             line_no = int(match.group(1))
-        elif raw.startswith("+"):
+        elif not in_header and raw.startswith("+"):
             yield path, line_no, raw[1:]
             line_no += 1
+        previous = raw
 
 
 def changed_paths(repo: Path, base: str, head: str) -> list[str]:
@@ -233,8 +294,8 @@ def scan(
     check("branch name", branch_name)
     for text_file in text_files:
         try:
-            content = text_file.read_text(encoding="utf-8")
-        except OSError as exc:
+            content = text_file.read_bytes().decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
             raise DenylistError(f"cannot read {text_file}: {exc}") from exc
         for offset, line in enumerate(content.splitlines(), start=1):
             check(f"{text_file.name} line {offset}", line)
