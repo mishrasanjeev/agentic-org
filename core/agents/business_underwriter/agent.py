@@ -217,9 +217,12 @@ def _query(application: Mapping[str, Any]) -> BusinessQuery:
 class _Investigator:
     def __init__(
         self, case_id: str, application: dict[str, Any], config: UnderwriterConfig, deps: UnderwriterDependencies,
-        gateway: ProviderToolGateway, untrusted: UntrustedTextRegistry,
+        gateway: ProviderToolGateway, untrusted: UntrustedTextRegistry, run_id: str,
     ) -> None:  # fmt: skip
         self.case_id = case_id
+        # Idempotency keys repeat within a run (a retried call is not a second request) but differ
+        # between runs, so a re-investigation re-queries the provider instead of replaying old answers.
+        self.key_prefix = "uw." + hashlib.sha256(f"{case_id}{run_id}".encode()).hexdigest()[:24]
         self.application = application
         self.config = config
         self.deps = deps
@@ -261,7 +264,7 @@ class _Investigator:
             registered_address=Address.model_validate(address) if address else None,
             identifiers=tuple(Identifier.model_validate(i) for i in self.application.get("identifiers") or ()),
         )
-        opts = VerifyOptions(idempotency_key=f"{self.case_id}.verify", declared=declared)
+        opts = VerifyOptions(idempotency_key=f"{self.key_prefix}.verify", declared=declared)
         overall = Deadline.after(self.config.verification_timeout_s)
         try:
             handle = await self.gateway.verify_business(candidate.ref, opts, deadline=self._deadline())
@@ -321,7 +324,7 @@ class _Investigator:
         )
         any_attempted = False
         for party in parties:
-            options = ScreenOptions(idempotency_key=f"{self.case_id}.screen.{party.key()}")
+            options = ScreenOptions(idempotency_key=f"{self.key_prefix}.screen.{party.key()}")
             entry = ScreenedParty(party=party.to_dict(), step=Step("ok"))
             try:
                 if party.kind == "person":
@@ -557,7 +560,7 @@ async def run_underwriter(
     try:
         prompt = load_prompt(*config.prompt)
         outcome.prompt = prompt.to_dict()
-        investigator = _Investigator(case_id, application, config, deps, gateway, untrusted)
+        investigator = _Investigator(case_id, application, config, deps, gateway, untrusted, run_id)
         await investigator.resolve()
         await investigator.verify()
         await investigator.ownership()
