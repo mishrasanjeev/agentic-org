@@ -101,3 +101,17 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** give workflows a principal — register the workflow definition (or
   require a stored agent on every step) as a Grantex agent with scopes for its
   connector steps, and resolve the step's grant from it.
+
+## A-8 — A legacy scope denial is reported as a completed run
+
+- **Found:** making deny-mode runs report `failed` (PRD F-1c, 2026-09-15).
+- **What:** in `off` mode an agent that carries a configured grant token still
+  gets the legacy `validate_tool_scopes` check. When it denies, the node sets
+  `status="failed"` and `error="Scope denied: ..."`, but the graph then routes
+  to `evaluate`, which unconditionally returns `status="completed"`; the run
+  result shows `completed` with an error string and the "Access denied" text
+  as output. Deny mode now keeps its runs `failed` via `grant_denial`; the
+  legacy path was left unchanged so `off` behaves exactly as before.
+- **Fix:** have `evaluate` preserve a `failed` status set by scope validation
+  (or set `grant_denial` from the legacy path too), and update the tests that
+  describe the legacy result.
