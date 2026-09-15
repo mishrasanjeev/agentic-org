@@ -11,3 +11,15 @@ core/agents/hr/ @mishrasanjeev
 connectors/ @mishrasanjeev
 auth/ @mishrasanjeev
 workflows/ @mishrasanjeev
+
+# Quality gates: coverage floors and settings, audit exceptions, CI workflows.
+# Loosening any of these needs an owner's review.
+/Makefile @mishrasanjeev
+/pyproject.toml @mishrasanjeev
+/scripts/check_new_module_coverage.py @mishrasanjeev
+/scripts/check_module_coverage.py @mishrasanjeev
+/scripts/run_pip_audit.py @mishrasanjeev
+/config/pip-audit-exceptions.toml @mishrasanjeev
+/config/denylist.sha256 @mishrasanjeev
+/requirements-rerecord.lock @mishrasanjeev
+/.github/workflows/ @mishrasanjeev

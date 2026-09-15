@@ -1,0 +1,46 @@
+# Test and check runner for `make test` and `make check` (docs/quickstart-local.md).
+#
+# Python 3.12, the version the CI jobs use, with the project's runtime and dev
+# dependencies, pip-audit and the pinned gitleaks. The repository is mounted at
+# run time rather than copied, so editing code never needs a rebuild; only a
+# dependency change does.
+FROM python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+
+ARG TARGETARCH
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc g++ libjpeg-dev zlib1g-dev libffi-dev git curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) arch=x64; sum="$GITLEAKS_SHA256_AMD64" ;; \
+      arm64) arch=arm64; sum="$GITLEAKS_SHA256_ARM64" ;; \
+      *) echo "unsupported architecture ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    archive="gitleaks_${GITLEAKS_VERSION}_linux_${arch}.tar.gz"; \
+    curl -fsSL -o "/tmp/$archive" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"; \
+    echo "${sum}  /tmp/$archive" | sha256sum -c -; \
+    tar -xzf "/tmp/$archive" -C /usr/local/bin gitleaks; \
+    rm "/tmp/$archive"; \
+    gitleaks version
+
+WORKDIR /opt/agenticorg-deps
+COPY pyproject.toml requirements-dev.txt ./
+# Install what `pip install -e ".[dev]"` would, without the package itself
+# (the source is mounted at /src and imported from there).
+RUN python -c "import tomllib; p = tomllib.load(open('pyproject.toml', 'rb'))['project']; \
+print('\n'.join(p['dependencies'] + p['optional-dependencies']['dev']))" > requirements-project.txt \
+    && pip install --no-cache-dir -r requirements-project.txt -r requirements-dev.txt \
+    && pip check
+
+# The mounted checkout is owned by the host user, which git would otherwise
+# refuse as a "dubious ownership" repository.
+RUN git config --system --add safe.directory '*'
+ENV HOME=/tmp \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+WORKDIR /src
