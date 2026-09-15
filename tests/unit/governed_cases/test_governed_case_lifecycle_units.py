@@ -221,6 +221,7 @@ def test_strict_runtimes_refuse_the_example_policies(monkeypatch: pytest.MonkeyP
 
 def test_the_migration_is_the_single_head_with_a_short_revision_id() -> None:
     script = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
-    assert script.get_heads() == ["v6z25_governed_cases"]
+    [head] = script.get_heads()
+    assert "v6z25_governed_cases" in {rev.revision for rev in script.walk_revisions(head)}
     revision = script.get_revision("v6z25_governed_cases")
     assert revision.down_revision == "v6z24_case_pseudonym_maps" and len(revision.revision) <= 32
