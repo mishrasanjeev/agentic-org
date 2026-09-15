@@ -188,6 +188,15 @@ license_header_check() {
 }
 
 # ---------------------------------------------------------------------------
+# 5c. Prompt tool references — every tool a built-in prompt calls is
+#     registered and in that agent's default tools; every default tool is
+#     registered (PRD F-3). Same script as the CI unit-tests job.
+# ---------------------------------------------------------------------------
+prompt_tool_check() {
+  python scripts/check_prompt_tools.py
+}
+
+# ---------------------------------------------------------------------------
 # 6. Enterprise stability release gates: broad exceptions, process-local
 #    state, stub-success paths, route metadata, and Alembic heads.
 # ---------------------------------------------------------------------------
@@ -300,6 +309,7 @@ run_step "secret scan (branch)"   secret_scan
 run_step "alembic revision <=32"  alembic_id_check
 run_step "verify=False scan"      verify_false_scan
 run_step "licence headers (new)"  license_header_check
+run_step "prompt tool references" prompt_tool_check
 run_step "enterprise stability"   enterprise_stability_gate
 run_step "pytest (CI unit suites)" pytest_check
 run_step "ui eslint"              ui_lint

@@ -136,7 +136,7 @@ def _tools_to_scopes(
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
-        from core.langgraph.tool_adapter import _build_tool_index
+        from core.langgraph.tool_adapter import _build_tool_index, _split_connector_tool_ref
 
         scoped_index = (
             _build_tool_index(connector_names=connector_names)
@@ -144,12 +144,25 @@ def _tools_to_scopes(
             else {}
         )
         global_index = _build_tool_index()
+        # Connector-qualified refs (``jira:create_issue``) resolve against
+        # the alias index so they scope to the connector they name.
+        qualified_index = _build_tool_index(include_connector_aliases=True)
     # enterprise-gate: broad-except-ok reason=tool-index-failure-falls-back-to-agenticorg-scopes
     except Exception:
         # Fallback: use tool names directly as scopes
         return scopes + [f"tool:agenticorg:execute:{t}" for t in tools]
 
     for tool_name in tools:
+        connector_hint, bare_tool = _split_connector_tool_ref(tool_name)
+        if connector_hint:
+            # Scope to the named connector when it registers the tool, never
+            # to a first-wins match of the bare name.
+            qualified = qualified_index.get(f"{connector_hint}:{bare_tool}")
+            if qualified:
+                scopes.append(f"tool:{qualified[0]}:execute:{bare_tool}")
+            else:
+                scopes.append(f"tool:agenticorg:execute:{tool_name}")
+            continue
         match = scoped_index.get(tool_name) or global_index.get(tool_name)
         if match:
             connector_name = match[0]
