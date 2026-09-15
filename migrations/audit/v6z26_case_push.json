@@ -1,0 +1,22 @@
+{
+  "revision": "v6z26_case_push",
+  "table": "case_push_endpoints",
+  "columns": [
+    "signing_keys_encrypted"
+  ],
+  "rollback_doc": "The table is new in this revision and starts empty, so rollback does not transform or discard pre-existing ciphertext. Remove the tenant's push endpoint through the API first; the tables can then be dropped manually once no undelivered outbox row depends on them.",
+  "dry_run": false,
+  "started_at": "2026-09-15T09:22:13.565634+00:00",
+  "row_counts": {
+    "case_push_endpoints": 0
+  },
+  "decrypt_post_sample": {
+    "signing_keys_encrypted": 0
+  },
+  "decrypt_pre_sample": {
+    "signing_keys_encrypted": 0
+  },
+  "pre_count": 0,
+  "post_count": 0,
+  "completed_at": "2026-09-15T09:22:13.574111+00:00"
+}

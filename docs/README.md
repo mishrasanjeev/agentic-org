@@ -37,6 +37,7 @@ Service health comes from
 | Understand the platform | [Current product status](PRODUCT_STATUS.md), [why AgenticOrg](why-agenticorg.md) |
 | Verify ownership and contact | [Ownership and contact](OWNERSHIP.md), [repository notice](../NOTICE) |
 | Build and govern agents | [Agents](agents.md), [agent workflows](agent-workflows.md), [testing](TEST_PLAN.md) |
+| Governed cases (business onboarding) | [Governance: grants, policy scores and human decisions](governance/README.md), [case lifecycle](governance/case-lifecycle.md), [case hand-off](governance/case-hand-off.md), [underwriter](agents/business-underwriter.md), [screening disposition](agents/screening-disposition.md) |
 | Upload documents and scans | [Knowledge ingestion and OCR](knowledge-ingestion.md) |
 | Configure voice agents | [Voice runtime](voice-runtime.md) |
 | Run browser automation | [RPA runtime](rpa-runtime.md) |
