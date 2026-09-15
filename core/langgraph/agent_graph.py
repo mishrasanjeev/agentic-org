@@ -37,6 +37,7 @@ from core.langgraph.tool_adapter import (
     _build_tool_index,
     build_tools_for_agent,
 )
+from core.pii.pseudonymiser import PseudonymSession
 
 logger = structlog.get_logger()
 
@@ -239,6 +240,7 @@ def build_agent_graph(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
+    pseudonymiser: PseudonymSession | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -257,6 +259,10 @@ def build_agent_graph(
         llm_provider: Explicit catalog provider id pinned on the agent
             (``agents.llm_provider``, else ``llm_config["provider"]``).
             ``None`` keeps the legacy model-name inference for old rows.
+        pseudonymiser: The case's pseudonymisation session (flag
+            ``pseudonymisation.pre_model``). Every message is pseudonymised
+            immediately before each model call, and tools restore arguments
+            and pseudonymise results through it.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -271,6 +277,7 @@ def build_agent_graph(
         domain=domain,
         capability_authorization=capability_authorization,
         pii_token_map=pii_token_map,
+        pseudonymiser=pseudonymiser,
     )
 
     # Bug sheet #14 (2026-09-14): ``ToolNode`` dispatches by exact name. A
@@ -312,6 +319,11 @@ def build_agent_graph(
             messages = [SystemMessage(content=system_prompt), *messages]
 
         trace.append(f"Calling LLM ({llm_model or 'default'})")
+        if pseudonymiser is not None:
+            # The last step before the model: whatever assembled these
+            # messages (runner, tool results, a resumed checkpoint), no raw
+            # value leaves in the request.
+            messages = await pseudonymiser.pseudonymise_messages(messages)
         response = await _get_llm().ainvoke(messages)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)

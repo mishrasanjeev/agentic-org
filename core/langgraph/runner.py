@@ -27,6 +27,7 @@ from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
+from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
 
 logger = structlog.get_logger()
@@ -88,6 +89,32 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
             tokens_used += int(_message_token_total(msg) or 0)
     cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
     return tokens_used, cost_usd
+
+
+def _pseudonymisation_failed(exc: pseudonymisation.PseudonymisationError) -> dict[str, Any]:
+    """Run result when pre-model pseudonymisation is on but cannot be applied: no model call is made."""
+    logger.warning("pseudonymisation_refused_run", reason=exc.reason)
+    return {
+        "status": "failed",
+        "output": {},
+        "confidence": 0.0,
+        "reasoning_trace": [f"Pseudonymisation unavailable: {exc.reason}"],
+        "tool_calls_log": [],
+        "tool_calls": [],  # BUG-11 dual-emit
+        "hitl_trigger": "",
+        "error": f"pseudonymisation_unavailable: {exc.reason}",
+        "explanation": {},
+        "performance": {"total_latency_ms": 0, "llm_tokens_used": 0, "llm_cost_usd": 0},
+    }
+
+
+async def _checkpoint_pseudonym_case_id(config: dict[str, Any]) -> str | None:
+    """The pseudonym case recorded in a thread's checkpoint, if the run was pseudonymised."""
+    saved = await _checkpointer.aget_tuple(config)  # type: ignore[arg-type]
+    if saved is None:
+        return None
+    value = (saved.checkpoint.get("channel_values") or {}).get("pseudonym_case_id")
+    return value if isinstance(value, str) and value else None
 
 
 def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
@@ -241,6 +268,21 @@ async def run_agent(
             "user data to LLM without sanitization."
         )
 
+    run_thread_id = thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}"
+
+    # F-5: with ``pseudonymisation.pre_model`` on for the tenant, the case's
+    # persistent pseudonym map replaces the per-run redaction below. It covers
+    # the system prompt, and every later model turn is pseudonymised again
+    # inside the graph.
+    pseudonymiser: pseudonymisation.PseudonymSession | None = None
+    if await pseudonymisation.pseudonymisation_enabled(tenant_id):
+        try:
+            pseudonymiser = await pseudonymisation.open_session(
+                tenant_id, pseudonymisation.resolve_case_id(task_input, fallback=run_thread_id)
+            )
+        except pseudonymisation.PseudonymisationError as exc:
+            return _pseudonymisation_failed(exc)
+
     # Build user message FROM ALREADY-REDACTED task_input
     # Apply redaction at the source (each task_input field) so no concatenation
     # ever sees raw PII.
@@ -252,7 +294,16 @@ async def run_agent(
         and task_input["inputs"].get("shadow_fixture_origin") is True
         and isinstance(task_input["inputs"].get("shadow_prompt"), str)
     )
-    if pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
+    if pseudonymiser is not None:
+        try:
+            masked_input = await pseudonymiser.pseudonymise_value(task_input)
+            user_message = await pseudonymiser.pseudonymise_text(_build_user_message(masked_input))
+            amended_prompt = await pseudonymiser.pseudonymise_text(
+                pseudonymisation.with_model_guidance(amended_prompt)
+            )
+        except pseudonymisation.PseudonymisationError as exc:
+            return _pseudonymisation_failed(exc)
+    elif pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
         # Recursively redact all string values in task_input
         from copy import deepcopy
 
@@ -290,8 +341,9 @@ async def run_agent(
             tenant_id=tenant_id,
             company_id=company_id,
             domain=domain,
-            pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
+            pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
             llm_provider=llm_provider,
+            pseudonymiser=pseudonymiser,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
@@ -317,11 +369,13 @@ async def run_agent(
         "hitl_trigger": "",
         "error": "",
     }
+    if pseudonymiser is not None:
+        initial_state["pseudonym_case_id"] = pseudonymiser.case_id
 
     # Config for checkpointing
     config = {
         "configurable": {
-            "thread_id": thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}",
+            "thread_id": run_thread_id,
         }
     }
 
@@ -351,7 +405,16 @@ async def run_agent(
             logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
 
         # --- Step 6: PII de-anonymization (after LLM) ---
-        if pii_token_map:
+        # The explanation below is written by a model, so it gets the
+        # pseudonymised output and trace; its bullets are restored after.
+        masked_output = result.get("output", {})
+        masked_trace = result.get("reasoning_trace", [])
+        if pseudonymiser is not None:
+            result["output"] = pseudonymiser.restore_value(masked_output)
+            result["reasoning_trace"] = pseudonymiser.restore_value(masked_trace)
+            if result.get("hitl_trigger"):
+                result["hitl_trigger"] = pseudonymiser.restore_text(result["hitl_trigger"])
+        elif pii_token_map:
             output = result.get("output", {})
             if isinstance(output, dict):
                 import json as _json
@@ -416,7 +479,12 @@ async def run_agent(
                     for tc in result.get("tool_calls_log", [])
                     if isinstance(tc, dict) and tc.get("tool")
                 ]
-                explanation = await generate_explanation(trace, out, tools)
+                if pseudonymiser is not None:
+                    explanation = pseudonymiser.restore_value(
+                        await generate_explanation(masked_trace, masked_output, tools)
+                    )
+                else:
+                    explanation = await generate_explanation(trace, out, tools)
             # enterprise-gate: broad-except-ok reason=explanation-sidecar-failure-does-not-change-run-status
             except Exception as exc:
                 logger.warning("explanation_generation_failed", error=str(exc))
@@ -440,7 +508,12 @@ async def run_agent(
             "reasoning_trace": result.get("reasoning_trace", []),
             "tool_calls_log": tool_log,
             "tool_calls": tool_log,
-            "hitl_trigger": result.get("hitl_trigger", "") or _hitl_trigger_from_interrupts(interrupts),
+            "hitl_trigger": result.get("hitl_trigger", "")
+            or (
+                pseudonymiser.restore_text(_hitl_trigger_from_interrupts(interrupts))
+                if pseudonymiser is not None
+                else _hitl_trigger_from_interrupts(interrupts)
+            ),
             "error": result.get("error", ""),
             "explanation": explanation,
             "content_safety": content_safety_result,
@@ -482,6 +555,13 @@ async def run_agent(
 
         # BUG-11 dual-emit (see comment above): keep both keys.
         hitl_tool_log = state_values.get("tool_calls_log", [])
+        if pseudonymiser is not None:
+            state_values = {
+                **state_values,
+                "output": pseudonymiser.restore_value(state_values.get("output", {})),
+                "reasoning_trace": pseudonymiser.restore_value(state_values.get("reasoning_trace", [])),
+            }
+            hitl_trigger = pseudonymiser.restore_text(hitl_trigger)
         return {
             "status": "hitl_triggered",
             "output": state_values.get("output", {}),
@@ -578,6 +658,19 @@ async def resume_agent(
     """
     from langgraph.types import Command
 
+    config = {"configurable": {"thread_id": thread_id}}
+
+    # A run started with pseudonymisation holds tokens in its checkpoint: its
+    # map is required to resume, whatever the flag says now.
+    pseudonymiser: pseudonymisation.PseudonymSession | None = None
+    case_id = await _checkpoint_pseudonym_case_id(config)
+    if case_id is not None:
+        try:
+            pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id)
+        except pseudonymisation.PseudonymisationError as exc:
+            logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
+            return {"status": "failed", "error": f"pseudonymisation_unavailable: {exc.reason}"}
+
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
         graph = build_agent_graph(
@@ -592,12 +685,11 @@ async def resume_agent(
             company_id=company_id,
             domain=domain,
             llm_provider=llm_provider,
+            pseudonymiser=pseudonymiser,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
     compiled = graph.compile(checkpointer=_checkpointer)
-
-    config = {"configurable": {"thread_id": thread_id}}
 
     t0 = time.perf_counter()
     try:
@@ -610,6 +702,9 @@ async def resume_agent(
         # thread, so this is the whole-thread usage (pre-interrupt reasoning
         # included), not just the post-resume delta.
         tokens_used, cost_usd = _sum_usage(result.get("messages", []))
+        if pseudonymiser is not None:
+            result["output"] = pseudonymiser.restore_value(result.get("output", {}))
+            result["reasoning_trace"] = pseudonymiser.restore_value(result.get("reasoning_trace", []))
         return {
             "status": result.get("status", "completed"),
             "output": result.get("output", {}),

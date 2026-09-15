@@ -56,8 +56,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   must pass mod 97 and VAT numbers their national check digits where the
   scheme has one (17 country prefixes); shapes that are otherwise ordinary
   numbers are only recognised next to a label such as "SSN" or "company
-  number". Nothing uses them yet, so behaviour is unchanged; pre-model
-  pseudonymisation builds on them.
+  number". Used by pre-model pseudonymisation (below).
+- Pseudonymisation before the model, per tenant behind the flag
+  `pseudonymisation.pre_model` (off by default). Names, dates of birth,
+  addresses and identifiers are replaced with placeholders such as
+  `[[PERSON_1:3fa9c2]]` before every model call on both model paths
+  (LangGraph agents and `LLMRouter`), system prompt included, and restored
+  inside the tool boundary so connectors receive the real values. A value
+  keeps its placeholder for the whole case; the map is stored encrypted per
+  tenant in the new `case_pseudonym_maps` table (migration
+  `v6z22_case_pseudonym_maps`, additive, row-level security) and survives a
+  pause and resume. Fails closed: if the map cannot be read or written no model
+  call is made, and a tool call whose placeholder cannot be restored is refused
+  with `E1012 pseudonym_restore_failed` instead of being sent. New metrics
+  `agenticorg_pii_pseudonymised_total{entity_type}`,
+  `agenticorg_pii_pseudonym_restore_refused_total{reason}` and
+  `agenticorg_pii_pseudonym_store_failures_total{reason}`. With the flag off
+  behaviour is unchanged. See `docs/security/pseudonymisation.md`.
 
 ### Fixed
 - The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report

@@ -1,0 +1,22 @@
+{
+  "revision": "v6z22_case_pseudonym_maps",
+  "table": "case_pseudonym_maps",
+  "columns": [
+    "mapping_encrypted"
+  ],
+  "rollback_doc": "The table is new in this revision and starts empty, so rollback does not transform or discard pre-existing ciphertext. Turn the pseudonymisation.pre_model flag off first; the table can then be dropped manually once no paused case depends on it.",
+  "dry_run": false,
+  "started_at": "2026-09-15T02:52:47.757072+00:00",
+  "row_counts": {
+    "case_pseudonym_maps": 0
+  },
+  "decrypt_post_sample": {
+    "mapping_encrypted": 0
+  },
+  "decrypt_pre_sample": {
+    "mapping_encrypted": 0
+  },
+  "pre_count": 0,
+  "post_count": 0,
+  "completed_at": "2026-09-15T02:52:47.768062+00:00"
+}
