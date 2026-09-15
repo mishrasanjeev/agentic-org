@@ -477,7 +477,7 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** match `in_insolvency` in the examples, or have the policy loader
   check `verification.status` operands against the interface vocabulary.
 
-## A-40 — The integration `client` fixture cannot run twice against one database
+## A-41 — The integration `client` fixture cannot run twice against one database
 
 - **Found:** re-running governed case API tests against a reused local
   PostgreSQL container (2026-09-15).
@@ -488,7 +488,7 @@ Remove an entry in the pull request that fixes it.
   because it starts from an empty database.
 - **Fix:** derive the slug from the tenant id, or conflict on the slug.
 
-## A-41 — `alembic upgrade head` fails on an empty database
+## A-42 — `alembic upgrade head` fails on an empty database
 
 - **Found:** generating the audit record for `v6z26_case_push` (2026-09-15).
 - **What:** early revisions assume tables created by the legacy SQL bootstrap
