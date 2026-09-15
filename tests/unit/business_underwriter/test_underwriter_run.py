@@ -425,10 +425,7 @@ async def test_a_grant_that_allows_the_tools_lets_the_run_complete(run_case, nar
     assert outcome.status == "completed"
 
 
-@pytest.mark.skip(
-    reason="PRD F-1: needs auth.grant_enforcement / auth.run_grants from PRs #1308, #1317 and #1324; "
-    "enable when they merge"
-)
+@pytest.mark.skip(reason="deferred to PR-1308: PRD F-1 grant enforcement (#1308, #1317, #1324) must merge first")
 async def test_removing_the_grant_fails_the_run_closed_under_grants_enforce_closed_deny(
     run_case, scripted_model
 ) -> None:
