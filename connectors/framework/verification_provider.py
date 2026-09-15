@@ -216,7 +216,7 @@ class Deadline:
         return time.monotonic() >= self.expires_at
 
     @asynccontextmanager
-    async def enforce(self, provider: str, capability: Capability) -> AsyncIterator[None]:
+    async def enforce(self, provider: str, capability: Capability | None = None) -> AsyncIterator[None]:
         """Bound the enclosed work by this deadline, raising :class:`ProviderTimeout` when it passes.
 
         Cancellation from outside propagates unchanged.
