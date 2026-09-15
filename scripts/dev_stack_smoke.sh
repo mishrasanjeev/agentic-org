@@ -4,11 +4,11 @@
 #
 # Asserts that the API answers its liveness endpoint directly, that the console
 # serves its health page, that the console proxies /api to the API, that the
-# OIDC stub publishes its discovery document and that the model stub lists its
-# scripted models, that the Grantex auth service is healthy and publishes its
-# signing keys, and that the API container reaches Grantex with the configured
-# URL and developer key. Fails with the failing check and response when any
-# check does not pass.
+# mock verification provider service answers, that the OIDC stub publishes its
+# discovery document, that the model stub lists its scripted models, that the
+# Grantex auth service is healthy and publishes its signing keys, and that the
+# API container reaches Grantex with the configured URL and developer key.
+# Fails with the failing check and response when any check does not pass.
 #
 # COMPOSE is the compose command for the stack (make passes its own); the last
 # check runs inside the api container through it.
@@ -16,6 +16,7 @@ set -euo pipefail
 
 api="http://127.0.0.1:${AGENTICORG_DEV_API_PORT:-8000}"
 ui="http://127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3000}"
+mock_provider="http://127.0.0.1:${AGENTICORG_DEV_MOCK_PROVIDER_PORT:-8081}"
 oidc="http://127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}"
 model="http://127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}"
 grantex="http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
@@ -39,6 +40,7 @@ check "api liveness"                  "$api/api/v1/health/liveness" '"status": *
 check "api readiness (db + redis)"    "$api/api/v1/health"          '"status": *"healthy"'
 check "console health"                "$ui/health"                  '^ok$'
 check "console -> api proxy"          "$ui/api/v1/health/liveness"  '"status": *"alive"'
+check "mock verification provider"    "$mock_provider/healthz"      '"alive": *true'
 check "oidc stub discovery"           "$oidc/.well-known/openid-configuration" '"issuer": *"http://127.0.0.1:'
 check "model stub scripted models"    "$model/v1/models"            '"scripted/final-only"'
 check "grantex health (db + redis)"   "$grantex/health"             '"status": *"healthy"'

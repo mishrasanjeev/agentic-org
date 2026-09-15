@@ -23,6 +23,7 @@ When it finishes:
 | API | <http://127.0.0.1:8000> (`/api/v1/health`, `/docs`) |
 | Postgres | `127.0.0.1:5432`, database/user `agenticorg`, password `agenticorg_dev` |
 | Redis | `127.0.0.1:6379` |
+| Mock verification provider | <http://127.0.0.1:8081> (`/healthz`) |
 | OIDC stub | <http://127.0.0.1:9400> (`/.well-known/openid-configuration`) |
 | Model stub | <http://127.0.0.1:8090> (`/v1/models`, `/v1/chat/completions`) |
 | Grantex auth service | <http://127.0.0.1:3001> (`/health`, `/.well-known/jwks.json`) |
@@ -40,6 +41,12 @@ All ports bind to `127.0.0.1` only.
 - **api** — the FastAPI application
 - **worker** — the Celery worker for workflows, reports and delivery
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
+- **mock-provider** — the fixture-backed `mock` verification provider as a
+  separate HTTP service; the API and worker reach it at
+  `http://mock-provider:8080` (`AGENTICORG_MOCK_PROVIDER_URL`). Its fault
+  injection and event endpoints stay off unless you start the stack with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`. See
+  `docs/providers/mock-provider.md`
 - **oidc-stub** — a development OpenID Connect provider with step-up; see
   [Development identity provider](#development-identity-provider)
 - **model-stub** — an OpenAI-compatible model service answering from scripts
@@ -220,7 +227,7 @@ against the stack's database and prints what it seeded:
 | Users | Approver A (`approver.a@example.com`) and Approver B (`approver.b@example.com`), role `domain_lead`, domain `backoffice`; the same emails as the OIDC stub's users |
 | Sign-in configuration | OIDC provider `dev-oidc` for the stub's public client `agenticorg-dev-public`, stored **disabled** (see the note above) |
 | Agents | "Risk Sentinel (development)" and "Compliance Guard (development)", in shadow mode with no tools authorised, model `vllm:scripted/final-only` (the model stub) |
-| Approval policy | `two-step-dev`: two sequential steps, each for the `domain_lead` role. It does not require two different people; see FINDINGS A-26 |
+| Approval policy | `two-step-dev`: two sequential steps, each for the `domain_lead` role. It does not require two different people; see FINDINGS A-32 |
 
 Every row has a fixed id, so running `make seed` again changes nothing and puts
 back any seeded field that was edited. It fails without writing anything if a
@@ -314,8 +321,8 @@ If a port is already taken, override it for the whole session:
 ```bash
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
 AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
-AGENTICORG_DEV_OIDC_PORT=19400 AGENTICORG_DEV_MODEL_STUB_PORT=18090 \
-AGENTICORG_DEV_GRANTEX_PORT=13001 make dev
+AGENTICORG_DEV_OIDC_PORT=19400 AGENTICORG_DEV_MOCK_PROVIDER_PORT=18081 \
+AGENTICORG_DEV_MODEL_STUB_PORT=18090 AGENTICORG_DEV_GRANTEX_PORT=13001 make dev
 ```
 
 The smoke test runs its API-to-Grantex check through `$COMPOSE` (make passes

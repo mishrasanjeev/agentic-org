@@ -150,8 +150,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `docs/testing/record-replay.md` and ADR 0008.
 - Connectors and agents can ship as separate packages through the
   `agenticorg.connectors` and `agenticorg.agents` entry-point groups
-  (`agenticorg.providers` and `agenticorg.workflows` are discovered and
-  rejected until their registries exist). Off by default
+  (`agenticorg.workflows` is discovered and rejected until its registry
+  exists). Off by default
   (`AGENTICORG_PLUGIN_LOADING`); only distributions in
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
@@ -199,6 +199,57 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   resume parameters stored with a paused run are never returned. See
   "Agent runs paused for approval" in `docs/RUNBOOKS.md` for the flag,
   reason codes and checkpoint retention.
+- Governed-case domain schemas (JSON Schema 2020-12, versioned `$id`s):
+  `business_case`, `ownership_graph`, `screening_result`,
+  `screening_disposition`, `policy_result`, `underwriting_memo` and
+  `case_push`, with shared definitions in `common`. Every memo section and
+  finding cites `evidence[]` of `{provider, record_id, field, retrieved_at,
+  excerpt_ref}`. `core/domain_schemas.py` validates documents and fails closed
+  with a reason code. A new `tests/contract/` suite, added to the CI unit job
+  and `scripts/preflight.sh`, validates every fixture in `schemas/examples/`,
+  fails on a fixture without a schema, and checks that documentation code
+  examples match the tests they come from. The schemas are not seeded into
+  tenant schema registries. See `docs/schemas/domain-schemas.md`.
+- `VerificationProvider` (`connectors/framework/verification_provider.py`):
+  one provider-neutral interface for business resolution, verification,
+  ownership, person and business screening, web presence and monitoring.
+  Providers declare a `Capability` set and callers degrade an undeclared
+  capability to `not_available` (`call_capability`); verification is
+  start-and-poll with `Pending` as a value; every I/O method takes a
+  `Deadline`; errors form a closed taxonomy with reason codes; webhook
+  verification returns `None` for anything unverifiable. Typed domain values
+  serialise to the published schemas. Providers register in
+  `connectors/providers/registry.py`, and plugin packages add them through the
+  `agenticorg.providers` entry-point group (still behind
+  `AGENTICORG_PLUGIN_LOADING` and the allowlist; natives keep priority). See
+  ADR 0009 and `docs/providers/plugin-packages.md`.
+- The `mock` verification provider (`connectors/providers/mock`), registered
+  natively: twelve synthetic US and UK businesses covering clean cases, a
+  missing and an undeclared owner, probable false-positive and true-match
+  screening hits, a dissolved company, a thin file with no registry match, and
+  adversarial text in website copy, a company name and a screening alias.
+  Configurable latency, failure injection and pending polls, deterministic
+  under a seed; HMAC-signed webhook events (including company dissolved) with
+  recorded genuine and forged deliveries. It runs in-process or as a separate
+  HTTP service with a client provider; `make dev` now starts it as
+  `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081;
+  fault-injection and event endpoints only with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) and points the API and worker at
+  it. It runs only when `AGENTICORG_ENV` is explicitly local, development or
+  test; elsewhere the registry neither lists nor creates it. See
+  `docs/providers/mock-provider.md`.
+- Provider conformance suite, published in the full distribution as
+  `agenticorg.testing.provider_conformance` (source: `testing/provider_conformance`).
+  A provider package subclasses `ProviderConformanceSuite` and supplies a
+  `ConformanceTarget`; twelve checks cover identity, capability honesty,
+  pending-then-result, expired and overrun deadlines (including polls),
+  cancellation, the error taxonomy, webhook verification including forged
+  payloads, webhook replay protection (stale deliveries, stable event ids),
+  pagination of candidates and monitor alerts, idempotency and schema
+  conformance, each failing with a readable reason. `strict=True` turns a
+  skipped check into a failure. The mock provider passes strictly in-process
+  and over HTTP; deliberately broken providers fail each check. Documentation code examples are extracted from tests. See
+  `docs/providers/writing-a-verification-provider.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
@@ -210,8 +261,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   must pass mod 97 and VAT numbers their national check digits where the
   scheme has one (17 country prefixes); shapes that are otherwise ordinary
   numbers are only recognised next to a label such as "SSN" or "company
-  number". Nothing uses them yet, so behaviour is unchanged; pre-model
-  pseudonymisation builds on them.
+  number". Used by pre-model pseudonymisation (below).
+- Pseudonymisation before the model, per tenant behind the flag
+  `pseudonymisation.pre_model` (off by default). Names, dates of birth,
+  addresses and identifiers are replaced with placeholders such as
+  `[[PERSON_1:3fa9c2]]` before every model call on both model paths
+  (LangGraph agents and `LLMRouter`), system prompt included, and restored
+  inside the tool boundary so connectors receive the real values. A value
+  keeps its placeholder for the run and its resumes; the case is always the
+  server-generated run id, never a `case_id` from a request, and only
+  placeholders issued into the run's own conversation are restored. The map is
+  stored encrypted per tenant in the new `case_pseudonym_maps` table (migration
+  `v6z24_case_pseudonym_maps`, additive, row-level security). Fails closed: if
+  the flag or the map cannot be read, or the map cannot be written, no model
+  call is made; a tool call whose placeholder cannot be restored is refused
+  with `E1012 pseudonym_restore_failed` and audited instead of being sent. New
+  metrics `agenticorg_pii_pseudonymised_total{entity_type}`,
+  `agenticorg_pii_pseudonym_restore_refused_total{reason}` and
+  `agenticorg_pii_pseudonymisation_unavailable_total{reason}`. New
+  `core.feature_flags.is_enabled_strict`, which raises on a failed lookup
+  instead of returning the default. With the flag off behaviour is unchanged.
+  See `docs/security/pseudonymisation.md`.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy

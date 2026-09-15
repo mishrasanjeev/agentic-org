@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/case_push/1.0.0",
+  "title": "Case push",
+  "description": "The body of a signed webhook that hands a case to the operator's system of record. The signature travels in headers, not in the body. Receivers must treat event_id as the idempotency key.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "event_type", "occurred_at", "case", "memo", "screening_results", "screening_dispositions"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "event_id": {"type": "string", "format": "uuid"},
+    "event_type": {
+      "type": "string",
+      "enum": ["case.completed", "case.updated", "case.decided"]
+    },
+    "occurred_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "case": {"$ref": "https://agenticorg.ai/schemas/business_case/1.0.0"},
+    "memo": {
+      "oneOf": [{"$ref": "https://agenticorg.ai/schemas/underwriting_memo/1.0.0"}, {"type": "null"}]
+    },
+    "screening_results": {
+      "type": "array",
+      "items": {"$ref": "https://agenticorg.ai/schemas/screening_result/1.0.0"}
+    },
+    "screening_dispositions": {
+      "type": "array",
+      "items": {"$ref": "https://agenticorg.ai/schemas/screening_disposition/1.0.0"}
+    },
+    "ownership_graph": {
+      "oneOf": [{"$ref": "https://agenticorg.ai/schemas/ownership_graph/1.0.0"}, {"type": "null"}]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"event_type": {"enum": ["case.completed", "case.decided"]}}},
+      "then": {"properties": {"memo": {"$ref": "https://agenticorg.ai/schemas/underwriting_memo/1.0.0"}}}
+    }
+  ]
+}
