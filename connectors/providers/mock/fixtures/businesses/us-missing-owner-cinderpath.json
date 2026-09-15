@@ -1,0 +1,122 @@
+{
+  "key": "us-missing-owner-cinderpath",
+  "scenarios": [
+    "missing_owner"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Cinderpath Freight Brokers LLC",
+    "trading_names": [],
+    "jurisdiction": "US-TX",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000003"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000003"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "300 Example Road"
+      ],
+      "locality": "Exampleburg",
+      "region": "TX",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": null,
+    "declared_activity": "freight_brokerage",
+    "declared_owners": [
+      {
+        "name": "Delphine Marrowgate",
+        "kind": "person",
+        "date_of_birth": "1985-06",
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 70,
+        "identifiers": []
+      },
+      {
+        "name": "Rufus Tallowmere",
+        "kind": "person",
+        "date_of_birth": null,
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 30,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-us-tx-0000003",
+    "jurisdiction": "US-TX",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000003"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000003"
+      }
+    ],
+    "legal_name": "Cinderpath Freight Brokers LLC",
+    "registry_status": "active",
+    "entity_type": "limited_liability_company",
+    "incorporated_on": "2020-11-19",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "300 Example Road"
+      ],
+      "locality": "Exampleburg",
+      "region": "TX",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "officers": [
+      {
+        "name": "Delphine Marrowgate",
+        "role": "manager",
+        "appointed_on": "2020-11-19",
+        "resigned_on": null,
+        "date_of_birth": "1985-06",
+        "nationalities": [
+          "US"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-delphine-marrowgate",
+        "kind": "person",
+        "name": "Delphine Marrowgate",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1985-06",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2020-11-19"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": null
+}

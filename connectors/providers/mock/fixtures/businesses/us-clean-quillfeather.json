@@ -1,0 +1,189 @@
+{
+  "key": "us-clean-quillfeather",
+  "scenarios": [
+    "clean",
+    "corporate_owner"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Quillfeather Analytics Inc",
+    "trading_names": [],
+    "jurisdiction": "US-DE",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000002"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000002"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "200 Example Boulevard"
+      ],
+      "locality": "Exampleville",
+      "region": "DE",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "website": "https://quillfeather-analytics.example.com",
+    "declared_activity": "software_services",
+    "declared_owners": [
+      {
+        "name": "Tidewell Ledger Holdings LLC",
+        "kind": "business",
+        "date_of_birth": null,
+        "nationalities": [],
+        "ownership_pct": 60,
+        "identifiers": []
+      },
+      {
+        "name": "Barnaby Coldharbour",
+        "kind": "person",
+        "date_of_birth": "1980-02",
+        "nationalities": [
+          "US"
+        ],
+        "ownership_pct": 40,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-us-de-0000002",
+    "jurisdiction": "US-DE",
+    "identifiers": [
+      {
+        "scheme": "us_state_file_number",
+        "value": "0000002"
+      },
+      {
+        "scheme": "us_ein",
+        "value": "00-0000002"
+      }
+    ],
+    "legal_name": "Quillfeather Analytics Inc",
+    "registry_status": "active",
+    "entity_type": "corporation",
+    "incorporated_on": "2016-08-02",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "200 Example Boulevard"
+      ],
+      "locality": "Exampleville",
+      "region": "DE",
+      "postal_code": "00000",
+      "country": "US"
+    },
+    "officers": [
+      {
+        "name": "Barnaby Coldharbour",
+        "role": "director",
+        "appointed_on": "2016-08-02",
+        "resigned_on": null,
+        "date_of_birth": "1980-02",
+        "nationalities": [
+          "US"
+        ]
+      },
+      {
+        "name": "Marisol Fenwright",
+        "role": "director",
+        "appointed_on": "2018-01-10",
+        "resigned_on": null,
+        "date_of_birth": "1974-10",
+        "nationalities": [
+          "US"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "biz-tidewell-ledger",
+        "kind": "business",
+        "name": "Tidewell Ledger Holdings LLC",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 60,
+          "max": 60
+        },
+        "voting_pct": {
+          "min": 60,
+          "max": 60
+        },
+        "jurisdiction": "US-DE",
+        "identifiers": [
+          {
+            "scheme": "us_state_file_number",
+            "value": "0000012"
+          }
+        ],
+        "date_of_birth": null,
+        "nationalities": [],
+        "started_on": "2016-08-02"
+      },
+      {
+        "node_id": "psn-marisol-fenwright",
+        "kind": "person",
+        "name": "Marisol Fenwright",
+        "owns": "biz-tidewell-ledger",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 100,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1974-10",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2015-01-05"
+      },
+      {
+        "node_id": "psn-barnaby-coldharbour",
+        "kind": "person",
+        "name": "Barnaby Coldharbour",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 40,
+          "max": 40
+        },
+        "voting_pct": {
+          "min": 40,
+          "max": 40
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1980-02",
+        "nationalities": [
+          "US"
+        ],
+        "started_on": "2016-08-02"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "quillfeather-analytics.example.com",
+    "registered_on": "2016-09",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Quillfeather Analytics builds demand forecasting dashboards for independent retailers."
+      }
+    ]
+  }
+}
