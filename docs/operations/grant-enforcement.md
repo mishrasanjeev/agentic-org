@@ -38,9 +38,9 @@ flags (`pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
 `core/feature_flags.py`). Operators manage them with database access:
 
 ```
-python scripts/authority_flags.py set grants.enforce_closed.warn --tenant <tenant id>
-python scripts/authority_flags.py set grants.enforce_closed.deny --global
-python scripts/authority_flags.py clear grants.enforce_closed.deny --tenant <tenant id>
+python scripts/authority_flags.py set grants.enforce_closed.warn --tenant <tenant id> --operator <name>
+python scripts/authority_flags.py set grants.enforce_closed.deny --global --operator <name>
+python scripts/authority_flags.py clear grants.enforce_closed.deny --tenant <tenant id> --operator <name>
 python scripts/authority_flags.py list --tenant <tenant id>
 ```
 
