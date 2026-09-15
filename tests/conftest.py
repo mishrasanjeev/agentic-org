@@ -84,22 +84,24 @@ def _reset_fake_doubles_between_tests():
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        "real_flag_lookup: read pseudonymisation.pre_model from the database even without AGENTICORG_DB_URL",
+        "real_flag_lookup: read pseudonymisation.pre_model from the database outside tests/integration",
     )
 
 
 @pytest.fixture(autouse=True)
-def _pseudonymisation_flag_unset_without_a_database(request, monkeypatch):
-    """Report ``pseudonymisation.pre_model`` as unset (no flag row) in runs without a database.
+def _pseudonymisation_flag_unset_outside_integration_tests(request, monkeypatch):
+    """Report ``pseudonymisation.pre_model`` as unset (no flag row) outside the integration suite.
 
     The flag is read strictly: a failed lookup refuses the agent run instead
-    of treating the flag as off. Unit, regression and security runs have no
-    database, so every agent run would be refused. They get the value a tenant
-    without the flag sees. Runs with ``AGENTICORG_DB_URL`` read the real
+    of treating the flag as off. Unit, regression and security tests do not
+    provision the feature-flag table (CI runs them without a database, and the
+    integration job runs the regression suite after tests that reset the
+    schema), so every agent run would be refused. They get the value a tenant
+    without the flag sees. Tests under ``tests/integration`` read the real
     table, and tests of the lookup-failure path opt out with
     ``@pytest.mark.real_flag_lookup``. Other flags are untouched.
     """
-    if os.getenv("AGENTICORG_DB_URL") or request.node.get_closest_marker("real_flag_lookup"):
+    if "integration" in request.node.path.parts or request.node.get_closest_marker("real_flag_lookup"):
         yield
         return
     from core import feature_flags
