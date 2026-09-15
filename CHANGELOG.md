@@ -5,6 +5,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Deterministic case policy engine (`core/policy/`): versioned YAML policies
+  evaluated over a case's evidence fields into a tier (`low` < `medium` <
+  `high` < `blocked`), a score and ordered reasons naming the rules that fired,
+  with the policy version, file hash and inputs recorded in every result. No
+  model is involved and model confidence is never an input. Policies load
+  strictly and fail closed at load with a reason code; missing evidence moves
+  a case towards the stricter tier. A policy can only be marked `production`
+  with `reviewed_by`, and loading an example policy logs a warning. Ships
+  `business_onboarding_us` and `business_onboarding_uk` **examples, which
+  require a compliance owner's review before any real use**. Metrics
+  `agenticorg_policy_evaluations_total{tier,policy_status}` and
+  `agenticorg_policy_load_total{outcome,reason}`. Nothing calls the engine
+  yet, so existing behaviour is unchanged. See `docs/policies/authoring.md`
+  and ADR 0011.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
