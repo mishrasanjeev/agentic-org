@@ -130,6 +130,13 @@ async def lifespan(app: FastAPI):
 
         logging.getLogger(__name__).debug("Blacklist cleanup skipped: %s", exc)
 
+    # Per-run grant cache (PRD F-1): one Redis client for this loop and the
+    # revocation listener. Never blocks startup; Celery workers create their
+    # client lazily on first use instead.
+    from auth.token_pool import token_pool
+
+    await token_pool.init()
+
     # Pre-warm Grantex JWKS cache so first real enforce() call is <1ms
     try:
         from core.langgraph.grantex_auth import get_grantex_client
@@ -145,6 +152,7 @@ async def lifespan(app: FastAPI):
     from api.v1.health import close_health_resources
     from core.database import close_db
 
+    await token_pool.close()
     await close_health_resources()
     await close_checkpointer()
     await close_db()

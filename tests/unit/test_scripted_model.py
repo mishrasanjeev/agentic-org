@@ -12,6 +12,7 @@ from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph.agent_graph import build_agent_graph
 from core.test_doubles.scripted_model import (
     ScriptedChatModel,
@@ -124,6 +125,7 @@ async def test_fixture_drives_a_tool_call_then_completion(scripted_model: Any) -
             connector_config={},
             connector_names=["gmail"],
             confidence_floor=0.5,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         result = await graph.compile().ainvoke(_state())
 
@@ -140,6 +142,7 @@ async def test_fixture_drives_interrupt_and_resume(scripted_model: Any) -> None:
         authorized_tools=[],
         confidence_floor=0.5,
         hitl_condition="total > 500000",
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     compiled = graph.compile(checkpointer=MemorySaver())
     config = {"configurable": {"thread_id": "scripted-hitl-1"}}

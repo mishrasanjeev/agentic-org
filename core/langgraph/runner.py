@@ -21,6 +21,8 @@ import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.errors import GraphInterrupt
 
+from auth.grant_enforcement import EnforcementMode
+from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
@@ -40,8 +42,12 @@ from core.langgraph.thread_ids import (
 )
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
+from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
+
+# Graph state carries the run's grant token; keep it out of LangSmith traces.
+install_trace_redaction()
 
 # Resource limits — prevent runaway agents from exhausting budget or the
 # checkpoint store. Tuned to cover the 99th percentile of legitimate runs;
@@ -207,6 +213,7 @@ async def run_agent(
     thread_id: str | None = None,
     company_id: str | None = None,
     llm_provider: str | None = None,
+    run_grant: RunGrant | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -225,6 +232,10 @@ async def run_agent(
         confidence_floor: Minimum confidence before HITL.
         hitl_condition: Additional HITL condition expression.
         grant_token: Grantex grant JWT for authorization.
+        run_grant: The run's resolved grant and ``grants.enforce_closed``
+            mode, when the caller already resolved it. Otherwise it is
+            resolved here from ``tenant_id``/``agent_id`` with
+            ``grant_token`` as the supplied token (``auth/run_grants.py``).
         connector_config: Config for connectors (auth, secrets).
         thread_id: Checkpoint thread. The API passes a server-generated,
             tenant-prefixed id (``thread_ids.new_thread_id``); any other id is
@@ -246,6 +257,16 @@ async def run_agent(
         return limit_block
 
     run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
+
+    # PRD F-1: resolve the grant the run's tool calls are checked against.
+    # In ``off`` this passes ``grant_token`` through untouched.
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph",
+        )
 
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
@@ -367,6 +388,7 @@ async def run_agent(
             domain=domain,
             pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
             llm_provider=llm_provider,
+            run_grant=run_grant,
             pseudonymiser=pseudonymiser,
         )
     finally:
@@ -386,7 +408,10 @@ async def run_agent(
         "agent_type": agent_type,
         "domain": domain,
         "tenant_id": tenant_id,
-        "grant_token": grant_token,
+        "grant_token": run_grant.token,
+        # A reused thread (voice ``voice:{call_sid}``) must not inherit a
+        # denial from an earlier turn.
+        "grant_denial": {},
         "confidence": 0.0,
         "status": "running",
         "output": {},
@@ -552,6 +577,8 @@ async def run_agent(
         if interrupts:
             # The resume endpoint needs the checkpoint thread to continue.
             response["thread_id"] = config["configurable"]["thread_id"]
+        if result.get("grant_denial"):
+            response["grant_denial"] = result["grant_denial"]
         return response
 
     except GraphInterrupt as gi:
@@ -676,6 +703,8 @@ async def resume_agent(
     company_id: str | None = None,
     domain: str | None = None,
     llm_provider: str | None = None,
+    grant_token: str = "",
+    run_grant: RunGrant | None = None,
     require_paused: bool = False,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
@@ -691,6 +720,10 @@ async def resume_agent(
     the approval gate (``checkpoint_not_found`` / ``checkpoint_not_paused``).
     Resuming a thread with no checkpoint would otherwise start a new, empty run.
     Refusals and failures carry a ``reason`` code.
+
+    PRD F-1: the grant is resolved again for the resumed run (the tenant's
+    mode may have changed and the checkpointed token may have expired); in
+    ``warn``/``deny`` the fresh token replaces the checkpointed one.
     """
     from langgraph.types import Command
 
@@ -731,6 +764,14 @@ async def resume_agent(
         reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
         return {"status": "failed", "error": str(e), "reason": reason}
 
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph_resume",
+        )
+
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
         graph = build_agent_graph(
@@ -746,10 +787,17 @@ async def resume_agent(
             domain=domain,
             llm_provider=llm_provider,
             pseudonymiser=pseudonymiser,
+            run_grant=run_grant,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
     compiled = graph.compile(checkpointer=checkpointer)
+
+    resume_command: Command[Any] = (
+        Command(resume=decision)
+        if run_grant.mode is EnforcementMode.OFF
+        else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
+    )
 
     t0 = time.perf_counter()
     try:
@@ -764,7 +812,7 @@ async def resume_agent(
                 logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
                 return {"status": "failed", "error": refusal, "reason": refusal}
         result = await compiled.ainvoke(  # type: ignore[call-overload]
-            Command(resume=decision),
+            resume_command,
             config=config,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)

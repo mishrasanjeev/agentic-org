@@ -27,6 +27,7 @@ import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.types import Command
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph import checkpointer as cp
 from core.test_doubles.scripted_model import final
 
@@ -169,7 +170,11 @@ def _graph() -> Any:
     from core.langgraph.agent_graph import build_agent_graph
 
     return build_agent_graph(
-        system_prompt="scripted", authorized_tools=[], confidence_floor=0.5, hitl_condition="total > 500000"
+        system_prompt="scripted",
+        authorized_tools=[],
+        confidence_floor=0.5,
+        hitl_condition="total > 500000",
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
 
 

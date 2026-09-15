@@ -421,6 +421,46 @@ Remove an entry in the pull request that fixes it.
   not a known role, and have `_can_decide` deny (with a reason) when the
   assignee role is unknown.
 
+## A-37 — Legacy scope validation calls the blocking `enforce` on the event loop
+
+- **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
+- **What:** in `off` mode `core/langgraph/agent_graph.py::validate_tool_scopes`
+  still calls `grantex.enforce(...)` directly inside the async graph node.
+  `enforce` can fetch the JWKS with a synchronous HTTP request, blocking the
+  event loop. The warn/deny path and `ToolGateway.execute` run it with
+  `asyncio.to_thread`; the legacy path was left byte-for-byte unchanged so
+  `off` keeps today's behaviour.
+- **Fix:** run the legacy call through `asyncio.to_thread` too.
+
+## A-38 — Workflow connector steps and unstored workflow agents have no grant principal
+
+- **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
+  2026-09-15).
+- **What:** a workflow `connector_tool` step calls a connector with no agent at
+  all, and an agent step whose `agent_id` does not resolve to a stored agent
+  runs as a synthetic `wf_agent_<step>` id. Neither has a Grantex agent
+  registration, so no grant can be resolved for them: in `warn` every call is
+  recorded as `grant_missing`/`no_agent` (or `lookup_failed`), in `deny` it is
+  refused. A2A and MCP calls for an agent type with no shared agent of that
+  type behave the same unless the caller brings its own Grantex token.
+- **Fix:** give workflows a principal — register the workflow definition (or
+  require a stored agent on every step) as a Grantex agent with scopes for its
+  connector steps, and resolve the step's grant from it.
+
+## A-39 — A legacy scope denial is reported as a completed run
+
+- **Found:** making deny-mode runs report `failed` (PRD F-1c, 2026-09-15).
+- **What:** in `off` mode an agent that carries a configured grant token still
+  gets the legacy `validate_tool_scopes` check. When it denies, the node sets
+  `status="failed"` and `error="Scope denied: ..."`, but the graph then routes
+  to `evaluate`, which unconditionally returns `status="completed"`; the run
+  result shows `completed` with an error string and the "Access denied" text
+  as output. Deny mode now keeps its runs `failed` via `grant_denial`; the
+  legacy path was left unchanged so `off` behaves exactly as before.
+- **Fix:** have `evaluate` preserve a `failed` status set by scope validation
+  (or set `grant_denial` from the legacy path too), and update the tests that
+  describe the legacy result.
+
 ## A-40 — A built-in connector is tied to one commercial screening provider
 
 - **Found:** `scripts/check_denylist.py audit` while removing vendor names
@@ -438,3 +478,32 @@ Remove an entry in the pull request that fixes it.
   warning for tenants that use it, then delete the in-repo module and its
   generator entry. New screening integrations go through the
   `VerificationProvider` interface instead.
+
+## A-41 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
+
+- **Found:** binding caller tokens on every run route (PRD F-1b review,
+  2026-09-15).
+- **What:** registered Grantex scopes and `enforce` decide per connector and
+  permission level (`tool:<connector>:<read|write|delete|admin>`), not per
+  tool, so a grant that covers one write tool on a connector covers every
+  write tool on it. A2A (`POST /a2a/tasks`) and MCP (`POST /mcp/call`) run an
+  agent *type* with that type's default tool list rather than a stored
+  agent's `authorized_tools`, so the tools such a call can reach are decided
+  by the type, and only the connector-level grant limits them.
+- **Fix:** register per-tool scopes (or a tool allow-list in the grant) and
+  have `enforce` check the tool; run A2A and MCP calls with the shared agent's
+  stored `authorized_tools` instead of the type defaults.
+
+## A-42 — The Grantex Python SDK's `agents.update` calls a route the auth service does not serve
+
+- **Found:** pushing agent scopes to Grantex on `PATCH /agents/{id}`, verified
+  against the Grantex auth service image (PRD F-1 review, 2026-09-15).
+- **What:** `grantex.resources._agents.AgentsClient.update` (0.5.0, 0.5.1 and
+  the SDK's main branch) sends `POST /v1/agents/{id}`. The auth service serves
+  `PATCH /v1/agents/{id}` and answers the `POST` with "Route not found", so
+  every scope update through the SDK fails. `auth/grantex_registration.py::
+  update_agent_scopes` sends the `PATCH` through the SDK's HTTP client as a
+  marked compatibility path.
+- **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
+  publish it, pin it here, and call `agents.update` again from
+  `update_agent_scopes`.

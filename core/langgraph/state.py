@@ -29,6 +29,8 @@ class AgentState(TypedDict):
         pseudonym_case_id: Case whose pseudonym map the messages use (set only
             when ``pseudonymisation.pre_model`` was on when the run started),
             so a resumed run restores tokens from the same map.
+        grant_denial: Set when grant enforcement refused a tool call (PRD F-1
+            deny mode): reason, sub_reason, grant_id, connector and tool.
     """
 
     messages: Annotated[list, add_messages]
@@ -45,3 +47,4 @@ class AgentState(TypedDict):
     hitl_trigger: str
     error: str
     pseudonym_case_id: NotRequired[str]
+    grant_denial: NotRequired[dict[str, str]]

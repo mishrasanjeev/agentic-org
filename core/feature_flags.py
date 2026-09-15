@@ -38,6 +38,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -211,6 +212,87 @@ async def is_enabled_strict(
             raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read") from exc
         _store_cache(cache_key, row, now + _CACHE_TTL_SECONDS)
     return _evaluate(row, flag_key, tenant_id, user_id, default=False)
+
+
+# Flags that decide what agents are allowed to do. Tenant admins must not be
+# able to set, change or delete them through the tenant feature-flag API: a
+# tenant row could otherwise switch an operator's enforcement off. Platform
+# operators manage them with ``scripts/authority_flags.py``. A key is reserved
+# when it equals one of these or starts with one of them followed by ".".
+RESERVED_FLAG_KEYS: tuple[str, ...] = (
+    "grants.enforce_closed",
+    "pseudonymisation.pre_model",
+    "approvals.resume_agent_runs",
+    "decisions.required",
+    "caps.enforce",
+)
+
+
+def is_reserved_flag_key(flag_key: str) -> bool:
+    """True for authority flags only platform operators may manage."""
+    key = (flag_key or "").strip().lower()
+    return any(key == reserved or key.startswith(reserved + ".") for reserved in RESERVED_FLAG_KEYS)
+
+
+@dataclass(frozen=True)
+class FlagRows:
+    """The global and tenant rows for one flag key, read independently."""
+
+    global_row: dict[str, Any] | None
+    tenant_row: dict[str, Any] | None
+
+
+def row_enabled(flag_key: str, row: dict[str, Any] | None, *, subject_id: str) -> bool:
+    """Evaluate one flag row (``enabled`` and rollout) for a stable subject."""
+    if row is None or not row["enabled"]:
+        return False
+    pct = int(row.get("rollout_percentage", 100))
+    if pct >= 100:
+        return True
+    if pct <= 0:
+        return False
+    return _bucket(flag_key, subject_id or "__anon__") < pct
+
+
+async def load_flag_rows_strict(flag_key: str, *, tenant_id: uuid.UUID) -> FlagRows:
+    """Read a flag's global row and the tenant's row separately.
+
+    For authority decisions: unlike ``is_enabled`` a tenant row does not hide
+    the global row, and a store that cannot be read raises
+    ``FeatureFlagLookupError`` instead of reading as "absent". Only successful
+    reads are cached.
+    """
+    cache_key = (f"rows:{tenant_id}", flag_key)
+    cached = _cache.get(cache_key)
+    now = time.monotonic()
+    if cached is not None and cached[1] > now and cached[0] is not None:
+        return FlagRows(global_row=cached[0]["global"], tenant_row=cached[0]["tenant"])
+
+    def _as_row(flag: FeatureFlag | None) -> dict[str, Any] | None:
+        if flag is None:
+            return None
+        return {"enabled": flag.enabled, "rollout_percentage": flag.rollout_percentage}
+
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            tenant_flag = (
+                await session.execute(
+                    select(FeatureFlag).where(FeatureFlag.tenant_id == tenant_id, FeatureFlag.flag_key == flag_key)
+                )
+            ).scalar_one_or_none()
+            global_flag = (
+                await session.execute(
+                    select(FeatureFlag).where(FeatureFlag.tenant_id.is_(None), FeatureFlag.flag_key == flag_key)
+                )
+            ).scalar_one_or_none()
+            rows = FlagRows(global_row=_as_row(global_flag), tenant_row=_as_row(tenant_flag))
+    # enterprise-gate: broad-except-ok reason=unreadable-flag-store-raises-lookup-error-never-reads-as-absent
+    except Exception as exc:
+        logger.warning("feature_flag_strict_lookup_failed", flag_key=flag_key, error_type=type(exc).__name__)
+        raise FeatureFlagLookupError(f"feature flag {flag_key!r} could not be read") from exc
+
+    _store_cache(cache_key, {"global": rows.global_row, "tenant": rows.tenant_row}, now + _CACHE_TTL_SECONDS)
+    return rows
 
 
 def clear_cache() -> None:

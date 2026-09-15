@@ -84,11 +84,42 @@ def _reset_fake_doubles_between_tests():
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
+        "real_flag_store: read authority feature flags from the real store instead of the hermetic empty one",
+    )
+    config.addinivalue_line(
+        "markers",
         "real_flag_lookup: read pseudonymisation.pre_model from the database outside tests/integration",
     )
     config.addinivalue_line(
         "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
     )
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_authority_flag_store(request, monkeypatch):
+    """Give tests an empty, readable authority flag store.
+
+    Grant enforcement (``auth/grant_enforcement.py``) fails closed to ``deny``
+    when the feature-flag table cannot be read, and unit tests run without a
+    database. An empty store keeps the deployment default (``off``) in force,
+    exactly as for a deployment with no flag rows. Tests under
+    ``tests/integration`` and tests marked ``real_flag_store`` or
+    ``real_flag_lookup`` read the real store.
+    """
+    if (
+        "integration" in request.node.path.parts
+        or request.node.get_closest_marker("real_flag_store")
+        or request.node.get_closest_marker("real_flag_lookup")
+    ):
+        yield
+        return
+    from core import feature_flags
+
+    async def _empty_rows(flag_key, *, tenant_id):
+        return feature_flags.FlagRows(global_row=None, tenant_row=None)
+
+    monkeypatch.setattr(feature_flags, "load_flag_rows_strict", _empty_rows)
+    yield
 
 
 @pytest.fixture(autouse=True)

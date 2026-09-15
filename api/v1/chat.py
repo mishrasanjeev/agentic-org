@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
+from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
 from core.models.agent import Agent
@@ -735,6 +736,28 @@ async def chat_query(
         # to the LLM and let the user get an answer somehow.
         _log.warning("chat_tds_route_helper_raised", error=str(exc), exc_info=True)
         det = None
+    # PRD F-1: the chat run's grant is the routed agent's; a caller Grantex
+    # token for another agent must also allow every tool call.
+    # Resolved once for the deterministic TDS route and the LangGraph run.
+    run_grant = await resolve_run_grant(
+        tenant_id=tenant_id,
+        agent_id=agent_id or "",
+        caller_token=getattr(request.state, "grant_token", None),
+        caller_agent_id=str(getattr(request.state, "agent_id", "") or ""),
+        runtime="chat",
+    )
+    if det is not None and not await direct_tool_call_permitted(
+        run_grant,
+        connector="zoho_books",
+        tool="calculate_tds",
+        tenant_id=tenant_id,
+        agent_id=agent_id or "",
+        agent_type=str(resolved_agent_type or ""),
+        runtime="deterministic_tds",
+    ):
+        # The calculation already ran locally (pure math, no side effect), but
+        # its answer is not returned; the LangGraph path below checks again.
+        det = None
     if det is not None:
         hitl_trigger = det.get("hitl_trigger") or None
         det_confidence = float(det["confidence"])
@@ -861,6 +884,7 @@ async def chat_query(
                 llm_provider=agent_llm_provider,
                 confidence_floor=0.88,
                 grant_token=grant_token,
+                run_grant=run_grant,
                 connector_config=connector_config,
                 connector_names=connector_names,
                 company_id=str(company_uuid),
