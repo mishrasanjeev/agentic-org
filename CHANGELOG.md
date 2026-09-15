@@ -11,8 +11,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   and `prompt=login`, with `acr`, `amr` (`["pwd"]` or `["pwd", "hwk"]`) and
   `auth_time` in its tokens. Seeds Approver A and Approver B from
   `tools/oidc_stub/config.dev.json`. Refuses to start unless `AGENTICORG_ENV`
-  is development, local or test. `tools/` is excluded from the API image. See
-  "Development identity provider" in `docs/quickstart-local.md`.
+  is development, local or test. Sessions last eight hours, repeated request
+  parameters are rejected, and step-up clients must send `max_age`. `tools/` is
+  excluded from the API image. See "Development identity provider" in
+  `docs/quickstart-local.md`.
 - Vendor-name denylist: `scripts/check_denylist.py` fails a change whose added
   lines, file paths, commit messages, branch name or pull request title and
   description name a denylisted verification, identity-data or screening
