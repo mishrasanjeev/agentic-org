@@ -78,9 +78,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   under a seed; HMAC-signed webhook events (including company dissolved) with
   recorded genuine and forged deliveries. It runs in-process or as a separate
   HTTP service with a client provider; `make dev` now starts it as
-  `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081)
-  and points the API and worker at it. It refuses to run outside local,
-  development and test environments. See `docs/providers/mock-provider.md`.
+  `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081;
+  fault-injection and event endpoints only with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) and points the API and worker at
+  it. It runs only when `AGENTICORG_ENV` is explicitly local, development or
+  test; elsewhere the registry neither lists nor creates it. See
+  `docs/providers/mock-provider.md`.
 - Provider conformance suite, published in the full distribution as
   `agenticorg.testing.provider_conformance` (source: `testing/provider_conformance`).
   A provider package subclasses `ProviderConformanceSuite` and supplies a

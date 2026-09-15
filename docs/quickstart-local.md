@@ -40,7 +40,9 @@ All ports bind to `127.0.0.1` only.
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
 - **mock-provider** — the fixture-backed `mock` verification provider as a
   separate HTTP service; the API and worker reach it at
-  `http://mock-provider:8080` (`AGENTICORG_MOCK_PROVIDER_URL`). See
+  `http://mock-provider:8080` (`AGENTICORG_MOCK_PROVIDER_URL`). Its fault
+  injection and event endpoints stay off unless you start the stack with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`. See
   `docs/providers/mock-provider.md`
 
 Every base image is pinned by digest. The API and worker set
@@ -72,7 +74,8 @@ If a port is already taken, override it for the whole session:
 
 ```bash
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
-AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \nAGENTICORG_DEV_MOCK_PROVIDER_PORT=18081 make dev
+AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
+AGENTICORG_DEV_MOCK_PROVIDER_PORT=18081 make dev
 ```
 
 Use the same variables with `make ps`, `make logs` and the smoke test.

@@ -12,11 +12,22 @@ one small.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializationInfo,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+    model_validator,
+)
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -397,14 +408,39 @@ class ScreeningResult(DomainModel):
 # --- web presence -------------------------------------------------------------------------------
 
 
+#: Serialisation context that includes :class:`UntrustedText` content, e.g.
+#: ``model.model_dump(mode="json", context=INCLUDE_UNTRUSTED_TEXT)``. Use it only to move the content
+#: to the untrusted-content extractor or between a provider and its own service.
+INCLUDE_UNTRUSTED_TEXT: dict[str, bool] = {"include_untrusted_text": True}
+
+
 class UntrustedText(DomainModel):
     """Attacker-controllable text (website copy). Never put it in a model prompt.
 
-    ``str()`` and ``repr()`` do not reveal the content, so it cannot slip into a prompt through
-    formatting; read ``value`` explicitly, inside the untrusted-content extractor.
+    The content does not leak by accident: ``str()`` and ``repr()`` show only its length, and
+    ``model_dump()`` / JSON serialisation - of this value or of any model containing it - produce a
+    redacted reference ``{"redacted": true, "characters": n, "sha256": "sha256:..."}`` unless the
+    caller passes ``context=INCLUDE_UNTRUSTED_TEXT``. A redacted reference does not validate back
+    into ``UntrustedText``. Read the content with :meth:`unsafe_value`, inside the untrusted-content
+    extractor.
     """
 
-    value: Annotated[str, StringConstraints(max_length=1_000_000)]
+    value: Annotated[str, StringConstraints(max_length=1_000_000), Field(repr=False)]
+
+    def unsafe_value(self) -> str:
+        """The raw content. Only the untrusted-content extractor should call this."""
+        return self.value
+
+    @property
+    def sha256(self) -> str:
+        return "sha256:" + hashlib.sha256(self.value.encode("utf-8")).hexdigest()
+
+    @model_serializer(mode="wrap")
+    def _serialise(self, handler: SerializerFunctionWrapHandler, info: SerializationInfo) -> Any:
+        context = info.context
+        if isinstance(context, dict) and context.get("include_untrusted_text") is True:
+            return handler(self)
+        return {"redacted": True, "characters": len(self.value), "sha256": self.sha256}
 
     def __str__(self) -> str:
         return f"<untrusted text: {len(self.value)} characters>"

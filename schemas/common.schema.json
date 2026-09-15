@@ -131,7 +131,7 @@
       "enum": ["person", "business"]
     },
     "section_status": {
-      "description": "How much of a section could be produced. not_available means the provider does not offer the capability.",
+      "description": "How much of a section could be produced. complete and partial cite evidence; not_available (the data is not offered or there is no registry match) and error (a provider error stopped the section) give a reason instead.",
       "type": "string",
       "enum": ["complete", "partial", "not_available", "error"]
     },

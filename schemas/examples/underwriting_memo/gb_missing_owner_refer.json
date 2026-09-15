@@ -35,7 +35,7 @@
           "evidence": [
             {
               "provider": "mock",
-              "record_id": "mock:company:00000001:psc",
+              "record_id": "mock:company:00000001:owners",
               "field": "items",
               "retrieved_at": "2026-09-01T09:00:00Z",
               "excerpt_ref": null
@@ -46,7 +46,7 @@
       "evidence": [
         {
           "provider": "mock",
-          "record_id": "mock:company:00000001:psc",
+          "record_id": "mock:company:00000001:owners",
           "field": "items",
           "retrieved_at": "2026-09-01T09:00:00Z",
           "excerpt_ref": null

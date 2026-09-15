@@ -24,9 +24,18 @@
     },
     "proposed_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
     "comparisons": {
+      "description": "Exactly one comparison for each of name, date_of_birth, nationality, address and associated_entities; an identifier that cannot be compared is recorded as not_comparable.",
       "type": "array",
-      "minItems": 1,
-      "items": {"$ref": "#/$defs/comparison"}
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {"$ref": "#/$defs/comparison"},
+      "allOf": [
+        {"contains": {"properties": {"identifier": {"const": "name"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "date_of_birth"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "nationality"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "address"}}}, "minContains": 1, "maxContains": 1},
+        {"contains": {"properties": {"identifier": {"const": "associated_entities"}}}, "minContains": 1, "maxContains": 1}
+      ]
     },
     "proposed_outcome": {"$ref": "#/$defs/outcome"},
     "confidence_band": {

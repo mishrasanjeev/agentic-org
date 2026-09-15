@@ -7,8 +7,9 @@
   network.
 - :func:`create_mock_provider` is what the providers registry calls: it reads
   ``AGENTICORG_MOCK_PROVIDER_*`` and returns the HTTP client when ``AGENTICORG_MOCK_PROVIDER_URL``
-  is set, the in-process provider otherwise. It refuses to run outside local, development and test
-  environments.
+  is set, the in-process provider otherwise. It refuses to run unless ``AGENTICORG_ENV`` is set
+  explicitly to a local, development or test value - unlike the application settings, an unset
+  variable does not default to development here.
 """
 
 from __future__ import annotations
@@ -26,12 +27,16 @@ class MockProviderRefusedError(RuntimeError):
     pass
 
 
+def mock_provider_available() -> bool:
+    """True only when ``AGENTICORG_ENV`` is explicitly local, dev, development, test or ci."""
+    return is_relaxed_env(os.getenv("AGENTICORG_ENV", ""))
+
+
 def create_mock_provider() -> VerificationProvider:
     environment = os.getenv("AGENTICORG_ENV", "")
-    if not is_relaxed_env(environment):
+    if not mock_provider_available():
         raise MockProviderRefusedError(
-            "the mock provider only runs in local, development and test environments "
-            f"(AGENTICORG_ENV={environment!r})"
+            f"the mock provider only runs in local, development and test environments (AGENTICORG_ENV={environment!r})"
         )
     settings = MockProviderSettings()
     config = settings.to_config()
@@ -49,4 +54,5 @@ __all__ = [
     "MockProviderRefusedError",
     "MockProviderSettings",
     "create_mock_provider",
+    "mock_provider_available",
 ]

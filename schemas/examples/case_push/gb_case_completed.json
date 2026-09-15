@@ -111,7 +111,7 @@
             "evidence": [
               {
                 "provider": "mock",
-                "record_id": "mock:company:00000001:psc",
+                "record_id": "mock:company:00000001:owners",
                 "field": "items",
                 "retrieved_at": "2026-09-01T09:00:00Z",
                 "excerpt_ref": null
@@ -122,7 +122,7 @@
         "evidence": [
           {
             "provider": "mock",
-            "record_id": "mock:company:00000001:psc",
+            "record_id": "mock:company:00000001:owners",
             "field": "items",
             "retrieved_at": "2026-09-01T09:00:00Z",
             "excerpt_ref": null
@@ -460,7 +460,7 @@
         "evidence": [
           {
             "provider": "mock",
-            "record_id": "mock:company:00000001:psc:1",
+            "record_id": "mock:company:00000001:owners:psn-orla-venncastle",
             "field": "name",
             "retrieved_at": "2026-09-01T09:00:00Z",
             "excerpt_ref": null
@@ -482,7 +482,7 @@
         "evidence": [
           {
             "provider": "mock",
-            "record_id": "mock:company:00000001:psc:2",
+            "record_id": "mock:company:00000001:owners:psn-tamsin-quellbridge",
             "field": "name",
             "retrieved_at": "2026-09-01T09:00:00Z",
             "excerpt_ref": null
@@ -508,10 +508,10 @@
         "evidence": [
           {
             "provider": "mock",
-            "record_id": "mock:company:00000001:psc:1",
-            "field": "natures_of_control[0]",
+            "record_id": "mock:company:00000001:owners:psn-orla-venncastle",
+            "field": "share_pct",
             "retrieved_at": "2026-09-01T09:00:00Z",
-            "excerpt_ref": "excerpt:mock-00000001-psc-1"
+            "excerpt_ref": "excerpt:mock-00000001-owners-orla-venncastle"
           }
         ]
       },
@@ -529,8 +529,8 @@
         "evidence": [
           {
             "provider": "mock",
-            "record_id": "mock:company:00000001:psc:2",
-            "field": "natures_of_control[0]",
+            "record_id": "mock:company:00000001:owners:psn-tamsin-quellbridge",
+            "field": "share_pct",
             "retrieved_at": "2026-09-01T09:00:00Z",
             "excerpt_ref": null
           }
@@ -540,7 +540,7 @@
     "evidence": [
       {
         "provider": "mock",
-        "record_id": "mock:company:00000001:psc",
+        "record_id": "mock:company:00000001:owners",
         "field": "items",
         "retrieved_at": "2026-09-01T09:00:00Z",
         "excerpt_ref": null

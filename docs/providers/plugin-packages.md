@@ -78,6 +78,10 @@ and counted in the `agenticorg_plugin_load_total{group, outcome}` metric, where
 
 A provider is created by calling its class with no arguments, so it reads its
 own configuration (for example from environment variables) in `__init__`.
+Declare `name` and `capabilities` as class attributes: they are validated when
+the entry point is registered, before the class is constructed. An instance may
+narrow its capabilities, never widen them. When the constructor raises, only
+the exception type is logged, never its message, which may carry configuration.
 `ProviderRegistry.create(name)` fails closed with a reason when the name is
 unknown (`unknown_provider`), the constructor raises (`construction_failed`)
 or the instance is malformed (`invalid_provider`). See

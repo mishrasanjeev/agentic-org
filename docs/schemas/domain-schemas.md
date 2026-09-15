@@ -39,7 +39,7 @@ evidence entry:
 |---|---|
 | `provider` | Registered provider name, e.g. `mock` or `acme_kyb` |
 | `record_id` | The provider's identifier for the record |
-| `field` | Dotted path of the field within that record, e.g. `natures_of_control[0]` |
+| `field` | Dotted path of the field within that record, e.g. `share_pct` or `officers[0].name` |
 | `retrieved_at` | When the record was retrieved (RFC 3339 with an offset) |
 | `excerpt_ref` | A stored excerpt for the human reviewer (`excerpt:<id>`), or `null` |
 
@@ -47,20 +47,27 @@ All five keys are required; `excerpt_ref` is explicitly `null` when there is
 no excerpt. Excerpts are listed in the memo's `excerpts` with a media type and
 digest and are never inlined into a document.
 
-In an `underwriting_memo`, every section and every finding carries at least
-one evidence entry. The one exception is a section whose `status` is
-`not_available`: it must give a `not_available_reason` (for example
-`capability_not_supported` when the provider does not offer ownership data)
-and has no findings, so a narrower provider degrades a memo instead of
-breaking it.
+In an `underwriting_memo`, every `complete` or `partial` section and every
+finding carries at least one evidence entry. Two statuses have no content and
+give a reason instead, with no findings and no evidence requirement:
+
+- `not_available` with a `not_available_reason` — `capability_not_supported`
+  when the provider does not offer the data, or `no_registry_match` — so a
+  narrower provider degrades a memo instead of breaking it;
+- `error` with an `error_reason`, the provider error's taxonomy code (for
+  example `provider_timeout` or `provider_unavailable`).
+
+A reason may appear only with its own status.
 
 ## Rules the schemas enforce
 
 - A memo's recommendation has `basis: "policy_result"` and
   `requires_human_decision: true`; there is no other value.
-- A screening disposition's outcome is `true_match`, `false_positive` or
-  `insufficient_information`; a review that overrides the proposal must give a
-  reason.
+- A screening disposition compares each of `name`, `date_of_birth`,
+  `nationality`, `address` and `associated_entities` exactly once; an
+  identifier that cannot be compared is recorded as `not_comparable`. Its
+  outcome is `true_match`, `false_positive` or `insufficient_information`; a
+  review that overrides the proposal must give a reason.
 - A case in state `decided` has a decision; a case in any other state does
   not.
 - A `case_push` for `case.completed` or `case.decided` carries a memo.
@@ -98,7 +105,9 @@ except DomainSchemaError as exc:
 | `schema_reference_unresolvable` | A `$ref` points outside the domain schemas |
 | `document_invalid` | The document does not conform; `errors` lists every problem |
 
-Date-time, URI, UUID and date formats are asserted, not just annotated.
+Date-time, URI, UUID and date formats are asserted, not just annotated. A
+date-time must be strict RFC 3339: a full date, `T`, hours, minutes and
+seconds (optionally fractional), and `Z` or a `±hh:mm` offset.
 
 ## Fixtures
 

@@ -330,3 +330,70 @@ def test_example_fixtures_use_only_reserved_domains() -> None:
             if text.startswith(("http://", "https://")):
                 host = text.split("/")[2]
                 assert host == "example.com" or host.endswith(".example.com"), f"{path.name}: {text}"
+
+
+# --- review follow-ups: error sections, identifier comparisons, strict timestamps ---------------
+
+
+def test_error_section_needs_an_error_reason_and_no_evidence() -> None:
+    error_section = {
+        "section_id": "ownership",
+        "status": "error",
+        "error_reason": "provider_timeout",
+        "findings": [],
+        "evidence": [],
+    }
+
+    def replace_ownership(doc: dict[str, Any], section: dict[str, Any]) -> None:
+        doc["sections"] = [s for s in doc["sections"] if s["section_id"] != "ownership"] + [section]
+
+    assert not _errors_after("underwriting_memo", lambda d: replace_ownership(d, error_section))
+    assert _errors_after("underwriting_memo", lambda d: replace_ownership(d, error_section | {"error_reason": None}))
+    missing = {k: v for k, v in error_section.items() if k != "error_reason"}
+    assert _errors_after("underwriting_memo", lambda d: replace_ownership(d, missing))
+    both = error_section | {"not_available_reason": "capability_not_supported"}
+    assert _errors_after("underwriting_memo", lambda d: replace_ownership(d, both))
+
+
+def test_reasons_belong_only_to_their_status() -> None:
+    assert _errors_after("underwriting_memo", lambda d: _memo_section(d, "registry").update(error_reason="not_found"))
+    assert _errors_after(
+        "underwriting_memo", lambda d: _memo_section(d, "web_presence").update(error_reason="provider_timeout")
+    )
+
+
+def test_disposition_compares_every_identifier_exactly_once() -> None:
+    def drop_address(doc: dict[str, Any]) -> None:
+        doc["comparisons"] = [c for c in doc["comparisons"] if c["identifier"] != "address"]
+
+    def duplicate_name(doc: dict[str, Any]) -> None:
+        name = next(c for c in doc["comparisons"] if c["identifier"] == "name")
+        doc["comparisons"] = [c for c in doc["comparisons"] if c["identifier"] != "address"] + [copy.deepcopy(name)]
+
+    def nothing_comparable(doc: dict[str, Any]) -> None:
+        for comparison in doc["comparisons"]:
+            comparison.update(subject_value=None, hit_value=None, result="not_comparable", evidence=[])
+
+    assert _errors_after("screening_disposition", drop_address)
+    assert _errors_after("screening_disposition", duplicate_name)
+    assert not _errors_after("screening_disposition", nothing_comparable)
+
+
+@pytest.mark.parametrize(
+    ("timestamp", "valid"),
+    [
+        ("2026-09-01T09:05:00Z", True),
+        ("2026-09-01t09:05:00.123456+05:30", True),
+        ("2016-12-31T23:59:60Z", True),
+        ("2026-09-01T09:05:00", False),
+        ("2026-09-01 09:05:00Z", False),
+        ("2026-09-01T09:05Z", False),
+        ("2026-09-01T09:05:00+0000", False),
+        ("2026-02-30T09:05:00Z", False),
+        ("2026-09-01T24:00:00Z", False),
+        ("2026-09-01T09:05:00+24:00", False),
+        ("20260901T090500Z", False),
+    ],
+)
+def test_timestamps_are_strict_rfc3339(timestamp: str, valid: bool) -> None:
+    assert (not _errors_after("screening_result", lambda d: d.update(screened_at=timestamp))) is valid

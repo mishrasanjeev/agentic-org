@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from connectors.framework.verification_provider import (
+    INCLUDE_UNTRUSTED_TEXT,
     BusinessQuery,
     BusinessRef,
     BusinessSubject,
@@ -209,8 +210,9 @@ def create_app(provider: MockProvider | None = None, *, admin: bool | None = Non
     @app.post("/v1/web-presence")
     async def web_presence(body: RefBody, deadline_ms: DeadlineHeader = None) -> dict[str, Any]:
         presence = await mock.web_presence(body.ref, deadline=_deadline(deadline_ms))
-        # Untrusted page content is transmitted as data; the receiving client re-wraps it.
-        return presence.model_dump(mode="json")
+        # The provider's own client needs the page content, so it is included explicitly; the
+        # client re-wraps it as UntrustedText, which redacts it again on any later serialisation.
+        return presence.model_dump(mode="json", context=INCLUDE_UNTRUSTED_TEXT)
 
     @app.post("/v1/monitors")
     async def monitor_enroll(body: MonitorBody, deadline_ms: DeadlineHeader = None) -> dict[str, Any]:

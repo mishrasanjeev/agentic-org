@@ -74,9 +74,12 @@ with the method set in PRD A-1, typed domain values
 - **Paging by offset.** `BusinessQuery` and `MonitorHandle` carry `offset` and
   `limit`; a short page is the last one. Opaque cursors were rejected because
   a `list[...]` return has nowhere to carry the next cursor.
-- **Untrusted text is typed.** Website copy is `UntrustedText`, whose `str()`
-  and `repr()` never show the content, so it cannot slip into a prompt through
-  formatting.
+- **Untrusted text is typed.** Website copy is `UntrustedText`. Its `str()`
+  and `repr()` never show the content, and serialising it (alone or inside any
+  model) yields a redacted reference with its length and digest unless the
+  caller passes `INCLUDE_UNTRUSTED_TEXT`; the raw value is read explicitly with
+  `unsafe_value()`. It cannot slip into a prompt, a log or a stored document
+  by formatting or serialisation.
 - **Registry and plugins.** `connectors/providers/registry.py` holds providers
   by name. Native providers register on import; plugin packages add
   `VerificationProvider` subclasses through the `agenticorg.providers`

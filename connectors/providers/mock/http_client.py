@@ -4,7 +4,8 @@
 Every call carries the remaining deadline in ``X-Request-Deadline-Ms`` and is bounded by it
 locally. Errors come back as ``{"error": {"reason": ...}}`` and are raised as the matching
 :class:`ProviderError`; transport failures are ``ProviderUnavailable``, a client-side timeout is
-``ProviderTimeout``, and a body that is not a valid domain value is ``ProviderResponseInvalid``.
+``ProviderTimeout``, an undecodable body or a redirect loop and a body that is not a valid domain
+value are ``ProviderResponseInvalid``, and any other request error is ``ProviderUnavailable``.
 Webhooks are verified locally with the shared secret; no network call is made.
 """
 
@@ -105,8 +106,17 @@ class MockHttpProvider(VerificationProvider):
             except httpx.TimeoutException as exc:
                 raise ProviderTimeout(self.name, "request timed out", capability=capability) from exc
             except httpx.TransportError as exc:
+                # Connection, read, write, proxy and protocol failures, and an unsupported scheme.
                 raise ProviderUnavailable(
                     self.name, f"transport error: {type(exc).__name__}", capability=capability
+                ) from exc
+            except (httpx.DecodingError, httpx.TooManyRedirects) as exc:
+                raise ProviderResponseInvalid(
+                    self.name, f"unreadable response: {type(exc).__name__}", capability=capability
+                ) from exc
+            except (httpx.HTTPError, httpx.InvalidURL, httpx.StreamError) as exc:
+                raise ProviderUnavailable(
+                    self.name, f"request failed: {type(exc).__name__}", capability=capability
                 ) from exc
         return self._decode(response, capability)
 

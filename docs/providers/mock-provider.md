@@ -7,9 +7,13 @@ demo run anywhere. It implements every capability of
 `VerificationProvider` (see `docs/adr/0009-provider-seam.md`) and was built
 from the domain, not from any real data source's responses.
 
-It is for development, tests and demos only. The providers registry refuses to
-create it, and its service refuses to start, unless `AGENTICORG_ENV` is
-`local`, `dev`, `development`, `test` or `ci`.
+It is for development, tests and demos only. **`AGENTICORG_ENV` must be set
+explicitly** to `local`, `dev`, `development`, `test` or `ci`. The application
+settings default an unset `AGENTICORG_ENV` to development, but the mock does
+not: when the variable is unset or names any other environment, its service
+refuses to start, `ProviderRegistry.names()` does not list `mock`, and
+`ProviderRegistry.create("mock")` fails with `unavailable`.
+`docker-compose.dev.yml` and the test suite set it for you.
 
 ## Two ways to run it
 
@@ -25,7 +29,9 @@ create it, and its service refuses to start, unless `AGENTICORG_ENV` is
 worker at it, so the seam is exercised over the network.
 
 Run the service on its own with
-`uvicorn connectors.providers.mock.service:app --port 8080`.
+`AGENTICORG_ENV=development uvicorn connectors.providers.mock.service:app --port 8080`.
+It needs no database, cache or application secret; the compose service sets only
+`AGENTICORG_ENV`, the seed and the admin switch.
 
 ## Fixtures
 
@@ -91,7 +97,7 @@ application against the domain schemas.
 | `capabilities` | `..._CAPABILITIES` | all | comma-separated subset, to exercise graceful degradation |
 | `webhook_secret` | `..._WEBHOOK_SECRET` | a development placeholder | HMAC key for events |
 | — | `..._URL` | empty | use the HTTP service at this URL |
-| — | `..._ADMIN` | `false` | enable the service's `/v1/admin` endpoints |
+| — | `..._ADMIN` | `false` | enable the service's `/v1/admin` endpoints (in `make dev`, set `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) |
 
 Latency and failures are drawn from the seed and the call itself, not from
 call order, so the same calls fail the same way even when they interleave.
@@ -104,7 +110,9 @@ or answer late (`slow`). `emit_event` records an event and returns it as a
 signed webhook delivery; a `business.dissolved` event also changes the
 company's registry status. Over HTTP the same controls are
 `POST /v1/admin/faults`, `/v1/admin/events` and `/v1/admin/reset`, and
-`MockHttpProvider` has matching methods.
+`MockHttpProvider` has matching methods. They answer `404 not_found` unless
+`AGENTICORG_MOCK_PROVIDER_ADMIN` is true; the dev stack leaves them off unless
+started with `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`.
 
 <!-- snippet: tests/unit/test_mock_verification_provider.py#mock-provider-example -->
 ```python
@@ -161,4 +169,7 @@ with status 400 `invalid_query`, 401 `provider_authentication_failed`,
 503 `provider_unavailable` or 504 `provider_timeout`. An invalid body is 400.
 The client raises the matching error; a transport failure is
 `ProviderUnavailable`, a local timeout `ProviderTimeout`, and any body that is
-not a valid domain value `ProviderResponseInvalid`.
+not a valid domain value `ProviderResponseInvalid`, as are an undecodable body and a redirect loop;
+any other request error is `ProviderUnavailable`. Page content is sent by the
+service with `INCLUDE_UNTRUSTED_TEXT` and re-wrapped by the client as
+`UntrustedText`, which redacts it again on any later serialisation.
