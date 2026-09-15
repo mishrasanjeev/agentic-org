@@ -78,10 +78,10 @@ build takes several minutes.
 
 | Command | Runs |
 |---|---|
-| `make test` | `tests/unit`, `tests/security`, `tests/regression` and the contract suite `tests/connector_harness` in one run with coverage and the 55% floor (the CI unit job), then `make test-integration` |
+| `make test` | `tests/unit`, `tests/security` and the contract suite `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
-| `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis (the CI integration job) |
+| `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
 | `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files |
 
 Each check is also a target of its own (`make check-ruff`, `check-mypy`,
