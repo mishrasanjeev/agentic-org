@@ -9,8 +9,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   lines, file paths, commit messages, branch name or pull request title and
   description name a denylisted verification, identity-data or screening
   vendor. Terms are matched through salted SHA-256 hashes in
-  `config/denylist.sha256` (80 terms; no plaintext is committed), independent
-  of case, spacing and punctuation. Runs in the new Vendor Denylist workflow
+  `config/denylist.sha256` (80 terms; the plain list is not committed, though
+  the salted hashes are not secret), independent of case, spacing, punctuation
+  and a term glued to the end of a word. Runs in the new Vendor Denylist workflow
   and in `make check`; `audit` checks the whole tree. See "Vendor-neutral
   names" in `CONTRIBUTING.md`.
 - `make test`, `make check` and `make e2e`. `make test` runs the unit and

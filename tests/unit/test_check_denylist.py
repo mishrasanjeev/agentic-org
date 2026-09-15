@@ -114,6 +114,52 @@ def test_match_reports_token_position(denylist: dl.Denylist) -> None:
     assert denylist.matches("configure the Acme Verify adapter") == [2]
 
 
+def _single(term: str) -> dl.Denylist:
+    """A denylist built exactly as ``build`` would, from one invented term."""
+    return dl.load_text(dl.render([term], TEST_SALT)[0])
+
+
+@pytest.mark.parametrize("text", ["myacmeverify", "use_theacmeverify", "INITECHKYB-free", "legacyinitechkyb"])
+def test_term_glued_to_the_end_of_a_word_matches(denylist: dl.Denylist, text: str) -> None:
+    assert denylist.matches(text)
+
+
+def test_word_tails_are_not_joined_to_the_following_words() -> None:
+    walls = _single("stone wall")
+    assert walls.matches("gemstonewall")
+    assert walls.matches("stone wall")
+    assert walls.matches("gemstone wall") == [], "a tail joined across a word boundary would be a chance match"
+
+
+def test_window_has_headroom_for_terms_split_into_more_tokens() -> None:
+    one_token = _single("initechkyb")
+    assert one_token.max_tokens == 1
+    assert one_token.matches("Ini-Tech-Kyb")  # three tokens: the longest term plus the headroom
+    assert one_token.matches("I-ni-Tech-Kyb") == []  # four tokens: beyond the headroom
+
+
+def test_long_identifiers_with_digits_are_still_checked(denylist: dl.Denylist) -> None:
+    identifier = "AcmeVerify2024ClientConfigurationSettingsHandler"
+    assert len(identifier) >= 40
+    assert not dl.looks_encoded(identifier)
+    assert denylist.matches(f"client = {identifier}()")
+    assert denylist.matches("acmeverify20240915clientconfigurationsettings")
+
+
+@pytest.mark.parametrize(
+    ("run", "encoded"),
+    [
+        ("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", True),
+        ("Q2x0AcmeVerify9z8y7x6w5v4u3t2s1r0qAbCdEfGhIjKlMnOp==", True),
+        ("AcmeVerify2024ClientConfigurationSettingsHandler", False),
+        ("abcdefabcdefabcdefabcdefabcdefabcdef", False),
+        ("configurationsettingsforthedevelopmentstackv2", False),
+    ],
+)
+def test_encoded_data_detection(run: str, encoded: bool) -> None:
+    assert dl.looks_encoded(run) is encoded
+
+
 # ── Scanning a change ───────────────────────────────────────────────────────
 
 
@@ -163,6 +209,34 @@ def test_explicit_branch_name_overrides_checkout(
     code, out, _ = _scan(repo, hash_file, capsys, "--branch", "feat/globex-screening-hub")
     assert code == 1
     assert "branch name" in out
+
+
+def test_added_lines_that_look_like_diff_headers_are_checked(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (repo / "notes.md").write_text("intro\n-- old heading\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "notes")
+    base = _git(repo, "rev-parse", "HEAD")
+    # In the unified diff these become "--- old heading" and "+++ acme verify":
+    # a removed and an added line, not a file header.
+    (repo / "notes.md").write_text("intro\n++ acme verify\n")
+    _git(repo, "commit", "-qam", "change")
+    code = dl.main(["--repo", str(repo), "--hash-file", str(hash_file), "scan", "--base", base, "--head", "HEAD"])
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "notes.md:2" in out
+
+
+def test_non_utf8_text_file_fails_closed(
+    repo: Path, hash_file: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _commit(repo, {"providers/mock.py": "ok = True\n"})
+    pr_text = tmp_path / "pull-request.txt"
+    pr_text.write_bytes(b"Title\n\xff\xfe not utf-8\n")
+    code, _, err = _scan(repo, hash_file, capsys, "--text-file", str(pr_text))
+    assert code == 2
+    assert "cannot read" in err
 
 
 def test_extra_text_file_is_checked(
