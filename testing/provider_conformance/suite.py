@@ -55,6 +55,9 @@ class ProviderConformanceSuite:
     def test_webhook_verification(self, conformance_target: ConformanceTarget) -> None:
         self._run("webhook_verification", conformance_target)
 
+    def test_webhook_replay_protection(self, conformance_target: ConformanceTarget) -> None:
+        self._run("webhook_replay_protection", conformance_target)
+
     def test_pagination(self, conformance_target: ConformanceTarget) -> None:
         self._run("pagination", conformance_target)
 

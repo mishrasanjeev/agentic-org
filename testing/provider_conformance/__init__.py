@@ -8,8 +8,9 @@ Published as ``agenticorg.testing.provider_conformance``. A provider package run
         def conformance_target(self) -> ConformanceTarget: ...
 
 Checks: identity, capability honesty, pending-then-result, expired and overrun deadlines,
-cancellation, error taxonomy, webhook verification including forged payloads, pagination,
-idempotency of repeated calls, and conformance of outputs to the published schemas. See
+cancellation, error taxonomy, webhook verification including forged payloads, webhook replay
+protection, pagination of candidates and alerts, idempotency of repeated calls, and conformance of
+outputs to the published schemas. ``ConformanceTarget(strict=True)`` fails any check it would skip. See
 ``docs/providers/writing-a-verification-provider.md``.
 
 Imports inside this package are relative so it works both from a source checkout
@@ -21,7 +22,7 @@ from __future__ import annotations
 from typing import Any
 
 from .checks import CHECKS, CheckContext, ConformanceFailure, ConformanceSkip, arun_check, run_check
-from .target import ConformanceTarget, FaultInjector, WebhookSample
+from .target import AlertPreparer, ConformanceTarget, FaultInjector, WebhookSample
 
 
 def __getattr__(name: str) -> Any:
@@ -35,6 +36,7 @@ def __getattr__(name: str) -> Any:
 
 __all__ = [
     "CHECKS",
+    "AlertPreparer",
     "CheckContext",
     "ConformanceFailure",
     "ConformanceSkip",

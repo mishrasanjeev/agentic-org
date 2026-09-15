@@ -6,6 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -20,6 +23,8 @@ from connectors.framework.verification_provider import (
     Deadline,
     Evidence,
     Identifier,
+    MonitorAlert,
+    MonitorHandle,
     NotFound,
     OwnershipGraph,
     Pending,
@@ -33,7 +38,7 @@ from connectors.framework.verification_provider import (
     VerificationProvider,
     VerifyOptions,
 )
-from connectors.providers.mock import FaultKind, MockConfig, MockProvider
+from connectors.providers.mock import FaultKind, MockConfig, MockProvider, webhooks
 from testing.provider_conformance import (
     CHECKS,
     ConformanceFailure,
@@ -52,7 +57,7 @@ KNOWN = BusinessRef(
 
 
 def target_for(
-    provider_cls: type[MockProvider] = MockProvider, *, injector: bool = True, **config: Any
+    provider_cls: type[MockProvider] = MockProvider, *, injector: bool = True, strict: bool = True, **config: Any
 ) -> ConformanceTarget:
     def genuine(provider: VerificationProvider) -> list[WebhookSample]:
         assert isinstance(provider, MockProvider)
@@ -62,6 +67,20 @@ def target_for(
     def forged(provider: VerificationProvider) -> list[WebhookSample]:
         [sample] = genuine(provider)
         return [WebhookSample(sample.headers, sample.body.replace(b"00000001", b"00000002"), "a forged payload")]
+
+    def stale(provider: VerificationProvider) -> list[WebhookSample]:
+        assert isinstance(provider, MockProvider)
+        _, body = provider.emit_event(KNOWN, ProviderEventType.BUSINESS_DISSOLVED)
+        event_id = json.loads(body)["event_id"]
+        headers = webhooks.sign(
+            provider.config.webhook_secret, body, event_id=event_id, timestamp=int(time.time()) - 7200
+        )
+        return [WebhookSample(headers, body, "a delivery signed two hours ago")]
+
+    def prepare(provider: VerificationProvider, handle: MonitorHandle) -> None:
+        assert isinstance(provider, MockProvider)
+        for _ in range(3):
+            provider.emit_event(handle.ref, ProviderEventType.OFFICERS_CHANGED)
 
     def inject(provider: VerificationProvider, kind: str, capability: Capability | None, delay: float) -> None:
         assert isinstance(provider, MockProvider)
@@ -79,9 +98,12 @@ def target_for(
         business=BusinessSubject(legal_name="Corvane Maritime Logistics Ltd"),
         genuine_webhooks=genuine,
         forged_webhooks=forged,
+        stale_webhooks=stale,
         fault_injector=inject if injector else None,
+        prepare_monitor_alerts=prepare,
         expects_pending=True,
         grace_seconds=0.3,
+        strict=strict,
     )
 
 
@@ -111,7 +133,20 @@ def test_a_provider_declaring_only_resolve_and_verify_still_conforms(check: str)
 @pytest.mark.parametrize("check", ["deadline_overrun", "cancellation"])
 def test_checks_that_need_a_fault_injector_are_skipped_with_the_reason(check: str) -> None:
     with pytest.raises(ConformanceSkip, match="needs a fault_injector"):
-        run_check(check, target_for(injector=False))
+        run_check(check, target_for(injector=False, strict=False))
+
+
+@pytest.mark.parametrize("check", ["deadline_overrun", "cancellation"])
+def test_strict_mode_fails_a_check_it_would_otherwise_skip(check: str) -> None:
+    message = failure(check, target_for(injector=False, strict=True))
+    assert "skipped in strict mode: needs a fault_injector" in message
+
+
+def test_monitor_paging_without_an_alert_preparer_is_skipped_or_fails_in_strict_mode() -> None:
+    lenient = replace(target_for(strict=False), prepare_monitor_alerts=None)
+    with pytest.raises(ConformanceSkip, match="prepare_monitor_alerts"):
+        run_check("pagination", lenient)
+    assert "skipped in strict mode" in failure("pagination", replace(lenient, strict=True))
 
 
 def test_unknown_check_names_are_rejected() -> None:
@@ -342,7 +377,7 @@ class TestMockProviderConformanceInProcess(ProviderConformanceSuite):
 
 def test_the_suite_class_turns_an_unexercisable_check_into_a_pytest_skip() -> None:
     with pytest.raises(pytest.skip.Exception, match=r"\[cancellation\] needs a fault_injector"):
-        ProviderConformanceSuite._run("cancellation", target_for(injector=False))
+        ProviderConformanceSuite._run("cancellation", target_for(injector=False, strict=False))
 
 
 def test_the_suite_class_reports_failures_as_assertion_errors() -> None:
@@ -355,3 +390,103 @@ def test_the_package_exposes_only_known_names() -> None:
 
     with pytest.raises(AttributeError):
         _ = suite.NoSuchThing  # type: ignore[attr-defined]
+
+
+# --- review follow-ups: expired deadlines on polls, replay protection, alert paging, timestamps --
+
+
+class PollsIgnoreDeadlines(MockProvider):
+    async def verification_result(self, h: VerificationHandle, *, deadline: Deadline) -> BusinessVerification | Pending:
+        return await super().verification_result(h, deadline=Deadline.after(60))
+
+
+def test_deadline_expired_probes_verification_result() -> None:
+    assert "verification_result answered although its deadline had already passed" in failure(
+        "deadline_expired", target_for(PollsIgnoreDeadlines)
+    )
+
+
+class AlertReadsIgnoreDeadlines(MockProvider):
+    async def monitor_result(self, h: MonitorHandle, *, deadline: Deadline) -> list[MonitorAlert]:
+        return await super().monitor_result(h, deadline=Deadline.after(60))
+
+
+def test_deadline_expired_probes_monitor_result() -> None:
+    assert "monitor_result answered although its deadline had already passed" in failure(
+        "deadline_expired", target_for(AlertReadsIgnoreDeadlines)
+    )
+
+
+class IgnoresSignatureAge(MockProvider):
+    def verify_webhook(self, headers: Any, body: bytes) -> ProviderEvent | None:
+        return webhooks.verify(
+            headers,
+            body,
+            secrets=(self.config.webhook_secret,),
+            provider=self.name,
+            now=int(time.time()),
+            tolerance_seconds=10**9,
+        )
+
+
+def test_webhook_replay_protection_reports_an_accepted_stale_delivery() -> None:
+    assert "accepted a delivery signed two hours ago; a signed delivery outside the time window is a replay" in failure(
+        "webhook_replay_protection", target_for(IgnoresSignatureAge)
+    )
+
+
+class UnstableEventIds(MockProvider):
+    def verify_webhook(self, headers: Any, body: bytes) -> ProviderEvent | None:
+        event = super().verify_webhook(headers, body)
+        if event is None:
+            return None
+        count = getattr(self, "_seen", 0) + 1
+        self._seen = count
+        return event.model_copy(update={"event_id": f"{event.event_id}-{count}"})
+
+
+def test_webhook_replay_protection_reports_unstable_event_ids() -> None:
+    assert "the event_id must be stable so a replay is detectable" in failure(
+        "webhook_replay_protection", target_for(UnstableEventIds)
+    )
+
+
+class IgnoresAlertOffset(MockProvider):
+    async def monitor_result(self, h: MonitorHandle, *, deadline: Deadline) -> list[MonitorAlert]:
+        return await super().monitor_result(h.model_copy(update={"offset": 0}), deadline=deadline)
+
+
+def test_pagination_reports_ignored_alert_offsets() -> None:
+    assert "walking monitor_result pages of limit=1 by offset did not reproduce" in failure(
+        "pagination", target_for(IgnoresAlertOffset)
+    )
+
+
+class ReadsAtCallTime(MockProvider):
+    """Stamps every read with the time of the call, as a live source would."""
+
+    async def ownership(self, ref: BusinessRef, *, deadline: Deadline) -> OwnershipGraph:
+        graph = await super().ownership(ref, deadline=deadline)
+        now = datetime.now(UTC)
+        stamp = {"retrieved_at": now}
+        return graph.model_copy(
+            update={"as_of": now, "evidence": tuple(e.model_copy(update=stamp) for e in graph.evidence)}
+        )
+
+
+def test_idempotency_ignores_when_an_unkeyed_read_happened() -> None:
+    run_check("idempotency", target_for(ReadsAtCallTime))
+
+
+class ReordersOwners(MockProvider):
+    async def ownership(self, ref: BusinessRef, *, deadline: Deadline) -> OwnershipGraph:
+        graph = await super().ownership(ref, deadline=deadline)
+        calls = getattr(self, "_calls", 0) + 1
+        self._calls = calls
+        return graph if calls % 2 else graph.model_copy(update={"nodes": tuple(reversed(graph.nodes))})
+
+
+def test_idempotency_still_reports_a_changed_answer() -> None:
+    assert "ownership: a repeated call returned a different answer" in failure(
+        "idempotency", target_for(ReordersOwners)
+    )

@@ -23,7 +23,7 @@ PYPROJECT = """\
 [project]
 name = "acme-kyb-agenticorg"
 version = "0.1.0"
-dependencies = ["agenticorg"]
+dependencies = ["agenticorg>=4.8"]
 
 [project.entry-points."agenticorg.providers"]
 acme_kyb = "acme_kyb_agenticorg.provider:AcmeKybProvider"

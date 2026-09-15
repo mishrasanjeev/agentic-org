@@ -190,19 +190,22 @@ everything above. Run it in your provider package's own test suite.
 | `identity` | `name` and `capabilities` are well formed | — |
 | `capability_honesty` | every declared capability answers for the target's inputs; every undeclared one raises `CapabilityNotSupported` (never `NotImplementedError`) | — |
 | `pending_then_result` | polling returns `Pending` values, then a result that never changes or reverts | `VERIFY` |
-| `deadline_expired` | an already-expired deadline is `ProviderTimeout`, promptly, for every capability | — |
+| `deadline_expired` | an already-expired deadline is `ProviderTimeout`, promptly, for every capability and for `verification_result` and `monitor_result` polls | — |
 | `deadline_overrun` | a call that would run past a short deadline stops with `ProviderTimeout` | a fault injector (`hang`) |
 | `cancellation` | cancelling a call in flight raises `CancelledError` promptly and leaves the provider usable | a fault injector (`slow`) |
 | `error_taxonomy` | unknown references and handles are `NotFound`, an empty query is `InvalidQuery`, transient failures are retryable, nothing outside the taxonomy escapes | a fault injector for the transient cases |
 | `webhook_verification` | genuine deliveries verify (with any header-name case); forged, tampered, header-less, body-less and malformed deliveries are rejected without raising | genuine and forged samples |
-| `pagination` | paging with `limit=1` reproduces the unpaged result in order; an offset past the end is empty | `RESOLVE`, a query with at least two candidates |
-| `idempotency` | repeated calls, and repeated starts with the same key, return the same answer | — |
+| `webhook_replay_protection` | a correctly signed delivery outside the accepted time window is rejected; verifying the same delivery twice yields the same `event_id`, so the caller can reject the replay | genuine and stale samples |
+| `pagination` | paging candidates and monitor alerts with `limit=1` reproduces the unpaged result in order; an offset past the end is empty | a query with at least two candidates; for `MONITOR`, an alert preparer |
+| `idempotency` | a repeated start or screening with the same key returns exactly the same value; a repeated unkeyed read returns the same answer apart from when records were read (`retrieved_at`, `as_of`, `observed_at`, `fetched_at`) | — |
 | `schema_conformance` | outputs validate against the published schemas and cite only your provider's records | — |
 
 A failure names the check, the provider and what to fix, for example
 `[capability_honesty] provider 'acme_kyb': ownership raised NotImplementedError;
 a capability that is not offered must raise CapabilityNotSupported`. A check the
-target cannot exercise is skipped with the reason.
+target cannot exercise is skipped with the reason — unless the target sets
+`strict=True`, which turns every skip into a failure. The mock runs strictly;
+run your provider strictly before you publish it.
 
 ### Running it
 
@@ -213,6 +216,8 @@ provider runs it, from outside the repository:
 
 <!-- snippet: tests/contract/provider_example/conformance_example.py#conformance-imports -->
 ```python
+import json
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -225,11 +230,12 @@ from connectors.framework.verification_provider import (
     Capability,
     Deadline,
     Identifier,
+    MonitorHandle,
     PersonSubject,
     ProviderEventType,
     VerificationProvider,
 )
-from connectors.providers.mock import FaultKind, MockConfig, MockHttpProvider, MockProvider
+from connectors.providers.mock import FaultKind, MockConfig, MockHttpProvider, MockProvider, webhooks
 from connectors.providers.mock.service import serve_in_thread
 ```
 
@@ -258,6 +264,22 @@ def forged_webhooks(provider: VerificationProvider) -> list[WebhookSample]:
     return [WebhookSample(headers=headers, body=forged_payload, description="a genuine signature on another company")]
 
 
+def stale_webhooks(provider: VerificationProvider) -> list[WebhookSample]:
+    # A genuine event re-signed two hours ago: the signature is valid, the delivery is a replay.
+    assert isinstance(provider, MockProvider)
+    _, body = provider.emit_event(KNOWN, ProviderEventType.BUSINESS_DISSOLVED)
+    event_id = json.loads(body)["event_id"]
+    two_hours_ago = int(time.time()) - 7200
+    headers = webhooks.sign(provider.config.webhook_secret, body, event_id=event_id, timestamp=two_hours_ago)
+    return [WebhookSample(headers=headers, body=body, description="a correctly signed delivery from two hours ago")]
+
+
+def prepare_monitor_alerts(provider: VerificationProvider, handle: MonitorHandle) -> None:
+    assert isinstance(provider, MockProvider)
+    for _ in range(3):
+        provider.emit_event(handle.ref, ProviderEventType.OFFICERS_CHANGED)
+
+
 def inject_fault(provider: VerificationProvider, kind: str, capability: Capability | None, delay: float) -> None:
     assert isinstance(provider, MockProvider)
     provider.inject_fault(FaultKind(kind), capability=capability, delay_seconds=delay)
@@ -275,8 +297,11 @@ def mock_target() -> ConformanceTarget:
         business=BusinessSubject(legal_name="Brightwater Lantern Works Ltd", jurisdiction="GB"),
         genuine_webhooks=genuine_webhooks,
         forged_webhooks=forged_webhooks,
+        stale_webhooks=stale_webhooks,
         fault_injector=inject_fault,
+        prepare_monitor_alerts=prepare_monitor_alerts,
         expects_pending=True,
+        strict=True,  # a skipped check fails
     )
 
 
@@ -296,10 +321,15 @@ What the target provides:
 - `genuine_webhooks` returns deliveries you must accept — produced by your
   source's sandbox, or recorded, with your provider's clock set to when they
   were signed. `forged_webhooks` returns deliveries you must reject; the suite
-  adds its own tampered and malformed variants.
+  adds its own tampered and malformed variants. `stale_webhooks` returns
+  correctly signed deliveries from outside your accepted time window.
 - `fault_injector` makes the next call hang, answer slowly, fail as unavailable
   or be rate limited. Wrap your HTTP transport in a test double to provide it;
   without it the checks that need it are skipped, and the suite says so.
+- `prepare_monitor_alerts` receives a fresh monitor handle and makes at least
+  two alerts exist on it (for example by triggering sandbox events), so alert
+  pages can be checked.
+- `strict=True` fails any check that would otherwise be skipped.
 - `expects_pending` requires at least one `Pending` before the result, if your
   source is always asynchronous.
 
@@ -315,8 +345,9 @@ itself — as `agenticorg.testing.provider_conformance`
 (`[tool.hatch.build.targets.wheel.force-include]` in `pyproject.toml`). The
 lightweight SDK published to PyPI as `agenticorg` is built from `sdk/` and does
 not include it, because it has no provider interface. Develop and test a
-provider against a tagged AgenticOrg release installed from source as a
-regular (not editable) install. An editable install of AgenticOrg does not
+provider against a tagged AgenticOrg release of at least 4.8 installed from
+source as a regular (not editable) install, for example
+`pip install "agenticorg @ git+https://github.com/mishrasanjeev/agentic-org@<tag>"`. An editable install of AgenticOrg does not
 expose the published name, because it resolves `agenticorg` to `sdk/agenticorg`;
 inside a checkout of this repository, import `testing.provider_conformance`
 instead. A contract test lays the files out as the wheel does and runs the
@@ -325,18 +356,26 @@ silently break.
 
 ## Packaging and entry points
 
-Declare the provider class in the `agenticorg.providers` entry-point group:
+Declare the provider class in the `agenticorg.providers` entry-point group,
+and require AgenticOrg 4.8 or later, the first release with the provider
+interface:
 
 <!-- snippet: tests/unit/test_provider_plugin_packaging.py#provider-pyproject -->
 ```toml
 [project]
 name = "acme-kyb-agenticorg"
 version = "0.1.0"
-dependencies = ["agenticorg"]
+dependencies = ["agenticorg>=4.8"]
 
 [project.entry-points."agenticorg.providers"]
 acme_kyb = "acme_kyb_agenticorg.provider:AcmeKybProvider"
 ```
+
+The requirement names the full AgenticOrg distribution, not the lightweight SDK
+published to PyPI under the same name (whose versions are below 4.8). Install
+the full distribution from source first (see "Where the suite comes from");
+pip then treats the requirement as satisfied when it installs your package.
+Without it, resolution fails instead of silently installing the SDK.
 
 Install the package next to AgenticOrg (the API image and every worker) and
 turn loading on:
@@ -369,8 +408,8 @@ See `docs/providers/mock-provider.md` for its fixtures and configuration.
 
 ## Before you publish
 
-- The conformance suite passes with a fault injector and real webhook samples,
-  with no skipped checks.
+- The conformance suite passes with `strict=True`: a fault injector, genuine,
+  forged and stale webhook samples and an alert preparer, and no skipped checks.
 - `capabilities` lists only what your contract with the source covers.
 - No field in your output is filled from free text the source did not
   structure, and nothing unmappable is passed through.

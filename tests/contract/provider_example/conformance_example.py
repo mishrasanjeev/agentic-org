@@ -11,6 +11,8 @@ documentation's examples are extracted from it.
 from __future__ import annotations
 
 # docs-snippet: start conformance-imports
+import json
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -23,11 +25,12 @@ from connectors.framework.verification_provider import (
     Capability,
     Deadline,
     Identifier,
+    MonitorHandle,
     PersonSubject,
     ProviderEventType,
     VerificationProvider,
 )
-from connectors.providers.mock import FaultKind, MockConfig, MockHttpProvider, MockProvider
+from connectors.providers.mock import FaultKind, MockConfig, MockHttpProvider, MockProvider, webhooks
 from connectors.providers.mock.service import serve_in_thread
 
 # docs-snippet: end conformance-imports
@@ -56,6 +59,22 @@ def forged_webhooks(provider: VerificationProvider) -> list[WebhookSample]:
     return [WebhookSample(headers=headers, body=forged_payload, description="a genuine signature on another company")]
 
 
+def stale_webhooks(provider: VerificationProvider) -> list[WebhookSample]:
+    # A genuine event re-signed two hours ago: the signature is valid, the delivery is a replay.
+    assert isinstance(provider, MockProvider)
+    _, body = provider.emit_event(KNOWN, ProviderEventType.BUSINESS_DISSOLVED)
+    event_id = json.loads(body)["event_id"]
+    two_hours_ago = int(time.time()) - 7200
+    headers = webhooks.sign(provider.config.webhook_secret, body, event_id=event_id, timestamp=two_hours_ago)
+    return [WebhookSample(headers=headers, body=body, description="a correctly signed delivery from two hours ago")]
+
+
+def prepare_monitor_alerts(provider: VerificationProvider, handle: MonitorHandle) -> None:
+    assert isinstance(provider, MockProvider)
+    for _ in range(3):
+        provider.emit_event(handle.ref, ProviderEventType.OFFICERS_CHANGED)
+
+
 def inject_fault(provider: VerificationProvider, kind: str, capability: Capability | None, delay: float) -> None:
     assert isinstance(provider, MockProvider)
     provider.inject_fault(FaultKind(kind), capability=capability, delay_seconds=delay)
@@ -73,8 +92,11 @@ def mock_target() -> ConformanceTarget:
         business=BusinessSubject(legal_name="Brightwater Lantern Works Ltd", jurisdiction="GB"),
         genuine_webhooks=genuine_webhooks,
         forged_webhooks=forged_webhooks,
+        stale_webhooks=stale_webhooks,
         fault_injector=inject_fault,
+        prepare_monitor_alerts=prepare_monitor_alerts,
         expects_pending=True,
+        strict=True,  # a skipped check fails
     )
 
 
@@ -109,6 +131,19 @@ class TestMockProviderOverHttpConformance(ProviderConformanceSuite):
             [sample] = await genuine(provider)
             return [WebhookSample(sample.headers, sample.body.replace(b"00000001", b"00000002"), "a forged payload")]
 
+        async def stale(provider: VerificationProvider) -> list[WebhookSample]:
+            [sample] = await genuine(provider)
+            event_id = json.loads(sample.body)["event_id"]
+            headers = webhooks.sign(
+                provider.config.webhook_secret, sample.body, event_id=event_id, timestamp=int(time.time()) - 7200
+            )
+            return [WebhookSample(headers, sample.body, "a delivery from the service re-signed two hours ago")]
+
+        async def prepare(provider: VerificationProvider, handle: MonitorHandle) -> None:
+            assert isinstance(provider, MockHttpProvider)
+            for _ in range(3):
+                await provider.emit_event(handle.ref, ProviderEventType.OFFICERS_CHANGED, deadline=Deadline.after(10))
+
         async def inject(
             provider: VerificationProvider, kind: str, capability: Capability | None, delay: float
         ) -> None:
@@ -127,6 +162,9 @@ class TestMockProviderOverHttpConformance(ProviderConformanceSuite):
             business=base.business,
             genuine_webhooks=genuine,
             forged_webhooks=forged,
+            stale_webhooks=stale,
             fault_injector=inject,
+            prepare_monitor_alerts=prepare,
             expects_pending=True,
+            strict=True,
         )

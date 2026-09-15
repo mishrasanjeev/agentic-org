@@ -300,25 +300,46 @@ async def check_pending_then_result(ctx: CheckContext) -> None:
             ctx.fail("verification_result changed after returning a result")
 
 
-async def check_deadline_expired(ctx: CheckContext) -> None:
+async def _expect_prompt_timeout(ctx: CheckContext, method: str, call: Callable[[], Awaitable[Any]]) -> None:
     grace = ctx.target.grace_seconds
+    started = time.monotonic()
+    try:
+        await asyncio.wait_for(call(), timeout=grace * 5)
+    except ProviderTimeout:
+        elapsed = time.monotonic() - started
+        if elapsed > grace:
+            ctx.fail(f"{method} took {elapsed:.2f}s to report an already-expired deadline")
+        return
+    except TimeoutError:
+        ctx.fail(f"{method} kept running past an already-expired deadline")
+    except ProviderError as exc:
+        ctx.fail(f"{method} with an expired deadline raised {exc.reason}; expected provider_timeout")
+    except Exception as exc:  # noqa: BLE001 - any other exception is exactly what this check reports
+        ctx.fail(f"{method} with an expired deadline raised {type(exc).__name__}; expected ProviderTimeout")
+    ctx.fail(f"{method} answered although its deadline had already passed; expected ProviderTimeout")
+
+
+def _expired() -> Deadline:
+    return Deadline(time.monotonic() - 1)
+
+
+async def check_deadline_expired(ctx: CheckContext) -> None:
     for capability in ctx.declared():
-        method = _method(capability)
-        started = time.monotonic()
-        try:
-            await asyncio.wait_for(_probe(ctx, capability, Deadline(time.monotonic() - 1)), timeout=grace * 5)
-        except ProviderTimeout:
-            elapsed = time.monotonic() - started
-            if elapsed > grace:
-                ctx.fail(f"{method} took {elapsed:.2f}s to report an already-expired deadline")
-            continue
-        except TimeoutError:
-            ctx.fail(f"{method} kept running past an already-expired deadline")
-        except ProviderError as exc:
-            ctx.fail(f"{method} with an expired deadline raised {exc.reason}; expected provider_timeout")
-        except Exception as exc:  # noqa: BLE001 - any other exception is exactly what this check reports
-            ctx.fail(f"{method} with an expired deadline raised {type(exc).__name__}; expected ProviderTimeout")
-        ctx.fail(f"{method} answered although its deadline had already passed; expected ProviderTimeout")
+
+        def probe(c: Capability = capability) -> Awaitable[Any]:
+            return _probe(ctx, c, _expired())
+
+        await _expect_prompt_timeout(ctx, _method(capability), probe)
+    if Capability.VERIFY in ctx.provider.capabilities:
+        handle = await _call(ctx, "verify_business", _probe(ctx, Capability.VERIFY, Deadline.after(CALL_SECONDS)))
+        await _expect_prompt_timeout(
+            ctx, "verification_result", lambda: ctx.provider.verification_result(handle, deadline=_expired())
+        )
+    if Capability.MONITOR in ctx.provider.capabilities:
+        monitor = await _call(ctx, "monitor_enroll", _probe(ctx, Capability.MONITOR, Deadline.after(CALL_SECONDS)))
+        await _expect_prompt_timeout(
+            ctx, "monitor_result", lambda: ctx.provider.monitor_result(monitor, deadline=_expired())
+        )
 
 
 async def check_deadline_overrun(ctx: CheckContext) -> None:
@@ -523,9 +544,40 @@ async def check_webhook_verification(ctx: CheckContext) -> None:
             ctx.fail(f"accepted {label}")
 
 
+async def check_webhook_replay_protection(ctx: CheckContext) -> None:
+    genuine = await _samples(ctx, ctx.target.genuine_webhooks)
+    stale = await _samples(ctx, ctx.target.stale_webhooks)
+    if not genuine:
+        raise ConformanceSkip("needs genuine_webhooks (a provider that verifies no webhooks has nothing to replay)")
+    if not stale:
+        raise ConformanceSkip("needs stale_webhooks: correctly signed deliveries outside the accepted time window")
+    for sample in stale:
+        label = sample.description or "a stale delivery"
+        if _verify(ctx, label, sample.headers, sample.body) is not None:
+            ctx.fail(f"accepted {label}; a signed delivery outside the time window is a replay and must be rejected")
+    for sample in genuine:
+        label = sample.description or "a genuine delivery"
+        first = _verify(ctx, label, sample.headers, sample.body)
+        again = _verify(ctx, f"{label} delivered again", sample.headers, sample.body)
+        if first is None or again is None:
+            ctx.fail(f"rejected {label}")
+        if first.event_id != again.event_id or first != again:
+            ctx.fail(
+                f"verifying {label} twice gave different events; the event_id must be stable so a replay is detectable"
+            )
+
+
 async def check_pagination(ctx: CheckContext) -> None:
-    if Capability.RESOLVE not in ctx.provider.capabilities:
-        raise ConformanceSkip("the provider does not declare resolve")
+    caps = ctx.provider.capabilities
+    if Capability.RESOLVE not in caps and Capability.MONITOR not in caps:
+        raise ConformanceSkip("the provider declares neither resolve nor monitor")
+    if Capability.RESOLVE in caps:
+        await _resolve_pages(ctx)
+    if Capability.MONITOR in caps:
+        await _monitor_pages(ctx)
+
+
+async def _resolve_pages(ctx: CheckContext) -> None:
     query = ctx.target.resolvable_query.model_copy(update={"offset": 0, "limit": 100})
     full = await _call(
         ctx, "resolve_business", ctx.provider.resolve_business(query, deadline=Deadline.after(CALL_SECONDS))
@@ -545,7 +597,7 @@ async def check_pagination(ctx: CheckContext) -> None:
             break
         page_query = page_query.next_page(page)
     if paged != full:
-        ctx.fail("walking pages of limit=1 by offset did not reproduce the unpaged result in the same order")
+        ctx.fail("walking resolve_business pages of limit=1 by offset did not reproduce the unpaged result in order")
     beyond = await _call(
         ctx,
         "resolve_business",
@@ -557,18 +609,83 @@ async def check_pagination(ctx: CheckContext) -> None:
         ctx.fail(f"an offset past the last candidate returned {len(beyond)} candidate(s); expected none")
 
 
+async def _monitor_pages(ctx: CheckContext) -> None:
+    prepare = ctx.target.prepare_monitor_alerts
+    if prepare is None:
+        raise ConformanceSkip("paging monitor_result needs prepare_monitor_alerts to create at least two alerts")
+    handle = await _call(ctx, "monitor_enroll", _probe(ctx, Capability.MONITOR, Deadline.after(CALL_SECONDS), "pages"))
+    await resolve_maybe_awaitable(prepare(ctx.provider, handle))
+    everything = handle.model_copy(update={"offset": 0, "limit": 500})
+    full = await _call(
+        ctx, "monitor_result", ctx.provider.monitor_result(everything, deadline=Deadline.after(CALL_SECONDS))
+    )
+    if len(full) < 2:
+        ctx.fail(f"prepare_monitor_alerts left {len(full)} alert(s); checking pages needs at least 2")
+    paged: list[Any] = []
+    page_handle = everything.model_copy(update={"limit": 1})
+    for _ in range(len(full) + 1):
+        page = await _call(
+            ctx, "monitor_result", ctx.provider.monitor_result(page_handle, deadline=Deadline.after(CALL_SECONDS))
+        )
+        if len(page) > page_handle.limit:
+            ctx.fail(f"monitor_result returned {len(page)} alerts for limit={page_handle.limit}")
+        paged.extend(page)
+        if len(page) < page_handle.limit:
+            break
+        page_handle = page_handle.next_page(page)
+    if paged != full:
+        ctx.fail("walking monitor_result pages of limit=1 by offset did not reproduce the unpaged result in order")
+    beyond = await _call(
+        ctx,
+        "monitor_result",
+        ctx.provider.monitor_result(
+            everything.model_copy(update={"offset": len(full)}), deadline=Deadline.after(CALL_SECONDS)
+        ),
+    )
+    if beyond:
+        ctx.fail(f"an offset past the last alert returned {len(beyond)} alert(s); expected none")
+
+
+#: Capabilities whose calls carry an idempotency key: a repeat must return exactly the same value.
+_KEYED = frozenset({Capability.VERIFY, Capability.SCREEN_PERSON, Capability.SCREEN_BUSINESS, Capability.MONITOR})
+#: When a record was read, not what it says: allowed to differ between two unkeyed reads.
+_READ_TIMESTAMPS = frozenset({"retrieved_at", "as_of", "observed_at", "fetched_at"})
+
+
+def _without_read_timestamps(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _without_read_timestamps(v) for k, v in value.items() if k not in _READ_TIMESTAMPS}
+    if isinstance(value, list):
+        return [_without_read_timestamps(v) for v in value]
+    return value
+
+
+def _same_answer(first: Any, second: Any) -> bool:
+    def plain(value: Any) -> Any:
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="json")
+        if isinstance(value, list):
+            return [plain(v) for v in value]
+        return value
+
+    return bool(_without_read_timestamps(plain(first)) == _without_read_timestamps(plain(second)))
+
+
 async def check_idempotency(ctx: CheckContext) -> None:
     for capability in ctx.declared():
         method = _method(capability)
         first = await _call(ctx, method, _probe(ctx, capability, Deadline.after(CALL_SECONDS), label="repeat"))
         second = await _call(ctx, method, _probe(ctx, capability, Deadline.after(CALL_SECONDS), label="repeat"))
-        if first != second:
-            detail = (
-                "the same idempotency key started a second job"
-                if capability in {Capability.VERIFY, Capability.MONITOR}
-                else "a repeated call returned a different answer"
-            )
-            ctx.fail(f"{method}: {detail}")
+        if capability in _KEYED:
+            if first != second:
+                detail = (
+                    "the same idempotency key started a second job"
+                    if capability in {Capability.VERIFY, Capability.MONITOR}
+                    else "the same idempotency key returned a different result"
+                )
+                ctx.fail(f"{method}: {detail}")
+        elif not _same_answer(first, second):
+            ctx.fail(f"{method}: a repeated call returned a different answer (ignoring when records were read)")
         if capability is Capability.VERIFY:
             result, _ = await _poll_to_completion(ctx, first)
             again = await _call(
@@ -621,6 +738,7 @@ CHECKS: dict[str, Check] = {
     "cancellation": check_cancellation,
     "error_taxonomy": check_error_taxonomy,
     "webhook_verification": check_webhook_verification,
+    "webhook_replay_protection": check_webhook_replay_protection,
     "pagination": check_pagination,
     "idempotency": check_idempotency,
     "schema_conformance": check_schema_conformance,
@@ -633,13 +751,18 @@ async def arun_check(name: str, target: ConformanceTarget) -> None:
     if check is None:
         raise KeyError(f"no conformance check named {name!r}; known checks: {', '.join(CHECKS)}")
     provider = await resolve_maybe_awaitable(target.factory())
+    context = CheckContext(check=name, target=target, provider=provider)
     try:
-        await check(CheckContext(check=name, target=target, provider=provider))
+        await check(context)
+    except ConformanceSkip as skip:
+        if target.strict:
+            raise ConformanceFailure(name, context.name, f"skipped in strict mode: {skip.reason}") from skip
+        raise
     finally:
         if target.close is not None:
             await target.close(provider)
 
 
 def run_check(name: str, target: ConformanceTarget) -> None:
-    """Run one check in a fresh event loop. Raises ConformanceFailure or ConformanceSkip."""
+    """Run one check in a fresh event loop. Raises ConformanceFailure, or ConformanceSkip unless strict."""
     asyncio.run(arun_check(name, target))

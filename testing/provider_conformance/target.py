@@ -14,6 +14,7 @@ from connectors.framework.verification_provider import (
     BusinessRef,
     BusinessSubject,
     Capability,
+    MonitorHandle,
     PersonSubject,
     VerificationProvider,
 )
@@ -32,6 +33,8 @@ ProviderFactory = Callable[[], VerificationProvider | Awaitable[VerificationProv
 #: Make the next call to ``capability`` (or any call) on this provider fail, hang or answer after ``delay_seconds``.
 FaultInjector = Callable[[VerificationProvider, FaultKindName, Capability | None, float], Awaitable[None] | None]
 WebhookSource = Callable[[VerificationProvider], Awaitable[Sequence[WebhookSample]] | Sequence[WebhookSample]]
+#: Cause at least two alerts on this monitor (for example by triggering sandbox events).
+AlertPreparer = Callable[[VerificationProvider, MonitorHandle], Awaitable[None] | None]
 
 
 @dataclass(frozen=True)
@@ -45,8 +48,12 @@ class ConformanceTarget:
 
     ``genuine_webhooks`` returns deliveries the provider must accept (``None`` if it never verifies
     webhooks). ``forged_webhooks`` returns deliveries it must reject; the suite adds its own
-    tampered and malformed variants. ``fault_injector`` enables the checks that need a slow,
-    hanging or failing provider; without it those checks are skipped, with the reason shown.
+    tampered and malformed variants. ``stale_webhooks`` returns deliveries that are correctly signed
+    but outside the provider's accepted time window, which it must also reject.
+    ``fault_injector`` enables the checks that need a slow, hanging or failing provider, and
+    ``prepare_monitor_alerts`` makes at least two alerts exist on a monitor so its pages can be
+    checked. Without them those checks are skipped with the reason shown - unless ``strict`` is
+    true, in which case a skipped check fails. Use ``strict`` for any provider you publish.
     """
 
     factory: ProviderFactory
@@ -57,7 +64,10 @@ class ConformanceTarget:
     business: BusinessSubject
     genuine_webhooks: WebhookSource | None = None
     forged_webhooks: WebhookSource | None = None
+    stale_webhooks: WebhookSource | None = None
     fault_injector: FaultInjector | None = None
+    prepare_monitor_alerts: AlertPreparer | None = None
+    strict: bool = False
     expects_pending: bool = False
     poll_timeout_seconds: float = 30.0
     grace_seconds: float = 1.0
