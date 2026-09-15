@@ -140,7 +140,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   server-generated run id, never a `case_id` from a request, and only
   placeholders issued into the run's own conversation are restored. The map is
   stored encrypted per tenant in the new `case_pseudonym_maps` table (migration
-  `v6z22_case_pseudonym_maps`, additive, row-level security). Fails closed: if
+  `v6z24_case_pseudonym_maps`, additive, row-level security). Fails closed: if
   the flag or the map cannot be read, or the map cannot be written, no model
   call is made; a tool call whose placeholder cannot be restored is refused
   with `E1012 pseudonym_restore_failed` and audited instead of being sent. New

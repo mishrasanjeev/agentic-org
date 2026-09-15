@@ -239,7 +239,7 @@ Remove an entry in the pull request that fixes it.
 
 ## A-26 — Encrypted-migration gates cannot read JSONB ciphertext containers
 
-- **Found:** re-running `v6z22_case_pseudonym_maps` on a table with rows
+- **Found:** re-running `v6z24_case_pseudonym_maps` on a table with rows
   (2026-09-15).
 - **What:** `EncryptedMigrationContext.dry_run_decrypt_sample` and
   `assert_decrypt_after` (`core/crypto/migration_helpers.py`) only handle text
@@ -247,7 +247,7 @@ Remove an entry in the pull request that fixes it.
   as a `dict` and fails with `AttributeError: 'dict' object has no attribute
   'decode'`, so the gate reports every row as undecryptable.
   `v6z12_voice_runtime` (`voice_calls.transcript_encrypted`) has the same
-  shape and cannot be re-run once the table has rows. `v6z22` avoids it by
+  shape and cannot be re-run once the table has rows. `v6z24` avoids it by
   skipping the gates when the table already exists.
 - **Fix:** unwrap `_encrypted` containers (and the `env1:` envelope prefix) in
   both sampling methods the way `core.crypto.verify_all.parse_encrypted_container`

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """PostgreSQL coverage for the encrypted per-case pseudonym map store (PRD F-5).
 
-Runs the ``v6z22_case_pseudonym_maps`` migration (idempotent) against the
+Runs the ``v6z24_case_pseudonym_maps`` migration (idempotent) against the
 database in ``AGENTICORG_DB_URL`` and exercises ``DatabasePseudonymMapStore``
 through ``core.database``: encryption at rest, persistence across sessions
 (a restart), concurrent writers on one case, row-level security between
@@ -31,7 +31,7 @@ from tests import pseudonymisation_case as case
 
 _DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 _SYNC_URL = _DB_URL.replace("postgresql+asyncpg", "postgresql")
-_MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z22_case_pseudonym_maps.py"
+_MIGRATION = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "v6_z24_case_pseudonym_maps.py"
 _PROBE_ROLE = "pseudonym_rls_probe"
 
 pytestmark = pytest.mark.skipif(not _DB_URL, reason="integration tests require AGENTICORG_DB_URL")
@@ -44,7 +44,7 @@ def engine() -> Iterator[Engine]:
 
     sync_engine = create_engine(_SYNC_URL)
     BaseModel.metadata.create_all(sync_engine)
-    spec = importlib.util.spec_from_file_location("v6z22_case_pseudonym_maps", _MIGRATION)
+    spec = importlib.util.spec_from_file_location("v6z24_case_pseudonym_maps", _MIGRATION)
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)

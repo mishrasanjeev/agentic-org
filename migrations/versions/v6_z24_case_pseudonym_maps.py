@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Encrypted per-case pseudonym maps for pre-model pseudonymisation.
 
-Revision ID: v6z22_case_pseudonym_maps
-Revises: v6z21_resource_ownership
+Revision ID: v6z24_case_pseudonym_maps
+Revises: v6z23_hitl_checkpoint_thread
 Create Date: 2026-09-15
 
 PRD F-5: ``core.pii.pseudonymiser`` replaces names, dates of birth,
@@ -28,8 +28,8 @@ from sqlalchemy import text
 
 from core.crypto.migration_helpers import encrypted_migration
 
-revision = "v6z22_case_pseudonym_maps"
-down_revision = "v6z21_resource_ownership"
+revision = "v6z24_case_pseudonym_maps"
+down_revision = "v6z23_hitl_checkpoint_thread"
 branch_labels = None
 depends_on = None
 
