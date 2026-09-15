@@ -60,6 +60,11 @@ async def test_ownership_graph_and_officer_screenings_validate_against_their_sch
         validate("screening_result", result.model_dump(mode="json"))
 
 
+def _is_reserved_domain(domain: str) -> bool:
+    labels = domain.lower().split(".")
+    return labels[-2:] in (["example", "com"], ["example", "org"])
+
+
 def _strings(value: Any) -> Iterator[str]:
     if isinstance(value, dict):
         for item in value.values():
@@ -89,8 +94,8 @@ def test_fixtures_use_only_reserved_identifiers_and_example_domains(path: Path) 
         assert _RESERVED_IDENTIFIERS[identifier["scheme"]].match(identifier["value"]), identifier
     for text in _strings(document):
         for host in re.findall(r"https?://([^/\s\"]+)", text):
-            assert host == "example.com" or host.endswith(".example.com"), host
+            assert _is_reserved_domain(host), host
         for domain in re.findall(r"\b[a-z0-9-]+(?:\.[a-z0-9-]+)*\.(?:com|org|net|io|co\.uk)\b", text):
-            assert domain.endswith("example.com") or domain.endswith("example.org"), domain
+            assert _is_reserved_domain(domain), domain
         for phone in re.findall(r"\b\d{3}-\d{4}\b", text):
             assert phone.startswith("555-01"), phone
