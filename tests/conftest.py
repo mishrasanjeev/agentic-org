@@ -86,6 +86,9 @@ def pytest_configure(config):
         "markers",
         "real_flag_lookup: read pseudonymisation.pre_model from the database outside tests/integration",
     )
+    config.addinivalue_line(
+        "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -208,12 +211,6 @@ def sample_invoice():
 
 
 CASSETTE_ROOT = Path(__file__).resolve().parent / "cassettes"
-
-
-def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
-    )
 
 
 def pytest_collection_modifyitems(config, items):
