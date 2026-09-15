@@ -74,8 +74,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   finished run's checkpoints are deleted. Any other decision leaves the run
   paused. A resume is refused, with a reason code, when the checkpoint is
   missing, not at the approval gate, undecryptable or outside the tenant.
-  Approval API responses no longer include the server-only
-  `context._checkpoint_resume` key; no other response field changes. See
+  Approval responses gain `context.checkpoint_resume` for resumed runs; the
+  resume parameters stored with a paused run are never returned. See
   "Agent runs paused for approval" in `docs/RUNBOOKS.md` for the flag,
   reason codes and checkpoint retention.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
