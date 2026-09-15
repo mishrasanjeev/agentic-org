@@ -164,9 +164,12 @@ prints only a count), then commits `config/denylist.sha256`.
   `scripts/check_module_coverage.py`; on pull requests, **75% of the changed
   lines** (diff-cover) and **75% of every new Python module**
   (`scripts/check_new_module_coverage.py`, which counts a new module no test
-  imports as 0%) must be covered. Tests, `conftest.py` files and Alembic
-  revisions are not gated as modules. Run the same gate locally after
-  `make test` with `make coverage-gate`.
+  imports as 0%) must be covered. Tests and test infrastructure (anything under
+  `tests`, `test_doubles` or `fixtures` directories, and `conftest.py`) count
+  toward neither gate; Alembic revisions are not gated as new modules. A
+  renamed module counts as new. The gate reads a report produced with a single
+  coverage source and fails on a filename it cannot attribute to exactly one
+  module. Run the same gate locally after `make test` with `make coverage-gate`.
 - All PRD test IDs (FT-FIN-xxx, SEC-AUTH-xxx, etc.) must pass
 - Use `pytest-asyncio` for async tests
 - Mock external services, not internal modules
@@ -198,7 +201,8 @@ the scan fails again.
 `scripts/run_pip_audit.py` runs `pip-audit` over the project metadata,
 `requirements.txt` and `requirements-v4.txt` on every pull request
 (`security-scan` job), nightly and in `make check`. It fails on any known
-vulnerability, and on anything that stops the audit from completing.
+vulnerability, on any dependency it could not audit (for example a package
+that is not on PyPI), and on anything that stops the audit from completing.
 
 Fix a finding by upgrading the dependency (or its parent) whenever a fixed
 version exists. When a fix has to wait:
@@ -209,6 +213,11 @@ version exists. When a fix has to wait:
    (or any alias, such as the CVE), the `package`, the `reason` from your
    assessment, an `owner`, and an `expires` date no more than 90 days out.
 3. Get the entry reviewed in the pull request like any other security change.
+
+A dependency pip-audit cannot audit is accepted the same way with a `[[skip]]`
+entry (`package`, `reason`, `owner`, `expires`). Entries with missing, unknown
+or wrongly typed fields, or duplicates, fail the audit with a message naming
+the entry.
 
 The audit reports every accepted finding with its owner and expiry, warns about
 exceptions that match nothing (remove them), and fails once an entry has

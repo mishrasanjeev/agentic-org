@@ -25,8 +25,11 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
-      - name: Install dependencies
-        run: pip install uv && uv pip install --system -e ".[dev]"
+      # Every dependency is pinned by hash before the step that holds the
+      # secret, so a newly published package version cannot run with the key.
+      # The tests import the project from the checkout; it is not installed.
+      - name: Install hash-pinned dependencies
+        run: python -m pip install --require-hashes --no-deps -r requirements-rerecord.lock
       - name: Re-record and compare
         env:
           MODEL_RECORD_API_KEY: ${{ secrets.MODEL_RECORD_API_KEY }}

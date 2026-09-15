@@ -126,3 +126,68 @@ def test_default_targets_cover_the_project_and_both_requirements_files(tmp_path:
 
 def test_committed_exception_list_is_valid() -> None:
     audit.load_exceptions(REPO_ROOT / "config" / "pip-audit-exceptions.toml", dt.datetime.now(dt.UTC).date())
+
+
+# ── Review follow-ups: unaudited dependencies and malformed entries ─────────
+
+
+def report_with_skip(name: str = "local-only-lib", reason: str = "Dependency not found on PyPI") -> str:
+    return json.dumps(
+        {"dependencies": [{"name": "safe-package", "version": "1.0", "vulns": []},
+                          {"name": name, "skip_reason": reason}], "fixes": []}
+    )
+
+
+def test_dependency_pip_audit_could_not_audit_fails(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert run(tmp_path, FakeRunner(0, report_with_skip())) == 1
+    out = capsys.readouterr().out
+    assert "could not audit" in out
+    assert "local-only-lib: Dependency not found on PyPI" in out
+
+
+def test_reviewed_skip_entry_accepts_an_unaudited_dependency(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = """
+[[skip]]
+package = "Local_Only.Lib"
+reason = "Built from this repository; audited through its own requirements."
+owner = "@maintainer"
+expires = 2026-10-01
+"""
+    assert run(tmp_path, FakeRunner(0, report_with_skip()), body) == 0
+    assert "accepted  local-only-lib (unaudited)" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("body", "reason"),
+    [
+        ('exception = ["CVE-2026-0001"]\n', "must be a table"),
+        ('exception = "CVE-2026-0001"\n', "must be an array of tables"),
+        (EXCEPTION.replace('id = "CVE-2026-0001"', "id = 1"), "id must be non-empty text"),
+        (EXCEPTION.replace('package = "Example-Lib"', 'package = ["a", "b"]'), "package must be non-empty text"),
+        (EXCEPTION.replace('reason = "Only the unaffected encoder is used."', 'reason = "  "'),
+         "reason must be non-empty text"),
+        (EXCEPTION + 'severity = "low"\n', "unknown field(s) severity"),
+        (EXCEPTION + EXCEPTION, "duplicates an earlier entry"),
+        ('[exceptions]\nid = "x"\n', "unknown top-level key(s) exceptions"),
+        ("[[skip]]\npackage = \"x\"\n", "missing reason, owner, expires"),
+        (EXCEPTION.replace("expires = 2026-10-01", "expires = 2026-10-01T00:00:00"), "must be a date"),
+    ],
+)
+def test_malformed_entries_fail_with_a_message_not_a_traceback(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], body: str, reason: str
+) -> None:
+    runner = FakeRunner(0, report())
+    assert run(tmp_path, runner, body) == 2
+    err = capsys.readouterr().err
+    assert reason in err
+    assert "Traceback" not in err
+    assert runner.calls == []
+
+
+def test_non_utf8_exception_file_fails_closed(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = tmp_path / "exceptions.toml"
+    path.write_bytes(b"\xff\xfe[[exception]]\n")
+    assert audit.main(["--exceptions", str(path)], runner=FakeRunner(0, report()), today=TODAY) == 2
+    assert "cannot read" in capsys.readouterr().err

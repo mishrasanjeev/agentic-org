@@ -7,9 +7,19 @@
 # the advisory id or any alias (for example a CVE id) together with the
 # package name. See "Dependency audit exceptions" in CONTRIBUTING.md.
 #
+# A dependency pip-audit could not audit at all (it reports a skip reason, for
+# example a package that is not on PyPI) also fails the audit unless a
+# [[skip]] entry accepts it, with the same fields except `id`.
+#
 # [[exception]]
 # id = "GHSA-xxxx-xxxx-xxxx"
 # package = "example-package"
 # reason = "Only the unaffected parser is imported; upgrade blocked by <dependency> until <version>."
+# owner = "@github-handle"
+# expires = 2026-12-01
+#
+# [[skip]]
+# package = "example-internal-package"
+# reason = "Built from this repository; its own requirements are audited."
 # owner = "@github-handle"
 # expires = 2026-12-01

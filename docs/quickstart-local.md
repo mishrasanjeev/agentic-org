@@ -87,7 +87,7 @@ build takes several minutes.
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
 | `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
-| `make coverage-gate` | after `make test`: at least 75% of the lines changed since `BASE_REF` (diff-cover) and 75% of every Python module added since then |
+| `make coverage-gate` | after `make test`: at least 75% of the lines changed since `BASE_REF` (diff-cover) and 75% of every Python module added since then; tests, test doubles and fixtures are not counted |
 | `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files with the reviewed exceptions in `config/pip-audit-exceptions.toml` |
 
 Each check is also a target of its own (`make check-ruff`, `check-mypy`,

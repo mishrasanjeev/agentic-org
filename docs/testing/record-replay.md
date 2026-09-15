@@ -103,6 +103,12 @@ variable (`gemini` by default, or `openai` or `anthropic`). The job summary
 says whether the recording run passed and which cassettes now differ from the
 committed ones; the log and the diff are uploaded as an artifact.
 
+Because the job holds a model API key, its dependencies are installed from
+`requirements-rerecord.lock` with `pip install --require-hashes` before the
+step that reads the secret, so a newly published package version cannot run
+with the key. Regenerate the lock deliberately (the command is at the top of
+the file) and review the diff.
+
 It only reports. Nothing is committed, and pull requests do not wait for it. A
 difference means the model's answer to an unchanged request has drifted:
 decide whether the tests still hold and, if the new behaviour is expected,

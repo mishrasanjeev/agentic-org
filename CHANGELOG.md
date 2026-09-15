@@ -8,19 +8,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - **Coverage gate (pull requests):** 75% of changed lines (diff-cover) and 75%
   of every new Python module (`scripts/check_new_module_coverage.py`; a new
   module no test imports counts as 0%), on top of the existing 55% total and
-  per-module floors. Runs as `make coverage-gate` and in the new Local Stack
-  workflow. **Break:** pull requests that add or change Python code below
+  per-module floors. Tests, test doubles and fixtures are not counted, renamed
+  modules count as new, and a coverage report whose filenames cannot be
+  attributed to exactly one module fails the gate. Runs as
+  `make coverage-gate` and in the new Local Stack workflow. **Break:** pull requests that add or change Python code below
   these floors now fail.
 - Local Stack workflow: `make check`, and `make dev && make test` followed by
   the coverage gate, `make seed` and `make e2e`, on fresh runners for every
   pull request and push to `main`.
 - `pip-audit` now runs through `scripts/run_pip_audit.py` in CI, nightly and
   `make check`, with dated, owned exceptions in
-  `config/pip-audit-exceptions.toml` (at most 90 days; expired entries fail).
+  `config/pip-audit-exceptions.toml` (at most 90 days; expired or malformed
+  entries fail). A dependency pip-audit could not audit fails too unless a
+  `[[skip]]` entry accepts it.
   See "Dependency audit exceptions" in `CONTRIBUTING.md`.
 - Nightly Cassette Re-record workflow: re-records every `model_cassette` test
   against a live model with the `MODEL_RECORD_API_KEY` secret and reports
-  cassette differences without gating. See `docs/testing/record-replay.md`.
+  cassette differences without gating. Its dependencies are hash-pinned
+  (`requirements-rerecord.lock`). See `docs/testing/record-replay.md`.
 - Local Grantex in the development stack: the Grantex auth service from its
   published image, pinned by digest, with its own `grantex` role and database
   on the stack's Postgres (created once by `grantex-db`) and Redis index 2.

@@ -9,10 +9,23 @@ new module missing from the report was never imported by the tests and counts
 as 0%, unless it has no executable statements (a docstring-only
 ``__init__.py``, for example).
 
-Tests, conftest files and Alembic revisions are not modules under this rule.
+Not gated: anything under a ``tests``, ``test``, ``test_doubles`` or
+``fixtures`` directory, ``conftest.py`` files and Alembic revisions under
+``migrations/``. A ``test_*.py`` file anywhere else is an ordinary module.
+Renames count as additions (``--no-renames``), so a moved module must meet the
+floor too.
 
-Fails closed (exit 2) when git fails, a ref does not resolve or the coverage
-report is missing or unreadable. Exit 1 lists the modules below the floor.
+Each ``filename`` in the report is resolved through the report's ``<source>``
+directories to a repository-relative path. coverage.py writes a filename
+relative to whichever source matched, and with overlapping sources (``.``
+together with ``core``) that choice varies between runs, so ``__init__.py``
+can mean several files. A filename that resolves to no file, or to more than
+one, fails the gate instead of being attributed to the wrong module; run the
+tests with a single coverage source (``make test`` does).
+
+Fails closed (exit 2) when git fails, a ref does not resolve, the coverage
+report is missing, unreadable or ambiguous, or a source lies outside the
+repository. Exit 1 lists the modules below the floor.
 
     python scripts/check_new_module_coverage.py --coverage-xml coverage.xml --base origin/main --floor 75
 """
@@ -30,7 +43,8 @@ from pathlib import Path, PurePosixPath
 from defusedxml import DefusedXmlException
 from defusedxml import ElementTree
 
-EXCLUDED_PREFIXES = ("tests/", "migrations/")
+EXCLUDED_DIRECTORIES = frozenset({"tests", "test", "test_doubles", "fixtures"})
+EXCLUDED_PREFIXES = ("migrations/",)
 EXCLUDED_NAMES = frozenset({"conftest.py"})
 
 
@@ -69,16 +83,15 @@ def _resolve(repo: Path, ref: str) -> str:
 
 def added_modules(repo: Path, base: str, head: str) -> list[str]:
     base_sha, head_sha = _resolve(repo, base), _resolve(repo, head)
-    out = _git(repo, "diff", "--name-only", "--diff-filter=A", "-z", f"{base_sha}...{head_sha}")
-    modules = []
-    for name in out.split("\0"):
-        if not name.endswith(".py") or name.startswith(EXCLUDED_PREFIXES):
-            continue
-        posix = PurePosixPath(name)
-        if posix.name in EXCLUDED_NAMES or posix.name.startswith("test_"):
-            continue
-        modules.append(name)
-    return sorted(modules)
+    out = _git(repo, "diff", "--name-only", "--no-renames", "--diff-filter=A", "-z", f"{base_sha}...{head_sha}")
+    return sorted(name for name in out.split("\0") if name and is_gated_module(name))
+
+
+def is_gated_module(name: str) -> bool:
+    posix = PurePosixPath(name)
+    if posix.suffix != ".py" or name.startswith(EXCLUDED_PREFIXES) or posix.name in EXCLUDED_NAMES:
+        return False
+    return not EXCLUDED_DIRECTORIES.intersection(posix.parts[:-1])
 
 
 def read_coverage(path: Path, repo: Path) -> dict[str, ModuleCoverage]:
@@ -89,14 +102,14 @@ def read_coverage(path: Path, repo: Path) -> dict[str, ModuleCoverage]:
         raise GateError(f"cannot read coverage report {path}: {exc}") from exc
     if root.tag != "coverage":
         raise GateError(f"{path} is not a Cobertura coverage report")
-    sources = [Path(s.text.strip()) for s in root.iter("source") if s.text and s.text.strip()]
     repo_root = repo.resolve()
+    prefixes = _source_prefixes(root, repo_root, path)
     lines: dict[str, dict[int, bool]] = {}
     for cls in root.iter("class"):
         filename = cls.get("filename")
         if not filename:
             raise GateError(f"{path}: a class entry has no filename")
-        relative = _relative(filename, sources, repo_root)
+        relative = resolve_filename(filename, prefixes, repo_root)
         seen = lines.setdefault(relative, {})
         for line in cls.iter("line"):
             number, hits = line.get("number"), line.get("hits")
@@ -108,20 +121,47 @@ def read_coverage(path: Path, repo: Path) -> dict[str, ModuleCoverage]:
     }
 
 
-def _relative(filename: str, sources: list[Path], repo_root: Path) -> str:
-    candidate = PurePosixPath(filename.replace("\\", "/"))
-    if not candidate.is_absolute():
-        # Relative to one of the report's sources; the sources may be container paths.
-        return str(candidate)
-    for source in sources:
-        try:
-            return str(PurePosixPath(candidate.relative_to(PurePosixPath(source.as_posix()))))
-        except ValueError:
+def _source_prefixes(root: object, repo_root: Path, report: Path) -> list[PurePosixPath]:
+    """Each ``<source>`` as a path relative to the repository root."""
+    prefixes: list[PurePosixPath] = []
+    for element in root.iter("source"):  # type: ignore[attr-defined]
+        text = (element.text or "").strip()
+        if not text:
             continue
-    try:
-        return Path(filename).resolve().relative_to(repo_root).as_posix()
-    except ValueError as exc:
-        raise GateError(f"coverage path {filename} is outside the repository") from exc
+        try:
+            relative = Path(text).resolve().relative_to(repo_root)
+        except (OSError, ValueError) as exc:
+            raise GateError(
+                f"{report}: coverage source {text} is outside the repository {repo_root}; "
+                "run the gate where the tests ran"
+            ) from exc
+        prefixes.append(PurePosixPath(relative.as_posix()))
+    if not prefixes:
+        raise GateError(f"{report}: the report names no <source> directory")
+    return prefixes
+
+
+def resolve_filename(filename: str, prefixes: list[PurePosixPath], repo_root: Path) -> str:
+    """The repository-relative path a report filename refers to; GateError if none or several."""
+    normalised = filename.replace("\\", "/")
+    if PurePosixPath(normalised).is_absolute() or Path(filename).is_absolute():
+        try:
+            return Path(filename).resolve().relative_to(repo_root).as_posix()
+        except (OSError, ValueError) as exc:
+            raise GateError(f"coverage path {filename} is outside the repository") from exc
+    matches = {
+        str(PurePosixPath(prefix, normalised))
+        for prefix in prefixes
+        if (repo_root / PurePosixPath(prefix, normalised)).is_file()
+    }
+    if not matches:
+        raise GateError(f"coverage filename {filename!r} is not a file under any <source> directory")
+    if len(matches) > 1:
+        raise GateError(
+            f"coverage filename {filename!r} is ambiguous ({', '.join(sorted(matches))}): the report was "
+            "produced with overlapping coverage sources; run the tests with a single source such as --cov=."
+        )
+    return matches.pop()
 
 
 def has_statements(path: Path) -> bool:

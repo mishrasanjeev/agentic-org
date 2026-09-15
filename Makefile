@@ -39,6 +39,13 @@ NEW_MODULE_FLOOR ?= 75
 # Extra coverage arguments for the integration run; `make test` appends it to
 # the unit run's data so coverage.xml covers both.
 INTEGRATION_COV_ARGS ?=
+# One coverage source for the runs the gate reads. pyproject.toml's addopts add
+# --cov=core --cov=api ...; together with --cov=. coverage.py writes some
+# filenames relative to core/ or api/ instead of the repository root, which
+# the new-module check cannot attribute reliably. -o addopts replaces them.
+GATE_COV_ARGS = -o addopts=--basetemp=codex-pytest-basetemp --cov=. --cov-report=xml --cov-report=term
+# Not gated for changed-line coverage: tests and test infrastructure.
+DIFF_COVER_EXCLUDE ?= */tests/* */test_doubles/* */fixtures/* conftest.py
 
 # Integration tests get their own database and Redis index on the stack's
 # servers; the database is dropped and recreated at the start of every run.
@@ -132,8 +139,8 @@ endif
 # the CI unit-tests job runs them; then the integration suites.
 test: tools-image
 	$(TOOLS) $(TEST_ENV) $(PY) -m pytest $(UNIT_SUITES) $(CONTRACT_SUITES) \
-		--cov=. --cov-report=xml --cov-fail-under=$(COVERAGE_FLOOR) $(PYTEST_ARGS)
-	$(MAKE) --no-print-directory test-integration INTEGRATION_COV_ARGS="--cov=. --cov-append --cov-report=xml"
+		$(GATE_COV_ARGS) --cov-fail-under=$(COVERAGE_FLOOR) $(PYTEST_ARGS)
+	$(MAKE) --no-print-directory test-integration INTEGRATION_COV_ARGS="$(GATE_COV_ARGS) --cov-append"
 
 test-unit: tools-image
 	$(TOOLS) $(TEST_ENV) $(PY) -m pytest $(UNIT_SUITES) $(PYTEST_ARGS)
@@ -153,7 +160,7 @@ test-integration: tools-image test-db
 # including ones the tests never import.
 coverage-gate: tools-image
 	$(TOOLS) $(PY) -m diff_cover.diff_cover_tool coverage.xml --compare-branch="$(BASE_REF)" \
-		--fail-under=$(DIFF_COVER_FLOOR)
+		--fail-under=$(DIFF_COVER_FLOOR) --exclude $(foreach p,$(DIFF_COVER_EXCLUDE),'$(p)')
 	$(TOOLS) $(PY) scripts/check_new_module_coverage.py --coverage-xml coverage.xml \
 		--base "$(BASE_REF)" --head HEAD --floor $(NEW_MODULE_FLOOR)
 
