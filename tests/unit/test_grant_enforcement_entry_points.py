@@ -228,14 +228,38 @@ async def test_gateway_deny_mode_runs_a_call_the_grant_and_legacy_scopes_cover()
     assert result == {"id": "c-1"} and len(connector.calls) == 1
 
 
-async def test_base_agent_passes_the_grant_to_an_injected_gateway_only_when_enforcement_is_on():
+async def test_base_agent_passes_the_grant_to_a_gateway_that_takes_it_in_every_mode():
+    # ToolGateway.execute requires run_grant, so it is passed in off as well.
     gateway = MagicMock()
     gateway.execute = AsyncMock(return_value={"id": "c-1"})
-    for mode, expect in ((EnforcementMode.OFF, False), (EnforcementMode.WARN, True)):
+    for mode in (EnforcementMode.OFF, EnforcementMode.WARN):
         agent = _base_agent(tool_gateway=gateway)
         with patch("core.agents.base.resolve_run_grant", AsyncMock(return_value=RunGrant(mode=mode))):
             await agent._call_tool("hubspot", "get_contact", {})
-        assert ("run_grant" in gateway.execute.await_args.kwargs) is expect
+        assert gateway.execute.await_args.kwargs["run_grant"].mode is mode
+
+
+async def test_base_agent_passes_the_grant_to_a_gateway_that_predates_it_only_when_enforcement_is_on():
+    seen: list[dict[str, Any]] = []
+
+    class _LegacyGateway:
+        async def execute(
+            self, *, tenant_id, agent_id, agent_scopes, connector_name, tool_name, params, idempotency_key=None
+        ):
+            seen.append({"connector": connector_name})
+            return {"id": "c-1"}
+
+    gateway = _LegacyGateway()
+    agent = _base_agent(tool_gateway=gateway)
+    with patch("core.agents.base.resolve_run_grant", AsyncMock(return_value=RunGrant(mode=EnforcementMode.OFF))):
+        assert await agent._call_tool("hubspot", "get_contact", {}) == {"id": "c-1"}
+    agent = _base_agent(tool_gateway=gateway)
+    with (
+        patch("core.agents.base.resolve_run_grant", AsyncMock(return_value=RunGrant(mode=EnforcementMode.WARN))),
+        pytest.raises(TypeError),  # it cannot check the grant, so it never dispatches
+    ):
+        await agent._call_tool("hubspot", "get_contact", {})
+    assert seen == [{"connector": "hubspot"}]
 
 
 # ── Workflow connector_tool step: no agent, no grant ─────────────────────
@@ -522,3 +546,30 @@ def test_per_type_wrappers_forward_the_grant_to_the_resolving_runner(path):
         keywords = {kw.arg for kw in call.keywords}
         assert "grant_token" in keywords, f"{path.stem} drops the caller's grant"
         assert "run_grant" not in keywords, f"{path.stem} bypasses run grant resolution"
+
+
+# ── run_grant is required on the tool-call paths ─────────────────────────
+
+
+def test_tool_call_paths_require_run_grant_as_a_keyword():
+    from core.langgraph.tool_adapter import execute_agent_tool
+    from core.tool_gateway.gateway import ToolGateway
+
+    for function in (execute_agent_tool, ToolGateway.execute):
+        parameter = inspect.signature(function).parameters["run_grant"]
+        assert parameter.kind is inspect.Parameter.KEYWORD_ONLY, function.__qualname__
+        assert parameter.default is inspect.Parameter.empty, function.__qualname__
+
+
+async def test_a_gateway_call_without_run_grant_is_refused_by_python():
+    from core.tool_gateway.gateway import ToolGateway
+
+    with pytest.raises(TypeError, match="run_grant"):
+        await ToolGateway().execute(  # type: ignore[call-arg]
+            tenant_id=TENANT,
+            agent_id=AGENT,
+            agent_scopes=["tool:hubspot:read:contact"],
+            connector_name="hubspot",
+            tool_name="get_contact",
+            params={},
+        )
