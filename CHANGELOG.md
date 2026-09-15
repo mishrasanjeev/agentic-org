@@ -61,6 +61,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `outcome`). **Break when set to `reject`:** a bare label such as
   `needs_review` must be written as a comparison (`needs_review == True`).
   See `docs/hitl-conditions.md`.
+- `scripts/check_prompt_tools.py` fails CI (unit-tests job) and
+  `scripts/preflight.sh` when a built-in agent prompt calls a tool that no
+  connector registers or that is not in that agent's default tools, or when a
+  default tool list names an unregistered tool. It runs with no baseline and
+  fails closed if the registry cannot be loaded. See "Prompt tool references"
+  in `CONTRIBUTING.md`.
 
 ### Fixed
 - Four shipped industry-pack agents no longer send every run to human review.
@@ -83,6 +89,75 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   generated SDK clients.
 - Connector harness and voice integration fixtures no longer emit avoidable
   async/Pydantic deprecation warnings.
+- Agent default tool lists (`_AGENT_TYPE_DEFAULT_TOOLS` and
+  `_DOMAIN_DEFAULT_TOOLS` in `api/v1/agents.py`, and the agent generator's
+  copy) no longer name 20 tools that no connector registers, such as
+  `get_post_analytics`, `schedule_social_post`, `slack_send_message` and
+  `search_content_fulltext`. Those names were never bound at run time but
+  were shown in the tool picker, MCP/A2A discovery and generated agents.
+  Nothing is added in their place. `seo_strategist` is left with no default
+  tools, so `POST /mcp/call` for `agenticorg_seo_strategist` now answers 400
+  "No tools configured" instead of running an agent with no tools.
+- Default tools that several connectors register now name the connector the
+  agent's prompt uses, so they no longer resolve to whichever connector was
+  imported first: `create_issue` is `jira:create_issue` for `vendor_manager`
+  and `facilities_agent` (it resolved to GitHub), `query` and
+  `search_contacts` are `salesforce:` for `abm` (it resolved to QuickBooks and
+  HubSpot), and `get_analytics`, `create_page`, `send_email`,
+  `create_campaign`, `create_incident` and `get_compliance_notice` are
+  qualified for the agents that name LinkedIn Ads, Confluence, SendGrid or
+  Gmail, Mailchimp, ServiceNow or GSTN. Accounting and HRMS tools shared by
+  interchangeable systems (`get_trial_balance`, `get_employee`, ...) stay bare
+  and resolve through the connectors linked to the agent.
+  `GET /agents/default-tools/{type}` keeps a qualified default only when its
+  connector is linked, and Grantex scopes for a qualified tool now name that
+  connector (`tool:jira:execute:create_issue`); an unknown connector never
+  matches.
+- **Behaviour change:** the finance agent prompts (`ap_processor`,
+  `ar_collections`, `close_agent`, `fpa_agent`, `recon_agent`,
+  `tax_compliance`) no longer tell the model to call tools that do not exist
+  (`ocr_extract_invoice`, `gstn_validate`, `erp_get_po`, `erp_get_grn`,
+  `erp_queue_payment`, `erp_get_ar_aging`, `erp_get_transactions`,
+  `banking_api_get_transactions`, ...). Steps now use the agent's registered
+  tools, or read the data from the task input and escalate to human review
+  when it is not there: AP needs the extracted invoice, the GSTIN verification
+  result and the PO/GRN details in the input; close needs sub-ledger balances;
+  FP&A needs the budget; reconciliation needs the GL entries; tax compliance
+  needs the period's transactions. AP no longer sends remittance advice,
+  reconciliation proposes entries instead of posting them, and AR hands Day
+  60+ contact to the collections team.
+- **Behaviour change:** the HR agent prompts (`ld_coordinator`,
+  `offboarding_agent`, `onboarding_agent`, `payroll_engine`,
+  `performance_coach`, `talent_acquisition`) no longer tell the model to call
+  tools that do not exist (`get_performance_data`, `okta_deactivate_user`,
+  `okta_provision_user`, `jira_create_issue`, `get_okr_progress`) or that the
+  agent does not have (`get_leave_balance`, `check_availability`). Steps now
+  use the registered equivalents (`deactivate_user`, `provision_user`,
+  `assign_group`, `create_page`, `get_employee`) or read performance data,
+  OKR progress, leave balances, panel availability and the separation record
+  from the task input and escalate to human review when they are missing.
+  Actions with no tool (equipment requests, course enrolment, GitHub/Jira/
+  Slack removal, data archival) are listed for the responsible team instead
+  of being claimed as done.
+- **Behaviour change:** the marketing agent prompts (`brand_monitor`,
+  `content_factory`, `crm_intelligence`, `seo_strategist`, `social_media`) no
+  longer tell the model to call tools that do not exist
+  (`get_brand_mentions`, `ahrefs_get_keywords`, `get_contacts`,
+  `ahrefs_get_rankings`, `get_post_analytics`). CRM scoring uses
+  `list_contacts` / `search_contacts`; social listening uses
+  `get_campaign_insights` and `list_channel_videos`; brand mentions, keyword
+  research, rankings and post analytics are read from the task input, with
+  escalation to human review when they are missing. The SEO strategist
+  writes ticket-ready recommendations instead of claiming to create Jira
+  tickets.
+- **Behaviour change:** the `vendor_manager` and `support_triage` prompts no
+  longer tell the model to call `sanctions_screen`, `gstn_validate` and
+  `mca_get_company_data` (not registered) or `get_ticket` (not in the
+  agent's tools). Vendor onboarding now requires the sanctions screening,
+  GSTIN verification and company registry results in the task input and
+  stops for human review when any is missing; SLA monitoring uses
+  `search_issues` and `get_project_metrics`. Support triage reads the ticket
+  from the task input and uses `apply_macro` / `update_ticket`.
 
 ## [4.0.0] — 2026-04-05
 
