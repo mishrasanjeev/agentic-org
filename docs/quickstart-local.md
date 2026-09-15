@@ -66,6 +66,7 @@ Production and staging configuration rejects them.
 | Command | Does |
 |---|---|
 | `make dev` | build, start, wait for health, smoke test |
+| `make seed` | development tenant, users, agents and sample data; safe to repeat |
 | `make ps` | service status |
 | `make logs` | follow logs from every service |
 | `make down` | stop the stack, keep data |
@@ -200,6 +201,37 @@ a wrong `code_verifier` or a replayed code are rejected, never downgraded.
 
 The API does not sign users in through the stub yet: its OIDC client only
 accepts HTTPS issuers on public hosts.
+
+## Development data
+
+With the stack up, `make seed` runs `scripts/seed_dev.py` in the tools image
+against the stack's database and prints what it seeded:
+
+| What | Seeded |
+|---|---|
+| Tenant | `acme-underwriting-dev`, "Acme Underwriting (development)", region EU |
+| Users | Approver A (`approver.a@example.com`) and Approver B (`approver.b@example.com`), role `domain_lead`, domain `backoffice`; the same emails as the OIDC stub's users |
+| Sign-in configuration | OIDC provider `dev-oidc` for the stub's public client `agenticorg-dev-public`, stored **disabled** (see the note above) |
+| Agents | "Risk Sentinel (development)" and "Compliance Guard (development)", in shadow mode with no tools authorised |
+| Approval policy | `two-step-dev`: two sequential steps, each for the `domain_lead` role. It does not require two different people; see FINDINGS A-32 |
+
+Every row has a fixed id, so running `make seed` again changes nothing and puts
+back any seeded field that was edited. It fails without writing anything if a
+seeded name (the tenant slug, a user's email, the provider key, an agent or the
+policy name) already belongs to a row it did not create. It refuses to run
+unless `AGENTICORG_ENV` is a development or test runtime, or when `APP_ENV`,
+`ENVIRONMENT`, `ENV` or `NODE_ENV` names a production-like runtime, and refuses
+a database host other than `localhost`, `127.0.0.1`, `::1` or the stack's
+`postgres` service unless `AGENTICORG_SEED_ALLOW_REMOTE_DB=1`. All names are
+invented and all addresses use `example.com`.
+
+The users have no password by default. To sign in to the console with email
+and password, choose a local passphrase of at least 12 characters and pass it
+in the environment; only its bcrypt hash is stored:
+
+```bash
+AGENTICORG_SEED_PASSWORD='choose-a-local-passphrase' make seed
+```
 
 ## Changing ports
 

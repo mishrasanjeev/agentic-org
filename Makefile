@@ -1,7 +1,8 @@
 # Developer entry points. See docs/quickstart-local.md.
 #
 #   make dev     build and start the local stack, wait until it is healthy, smoke-test it
-#   make down    stop the stack (data volumes are kept)
+#   make seed    development tenant, users, agents and sample data (idempotent)
+#   make down   stop the stack (data volumes are kept)
 #   make clean   stop the stack and delete its data volumes
 #   make logs    follow the stack's logs
 #   make ps      show service status
@@ -45,8 +46,10 @@ TOOLS = $(COMPOSE) --profile tools run --rm --no-deps --user $(HOST_UID):$(HOST_
 PY = python
 TEST_DB_HOST = postgres:5432
 TEST_REDIS_HOST = redis:6379
+SEED_TOOLS = $(COMPOSE) --profile tools run --rm --no-deps --user $(HOST_UID):$(HOST_GID) -e AGENTICORG_SEED_PASSWORD tools
 else ifeq ($(RUNNER),local)
 TOOLS =
+SEED_TOOLS =
 PY = $(PYTHON)
 TEST_DB_HOST = 127.0.0.1:$(or $(AGENTICORG_DEV_POSTGRES_PORT),5432)
 TEST_REDIS_HOST = 127.0.0.1:$(or $(AGENTICORG_DEV_REDIS_PORT),6379)
@@ -62,13 +65,18 @@ INTEGRATION_ENV = $(TEST_ENV) \
 E2E_CONFIG ?= e2e/dev-stack.config.ts
 E2E_ARGS ?=
 
-.PHONY: help dev down clean logs ps \
+# The stack's own database and the placeholder key from docker-compose.dev.yml.
+DEV_DB_NAME ?= agenticorg
+DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
+
+.PHONY: help dev seed down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
 	e2e
 
 help:
 	@echo "make dev     build and start the local stack and smoke-test it"
+	@echo "make seed    development tenant, users, agents and sample data (needs make dev)"
 	@echo "make down    stop the stack (keeps data)"
 	@echo "make clean   stop the stack and delete its data volumes"
 	@echo "make logs    follow logs"
@@ -93,6 +101,16 @@ logs:
 
 ps:
 	$(COMPOSE) ps
+
+# Idempotent development data (scripts/seed_dev.py) in the running stack's
+# database. When AGENTICORG_SEED_PASSWORD is set in your environment the
+# seeded users can also sign in with email and that password.
+seed: tools-image
+	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
+		{ echo "make seed: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(SEED_TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
+		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
+		$(PY) -m scripts.seed_dev
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
