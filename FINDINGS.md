@@ -151,8 +151,9 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** running `make test-integration` from a Windows worktree
   (2026-09-15).
-- **What:** the repository has no `.gitattributes`, so Git for Windows'
-  default `core.autocrlf=true` checks shell scripts out with CRLF endings.
+- **What:** `.gitattributes` fixes line endings only for
+  `core/policy/examples/*.yaml`, so Git for Windows' default
+  `core.autocrlf=true` checks shell scripts out with CRLF endings.
   Bash inside the Linux containers then rejects them:
   `tests/regression/test_bug_sheet_platform_20260914.py::test_deploy_script_pins_worker_and_beat_entrypoints`
   fails on `bash -n scripts/deploy_cloud_run.sh`, and the scripts `make`
@@ -174,3 +175,22 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
   and description become configuration or `acme_kyb`-style examples; the prompt
   and documents drop the vendor names), then confirm `audit` exits 0.
+
+## A-19 — Approval step conditions that fail to evaluate are skipped
+
+- **Found:** reading `core/approvals/policy_engine.py` while adding the case
+  policy engine (2026-09-15).
+- **What:** `_condition_matches` catches every exception from
+  `workflows.condition_evaluator.evaluate_condition`, logs a warning and
+  returns `False`. `first_applicable_step` and `next_step_after` treat `False`
+  as "this step does not apply", so an approval step whose condition is
+  malformed, references a missing context key or raises for any other reason
+  is silently skipped. In `api/v1/approvals.py` an `advance` with no further
+  applicable step marks the item `decided`, so a broken condition on, for
+  example, a second sign-off step lets the item complete with fewer approvals
+  than the policy requires. This fails open on an authority path.
+- **Fix:** validate step conditions when an approval policy is created or
+  updated (refuse unparseable ones with a reason), and at decision time treat
+  an evaluation error as "step applies" (or refuse the decision with a reason
+  code) rather than skipping it, with a test for a malformed condition on a
+  later step.

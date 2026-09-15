@@ -26,7 +26,7 @@ BASE_REF ?= origin/main
 # Extra arguments for every pytest run, e.g. PYTEST_ARGS="-x -k approvals".
 PYTEST_ARGS ?=
 
-UNIT_SUITES ?= tests/unit tests/security tests/regression
+UNIT_SUITES ?= tests/unit tests/security
 CONTRACT_SUITES ?= tests/connector_harness
 INTEGRATION_SUITES ?= tests/integration tests/regression
 COVERAGE_FLOOR ?= 55
