@@ -22,6 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
+from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
@@ -587,13 +588,27 @@ async def resume_agent(
     company_id: str | None = None,
     domain: str | None = None,
     llm_provider: str | None = None,
+    grant_token: str = "",
+    run_grant: RunGrant | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
     Uses LangGraph's Command(resume=...) to continue from the
     interrupt point with the human's decision.
+
+    PRD F-1: the grant is resolved again for the resumed run (the tenant's
+    mode may have changed and the checkpointed token may have expired); in
+    ``warn``/``deny`` the fresh token replaces the checkpointed one.
     """
     from langgraph.types import Command
+
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph_resume",
+        )
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
@@ -609,17 +624,23 @@ async def resume_agent(
             company_id=company_id,
             domain=domain,
             llm_provider=llm_provider,
+            run_grant=run_grant,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
     compiled = graph.compile(checkpointer=_checkpointer)
 
     config = {"configurable": {"thread_id": thread_id}}
+    resume_command: Command[Any] = (
+        Command(resume=decision)
+        if run_grant.mode is EnforcementMode.OFF
+        else Command(resume=decision, update={"grant_token": run_grant.token})
+    )
 
     t0 = time.perf_counter()
     try:
         result = await compiled.ainvoke(  # type: ignore[call-overload]
-            Command(resume=decision),
+            resume_command,
             config=config,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
