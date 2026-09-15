@@ -3,14 +3,16 @@
 # Smoke test for the local development stack (docker-compose.dev.yml).
 #
 # Asserts that the API answers its liveness endpoint directly, that the console
-# serves its health page, that the console proxies /api to the API, and that
-# the OIDC stub publishes its discovery document. Fails
-# with the failing URL and response when any check does not pass.
+# serves its health page, that the console proxies /api to the API, that the
+# OIDC stub publishes its discovery document and that the model stub lists its
+# scripted models. Fails with the failing URL and response when any check does
+# not pass.
 set -euo pipefail
 
 api="http://127.0.0.1:${AGENTICORG_DEV_API_PORT:-8000}"
 ui="http://127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3000}"
 oidc="http://127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}"
+model="http://127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}"
 attempts="${SMOKE_ATTEMPTS:-60}"
 
 check() {
@@ -31,4 +33,5 @@ check "api readiness (db + redis)"    "$api/api/v1/health"          '"status": *
 check "console health"                "$ui/health"                  '^ok$'
 check "console -> api proxy"          "$ui/api/v1/health/liveness"  '"status": *"alive"'
 check "oidc stub discovery"           "$oidc/.well-known/openid-configuration" '"issuer": *"http://127.0.0.1:'
+check "model stub scripted models"    "$model/v1/models"            '"scripted/final-only"'
 echo "dev stack smoke test: ok"

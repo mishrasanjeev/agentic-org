@@ -24,6 +24,7 @@ When it finishes:
 | Postgres | `127.0.0.1:5432`, database/user `agenticorg`, password `agenticorg_dev` |
 | Redis | `127.0.0.1:6379` |
 | OIDC stub | <http://127.0.0.1:9400> (`/.well-known/openid-configuration`) |
+| Model stub | <http://127.0.0.1:8090> (`/v1/models`, `/v1/chat/completions`) |
 
 All ports bind to `127.0.0.1` only.
 
@@ -40,16 +41,16 @@ All ports bind to `127.0.0.1` only.
 - **ui** — the console, served by nginx, proxying `/api` and `/ws` to the API
 - **oidc-stub** — a development OpenID Connect provider with step-up; see
   [Development identity provider](#development-identity-provider)
+- **model-stub** — an OpenAI-compatible model service answering from scripts
+  and recorded cassettes; see [Model stub](#model-stub)
 
 Every base image is pinned by digest. The API and worker set
 `AGENTICORG_TEST_FAKE_LLM=1` (see `docs/hermetic_test_doubles.md`), so
 completions made through the LLM router return stable, clearly synthetic output
-without calling a model provider.
-
-**Current limitation:** LangGraph agent runs build their model through
-`core/langgraph/llm_factory.py`, which the fake does not cover. Until the local
-model stub service is added to this stack, running an agent needs a model
-provider configured for the tenant; everything else works without one.
+without calling a model provider. LangGraph agent runs, which the fake does not
+cover, use the model stub when the agent's model is a `vllm:` model: the API
+and worker have `VLLM_BASE_URL=http://model-stub:8080`. The agents `make seed`
+creates use `vllm:scripted/final-only`, so they run with no model credentials.
 
 The credentials in `docker-compose.dev.yml` are development placeholders.
 Production and staging configuration rejects them.
@@ -189,7 +190,7 @@ against the stack's database and prints what it seeded:
 | Tenant | `acme-underwriting-dev`, "Acme Underwriting (development)", region EU |
 | Users | Approver A (`approver.a@example.com`) and Approver B (`approver.b@example.com`), role `domain_lead`, domain `backoffice`; the same emails as the OIDC stub's users |
 | Sign-in configuration | OIDC provider `dev-oidc` for the stub's public client `agenticorg-dev-public`, stored **disabled** (see the note above) |
-| Agents | "Risk Sentinel (development)" and "Compliance Guard (development)", in shadow mode with no tools authorised |
+| Agents | "Risk Sentinel (development)" and "Compliance Guard (development)", in shadow mode with no tools authorised, model `vllm:scripted/final-only` (the model stub) |
 | Approval policy | `four-eyes-dev`: step 1 `underwriter`, step 2 `approver` (a different person) |
 
 Every row has a fixed id, so running `make seed` again changes nothing and puts
@@ -207,6 +208,43 @@ in the environment; only its bcrypt hash is stored:
 AGENTICORG_SEED_PASSWORD='choose-a-local-passphrase' make seed
 ```
 
+## Model stub
+
+The **model-stub** service (`tools/model_stub`) speaks the OpenAI chat
+completions API, including tool calls, so the API can run agents without model
+credentials. Point an agent at it with a `vllm:` model id; the API strips the
+prefix and calls `http://model-stub:8080/v1`. It is development-only in the same
+way as the OIDC stub, and never streams.
+
+**Scripted models.** `vllm:scripted/<name>` answers from
+`tools/model_stub/scripts/<name>.json`:
+
+```json
+{"steps": [
+  {"tool_calls": [{"name": "lookup_case", "arguments": {"case_id": "CASE-0001"}}]},
+  {"content": {"decision": "refer", "confidence": 0.5}}
+]}
+```
+
+The step served is the number of assistant turns already in the conversation,
+so the stub keeps no state. A `content` object is returned as JSON text.
+Tool-call ids are derived from the tool name and arguments exactly as the
+in-process scripted model (`core/test_doubles/scripted_model.py`) derives them.
+A conversation longer than the script (409 `script_exhausted`), a tool the
+request did not bind (400 `script_mismatch`) and an unknown script (404) are
+errors. `final-only` ships as an example that answers once, with no tools.
+
+**Cassettes.** Any other model id is answered from
+`tests/cassettes/model_stub/`, keyed and stored with `core/model_replay.py`
+(model id, messages, tool schemas, temperature, max tokens, stop). In the
+default `replay` mode a request with no cassette gets 404 `cassette_miss`, with
+the same explanation of where it differs from the nearest recording as the
+test harness gives, and nothing is forwarded. To record, run the stack with
+`MODEL_STUB_MODE=record` and `MODEL_RECORD_API_KEY` set; requests are then
+forwarded to `MODEL_STUB_UPSTREAM_URL` (default the OpenAI API) and saved. The
+stub refuses to start in record mode without the key. Review recorded
+cassettes like any other fixture before committing them.
+
 ## Changing ports
 
 If a port is already taken, override it for the whole session:
@@ -214,7 +252,7 @@ If a port is already taken, override it for the whole session:
 ```bash
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
 AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
-AGENTICORG_DEV_OIDC_PORT=19400 make dev
+AGENTICORG_DEV_OIDC_PORT=19400 AGENTICORG_DEV_MODEL_STUB_PORT=18090 make dev
 ```
 
 Use the same variables with `make ps`, `make logs` and the smoke test.

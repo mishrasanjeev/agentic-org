@@ -5,6 +5,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- OpenAI-compatible model stub in the local stack (`model-stub`,
+  `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
+  from scripted sequences (`scripted/<name>`, ids matching the in-process
+  scripted model) or from cassettes keyed and stored by `core/model_replay.py`.
+  Replay misses are errors and are never forwarded; record mode forwards to a
+  real provider and refuses to start without `MODEL_RECORD_API_KEY`. The API
+  and worker send `vllm:` models to it, and the agents `make seed` creates use
+  `vllm:scripted/final-only`, so agents run locally without model credentials.
+  Refuses to start outside development and test. See "Model stub" in
+  `docs/quickstart-local.md`.
 - `make seed` (`scripts/seed_dev.py`): an idempotent development tenant with
   Approver A and Approver B (the OIDC stub's identities, matched by email), a
   disabled `dev-oidc` sign-in configuration for the stub, two sample agents in

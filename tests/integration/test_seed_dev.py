@@ -79,9 +79,10 @@ async def test_seed_creates_tenant_users_agents_sso_and_four_eyes_policy(engine:
             ("approver.b@example.com", "domain_lead", "active", None),
         ]
         tenant = {"tid": TENANT_ID}
-        agent_sql = text("SELECT status, authorized_tools FROM agents WHERE tenant_id = :tid")
+        agent_sql = text("SELECT status, authorized_tools, llm_model FROM agents WHERE tenant_id = :tid")
         agents = (await conn.execute(agent_sql, tenant)).all()
         assert all(a.status == "shadow" and a.authorized_tools == [] for a in agents)
+        assert {a.llm_model for a in agents} == {"vllm:scripted/final-only"}
         sso = (await conn.execute(text("SELECT enabled, config FROM sso_configs WHERE tenant_id = :tid"), tenant)).one()
         assert sso.enabled is False
         assert sso.config["client_id"] == "agenticorg-dev-public"

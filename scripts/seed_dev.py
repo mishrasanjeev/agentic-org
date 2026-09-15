@@ -10,7 +10,8 @@ Creates, or brings back to the seeded state, one development tenant:
 * an OIDC sign-in configuration ``dev-oidc`` pointing at that provider's public
   client, stored disabled because the API only accepts HTTPS issuers on
   public hosts;
-* two sample agents in shadow mode with no tools authorised;
+* two sample agents in shadow mode with no tools authorised, whose model is the
+  model stub's ``final-only`` script;
 * a four-eyes approval policy: the underwriter, then a second, different
   approver.
 
@@ -52,6 +53,7 @@ SSO_PROVIDER_KEY = "dev-oidc"
 SSO_CLIENT_ID = "agenticorg-dev-public"
 OIDC_ISSUER = "http://127.0.0.1:9400"
 APPROVAL_POLICY_NAME = "four-eyes-dev"
+SAMPLE_AGENT_MODEL = "vllm:scripted/final-only"
 
 
 class SeedError(RuntimeError):
@@ -228,6 +230,8 @@ async def seed(db_url: str, environ: Mapping[str, str]) -> dict[str, Any]:
                 agent.hitl_condition = f"confidence < {seed_agent.confidence_floor}"
                 # Shadow mode and no authorised tools: a sample agent can never act on its own.
                 agent.status, agent.authorized_tools, agent.is_builtin = "shadow", [], False
+                # Answered by the model stub's scripted sequence, so no model credentials are needed.
+                agent.llm_model, agent.llm_provider = SAMPLE_AGENT_MODEL, None
                 summary["agents"].append(seed_agent.name)
 
             policy_id = seed_id("approval-policy:four-eyes")
