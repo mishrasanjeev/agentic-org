@@ -23,6 +23,7 @@ import pathlib
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -60,6 +61,8 @@ def _client(lifetime: timedelta = timedelta(minutes=15)) -> MagicMock:
         }
 
     client.grants.delegate.side_effect = _delegate
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = SimpleNamespace(scopes=tuple(SCOPES))
     return client
 
 
@@ -133,6 +136,8 @@ async def test_a_delegation_without_an_expiry_is_refused_rather_than_minted_per_
 
     client = MagicMock()
     client.grants.delegate.return_value = {"grantToken": "placeholder-no-expiry", "grantId": "grnt_x"}
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = SimpleNamespace(scopes=tuple(SCOPES))
     pool = TokenPool(grantex_client_factory=lambda: client)
     pool.lazy_redis = False
     with pytest.raises(GrantMintError) as err:

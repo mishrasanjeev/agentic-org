@@ -22,6 +22,7 @@ import json
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,6 +63,8 @@ def _delegating_client(expires_in: timedelta = timedelta(minutes=15)) -> MagicMo
         "expiresAt": (datetime.now(UTC) + expires_in).isoformat().replace("+00:00", "Z"),
         "scopes": REGISTERED["grantex_scopes"],
     }
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = SimpleNamespace(scopes=tuple(REGISTERED["grantex_scopes"]))
     return client
 
 
@@ -159,6 +162,8 @@ async def test_pool_refuses_to_mint_for_an_unregistered_agent(root_grant, regist
 async def test_pool_delegation_failure_is_a_mint_error(root_grant):
     client = MagicMock()
     client.grants.delegate.side_effect = RuntimeError("Parent grant has expired")
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = SimpleNamespace(scopes=tuple(REGISTERED["grantex_scopes"]))
     pool = TokenPool(grantex_client_factory=lambda: client)
     with pytest.raises(GrantMintError) as err:
         await pool.get_run_grant_token(tenant_id=TENANT, agent_id=AGENT, **_registered())
@@ -168,6 +173,8 @@ async def test_pool_delegation_failure_is_a_mint_error(root_grant):
 async def test_pool_delegation_without_a_token_is_a_mint_error(root_grant):
     client = MagicMock()
     client.grants.delegate.return_value = {"grantId": "grnt_placeholder"}
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = SimpleNamespace(scopes=tuple(REGISTERED["grantex_scopes"]))
     pool = TokenPool(grantex_client_factory=lambda: client)
     with pytest.raises(GrantMintError) as err:
         await pool.get_run_grant_token(tenant_id=TENANT, agent_id=AGENT, **_registered())

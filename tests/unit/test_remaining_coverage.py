@@ -2510,6 +2510,8 @@ class TestTokenPoolRefresh:
             "grantId": "grnt_1",
             "expiresAt": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
         }
+        # The pool delegates only scopes the agent's registration carries.
+        client.agents.get.return_value = MagicMock(scopes=("read",))
         p = TokenPool(grantex_client_factory=lambda: client)
         p.redis = AsyncMock()
         resolver = AsyncMock(

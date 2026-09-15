@@ -108,9 +108,9 @@ async def test_backfill_updates_grantex_then_storage():
     client.agents.update.assert_called_once_with(
         "ag_1", scopes=["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]
     )
-    stored = persist.await_args.args[0]
-    assert stored["grantex"]["grantex_scopes"] == ["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]
-    assert stored["grantex"]["grantex_did"] == "did:x" and stored["k"] == 1
+    # Only the scope list is written (config.grantex.grantex_scopes); the rest
+    # of the config is never rewritten from a stale snapshot.
+    assert persist.await_args.args[0] == ["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]
 
 
 async def test_backfill_leaves_storage_alone_when_grantex_refuses():
@@ -144,6 +144,8 @@ async def test_pool_refresh_delegates_from_the_root_grant(monkeypatch):
         "grantId": "grnt_r",
         "expiresAt": (datetime.now(UTC) + timedelta(minutes=15)).isoformat(),
     }
+    # The pool delegates only scopes the agent's registration carries.
+    client.agents.get.return_value = MagicMock(scopes=("tool:hubspot:read:list_contacts",))
     pool = TokenPool(grantex_client_factory=lambda: client)
     pool.redis = AsyncMock()
     pool._schedule_refresh = MagicMock()
@@ -209,6 +211,9 @@ class _TenantSession:
 
         if isinstance(statement, Update):
             self.writes.append(statement)
+            written = _Rows([])
+            written.rowcount = 1  # type: ignore[attr-defined]  # the scope write matched the agent
+            return written
         return _Rows(self.agents)
 
 
