@@ -17,11 +17,28 @@ from sqlalchemy import select
 from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
-from core.feature_flags import clear_cache, is_enabled
+from core.feature_flags import clear_cache, is_enabled, is_reserved_flag_key
 from core.models.feature_flag import FeatureFlag
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/feature-flags", tags=["Feature Flags"], dependencies=[require_tenant_admin])
+
+
+def _refuse_reserved_key(flag_key: str) -> None:
+    """Authority flags (``core.feature_flags.RESERVED_FLAG_KEYS``) are operator-managed.
+
+    A tenant admin must not be able to create, change or delete them: a tenant
+    row could switch off enforcement an operator set for the tenant.
+    """
+    if is_reserved_flag_key(flag_key):
+        logger.warning("feature_flag_reserved_key_refused", flag_key=flag_key[:100])
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "flag_key_reserved",
+                "message": "This flag is managed by platform operators and cannot be changed through this API.",
+            },
+        )
 
 
 class FlagIn(BaseModel):
@@ -57,6 +74,7 @@ async def upsert_flag(
     body: FlagIn,
     tenant_id: str = Depends(get_current_tenant),
 ) -> FlagOut:
+    _refuse_reserved_key(body.flag_key)
     tid = uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(
@@ -161,6 +179,7 @@ async def delete_flag(
     flag_key: str,
     tenant_id: str = Depends(get_current_tenant),
 ) -> None:
+    _refuse_reserved_key(flag_key)
     tid = uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         result = await session.execute(

@@ -12,7 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
@@ -23,6 +23,14 @@ from api.deps import (
     require_tenant_admin,
 )
 from api.route_metadata import route_meta
+from auth.grant_enforcement import EnforcementMode, resolve_enforcement_mode
+from auth.run_grants import (
+    CALLER_GRANT_KEY,
+    RunGrant,
+    caller_grant_from_request,
+    direct_tool_call_permitted,
+    resolve_run_grant,
+)
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -1073,12 +1081,6 @@ async def _resolve_agent_connector_ids_for_type(
 
     import uuid as _uuid
 
-    from sqlalchemy import case, select
-
-    from core.database import get_tenant_session
-    from core.models.agent import Agent
-    from core.models.company import Company
-
     try:
         tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
     except (TypeError, ValueError):
@@ -1093,6 +1095,28 @@ async def _resolve_agent_connector_ids_for_type(
     except (TypeError, ValueError):
         return []
 
+    row = await _select_agent_for_type(tid, agent_type, company_uuid)
+    return list(getattr(row, "connector_ids", None) or []) if row is not None else []
+
+
+async def _select_agent_for_type(
+    tid: _uuid.UUID,
+    agent_type: str,
+    company_uuid: _uuid.UUID | None,
+) -> Any:
+    """The shared agent of ``agent_type`` that routes without an agent id run as.
+
+    Active before shadow before anything else; never a personal agent.
+    Returns ``None`` when there is none; raises ``RuntimeError`` when the
+    lookup fails or the company does not belong to the tenant.
+    """
+    from sqlalchemy import case, select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+    from core.models.company import Company
+
+    tenant_id = str(tid)
     try:
         async with get_tenant_session(tid) as session:
             if company_uuid is not None:
@@ -1128,9 +1152,7 @@ async def _resolve_agent_connector_ids_for_type(
                     .limit(1)
                 )
             ).scalar_one_or_none()
-            if row is None:
-                return []
-            return list(getattr(row, "connector_ids", None) or [])
+            return row
     except (RuntimeError, SQLAlchemyError) as exc:
         logger.warning(
             "resolve_agent_connector_ids_failed",
@@ -1139,6 +1161,57 @@ async def _resolve_agent_connector_ids_for_type(
             error=str(exc),
         )
         raise RuntimeError("Failed to resolve agent connector bindings") from exc
+
+
+async def _resolve_run_grant_for_type(
+    *,
+    tenant_id: str,
+    agent_type: str,
+    company_id: str | _uuid.UUID | None,
+    caller_token: str | None,
+    caller_agent_id: str | None,
+    runtime: str,
+) -> RunGrant:
+    """PRD F-1 run grant for routes that run an agent *type* (A2A, MCP).
+
+    The run executes as the shared agent of that type the routes take
+    connector bindings from, so its grant is that agent's. A caller token
+    issued to that same agent is used as the grant; a caller token for any
+    other agent is kept alongside it and both must allow every tool call. With
+    no such agent, or a failed lookup, the run agent has no grant: every tool
+    call is recorded (warn) or refused (deny).
+    """
+    mode = await resolve_enforcement_mode(tenant_id)
+    if mode is EnforcementMode.OFF:
+        return await resolve_run_grant(
+            tenant_id=tenant_id, agent_id="", supplied_token=caller_token, mode=mode, runtime=runtime
+        )
+    try:
+        tid = _uuid.UUID(str(tenant_id))
+        company_uuid = (
+            company_id if isinstance(company_id, _uuid.UUID) else _uuid.UUID(str(company_id)) if company_id else None
+        )
+        row = await _select_agent_for_type(tid, agent_type, company_uuid)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        logger.warning("grant_resolution_type_lookup_failed", agent_type=agent_type, error_type=type(exc).__name__)
+        return RunGrant(
+            mode=mode,
+            source="none",
+            missing_sub_reason="lookup_failed",
+            caller_token=(caller_token or "").strip(),
+            caller_agent_id=str(caller_agent_id or ""),
+        )
+    config = getattr(row, "config", None) or {} if row is not None else {}
+    grantex = config.get("grantex") if isinstance(config, dict) else None
+    return await resolve_run_grant(
+        tenant_id=tenant_id,
+        agent_id=str(row.id) if row is not None else "",
+        grantex_config=(grantex if isinstance(grantex, dict) else {}) if row is not None else None,
+        mode=mode,
+        runtime=runtime,
+        caller_token=caller_token,
+        caller_agent_id=caller_agent_id,
+    )
 
 
 async def _resolve_connector_configs(
@@ -2918,6 +2991,7 @@ async def update_agent(
 )
 async def run_agent(
     agent_id: UUID,
+    request: Request,
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
@@ -3104,6 +3178,21 @@ async def run_agent(
     if grantex_config:
         grant_token = grantex_config.get("grant_token", "")
 
+    # PRD F-1: resolve the run's grant and ``grants.enforce_closed`` mode once
+    # for both the deterministic shadow route and the LangGraph run. In ``off``
+    # the legacy token above is passed through unchanged. A request that
+    # authenticated with a Grantex token is bound to it: every tool call must
+    # be allowed by that token as well as by the agent's grant.
+    run_caller = caller_grant_from_request(request)
+    run_grant = await resolve_run_grant(
+        tenant_id=tenant_id,
+        agent_id=str(agent_id),
+        supplied_token=grant_token,
+        grantex_config=grantex_config if isinstance(grantex_config, dict) else {},
+        runtime="langgraph",
+        **run_caller.resolve_kwargs(),
+    )
+
     # 5a. Budget check (if cost controls configured)
     cost_controls = agent_config.get("cost_controls", {})
     monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if cost_controls else 0
@@ -3281,6 +3370,21 @@ async def run_agent(
         # the same helper for #440 / BUG-17 closure; here we reuse it
         # for the shadow path. Gated on fixture_tool_authorized above.
         if fixture.get("deterministic_route") == "tds" and fixture.get("prompt"):
+            # The deterministic route invokes zoho_books.calculate_tds
+            # directly, so it takes the same grant check as a graph tool call
+            # (PRD F-1). When refused, fall through to the graph, which checks
+            # again.
+            if not await direct_tool_call_permitted(
+                run_grant,
+                connector="zoho_books",
+                tool="calculate_tds",
+                tenant_id=tenant_id,
+                agent_id=str(agent_id),
+                agent_type=str(agent_config.get("agent_type") or ""),
+                runtime="deterministic_tds",
+            ):
+                fixture = {**fixture, "deterministic_route": ""}
+        if fixture.get("deterministic_route") == "tds" and fixture.get("prompt"):
             try:
                 from api.v1._tds_routing import try_tds_deterministic_route
 
@@ -3368,6 +3472,7 @@ async def run_agent(
                     else agent_config.get("hitl_condition", "")
                 ),
                 grant_token=grant_token,
+                run_grant=run_grant,
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
@@ -3455,6 +3560,7 @@ async def run_agent(
                 "reasoning_trace": task_trace[:10],
                 "runtime": "langgraph",
                 "has_hitl": bool(hitl_trigger),
+                **({"grant_denial": lg_result["grant_denial"]} if lg_result.get("grant_denial") else {}),
             },
         )
         session.add(audit_entry)
@@ -3485,6 +3591,11 @@ async def run_agent(
                 "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
                 "domain": agent_config.get("domain", "ops"),
             }
+            # A run bound to a caller token stays bound after approval: the
+            # resume has no token, so its tool calls are refused (PRD F-1).
+            caller_marker = run_caller.marker()
+            if caller_marker is not None:
+                resume_spec[RESUME_SPEC_KEY][CALLER_GRANT_KEY] = caller_marker
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
@@ -3622,6 +3733,9 @@ async def run_agent(
         "error": task_error or None,
         "review_learning": review_learning,
     }
+    if lg_result.get("grant_denial"):
+        # PRD F-1 deny: the reason code for the refused tool call.
+        response["grant_denial"] = lg_result["grant_denial"]
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response

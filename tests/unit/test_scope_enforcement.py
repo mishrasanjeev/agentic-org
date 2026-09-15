@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -553,6 +555,7 @@ class TestGatewayEnforcement:
                 tool_name="process_refund",
                 params={"charge_id": "ch_123"},
                 grant_token="grantex-test-token",
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
 
         # Should be denied by grantex.enforce, not by keyword guessing
