@@ -9,7 +9,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
   from scripted sequences (`scripted/<name>`, ids matching the in-process
   scripted model) or from cassettes keyed and stored by `core/model_replay.py`.
-  Replay misses are errors and are never forwarded; record mode forwards to a
+  Options that change the answer (`tool_choice`, `response_format`, `seed`, ...)
+  are part of the key and unknown request fields are rejected. Replay misses
+  are errors and are never forwarded; record mode forwards to a
   real provider and refuses to start without `MODEL_RECORD_API_KEY`. The API
   and worker send `vllm:` models to it, and the agents `make seed` creates use
   `vllm:scripted/final-only`, so agents run locally without model credentials.

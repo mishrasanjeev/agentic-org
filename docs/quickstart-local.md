@@ -251,11 +251,18 @@ Tool-call ids are derived from the tool name and arguments exactly as the
 in-process scripted model (`core/test_doubles/scripted_model.py`) derives them.
 A conversation longer than the script (409 `script_exhausted`), a tool the
 request did not bind (400 `script_mismatch`) and an unknown script (404) are
-errors. `final-only` ships as an example that answers once, with no tools.
+errors. A malformed script (a step that is not exactly one of `tool_calls` or
+`content`, arguments that are not an object, an argument named `call_id`)
+answers 422 `invalid_script`. `final-only` ships as an example that answers
+once, with no tools.
 
 **Cassettes.** Any other model id is answered from
 `tests/cassettes/model_stub/`, keyed and stored with `core/model_replay.py`
-(model id, messages, tool schemas, temperature, max tokens, stop). In the
+(model id, messages, tool schemas, temperature, max tokens, stop, and, when a
+request sends them, `tool_choice`, `response_format`, `top_p`, `seed`,
+`parallel_tool_calls`, `frequency_penalty`, `presence_penalty`, `logit_bias` and
+`reasoning_effort`). A request field the stub neither keys nor understands is
+rejected with 400 `unsupported_parameter` rather than ignored. In the
 default `replay` mode a request with no cassette gets 404 `cassette_miss`, with
 the same explanation of where it differs from the nearest recording as the
 test harness gives, and nothing is forwarded. To record, run the stack with
