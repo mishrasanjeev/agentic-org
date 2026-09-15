@@ -295,7 +295,7 @@ def test_conditions_nested_too_deeply_are_rejected() -> None:
             "    effect: {<<: {tier: high}, reason: r}\n",
             R.YAML_ALIAS,
         ),
-        ("policy: !!binary aGVsbG8=\nversion: 1.0.0\n", R.INVALID_VALUE),
+        ("policy: !!binary aGVsbG8=\nversion: 1.0.0\n", R.YAML_INVALID),
         ("policy: !custom p\n", R.YAML_INVALID),
         ("? [a, b]\n: 1\n", R.INVALID_VALUE),
     ],
