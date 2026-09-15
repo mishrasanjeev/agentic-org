@@ -5,6 +5,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- `make test`, `make check` and `make e2e`. `make test` runs the unit and
+  contract suites with the 55% coverage floor, then the integration suites
+  against the local stack's Postgres and Redis in a separate `agenticorg_test`
+  database that is recreated each run (the development database is never
+  touched). `make check` runs ruff, mypy, bandit, gitleaks, the licence-header
+  check, JSON Schema validation of `schemas/` and pip-audit. Both run in a new
+  `agenticorg-tools` image (`Dockerfile.tools`, Python 3.12) so only Docker
+  and make are needed; `RUNNER=local` uses a local interpreter. `make e2e`
+  runs the new `ui/e2e/dev-stack.config.ts` Playwright suite against the
+  running stack in the official Playwright image. See "Tests and checks" in
+  `docs/quickstart-local.md`.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
