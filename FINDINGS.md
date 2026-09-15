@@ -250,3 +250,91 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** refuse to create or update a policy step whose `approver_role` is
   not a known role, and have `_can_decide` deny (with a reason) when the
   assignee role is unknown.
+
+## A-20 — Runner's `GraphInterrupt` fallback reads state synchronously
+
+- **Found:** switching the LangGraph checkpointer to Postgres (PRD F-2, 2026-09-15).
+- **What:** `core/langgraph/runner.py::run_agent` handles `GraphInterrupt` by
+  calling `compiled.get_state(config)`, the synchronous API, from inside the
+  event loop. `AsyncPostgresSaver` refuses synchronous reads from the loop
+  thread, so with `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres` that read
+  always raises, is swallowed by the surrounding `except Exception`, and the
+  result reports no output, confidence or token usage. LangGraph 1.x no longer
+  raises `GraphInterrupt` from a top-level `ainvoke` (it returns
+  `__interrupt__`), so the branch is only reached by older or nested
+  invocations.
+- **Fix:** use `await compiled.aget_state(config)` and update
+  `tests/regression/test_bug_sheet_langgraph_20260914.py::TestSheet36HitlUsage::test_graph_interrupt_exception_path_reports_real_tokens`,
+  which mocks the synchronous `get_state`, in the same change (or delete the
+  branch if nested invocation is not supported).
+
+## A-21 — Key rotation tooling does not cover checkpoint ciphertext
+
+- **Found:** encrypting LangGraph checkpoints with the vault keyring (PRD F-2, 2026-09-15).
+- **What:** `core/crypto/rewrap.py` and `core/crypto/verify_all.py` walk
+  registered ORM columns holding key-stamped `agko_v{id}$` strings through
+  tenant RLS scopes. Checkpoint payloads in `checkpoint_blobs.blob` and
+  `checkpoint_writes.blob` are unstamped `MultiFernet` tokens in tables with no
+  ORM model and no `tenant_id`, so `verify_all --check=<kid>` reports a key as
+  unreferenced while paused runs still depend on it, and rewrap never moves
+  them to the active key. Retiring a key strands those runs
+  (`checkpoint_decrypt_failed`).
+- **Fix:** add a checkpoint scanner to both tools that runs as the database
+  owner over the checkpoint tables, using `MultiFernet.rotate` for rewrap and a
+  trial decrypt per retired key for verification (or stamp the key id into the
+  cipher name), with a test that a key referenced only by a checkpoint blocks
+  retirement. Until then, keep retired keys in the keyring for longer than the
+  approval window plus the checkpoint retention period.
+
+## A-22 — No tenant offboarding path removes checkpoints
+
+- **Found:** adding tenant checkpoint deletion (PRD F-2, 2026-09-15).
+- **What:** `core.langgraph.checkpointer.delete_tenant_checkpoints(tenant_id)`
+  deletes every `tenant:<id>:` thread, but the repository has no tenant
+  deletion or offboarding flow to call it from. Subject-level DSAR erasure
+  (`audit/dsar.py`) cannot reach checkpoint content either: it is encrypted and
+  not indexed by subject, so a subject's data in a paused or finished run
+  remains until the thread is deleted.
+- **Fix:** call `delete_tenant_checkpoints` from the tenant offboarding job when
+  one is built, and have DSAR erasure record that checkpoint content is
+  removed by retention (or delete the tenant's threads older than the request)
+  so the erasure status stays honest.
+
+## A-23 — Chat-created approvals cannot resume their run
+
+- **Found:** wiring approval decisions to checkpoint resume (PRD F-2, 2026-09-15).
+- **What:** `api/v1/chat.py::_record_chat_hitl` creates `hitl_queue` rows for
+  chat turns that paused for approval but never passes a server-generated
+  thread to `run_agent` or stores `checkpoint_thread_id`, so those approvals
+  never resume the run even with `approvals.resume_agent_runs` on (the resume
+  is not scheduled). Only `POST /agents/{id}/run` records the thread and the
+  resume parameters.
+- **Fix:** generate the thread with `core.langgraph.thread_ids.new_thread_id`
+  in the chat path, store it and the `_checkpoint_resume` parameters on the
+  row the way `api/v1/agents.py` does, and extend
+  `tests/unit/test_approval_resumes_agent_run.py` to the chat route.
+
+## A-24 — No automatic retention for the Postgres checkpoint store
+
+- **Found:** documenting checkpoint retention (PRD F-2, 2026-09-15).
+- **What:** with `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres` every agent run
+  writes checkpoints, including runs that never pause, and only runs resumed
+  after approval are deleted. Nothing else removes them, so
+  `checkpoints`/`checkpoint_blobs`/`checkpoint_writes` grow with total run
+  volume. `docs/RUNBOOKS.md` gives the manual cleanup SQL.
+- **Fix:** a scheduled Celery task running that cleanup in batches (threads
+  older than the approval window with no open approval), with a metric for
+  rows removed; optionally delete a per-run thread as soon as its run ends
+  without pausing (not voice threads, which rely on continuity).
+
+## A-25 — A refused, failed or interrupted approval resume cannot be retried
+
+- **Found:** implementing approval-driven resume (PRD F-2, 2026-09-15).
+- **What:** `core/approvals/agent_run_resume.py` claims an approval once
+  (`context.checkpoint_resume.state`) and refuses any later resume. A resume
+  that failed on a transient store outage, or whose process died while
+  `state` was `resuming`, leaves the run paused with no API or task to try
+  again; `decide` returns 409 for the already-decided approval.
+- **Fix:** an admin-only retry endpoint (or scheduled sweep) that re-claims
+  approvals in `refused` with a transient reason (`checkpoint_store_unreachable`)
+  or `resuming` older than the run timeout, with tests for double-claim safety.
