@@ -237,7 +237,38 @@ Remove an entry in the pull request that fixes it.
   approvals in `refused` with a transient reason (`checkpoint_store_unreachable`)
   or `resuming` older than the run timeout, with tests for double-claim safety.
 
-## A-26 — Encrypted-migration gates cannot read JSONB ciphertext containers
+## A-26 — Importing the provider interface loads every connector
+
+- **Found:** building the provider conformance suite (2026-09-15).
+- **What:** `connectors/__init__.py` imports all connector modules at package
+  import. `connectors.framework.verification_provider`, which every provider
+  package and `agenticorg.testing.provider_conformance` import, therefore
+  pulls in every connector and its third-party dependencies, so a provider
+  package's tests need the whole platform's dependency set installed.
+- **Fix:** register native connectors from an explicit function called at
+  application and worker startup (before plugin loading) instead of at
+  package import, or move `connectors/framework` into a package with no
+  import-time side effects. Keep the native-before-plugin ordering test.
+
+## A-27 — mypy skips every module under connectors/
+
+- **Found:** type-checking the provider seam (2026-09-15).
+- **What:** `pyproject.toml` sets `ignore_errors = true` for `connectors.*`,
+  so CI's `mypy .` reports nothing for the new provider interface, registry
+  and mock provider, or for any connector. The new modules were checked
+  separately with a stricter configuration and are clean.
+- **Fix:** replace the blanket override with a per-module list of the legacy
+  connectors that still fail, so new code under `connectors/` is checked.
+
+## A-28 — CLAUDE.md lists the preflight test suites without tests/contract
+
+- **Found:** adding `tests/contract/` to the CI unit job and
+  `scripts/preflight.sh` (2026-09-15).
+- **What:** "Required Before Every Push" in `CLAUDE.md` still lists
+  `pytest tests/regression/ tests/unit/ tests/security/ tests/connector_harness/`.
+- **Fix:** add `tests/contract/` to that line.
+
+## A-29 — Encrypted-migration gates cannot read JSONB ciphertext containers
 
 - **Found:** re-running `v6z24_case_pseudonym_maps` on a table with rows
   (2026-09-15).
@@ -253,7 +284,7 @@ Remove an entry in the pull request that fixes it.
   both sampling methods the way `core.crypto.verify_all.parse_encrypted_container`
   does, with a test over a JSONB column.
 
-## A-27 — Key rewrap silently skips JSONB ciphertext outside `*credentials_encrypted`
+## A-30 — Key rewrap silently skips JSONB ciphertext outside `*credentials_encrypted`
 
 - **Found:** registering `case_pseudonym_maps.mapping_encrypted` with
   `core/crypto/verify_all.py` (2026-09-15).
@@ -269,7 +300,7 @@ Remove an entry in the pull request that fixes it.
   and `_wrap_ciphertext_for_column`, skip or separately handle `env1:` values
   with an explicit count, and add both columns to the rewrap tests.
 
-## A-28 — Some model calls send personal data without redaction
+## A-31 — Some model calls send personal data without redaction
 
 - **Found:** tracing every model caller for pre-model pseudonymisation
   (2026-09-15).

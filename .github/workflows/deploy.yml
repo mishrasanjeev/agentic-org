@@ -222,7 +222,7 @@ jobs:
         run: python scripts/check_billing_catalog.py
       - name: Enforce prompt and default tool references
         run: python scripts/check_prompt_tools.py
-      - run: pytest tests/unit/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
+      - run: pytest tests/unit/ tests/contract/ tests/connector_harness/ tests/security/ tests/regression/ --cov=. --cov-report=xml --cov-fail-under=55
         env:
           AGENTICORG_SECRET_KEY: ci-test-secret-key-minimum-16
       - uses: codecov/codecov-action@v7

@@ -1,0 +1,106 @@
+{
+  "schema_version": "1.0.0",
+  "disposition_id": "dsp-0000000000000001",
+  "case_id": "case_0001",
+  "screening_id": "scr-0000000000000001",
+  "hit_id": "hit-0000000000000001",
+  "proposed_by": {
+    "agent": "screening_disposition",
+    "agent_version": "0.1.0",
+    "prompt_version": "2026-09-01"
+  },
+  "proposed_at": "2026-09-01T09:06:00Z",
+  "comparisons": [
+    {
+      "identifier": "name",
+      "subject_value": "Tamsin Quellbridge",
+      "hit_value": "Tamsin Quelbridge",
+      "result": "partial_match",
+      "note": "One letter differs.",
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:watchlist:entry:0007",
+          "field": "names[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": "excerpt:mock-watchlist-0007"
+        }
+      ]
+    },
+    {
+      "identifier": "date_of_birth",
+      "subject_value": "1983-11",
+      "hit_value": "1958-02-14",
+      "result": "mismatch",
+      "note": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:watchlist:entry:0007",
+          "field": "dates_of_birth[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "identifier": "nationality",
+      "subject_value": "GB, IE",
+      "hit_value": "ZZ",
+      "result": "mismatch",
+      "note": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:watchlist:entry:0007",
+          "field": "nationalities[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    },
+    {
+      "identifier": "address",
+      "subject_value": null,
+      "hit_value": null,
+      "result": "not_comparable",
+      "note": "Neither record carries an address.",
+      "evidence": []
+    },
+    {
+      "identifier": "associated_entities",
+      "subject_value": "Brightwater Lantern Works Ltd",
+      "hit_value": "Northwind Glassblowing Collective",
+      "result": "mismatch",
+      "note": null,
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:watchlist:entry:0007",
+          "field": "associated_entities[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    }
+  ],
+  "proposed_outcome": "false_positive",
+  "confidence_band": "high",
+  "rationale": "The name nearly matches but date of birth, nationality and associated entities all differ.",
+  "evidence": [
+    {
+      "provider": "mock",
+      "record_id": "mock:screening:scr-0000000000000001",
+      "field": "hits[0]",
+      "retrieved_at": "2026-09-01T09:05:00Z",
+      "excerpt_ref": null
+    }
+  ],
+  "review": {
+    "action": "overridden",
+    "final_outcome": "insufficient_information",
+    "analyst_id": "user:analyst-a",
+    "reviewed_at": "2026-09-01T10:00:00Z",
+    "reason": "Requesting a certified passport copy before closing."
+  }
+}

@@ -101,13 +101,9 @@ class DSCAdapter:
         password = self.dsc_password.encode("utf-8") if self.dsc_password else None
 
         try:
-            self._private_key, self._certificate, self._chain = (
-                load_key_and_certificates(pfx_data, password)
-            )
+            self._private_key, self._certificate, self._chain = load_key_and_certificates(pfx_data, password)
         except (ValueError, TypeError) as exc:
-            raise ValueError(
-                f"Failed to load DSC certificate — wrong password or corrupt file: {exc}"
-            ) from exc
+            raise ValueError(f"Failed to load DSC certificate — wrong password or corrupt file: {exc}") from exc
 
         if self._private_key is None:
             raise ValueError("DSC file does not contain a private key")
@@ -159,14 +155,8 @@ class DSCAdapter:
         not_before = cert.not_valid_before_utc
         not_after = cert.not_valid_after_utc
 
-        subject_parts = {
-            attr.oid._name: attr.value
-            for attr in cert.subject
-        }
-        issuer_parts = {
-            attr.oid._name: attr.value
-            for attr in cert.issuer
-        }
+        subject_parts = {attr.oid._name: attr.value for attr in cert.subject}
+        issuer_parts = {attr.oid._name: attr.value for attr in cert.issuer}
 
         return {
             "subject": subject_parts,

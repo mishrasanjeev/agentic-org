@@ -1,0 +1,550 @@
+{
+  "schema_version": "1.0.0",
+  "event_id": "00000000-0000-4000-8000-000000000001",
+  "event_type": "case.completed",
+  "occurred_at": "2026-09-01T09:10:05Z",
+  "case": {
+    "schema_version": "1.0.0",
+    "case_id": "case_0001",
+    "purpose": "aml.cdd.onboarding",
+    "state": "awaiting_decision",
+    "created_at": "2026-09-01T08:55:00Z",
+    "updated_at": "2026-09-01T09:10:00Z",
+    "application": {
+      "legal_name": "Brightwater Lantern Works Ltd",
+      "trading_names": [
+        "Brightwater Lanterns"
+      ],
+      "jurisdiction": "GB",
+      "identifiers": [
+        {
+          "scheme": "gb_company_number",
+          "value": "00000001"
+        }
+      ],
+      "registered_address": {
+        "lines": [
+          "1 Example Street"
+        ],
+        "locality": "Exampleton",
+        "region": null,
+        "postal_code": "ZZ99 9ZZ",
+        "country": "GB"
+      },
+      "website": "https://brightwater-lanterns.example.com",
+      "declared_activity": "manufacturing_lighting",
+      "declared_owners": [
+        {
+          "name": "Orla Venncastle",
+          "kind": "person",
+          "date_of_birth": "1971-04",
+          "nationalities": [
+            "GB"
+          ],
+          "ownership_pct": 60,
+          "identifiers": []
+        },
+        {
+          "name": "Ansel Pikeworth",
+          "kind": "person",
+          "date_of_birth": null,
+          "nationalities": [
+            "GB"
+          ],
+          "ownership_pct": 40,
+          "identifiers": []
+        }
+      ]
+    },
+    "subject": {
+      "provider": "mock",
+      "provider_ref": "mock-gb-00000001",
+      "jurisdiction": "GB",
+      "identifiers": [
+        {
+          "scheme": "gb_company_number",
+          "value": "00000001"
+        }
+      ]
+    },
+    "decision": null
+  },
+  "memo": {
+    "schema_version": "1.0.0",
+    "memo_id": "memo_0001",
+    "case_id": "case_0001",
+    "created_at": "2026-09-01T09:10:00Z",
+    "subject": {
+      "provider": "mock",
+      "provider_ref": "mock-gb-00000001",
+      "jurisdiction": "GB",
+      "identifiers": [
+        {
+          "scheme": "gb_company_number",
+          "value": "00000001"
+        }
+      ]
+    },
+    "sections": [
+      {
+        "section_id": "registry",
+        "status": "complete",
+        "findings": [],
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:profile",
+            "field": "company_status",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      },
+      {
+        "section_id": "ownership",
+        "status": "complete",
+        "findings": [
+          {
+            "code": "missing_owner",
+            "severity": "medium",
+            "statement": "Declared owner Ansel Pikeworth does not appear in the ownership graph at or above 25%.",
+            "evidence": [
+              {
+                "provider": "mock",
+                "record_id": "mock:company:00000001:owners",
+                "field": "items",
+                "retrieved_at": "2026-09-01T09:00:00Z",
+                "excerpt_ref": null
+              }
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:owners",
+            "field": "items",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      },
+      {
+        "section_id": "screening",
+        "status": "partial",
+        "findings": [
+          {
+            "code": "screening_hit",
+            "severity": "low",
+            "statement": "One probable false-positive sanctions hit is awaiting analyst review.",
+            "evidence": [
+              {
+                "provider": "mock",
+                "record_id": "mock:watchlist:entry:0007",
+                "field": "names[0]",
+                "retrieved_at": "2026-09-01T09:05:00Z",
+                "excerpt_ref": "excerpt:mock-watchlist-0007"
+              }
+            ]
+          }
+        ],
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:screening:scr-0000000000000001",
+            "field": "hits",
+            "retrieved_at": "2026-09-01T09:05:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      },
+      {
+        "section_id": "web_presence",
+        "status": "not_available",
+        "not_available_reason": "capability_not_supported",
+        "findings": [],
+        "evidence": []
+      }
+    ],
+    "policy_result": {
+      "schema_version": "1.0.0",
+      "policy": {
+        "policy_id": "business_onboarding_uk",
+        "version": "1.2.0",
+        "example": true,
+        "reviewed_by": null
+      },
+      "inputs_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+      "score": 40,
+      "tier": "medium",
+      "reasons": [
+        {
+          "rule_id": "ownership_reconciled",
+          "tier": "medium",
+          "reason": "Declared owners do not reconcile with the ownership graph",
+          "score": 40,
+          "inputs": {
+            "ownership.missing_owners": 1
+          }
+        }
+      ]
+    },
+    "recommendation": {
+      "proposed": "refer",
+      "basis": "policy_result",
+      "requires_human_decision": true
+    },
+    "missing_items": [
+      {
+        "item": "owner_evidence",
+        "reason": "Evidence of Ansel Pikeworth's ownership is needed to reconcile declared owners."
+      }
+    ],
+    "excerpts": [
+      {
+        "excerpt_ref": "excerpt:mock-watchlist-0007",
+        "provider": "mock",
+        "record_id": "mock:watchlist:entry:0007",
+        "media_type": "text/plain",
+        "sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+      }
+    ],
+    "provenance": {
+      "agent": "business_underwriter",
+      "agent_version": "0.1.0",
+      "prompt_version": "2026-09-01",
+      "model_id": "scripted-model",
+      "model_confidence": null
+    }
+  },
+  "screening_results": [
+    {
+      "schema_version": "1.0.0",
+      "screening_id": "scr-0000000000000001",
+      "provider": "mock",
+      "subject_kind": "person",
+      "subject": {
+        "name": "Tamsin Quellbridge",
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "jurisdiction": null,
+        "address": null,
+        "identifiers": []
+      },
+      "screened_at": "2026-09-01T09:05:00Z",
+      "list_types": [
+        "sanctions",
+        "pep",
+        "watchlist"
+      ],
+      "hits": [
+        {
+          "hit_id": "hit-0000000000000001",
+          "list_type": "sanctions",
+          "source": {
+            "name": "Mock Consolidated Restrictive Measures List",
+            "authority": "Mock Treasury Office",
+            "jurisdiction": "ZZ"
+          },
+          "entry_kind": "person",
+          "matched_name": "Tamsin Quelbridge",
+          "aliases": [
+            "T. Quelbridge"
+          ],
+          "dates_of_birth": [
+            "1958-02-14"
+          ],
+          "nationalities": [
+            "ZZ"
+          ],
+          "addresses": [],
+          "associated_entities": [
+            "Northwind Glassblowing Collective"
+          ],
+          "listed_on": "2014-03-01",
+          "name_similarity": 0.94,
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "names[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": "excerpt:mock-watchlist-0007"
+            }
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:screening:scr-0000000000000001",
+          "field": "hits",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ]
+    }
+  ],
+  "screening_dispositions": [
+    {
+      "schema_version": "1.0.0",
+      "disposition_id": "dsp-0000000000000001",
+      "case_id": "case_0001",
+      "screening_id": "scr-0000000000000001",
+      "hit_id": "hit-0000000000000001",
+      "proposed_by": {
+        "agent": "screening_disposition",
+        "agent_version": "0.1.0",
+        "prompt_version": "2026-09-01"
+      },
+      "proposed_at": "2026-09-01T09:06:00Z",
+      "comparisons": [
+        {
+          "identifier": "name",
+          "subject_value": "Tamsin Quellbridge",
+          "hit_value": "Tamsin Quelbridge",
+          "result": "partial_match",
+          "note": "One letter differs.",
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "names[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": "excerpt:mock-watchlist-0007"
+            }
+          ]
+        },
+        {
+          "identifier": "date_of_birth",
+          "subject_value": "1983-11",
+          "hit_value": "1958-02-14",
+          "result": "mismatch",
+          "note": null,
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "dates_of_birth[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": null
+            }
+          ]
+        },
+        {
+          "identifier": "nationality",
+          "subject_value": "GB, IE",
+          "hit_value": "ZZ",
+          "result": "mismatch",
+          "note": null,
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "nationalities[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": null
+            }
+          ]
+        },
+        {
+          "identifier": "address",
+          "subject_value": null,
+          "hit_value": null,
+          "result": "not_comparable",
+          "note": "Neither record carries an address.",
+          "evidence": []
+        },
+        {
+          "identifier": "associated_entities",
+          "subject_value": "Brightwater Lantern Works Ltd",
+          "hit_value": "Northwind Glassblowing Collective",
+          "result": "mismatch",
+          "note": null,
+          "evidence": [
+            {
+              "provider": "mock",
+              "record_id": "mock:watchlist:entry:0007",
+              "field": "associated_entities[0]",
+              "retrieved_at": "2026-09-01T09:05:00Z",
+              "excerpt_ref": null
+            }
+          ]
+        }
+      ],
+      "proposed_outcome": "false_positive",
+      "confidence_band": "high",
+      "rationale": "The name nearly matches but date of birth, nationality and associated entities all differ.",
+      "evidence": [
+        {
+          "provider": "mock",
+          "record_id": "mock:screening:scr-0000000000000001",
+          "field": "hits[0]",
+          "retrieved_at": "2026-09-01T09:05:00Z",
+          "excerpt_ref": null
+        }
+      ],
+      "review": {
+        "action": "overridden",
+        "final_outcome": "insufficient_information",
+        "analyst_id": "user:analyst-a",
+        "reviewed_at": "2026-09-01T10:00:00Z",
+        "reason": "Requesting a certified passport copy before closing."
+      }
+    }
+  ],
+  "ownership_graph": {
+    "schema_version": "1.0.0",
+    "provider": "mock",
+    "subject": {
+      "provider": "mock",
+      "provider_ref": "mock-gb-00000001",
+      "jurisdiction": "GB",
+      "identifiers": [
+        {
+          "scheme": "gb_company_number",
+          "value": "00000001"
+        }
+      ]
+    },
+    "subject_node_id": "biz-00000001",
+    "as_of": "2026-09-01T09:00:00Z",
+    "completeness": "complete",
+    "nodes": [
+      {
+        "node_id": "biz-00000001",
+        "kind": "business",
+        "name": "Brightwater Lantern Works Ltd",
+        "jurisdiction": "GB",
+        "identifiers": [
+          {
+            "scheme": "gb_company_number",
+            "value": "00000001"
+          }
+        ],
+        "date_of_birth": null,
+        "nationalities": [],
+        "address": {
+          "lines": [
+            "1 Example Street"
+          ],
+          "locality": "Exampleton",
+          "region": null,
+          "postal_code": "ZZ99 9ZZ",
+          "country": "GB"
+        },
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:profile",
+            "field": "company_name",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      },
+      {
+        "node_id": "psn-orla-venncastle",
+        "kind": "person",
+        "name": "Orla Venncastle",
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1971-04",
+        "nationalities": [
+          "GB"
+        ],
+        "address": null,
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:owners:psn-orla-venncastle",
+            "field": "name",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      },
+      {
+        "node_id": "psn-tamsin-quellbridge",
+        "kind": "person",
+        "name": "Tamsin Quellbridge",
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1983-11",
+        "nationalities": [
+          "GB",
+          "IE"
+        ],
+        "address": null,
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:owners:psn-tamsin-quellbridge",
+            "field": "name",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from_node_id": "psn-orla-venncastle",
+        "to_node_id": "biz-00000001",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 50,
+          "max": 75
+        },
+        "voting_pct": {
+          "min": 50,
+          "max": 75
+        },
+        "started_on": "2019-06-01",
+        "ended_on": null,
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:owners:psn-orla-venncastle",
+            "field": "share_pct",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": "excerpt:mock-00000001-owners-orla-venncastle"
+          }
+        ]
+      },
+      {
+        "from_node_id": "psn-tamsin-quellbridge",
+        "to_node_id": "biz-00000001",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 25,
+          "max": 50
+        },
+        "voting_pct": null,
+        "started_on": "2019-06-01",
+        "ended_on": null,
+        "evidence": [
+          {
+            "provider": "mock",
+            "record_id": "mock:company:00000001:owners:psn-tamsin-quellbridge",
+            "field": "share_pct",
+            "retrieved_at": "2026-09-01T09:00:00Z",
+            "excerpt_ref": null
+          }
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "provider": "mock",
+        "record_id": "mock:company:00000001:owners",
+        "field": "items",
+        "retrieved_at": "2026-09-01T09:00:00Z",
+        "excerpt_ref": null
+      }
+    ]
+  }
+}
