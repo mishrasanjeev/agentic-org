@@ -5,6 +5,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Governance documentation (`docs/governance/README.md`): how grants, policy
+  scores and human decisions interact for governed cases - read-only tool sets
+  and the grant check at the tool gateway, deterministic policy tiers that
+  gate the recommendation while model confidence stays metadata, decisions
+  recorded only with verified decision grants, analyst reviews and approved
+  information requests, the signed hand-off, and what is recorded for audit.
+  Links the case lifecycle, hand-off, agent and security pages.
 - Portable case hand-off for governed cases (`core/cases/push.py`, PRD A-8):
   a `case_push` event is written to `case_push_outbox` in the same transaction
   as the case change (`case.completed`, `case.updated`, `case.decided`) and
