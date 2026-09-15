@@ -1,0 +1,56 @@
+name: Vendor Denylist
+
+# Fails when a pull request names a denylisted third-party vendor in its added
+# lines, file paths, commit messages, branch name, title or description. Only
+# salted hashes of the terms are in the repository (config/denylist.sha256).
+# See CONTRIBUTING.md ("Vendor-neutral names").
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  denylist:
+    name: Vendor denylist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - name: Scan the change
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pull-request.txt"
+              python scripts/check_denylist.py scan --base "$PR_BASE" --head "$PR_HEAD" \
+                --branch "$PR_BRANCH" --text-file "$RUNNER_TEMP/pull-request.txt" ;;
+            push)
+              if [[ "$PUSH_BEFORE" =~ ^0+$ ]]; then
+                echo "::error::no previous commit to compare against; run the audit instead"
+                exit 2
+              fi
+              python scripts/check_denylist.py scan --base "$PUSH_BEFORE" --head "$PUSH_AFTER" --branch "$REF_NAME" ;;
+            *)
+              python scripts/check_denylist.py scan --base origin/main --head HEAD --branch "$REF_NAME" ;;
+          esac

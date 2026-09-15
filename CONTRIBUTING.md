@@ -111,6 +111,37 @@ same check over your branch:
 python scripts/check_license_headers.py --base origin/main
 ```
 
+### Vendor-neutral names
+
+Code, tests, fixtures, documentation, commit messages, branch names and pull
+requests never name a commercial verification, KYB/KYC, identity-data or
+sanctions-screening vendor. Interfaces are built from the domain; the mock
+provider is `mock` and documentation and examples use `acme_kyb`.
+
+`scripts/check_denylist.py` enforces this. It splits the added lines of a
+change, its file paths, commit messages and branch name (and, in CI, the pull
+request title and description) into words, and compares salted SHA-256 hashes
+of every run of up to a few consecutive words against `config/denylist.sha256`.
+Spacing, punctuation, case and accents do not matter: `Acme Verify`,
+`acme_verify` and `AcmeVerify` are the same term. Only the salt and the hashes
+are committed and the plain list is kept outside the repository by the
+maintainers, which keeps the names out of the tree and its diffs. The hashes
+are not a secret: with the committed salt anyone can test a guessed name. Failures give the location, not the matched words. The check fails
+closed when git or the hash file misbehaves.
+
+```bash
+python scripts/check_denylist.py scan --base origin/main   # this branch (also part of make check)
+python scripts/check_denylist.py audit                     # every tracked file
+```
+
+The **Vendor Denylist** workflow runs `scan` on every pull request (including
+title and description edits) and on pushes to `main`. If it flags a word that
+is not a vendor name, tell a maintainer rather than working around it. To change
+the list, a maintainer edits the private terms file and regenerates the hashes
+(`python scripts/check_denylist.py build --keep-salt --terms-file <path outside
+the repository>`, which refuses a terms file inside the working tree and
+prints only a count), then commits `config/denylist.sha256`.
+
 ### Python (Backend)
 
 - **Linter**: `ruff check .` (zero violations required)
@@ -128,7 +159,17 @@ python scripts/check_license_headers.py --base origin/main
 
 ### Tests
 
-- Minimum **80% code coverage** enforced in CI
+- Coverage gates in CI: the unit and contract suites must keep total coverage at
+  or above **55%**, with per-module floors from
+  `scripts/check_module_coverage.py`; on pull requests, **75% of the changed
+  lines** (diff-cover) and **75% of every new Python module**
+  (`scripts/check_new_module_coverage.py`, which counts a new module no test
+  imports as 0%) must be covered. Tests and test infrastructure (anything under
+  `tests`, `test_doubles` or `fixtures` directories, and `conftest.py`) count
+  toward neither gate; Alembic revisions are not gated as new modules. A
+  renamed module counts as new. The gate reads a report produced with a single
+  coverage source and fails on a filename it cannot attribute to exactly one
+  module. Run the same gate locally after `make test` with `make coverage-gate`.
 - All PRD test IDs (FT-FIN-xxx, SEC-AUTH-xxx, etc.) must pass
 - Use `pytest-asyncio` for async tests
 - Mock external services, not internal modules
@@ -154,6 +195,33 @@ package out of the runtime image. When a fix has to wait, add an entry to
 `statement` naming the `FINDINGS.md` entry that tracks the fix, and an
 `expired_at` date no more than 30 days out. An expired entry stops applying and
 the scan fails again.
+
+### Dependency audit exceptions
+
+`scripts/run_pip_audit.py` runs `pip-audit` over the project metadata,
+`requirements.txt` and `requirements-v4.txt` on every pull request
+(`security-scan` job), nightly and in `make check`. It fails on any known
+vulnerability, on any dependency it could not audit (for example a package
+that is not on PyPI), and on anything that stops the audit from completing.
+
+Fix a finding by upgrading the dependency (or its parent) whenever a fixed
+version exists. When a fix has to wait:
+
+1. Assess the advisory: is the vulnerable code reachable here, and what
+   mitigates it?
+2. Add an entry to `config/pip-audit-exceptions.toml` with the advisory `id`
+   (or any alias, such as the CVE), the `package`, the `reason` from your
+   assessment, an `owner`, and an `expires` date no more than 90 days out.
+3. Get the entry reviewed in the pull request like any other security change.
+
+A dependency pip-audit cannot audit is accepted the same way with a `[[skip]]`
+entry (`package`, `reason`, `owner`, `expires`). Entries with missing, unknown
+or wrongly typed fields, or duplicates, fail the audit with a message naming
+the entry.
+
+The audit reports every accepted finding with its owner and expiry, warns about
+exceptions that match nothing (remove them), and fails once an entry has
+expired until the dependency is fixed or the review is renewed.
 
 ## Agent Development
 

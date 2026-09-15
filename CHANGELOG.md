@@ -64,6 +64,87 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `core.policy.document.policy_result_document`. Nothing in the platform runs
   the agent yet, so existing behaviour is unchanged. See
   `docs/agents/business-underwriter.md`.
+- **Coverage gate (pull requests):** 75% of changed lines (diff-cover) and 75%
+  of every new Python module (`scripts/check_new_module_coverage.py`; a new
+  module no test imports counts as 0%), on top of the existing 55% total and
+  per-module floors. Tests, test doubles and fixtures are not counted, renamed
+  modules count as new, and a coverage report whose filenames cannot be
+  attributed to exactly one module fails the gate. Runs as
+  `make coverage-gate` and in the new Local Stack workflow. **Break:** pull requests that add or change Python code below
+  these floors now fail.
+- Local Stack workflow: `make check`, and `make dev && make test` followed by
+  the coverage gate, `make seed` and `make e2e`, on fresh runners for every
+  pull request and push to `main`.
+- `pip-audit` now runs through `scripts/run_pip_audit.py` in CI, nightly and
+  `make check`, with dated, owned exceptions in
+  `config/pip-audit-exceptions.toml` (at most 90 days; expired or malformed
+  entries fail). A dependency pip-audit could not audit fails too unless a
+  `[[skip]]` entry accepts it.
+  See "Dependency audit exceptions" in `CONTRIBUTING.md`.
+- Nightly Cassette Re-record workflow: re-records every `model_cassette` test
+  against a live model with the `MODEL_RECORD_API_KEY` secret and reports
+  cassette differences without gating. Its dependencies are hash-pinned
+  (`requirements-rerecord.lock`). See `docs/testing/record-replay.md`.
+- Local Grantex in the development stack: the Grantex auth service from its
+  published image, pinned by digest, with its own `grantex` role and database
+  on the stack's Postgres (created once by `grantex-db`) and Redis index 2.
+  The API and worker use it through `GRANTEX_BASE_URL` and a seeded
+  development `GRANTEX_API_KEY`. The smoke test checks its health and keys and
+  that the API container reaches it with the configured key. See "Local
+  Grantex" in `docs/quickstart-local.md`.
+- OpenAI-compatible model stub in the local stack (`model-stub`,
+  `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
+  from scripted sequences (`scripted/<name>`, ids matching the in-process
+  scripted model) or from cassettes keyed and stored by `core/model_replay.py`.
+  Options that change the answer (`tool_choice`, `response_format`, `seed`, ...)
+  are part of the key and unknown request fields are rejected. Replay misses
+  are errors and are never forwarded; record mode forwards to a
+  real provider and refuses to start without `MODEL_RECORD_API_KEY`. The API
+  and worker send `vllm:` models to it, and the agents `make seed` creates use
+  `vllm:scripted/final-only`, so agents run locally without model credentials.
+  Refuses to start outside development and test. See "Model stub" in
+  `docs/quickstart-local.md`.
+- `make seed` (`scripts/seed_dev.py`): an idempotent development tenant with
+  Approver A and Approver B (the OIDC stub's identities, matched by email), a
+  disabled `dev-oidc` sign-in configuration for the stub, two sample agents in
+  shadow mode with no tools, and a two-step sequential approval policy (it does
+  not require distinct approvers). Fixed ids make repeated runs a no-op; a
+  conflicting existing row fails the run without writes; it refuses
+  production-like runtimes and non-local database hosts unless
+  `AGENTICORG_SEED_ALLOW_REMOTE_DB=1`. Optional
+  `AGENTICORG_SEED_PASSWORD` enables email sign-in. See "Development data" in
+  `docs/quickstart-local.md`.
+- Development OpenID Connect provider in the local stack (`oidc-stub`,
+  `tools/oidc_stub`): discovery, JWKS, authorization code with mandatory PKCE,
+  token and userinfo endpoints, and step-up through `acr_values`, `max_age`
+  and `prompt=login`, with `acr`, `amr` (`["pwd"]` or `["pwd", "hwk"]`) and
+  `auth_time` in its tokens. Seeds Approver A and Approver B from
+  `tools/oidc_stub/config.dev.json`. Refuses to start unless `AGENTICORG_ENV`
+  is development, local or test. Sessions last eight hours, repeated request
+  parameters are rejected, and step-up clients must send `max_age`. `tools/` is
+  excluded from the API image. See "Development identity provider" in
+  `docs/quickstart-local.md`.
+- Vendor-name denylist: `scripts/check_denylist.py` fails a change whose added
+  lines, file paths, commit messages, branch name or pull request title and
+  description name a denylisted verification, identity-data or screening
+  vendor. Terms are matched through salted SHA-256 hashes in
+  `config/denylist.sha256` (80 terms; the plain list is not committed, though
+  the salted hashes are not secret), independent of case, spacing, punctuation
+  and a term glued to the end of a word. Runs in the new Vendor Denylist workflow
+  and in `make check`; `audit` checks the whole tree. See "Vendor-neutral
+  names" in `CONTRIBUTING.md`.
+- `make test`, `make check` and `make e2e`. `make test` runs the unit and
+  contract suites with the 55% coverage floor, then the integration and
+  regression suites against the local stack's Postgres and Redis in a separate `agenticorg_test`
+  database that is recreated each run (the development database is never
+  touched). `make check` runs ruff, mypy, bandit, gitleaks, the licence-header
+  check, JSON Schema validation of `schemas/` and pip-audit. Both run in a new
+  `agenticorg-tools` image (`Dockerfile.tools`, Python 3.12) so only Docker
+  and make are needed; `RUNNER=local` uses a local interpreter. `make e2e`
+  runs the new `ui/e2e/dev-stack.config.ts` Playwright suite against the
+  running stack in the official Playwright image. See "Tests and checks" in
+  `docs/quickstart-local.md`.
+
 - Untrusted content extractor (`core/extraction/`): websites, registry
   documents and applicant uploads are parsed in a separate worker process
   with no network access and a wall-clock limit (on Linux a seccomp filter is
