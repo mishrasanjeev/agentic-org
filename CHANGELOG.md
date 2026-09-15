@@ -50,6 +50,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- `scripts/check_prompt_tools.py` fails CI (unit-tests job) and
+  `scripts/preflight.sh` when a built-in agent prompt calls a tool that no
+  connector registers or that is not in that agent's default tools, or when a
+  default tool list names an unregistered tool. It runs with no baseline and
+  fails closed if the registry cannot be loaded. See "Prompt tool references"
+  in `CONTRIBUTING.md`.
 
 ### Fixed
 - The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report
