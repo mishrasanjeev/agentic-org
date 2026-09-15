@@ -337,10 +337,23 @@ def test_resolve_overlaps_keeps_the_longest_and_scales(monkeypatch: pytest.Monke
     small = [match(0, 4, "A", "xxxx"), match(2, 10, "B", "x" * 8), match(10, 12, "C", "xx"), match(11, 13, "D", "xx")]
     assert [m.entity_type for m in ir.resolve_overlaps(small)] == ["B", "C"]
 
-    many = [match(i * 3, i * 3 + 2, "A", "xx") for i in range(8000)]
-    many += [match(i * 3 + 1, i * 3 + 3, "B", "xx") for i in range(8000)]
-    started = time.perf_counter()
+    def overlapping(pairs: int) -> list[ir.IdentifierMatch]:
+        items = [match(i * 3, i * 3 + 2, "A", "xx") for i in range(pairs)]
+        return items + [match(i * 3 + 1, i * 3 + 3, "B", "xx") for i in range(pairs)]
+
+    def fastest(items: list[ir.IdentifierMatch]) -> float:
+        best = float("inf")
+        for _ in range(3):
+            started = time.perf_counter()
+            ir.resolve_overlaps(items)
+            best = min(best, time.perf_counter() - started)
+        return best
+
+    many = overlapping(8000)
     kept = ir.resolve_overlaps(many)
-    elapsed = time.perf_counter() - started
     assert len(kept) == 8000 and all(m.entity_type == "A" for m in kept)
-    assert elapsed < 0.5, f"resolve_overlaps took {elapsed:.2f}s for 16,000 matches"
+
+    # Scaling, not wall-clock: 4x the matches must cost well under the 16x a
+    # quadratic scan would, whatever the runner's speed or coverage overhead.
+    ratio = fastest(overlapping(8000)) / max(fastest(overlapping(2000)), 1e-6)
+    assert ratio < 8, f"resolve_overlaps scaled {ratio:.1f}x for 4x the matches"
