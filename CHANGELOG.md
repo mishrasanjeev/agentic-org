@@ -80,13 +80,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (default `memory`, unchanged behaviour). A new migration
   (`v6z22_langgraph_checkpoints`) creates the LangGraph checkpoint tables;
   they are not created at runtime. Checkpoint data is encrypted with the
-  credential-vault keyring; no channel value is stored in plaintext. With the
-  Postgres store selected and unreachable, or its schema missing or stale,
-  the API refuses to start and agent runs fail (the run endpoint returns
+  credential-vault keyring and bound to its thread, so a blob copied into
+  another thread is refused; no channel value is stored in plaintext. With
+  the Postgres store selected and unreachable, its schema missing or stale,
+  its keyring malformed, or an unverified checkpoint library installed, the
+  API refuses to start and agent runs fail (the run endpoint returns
   `503 agent_checkpoint_store_unavailable`); nothing falls back to memory.
-  Refusals are counted in `agenticorg_checkpointer_unavailable_total` by
-  reason. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool` 3.3.1 as direct
-  dependencies.
+  Celery workers open the store on their first agent run, so a store outage
+  fails those runs but never stops a worker from starting. Refusals are
+  counted in `agenticorg_checkpointer_unavailable_total` by reason. A keyring
+  change needs a restart of the API and workers.
+  `core.langgraph.checkpointer.delete_tenant_checkpoints` removes a tenant's
+  checkpoints for offboarding. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool`
+  3.3.1 as direct dependencies and pins `langgraph-checkpoint-postgres` 3.1.2
+  and `langgraph-checkpoint` 4.2.0 exactly (previously `>=3.1.2` and
+  unpinned).
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
