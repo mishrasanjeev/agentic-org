@@ -483,7 +483,7 @@ Remove an entry in the pull request that fixes it.
   `off` keeps today's behaviour.
 - **Fix:** run the legacy call through `asyncio.to_thread` too.
 
-## A-35 — Workflow connector steps and unstored workflow agents have no grant principal
+## A-38 — Workflow connector steps and unstored workflow agents have no grant principal
 
 - **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
   2026-09-15).
