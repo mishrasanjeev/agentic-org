@@ -64,6 +64,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   generated SDK clients.
 - Connector harness and voice integration fixtures no longer emit avoidable
   async/Pydantic deprecation warnings.
+- **Behaviour change:** the marketing agent prompts (`brand_monitor`,
+  `content_factory`, `crm_intelligence`, `seo_strategist`, `social_media`) no
+  longer tell the model to call tools that do not exist
+  (`get_brand_mentions`, `ahrefs_get_keywords`, `get_contacts`,
+  `ahrefs_get_rankings`, `get_post_analytics`). CRM scoring uses
+  `list_contacts` / `search_contacts`; social listening uses
+  `get_campaign_insights` and `list_channel_videos`; brand mentions, keyword
+  research, rankings and post analytics are read from the task input, with
+  escalation to human review when they are missing. The SEO strategist
+  writes ticket-ready recommendations instead of claiming to create Jira
+  tickets.
 
 ## [4.0.0] — 2026-04-05
 
