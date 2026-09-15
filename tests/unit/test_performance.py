@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.tool_gateway.gateway import ToolGateway
 from core.tool_gateway.rate_limiter import RateLimiter, RateLimitResult
 from scaling.hpa_integration import HPAIntegration
@@ -267,6 +268,7 @@ class TestNFTPERF005:
                 connector_name="test_connector",
                 tool_name="get_data",
                 params={"key": f"val-{i}"},
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
             t1 = time.monotonic()
             latencies_ms.append((t1 - t0) * 1000)

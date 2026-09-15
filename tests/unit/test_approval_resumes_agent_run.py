@@ -25,6 +25,15 @@ from tests.regression.test_ownership_approvals_20260914 import (
 )
 
 TENANT_UUID = uuid.UUID(TENANT)
+
+
+def _tenant_flag(enabled: bool) -> AsyncMock:
+    """A flag store holding only a tenant row for approvals.resume_agent_runs."""
+    from core.feature_flags import FlagRows
+
+    return AsyncMock(
+        return_value=FlagRows(global_row=None, tenant_row={"enabled": enabled, "rollout_percentage": 100})
+    )
 OTHER_TENANT = uuid.UUID("0000000b-0000-4000-8000-00000000000b")
 SPEC = {
     "confidence_floor": 0.5,
@@ -115,21 +124,22 @@ async def test_flag_defaults_off_and_is_read_per_tenant() -> None:
     skipped = ar.agent_run_resumes_total.labels(outcome="skipped")
     before = skipped._value.get()
     with (
-        patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)) as flag,
+        patch("core.feature_flags.load_flag_rows_strict", _tenant_flag(False)) as flag,
         patch.object(ar.logger, "warning") as warn,
     ):
         assert await ar.should_resume(item, TENANT_UUID) is False
-    flag.assert_awaited_once_with("approvals.resume_agent_runs", tenant_id=TENANT_UUID, default=False)
+    flag.assert_awaited_once_with("approvals.resume_agent_runs", tenant_id=TENANT_UUID)
     # A paused run left paused because the flag is off or unreadable is visible.
     assert skipped._value.get() == before + 1
     assert warn.call_args.args[0] == "agent_run_resume_skipped"
-    assert warn.call_args.kwargs["reason"] == "resume_flag_off_or_unavailable"
+    assert warn.call_args.kwargs["reason"] == "resume_flag_off"
 
-    with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)):
+    with patch("core.feature_flags.load_flag_rows_strict", _tenant_flag(True)):
         assert await ar.should_resume(item, TENANT_UUID) is True
     assert skipped._value.get() == before + 1
 
 
+@pytest.mark.real_flag_lookup
 async def test_a_failed_flag_lookup_skips_the_resume_loudly() -> None:
     from core import feature_flags
 
@@ -165,7 +175,7 @@ async def test_a_failed_flag_lookup_skips_the_resume_loudly() -> None:
     ],
 )
 async def test_non_resumable_approvals_never_consult_the_flag(extra: dict) -> None:
-    with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)) as flag:
+    with patch("core.feature_flags.load_flag_rows_strict", _tenant_flag(True)) as flag:
         assert await ar.should_resume(_paused_item(_agent(), **extra), TENANT_UUID) is False
     flag.assert_not_awaited()
 
@@ -190,7 +200,7 @@ async def _decide(item: Any, agent: Any, *, flag: bool, decision: str = "approve
         _session_patch("api.v1.approvals.get_tenant_session", _QueueSession(item, agent)),
         patch("core.approvals.resolve_policy", AsyncMock(return_value=None)),
         patch("core.feedback.shadow_learning.capture_hitl_feedback", AsyncMock(return_value={})),
-        patch("core.feature_flags.is_enabled", AsyncMock(return_value=flag)),
+        patch("core.feature_flags.load_flag_rows_strict", _tenant_flag(flag)),
     ):
         response = await decide(
             hitl_id=item.id,

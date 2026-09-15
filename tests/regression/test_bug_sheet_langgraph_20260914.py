@@ -37,6 +37,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Interrupt
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph import runner
 from core.langgraph.agent_graph import (
     _rewrite_tool_call_names,
@@ -189,6 +190,7 @@ class TestSheet14ConnectorQualifiedToolNames:
                 connector_config={},
                 connector_names=["gmail"],
                 confidence_floor=0.5,
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
             compiled = graph.compile()
             result = await compiled.ainvoke(
@@ -617,6 +619,7 @@ class TestPinnedLlmProviderRuntimeWiring:
             confidence_floor=0.5,
             tenant_id=tenant,
             llm_provider="openai",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         result = await graph.compile().ainvoke(_minimal_state())
 

@@ -384,13 +384,15 @@ def test_an_empty_case_key_is_refused() -> None:
 
 
 async def test_flag_is_off_without_a_valid_tenant_and_reads_the_named_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.feature_flags import FlagRows
+
     seen: list[tuple[str, Any]] = []
 
-    async def fake_is_enabled(flag_key: str, *, tenant_id: Any = None, **_: Any) -> bool:
+    async def fake_rows(flag_key: str, *, tenant_id: Any = None) -> FlagRows:
         seen.append((flag_key, tenant_id))
-        return True
+        return FlagRows(global_row=None, tenant_row={"enabled": True, "rollout_percentage": 100})
 
-    monkeypatch.setattr("core.feature_flags.is_enabled_strict", fake_is_enabled)
+    monkeypatch.setattr("core.feature_flags.load_flag_rows_strict", fake_rows)
     assert await ps.pseudonymisation_enabled(None) is False
     assert await ps.pseudonymisation_enabled("not-a-uuid") is False
     assert await ps.pseudonymisation_enabled(case.TENANT_ID) is True
@@ -400,11 +402,11 @@ async def test_flag_is_off_without_a_valid_tenant_and_reads_the_named_flag(monke
 async def test_flag_defaults_off_when_no_flag_row_exists(monkeypatch: pytest.MonkeyPatch) -> None:
     from core import feature_flags
 
-    async def no_row(tenant_id: Any, flag_key: str) -> None:
-        return None
+    async def no_rows(flag_key: str, *, tenant_id: Any) -> feature_flags.FlagRows:
+        return feature_flags.FlagRows(global_row=None, tenant_row=None)
 
     feature_flags.clear_cache()
-    monkeypatch.setattr(feature_flags, "_query_flag", no_row)
+    monkeypatch.setattr(feature_flags, "load_flag_rows_strict", no_rows)
     assert await ps.pseudonymisation_enabled(case.TENANT_ID) is False
     feature_flags.clear_cache()
 

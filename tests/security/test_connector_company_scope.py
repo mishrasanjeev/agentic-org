@@ -15,6 +15,7 @@ import core.database as database_module
 import core.tool_gateway.gateway as gateway_module
 from api.v1.a2a import A2ATaskRequest
 from api.v1.mcp import MCPCallRequest
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph.runner import resume_agent
 from core.models.connector_config import ConnectorConfig
 from core.tool_gateway.gateway import ToolGateway
@@ -57,6 +58,7 @@ async def test_gateway_cache_and_registration_are_company_separated(
         "tool_name": "get_trial_balance",
         "params": {},
         "domain": "finance",
+        "run_grant": NO_RUN_GRANT_FOR_TESTS,
     }
     result_a = await gateway.execute(company_id=COMPANY_A, **common)
     result_b = await gateway.execute(company_id=COMPANY_B, **common)
@@ -89,6 +91,7 @@ async def test_company_request_never_falls_back_to_global_connector(
         params={},
         company_id=COMPANY_A,
         domain="finance",
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
 
     assert result["error"]["code"] == "E1005"

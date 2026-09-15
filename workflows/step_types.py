@@ -545,17 +545,38 @@ async def _execute_connector_tool_step(step: dict, state: dict) -> dict[str, Any
             output=result,
         )
 
+    from auth.run_grants import CALLER_GRANT_KEY, caller_grant_for_run, direct_tool_call_permitted, resolve_run_grant
     from core.langgraph.tool_adapter import _execute_connector_tool
 
-    result = await _execute_connector_tool(
-        connector,
-        tool,
-        _connector_step_inputs(step, state),
-        config,
+    # PRD F-1: a connector step is not made by an agent, so there is no
+    # Grantex registration to resolve a grant for. Off keeps the legacy
+    # behaviour; warn records ``grant_missing``/``no_agent``; deny refuses it.
+    # A run started by a caller Grantex token is also checked against it.
+    step_grant = await resolve_run_grant(
         tenant_id=tenant_id or None,
-        company_id=str(company_uuid),
-        domain=step.get("domain") or _state_lookup(state, "domain"),
+        agent_id="",
+        runtime="workflow_connector_tool",
+        **caller_grant_for_run(state.get(CALLER_GRANT_KEY)).resolve_kwargs(),
     )
+    if not await direct_tool_call_permitted(
+        step_grant,
+        connector=connector,
+        tool=tool,
+        tenant_id=tenant_id,
+        agent_id="",
+        runtime="workflow_connector_tool",
+    ):
+        result = {"error": {"code": "E1007", "message": "grant_denied: grant_missing", "reason": "grant_missing"}}
+    else:
+        result = await _execute_connector_tool(
+            connector,
+            tool,
+            _connector_step_inputs(step, state),
+            config,
+            tenant_id=tenant_id or None,
+            company_id=str(company_uuid),
+            domain=step.get("domain") or _state_lookup(state, "domain"),
+        )
     if isinstance(result, dict) and result.get("error"):
         return failure_result(
             step_id=str(step.get("id", "")),
@@ -683,6 +704,26 @@ async def _execute_agent(step: dict, state: dict) -> dict[str, Any]:
             agent_instance.confidence_floor = 0.0
         else:
             agent_instance = AgentRegistry.create_from_config(config)
+
+        # PRD F-1: a run started by a caller Grantex token checks every tool
+        # call against that token too; an agent that cannot take the binding
+        # does not run.
+        from auth.run_grants import CALLER_GRANT_KEY, caller_grant_for_run
+
+        caller = caller_grant_for_run(state.get(CALLER_GRANT_KEY))
+        bind_caller = getattr(agent_instance, "bind_caller", None)
+        if callable(bind_caller):
+            bind_caller(caller)
+        elif caller.bound:
+            return failure_result(
+                step_id=str(step.get("id", "")),
+                step_type="agent",
+                failure=AgentExecutionError(
+                    agent=agent_type,
+                    step_id=str(step.get("id", "")),
+                    cause="Agent cannot be bound to the caller grant that started this run.",
+                ),
+            )
 
         task = TaskAssignment(
             message_id=f"msg_{uuid.uuid4().hex[:12]}",
@@ -1100,11 +1141,14 @@ async def _execute_sub_workflow(step: dict, state: dict) -> dict[str, Any]:
 
         state_store = WorkflowStateStore()
 
+    from auth.run_grants import CALLER_GRANT_KEY
+
     sub_engine = WorkflowEngine(state_store=state_store)
     sub_run_id = await sub_engine.start_run(
         sub_definition,
         trigger_payload=step.get("input", {}),
         tenant_id=state.get("tenant_id"),
+        caller_grant=state.get(CALLER_GRANT_KEY),
     )
     result = await sub_engine.execute(sub_run_id)
     status = result.get("status", "failed")

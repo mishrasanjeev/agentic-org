@@ -299,6 +299,60 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   default tool list names an unregistered tool. It runs with no baseline and
   fails closed if the registry cannot be loaded. See "Prompt tool references"
   in `CONTRIBUTING.md`.
+- Grant enforcement modes for agent tool calls (`grants.enforce_closed`:
+  `off`, `warn`, `deny`). The mode is the strictest of
+  `AGENTICORG_GRANTS_ENFORCE_CLOSED` (default `off`, which keeps today's
+  behaviour) and the global and tenant rows of the
+  `grants.enforce_closed.warn` / `.deny` flags, each read on its own. In
+  `warn`, runs from `POST /agents/{id}/run` and other callers of the LangGraph
+  runner resolve a grant per run — the caller's token, the agent's configured
+  token, or one the token pool now mints by delegating from
+  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent (cached
+  per tenant, agent and scope set, refreshed before it expires, at most one
+  mint per key per process) — and every tool call that grant would deny still
+  runs (a token supplied by the caller or configured on the agent stays
+  enforced as before) but is logged as `grant_enforcement_would_deny` and
+  counted in `agenticorg_grant_enforcement_denials_total{mode,reason}` with
+  the Grantex SDK's reason (exact messages of the pinned 0.5.x SDK mapped to
+  the Appendix B reasons until the Grantex 0.6 SDK with reason codes is
+  published), including runs with no grant at all
+  (`grant_missing`). If the flag table cannot be read and the process has no
+  recent mode for the tenant, the run falls back to the strictest mode.
+  `deny` is not switchable yet and runs as `warn`. See
+  `docs/operations/grant-enforcement.md`.
+- The Grantex SDK pin moves from `grantex==0.5.0` to `grantex==0.5.1`
+  (amount and malformed-cap checks in `enforce`; no API change).
+- **Break:** the authority flags (`grants.enforce_closed.*`,
+  `pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
+  `decisions.required`, `caps.enforce`) can no longer be created, changed or
+  deleted through `/api/v1/feature-flags`; the API answers
+  `403 flag_key_reserved`. Platform operators manage them with
+  `scripts/authority_flags.py`.
+- **Break (Python API):** `core.langgraph.agent_graph.build_agent_graph` and
+  every `build_*_graph` builder in `core/langgraph/agents/` take a required
+  keyword `run_grant`, so a graph can no longer be built with grant
+  enforcement silently left off.
+- **Break (Python API):** `core.langgraph.tool_adapter.execute_agent_tool` and
+  `core.tool_gateway.gateway.ToolGateway.execute` take a required keyword
+  `run_grant` as well. `BaseAgent` passes its run grant in every mode; tests
+  that exercise only the legacy checks pass
+  `auth.run_grants.NO_RUN_GRANT_FOR_TESTS`, which production code may not use.
+- Grant enforcement now covers every agent run entry point: chat, A2A and
+  MCP (the run agent's grant; a caller Grantex token issued to another agent
+  must also allow every call), voice and
+  per-type wrappers through the runner, `resume_agent`, and workflow agent
+  steps, collaboration steps, workflow resume and the sales pipeline through
+  `BaseAgent` and the tool gateway. Workflow `connector_tool` steps have no
+  agent and therefore no grant: recorded in `warn`, refused in `deny`. In
+  warn and deny the tool gateway runs the grant check and all of its legacy
+  checks. `off` is unchanged.
+- A caller Grantex token is bound on every route that starts a run:
+  `POST /agents/{id}/run`, `POST /workflows/{id}/run` (every step type that
+  calls tools, and sub-workflows) and the sales pipeline routes, as well as
+  chat, A2A and MCP. A run started with a caller token and resumed later
+  without it refuses tool calls in warn and deny
+  (`grant_missing`/`caller_token_unavailable`); only the caller's agent id is
+  stored, never the token.
 
 ### Fixed
 - Four shipped industry-pack agents no longer send every run to human review.

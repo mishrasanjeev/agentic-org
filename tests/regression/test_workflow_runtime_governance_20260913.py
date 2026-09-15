@@ -29,6 +29,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from workflows.engine import WorkflowEngine
 from workflows.state_store import InMemoryWorkflowStateRepository, WorkflowStateStore
 
@@ -208,6 +209,7 @@ async def test_gateway_idempotency_is_a_reservation_not_check_then_store() -> No
             "tool_name": "list_contacts",
             "params": {},
             "idempotency_key": "k1",
+            "run_grant": NO_RUN_GRANT_FOR_TESTS,
         }
         first, second = await asyncio.gather(gateway.execute(**kwargs), gateway.execute(**kwargs))
         third = await gateway.execute(**kwargs)
@@ -243,6 +245,7 @@ async def test_gateway_releases_reservation_on_connector_error() -> None:
             tool_name="list_contacts",
             params={},
             idempotency_key="k1",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
     assert result["error"]["code"] == "E1001"
     store.release.assert_awaited_once()

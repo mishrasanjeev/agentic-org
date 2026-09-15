@@ -23,6 +23,8 @@ import structlog
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
 from core.config import is_strict_runtime_env, settings
@@ -730,6 +732,10 @@ async def execute_agent_tool(
     authorized_tools: list[str],
     grant_token: str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
+    run_grant: RunGrant | None,
+    agent_id: str = "",
+    runtime: str = "base_agent",
+    agent_type: str = "",
     pseudonymiser: PseudonymSession | None = None,
 ) -> dict[str, Any]:
     """Governed tool dispatch for ``BaseAgent`` callers without a ToolGateway.
@@ -742,6 +748,12 @@ async def execute_agent_tool(
 
     With ``pseudonymiser`` the model's pseudonymised arguments are restored
     first; a call whose pseudonyms cannot all be restored is refused.
+
+    PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
+    replaces the legacy ``grant_token`` check (``auth/grant_enforcement.py``).
+    ``run_grant`` is required so the grant check cannot be left out by
+    omission; only tests that exercise the legacy checks alone pass
+    ``auth.run_grants.NO_RUN_GRANT_FOR_TESTS``.
     """
     if pseudonymiser is not None:
         try:
@@ -764,7 +776,31 @@ async def execute_agent_tool(
             }
         }
 
-    if grant_token:
+    if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
+        amount = params.get("amount")
+        check = await check_run_grant(
+            run_grant,
+            connector=connector_name,
+            tool=tool_name,
+            amount=amount if isinstance(amount, int | float) and not isinstance(amount, bool) else None,
+            context=GrantCallContext(
+                tenant_id=str(tenant_id or ""),
+                agent_id=agent_id,
+                agent_type=agent_type,
+                runtime=runtime,
+                grant_source=run_grant.source,
+            ),
+        )
+        if not check.dispatch_allowed and check.denial is not None:
+            return {
+                "error": {
+                    "code": "E1007",
+                    "message": f"grant_denied: {check.denial.reason.value}",
+                    "reason": check.denial.reason.value,
+                    "sub_reason": check.denial.sub_reason,
+                }
+            }
+    elif grant_token:
         from core.langgraph.grantex_auth import get_grantex_client
 
         # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
