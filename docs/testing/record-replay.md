@@ -92,6 +92,27 @@ Before committing:
 - Read the diff. A cassette is expected output; review it as such.
 - Delete cassettes for tests you removed or renamed.
 
+## Nightly re-record
+
+`.github/workflows/cassette-rerecord.yml` runs every night (and on demand). It
+re-runs every test that uses the `model_cassette` fixture (they carry the
+`model_cassette` marker automatically, so `pytest -m model_cassette` selects
+them) in `record` mode against a live model, using the `MODEL_RECORD_API_KEY`
+secret for the provider named by the `MODEL_RECORD_PROVIDER` repository
+variable (`gemini` by default, or `openai` or `anthropic`). The job summary
+says whether the recording run passed and which cassettes now differ from the
+committed ones; the log and the diff are uploaded as an artifact.
+
+It only reports. Nothing is committed, and pull requests do not wait for it. A
+difference means the model's answer to an unchanged request has drifted:
+decide whether the tests still hold and, if the new behaviour is expected,
+re-record in a pull request. Without the secret the job is skipped with a
+warning. The same script runs locally:
+
+```bash
+MODEL_RECORD_API_KEY=... MODEL_RECORD_PROVIDER=openai bash scripts/rerecord_cassettes.sh
+```
+
 ## Cassette format
 
 One JSON file per request, named by the key's hex digest:

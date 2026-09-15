@@ -158,7 +158,14 @@ prints only a count), then commits `config/denylist.sha256`.
 
 ### Tests
 
-- Minimum **80% code coverage** enforced in CI
+- Coverage gates in CI: the unit and contract suites must keep total coverage at
+  or above **55%**, with per-module floors from
+  `scripts/check_module_coverage.py`; on pull requests, **75% of the changed
+  lines** (diff-cover) and **75% of every new Python module**
+  (`scripts/check_new_module_coverage.py`, which counts a new module no test
+  imports as 0%) must be covered. Tests, `conftest.py` files and Alembic
+  revisions are not gated as modules. Run the same gate locally after
+  `make test` with `make coverage-gate`.
 - All PRD test IDs (FT-FIN-xxx, SEC-AUTH-xxx, etc.) must pass
 - Use `pytest-asyncio` for async tests
 - Mock external services, not internal modules
@@ -184,6 +191,27 @@ package out of the runtime image. When a fix has to wait, add an entry to
 `statement` naming the `FINDINGS.md` entry that tracks the fix, and an
 `expired_at` date no more than 30 days out. An expired entry stops applying and
 the scan fails again.
+
+### Dependency audit exceptions
+
+`scripts/run_pip_audit.py` runs `pip-audit` over the project metadata,
+`requirements.txt` and `requirements-v4.txt` on every pull request
+(`security-scan` job), nightly and in `make check`. It fails on any known
+vulnerability, and on anything that stops the audit from completing.
+
+Fix a finding by upgrading the dependency (or its parent) whenever a fixed
+version exists. When a fix has to wait:
+
+1. Assess the advisory: is the vulnerable code reachable here, and what
+   mitigates it?
+2. Add an entry to `config/pip-audit-exceptions.toml` with the advisory `id`
+   (or any alias, such as the CVE), the `package`, the `reason` from your
+   assessment, an `owner`, and an `expires` date no more than 90 days out.
+3. Get the entry reviewed in the pull request like any other security change.
+
+The audit reports every accepted finding with its owner and expiry, warns about
+exceptions that match nothing (remove them), and fails once an entry has
+expired until the dependency is fixed or the review is renewed.
 
 ## Agent Development
 

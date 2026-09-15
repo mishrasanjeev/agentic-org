@@ -297,15 +297,13 @@ jobs:
       - run: |
           . .audit-env/bin/activate
           bandit -r core/ connectors/ api/ auth/ -ll
-      - run: |
+      # The project and both requirements files, failing on any vulnerability
+      # without a dated exception in config/pip-audit-exceptions.toml
+      # (CONTRIBUTING.md, "Dependency audit exceptions").
+      - name: pip-audit with reviewed exceptions
+        run: |
           . .audit-env/bin/activate
-          pip-audit --desc --timeout 60 .
-      - run: |
-          . .audit-env/bin/activate
-          pip-audit --desc --timeout 60 -r requirements.txt
-      - run: |
-          . .audit-env/bin/activate
-          pip-audit --desc --timeout 60 -r requirements-v4.txt
+          python scripts/run_pip_audit.py
 
   release-acceptance:
     needs: [classify-changes, frontend-validation, frontend-quality, unit-tests, integration-tests, security-scan]

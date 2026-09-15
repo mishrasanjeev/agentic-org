@@ -173,6 +173,19 @@ def sample_invoice():
 CASSETTE_ROOT = Path(__file__).resolve().parent / "cassettes"
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Mark every test that uses ``model_cassette`` so ``-m model_cassette`` selects exactly those."""
+    for item in items:
+        if "model_cassette" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.model_cassette)
+
+
 @pytest.fixture
 def model_cassette(request):
     """Scope model calls to ``tests/cassettes/<test module>/<test name>/``.

@@ -16,15 +16,6 @@ Remove an entry in the pull request that fixes it.
   libuuid 2.42.3-r1 or later (`scripts/refresh_image_digests.sh`), rebuild,
   rescan and drop the seven entries from `.trivyignore.yaml`.
 
-## A-2 — CONTRIBUTING.md overstates the coverage gate
-
-- **Found:** editing `CONTRIBUTING.md` (2026-09-14).
-- **What:** "Tests" says a minimum 80% coverage is enforced in CI; CI and
-  `scripts/preflight.sh` enforce `--cov-fail-under=55` plus per-module floors
-  (`scripts/check_module_coverage.py`).
-- **Fix:** state the real gate. The governed-actions work raises it to 75% on
-  changed code, so update the text in that change.
-
 ## A-3 — Preflight mypy and CI lint type-check different environments
 
 - **Found:** running `scripts/preflight.sh` on `main` at 784cbd03 (2026-09-14).
@@ -204,3 +195,16 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** prefix the cache and bytecode patterns with `**/` (for example
   `**/__pycache__/`, `**/*.py[cod]`) and confirm with a build after a test run
   that the builder layers stay cached.
+
+## A-18 — `CONTRIBUTING.md` is committed with CRLF line endings
+
+- **Found:** rebasing the local-stack changes onto `main` at 409fc44d
+  (2026-09-15).
+- **What:** b611368e rewrote `CONTRIBUTING.md` with CRLF line endings, while
+  the rest of the repository stores LF. The commit shows every line as
+  changed, and any branch that edited the file before it now conflicts on the
+  whole file; an LF-only editor or a `core.autocrlf=input` checkout turns the
+  next edit into another whole-file rewrite.
+- **Fix:** renormalise the file to LF in its own commit and add a
+  `.gitattributes` rule (`*.md text eol=lf`, together with A-14's `*.sh`
+  rule) so line endings are fixed at the repository level.
