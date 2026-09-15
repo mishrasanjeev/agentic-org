@@ -15,8 +15,13 @@ _BLOCK_RE = re.compile(r"```yaml\n(.*?)```", re.DOTALL)
 _REJECTED_RE = re.compile(r"^# rejected: (\w+)\n")
 
 
+def _doc() -> str:
+    # Normalise line endings so a CRLF checkout reads the same blocks.
+    return DOC.read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
 def _blocks() -> list[str]:
-    return _BLOCK_RE.findall(DOC.read_text(encoding="utf-8"))
+    return _BLOCK_RE.findall(_doc())
 
 
 def test_the_authoring_guide_has_yaml_examples() -> None:
@@ -74,14 +79,12 @@ def test_documented_error_message_format() -> None:
     with pytest.raises(PolicyLoadError) as info:
         load_policy_bytes(block.encode("utf-8"), source="policies/uk.yaml")
     assert str(info.value).startswith("policies/uk.yaml: policy_unknown_operator at rules[0].when.all[1].b.between: ")
-    assert "`policies/uk.yaml: policy_unknown_operator at rules[0].when.all[1].b.between: …`" in DOC.read_text(
-        encoding="utf-8"
-    )
+    assert "`policies/uk.yaml: policy_unknown_operator at rules[0].when.all[1].b.between: …`" in _doc()
 
 
 def test_every_reason_code_is_documented() -> None:
     from core.policy import PolicyLoadReason
 
-    text = DOC.read_text(encoding="utf-8")
+    text = _doc()
     undocumented = [reason.value for reason in PolicyLoadReason if f"`{reason.value}`" not in text]
     assert undocumented == []

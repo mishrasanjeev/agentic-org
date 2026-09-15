@@ -44,7 +44,7 @@ rules:
 | `policy` | yes | Policy id: lower-case snake_case, up to 64 characters. |
 | `version` | yes | [Semantic version](https://semver.org) as a string, e.g. `1.2.0` or `2.0.0-rc.1`. `1.2` is refused. |
 | `status` | no | `example` (the default) or `production`. |
-| `reviewed_by` | for `production` | The compliance owner who reviewed this version. |
+| `reviewed_by` | for `production` | The compliance owner who reviewed this version. Placeholders such as `TODO`, `tbd`, `n/a`, `none` or a single character are refused. |
 | `description` | no | Free text for people. |
 | `score_thresholds` | no | Minimum scores that raise the tier; see [Tiers and score](#tiers-and-score). |
 | `rules` | yes | A non-empty list of rules. |
@@ -82,6 +82,8 @@ Combine several tests with `all` rather than putting two keys in one mapping.
 Comparisons never convert types. Strings compare exactly (case-sensitive).
 Numbers compare numerically (`1` equals `1.0`). Booleans are not numbers, so
 `true` never equals `1`. `null` is not an operand: use `exists` or `missing`.
+Integers must lie within ±2^53 (the range JSON consumers agree on), both as
+operands and as evidence values.
 
 | Combinator | Takes | Meaning |
 |---|---|---|
@@ -106,7 +108,9 @@ rules:
 ```
 
 YAML note: the loader treats only `true`/`false` as booleans. `yes`, `no`, `on`
-and `off` stay strings, and dates such as `2026-01-01` stay strings.
+and `off` stay strings, and dates such as `2026-01-01` stay strings. Explicit
+YAML tags (`!!int`, `!!str`, `!custom`, `!`) are refused; write values plainly
+and quote strings that would otherwise read as numbers.
 
 ## Missing evidence
 
@@ -115,10 +119,15 @@ may have failed, a field may hold the wrong type. The engine never lets that
 silently pass.
 
 - A comparison whose path is **absent or `null`**, or whose value the operator
-  cannot compare (wrong type, a list or mapping, `NaN` or infinity), is
-  **unresolved** — neither true nor false.
-- `exists` and `missing` are never unresolved; they are how you test for
-  absence explicitly.
+  cannot compare (wrong type, a list or mapping, `NaN` or infinity, an integer
+  outside ±2^53), is **unresolved** — neither true nor false.
+- `exists` and `missing` are never unresolved for evidence that can be read;
+  they are how you test for absence explicitly.
+- If reading a path raises (for example a mapping backed by a failing store),
+  the path is recorded as `{"non_scalar": "unreadable"}` in `inputs`, logged as
+  `policy_evidence_unreadable`, and **every** operator on it — including
+  `exists` and `missing` — is unresolved, so the rules that read it fire.
+  Evaluation itself never raises on evidence content.
 - Combinators use three-valued logic. `not` of unresolved is unresolved. `all`
   is false if any item is false, otherwise unresolved if any item is
   unresolved. `any` is true if any item is true, otherwise unresolved if any
@@ -131,12 +140,12 @@ a case towards the stricter tier. In the complete policy above, an empty
 evidence mapping fires all three rules and the case is `blocked`, with every
 reason indeterminate.
 
-| Operator | Path absent or `null` | Present, wrong type or non-finite |
-|---|---|---|
-| `eq`, `ne`, `in`, `not_in` | unresolved → rule fires | unresolved → rule fires |
-| `gt`, `gte`, `lt`, `lte` | unresolved → rule fires | unresolved → rule fires |
-| `exists` | false | true |
-| `missing` | true | false |
+| Operator | Path absent or `null` | Present, wrong type or non-finite | Reading raised |
+|---|---|---|---|
+| `eq`, `ne`, `in`, `not_in` | unresolved → rule fires | unresolved → rule fires | unresolved → rule fires |
+| `gt`, `gte`, `lt`, `lte` | unresolved → rule fires | unresolved → rule fires | unresolved → rule fires |
+| `exists` | false | true | unresolved → rule fires |
+| `missing` | true | false | unresolved → rule fires |
 
 When a rule should apply only to evidence that is present, guard it with
 `exists` **and** make sure another rule handles the absent case. The examples
@@ -206,7 +215,7 @@ record:
 | `tier`, `tier_source`, `score` | As above |
 | `reasons` | Fired rules, most severe tier first, then in file order: `rule_id`, `tier`, `score`, `reason`, `indeterminate`, `unresolved_paths` |
 | `fired_rules` | The rule ids of `reasons`, in the same order |
-| `inputs` | Every path the policy reads, with the value read: a scalar, `null` when missing, or `{"non_scalar": "mapping" \| "list" \| "non_finite_number" \| "other"}` |
+| `inputs` | Every path the policy reads, with the value read: a scalar, `null` when missing, or `{"non_scalar": "mapping" \| "list" \| "non_finite_number" \| "integer_out_of_range" \| "unreadable" \| "other"}` |
 | `missing_inputs`, `invalid_inputs` | Referenced paths that were absent, or present but unusable, sorted |
 | `inputs_hash` | `sha256:` over the canonical JSON of `inputs` |
 
@@ -220,8 +229,9 @@ Policies are loaded when the process starts, never while a case is evaluated.
 refuse anything that is not a valid policy with a `PolicyLoadError` naming the
 file, a stable reason code and the location, for example
 `policies/uk.yaml: policy_unknown_operator at rules[0].when.all[1].b.between: …`.
-A directory is refused as a whole if any file in it is invalid, if it is empty,
-or if two files declare the same policy id. Pass `require_production=True` in
+A directory loads every file ending in `.yaml` or `.yml` in any letter case,
+and is refused as a whole if any file in it is invalid, if it is empty, or if
+two files declare the same policy id. Pass `require_production=True` in
 deployments that must refuse example policies.
 
 | Reason code | Cause |
@@ -229,7 +239,7 @@ deployments that must refuse example policies.
 | `policy_file_unreadable` | The file cannot be read |
 | `policy_too_large` | Over 256 KiB |
 | `policy_encoding_invalid` | Not UTF-8 |
-| `policy_yaml_invalid` | Not parseable YAML, more than one document, or an unknown tag |
+| `policy_yaml_invalid` | Not parseable YAML, more than one document, an explicit tag, or a value the YAML reader cannot build (such as an integer over Python's digit limit) |
 | `policy_duplicate_key` | The same key twice in one mapping |
 | `policy_yaml_alias_forbidden` | YAML aliases or merge keys |
 | `policy_missing_field` | A required key is absent or `null` |
@@ -242,7 +252,7 @@ deployments that must refuse example policies.
 | `policy_invalid_operand` | An operand of the wrong type for its operator |
 | `policy_duplicate_rule_id` | Two rules with the same id |
 | `policy_limit_exceeded` | More than 500 rules, conditions nested more than 12 deep, over-long strings or lists |
-| `policy_production_unreviewed` | `status: production` without `reviewed_by` |
+| `policy_production_unreviewed` | `status: production` without `reviewed_by`, or with a placeholder reviewer |
 | `policy_not_production` | `require_production=True` and the policy is not production |
 | `policy_directory_invalid` | Missing or empty policy directory |
 | `policy_duplicate_policy_id` | Two files in a directory declare the same `policy` |

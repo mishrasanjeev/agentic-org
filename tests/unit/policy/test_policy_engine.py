@@ -397,3 +397,51 @@ def test_evaluations_are_counted_by_tier_and_status() -> None:
     before = REGISTRY.get_sample_value("agenticorg_policy_evaluations_total", labels) or 0.0
     evaluate(_policy(PRD_EXAMPLE), {})
     assert REGISTRY.get_sample_value("agenticorg_policy_evaluations_total", labels) == before + 1
+
+
+# ── Review hardening: evaluation never raises on evidence ───────────────────
+
+
+class _RaisingMapping(dict):
+    def __contains__(self, key: object) -> bool:
+        raise RuntimeError("backing store unavailable")
+
+
+class _RaisingGetItem(dict):
+    def __getitem__(self, key: object) -> Any:
+        raise KeyError(key)
+
+
+def test_huge_integers_in_evidence_are_unusable_not_a_crash() -> None:
+    policy = _policy(PRD_EXAMPLE)
+    for value in (10**5000, 2**53 + 1, -(2**60)):
+        result = evaluate(policy, _with(CLEAN, "screening.unresolved_true_matches", value))
+        assert result.tier is Tier.BLOCKED
+        assert result.reasons[0].indeterminate is True
+        assert result.inputs["screening.unresolved_true_matches"] == {"non_scalar": "integer_out_of_range"}
+        assert result.invalid_inputs == ("screening.unresolved_true_matches",)
+        json.dumps(result.to_dict())
+    assert evaluate(policy, _with(CLEAN, "screening.unresolved_true_matches", 2**53)).fired_rules == (
+        "screening_clear",
+    )
+
+
+@pytest.mark.parametrize("mapping_type", [_RaisingMapping, _RaisingGetItem])
+def test_evidence_that_raises_while_read_fires_the_rule_as_indeterminate(mapping_type: type) -> None:
+    import structlog
+
+    evidence = copy.deepcopy(CLEAN)
+    evidence["screening"] = mapping_type(evidence["screening"])
+    policy = _policy(
+        PRD_EXAMPLE
+        + "  - id: screening_present\n    when: {screening.unresolved_true_matches: {missing: true}}\n"
+        + '    effect: {tier: high, reason: "Screening evidence is missing"}\n'
+    )
+    with structlog.testing.capture_logs() as logs:
+        result = evaluate(policy, evidence)
+    assert result.tier is Tier.BLOCKED
+    assert set(result.fired_rules) == {"screening_clear", "screening_present"}
+    assert all(reason.indeterminate for reason in result.reasons)
+    assert result.inputs["screening.unresolved_true_matches"] == {"non_scalar": "unreadable"}
+    assert "screening.unresolved_true_matches" in result.invalid_inputs
+    assert [entry["error"] for entry in logs if entry["event"] == "policy_evidence_unreadable"]

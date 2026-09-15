@@ -32,10 +32,12 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
+import structlog
 from prometheus_client import Counter
 
 from core.policy.types import (
     ENGINE_VERSION,
+    MAX_SAFE_INTEGER,
     MAX_SCORE,
     AllOf,
     AnyOf,
@@ -56,14 +58,19 @@ _policy_evaluations_total = Counter(
     ["tier", "policy_status"],
 )
 
+logger = structlog.get_logger()
+
 _MISSING = object()
+# The evidence mapping raised while a path was read. Treated as unusable
+# evidence by every operator, including exists and missing, so the rule fires.
+_UNREADABLE = object()
 
 
 def _kind(value: Any) -> str | None:
     if isinstance(value, bool):
         return "bool"
     if isinstance(value, int):
-        return "number"
+        return "number" if -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER else None
     if isinstance(value, float):
         return "number" if math.isfinite(value) else None
     if isinstance(value, str):
@@ -73,20 +80,31 @@ def _kind(value: Any) -> str | None:
 
 def _read(evidence: Mapping[str, Any], segments: tuple[str, ...]) -> Any:
     node: Any = evidence
-    for segment in segments:
-        if not isinstance(node, Mapping) or segment not in node:
-            return _MISSING
-        node = node[segment]
+    try:
+        for segment in segments:
+            if not isinstance(node, Mapping) or segment not in node:
+                return _MISSING
+            node = node[segment]
+    # enterprise-gate: broad-except-ok reason=unreadable-evidence-fires-rule-towards-stricter-tier
+    except Exception as exc:
+        # Evidence that cannot be read must not stop evaluation or pass: the
+        # path is recorded as unusable and every rule reading it fires.
+        logger.warning("policy_evidence_unreadable", path=".".join(segments), error=type(exc).__name__)
+        return _UNREADABLE
     return _MISSING if node is None else node
 
 
 def _snapshot(value: Any) -> JsonValue:
     if value is _MISSING:
         return None
+    if value is _UNREADABLE:
+        return {"non_scalar": "unreadable"}
     if _kind(value) is not None:
         return value
     if isinstance(value, float):
         return {"non_scalar": "non_finite_number"}
+    if isinstance(value, int) and not isinstance(value, bool):
+        return {"non_scalar": "integer_out_of_range"}
     if isinstance(value, Mapping):
         return {"non_scalar": "mapping"}
     if isinstance(value, list | tuple):
@@ -122,6 +140,9 @@ class _Evaluation:
 
     def _compare(self, leaf: Compare) -> bool | None:
         value = self.values[leaf.path]
+        if value is _UNREADABLE:
+            self.unresolved.add(leaf.path)
+            return None
         if leaf.op is Operator.EXISTS:
             return value is not _MISSING
         if leaf.op is Operator.MISSING:
