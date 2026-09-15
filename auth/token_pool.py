@@ -39,7 +39,6 @@ from typing import Any
 import redis.asyncio as aioredis
 import structlog
 
-from auth.grantex import grantex_client
 from core.config import external_keys, settings
 
 logger = structlog.get_logger()
@@ -122,11 +121,11 @@ class TokenPool:
         self._revocation_task: asyncio.Task | None = None
 
     def set_agent_config_resolver(self, resolver: AgentConfigResolver) -> None:
-        """Register a callback to look up agent config (agent_type, scopes) by agent_id.
+        """Register a callback to look up agent config by agent_id for token refresh.
 
         The resolver must return a dict with at least:
-            {"agent_type": str, "scopes": list[str]}
-        It may also include "token_ttl": int (seconds).
+            {"grantex_agent_id": str, "scopes": list[str]}
+        It may also include "agent_type": str and "token_ttl": int (seconds).
         """
         self._agent_config_resolver = resolver
 
@@ -384,10 +383,15 @@ class TokenPool:
     async def _refresh_after(self, agent_id: str, delay: int) -> None:
         """Wait for *delay* seconds, then proactively refresh the agent token.
 
-        Loads agent config via the registered resolver, requests a new
-        delegated token from Grantex, and stores it back in the pool.
-        On any failure the error is logged and the stale token is removed
-        so subsequent callers will obtain a fresh one on demand.
+        Loads agent config via the registered resolver, delegates a new
+        grant from the root grant to the agent's registered Grantex agent
+        (``grants.delegate``, the same path as the first run grant), and stores
+        it back in the pool. On any failure the error is logged and the stale
+        token is removed so subsequent callers obtain a fresh one on demand.
+
+        This used to call ``auth.grantex.GrantexClient.delegate_agent_token``,
+        an OAuth ``urn:grantex:agent_delegation`` grant type the Grantex auth
+        service does not serve, so a refresh could never succeed.
         """
         try:
             await asyncio.sleep(delay)
@@ -406,17 +410,17 @@ class TokenPool:
                 return
 
             agent_cfg = await self._agent_config_resolver(agent_id)
-            agent_type: str = agent_cfg["agent_type"]
-            scopes: list[str] = agent_cfg["scopes"]
-            ttl: int = agent_cfg.get("token_ttl", 3600)
+            agent_type = str(agent_cfg.get("agent_type") or "")
+            grantex_agent_id = str(agent_cfg.get("grantex_agent_id") or "")
+            scopes = [s for s in agent_cfg.get("scopes") or [] if isinstance(s, str) and s]
+            ttl = int(agent_cfg.get("token_ttl") or settings.grants_run_token_ttl_seconds)
+            if not grantex_agent_id or not scopes:
+                raise GrantMintError("agent_not_registered", "agent has no registered Grantex agent id or scopes")
 
-            # Request a new delegated token from Grantex
-            token_data = await grantex_client.delegate_agent_token(
-                agent_id=agent_id,
-                agent_type=agent_type,
-                scopes=scopes,
-                ttl=ttl,
-            )
+            # Delegate a new grant from the root grant (grants.delegate).
+            grant = await self._mint_run_grant(grantex_agent_id=grantex_agent_id, scopes=scopes, ttl_seconds=ttl)
+            expires_in = int(grant.expires_at - time.time()) if grant.expires_at else ttl
+            token_data = {"access_token": grant.token, "grant_id": grant.grant_id, "expires_in": max(1, expires_in)}
 
             # Store refreshed token (this also schedules the next refresh)
             await self.store_token(agent_id, token_data)
@@ -425,7 +429,8 @@ class TokenPool:
                 "token_refreshed",
                 agent_id=agent_id,
                 agent_type=agent_type,
-                expires_in=token_data.get("expires_in"),
+                grant_id=grant.grant_id,
+                expires_in=token_data["expires_in"],
             )
 
         except asyncio.CancelledError:

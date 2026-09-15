@@ -96,7 +96,7 @@ Minting needs:
 | Setting | Meaning |
 |---|---|
 | `GRANTEX_API_KEY` | Grantex SDK key (already required) |
-| `GRANTEX_ROOT_GRANT_TOKEN` | Root grant the per-run grants are delegated from. A credential: inject it from the secret manager, never commit it |
+| `GRANTEX_ROOT_GRANT_TOKEN` | Root grant the per-run grants are delegated from. A credential: inject it from the secret manager, never commit it. It must cover every scope the agents it serves are registered with (Grantex refuses a delegation that asks for more than the parent grant or the agent's registration) |
 | `AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS` | Lifetime requested for a per-run grant (default 900, 60–86400; Grantex caps it at the root grant's expiry) |
 
 When no token can be resolved the run still starts and each tool call it makes
@@ -196,6 +196,28 @@ A refused tool call stops the run before the connector is called.
   and the step fails. The gateway also writes a `scope_denied` audit row with
   the reason, sub-reason and grant id.
 
+## Registered scopes
+
+Agents are registered on Grantex with one scope per authorized tool,
+`tool:{connector}:{permission}:{tool}`, where `permission` is the level the
+connector's Grantex manifest declares (`read`, `write`, `delete`, `admin`), or
+`read`/`write` from the tool name when there is no manifest, plus
+`agenticorg:{domain}:read`. `PATCH /agents/{id}` recomputes them when the
+authorized tools change. Grantex compares the highest level a grant holds for
+a connector with the level the tool needs.
+
+Agents registered before this mapping carry `...:execute:...` scopes, which
+grant nothing. Re-scope them (report first, then apply):
+
+```
+python scripts/refresh_grantex_scopes.py --tenant <tenant id>
+python scripts/refresh_grantex_scopes.py --tenant <tenant id> --apply
+```
+
+The script updates the agent on Grantex, then `config.grantex.grantex_scopes`;
+it is idempotent and prints one JSON line per agent. Then re-read the
+warn-mode report before switching the tenant to `deny`.
+
 ## Runbook
 
 ### 1. Put a tenant in warn and read the warnings
@@ -217,7 +239,7 @@ for the whole deployment. Common patterns:
 | `grant_missing` / `agent_not_registered` | Agent created without a Grantex registration | Re-register the agent |
 | `grant_missing` / `mint_failed` | Root grant expired or revoked, or Grantex unreachable | Rotate the root grant; check Grantex |
 | `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-35) | Give the step a stored agent or accept it fails in deny |
-| `tool_not_granted` on every call of an agent | Registered scopes the grant cannot satisfy (FINDINGS A-32) | Fix the registration scopes |
+| `tool_not_granted` or `permission_insufficient` on every call of an agent registered before this release | Its registered scopes still use `execute` | Run `scripts/refresh_grantex_scopes.py --tenant <tenant id> --apply` |
 | `permission_insufficient` | The agent is registered for `read` but calls a write tool | Decide whether the agent should have the permission |
 | `manifest_unknown_tool` | No Grantex manifest for the connector or tool | Add a manifest (`GRANTEX_MANIFESTS_DIR`) |
 | `enforcement_unavailable` | The check could not run | Fix the error named in `sub_reason` |

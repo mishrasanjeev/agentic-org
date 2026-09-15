@@ -119,8 +119,13 @@ def _tools_to_scopes(
 ) -> list[str]:
     """Map tool names to Grantex scopes.
 
-    Format: tool:{connector}:execute:{tool_name}
-    Also adds domain-level read scope.
+    Format: ``tool:{connector}:{permission}:{tool_name}``, plus a domain-level
+    read scope. ``permission`` is what ``grantex.enforce`` understands
+    (``read < write < delete < admin``): the level the connector's shipped
+    Grantex manifest declares for the tool, else a conservative name
+    heuristic (``core.langgraph.grantex_auth._tool_permission``). An
+    ``execute`` segment - used before - resolves to no permission, so a grant
+    carrying only such scopes denied every call.
 
     BUG-07 (Uday CA Firms 2026-05-02): tool names like ``list_invoices``
     and ``get_balance_sheet`` are registered by multiple connectors
@@ -133,6 +138,11 @@ def _tools_to_scopes(
     declare any connector_ids continue to use the unscoped index — for
     them we have no signal that *should* have constrained the choice.
     """
+    from core.langgraph.grantex_auth import _tool_permission
+
+    def _scope(connector_name: str, tool: str) -> str:
+        return f"tool:{connector_name}:{_tool_permission(connector_name, tool)}:{tool}"
+
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
@@ -150,7 +160,7 @@ def _tools_to_scopes(
     # enterprise-gate: broad-except-ok reason=tool-index-failure-falls-back-to-agenticorg-scopes
     except Exception:
         # Fallback: use tool names directly as scopes
-        return scopes + [f"tool:agenticorg:execute:{t}" for t in tools]
+        return scopes + [_scope("agenticorg", t) for t in tools]
 
     for tool_name in tools:
         connector_hint, bare_tool = _split_connector_tool_ref(tool_name)
@@ -159,15 +169,14 @@ def _tools_to_scopes(
             # to a first-wins match of the bare name.
             qualified = qualified_index.get(f"{connector_hint}:{bare_tool}")
             if qualified:
-                scopes.append(f"tool:{qualified[0]}:execute:{bare_tool}")
+                scopes.append(_scope(qualified[0], bare_tool))
             else:
-                scopes.append(f"tool:agenticorg:execute:{tool_name}")
+                scopes.append(_scope("agenticorg", tool_name))
             continue
         match = scoped_index.get(tool_name) or global_index.get(tool_name)
         if match:
-            connector_name = match[0]
-            scopes.append(f"tool:{connector_name}:execute:{tool_name}")
+            scopes.append(_scope(match[0], tool_name))
         else:
-            scopes.append(f"tool:agenticorg:execute:{tool_name}")
+            scopes.append(_scope("agenticorg", tool_name))
 
     return scopes

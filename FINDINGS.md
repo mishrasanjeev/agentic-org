@@ -315,43 +315,6 @@ Remove an entry in the pull request that fixes it.
   too (as the pseudonymised path now does), and decide per caller whether its
   input can hold personal data; route those through a pseudonymisation session.
 
-## A-32 — Registered Grantex scopes use a permission `enforce` cannot satisfy
-
-- **Found:** wiring per-run grants for `grants.enforce_closed` (PRD F-1,
-  2026-09-15).
-- **What:** `auth/grantex_registration.py::_tools_to_scopes` registers agents
-  with `tool:{connector}:execute:{tool}` scopes, and `PATCH /agents/{id}`
-  refreshes `config.grantex.grantex_scopes` with the same function
-  (`api/v1/agents.py`, BUG-07 block). `grantex.enforce` resolves the granted
-  level from the third segment and only understands
-  `read < write < delete < admin`, so an `execute` scope grants nothing and
-  every call is denied. `core/langgraph/grantex_auth.py::_tools_to_scopes`
-  already emits `read`/`write` from the shipped manifests, but nothing on the
-  registration path uses it. A per-run grant delegated from these
-  registrations therefore reports every tool call as `tool_not_granted` in
-  warn mode.
-- **Fix:** register and refresh scopes with the manifest-aware mapping, update
-  already-registered agents on Grantex (`agents.update`) in a backfill, and
-  re-check the warn-mode report before any tenant moves to deny.
-
-## A-33 — The token pool's refresh path calls a grant type Grantex does not serve
-
-- **Found:** extending `auth/token_pool.py` to obtain the first run token
-  (2026-09-15).
-- **What:** `TokenPool._refresh_after` refreshes through
-  `auth/grantex.py::GrantexClient.delegate_agent_token`, which posts
-  `grant_type=urn:grantex:agent_delegation` (after a `client_credentials`
-  platform token) to `{GRANTEX_TOKEN_SERVER}/oauth2/token`. The Grantex auth
-  service serves `/oauth/token` with `authorization_code`, `refresh_token` and
-  token exchange only, so that refresh can never succeed against it. Nothing
-  calls `token_pool.init()` or `set_agent_config_resolver()` either, so the
-  refresh loop and revocation listener never run. Per-run grants added for
-  F-1 use `grants.delegate` from the root grant instead and do not depend on
-  this path.
-- **Fix:** remove the dead refresh/revocation machinery or rebuild it on
-  `grants.delegate` / `tokens.refresh`, and initialise the pool (with a Redis
-  client per event loop) where the API and workers start.
-
 ## A-34 — Legacy scope validation calls the blocking `enforce` on the event loop
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).

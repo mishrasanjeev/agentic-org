@@ -76,7 +76,12 @@ class GrantexClient:
     async def delegate_agent_token(
         self, agent_id: str, agent_type: str, scopes: list[str], ttl: int = 3600
     ) -> dict[str, Any]:
-        """Obtain scoped agent token via delegation grant."""
+        """Obtain scoped agent token via delegation grant.
+
+        Not used by the platform: the Grantex auth service does not serve the
+        ``urn:grantex:agent_delegation`` grant type. Agent grants are delegated
+        from the root grant with ``grants.delegate`` (``auth/token_pool.py``).
+        """
         return await self._post_token(
             data={
                 "grant_type": "urn:grantex:agent_delegation",

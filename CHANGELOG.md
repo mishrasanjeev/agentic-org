@@ -17,11 +17,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   writes to its audit row. Default stays `off`; nothing changes unless a
   tenant or the deployment opts in. Rollback: disable the tenant's deny flag
   or reset the deployment default. See the runbook in
-  `docs/operations/grant-enforcement.md`. **Do not switch a tenant to `deny`
-  yet if its agents rely on minted grants:** agents are registered with
-  `execute` scopes that Grantex's check cannot satisfy, so a minted grant
-  denies every call today (FINDINGS A-32); the warn-mode report shows this as
-  `tool_not_granted` on every call.
+  `docs/operations/grant-enforcement.md`. Agents registered before this
+  release carry scopes Grantex's check cannot satisfy: run
+  `scripts/refresh_grantex_scopes.py --apply` before switching their tenant
+  to `deny`.
 
 ### Added
 - Untrusted content extractor (`core/extraction/`): websites, registry
@@ -276,6 +275,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   checks. `off` is unchanged.
 
 ### Fixed
+- Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
+  with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
+  connector's Grantex manifest instead of `...:execute:...`, which Grantex's
+  permission check never satisfies, so grants delegated for them allowed
+  nothing. `scripts/refresh_grantex_scopes.py` re-scopes agents registered
+  before (report only by default; `--apply` updates Grantex, then storage).
+- The token pool refreshes agent tokens by delegating from the root grant
+  (`grants.delegate`) instead of an OAuth grant type the Grantex auth service
+  does not serve.
 - Four shipped industry-pack agents no longer send every run to human review.
   Their HITL conditions were bare labels (`high_value_or_complex_risk`,
   `high_value_or_fraud_indicator`, `cancellation_or_major_endorsement`,
