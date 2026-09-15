@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains, get_user_role
 from api.route_metadata import route_meta
+from core.approvals.agent_run_resume import public_context, resume_approved_agent_run, should_resume
 from core.database import get_tenant_session
 from core.models.agent import Agent
 from core.models.audit import AuditLog
@@ -119,7 +120,8 @@ def _hitl_to_dict(item: HITLQueue) -> dict:
         "status": _effective_status(item),
         "assignee_role": item.assignee_role,
         "decision_options": item.decision_options,
-        "context": item.context,
+        # Without the server-only parameters kept for resuming a paused run.
+        "context": public_context(item.context),
         "decision": item.decision,
         "decision_by": str(item.decision_by) if item.decision_by else None,
         "requested_by_user_id": (
@@ -674,6 +676,12 @@ async def decide(
             {"decision": body.decision, "notes": body.notes},
             str(engine_run_id_hint or "") or None,
         )
+
+    # Resume a paused standalone run from its checkpoint (flag
+    # approvals.resume_agent_runs, default off). The task re-reads the row in
+    # the tenant session; nothing from this request identifies the checkpoint.
+    if policy_action in {"advance", "reject"} and await should_resume(item, tid):
+        background_tasks.add_task(resume_approved_agent_run, tid, item.id)
 
     if learning_result.get("ran_in_shadow") and policy_action in {"advance", "reject"}:
         from core.feedback.analyzer import analyze_and_apply_feedback
