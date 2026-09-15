@@ -16,15 +16,6 @@ Remove an entry in the pull request that fixes it.
   libuuid 2.42.3-r1 or later (`scripts/refresh_image_digests.sh`), rebuild,
   rescan and drop the seven entries from `.trivyignore.yaml`.
 
-## A-2 — CONTRIBUTING.md overstates the coverage gate
-
-- **Found:** editing `CONTRIBUTING.md` (2026-09-14).
-- **What:** "Tests" says a minimum 80% coverage is enforced in CI; CI and
-  `scripts/preflight.sh` enforce `--cov-fail-under=55` plus per-module floors
-  (`scripts/check_module_coverage.py`).
-- **Fix:** state the real gate. The governed-actions work raises it to 75% on
-  changed code, so update the text in that change.
-
 ## A-3 — Preflight mypy and CI lint type-check different environments
 
 - **Found:** running `scripts/preflight.sh` on `main` at 784cbd03 (2026-09-14).
@@ -129,6 +120,95 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** register a knowledge-search tool or rewrite those steps, qualify
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
+
+## A-13 — Test runs rewrite tracked files
+
+- **Found:** running `make test` and `make test-integration` in a fresh clone
+  (2026-09-15).
+- **What:** two suites write into tracked files, so every local run dirties
+  the working tree and the changes are easy to commit by accident.
+  `tests/integration/test_alembic_e2e.py` runs the real migrations, and
+  `core/crypto/migration_helpers.py` writes each encrypted-column migration's
+  audit record to `migrations/audit/<revision>.json` in the checkout
+  (`v6z12_voice_runtime.json` gets new `started_at`/`completed_at`).
+  `tests/unit/test_check_module_coverage.py` runs
+  `scripts/check_module_coverage.py`, which rewrites the tracked
+  `coverage_report.json`.
+- **Fix:** let both output locations be overridden (environment variables the
+  tests point at a temporary directory), or have the tests restore the files;
+  keep the committed records as they are.
+
+## A-14 — Shell scripts break on Windows checkouts with `core.autocrlf=true`
+
+- **Found:** running `make test-integration` from a Windows worktree
+  (2026-09-15).
+- **What:** `.gitattributes` fixes line endings only for
+  `core/policy/examples/*.yaml`, so Git for Windows' default
+  `core.autocrlf=true` checks shell scripts out with CRLF endings.
+  Bash inside the Linux containers then rejects them:
+  `tests/regression/test_bug_sheet_platform_20260914.py::test_deploy_script_pins_worker_and_beat_entrypoints`
+  fails on `bash -n scripts/deploy_cloud_run.sh`, and the scripts `make`
+  runs in containers would fail the same way. A clone made with
+  `core.autocrlf=false` is unaffected.
+- **Fix:** add `.gitattributes` with `*.sh text eol=lf` (and the same for
+  other files executed inside Linux containers), then renormalise.
+
+## A-15 — Existing files name commercial screening and business-data vendors
+
+- **Found:** `python scripts/check_denylist.py audit` when adding the vendor
+  denylist (2026-09-15).
+- **What:** six tracked lines predate the vendor-neutral rule and name
+  commercial vendors: two in `connectors/ops/sanctions_api.py`, one each in
+  `core/agents/packs/insurance/prompts/underwriting_analyst.prompt.txt`,
+  `docs/PRD_CxO_v5.0.md`, `docs/connector_production_readiness.md` and
+  `scripts/generate_connectors.py`. The pull request check only looks at added
+  lines, so these pass today but fail as soon as someone edits them.
+- **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
+  and description become configuration or `acme_kyb`-style examples; the prompt
+  and documents drop the vendor names), then confirm `audit` exits 0.
+
+## A-16 — Re-running `make dev` after an API change breaks the console proxy
+
+- **Found:** re-running `make dev` on a running stack after the API image was
+  rebuilt (2026-09-15).
+- **What:** `ui/nginx.conf` proxies `/api` through an `upstream` block naming
+  `agenticorg-api:8000`, which nginx resolves once at start. Compose recreates
+  the `api` container (new address) but leaves `ui` running, so the console
+  answers `/api/...` with 502 and `scripts/dev_stack_smoke.sh` fails on
+  "console -> api proxy" until `ui` is restarted. A first `make dev` on a clean
+  machine is unaffected.
+- **Fix:** add `restart: true` to the `ui` service's `depends_on.api` entry in
+  `docker-compose.dev.yml` (Compose restarts `ui` whenever it recreates
+  `api`), or resolve the upstream at request time with a `resolver` directive
+  and a variable in `proxy_pass`.
+
+## A-17 — `.dockerignore` cache and bytecode patterns only match the repository root
+
+- **Found:** `make dev` rebuilding the API image's dependency layers after a
+  local pytest run (2026-09-15).
+- **What:** `.dockerignore` lists `__pycache__/`, `*.py[cod]`, `.pytest_cache/`
+  and similar without a `**/` prefix. Docker matches such patterns from the
+  context root only, so `core/**/__pycache__` and other nested bytecode from a
+  developer's test runs are sent in the build context. They change the
+  checksum of `COPY core/ core/` in the builder stage, which reruns the full
+  `pip install` (several minutes) and puts stale `.pyc` files into a locally
+  built image. Clean CI checkouts are unaffected.
+- **Fix:** prefix the cache and bytecode patterns with `**/` (for example
+  `**/__pycache__/`, `**/*.py[cod]`) and confirm with a build after a test run
+  that the builder layers stay cached.
+
+## A-18 — `CONTRIBUTING.md` is committed with CRLF line endings
+
+- **Found:** rebasing the local-stack changes onto `main` at 409fc44d
+  (2026-09-15).
+- **What:** b611368e rewrote `CONTRIBUTING.md` with CRLF line endings, while
+  the rest of the repository stores LF. The commit shows every line as
+  changed, and any branch that edited the file before it now conflicts on the
+  whole file; an LF-only editor or a `core.autocrlf=input` checkout turns the
+  next edit into another whole-file rewrite.
+- **Fix:** renormalise the file to LF in its own commit and add a
+  `.gitattributes` rule (`*.md text eol=lf`, together with A-14's `*.sh`
+  rule) so line endings are fixed at the repository level.
 
 ## A-19 — Approval step conditions that fail to evaluate are skipped
 
@@ -315,7 +395,47 @@ Remove an entry in the pull request that fixes it.
   too (as the pseudonymised path now does), and decide per caller whether its
   input can hold personal data; route those through a pseudonymisation session.
 
-## A-34 — Legacy scope validation calls the blocking `enforce` on the event loop
+## A-32 — Multi-step approvals do not require distinct approvers
+
+- **Found:** review of the development seed's approval policy (2026-09-15).
+- **What:** `api/v1/approvals.py` only refuses a second vote by the same person
+  on the *same* step ("This reviewer has already voted on the current approval
+  step"). Nothing compares approvers across steps, and no code reads a
+  distinct-approver setting, so one user holding the step roles can approve
+  every step of a multi-step policy alone. A policy described as four-eyes is
+  therefore not enforced as such.
+- **Fix:** record approvers per item and refuse a decision by anyone who
+  decided an earlier step when the policy requires distinct approvers, with a
+  reason code and a test. The governed-actions decision grants will enforce
+  four-eyes for case decisions; the generic approval flow still needs this.
+
+## A-33 — Approval steps for an unknown role can be decided by any known role
+
+- **Found:** same review (2026-09-15).
+- **What:** `_can_decide` in `api/v1/approvals.py` compares role levels from
+  `_ROLE_HIERARCHY`, where an unknown role is level 0. An item whose
+  `assignee_role` is not in the map (the approval policy API accepts any
+  string for `approver_role`) needs level 0, so every user with a known role
+  passes the check. This fails open on an authority path.
+- **Fix:** refuse to create or update a policy step whose `approver_role` is
+  not a known role, and have `_can_decide` deny (with a reason) when the
+  assignee role is unknown.
+
+## A-34 — A wall-clock assertion in the identifier recogniser tests fails under coverage
+
+- **Found:** the CI `unit-tests` job on a local-stack pull request (2026-09-15).
+- **What:** `tests/unit/test_pii_international_recognizers.py::test_resolve_overlaps_keeps_the_longest_and_scales`
+  asserts that `resolve_overlaps` handles 16,000 matches in under 0.5 seconds
+  of wall-clock time. The unit job runs with `--cov=.`, whose line tracing
+  slows the loop; on a shared runner it took 0.72 seconds and failed, then
+  passed on a rerun of the same commit. The test is flaky rather than the
+  code slow.
+- **Fix:** assert the algorithmic property instead (for example, count
+  comparisons, or compare the time for 16,000 matches with the time for 1,600
+  and require roughly linear growth), or mark the timing check to run without
+  coverage.
+
+## A-37 — Legacy scope validation calls the blocking `enforce` on the event loop
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
 - **What:** in `off` mode `core/langgraph/agent_graph.py::validate_tool_scopes`
@@ -326,7 +446,7 @@ Remove an entry in the pull request that fixes it.
   `off` keeps today's behaviour.
 - **Fix:** run the legacy call through `asyncio.to_thread` too.
 
-## A-35 — Workflow connector steps and unstored workflow agents have no grant principal
+## A-38 — Workflow connector steps and unstored workflow agents have no grant principal
 
 - **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
   2026-09-15).
@@ -341,7 +461,7 @@ Remove an entry in the pull request that fixes it.
   require a stored agent on every step) as a Grantex agent with scopes for its
   connector steps, and resolve the step's grant from it.
 
-## A-36 — A legacy scope denial is reported as a completed run
+## A-39 — A legacy scope denial is reported as a completed run
 
 - **Found:** making deny-mode runs report `failed` (PRD F-1c, 2026-09-15).
 - **What:** in `off` mode an agent that carries a configured grant token still

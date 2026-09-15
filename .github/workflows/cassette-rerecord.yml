@@ -1,0 +1,46 @@
+name: Cassette Re-record
+
+# Nightly: re-record every model cassette against a live model with the
+# MODEL_RECORD_API_KEY secret and report which cassettes changed. Reports only:
+# nothing is committed and no pull request depends on this workflow. Change
+# the provider with the MODEL_RECORD_PROVIDER repository variable (gemini,
+# openai or anthropic). See docs/testing/record-replay.md.
+
+on:
+  schedule:
+    - cron: "15 21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rerecord:
+    name: Re-record cassettes
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      # Every dependency is pinned by hash before the step that holds the
+      # secret, so a newly published package version cannot run with the key.
+      # The tests import the project from the checkout; it is not installed.
+      - name: Install hash-pinned dependencies
+        run: python -m pip install --require-hashes --no-deps -r requirements-rerecord.lock
+      - name: Re-record and compare
+        env:
+          MODEL_RECORD_API_KEY: ${{ secrets.MODEL_RECORD_API_KEY }}
+          MODEL_RECORD_PROVIDER: ${{ vars.MODEL_RECORD_PROVIDER || 'gemini' }}
+          REPORT_DIR: ${{ runner.temp }}/cassette-report
+        run: bash scripts/rerecord_cassettes.sh
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: cassette-rerecord-${{ github.run_id }}
+          path: ${{ runner.temp }}/cassette-report
+          if-no-files-found: ignore
+          retention-days: 14

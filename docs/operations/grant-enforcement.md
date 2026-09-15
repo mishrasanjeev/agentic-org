@@ -238,7 +238,7 @@ for the whole deployment. Common patterns:
 | `grant_missing` / `minting_unconfigured` | `GRANTEX_ROOT_GRANT_TOKEN` or `GRANTEX_API_KEY` not set | Configure the root grant |
 | `grant_missing` / `agent_not_registered` | Agent created without a Grantex registration | Re-register the agent |
 | `grant_missing` / `mint_failed` | Root grant expired or revoked, or Grantex unreachable | Rotate the root grant; check Grantex |
-| `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-35) | Give the step a stored agent or accept it fails in deny |
+| `grant_missing` / `no_agent` | Workflow connector step or type with no stored agent (FINDINGS A-38) | Give the step a stored agent or accept it fails in deny |
 | `tool_not_granted` or `permission_insufficient` on every call of an agent registered before this release | Its registered scopes still use `execute` | Run `scripts/refresh_grantex_scopes.py --tenant <tenant id> --apply` |
 | `permission_insufficient` | The agent is registered for `read` but calls a write tool | Decide whether the agent should have the permission |
 | `manifest_unknown_tool` | No Grantex manifest for the connector or tool | Add a manifest (`GRANTEX_MANIFESTS_DIR`) |
