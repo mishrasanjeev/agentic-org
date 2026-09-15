@@ -15,8 +15,10 @@ Runs only when pointed at a Grantex auth service with a sandbox developer key
     AGENTICORG_GRANTEX_E2E_SANDBOX_KEY=<sandbox developer key> \\
     pytest tests/integration/test_grant_enforcement_grantex_e2e.py
 
-Reason codes come from the Grantex SDK's ``EnforceResult.reason_code``; with an
-SDK that predates them every denial is ``unclassified`` and the test says so.
+Reason codes come from the Grantex SDK's ``EnforceResult.reason_code`` when the
+SDK has it, else from the pinned 0.5.x SDK's exact denial messages
+(``auth.grant_enforcement.classify_enforce_result``); either way each denial
+carries its exact reason.
 """
 
 from __future__ import annotations
@@ -46,16 +48,6 @@ TENANT = str(uuid.uuid4())
 AGENT = str(uuid.uuid4())
 AUTHORIZED_TOOLS = ["hubspot:list_contacts", "salesforce:query"]
 CALLED_TOOLS = ["hubspot:list_contacts", "hubspot:create_contact", "salesforce:query"]
-
-
-def _sdk_has_reason_codes() -> bool:
-    from grantex.manifest import EnforceResult
-
-    return "reason_code" in getattr(EnforceResult, "__dataclass_fields__", {})
-
-
-def _expected(reason: str) -> str:
-    return reason if _sdk_has_reason_codes() else "unclassified"
 
 
 @pytest.fixture(scope="module")
@@ -188,7 +180,7 @@ async def test_warn_runs_every_call_and_records_the_ungranted_ones(grantex_env, 
     assert called == ["list_contacts", "create_contact", "query"]
     events = [(e["tool"], e["reason"]) for e in logs if e["event"] == "grant_enforcement_would_deny"]
     # list_contacts and query are granted (read); create_contact needs write.
-    assert events == [("create_contact", _expected("permission_insufficient"))]
+    assert events == [("create_contact", "permission_insufficient")]
     assert result["status"] == "completed"
 
 
@@ -206,11 +198,9 @@ async def test_deny_runs_granted_calls_and_refuses_an_ungranted_one(grantex_env,
     assert called == ["list_contacts"]
     assert result["status"] == "failed"
     assert result["hitl_trigger"] == ""
-    assert result["grant_denial"]["reason"] == _expected("permission_insufficient")
+    assert result["grant_denial"]["reason"] == "permission_insufficient"
     assert result["grant_denial"]["tool"] == "create_contact"
-    assert [e["reason"] for e in logs if e["event"] == "grant_enforcement_denied"] == [
-        _expected("permission_insufficient")
-    ]
+    assert [e["reason"] for e in logs if e["event"] == "grant_enforcement_denied"] == ["permission_insufficient"]
 
 
 async def test_deny_refuses_a_connector_the_grant_does_not_cover(grantex_env, scripted_model, monkeypatch):
@@ -224,7 +214,7 @@ async def test_deny_refuses_a_connector_the_grant_does_not_cover(grantex_env, sc
         monkeypatch,
     )
     assert called == []
-    assert result["grant_denial"]["reason"] == _expected("tool_not_granted")
+    assert result["grant_denial"]["reason"] == "tool_not_granted"
 
 
 async def test_patch_scope_push_and_pool_delegate_only_registered_scopes(grantex_env, monkeypatch):
