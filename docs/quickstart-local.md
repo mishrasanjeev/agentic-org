@@ -83,10 +83,10 @@ build takes several minutes.
 
 | Command | Runs |
 |---|---|
-| `make test` | `tests/unit`, `tests/security`, `tests/regression` and the contract suite `tests/connector_harness` in one run with coverage and the 55% floor (the CI unit job), then `make test-integration` |
+| `make test` | `tests/unit`, `tests/security` and the contract suite `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
-| `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis (the CI integration job) |
+| `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
 | `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files |
 
 Each check is also a target of its own (`make check-ruff`, `check-mypy`,
@@ -161,22 +161,38 @@ Users and clients come from `tools/oidc_stub/config.dev.json`:
 
 The `agenticorg-api-dev` client is confidential (development placeholder
 secret in the config file) and `agenticorg-dev-public` is a public client.
-Redirect URIs on `http://127.0.0.1` match on any port, so moving the stack's
-ports does not break them.
+Redirect URIs must match exactly, with one exception: a registered plain
+`http` redirect URI on a loopback host (`127.0.0.1`, `localhost` or `[::1]`)
+also matches the same host, path and query on any other port, so moving the
+stack's ports does not break them.
 
 `/authorize` shows a sign-in page listing the users; choosing one is the
 authentication (there are no passwords). Tokens carry `acr`, `amr` and
 `auth_time`:
 
-| Request | Sign-in | `acr` | `amr` |
-|---|---|---|---|
-| no `acr_values`, or `urn:agenticorg:acr:basic` | pick a user | `urn:agenticorg:acr:basic` | `["pwd"]` |
-| `acr_values=urn:agenticorg:acr:step-up` | pick a user and confirm the simulated security key | `urn:agenticorg:acr:step-up` | `["pwd", "hwk"]` |
+| How the browser session signed in | `acr` | `amr` |
+|---|---|---|
+| picked a user | `urn:agenticorg:acr:basic` | `["pwd"]` |
+| picked a user and confirmed the simulated security key | `urn:agenticorg:acr:step-up` | `["pwd", "hwk"]` |
+
+`acr` and `amr` describe the session, not the request: a request without
+`acr_values` (or with `urn:agenticorg:acr:basic`) that arrives in a session
+already stepped up gets `urn:agenticorg:acr:step-up`. Only
+`acr_values=urn:agenticorg:acr:step-up` requires the security key.
 
 A browser session that already satisfies the request is signed in without a
 prompt. A session that is not stepped up, is older than `max_age`, or meets
 `prompt=login` is asked to authenticate again, and re-authentication must be by
 the same user. `prompt=none` returns `login_required` instead of prompting.
+Sessions end eight hours after sign-in.
+
+**Step-up clients must send `max_age`** (for example `max_age=300`) together
+with `acr_values=urn:agenticorg:acr:step-up`, and check `auth_time` and `amr`
+in the ID token. Without `max_age`, a security-key confirmation made hours
+earlier in the same browser session satisfies the request again.
+
+Every query and form parameter may appear only once; a repeated parameter is
+rejected with `invalid_request` (or an error page on `/authorize`).
 Unknown `acr_values`, a missing PKCE challenge, an unregistered `redirect_uri`,
 a wrong `code_verifier` or a replayed code are rejected, never downgraded.
 
@@ -194,13 +210,16 @@ against the stack's database and prints what it seeded:
 | Users | Approver A (`approver.a@example.com`) and Approver B (`approver.b@example.com`), role `domain_lead`, domain `backoffice`; the same emails as the OIDC stub's users |
 | Sign-in configuration | OIDC provider `dev-oidc` for the stub's public client `agenticorg-dev-public`, stored **disabled** (see the note above) |
 | Agents | "Risk Sentinel (development)" and "Compliance Guard (development)", in shadow mode with no tools authorised, model `vllm:scripted/final-only` (the model stub) |
-| Approval policy | `four-eyes-dev`: step 1 `underwriter`, step 2 `approver` (a different person) |
+| Approval policy | `two-step-dev`: two sequential steps, each for the `domain_lead` role. It does not require two different people; see FINDINGS A-26 |
 
 Every row has a fixed id, so running `make seed` again changes nothing and puts
 back any seeded field that was edited. It fails without writing anything if a
 seeded name (the tenant slug, a user's email, the provider key, an agent or the
 policy name) already belongs to a row it did not create. It refuses to run
-unless `AGENTICORG_ENV` is a development or test runtime. All names are
+unless `AGENTICORG_ENV` is a development or test runtime, or when `APP_ENV`,
+`ENVIRONMENT`, `ENV` or `NODE_ENV` names a production-like runtime, and refuses
+a database host other than `localhost`, `127.0.0.1`, `::1` or the stack's
+`postgres` service unless `AGENTICORG_SEED_ALLOW_REMOTE_DB=1`. All names are
 invented and all addresses use `example.com`.
 
 The users have no password by default. To sign in to the console with email
@@ -235,11 +254,18 @@ Tool-call ids are derived from the tool name and arguments exactly as the
 in-process scripted model (`core/test_doubles/scripted_model.py`) derives them.
 A conversation longer than the script (409 `script_exhausted`), a tool the
 request did not bind (400 `script_mismatch`) and an unknown script (404) are
-errors. `final-only` ships as an example that answers once, with no tools.
+errors. A malformed script (a step that is not exactly one of `tool_calls` or
+`content`, arguments that are not an object, an argument named `call_id`)
+answers 422 `invalid_script`. `final-only` ships as an example that answers
+once, with no tools.
 
 **Cassettes.** Any other model id is answered from
 `tests/cassettes/model_stub/`, keyed and stored with `core/model_replay.py`
-(model id, messages, tool schemas, temperature, max tokens, stop). In the
+(model id, messages, tool schemas, temperature, max tokens, stop, and, when a
+request sends them, `tool_choice`, `response_format`, `top_p`, `seed`,
+`parallel_tool_calls`, `frequency_penalty`, `presence_penalty`, `logit_bias` and
+`reasoning_effort`). A request field the stub neither keys nor understands is
+rejected with 400 `unsupported_parameter` rather than ignored. In the
 default `replay` mode a request with no cassette gets 404 `cassette_miss`, with
 the same explanation of where it differs from the nearest recording as the
 test harness gives, and nothing is forwarded. To record, run the stack with

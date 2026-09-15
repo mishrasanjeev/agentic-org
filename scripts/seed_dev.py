@@ -12,14 +12,19 @@ Creates, or brings back to the seeded state, one development tenant:
   public hosts;
 * two sample agents in shadow mode with no tools authorised, whose model is the
   model stub's ``final-only`` script;
-* a four-eyes approval policy: the underwriter, then a second, different
-  approver.
+* a two-step sequential approval policy (both steps for the ``domain_lead``
+  role the seeded users hold). It does not require two different people: the
+  approval flow does not enforce distinct approvers across steps yet.
 
 Every row has a fixed id derived from its seed key, so running the seed again
 changes nothing (and restores seeded fields someone edited). All names are
 invented and all addresses use ``example.com``. Refuses to run unless
-``AGENTICORG_ENV`` is a development or test runtime, and fails without writing
-anything if a seeded name is already taken by a row the seed did not create.
+``AGENTICORG_ENV`` is a development or test runtime and no other common
+environment variable names a production-like runtime; refuses a database that
+is not on this machine or the local stack (loopback or the ``postgres`` compose
+service) unless ``AGENTICORG_SEED_ALLOW_REMOTE_DB=1``; and fails without
+writing anything if a seeded name is already taken by a row the seed did not
+create.
 
     AGENTICORG_ENV=development AGENTICORG_DB_URL=postgresql+asyncpg://... python -m scripts.seed_dev
 
@@ -40,11 +45,16 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OIDC_STUB_CONFIG = REPO_ROOT / "tools" / "oidc_stub" / "config.dev.json"
 SEED_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://example.com/agenticorg/dev-seed")
 RELAXED_ENVS = frozenset({"development", "dev", "local", "test", "ci"})
+PRODUCTION_MARKERS = frozenset({"production", "prod", "staging", "stage", "uat", "preprod", "live"})
+ENV_VARIABLES = ("AGENTICORG_ENV", "APP_ENV", "ENVIRONMENT", "ENV", "NODE_ENV")
+LOCAL_DB_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "postgres"})
+ALLOW_REMOTE_DB_ENV = "AGENTICORG_SEED_ALLOW_REMOTE_DB"
 MIN_PASSWORD_LENGTH = 12
 
 TENANT_SLUG = "acme-underwriting-dev"
@@ -52,7 +62,10 @@ TENANT_NAME = "Acme Underwriting (development)"
 SSO_PROVIDER_KEY = "dev-oidc"
 SSO_CLIENT_ID = "agenticorg-dev-public"
 OIDC_ISSUER = "http://127.0.0.1:9400"
-APPROVAL_POLICY_NAME = "four-eyes-dev"
+APPROVAL_POLICY_NAME = "two-step-dev"
+APPROVAL_STEP_ROLE = "domain_lead"
+# Seed keys of rows earlier versions of this script created; removed when found.
+RETIRED_POLICY_KEY = "approval-policy:four-eyes"
 SAMPLE_AGENT_MODEL = "vllm:scripted/final-only"
 
 
@@ -97,11 +110,37 @@ AGENTS: Sequence[SeedAgent] = (
 
 
 def assert_development_runtime(environ: Mapping[str, str]) -> None:
+    for name in ENV_VARIABLES:
+        value = environ.get(name, "").strip().lower()
+        if value in PRODUCTION_MARKERS:
+            raise SeedError(f"refusing to seed: {name}={value} indicates a production-like runtime")
     runtime = environ.get("AGENTICORG_ENV", "").strip().lower()
     if runtime not in RELAXED_ENVS:
         raise SeedError(
             f"refusing to seed: AGENTICORG_ENV must be one of {', '.join(sorted(RELAXED_ENVS))} "
             f"(got {runtime or 'nothing'})"
+        )
+
+
+def assert_local_database(db_url: str, environ: Mapping[str, str]) -> None:
+    """Refuse a database outside this machine or the local stack unless explicitly allowed."""
+    if environ.get(ALLOW_REMOTE_DB_ENV, "").strip() == "1":
+        return
+    try:
+        parts = urlsplit(db_url)
+        host = parts.hostname
+        parts.port  # noqa: B018 - raises ValueError for a malformed port
+    except ValueError as exc:
+        raise SeedError(f"refusing to seed: AGENTICORG_DB_URL cannot be parsed ({exc})") from exc
+    if parts.query or parts.fragment:
+        raise SeedError(
+            "refusing to seed: AGENTICORG_DB_URL carries query parameters, which can select another host; "
+            f"set {ALLOW_REMOTE_DB_ENV}=1 if that is intended"
+        )
+    if host not in LOCAL_DB_HOSTS:
+        raise SeedError(
+            f"refusing to seed: database host {host or '(none)'!r} is not local "
+            f"({', '.join(sorted(LOCAL_DB_HOSTS))}); set {ALLOW_REMOTE_DB_ENV}=1 to seed it anyway"
         )
 
 
@@ -138,6 +177,7 @@ def _password_hash(environ: Mapping[str, str]) -> str | None:
 async def seed(db_url: str, environ: Mapping[str, str]) -> dict[str, Any]:
     """Apply the seed in one transaction and return what it contains."""
     assert_development_runtime(environ)
+    assert_local_database(db_url, environ)
     users = load_users()
     password_hash = _password_hash(environ)
 
@@ -234,23 +274,31 @@ async def seed(db_url: str, environ: Mapping[str, str]) -> dict[str, Any]:
                 agent.llm_model, agent.llm_provider = SAMPLE_AGENT_MODEL, None
                 summary["agents"].append(seed_agent.name)
 
-            policy_id = seed_id("approval-policy:four-eyes")
+            # An earlier version seeded a policy that claimed two different
+            # approvers; nothing enforced that, so it is removed (only by its
+            # seed-owned id) rather than left to mislead.
+            retired = await session.get(ApprovalPolicy, seed_id(RETIRED_POLICY_KEY))
+            if retired is not None:
+                await session.delete(retired)
+                await session.flush()
+
+            policy_id = seed_id("approval-policy:two-step")
             conflict = (ApprovalPolicy.tenant_id == tenant_id) & (ApprovalPolicy.name == APPROVAL_POLICY_NAME)
             policy = await claim(ApprovalPolicy, policy_id, conflict, f"approval policy {APPROVAL_POLICY_NAME!r}")
             if policy is None:
                 policy = ApprovalPolicy(id=policy_id, tenant_id=tenant_id, name=APPROVAL_POLICY_NAME)
                 session.add(policy)
-            policy.description = "Development four-eyes policy: the underwriter, then a different approver."
+            policy.description = "Development two-step sequential approval, both steps for domain leads."
             policy.is_active = True
             await session.flush()
-            for sequence, role in ((1, "underwriter"), (2, "approver")):
-                step_id = seed_id(f"approval-step:four-eyes:{sequence}")
+            for sequence in (1, 2):
+                step_id = seed_id(f"approval-step:two-step:{sequence}")
                 step = await session.get(ApprovalStep, step_id)
                 if step is None:
                     step = ApprovalStep(id=step_id, policy_id=policy_id, sequence=sequence)
                     session.add(step)
-                step.approver_role, step.quorum_required, step.quorum_total, step.mode = role, 1, 1, "sequential"
-                step.step_metadata = {"distinct_from_previous_steps": sequence > 1}
+                step.approver_role, step.quorum_required, step.quorum_total = APPROVAL_STEP_ROLE, 1, 1
+                step.mode, step.step_metadata = "sequential", {}
             summary["approval_policy"] = APPROVAL_POLICY_NAME
     finally:
         await engine.dispose()

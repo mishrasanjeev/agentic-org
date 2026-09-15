@@ -16,7 +16,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
   from scripted sequences (`scripted/<name>`, ids matching the in-process
   scripted model) or from cassettes keyed and stored by `core/model_replay.py`.
-  Replay misses are errors and are never forwarded; record mode forwards to a
+  Options that change the answer (`tool_choice`, `response_format`, `seed`, ...)
+  are part of the key and unknown request fields are rejected. Replay misses
+  are errors and are never forwarded; record mode forwards to a
   real provider and refuses to start without `MODEL_RECORD_API_KEY`. The API
   and worker send `vllm:` models to it, and the agents `make seed` creates use
   `vllm:scripted/final-only`, so agents run locally without model credentials.
@@ -25,9 +27,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - `make seed` (`scripts/seed_dev.py`): an idempotent development tenant with
   Approver A and Approver B (the OIDC stub's identities, matched by email), a
   disabled `dev-oidc` sign-in configuration for the stub, two sample agents in
-  shadow mode with no tools, and a two-step four-eyes approval policy. Fixed
-  ids make repeated runs a no-op; a conflicting existing row fails the run
-  without writes; it refuses non-development runtimes. Optional
+  shadow mode with no tools, and a two-step sequential approval policy (it does
+  not require distinct approvers). Fixed ids make repeated runs a no-op; a
+  conflicting existing row fails the run without writes; it refuses
+  production-like runtimes and non-local database hosts unless
+  `AGENTICORG_SEED_ALLOW_REMOTE_DB=1`. Optional
   `AGENTICORG_SEED_PASSWORD` enables email sign-in. See "Development data" in
   `docs/quickstart-local.md`.
 - Development OpenID Connect provider in the local stack (`oidc-stub`,
@@ -36,19 +40,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   and `prompt=login`, with `acr`, `amr` (`["pwd"]` or `["pwd", "hwk"]`) and
   `auth_time` in its tokens. Seeds Approver A and Approver B from
   `tools/oidc_stub/config.dev.json`. Refuses to start unless `AGENTICORG_ENV`
-  is development, local or test. `tools/` is excluded from the API image. See
-  "Development identity provider" in `docs/quickstart-local.md`.
+  is development, local or test. Sessions last eight hours, repeated request
+  parameters are rejected, and step-up clients must send `max_age`. `tools/` is
+  excluded from the API image. See "Development identity provider" in
+  `docs/quickstart-local.md`.
 - Vendor-name denylist: `scripts/check_denylist.py` fails a change whose added
   lines, file paths, commit messages, branch name or pull request title and
   description name a denylisted verification, identity-data or screening
   vendor. Terms are matched through salted SHA-256 hashes in
-  `config/denylist.sha256` (80 terms; no plaintext is committed), independent
-  of case, spacing and punctuation. Runs in the new Vendor Denylist workflow
+  `config/denylist.sha256` (80 terms; the plain list is not committed, though
+  the salted hashes are not secret), independent of case, spacing, punctuation
+  and a term glued to the end of a word. Runs in the new Vendor Denylist workflow
   and in `make check`; `audit` checks the whole tree. See "Vendor-neutral
   names" in `CONTRIBUTING.md`.
 - `make test`, `make check` and `make e2e`. `make test` runs the unit and
-  contract suites with the 55% coverage floor, then the integration suites
-  against the local stack's Postgres and Redis in a separate `agenticorg_test`
+  contract suites with the 55% coverage floor, then the integration and
+  regression suites against the local stack's Postgres and Redis in a separate `agenticorg_test`
   database that is recreated each run (the development database is never
   touched). `make check` runs ruff, mypy, bandit, gitleaks, the licence-header
   check, JSON Schema validation of `schemas/` and pip-audit. Both run in a new
@@ -57,6 +64,37 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   runs the new `ui/e2e/dev-stack.config.ts` Playwright suite against the
   running stack in the official Playwright image. See "Tests and checks" in
   `docs/quickstart-local.md`.
+
+- Untrusted content extractor (`core/extraction/`): websites, registry
+  documents and applicant uploads are parsed in a separate worker process
+  with no network access and a wall-clock limit (on Linux a seccomp filter is
+  required by default; an audit hook, resource limits and a network namespace
+  are added where available) and return typed, length-capped,
+  character-class-constrained fields only. Excerpts are stored separately and
+  cited by `excerpt_ref`. Timeouts, crashes, oversized or off-schema output
+  fail closed with a reason code and no fields. `build_model_context` renders
+  evidence for a model with untrusted text replaced by references, and the
+  new optional `build_agent_graph(context_guard=...)` stops a run before any
+  model call that would carry untrusted text. Metrics
+  `agenticorg_extraction_total{kind,outcome}` and
+  `agenticorg_extraction_duration_seconds{kind}`. Nothing calls the extractor
+  yet and `context_guard` defaults to `None`, so existing behaviour is
+  unchanged. PDF and office documents are refused, not parsed. See
+  `docs/security/untrusted-content.md`.
+- Deterministic case policy engine (`core/policy/`): versioned YAML policies
+  evaluated over a case's evidence fields into a tier (`low` < `medium` <
+  `high` < `blocked`), a score and ordered reasons naming the rules that fired,
+  with the policy version, file hash and inputs recorded in every result. No
+  model is involved and model confidence is never an input. Policies load
+  strictly and fail closed at load with a reason code; missing evidence moves
+  a case towards the stricter tier. A policy can only be marked `production`
+  with `reviewed_by`, and loading an example policy logs a warning. Ships
+  `business_onboarding_us` and `business_onboarding_uk` **examples, which
+  require a compliance owner's review before any real use**. Metrics
+  `agenticorg_policy_evaluations_total{tier,policy_status}` and
+  `agenticorg_policy_load_total{outcome,reason}`. Nothing calls the engine
+  yet, so existing behaviour is unchanged. See `docs/policies/authoring.md`
+  and ADR 0011.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
@@ -102,6 +140,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   seller/buyer commerce runtime.
 - An idempotent migration that repairs the native `knowledge_documents` index
   on both legacy and ORM-bootstrap installations.
+- Recognisers for United States SSN, ITIN and EIN, United Kingdom National
+  Insurance and Companies House numbers, European VAT numbers and IBANs
+  (`core/pii/international_recognizers.py`), alongside the Indian ones. IBANs
+  must pass mod 97 and VAT numbers their national check digits where the
+  scheme has one (17 country prefixes); shapes that are otherwise ordinary
+  numbers are only recognised next to a label such as "SSN" or "company
+  number". Nothing uses them yet, so behaviour is unchanged; pre-model
+  pseudonymisation builds on them.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy

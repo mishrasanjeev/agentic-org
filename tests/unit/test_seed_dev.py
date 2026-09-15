@@ -59,7 +59,7 @@ def test_non_reserved_email_domain_is_refused(tmp_path: Path) -> None:
 
 
 def test_seed_ids_are_stable_and_distinct() -> None:
-    keys = ["tenant", "user:dev-approver-a", "user:dev-approver-b", "sso:dev-oidc", "approval-policy:four-eyes"]
+    keys = ["tenant", "user:dev-approver-a", "user:dev-approver-b", "sso:dev-oidc", "approval-policy:two-step"]
     keys += [agent.key for agent in seed_dev.AGENTS]
     ids = [seed_dev.seed_id(key) for key in keys]
     assert ids == [seed_dev.seed_id(key) for key in keys]
@@ -78,3 +78,73 @@ def test_main_fails_closed_without_database_url(
     monkeypatch.delenv("AGENTICORG_DB_URL", raising=False)
     assert seed_dev.main() == 2
     assert "AGENTICORG_DB_URL is not set" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "environ",
+    [
+        {"AGENTICORG_ENV": "development", "APP_ENV": "production"},
+        {"AGENTICORG_ENV": "development", "ENVIRONMENT": "staging"},
+        {"AGENTICORG_ENV": "test", "NODE_ENV": "production"},
+        {"AGENTICORG_ENV": "local", "ENV": "prod"},
+    ],
+)
+def test_seed_refuses_production_markers_in_other_variables(environ: dict[str, str]) -> None:
+    with pytest.raises(seed_dev.SeedError, match="production-like runtime"):
+        seed_dev.assert_development_runtime(environ)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg",
+        "postgresql+asyncpg://agenticorg:agenticorg_dev@127.0.0.1:58310/agenticorg",
+        "postgresql+asyncpg://agenticorg:agenticorg_dev@localhost/agenticorg_test",
+        "postgresql+asyncpg://agenticorg:agenticorg_dev@[::1]:5432/agenticorg",
+    ],
+)
+def test_local_databases_are_accepted(url: str) -> None:
+    seed_dev.assert_local_database(url, {})
+
+
+@pytest.mark.parametrize(
+    ("url", "reason"),
+    [
+        ("postgresql+asyncpg://u:p@db.example.com:5432/agenticorg", "is not local"),
+        ("postgresql+asyncpg://u:p@192.0.2.10:5432/agenticorg", "is not local"),
+        ("postgresql+asyncpg://u:p@postgres.example.com/agenticorg", "is not local"),
+        ("postgresql+asyncpg:///agenticorg", "is not local"),
+        ("postgresql+asyncpg://u:p@localhost/agenticorg?host=db.example.com", "query parameters"),
+        ("postgresql+asyncpg://u:p@localhost:99999/agenticorg", "cannot be parsed"),
+    ],
+)
+def test_non_local_databases_are_refused_before_connecting(
+    url: str, reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlalchemy.ext.asyncio as sa_async
+
+    def no_engine(*args: object, **kwargs: object) -> None:
+        raise AssertionError("must not connect to a database it refuses")
+
+    monkeypatch.setattr(sa_async, "create_async_engine", no_engine)
+    with pytest.raises(seed_dev.SeedError, match=reason):
+        seed_dev.assert_local_database(url, {})
+    with pytest.raises(seed_dev.SeedError, match=reason):
+        import asyncio
+
+        asyncio.run(seed_dev.seed(url, {"AGENTICORG_ENV": "development"}))
+
+
+def test_remote_database_needs_the_explicit_override() -> None:
+    url = "postgresql+asyncpg://u:p@db.example.com:5432/agenticorg"
+    seed_dev.assert_local_database(url, {seed_dev.ALLOW_REMOTE_DB_ENV: "1"})
+    for value in ("true", "yes", "0", ""):
+        with pytest.raises(seed_dev.SeedError):
+            seed_dev.assert_local_database(url, {seed_dev.ALLOW_REMOTE_DB_ENV: value})
+
+
+def test_seeded_approval_steps_use_a_role_the_approval_flow_knows() -> None:
+    from api.v1.approvals import _ROLE_HIERARCHY
+
+    assert seed_dev.APPROVAL_STEP_ROLE in _ROLE_HIERARCHY
+    assert set(seed_dev.USER_ROLES.values()) == {(seed_dev.APPROVAL_STEP_ROLE, "backoffice")}

@@ -19,8 +19,11 @@ requested model id:
   ``MODEL_RECORD_API_KEY`` and the answer saved; the stub refuses to start in
   record mode without that key.
 
-Streaming, ``n`` other than 1 and malformed requests are rejected with
-OpenAI-style error bodies.
+Every request field that can change the answer is part of the cassette key
+(:data:`KEYED_OPTIONS` join the harness's temperature, max tokens and stop when
+present); any other field is rejected rather than ignored. Streaming, ``n``
+other than 1 and malformed requests are rejected with OpenAI-style error
+bodies, and an invalid script is a 422, never a dropped connection.
 """
 
 from __future__ import annotations
@@ -56,6 +59,14 @@ MAX_BODY_BYTES = 8 * 1024 * 1024
 UPSTREAM_TIMEOUT_SECONDS = 120.0
 
 _SCRIPT_NAME_RE = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+# Request fields that change what a model returns. They are added to the key's
+# params only when present, so requests without them keep the in-process key.
+KEYED_OPTIONS = ("tool_choice", "response_format", "top_p", "seed", "parallel_tool_calls",
+                 "frequency_penalty", "presence_penalty", "logit_bias", "reasoning_effort")
+# Fields that are understood but do not change the answer.
+_HANDLED_FIELDS = frozenset({"model", "messages", "tools", "temperature", "max_tokens", "max_completion_tokens",
+                             "stop", "stream", "n", "user"})
+_TOOL_NAME_RE = re.compile(r"[A-Za-z0-9_.:-]{1,128}")
 _ROLES = frozenset({"system", "developer", "user", "assistant", "tool"})
 _LOOPBACK = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -140,13 +151,27 @@ def _tools(body: Mapping[str, Any]) -> list[dict[str, Any]]:
     return tools
 
 
+def _reject_unknown_fields(body: Mapping[str, Any]) -> None:
+    unknown = sorted(set(body) - _HANDLED_FIELDS - set(KEYED_OPTIONS))
+    if unknown:
+        raise StubError(
+            HTTPStatus.BAD_REQUEST,
+            "unsupported_parameter",
+            f"unsupported request field(s): {', '.join(unknown)}; the stub cannot key or honour them",
+        )
+
+
 def _params(body: Mapping[str, Any]) -> dict[str, Any]:
-    """The sampling parameters the in-process harness keys on."""
+    """The key's params: the harness's sampling parameters plus any keyed option present."""
     stop = body.get("stop")
     if isinstance(stop, str):
         stop = [stop]
     max_tokens = body.get("max_completion_tokens", body.get("max_tokens"))
-    return {"temperature": body.get("temperature"), "max_tokens": max_tokens, "stop": stop}
+    params: dict[str, Any] = {"temperature": body.get("temperature"), "max_tokens": max_tokens, "stop": stop}
+    for option in KEYED_OPTIONS:
+        if option in body:
+            params[option] = body[option]
+    return params
 
 
 def _text(content: Any) -> str:
@@ -155,6 +180,10 @@ def _text(content: Any) -> str:
     if isinstance(content, list):
         return "".join(part.get("text", "") if isinstance(part, dict) else str(part) for part in content)
     return ""
+
+
+def _invalid_script(name: str, detail: str) -> StubError:
+    return StubError(HTTPStatus.UNPROCESSABLE_ENTITY, "invalid_script", f"script {name!r}: {detail}")
 
 
 def completion_body(model: str, key: str, message: AIMessage) -> dict[str, Any]:
@@ -227,6 +256,7 @@ class ModelStub:
         model = body.get("model")
         if not isinstance(model, str) or not model:
             raise StubError(HTTPStatus.BAD_REQUEST, "invalid_request_error", "model is required")
+        _reject_unknown_fields(body)
         messages = _to_langchain(body.get("messages"))
         tools = _tools(body)
         if model.startswith(SCRIPTED_PREFIX):
@@ -242,11 +272,11 @@ class ModelStub:
         if not path.is_file():
             raise StubError(HTTPStatus.NOT_FOUND, "unknown_script", f"no script named {name!r}")
         try:
-            steps = json.loads(path.read_text(encoding="utf-8"))["steps"]
+            steps = json.loads(path.read_bytes().decode("utf-8"))["steps"]
             if not isinstance(steps, list) or not steps:
                 raise ValueError("steps must be a non-empty list")
         except (OSError, ValueError, KeyError, TypeError) as exc:
-            raise StubError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_script", f"script {name!r}: {exc}") from exc
+            raise _invalid_script(name, str(exc)) from exc
 
         turn = sum(1 for message in messages if isinstance(message, AIMessage))
         if turn >= len(steps):
@@ -257,26 +287,43 @@ class ModelStub:
                 f"script {name!r}: the conversation asked for turn {turn + 1} after all {len(steps)} scripted {noun}",
             )
         step = steps[turn]
-        if isinstance(step, dict) and isinstance(step.get("tool_calls"), list) and step["tool_calls"]:
-            bound = {t.get("function", {}).get("name") for t in tools if t.get("type") == "function"}
-            calls = []
-            for call in step["tool_calls"]:
-                if not isinstance(call, dict) or not isinstance(call.get("name"), str):
-                    detail = f"script {name!r}: bad tool call"
-                    raise StubError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_script", detail)
-                if call["name"] not in bound:
-                    raise StubError(
-                        HTTPStatus.BAD_REQUEST,
-                        "script_mismatch",
-                        f"script {name!r} turn {turn + 1} calls {call['name']!r}, which the request did not bind",
-                    )
-                calls.extend(tool_call(call["name"], **dict(call.get("arguments") or {})).tool_calls)
-            message = AIMessage(content="", tool_calls=calls)
-        elif isinstance(step, dict) and "content" in step:
-            message = final(step["content"])
-        else:
-            raise StubError(HTTPStatus.INTERNAL_SERVER_ERROR, "invalid_script", f"script {name!r}: step {turn + 1}")
-        return f"scripted:{name}:{turn}", message
+        where = f"step {turn + 1}"
+        if not isinstance(step, dict) or set(step) - {"tool_calls", "content"} or len(step) != 1:
+            raise _invalid_script(name, f"{where} must be an object with exactly one of 'tool_calls' or 'content'")
+        if "content" in step:
+            if not isinstance(step["content"], str | dict):
+                raise _invalid_script(name, f"{where}: 'content' must be a string or an object")
+            return f"scripted:{name}:{turn}", final(step["content"])
+
+        planned = step["tool_calls"]
+        if not isinstance(planned, list) or not planned:
+            raise _invalid_script(name, f"{where}: 'tool_calls' must be a non-empty list")
+        bound = {
+            t["function"].get("name")
+            for t in tools
+            if t.get("type") == "function" and isinstance(t.get("function"), dict)
+        }
+        calls = []
+        for index, call in enumerate(planned):
+            call_where = f"{where} tool_calls[{index}]"
+            if not isinstance(call, dict) or set(call) - {"name", "arguments"}:
+                raise _invalid_script(name, f"{call_where} must be an object with 'name' and optional 'arguments'")
+            tool = call.get("name")
+            arguments = call.get("arguments", {})
+            if not isinstance(tool, str) or not _TOOL_NAME_RE.fullmatch(tool):
+                raise _invalid_script(name, f"{call_where}: 'name' must be a tool name")
+            if not isinstance(arguments, dict):
+                raise _invalid_script(name, f"{call_where}: 'arguments' must be an object")
+            if "call_id" in arguments:
+                raise _invalid_script(name, f"{call_where}: an argument may not be called 'call_id'")
+            if tool not in bound:
+                raise StubError(
+                    HTTPStatus.BAD_REQUEST,
+                    "script_mismatch",
+                    f"script {name!r} turn {turn + 1} calls {tool!r}, which the request did not bind",
+                )
+            calls.extend(tool_call(tool, **arguments).tool_calls)
+        return f"scripted:{name}:{turn}", AIMessage(content="", tool_calls=calls)
 
     def _cassette(
         self, body: dict[str, Any], model: str, messages: list[BaseMessage], tools: list[dict[str, Any]]

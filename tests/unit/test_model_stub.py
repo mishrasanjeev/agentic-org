@@ -355,3 +355,92 @@ def test_invalid_settings_are_rejected(cassettes: Path, extra: dict[str, str], r
 def test_record_key_is_not_in_the_settings_repr(cassettes: Path, scripts: Path) -> None:
     settings = record_settings(cassettes, scripts, "https://upstream.example.com/v1")
     assert FAKE_KEY not in repr(settings)
+
+
+# ── Review follow-ups: keyed options, unknown fields, invalid scripts ──────
+
+
+def _cassette_key(stub: ms.ModelStub, body: dict[str, Any]) -> str:
+    messages = ms._to_langchain(body["messages"])
+    return model_replay.request_key(body["model"], messages, tools=ms._tools(body), params=ms._params(body))
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("tool_choice", "required"),
+        ("response_format", {"type": "json_object"}),
+        ("top_p", 0.5),
+        ("seed", 7),
+        ("parallel_tool_calls", False),
+    ],
+)
+def test_options_that_change_the_answer_change_the_cassette_key(
+    cassettes: Path, scripts: Path, option: str, value: Any
+) -> None:
+    stub = replay_stub(cassettes, scripts)
+    base = {"model": "acme-model-1", "messages": [{"role": "user", "content": "hello"}], "temperature": 0.1}
+    assert _cassette_key(stub, {**base, option: value}) != _cassette_key(stub, base)
+    assert "tool_choice" not in ms._params(base), "requests without options keep the in-process key"
+
+
+def test_recorded_answer_is_not_replayed_for_a_different_tool_choice(cassettes: Path, scripts: Path) -> None:
+    upstream = FakeUpstream()
+    body = {"model": "acme-model-1", "messages": [{"role": "user", "content": "hello"}], "tool_choice": "auto"}
+    with upstream.running() as url, serving(ms.ModelStub(record_settings(cassettes, scripts, url))) as base:
+        assert post(base, body).status_code == 200
+    with serving(replay_stub(cassettes, scripts)) as base:
+        assert post(base, body).status_code == 200
+        assert post(base, {**body, "tool_choice": "none"}).json()["error"]["code"] == "cassette_miss"
+
+
+@pytest.mark.parametrize("field", ["logprobs", "stream_options", "functions", "audio"])
+def test_unknown_request_fields_are_rejected(cassettes: Path, scripts: Path, field: str) -> None:
+    with serving(replay_stub(cassettes, scripts)) as base:
+        response = post(base, {"model": "scripted/review-case", "messages": [{"role": "user", "content": "x"}],
+                               field: True})
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "unsupported_parameter"
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [{"tool_calls": [{"name": "lookup_case", "arguments": ["CASE-0001"]}]}],
+        [{"tool_calls": [{"name": "lookup_case", "arguments": {"call_id": "x"}}]}],
+        [{"tool_calls": [{"name": 7}]}],
+        [{"tool_calls": [{"name": "lookup case"}]}],
+        [{"tool_calls": ["lookup_case"]}],
+        [{"tool_calls": []}],
+        [{"tool_calls": [{"name": "lookup_case", "args": {}}]}],
+        [{"content": 5}],
+        [{"content": "done", "tool_calls": []}],
+        ["just text"],
+        "not a list",
+    ],
+)
+def test_invalid_scripts_return_422_not_a_dropped_connection(
+    cassettes: Path, tmp_path: Path, steps: Any
+) -> None:
+    scripts_dir = tmp_path / "bad-scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "broken.json").write_text(json.dumps({"steps": steps}), encoding="utf-8")
+    body = {
+        "model": "scripted/broken",
+        "messages": [{"role": "user", "content": "go"}],
+        "tools": [convert_to_openai_tool(lookup_case)],
+    }
+    with serving(replay_stub(cassettes, scripts_dir)) as base:
+        response = post(base, body)
+        assert response.status_code == 422
+        assert response.json()["error"]["code"] == "invalid_script"
+        assert httpx.get(f"{base}/healthz", timeout=10).status_code == 200
+
+
+def test_script_that_is_not_utf8_json_returns_422(cassettes: Path, tmp_path: Path) -> None:
+    scripts_dir = tmp_path / "bad-scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "binary.json").write_bytes(b"\xff\xfe{")
+    with serving(replay_stub(cassettes, scripts_dir)) as base:
+        response = post(base, {"model": "scripted/binary", "messages": [{"role": "user", "content": "go"}]})
+    assert response.status_code == 422
