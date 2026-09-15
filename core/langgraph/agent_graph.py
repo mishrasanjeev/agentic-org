@@ -623,7 +623,13 @@ def build_agent_graph(
         return "evaluate"
 
     def should_escalate(state: AgentState) -> str:
-        """Route to HITL if confidence is below floor, else to END."""
+        """Route to HITL if confidence is below floor, else to END.
+
+        A run stopped by grant enforcement ends as failed: a refused tool call
+        is not a decision for a human reviewer (PRD F-1 deny).
+        """
+        if state.get("grant_denial"):
+            return END
         confidence = state.get("confidence", 1.0)
         output = state.get("output", {})
         trigger = _check_hitl_trigger(confidence, confidence_floor, hitl_condition, output)

@@ -185,7 +185,8 @@ gateway, so enforcement never skips or downgrades a check `off` makes.
 A refused tool call stops the run before the connector is called.
 
 - **LangGraph runs** (`POST /agents/{id}/run`, chat, A2A, MCP, voice): status
-  `failed`, `error` `grant_denied: <reason>`, and a `grant_denial` object in
+  `failed` (never routed to human review, whatever the confidence floor),
+  `error` `grant_denied: <reason>`, and a `grant_denial` object in
   the run result — `reason`, `sub_reason`, `grant_id`, `connector`, `tool`.
   `POST /agents/{id}/run` returns `grant_denial` in its response and writes it
   into the details of the run's `agent.run` audit row.

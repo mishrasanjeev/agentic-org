@@ -212,7 +212,7 @@ Remove an entry in the pull request that fixes it.
   require a stored agent on every step) as a Grantex agent with scopes for its
   connector steps, and resolve the step's grant from it.
 
-## A-17 — A legacy scope denial is reported as a completed run
+## A-30 — A legacy scope denial is reported as a completed run
 
 - **Found:** making deny-mode runs report `failed` (PRD F-1c, 2026-09-15).
 - **What:** in `off` mode an agent that carries a configured grant token still

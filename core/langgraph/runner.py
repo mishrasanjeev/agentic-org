@@ -331,6 +331,9 @@ async def run_agent(
         "domain": domain,
         "tenant_id": tenant_id,
         "grant_token": run_grant.token,
+        # A reused thread (voice ``voice:{call_sid}``) must not inherit a
+        # denial from an earlier turn.
+        "grant_denial": {},
         "confidence": 0.0,
         "status": "running",
         "output": {},
@@ -640,7 +643,7 @@ async def resume_agent(
     resume_command: Command[Any] = (
         Command(resume=decision)
         if run_grant.mode is EnforcementMode.OFF
-        else Command(resume=decision, update={"grant_token": run_grant.token})
+        else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
     )
 
     t0 = time.perf_counter()
