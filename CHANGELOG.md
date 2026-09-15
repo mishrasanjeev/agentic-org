@@ -64,6 +64,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   generated SDK clients.
 - Connector harness and voice integration fixtures no longer emit avoidable
   async/Pydantic deprecation warnings.
+- **Behaviour change:** the HR agent prompts (`ld_coordinator`,
+  `offboarding_agent`, `onboarding_agent`, `payroll_engine`,
+  `performance_coach`, `talent_acquisition`) no longer tell the model to call
+  tools that do not exist (`get_performance_data`, `okta_deactivate_user`,
+  `okta_provision_user`, `jira_create_issue`, `get_okr_progress`) or that the
+  agent does not have (`get_leave_balance`, `check_availability`). Steps now
+  use the registered equivalents (`deactivate_user`, `provision_user`,
+  `assign_group`, `create_page`, `get_employee`) or read performance data,
+  OKR progress, leave balances, panel availability and the separation record
+  from the task input and escalate to human review when they are missing.
+  Actions with no tool (equipment requests, course enrolment, GitHub/Jira/
+  Slack removal, data archival) are listed for the responsible team instead
+  of being claimed as done.
 
 ## [4.0.0] — 2026-04-05
 
