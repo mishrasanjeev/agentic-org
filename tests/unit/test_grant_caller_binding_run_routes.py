@@ -322,7 +322,7 @@ async def test_workflow_run_started_with_a_grantex_token_records_the_binding_and
     assert run.context[CALLER_GRANT_KEY] == {"agent_id": CALLER_AGENT}
     assert CALLER not in str(run.context)  # the token is never persisted
     [task] = tasks.tasks
-    assert task.func.__name__ == "_run_workflow_in_background"
+    assert task.func.__name__ == "_execute_workflow_bg"
     assert task.args[-1] == CallerGrant(token=CALLER, agent_id=CALLER_AGENT)
 
 
@@ -339,14 +339,22 @@ async def test_workflow_background_execution_holds_the_caller_only_while_it_runs
     caller = CallerGrant(token=CALLER, agent_id=CALLER_AGENT)
     seen: dict[str, Any] = {}
 
-    async def _steps(tenant_id, run_id, definition, trigger_payload, bound):
-        seen["active"] = caller_grant_for_run({"agent_id": CALLER_AGENT})
-        seen["bound"] = bound
+    class _StopAfterBindingError(Exception):
+        pass
 
-    with patch.object(workflows, "_execute_workflow_bg", _steps):
-        await workflows._run_workflow_in_background(uuid.UUID(TENANT), uuid.uuid4(), {}, None, caller)
-    assert seen == {"active": caller, "bound": caller}
-    assert caller_grant_for_run(None) == NO_CALLER
+    class _StateStore:
+        async def init(self) -> None:
+            # The first thing the background execution does; stop the run here.
+            seen["active"] = caller_grant_for_run({"agent_id": CALLER_AGENT})
+            raise _StopAfterBindingError
+
+    with (
+        patch("workflows.state_store.WorkflowStateStore", _StateStore),
+        pytest.raises(_StopAfterBindingError),
+    ):
+        await workflows._execute_workflow_bg(uuid.UUID(TENANT), uuid.uuid4(), {}, None, caller)
+    assert seen == {"active": caller}
+    assert caller_grant_for_run(None) == NO_CALLER  # released when the execution ends
     [start] = _calls(_function_source(workflows, "_execute_workflow_bg"), "start_run")
     assert {kw.arg: ast.unparse(kw.value) for kw in start.keywords}["caller_grant"] == "caller.marker()"
 

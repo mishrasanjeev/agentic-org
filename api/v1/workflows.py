@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import functools
 import uuid as _uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -634,23 +636,31 @@ async def delete_workflow(
 # ── Background workflow execution ──────────────────────────────────────────
 
 
-async def _run_workflow_in_background(
-    tenant_id: _uuid.UUID,
-    run_id: _uuid.UUID,
-    definition: dict,
-    trigger_payload: dict | None,
-    caller: CallerGrant = NO_CALLER,
-) -> None:
-    """Background task for a started run: execute it bound to its caller grant.
+def _bound_to_run_caller(
+    execute: Callable[[_uuid.UUID, _uuid.UUID, dict, dict | None, CallerGrant], Awaitable[None]],
+) -> Callable[..., Awaitable[None]]:
+    """Run the background execution bound to the caller grant it is given.
 
     PRD F-1: ``caller`` is the Grantex token the run was started with, if
     any. It is held in memory for this execution only; the run's state
     records the binding, so a later resume without it refuses tool calls.
     """
-    with bind_caller_grant(caller):
-        await _execute_workflow_bg(tenant_id, run_id, definition, trigger_payload, caller)
+
+    @functools.wraps(execute)
+    async def _bound(
+        tenant_id: _uuid.UUID,
+        run_id: _uuid.UUID,
+        definition: dict,
+        trigger_payload: dict | None,
+        caller: CallerGrant = NO_CALLER,
+    ) -> None:
+        with bind_caller_grant(caller):
+            await execute(tenant_id, run_id, definition, trigger_payload, caller)
+
+    return _bound
 
 
+@_bound_to_run_caller
 async def _execute_workflow_bg(
     tenant_id: _uuid.UUID,
     run_id: _uuid.UUID,
@@ -926,7 +936,7 @@ async def run_workflow(
 
     # Execute workflow steps in the background
     background_tasks.add_task(
-        _run_workflow_in_background, tid, run.id, definition, body.payload, run_caller
+        _execute_workflow_bg, tid, run.id, definition, body.payload, run_caller
     )
 
     return {
