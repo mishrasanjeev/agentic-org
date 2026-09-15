@@ -84,23 +84,20 @@ async def test_tenant_warn_flag_overrides_off_default(monkeypatch):
 
 async def test_deny_flag_wins_over_warn_flag(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
     with patch("core.feature_flags.is_enabled_strict", _flags(warn=True, deny=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
 
 
-async def test_requested_deny_runs_as_warn_until_deny_is_available(monkeypatch):
+async def test_requested_deny_is_honoured_without_a_cap(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "off")
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", False)
     with patch("core.feature_flags.is_enabled_strict", _flags(deny=True)), capture_logs() as logs:
         mode = await resolve_enforcement_mode(TENANT)
-    assert mode is EnforcementMode.WARN
-    assert any(entry["event"] == "grant_enforcement_deny_unavailable" for entry in logs)
+    assert mode is EnforcementMode.DENY
+    assert not any(entry["event"] == "grant_enforcement_deny_unavailable" for entry in logs)
 
 
 async def test_tenant_flags_cannot_weaken_the_deployment_default(monkeypatch):
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "deny")
-    monkeypatch.setattr(ge, "DENY_MODE_AVAILABLE", True)
     with patch("core.feature_flags.is_enabled_strict", _flags(warn=True)):
         assert await resolve_enforcement_mode(TENANT) is EnforcementMode.DENY
     monkeypatch.setattr(ge.settings, "grants_enforce_closed", "warn")
