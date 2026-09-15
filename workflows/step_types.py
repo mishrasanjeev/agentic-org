@@ -498,9 +498,17 @@ async def execute_step(step: dict, state: dict) -> dict[str, Any]:
         "wait": _execute_wait,
         "wait_for_event": _execute_wait_for_event,
         "collaboration": _execute_collaboration,
+        "case_agent": _execute_case_agent,
     }
     handler = handlers.get(step_type, _execute_agent)
     return await handler(step, state)
+
+
+async def _execute_case_agent(step: dict, state: dict) -> dict[str, Any]:
+    """Governed case step (``core.cases.runtime``): refused unless ``governed_cases.enabled`` is on."""
+    from core.cases.runtime import run_case_step
+
+    return await run_case_step(step, state)
 
 
 async def _execute_collaboration(step: dict, state: dict) -> dict[str, Any]:

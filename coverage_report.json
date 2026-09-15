@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-09-15T04:48:13.556340+00:00",
-  "global_percent": 1.0,
+  "generated_at": "2026-09-15T08:40:20.117324+00:00",
+  "global_percent": 16.0,
   "global_floor": 55.0,
   "global_target": 80.0,
   "critical_path_target": 90.0,
@@ -8,7 +8,7 @@
   "modules": [
     {
       "glob": "auth/*",
-      "percent": 0.0,
+      "percent": 2.0,
       "floor": 70.0,
       "target": 90.0,
       "status": "fail"
@@ -29,7 +29,7 @@
     },
     {
       "glob": "core/database.py",
-      "percent": 0.0,
+      "percent": 21.0,
       "floor": 30.0,
       "target": 90.0,
       "status": "fail"
@@ -43,7 +43,7 @@
     },
     {
       "glob": "core/billing/*",
-      "percent": 0.0,
+      "percent": 1.0,
       "floor": 0.0,
       "target": 90.0,
       "status": "ok"
