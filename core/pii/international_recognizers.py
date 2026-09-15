@@ -160,8 +160,8 @@ _NINO_UNALLOCATED_PREFIXES = frozenset({"BG", "GB", "KN", "NK", "NT", "TN", "ZZ"
 
 def _nino_prefix_allocated(prefix: str) -> bool:
     """HMRC never allocates D, F, I, Q, U or V first, D, F, I, O, Q, U or V second, or the reserved pairs."""
-    first, second = prefix.upper()
-    return first not in "DFIQUV" and second not in "DFIOQUV" and prefix.upper() not in _NINO_UNALLOCATED_PREFIXES
+    upper = prefix.upper()
+    return upper[0] not in "DFIQUV" and upper[1] not in "DFIOQUV" and upper not in _NINO_UNALLOCATED_PREFIXES
 
 
 _NINO_CONTEXT = _context_pattern("nino", "national insurance", "ni number", "ni no")
