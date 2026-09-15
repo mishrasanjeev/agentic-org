@@ -30,7 +30,7 @@ record = outcome.case_record()  # prompt digest, policy result, every tool call 
 | Step | What happens | Section |
 |---|---|---|
 | Resolve | `resolve_business` with the declared name, jurisdiction, identifiers and address. Only a unique candidate scoring at least 0.9 is accepted; anything else is `no_registry_match`. | `identity` |
-| Verify | `verify_business` starts verification (idempotency key `<case_id>.verify`), then `verification_result` is polled while it returns `Pending`, honouring `retry_after_seconds` (capped by `max_poll_interval_s`) until `verification_timeout_s`, after which the section is an `error` with `provider_timeout`. | `registry` |
+| Verify | `verify_business` starts verification (with an idempotency key unique to the case and run, so a retried call is not a second request but a re-investigation queries the provider again), then `verification_result` is polled while it returns `Pending`, honouring `retry_after_seconds` (capped by `max_poll_interval_s`) until `verification_timeout_s`, after which the section is an `error` with `provider_timeout`. | `registry` |
 | Reconcile ownership | `ownership`, then [reconciliation](#ownership-reconciliation) against the declared owners. | `ownership` |
 | Screen every party | `screen_business` for the business and business owners, `screen_person` for graph owners, current officers and declared owners - each party once, with the richest identifiers any source gave. | `screening` |
 | Web presence | `web_presence`; each page's content goes only to the [sandboxed extractor](../security/untrusted-content.md). Only typed fields and excerpt references come back. | `web_presence`, `activity` |
