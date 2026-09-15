@@ -421,20 +421,6 @@ Remove an entry in the pull request that fixes it.
   not a known role, and have `_can_decide` deny (with a reason) when the
   assignee role is unknown.
 
-## A-34 — A wall-clock assertion in the identifier recogniser tests fails under coverage
-
-- **Found:** the CI `unit-tests` job on a local-stack pull request (2026-09-15).
-- **What:** `tests/unit/test_pii_international_recognizers.py::test_resolve_overlaps_keeps_the_longest_and_scales`
-  asserts that `resolve_overlaps` handles 16,000 matches in under 0.5 seconds
-  of wall-clock time. The unit job runs with `--cov=.`, whose line tracing
-  slows the loop; on a shared runner it took 0.72 seconds and failed, then
-  passed on a rerun of the same commit. The test is flaky rather than the
-  code slow.
-- **Fix:** assert the algorithmic property instead (for example, count
-  comparisons, or compare the time for 16,000 matches with the time for 1,600
-  and require roughly linear growth), or mark the timing check to run without
-  coverage.
-
 ## A-40 — A built-in connector is tied to one commercial screening provider
 
 - **Found:** `scripts/check_denylist.py audit` while removing vendor names
