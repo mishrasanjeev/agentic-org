@@ -177,7 +177,7 @@ async def _delete_thread(thread_id: str) -> bool:
         saver = await get_checkpointer()
         await saver.adelete_thread(thread_id)
         return True
-    # enterprise-gate: broad-except-ok reason=finished-run-checkpoint-cleanup-is-retried-by-the-retention-runbook
+    # enterprise-gate: broad-except-ok reason=checkpoint-cleanup-failure-degrades-to-the-retention-runbook-sweep
     except Exception as exc:
         logger.warning("agent_run_resume_checkpoint_cleanup_failed", error_type=type(exc).__name__)
         return False
