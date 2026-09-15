@@ -64,9 +64,10 @@ def _respond(messages: list[BaseMessage]) -> AIMessage:
 
 @pytest.fixture(scope="module")
 def engine() -> Iterator[Engine]:
-    import core.models  # noqa: F401 - registers every ORM model
     from alembic.operations import Operations
     from alembic.runtime.migration import MigrationContext
+
+    import core.models  # noqa: F401 - registers every ORM model
     from core.models.base import BaseModel
 
     sync_engine = create_engine(_SYNC_URL)
@@ -168,7 +169,11 @@ async def test_case_investigation_runs_through_the_tool_gateway_to_awaiting_deci
     assert "missing_owner" in [f["code"] for s in case.memo["sections"] for f in s["findings"]]
     [record] = case.agent_records
     assert record["agent"] == "business_underwriter" and record["prompt"]["sha256"].startswith("sha256:")
-    assert {call["tool"] for call in record["tool_calls"]} >= {"resolve_business", "verification_result", "screen_person"}
+    assert {call["tool"] for call in record["tool_calls"]} >= {
+        "resolve_business",
+        "verification_result",
+        "screen_person",
+    }
 
     disposed = await dispose_screening_hits(tenant, case_ref, runtime=runtime, actor="user:analyst-a")
     assert disposed == {"case_ref": case_ref, "proposed": 1, "failed": [], "outcomes": ["false_positive"]}
@@ -215,7 +220,9 @@ async def test_capability_degraded_provider_still_reaches_awaiting_decision(
     tenant, _ = tenants
     scripted_model([_respond])
     case_ref = await _submit(tenant, "gb-clean-brightwater")
-    provider = MockProvider(MockConfig(clock=lambda: FROZEN, capabilities=frozenset({Capability.RESOLVE, Capability.VERIFY})))
+    provider = MockProvider(
+        MockConfig(clock=lambda: FROZEN, capabilities=frozenset({Capability.RESOLVE, Capability.VERIFY}))
+    )
     output = await investigate_case(tenant, case_ref, runtime=_runtime(provider), actor="workflow:test")
     assert output["state"] == "awaiting_decision"
     case, _ = await _load(tenant, case_ref)
@@ -223,7 +230,9 @@ async def test_capability_degraded_provider_still_reaches_awaiting_decision(
     assert statuses["ownership"] == statuses["screening"] == statuses["web_presence"] == "not_available"
 
 
-async def test_a_refused_grant_fails_the_case_closed(engine: Engine, tenants: tuple[str, str], scripted_model: Any) -> None:
+async def test_a_refused_grant_fails_the_case_closed(
+    engine: Engine, tenants: tuple[str, str], scripted_model: Any
+) -> None:
     tenant, _ = tenants
     scripted_model([])
 
@@ -241,7 +250,9 @@ async def test_a_refused_grant_fails_the_case_closed(engine: Engine, tenants: tu
     assert case.memo is None and case.agent_records[0]["tool_calls"][0]["outcome"] == "denied"
 
 
-async def test_lifecycle_refuses_illegal_transitions_and_stale_versions(engine: Engine, tenants: tuple[str, str]) -> None:
+async def test_lifecycle_refuses_illegal_transitions_and_stale_versions(
+    engine: Engine, tenants: tuple[str, str]
+) -> None:
     from core.database import get_tenant_session
 
     tenant, _ = tenants
@@ -300,13 +311,20 @@ async def test_row_level_security_isolates_cases_between_tenants(engine: Engine,
         conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {_PROBE_ROLE}"))
         conn.execute(text(f"GRANT SELECT, INSERT ON governed_cases, governed_case_transitions TO {_PROBE_ROLE}"))
 
+    queries = {
+        "governed_cases": "SELECT count(*) FROM governed_cases WHERE case_ref = :ref",
+        "governed_case_transitions": (
+            "SELECT count(*) FROM governed_case_transitions t "
+            "WHERE t.case_id = (SELECT id FROM governed_cases g WHERE g.case_ref = :ref)"
+        ),
+    }
+
     def visible(tenant_id: str | None, table: str) -> int:
         with engine.begin() as conn:
             conn.execute(text(f"SET LOCAL ROLE {_PROBE_ROLE}"))
             if tenant_id is not None:
                 conn.execute(text("SELECT set_config('agenticorg.tenant_id', :t, true)"), {"t": tenant_id})
-            column = "case_ref" if table == "governed_cases" else "(SELECT case_ref FROM governed_cases g WHERE g.id = case_id)"
-            return conn.execute(text(f"SELECT count(*) FROM {table} WHERE {column} = :ref"), {"ref": case_ref}).scalar_one()
+            return conn.execute(text(queries[table]), {"ref": case_ref}).scalar_one()
 
     try:
         assert visible(tenant_a, "governed_cases") == 1
@@ -319,8 +337,10 @@ async def test_row_level_security_isolates_cases_between_tenants(engine: Engine,
             with pytest.raises(DBAPIError, match="row-level security"):
                 conn.execute(
                     text(
-                        "INSERT INTO governed_cases (id, tenant_id, case_ref, purpose, state, provider, policy_id, application) "
-                        "VALUES (:id, :t, 'case_000000000000000000000000', 'aml.cdd.onboarding', 'submitted', 'mock', 'p', '{}'::jsonb)"
+                        "INSERT INTO governed_cases "
+                        "(id, tenant_id, case_ref, purpose, state, provider, policy_id, application) "
+                        "VALUES (:id, :t, 'case_000000000000000000000000', 'aml.cdd.onboarding', "
+                        "'submitted', 'mock', 'p', '{}'::jsonb)"
                     ),
                     {"id": str(uuid.uuid4()), "t": tenant_a},
                 )
@@ -350,7 +370,9 @@ async def test_business_onboarding_workflow_runs_on_the_engine_and_stops_at_the_
         return await run_case_step(step, state, runtime=runtime)
 
     monkeypatch.setattr("workflows.step_types._execute_case_agent", step_with_test_runtime)
-    definition = WorkflowParser().parse((_ROOT / "workflows" / "examples" / "business_onboarding.yaml").read_text(encoding="utf-8"))
+    definition = WorkflowParser().parse(
+        (_ROOT / "workflows" / "examples" / "business_onboarding.yaml").read_text(encoding="utf-8")
+    )
     workflow = WorkflowEngine(WorkflowStateStore(repository=InMemoryWorkflowStateRepository()))
     run_id = await workflow.start_run(definition, {"case_ref": case_ref, "decision_grants": []}, tenant_id=tenant)
     await workflow.execute(run_id)
@@ -410,7 +432,11 @@ async def test_case_api_end_to_end_with_tenant_isolation(
         assert body["transitions"][0]["actor"].startswith("user:")
 
         tenant_b_headers = {"Authorization": f"Bearer {_make_jwt(tenant_id=str(uuid.uuid4()))}"}
-        assert (await client.get(f"/api/v1/governed-cases/{case_ref}", headers=tenant_b_headers)).status_code in (401, 403, 404)
+        assert (await client.get(f"/api/v1/governed-cases/{case_ref}", headers=tenant_b_headers)).status_code in (
+            401,
+            403,
+            404,
+        )
 
         decision = await client.post(
             f"/api/v1/governed-cases/{case_ref}/decision", json={"outcome": "approve"}, headers=auth_headers
@@ -432,10 +458,16 @@ async def test_case_api_end_to_end_with_tenant_isolation(
             json={"action": "overridden", "final_outcome": "true_match"},
             headers=auth_headers,
         )
-        assert missing_reason.status_code == 422 and missing_reason.json()["error"]["reason"] == "override_reason_required"
+        assert (
+            missing_reason.status_code == 422 and missing_reason.json()["error"]["reason"] == "override_reason_required"
+        )
         reviewed = await client.post(
             f"/api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review",
-            json={"action": "overridden", "final_outcome": "insufficient_information", "reason": "Awaiting a passport copy."},
+            json={
+                "action": "overridden",
+                "final_outcome": "insufficient_information",
+                "reason": "Awaiting a passport copy.",
+            },
             headers=auth_headers,
         )
         assert reviewed.status_code == 200, reviewed.text

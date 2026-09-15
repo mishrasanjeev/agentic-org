@@ -165,7 +165,11 @@ def _runtime(enabled: bool = True) -> CaseRuntime:
         ({"id": "s", "action": "approve_case"}, {"case_ref": CASE_REF}, "case_action_unknown"),
         ({"id": "s", "action": "investigate"}, {"case_ref": "../other"}, "case_ref_invalid"),
         ({"id": "s", "action": "investigate"}, {}, "case_ref_invalid"),
-        ({"id": "s", "action": "record_decision", "decision_step": "h"}, {"case_ref": CASE_REF}, "decision_not_recorded"),
+        (
+            {"id": "s", "action": "record_decision", "decision_step": "h"},
+            {"case_ref": CASE_REF},
+            "decision_not_recorded",
+        ),
     ],
 )
 async def test_case_agent_step_refusals(step: dict[str, Any], payload: dict[str, Any], reason: str) -> None:
