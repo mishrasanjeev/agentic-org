@@ -110,7 +110,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   in the approval's `context.checkpoint_resume`, in an `agent.run.resumed`
   audit event and in `agenticorg_agent_run_resumes_total{outcome}`, and a
   finished run's checkpoints are deleted. Any other decision leaves the run
-  paused. A resume is refused, with a reason code, when the checkpoint is
+  paused; an approve or reject left paused because the flag is off or cannot
+  be read is logged (`agent_run_resume_skipped`) and counted as
+  `outcome="skipped"`. A resume is refused, with a reason code, when the checkpoint is
   missing, not at the approval gate, undecryptable or outside the tenant.
   Approval responses gain `context.checkpoint_resume` for resumed runs; the
   resume parameters stored with a paused run are never returned. See

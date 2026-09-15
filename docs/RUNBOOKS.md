@@ -182,6 +182,26 @@ Enable the flag for a tenant as a tenant admin:
 `POST /api/v1/feature-flags` with `{"flag_key": "approvals.resume_agent_runs", "enabled": true, "rollout_percentage": 100}`.
 Resuming across restarts and replicas needs `postgres`.
 
+Operating the Postgres store:
+
+- The API opens the store at startup and refuses to start without it. Celery
+  workers open it on their first agent run (never at worker start), so an
+  outage fails those runs with a reason code but does not stop workers or
+  other queues.
+- The store reads `AGENTICORG_VAULT_KEYRING` when it opens. **Any keyring
+  change (adding, reordering or removing a key) needs a restart of the API and
+  every worker**; a process that is not restarted keeps encrypting with the
+  old active key.
+- The key rotation tools (`core/crypto/rewrap.py`, `core/crypto/verify_all.py`)
+  do **not** cover checkpoint tables (FINDINGS A-21): `verify_all` can report a
+  key unreferenced while paused runs still need it, and rewrap never moves
+  checkpoints to the active key. Keep a retired key in the keyring for longer
+  than the approval window plus checkpoint retention.
+- Each encrypted payload is bound to its thread and namespace; a blob copied
+  into another thread fails with `checkpoint_binding_mismatch`.
+- `langgraph-checkpoint-postgres` and `langgraph-checkpoint` are pinned exactly;
+  a different installed version is refused (`checkpoint_library_unverified`).
+
 **Detect:**
 - API does not start and logs `langgraph_checkpointer_unavailable reason=...`; runs
   return `503 agent_checkpoint_store_unavailable`; metric
@@ -189,6 +209,10 @@ Resuming across restarts and replicas needs `postgres`.
 - `agenticorg_agent_run_resumes_total{outcome="refused"|"failed"}` rises. Each
   resume writes an `agent.run.resumed` audit event and sets
   `context.checkpoint_resume` (`state`, `reason`) on the approval.
+- `agenticorg_agent_run_resumes_total{outcome="skipped"}` and the warning
+  `agent_run_resume_skipped reason=resume_flag_off_or_unavailable`: an approve or
+  reject decision left a paused run paused because the flag is off for the
+  tenant or the flag lookup failed.
 
 **Diagnose** (reason codes):
 
@@ -196,9 +220,12 @@ Resuming across restarts and replicas needs `postgres`.
 |---|---|---|
 | `checkpoint_store_unreachable` | pool could not connect | check `AGENTICORG_LANGGRAPH_CHECKPOINT_DB_URL` (defaults to the DB URL), network, credentials |
 | `checkpoint_schema_missing` / `checkpoint_schema_stale` / `checkpoint_schema_ahead` | checkpoint tables absent, or `checkpoint_migrations` not at the version the installed library expects | run `python scripts/alembic_migrate.py`; after a library upgrade, ship the migration for its new entries |
+| `checkpoint_library_unverified` | the installed checkpoint library is not the version the sealed saver was verified against | reinstall from the pinned requirements; an upgrade needs a reviewed code change |
+| `checkpoint_encryption_key_invalid` / `checkpoint_encryption_key_missing` | `AGENTICORG_VAULT_KEYRING` is malformed or empty | fix the keyring (`id:secret,...`), then restart API and workers |
 | `checkpoint_event_loop_mismatch` | the pool was used from an event loop that did not open it | a code defect; capture the stack and file it |
 | `checkpoint_not_found` / `checkpoint_not_paused` | no checkpoint at the approval gate for this thread (run paused under `memory`, before the flag, or cleaned up) | the run cannot be resumed; re-run the agent |
 | `checkpoint_not_encrypted` / `checkpoint_decrypt_failed` | stored data is plaintext, tampered with, or encrypted with a key no longer in `AGENTICORG_VAULT_KEYRING` | restore the retired key to the keyring (keep old keys until paused runs drain); treat plaintext rows as an incident |
+| `checkpoint_binding_mismatch` / `checkpoint_binding_missing` | a payload stored under another thread was loaded, or a load bypassed the saver | treat a mismatch as a security incident (rows were copied between threads); a missing binding is a code defect |
 | `checkpoint_thread_tenant_mismatch` | a thread outside the approval's tenant | should be impossible (check constraint on `hitl_queue`); treat as a security incident |
 | `decision_not_resumable` | decision other than approve or reject (for example `override`) | the run stays paused; re-run if needed |
 | `rejection_not_applied` | a reject decision did not fail the run at the gate | the run is not reported as completed; investigate the agent's HITL condition |
@@ -242,4 +269,10 @@ COMMIT;
 
 An approval whose thread was cleaned up still accepts a decision; with the flag on,
 the resume is refused with `checkpoint_not_found`.
+
+**Tenant offboarding:** `core.langgraph.checkpointer.delete_tenant_checkpoints(tenant_id)`
+deletes every `tenant:<id>:` thread (runs and voice sessions) from the configured
+store; run it with the backend settings of the API. No offboarding flow calls it
+yet, and subject-level DSAR erasure does not reach checkpoint content (FINDINGS
+A-22), which is removed only by deleting the thread.
 
