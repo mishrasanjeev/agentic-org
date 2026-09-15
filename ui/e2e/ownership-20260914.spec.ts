@@ -11,7 +11,12 @@
  * The agent is deleted at the end through the API as its owner.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { DEMO_ROLE_CREDENTIALS, DEMO_USER_CREDENTIALS, setSessionToken } from "./helpers/auth";
+import {
+  DEMO_ROLE_CREDENTIALS,
+  DEMO_USER_CREDENTIALS,
+  requireDemoRoleCredentials,
+  setSessionToken,
+} from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const API = process.env.API_URL || APP;
@@ -38,6 +43,8 @@ function bearer(token: string) {
 }
 
 test.describe.serial("Bug sheet 2026-09-14 — personal agent ownership", () => {
+  test.beforeEach(() => requireDemoRoleCredentials(["user", "cfo", "chro"]));
+
   const agentName = `Ownership E2E ${Date.now()}`;
   let agentId = "";
   let companyId = "";

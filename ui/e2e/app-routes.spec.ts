@@ -101,7 +101,9 @@ test.describe("Dashboard Routes — Auth Required", () => {
       await expect(page.getByText(route.expectText).first()).toBeVisible({ timeout: 15000 });
 
       // No error states
-      const mainText = await page.locator("main").textContent() || "";
+      // Rendered text only: textContent includes collapsed agent payloads
+      // (approval "Reasoning Trace" JSON), which are data, not display bugs.
+      const mainText = await page.locator("main").innerText() || "";
       expect(mainText).not.toContain("NaN");
     });
   }
@@ -243,7 +245,7 @@ test.describe("Data Display Quality", () => {
     test(`${p} shows no NaN or undefined`, async ({ page }) => {
       await page.goto(p);
       await page.waitForLoadState("networkidle");
-      const body = await page.locator("main").textContent() || "";
+      const body = await page.locator("main").innerText() || "";
       expect(body).not.toContain("NaN");
       expect(body).not.toContain("undefined");
     });

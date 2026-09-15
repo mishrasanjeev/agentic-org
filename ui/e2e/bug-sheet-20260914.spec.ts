@@ -12,7 +12,12 @@
  *       context_window.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { DEMO_ROLE_CREDENTIALS, DEMO_USER_CREDENTIALS, setSessionToken } from "./helpers/auth";
+import {
+  DEMO_ROLE_CREDENTIALS,
+  DEMO_USER_CREDENTIALS,
+  requireDemoRoleCredentials,
+  setSessionToken,
+} from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const API = process.env.API_URL || APP;
@@ -38,6 +43,7 @@ async function signIn(page: Page, creds: Creds): Promise<string> {
 
 test.describe("Bug sheet 2026-09-14 — header and chat entry point", () => {
   test("#27 organization name is shown in the header", async ({ page }) => {
+    requireDemoRoleCredentials(["user"]);
     const token = await signIn(page, DEMO_USER_CREDENTIALS);
     const me = await page.request.get(`${API}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -51,6 +57,7 @@ test.describe("Bug sheet 2026-09-14 — header and chat entry point", () => {
   });
 
   test("#53 auditor is not offered the chat bar; CFO is", async ({ page, browser }) => {
+    requireDemoRoleCredentials(["auditor", "cfo"]);
     await signIn(page, DEMO_ROLE_CREDENTIALS.auditor);
     await page.goto(`${APP}/dashboard`, { waitUntil: "domcontentloaded" });
     await expect(page.getByTestId("org-name").first()).toBeVisible({ timeout: 20000 });
@@ -66,6 +73,7 @@ test.describe("Bug sheet 2026-09-14 — header and chat entry point", () => {
   });
 
   test("#53 CFO chatting to an HR agent is refused with 404", async ({ page }) => {
+    requireDemoRoleCredentials(["user", "cfo"]);
     const adminToken = await tokenFor(page, DEMO_USER_CREDENTIALS);
     const list = await page.request.get(`${API}/api/v1/agents?limit=200`, {
       headers: { Authorization: `Bearer ${adminToken}` },
@@ -89,6 +97,7 @@ test.describe("Bug sheet 2026-09-14 — header and chat entry point", () => {
 
 test.describe("Bug sheet 2026-09-14 — AI settings model entry", () => {
   test("#37/#40 openai_compatible accepts a free-text model name", async ({ page }) => {
+    requireDemoRoleCredentials(["user"]);
     const errors: string[] = [];
     page.on("pageerror", (err) => errors.push(err.message));
 

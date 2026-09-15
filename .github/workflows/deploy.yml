@@ -478,6 +478,7 @@ jobs:
             if [ "$HTTP_CODE" = "200" ]; then
               TOKEN=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
               if [ -n "$TOKEN" ]; then
+                echo "::add-mask::$TOKEN"
                 echo "token=$TOKEN" >> $GITHUB_OUTPUT
                 echo "E2E token acquired on attempt $attempt"
                 exit 0
@@ -532,23 +533,69 @@ jobs:
       - name: Install Playwright
         run: cd ui && npm ci && npx playwright install --with-deps chromium
 
+      - name: Declare demo-role credentials for Playwright
+        # Specs that log in as the seeded demo users (CFO, CHRO, auditor, ...)
+        # need their passwords; the defaults in ui/e2e/helpers/auth.ts exist
+        # only in the local Docker stack. When the secrets are absent the
+        # affected tests are skipped with the reason in the report and this
+        # warning on the run, instead of failing on 401s (run 34882967171).
+        env:
+          AGENTICORG_DEMO_USER_PASSWORD: ${{ secrets.AGENTICORG_DEMO_USER_PASSWORD }}
+          AGENTICORG_DEMO_CEO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CEO_PASSWORD }}
+          AGENTICORG_DEMO_CFO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CFO_PASSWORD }}
+          AGENTICORG_DEMO_CHRO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CHRO_PASSWORD }}
+          AGENTICORG_DEMO_CMO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CMO_PASSWORD }}
+          AGENTICORG_DEMO_COO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_COO_PASSWORD }}
+          AGENTICORG_DEMO_AUDITOR_PASSWORD: ${{ secrets.AGENTICORG_DEMO_AUDITOR_PASSWORD }}
+        run: |
+          missing=""
+          for name in AGENTICORG_DEMO_USER_PASSWORD AGENTICORG_DEMO_CEO_PASSWORD AGENTICORG_DEMO_CFO_PASSWORD             AGENTICORG_DEMO_CHRO_PASSWORD AGENTICORG_DEMO_CMO_PASSWORD AGENTICORG_DEMO_COO_PASSWORD             AGENTICORG_DEMO_AUDITOR_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning title=Demo-role Playwright specs skipped::Missing secrets:$missing. Tests that log in as demo roles are skipped; see the skip reasons in the Playwright report."
+            echo "E2E_DEMO_ROLES=unavailable" >> "$GITHUB_ENV"
+          fi
+
       - name: Run ALL Playwright E2E regression suite against production
         # Blocking. PR #151 (Phase 1 auth role) and #152 (Phase 2 cxo
         # rewrite) fixed the systemic drift that had been hidden by
         # continue-on-error. If a spec fails here, fix the spec or the
         # product — do not reintroduce continue-on-error.
-        timeout-minutes: 45
+        # Serial on purpose: specs create and edit shared production data.
+        # One retry and a 120-minute ceiling: with two retries the suite
+        # hit the old 45-minute limit at test ~464 of 719 (run 34882967171).
+        timeout-minutes: 120
         run: cd ui && npx playwright test --config=e2e/regression.config.ts
         env:
           BASE_URL: https://app.agenticorg.ai
           E2E_TOKEN: ${{ steps.auth.outputs.token }}
+          PLAYWRIGHT_RETRIES: "1"
+          AGENTICORG_DEMO_USER_PASSWORD: ${{ secrets.AGENTICORG_DEMO_USER_PASSWORD }}
+          AGENTICORG_DEMO_CEO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CEO_PASSWORD }}
+          AGENTICORG_DEMO_CFO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CFO_PASSWORD }}
+          AGENTICORG_DEMO_CHRO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CHRO_PASSWORD }}
+          AGENTICORG_DEMO_CMO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CMO_PASSWORD }}
+          AGENTICORG_DEMO_COO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_COO_PASSWORD }}
+          AGENTICORG_DEMO_AUDITOR_PASSWORD: ${{ secrets.AGENTICORG_DEMO_AUDITOR_PASSWORD }}
 
-      - name: Upload Playwright report
+      - name: Upload Playwright report and failure artifacts
+        # test-results holds each failure's error context and screenshot as
+        # it happens, so a run that times out before the HTML report is
+        # written still shows why tests failed. This repository is public:
+        # trace archives record request headers and session cookies, so they
+        # are never uploaded, and artifacts expire after a week.
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: ui/playwright-report/
+          path: |
+            ui/playwright-report/
+            ui/test-results/
+            !ui/**/*.zip
+            !ui/**/*.webm
+          if-no-files-found: warn
+          retention-days: 7
 
   approval-gate:
     needs: [classify-changes, build]

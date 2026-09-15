@@ -37,7 +37,9 @@ export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.ts",
   timeout: 60_000,
-  retries: 2,
+  // CI's production run sets PLAYWRIGHT_RETRIES=1 so failing specs cannot
+  // triple the runtime; the default stays 2 for other callers.
+  retries: Number.parseInt(process.env.PLAYWRIGHT_RETRIES ?? "2", 10),
   workers: 1, // Sequential for regression stability
   // Codex 2026-04-22 release-signoff post-deploy e2e flagged the
   // clash: Playwright refuses when the HTML reporter folder sits

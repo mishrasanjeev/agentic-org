@@ -13,6 +13,7 @@ import { test, expect, Page } from "@playwright/test";
 import {
   DEMO_ROLE_CREDENTIALS,
   DEMO_USER_CREDENTIALS,
+  requireDemoRoleCredentials,
   setSessionToken,
 } from "./helpers/auth";
 
@@ -708,6 +709,7 @@ test.describe("Proactive Regression - Similar Issues", () => {
   // failing. After 3 retries the account is asserted; if the limiter
   // is actually broken (5xx / 400 / 401) the test fails as intended.
   test("all 7 demo accounts return valid JWT", async ({ request }) => {
+    requireDemoRoleCredentials(["user", "ceo", "cfo", "chro", "cmo", "coo", "auditor"]);
     test.setTimeout(120_000); // 7 accounts × up to 3 retries × up to 10s
     const accounts = [
       { email: DEMO_USER_CREDENTIALS.email, pw: DEMO_USER_CREDENTIALS.password },
@@ -788,7 +790,8 @@ test.describe("Proactive Regression - Similar Issues", () => {
   // Approvals page loads without crash
   test("approvals page loads without crash", async ({ page }) => {
     await goTo(page, "/dashboard/approvals");
-    const body = (await page.locator("body").textContent()) || "";
+    // Rendered text: the collapsed "Reasoning Trace" holds verbatim agent output.
+    const body = (await page.locator("body").innerText()) || "";
     expect(body).not.toContain("Something went wrong");
     expect(body).not.toMatch(/\bNaN\b/);
   });
