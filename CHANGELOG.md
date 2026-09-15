@@ -81,6 +81,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081)
   and points the API and worker at it. It refuses to run outside local,
   development and test environments. See `docs/providers/mock-provider.md`.
+- Provider conformance suite, published in the full distribution as
+  `agenticorg.testing.provider_conformance` (source: `testing/provider_conformance`).
+  A provider package subclasses `ProviderConformanceSuite` and supplies a
+  `ConformanceTarget`; eleven checks cover identity, capability honesty,
+  pending-then-result, expired and overrun deadlines, cancellation, the error
+  taxonomy, webhook verification including forged payloads, pagination,
+  idempotency and schema conformance, each failing with a readable reason. The
+  mock provider passes in-process and over HTTP; deliberately broken providers
+  fail each check. Documentation code examples are extracted from tests. See
+  `docs/providers/writing-a-verification-provider.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

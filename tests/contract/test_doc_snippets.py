@@ -29,6 +29,7 @@ CHECKED_DOCS: tuple[str, ...] = (
     "docs/schemas/domain-schemas.md",
     "docs/adr/0009-provider-seam.md",
     "docs/providers/mock-provider.md",
+    "docs/providers/writing-a-verification-provider.md",
 )
 
 _MARKER = re.compile(r"^<!--\s*snippet:\s*(?P<path>[^#\s]+)#(?P<name>[a-z0-9][a-z0-9-]*)\s*-->\s*$")

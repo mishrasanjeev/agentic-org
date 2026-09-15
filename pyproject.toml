@@ -32,6 +32,15 @@ packages = [
     "sdk/agenticorg",
 ]
 
+[tool.hatch.build.targets.wheel.force-include]
+# The provider conformance suite is developed at testing/provider_conformance
+# (imports inside it are relative) and published inside the full-platform
+# wheel as agenticorg.testing.provider_conformance, next to the connectors
+# package that holds the interface it checks. It is not part of the
+# lightweight SDK built from sdk/, which has no provider interface.
+"testing/__init__.py" = "agenticorg/testing/__init__.py"
+"testing/provider_conformance" = "agenticorg/testing/provider_conformance"
+
 [project]
 name = "agenticorg"
 version = "4.8.0"
