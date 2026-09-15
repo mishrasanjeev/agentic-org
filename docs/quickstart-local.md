@@ -85,7 +85,7 @@ build takes several minutes.
 
 | Command | Runs |
 |---|---|
-| `make test` | `tests/unit`, `tests/security` and the contract suite `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
+| `make test` | `tests/unit`, `tests/security` and the contract suites `tests/contract` and `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
 | `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
