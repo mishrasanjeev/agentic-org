@@ -41,7 +41,7 @@ evidence entry:
 | `record_id` | The provider's identifier for the record |
 | `field` | Dotted path of the field within that record, e.g. `share_pct` or `officers[0].name` |
 | `retrieved_at` | When the record was retrieved (RFC 3339 with an offset) |
-| `excerpt_ref` | A stored excerpt for the human reviewer (`excerpt:<id>`), or `null` |
+| `excerpt_ref` | An opaque reference to a stored excerpt for the human reviewer (for example the extractor's `exc_<digest>`), or `null` |
 
 All five keys are required; `excerpt_ref` is explicitly `null` when there is
 no excerpt. Excerpts are listed in the memo's `excerpts` with a media type and

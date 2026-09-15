@@ -30,9 +30,9 @@
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
     "excerpt_ref": {
-      "description": "Reference to a stored excerpt shown to the human reviewer. The excerpt itself is never inlined.",
+      "description": "Opaque reference to a stored excerpt shown to the human reviewer, e.g. exc_<digest> from the untrusted-content extractor. The excerpt itself is never inlined.",
       "type": "string",
-      "pattern": "^excerpt:[A-Za-z0-9._:\\-]{1,128}$"
+      "pattern": "^[A-Za-z][A-Za-z0-9._:\\-]{2,128}$"
     },
     "evidence": {
       "description": "One upstream record behind an assertion.",
