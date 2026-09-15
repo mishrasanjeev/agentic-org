@@ -19,7 +19,8 @@ See ``docs/schemas/domain-schemas.md``.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+import re
+from datetime import date
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -64,17 +65,29 @@ def schema_id(name: str, version: str = SCHEMA_VERSION) -> str:
     return f"{SCHEMA_BASE_URI}{name}/{version}"
 
 
+_RFC3339_DATE_TIME = re.compile(
+    r"^(?P<date>[0-9]{4}-[0-9]{2}-[0-9]{2})[Tt](?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})"
+    r"(?P<fraction>\.[0-9]+)?(?P<offset>[Zz]|[+-](?P<oh>[0-9]{2}):(?P<om>[0-9]{2}))$"
+)
+
+
 def _check_date_time(value: object) -> bool:
+    """RFC 3339 ``date-time``: a full date, ``T``, a full time with seconds and an explicit offset."""
     if not isinstance(value, str):
         return True
-    # RFC 3339 requires the "T" separator and an explicit offset.
-    if "T" not in value.upper():
+    match = _RFC3339_DATE_TIME.match(value)
+    if match is None:
         return False
     try:
-        parsed = datetime.fromisoformat(value.replace("z", "Z").replace("Z", "+00:00"))
+        date.fromisoformat(match["date"])
     except ValueError:
         return False
-    return parsed.tzinfo is not None
+    hour, minute, second = int(match["hour"]), int(match["minute"]), int(match["second"])
+    if hour > 23 or minute > 59 or second > 60:  # 60 is a leap second
+        return False
+    if match["oh"] is not None and (int(match["oh"]) > 23 or int(match["om"]) > 59):
+        return False
+    return True
 
 
 def _check_uri(value: object) -> bool:
