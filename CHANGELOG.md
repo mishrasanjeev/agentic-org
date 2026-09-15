@@ -5,6 +5,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Screening Disposition reference agent (`core/agents/screening_disposition/`,
+  PRD A-7 / US-3): for one screening hit it re-screens the subject through
+  the provider tool gateway to confirm the hit, compares name, date of birth,
+  nationality, address and associated entities, and proposes `true_match`,
+  `false_positive` or `insufficient_information` with a confidence band by
+  fixed rules, producing a schema-valid, cited `screening_disposition` with
+  `review: null`. The model writes the rationale from comparison results only;
+  a rationale that states another outcome, talks of closing the hit or repeats
+  untrusted text is replaced by a template rationale. No automatic closure in
+  any configuration: the tool set is read-only screening and no closing tool
+  can be configured. `apply_review` records an analyst's acceptance or
+  override (reason required, analyst identity from the authenticated session,
+  written once). Metric
+  `agenticorg_screening_dispositions_proposed_total{outcome,band}`. Shared
+  `core/agents/case_model_call.py` makes the guarded, pseudonymised prose call
+  for both reference agents. Nothing in the platform runs the agent yet. See
+  `docs/agents/screening-disposition.md`.
 - Business Onboarding Underwriter reference agent
   (`core/agents/business_underwriter/`, PRD A-7): resolves an application
   through a verification provider, starts verification and polls while it is
