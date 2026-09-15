@@ -84,7 +84,12 @@ async def refresh_agent_scopes(
 
     ``persist`` stores the new scope list as ``config.grantex.grantex_scopes``.
     """
-    from auth.grantex_registration import ScopeLimitExceededError, _tools_to_scopes, bounded_scopes
+    from auth.grantex_registration import (
+        ScopeLimitExceededError,
+        _tools_to_scopes,
+        bounded_scopes,
+        update_agent_scopes,
+    )
 
     grantex_cfg = dict(config.get("grantex") or {})
     grantex_agent_id = str(grantex_cfg.get("grantex_agent_id") or "")
@@ -101,7 +106,7 @@ async def refresh_agent_scopes(
     if not apply:
         return ScopeRefresh(agent_id, grantex_agent_id, before, after, "would_update")
     try:
-        await asyncio.to_thread(grantex_client.agents.update, grantex_agent_id, scopes=after)
+        await asyncio.to_thread(update_agent_scopes, grantex_client, grantex_agent_id, after)
     # enterprise-gate: broad-except-ok reason=grantex-update-failure-is-reported-and-storage-is-not-changed
     except Exception as exc:
         logger.error("grantex_scope_refresh_failed", agent_id=agent_id, error_type=type(exc).__name__)

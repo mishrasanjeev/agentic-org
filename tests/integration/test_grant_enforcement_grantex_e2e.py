@@ -225,3 +225,43 @@ async def test_deny_refuses_a_connector_the_grant_does_not_cover(grantex_env, sc
     )
     assert called == []
     assert result["grant_denial"]["reason"] == _expected("tool_not_granted")
+
+
+async def test_patch_scope_push_and_pool_delegate_only_registered_scopes(grantex_env, monkeypatch):
+    """A PATCH pushes new scopes to the registration; the pool then delegates only registered scopes.
+
+    Also pins the compatibility PATCH: the SDK's ``agents.update`` posts to a
+    route the auth service does not serve (FINDINGS A-42).
+    """
+    from grantex import Grantex
+
+    from api.v1.agents import _push_grantex_scopes
+    from auth.token_pool import token_pool
+
+    sdk = Grantex(api_key=SANDBOX_KEY, base_url=BASE_URL)
+    registered = list(grantex_env["registration"]["grantex_scopes"])
+    extra = sdk.agents.register(name=f"f1-e2e-patch-{AGENT[:8]}", scopes=registered, description="e2e patch")
+    narrowed = [s for s in registered if s != "tool:salesforce:read:query"]
+    agent = MagicMock(id=uuid.uuid4())
+    agent.config = {"grantex": {"grantex_agent_id": extra.id, "grantex_scopes": registered}}
+
+    from grantex import GrantexApiError
+
+    with pytest.raises(GrantexApiError):
+        sdk.agents.update(extra.id, scopes=narrowed)
+    await _push_grantex_scopes(agent, narrowed, tenant_id=TENANT)
+    assert sorted(sdk.agents.get(extra.id).scopes) == sorted(narrowed)
+    assert agent.config["grantex"]["grantex_scopes"] == narrowed
+
+    # Stored scopes that ran ahead of the registration are not delegated.
+    monkeypatch.setattr(token_pool, "lazy_redis", False)
+    with capture_logs() as logs:
+        grant = await resolve_run_grant(
+            tenant_id=TENANT,
+            agent_id=str(uuid.uuid4()),
+            grantex_config={"grantex_agent_id": extra.id, "grantex_scopes": registered},
+            mode=EnforcementMode.DENY,
+        )
+    assert grant.source == "minted" and grant.token
+    [dropped] = [e for e in logs if e["event"] == "run_grant_scopes_not_registered"]
+    assert (dropped["stored_count"], dropped["delegated_count"]) == (len(registered), len(narrowed))

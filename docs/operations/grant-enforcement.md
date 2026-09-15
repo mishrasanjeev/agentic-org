@@ -212,8 +212,10 @@ tool needs.
 
 `PATCH /agents/{id}` recomputes them when the authorized tools change. For an
 agent registered on Grantex the new scopes go to its registration first
-(`agents.update`), and are stored only once Grantex accepted them; otherwise
-the whole PATCH is refused and nothing changes:
+(`PATCH /v1/agents/{id}`, sent directly because the Python SDK's
+`agents.update` uses a route the service does not serve - FINDINGS A-42), and
+are stored only once Grantex accepted them; otherwise the whole PATCH is
+refused and nothing changes:
 
 | HTTP | `detail.reason_code` | Cause |
 |---|---|---|

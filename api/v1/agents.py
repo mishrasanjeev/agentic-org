@@ -3014,13 +3014,13 @@ async def update_agent(
 async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str) -> None:
     """Update a registered agent's scopes on Grantex, then store them on the agent.
 
-    Grantex is called off the event loop and first; the scopes are stored only
+    Grantex (``update_agent_scopes``) is called off the event loop and first; the scopes are stored only
     after it accepted them. Any failure raises (``reason_code``
     ``grantex_unconfigured`` or ``grantex_update_failed``), so the request's
     transaction rolls back and the agent keeps the tools and scopes it had.
     Unchanged scopes are stored without calling Grantex.
     """
-    from auth.grantex_registration import _get_grantex_client
+    from auth.grantex_registration import _get_grantex_client, update_agent_scopes
 
     cfg = dict(agent.config or {})
     grx = dict(cfg.get("grantex") or {})
@@ -3045,7 +3045,7 @@ async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str)
                 },
             )
         try:
-            await asyncio.to_thread(client.agents.update, grantex_agent_id, scopes=list(scopes))
+            await asyncio.to_thread(update_agent_scopes, client, grantex_agent_id, list(scopes))
         # enterprise-gate: broad-except-ok reason=grantex-update-failure-rolls-back-the-patch-with-a-reason
         except Exception as exc:
             logger.warning(

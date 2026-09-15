@@ -474,3 +474,17 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** have `evaluate` preserve a `failed` status set by scope validation
   (or set `grant_denial` from the legacy path too), and update the tests that
   describe the legacy result.
+
+## A-42 — The Grantex Python SDK's `agents.update` calls a route the auth service does not serve
+
+- **Found:** pushing agent scopes to Grantex on `PATCH /agents/{id}`, verified
+  against the Grantex auth service image (PRD F-1 review, 2026-09-15).
+- **What:** `grantex.resources._agents.AgentsClient.update` (0.5.0, 0.5.1 and
+  the SDK's main branch) sends `POST /v1/agents/{id}`. The auth service serves
+  `PATCH /v1/agents/{id}` and answers the `POST` with "Route not found", so
+  every scope update through the SDK fails. `auth/grantex_registration.py::
+  update_agent_scopes` sends the `PATCH` through the SDK's HTTP client as a
+  marked compatibility path.
+- **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
+  publish it, pin it here, and call `agents.update` again from
+  `update_agent_scopes`.

@@ -99,14 +99,14 @@ async def test_patch_updates_the_grantex_registration_off_the_loop_before_storin
     agent = _agent(_registered())
     client = MagicMock()
     stored_at_update: list[list[str]] = []
-    client.agents.update.side_effect = lambda *_a, **_k: stored_at_update.append(
+    client._http.patch.side_effect = lambda *_a, **_k: stored_at_update.append(
         list(agent.config["grantex"]["grantex_scopes"])
     )
     to_thread = AsyncMock(side_effect=lambda fn, *a, **k: fn(*a, **k))
     with patch("api.v1.agents.asyncio.to_thread", to_thread):
         assert (await _patch(agent, ["list_contacts"], client=client))["updated"] is True
-    assert to_thread.await_args.args[0] is client.agents.update
-    client.agents.update.assert_called_once_with("ag_1", scopes=NEW)
+    assert to_thread.await_args.args[0].__name__ == "update_agent_scopes"
+    client._http.patch.assert_called_once_with("/v1/agents/ag_1", {"scopes": NEW})
     assert stored_at_update == [OLD]  # Grantex first, storage after
     assert agent.config["grantex"] == {"grantex_agent_id": "ag_1", "grantex_did": "did:x", "grantex_scopes": NEW}
     assert agent.config["k"] == 1
@@ -115,7 +115,7 @@ async def test_patch_updates_the_grantex_registration_off_the_loop_before_storin
 @pytest.mark.parametrize(
     ("client", "status", "reason_code"),
     [
-        (MagicMock(**{"agents.update.side_effect": RuntimeError("refused")}), 502, "grantex_update_failed"),
+        (MagicMock(**{"_http.patch.side_effect": RuntimeError("refused")}), 502, "grantex_update_failed"),
         (None, 503, "grantex_unconfigured"),
     ],
 )
@@ -136,7 +136,7 @@ async def test_patch_refuses_more_scopes_than_a_registration_carries():
         await _patch(agent, ["many"], client=client, scopes=[f"tool:hubspot:read:t{i}" for i in range(101)])
     assert (exc.value.status_code, exc.value.detail["reason_code"]) == (422, "scope_limit_exceeded")
     assert "at most 100" in exc.value.detail["message"]
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
     assert agent.config["grantex"]["grantex_scopes"] == OLD
 
 
@@ -165,14 +165,14 @@ async def test_patch_of_a_registered_agent_refuses_when_its_scopes_cannot_be_com
         ):
             await agents.update_agent(agent_id=agent.id, body=body, tenant_id=TENANT)
     assert (exc.value.status_code, exc.value.detail["reason_code"]) == (503, "scope_computation_failed")
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
 
 
 async def test_patch_with_unchanged_scopes_does_not_call_grantex():
     agent = _agent(_registered(NEW))
     client = MagicMock()
     await _patch(agent, ["list_contacts"], client=client)
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
     assert agent.config["grantex"]["grantex_scopes"] == NEW
 
 
@@ -279,7 +279,7 @@ async def _refresh(*, scopes: list[str] | None = None, persist: AsyncMock | None
 async def test_backfill_reports_a_storage_failure_for_the_agent():
     result, client, _ = await _refresh(persist=AsyncMock(side_effect=RuntimeError("db down")))
     assert result.outcome == "storage_failed"
-    client.agents.update.assert_called_once()
+    client._http.patch.assert_called_once()
     assert json.loads(result.as_json())["error"] == "storage write failed: RuntimeError"
 
 
@@ -288,7 +288,7 @@ async def test_backfill_deduplicates_and_reports_an_agent_over_the_scope_limit()
     assert persist.await_args.args[0] == NEW
     result, client, persist = await _refresh(scopes=[f"tool:hubspot:read:t{i}" for i in range(101)])
     assert result.outcome == "scope_limit_exceeded" and "at most 100" in result.error
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
     persist.assert_not_awaited()
 
 
@@ -380,3 +380,22 @@ def test_backfill_command_selects_only_agents_that_are_not_deleted(capsys):
     [select] = log["selects"]
     compiled = select.compile(dialect=postgresql.dialect())
     assert "agents.status != " in str(compiled) and "deleted" in compiled.params.values()
+
+
+# ── Grantex scope update (compatibility PATCH) ────────────────────────────
+
+
+def test_scope_update_sends_a_patch_because_the_sdk_update_posts_to_an_unserved_route():
+    from auth.grantex_registration import update_agent_scopes
+
+    client = MagicMock()
+    update_agent_scopes(client, "ag/1", NEW)
+    client._http.patch.assert_called_once_with("/v1/agents/ag%2F1", {"scopes": NEW})
+    client.agents.update.assert_not_called()
+
+
+def test_scope_update_fails_when_the_client_cannot_send_a_patch():
+    from auth.grantex_registration import update_agent_scopes
+
+    with pytest.raises(RuntimeError, match="cannot send PATCH"):
+        update_agent_scopes(SimpleNamespace(_http=SimpleNamespace()), "ag_1", NEW)

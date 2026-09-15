@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable
 from typing import Any, Final
+from urllib.parse import quote
 
 import structlog
 
@@ -42,6 +43,24 @@ def bounded_scopes(scopes: Iterable[str]) -> list[str]:
     if len(unique) > MAX_AGENT_SCOPES:
         raise ScopeLimitExceededError(len(unique))
     return unique
+
+
+def update_agent_scopes(client: Any, grantex_agent_id: str, scopes: Iterable[str]) -> None:
+    """Replace a registered agent's scopes on Grantex. Blocking: call it off the event loop.
+
+    Compatibility: the Grantex Python SDK's ``agents.update`` (0.5.x, and its
+    main branch at the time of writing) sends ``POST /v1/agents/{id}``, a route
+    the Grantex auth service does not serve - it serves ``PATCH`` - so the SDK
+    call always fails. Until the SDK is fixed this sends the ``PATCH`` through
+    the SDK's own HTTP client (same key, base URL and error mapping). Grantex
+    refuses duplicate scopes and more than 100; pass ``bounded_scopes`` output.
+    Any failure raises. See FINDINGS.md A-42.
+    """
+    http = getattr(client, "_http", None)
+    send_patch = getattr(http, "patch", None)
+    if not callable(send_patch):
+        raise RuntimeError("the Grantex client cannot send PATCH requests")
+    send_patch(f"/v1/agents/{quote(grantex_agent_id, safe='')}", {"scopes": list(scopes)})
 
 
 def _get_grantex_client():
