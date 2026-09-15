@@ -275,7 +275,9 @@ def serve_in_thread(
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind((host, port))
     bound_port = listener.getsockname()[1]
-    server = uvicorn.Server(uvicorn.Config(app, log_level="warning", lifespan="off", access_log=False))
+    server = uvicorn.Server(
+        uvicorn.Config(app, log_level="warning", lifespan="off", access_log=False, timeout_graceful_shutdown=2)
+    )
     thread = threading.Thread(target=server.run, kwargs={"sockets": [listener]}, daemon=True)
     thread.start()
     try:
