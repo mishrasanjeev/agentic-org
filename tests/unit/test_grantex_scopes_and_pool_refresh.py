@@ -97,7 +97,7 @@ async def _refresh(config: dict[str, Any], *, apply: bool, client: MagicMock | N
 async def test_backfill_reports_by_default_and_changes_nothing():
     result, client, persist = await _refresh(_config(["tool:hubspot:execute:list_contacts"]), apply=False)
     assert result.outcome == "would_update"
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
     persist.assert_not_awaited()
     assert '"execute_scopes_before": 1' in result.as_json()
 
@@ -105,8 +105,10 @@ async def test_backfill_reports_by_default_and_changes_nothing():
 async def test_backfill_updates_grantex_then_storage():
     result, client, persist = await _refresh(_config(["tool:hubspot:execute:list_contacts"]), apply=True)
     assert result.outcome == "updated"
-    client.agents.update.assert_called_once_with(
-        "ag_1", scopes=["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]
+    # Sent as PATCH /v1/agents/{id}: the SDK's agents.update posts to a route
+    # the auth service does not serve (FINDINGS A-42).
+    client._http.patch.assert_called_once_with(
+        "/v1/agents/ag_1", {"scopes": ["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]}
     )
     # Only the scope list is written (config.grantex.grantex_scopes); the rest
     # of the config is never rewritten from a stale snapshot.
@@ -115,7 +117,7 @@ async def test_backfill_updates_grantex_then_storage():
 
 async def test_backfill_leaves_storage_alone_when_grantex_refuses():
     client = MagicMock()
-    client.agents.update.side_effect = RuntimeError("403")
+    client._http.patch.side_effect = RuntimeError("403")
     result, _, persist = await _refresh(_config(["tool:hubspot:execute:list_contacts"]), apply=True, client=client)
     assert result.outcome == "grantex_failed"
     persist.assert_not_awaited()
@@ -127,7 +129,7 @@ async def test_backfill_skips_current_and_unregistered_agents():
     )
     unregistered, _, _ = await _refresh({"grantex": {}}, apply=True)
     assert (current.outcome, unregistered.outcome) == ("unchanged", "not_registered")
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
 
 
 # ── Pool refresh ─────────────────────────────────────────────────────────
@@ -262,12 +264,12 @@ def test_backfill_command_reports_without_apply(capsys):
     )
     assert code == 0 and writes == []
     assert lines[0]["outcome"] == "would_update" and lines[-1]["summary"] == {"would_update": 1}
-    client.agents.update.assert_not_called()
+    client._http.patch.assert_not_called()
 
 
 def test_backfill_command_applies_and_counts_failures(capsys):
     client = MagicMock()
-    client.agents.update.side_effect = [None, RuntimeError("refused")]
+    client._http.patch.side_effect = [None, RuntimeError("refused")]
     agents = [_agent(["tool:hubspot:execute:list_contacts"]), _agent(["tool:hubspot:execute:list_contacts"], "ag_2")]
     code, writes, lines = _run_backfill(["--all-tenants", "--apply"], agents, client, capsys)
     assert code == 1
