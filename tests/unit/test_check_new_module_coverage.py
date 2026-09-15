@@ -210,7 +210,9 @@ def test_real_coverage_report_with_overlapping_sources_is_never_misattributed(
     import importlib
     import sys
 
-    cov = coverage.Coverage(source=[str(root), str(root / "alphapkg"), str(root / "betapkg")], data_file=None)
+    cov = coverage.Coverage(
+        source=[str(root), str(root / "alphapkg"), str(root / "betapkg")], data_file=None, config_file=False
+    )
     sys.path.insert(0, str(root))
     importlib.invalidate_caches()
     try:
