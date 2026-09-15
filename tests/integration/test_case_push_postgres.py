@@ -515,3 +515,55 @@ async def test_push_endpoint_and_dead_letter_api(client: Any, auth_headers: dict
         assert missing.status_code == 404
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_push_retrieval_and_dead_letter_replay_over_the_api(
+    client: Any, auth_headers: dict[str, str], engine: Engine, scripted_model: Any
+) -> None:
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from tests.integration.conftest import TEST_TENANT_ID
+
+    scripted_model([_respond])
+    clock = Clock(T0)
+    runtime = _runtime(clock)
+    app.dependency_overrides[routes.get_case_runtime] = lambda: runtime
+    try:
+        assert (await client.get("/api/v1/case-push/endpoint", headers=auth_headers)).status_code == 200
+        assert (
+            await client.put("/api/v1/case-push/endpoint", json={"url": ENDPOINT}, headers=auth_headers)
+        ).status_code == 200
+        application = MockProvider().fixture("us-clean-quillfeather").application
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        assert (
+            await client.post(f"/api/v1/governed-cases/{case_ref}/investigate", headers=auth_headers)
+        ).status_code == 202
+
+        payload = await client.get(f"/api/v1/governed-cases/{case_ref}/push-payload", headers=auth_headers)
+        assert payload.status_code == 200, payload.text
+        validate("case_push", payload.json())
+        deliveries = (
+            await client.get(f"/api/v1/governed-cases/{case_ref}/push-deliveries", headers=auth_headers)
+        ).json()
+        [event] = [d for d in deliveries["deliveries"] if d["event_type"] == "case.completed"]
+        assert event["event_id"] == payload.json()["event_id"] and event["status"] == "pending"
+
+        await _dispatcher(Receiver(410), clock).dispatch_tenant(uuid.UUID(TEST_TENANT_ID))
+        [dead] = [
+            d
+            for d in (await client.get("/api/v1/case-push/dead-letters", headers=auth_headers)).json()["dead_letters"]
+            if d["event_id"] == event["event_id"]
+        ]
+        assert dead["last_error"] == "endpoint_rejected:http_410"
+        replayed = await client.post(f"/api/v1/case-push/dead-letters/{dead['outbox_id']}/replay", headers=auth_headers)
+        assert (
+            replayed.status_code == 200
+            and replayed.json()["status"] == "pending"
+            and replayed.json()["replay_count"] == 1
+        )
+        again = await client.post(f"/api/v1/case-push/dead-letters/{dead['outbox_id']}/replay", headers=auth_headers)
+        assert again.status_code == 409
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
