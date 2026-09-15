@@ -1,0 +1,34 @@
+{
+  "users": [
+    {
+      "sub": "dev-approver-a",
+      "email": "approver.a@example.com",
+      "name": "Approver A",
+      "roles": ["underwriter", "approver"]
+    },
+    {
+      "sub": "dev-approver-b",
+      "email": "approver.b@example.com",
+      "name": "Approver B",
+      "roles": ["approver"]
+    }
+  ],
+  "clients": [
+    {
+      "client_id": "agenticorg-api-dev",
+      "client_secret": "agenticorg-dev-only-oidc-client-secret",
+      "redirect_uris": [
+        "http://127.0.0.1:8000/api/v1/auth/sso/dev-oidc/callback",
+        "http://127.0.0.1:3000/api/v1/auth/sso/dev-oidc/callback"
+      ]
+    },
+    {
+      "client_id": "agenticorg-dev-public",
+      "redirect_uris": [
+        "http://127.0.0.1:8000/api/v1/auth/sso/dev-oidc/callback",
+        "http://127.0.0.1:3000/api/v1/auth/sso/dev-oidc/callback",
+        "http://127.0.0.1/callback"
+      ]
+    }
+  ]
+}
