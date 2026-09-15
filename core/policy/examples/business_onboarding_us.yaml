@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# ============================================================================
+#  EXAMPLE POLICY - NOT REVIEWED - DO NOT USE FOR REAL ONBOARDING DECISIONS
+# ============================================================================
+#  This file shows the policy format and a plausible shape for United States
+#  business onboarding. It has not been reviewed by a compliance owner and is
+#  not regulatory advice. Before any real use a named compliance owner must
+#  review and adapt every rule, set `status: production` and record themselves
+#  in `reviewed_by`. Loading this file logs `policy_example_loaded`.
+#  See docs/policies/authoring.md.
+# ============================================================================
+policy: business_onboarding_us
+version: 1.0.0
+status: example
+reviewed_by: null
+description: >-
+  EXAMPLE ONLY - requires compliance review before any real use. United States
+  business onboarding over registry verification, ownership reconciliation,
+  screening and web presence evidence.
+score_thresholds:
+  high: 60
+rules:
+  - id: screening_true_match
+    description: A screening hit confirmed as a true match and not yet resolved.
+    when: {screening.unresolved_true_matches: {gt: 0}}
+    effect: {tier: blocked, reason: "Unresolved true match in screening"}
+
+  - id: registry_dissolved
+    description: >-
+      Fires only on a registry record that says dissolved or revoked. A missing
+      status is handled by registry_active, so this rule guards with exists.
+    when:
+      all:
+        - {verification.status: {exists: true}}
+        - {verification.status: {in: [dissolved, revoked]}}
+    effect: {tier: blocked, reason: "Registry record shows the business as dissolved or revoked"}
+
+  - id: registry_record_found
+    description: Fires when no registry record matched, or when the match result is missing.
+    when:
+      not: {verification.registry_match: {eq: true}}
+    effect: {tier: high, reason: "No registry record matched the application"}
+
+  - id: registry_active
+    when: {verification.status: {not_in: [active]}}
+    effect: {tier: high, reason: "Registry status is not active"}
+
+  - id: tax_identifier_match
+    when: {verification.tax_id_match: {ne: true}}
+    effect: {tier: high, reason: "Declared tax identifier does not match the registry record"}
+
+  - id: ownership_missing_owner
+    when: {ownership.missing_owners: {gt: 0}}
+    effect: {tier: medium, reason: "A declared owner is absent from the ownership graph"}
+
+  - id: ownership_undeclared_owner
+    when: {ownership.undeclared_owners: {gt: 0}}
+    effect: {tier: medium, reason: "The ownership graph shows an owner the applicant did not declare"}
+
+  - id: screening_possible_match
+    when: {screening.unresolved_possible_matches: {gt: 0}}
+    effect: {tier: medium, reason: "Screening hits awaiting disposition"}
+
+  - id: web_presence_activity_mismatch
+    when: {web_presence.activity_mismatch: {eq: true}}
+    effect: {tier: medium, reason: "Observed business activity differs from the declared activity", score: 10}

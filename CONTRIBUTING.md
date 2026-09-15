@@ -124,8 +124,9 @@ request title and description) into words, and compares salted SHA-256 hashes
 of every run of up to a few consecutive words against `config/denylist.sha256`.
 Spacing, punctuation, case and accents do not matter: `Acme Verify`,
 `acme_verify` and `AcmeVerify` are the same term. Only the salt and the hashes
-are committed; the plaintext list is kept outside the repository by the
-maintainers. Failures give the location, not the matched words. The check fails
+are committed and the plain list is kept outside the repository by the
+maintainers, which keeps the names out of the tree and its diffs. The hashes
+are not a secret: with the committed salt anyone can test a guessed name. Failures give the location, not the matched words. The check fails
 closed when git or the hash file misbehaves.
 
 ```bash

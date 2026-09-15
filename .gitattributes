@@ -1,0 +1,3 @@
+# Policy files are hashed byte-for-byte into policy results and evidence
+# packages, so their line endings must not depend on the checkout platform.
+core/policy/examples/*.yaml text eol=lf
