@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/ownership_graph/1.0.0",
+  "title": "Ownership graph",
+  "description": "Who owns or controls a business, as reported by one provider. Share and voting percentages are ranges because registries commonly report bands.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "provider", "subject", "subject_node_id", "as_of", "completeness", "nodes", "edges", "evidence"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "provider": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/provider_name"},
+    "subject": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/business_ref"},
+    "subject_node_id": {
+      "description": "The node that represents the subject business.",
+      "$ref": "#/$defs/node_id"
+    },
+    "as_of": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "completeness": {
+      "description": "complete: the provider believes every owner above its reporting threshold is present; partial: some chains could not be resolved; unknown: the provider cannot say.",
+      "type": "string",
+      "enum": ["complete", "partial", "unknown"]
+    },
+    "nodes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/node"}
+    },
+    "edges": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/edge"}
+    },
+    "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+  },
+  "$defs": {
+    "node_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:\\-]{0,127}$"
+    },
+    "percentage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "percentage_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {"$ref": "#/$defs/percentage"},
+        "max": {"$ref": "#/$defs/percentage"}
+      }
+    },
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node_id", "kind", "name", "evidence"],
+      "properties": {
+        "node_id": {"$ref": "#/$defs/node_id"},
+        "kind": {
+          "type": "string",
+          "enum": ["person", "business", "trust", "public_body", "unknown"]
+        },
+        "name": {"type": "string", "minLength": 1, "maxLength": 512},
+        "jurisdiction": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/jurisdiction"},
+            {"type": "null"}
+          ]
+        },
+        "identifiers": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier"}
+        },
+        "date_of_birth": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "nationalities": {
+          "type": "array",
+          "items": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/country_code"}
+        },
+        "address": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/address"},
+            {"type": "null"}
+          ]
+        },
+        "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+      }
+    },
+    "edge": {
+      "description": "from owns or controls to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_node_id", "to_node_id", "relationship", "evidence"],
+      "properties": {
+        "from_node_id": {"$ref": "#/$defs/node_id"},
+        "to_node_id": {"$ref": "#/$defs/node_id"},
+        "relationship": {
+          "type": "string",
+          "enum": ["shareholding", "voting_rights", "appointment_rights", "significant_influence", "trustee", "nominee"]
+        },
+        "share_pct": {
+          "oneOf": [{"$ref": "#/$defs/percentage_range"}, {"type": "null"}]
+        },
+        "voting_pct": {
+          "oneOf": [{"$ref": "#/$defs/percentage_range"}, {"type": "null"}]
+        },
+        "started_on": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "ended_on": {
+          "oneOf": [
+            {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/partial_date"},
+            {"type": "null"}
+          ]
+        },
+        "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+      }
+    }
+  }
+}
