@@ -187,7 +187,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     "ap_processor": [
         "fetch_bank_statement", "check_account_balance", "post_voucher",
         "get_ledger_balance", "get_trial_balance", "create_order",
-        "check_order_status", "list_vendors", "create_vendor",
+        "list_vendors", "create_vendor",
         "create_item", "create_bill", "list_vendor_bills", "list_bills",
         "search_bills", "get_bill_by_id",
     ],
@@ -206,7 +206,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "close_agent": [
         "list_invoices", "fetch_bank_statement",
-        "get_balance", "search_content_fulltext",
+        "get_balance",
     ],
     "fpa_agent": [
         # Mirrors api/v1/agents.py:_AGENT_TYPE_DEFAULT_TOOLS — same agent
@@ -214,7 +214,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         # newly-created agents miss tools their handlers expect.
         "get_profit_loss", "get_trial_balance",
         "list_invoices", "get_balance",
-        "get_campaign_performance_metrics", "get_project_metrics",
+        "get_project_metrics",
     ],
     "treasury": [
         "check_account_balance", "fetch_bank_statement",
@@ -222,7 +222,7 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
     ],
     "expense_manager": [
         "record_expense", "create_bill", "list_vendors", "create_vendor",
-        "create_ap_invoice", "check_order_status", "list_invoices",
+        "create_ap_invoice", "list_invoices",
         "get_profit_loss",
     ],
     "rev_rec": [
@@ -234,22 +234,22 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_balance_sheet", "create_ap_invoice",
     ],
     "talent_acquisition": [
-        "post_job", "search_candidates", "get_applications",
-        "schedule_interview", "send_offer", "send_inmail",
+        "post_job", "search_candidates",
+        "schedule_interview", "send_inmail",
     ],
     "onboarding_agent": [
         "create_employee", "provision_user", "assign_group",
-        "create_page", "schedule_social_post",
+        "confluence:create_page",
     ],
     "payroll_engine": [
         "run_payroll", "get_payslip", "get_attendance",
-        "post_leave", "file_24q_return",
+        "file_24q_return",
     ],
     "performance_coach": [
         "update_performance", "get_employee", "get_org_chart", "add_comment",
     ],
     "ld_coordinator": [
-        "search_content_fulltext", "create_page",
+        "confluence:create_page",
         "get_employee", "schedule_interview",
     ],
     "offboarding_agent": [
@@ -257,18 +257,14 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "remove_group", "list_active_sessions",
     ],
     "content_factory": [
-        "schedule_social_post", "get_post_analytics",
-        "manage_publishing_queue", "approve_draft_post", "create_page",
+        "confluence:create_page",
     ],
     "campaign_pilot": [
         "search_campaigns", "get_campaign_performance",
         "mutate_campaign_budget", "get_search_terms",
-        "get_analytics", "get_stats",
+        "linkedin_ads:get_analytics", "get_stats",
     ],
-    "seo_strategist": [
-        "get_campaign_performance_metrics", "get_search_term_report",
-        "search_content_fulltext", "get_post_analytics",
-    ],
+    "seo_strategist": [],
     "crm_intelligence": [
         "list_contacts", "search_contacts", "list_deals",
         "get_deal", "get_campaign_analytics", "create_contact",
@@ -276,19 +272,19 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "associate_contact_to_company", "list_owners",
     ],
     "brand_monitor": [
-        "get_post_analytics", "get_campaign_performance",
-        "schedule_social_post", "search_contacts",
+        "get_campaign_performance",
+        "search_contacts",
     ],
     "email_marketing": [
-        "send_email", "create_campaign", "send_campaign",
+        "sendgrid:send_email", "mailchimp:create_campaign", "send_campaign",
         "get_campaign_report", "add_list_member", "get_campaign_stats",
     ],
     "social_media": [
-        "create_tweet", "create_update", "get_post_analytics",
+        "create_tweet", "create_update",
         "list_channel_videos", "get_campaign_insights",
     ],
     "abm": [
-        "query", "search_contacts", "get_analytics",
+        "salesforce:query", "salesforce:search_contacts", "linkedin_ads:get_analytics",
         "get_campaign_performance", "create_campaign",
     ],
     "competitive_intel": [
@@ -296,44 +292,44 @@ _AGENT_TYPE_DEFAULT_TOOLS: dict[str, list[str]] = {
         "get_share_of_voice", "get_backlinks",
     ],
     "support_triage": [
-        "create_ticket", "update_ticket", "escalate_to_group",
-        "get_sla_breach_status", "get_csat_score", "apply_macro",
+        "create_ticket", "update_ticket",
+        "get_csat_score", "apply_macro",
         "send_message", "post_alert",
     ],
     "vendor_manager": [
-        "search_issues", "create_issue", "add_comment",
-        "create_page", "get_project_metrics",
+        "search_issues", "jira:create_issue", "add_comment",
+        "confluence:create_page", "get_project_metrics",
     ],
     "contract_intelligence": [
-        "search_content_fulltext", "create_page",
+        "confluence:create_page",
         "search_issues", "get_page_tree",
     ],
     "compliance_guard": [
-        "get_compliance_notice", "get_access_log", "search_issues",
+        "gstn:get_compliance_notice", "get_access_log", "search_issues",
         "create_incident", "send_message",
     ],
     "it_operations": [
-        "create_incident", "trigger_alert_with_context",
-        "acknowledge_incident", "manage_on_call_schedule",
-        "run_automated_runbook", "send_message", "post_alert",
+        "servicenow:create_incident",
+        "acknowledge_incident",
+        "send_message", "post_alert",
     ],
     "legal_ops": [
-        "search_content_fulltext", "create_page", "search_issues",
-        "get_page_tree", "manage_space_permissions",
+        "confluence:create_page", "search_issues",
+        "get_page_tree",
     ],
     "risk_sentinel": [
         "get_access_log", "create_incident", "get_compliance_notice",
-        "search_issues", "generate_postmortem_doc",
+        "search_issues",
     ],
     "facilities_agent": [
         "create_ticket", "update_ticket",
-        "create_issue", "get_sla_breach_status",
+        "jira:create_issue",
     ],
-    "email_agent": ["send_email", "read_inbox", "search_emails"],
+    "email_agent": ["gmail:send_email", "read_inbox", "search_emails"],
     "notification_agent": [
-        "send_email", "create_calendar_event", "slack_send_message",
+        "send_email",
     ],
-    "chat_agent": ["slack_send_message", "send_email", "read_inbox"],
+    "chat_agent": ["send_email", "read_inbox"],
 }
 
 VALID_DOMAINS = {"commerce", "finance", "hr", "marketing", "ops", "backoffice", "comms"}

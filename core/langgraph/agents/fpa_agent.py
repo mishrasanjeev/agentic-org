@@ -17,7 +17,6 @@ DEFAULT_TOOLS = [
     'get_trial_balance',
     'list_invoices',
     'get_balance',
-    'get_campaign_performance_metrics',
     'get_project_metrics',
 ]
 
