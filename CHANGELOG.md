@@ -45,6 +45,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
   `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
+- Agent runs paused for human approval can be checkpointed in Postgres
+  instead of process memory: `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres`
+  (default `memory`, unchanged behaviour). A new migration
+  (`v6z22_langgraph_checkpoints`) creates the LangGraph checkpoint tables;
+  they are not created at runtime. Checkpoint data is encrypted with the
+  credential-vault keyring; no channel value is stored in plaintext. With the
+  Postgres store selected and unreachable, or its schema missing or stale,
+  the API refuses to start and agent runs fail (the run endpoint returns
+  `503 agent_checkpoint_store_unavailable`); nothing falls back to memory.
+  Refusals are counted in `agenticorg_checkpointer_unavailable_total` by
+  reason. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool` 3.3.1 as direct
+  dependencies.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.

@@ -13,7 +13,14 @@ from typing import Any
 import structlog.contextvars
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish, setup_logging, task_postrun, task_prerun, worker_process_init
+from celery.signals import (
+    before_task_publish,
+    setup_logging,
+    task_postrun,
+    task_prerun,
+    worker_process_init,
+    worker_process_shutdown,
+)
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
@@ -183,6 +190,29 @@ def _load_plugins_in_worker(**_kwargs: Any) -> None:
     from connectors.plugins import load_configured_plugins
 
     load_configured_plugins()
+
+
+@worker_process_init.connect
+def _open_checkpointer_in_worker(**_kwargs: Any) -> None:
+    """Open the agent checkpoint store on this worker process's persistent loop.
+
+    Agent runs execute through ``core.tasks.async_runner.run_async``, so the
+    pool must belong to that loop. A failure is logged and re-raised; the store
+    is then opened again, or refused with a reason code, when a task first
+    needs it. It never falls back to process memory.
+    """
+    from core.langgraph.checkpointer import open_checkpointer
+    from core.tasks.async_runner import run_async
+
+    run_async(open_checkpointer())
+
+
+@worker_process_shutdown.connect
+def _close_checkpointer_in_worker(**_kwargs: Any) -> None:
+    from core.langgraph.checkpointer import close_checkpointer
+    from core.tasks.async_runner import run_async
+
+    run_async(close_checkpointer())
 
 
 @before_task_publish.connect

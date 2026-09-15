@@ -19,12 +19,12 @@ from typing import Any
 
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
+from core.langgraph.checkpointer import get_checkpointer
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
 from core.pii.redactor import PIIRedactor
@@ -36,9 +36,6 @@ logger = structlog.get_logger()
 # see docs/PERFORMANCE.md for baselines.
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
-
-# In-memory checkpointer for now — will switch to PostgreSQL in production
-_checkpointer = MemorySaver()
 
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
@@ -297,7 +294,9 @@ async def run_agent(
         reset_prefetched_llm_credential(credential_token)
 
     # Compile with checkpointer
-    compiled = graph.compile(checkpointer=_checkpointer)
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    compiled = graph.compile(checkpointer=await get_checkpointer())
 
     initial_state: AgentState = {
         "messages": [
@@ -595,7 +594,9 @@ async def resume_agent(
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
-    compiled = graph.compile(checkpointer=_checkpointer)
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    compiled = graph.compile(checkpointer=await get_checkpointer())
 
     config = {"configurable": {"thread_id": thread_id}}
 

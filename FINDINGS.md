@@ -38,3 +38,20 @@ Remove an entry in the pull request that fixes it.
   (install `.[dev]` in the lint job) and fix the processor list's annotation,
   or make preflight mirror the lint job's minimal environment. The first
   catches real type errors; the second only restores agreement.
+
+## A-4 — Runner's `GraphInterrupt` fallback reads state synchronously
+
+- **Found:** switching the LangGraph checkpointer to Postgres (PRD F-2, 2026-09-15).
+- **What:** `core/langgraph/runner.py::run_agent` handles `GraphInterrupt` by
+  calling `compiled.get_state(config)`, the synchronous API, from inside the
+  event loop. `AsyncPostgresSaver` refuses synchronous reads from the loop
+  thread, so with `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres` that read
+  always raises, is swallowed by the surrounding `except Exception`, and the
+  result reports no output, confidence or token usage. LangGraph 1.x no longer
+  raises `GraphInterrupt` from a top-level `ainvoke` (it returns
+  `__interrupt__`), so the branch is only reached by older or nested
+  invocations.
+- **Fix:** use `await compiled.aget_state(config)` and update
+  `tests/regression/test_bug_sheet_langgraph_20260914.py::TestSheet36HitlUsage::test_graph_interrupt_exception_path_reports_real_tokens`,
+  which mocks the synchronous `get_state`, in the same change (or delete the
+  branch if nested invocation is not supported).
