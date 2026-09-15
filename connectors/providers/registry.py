@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from connectors.framework.verification_provider import Capability, VerificationProvider
+from connectors.providers.mock import create_mock_provider
 
 ProviderFactory = Callable[[], VerificationProvider]
 
@@ -109,7 +110,7 @@ class ProviderRegistry:
 
 #: Native providers, registered on import. ``connectors.plugins`` imports this module before
 #: registering plugins, so natives are always present first.
-NATIVE_PROVIDERS: tuple[tuple[str, ProviderFactory], ...] = ()
+NATIVE_PROVIDERS: tuple[tuple[str, ProviderFactory], ...] = (("mock", create_mock_provider),)
 
 
 def register_native_providers() -> None:

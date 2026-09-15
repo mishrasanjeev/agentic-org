@@ -1,0 +1,115 @@
+{
+  "key": "gb-true-match-corvane",
+  "scenarios": [
+    "true_match"
+  ],
+  "snapshot_at": "2026-09-01T09:00:00Z",
+  "application": {
+    "legal_name": "Corvane Maritime Logistics Ltd",
+    "trading_names": [],
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000003"
+      }
+    ],
+    "registered_address": {
+      "lines": [
+        "3 Example Quay"
+      ],
+      "locality": "Examplemouth",
+      "region": null,
+      "postal_code": "ZZ99 9ZX",
+      "country": "GB"
+    },
+    "website": "https://corvane-maritime.example.com",
+    "declared_activity": "freight_forwarding",
+    "declared_owners": [
+      {
+        "name": "Radomir Vexley",
+        "kind": "person",
+        "date_of_birth": "1966-09",
+        "nationalities": [
+          "ZZ"
+        ],
+        "ownership_pct": 100,
+        "identifiers": []
+      }
+    ]
+  },
+  "registry": {
+    "provider_ref": "mock-gb-00000003",
+    "jurisdiction": "GB",
+    "identifiers": [
+      {
+        "scheme": "gb_company_number",
+        "value": "00000003"
+      }
+    ],
+    "legal_name": "Corvane Maritime Logistics Ltd",
+    "registry_status": "active",
+    "entity_type": "private_limited_company",
+    "incorporated_on": "2012-01-23",
+    "dissolved_on": null,
+    "registered_address": {
+      "lines": [
+        "3 Example Quay"
+      ],
+      "locality": "Examplemouth",
+      "region": null,
+      "postal_code": "ZZ99 9ZX",
+      "country": "GB"
+    },
+    "officers": [
+      {
+        "name": "Radomir Vexley",
+        "role": "director",
+        "appointed_on": "2012-01-23",
+        "resigned_on": null,
+        "date_of_birth": "1966-09",
+        "nationalities": [
+          "ZZ"
+        ]
+      }
+    ],
+    "ownership_completeness": "complete",
+    "owners": [
+      {
+        "node_id": "psn-radomir-vexley",
+        "kind": "person",
+        "name": "Radomir Vexley",
+        "owns": "subject",
+        "relationship": "shareholding",
+        "share_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "voting_pct": {
+          "min": 75,
+          "max": 100
+        },
+        "jurisdiction": null,
+        "identifiers": [],
+        "date_of_birth": "1966-09",
+        "nationalities": [
+          "ZZ"
+        ],
+        "started_on": "2012-01-23"
+      }
+    ],
+    "monitor_events": []
+  },
+  "web": {
+    "domain": "corvane-maritime.example.com",
+    "registered_on": "2012-02",
+    "pages": [
+      {
+        "path": "/",
+        "http_status": 200,
+        "media_type": "text/html",
+        "content": "Charter shipping and freight forwarding for bulk cargo."
+      }
+    ]
+  }
+}
