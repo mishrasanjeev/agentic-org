@@ -41,6 +41,7 @@ from core.langgraph.tool_adapter import (
     _build_tool_index,
     build_tools_for_agent,
 )
+from core.pii.pseudonymiser import PseudonymSession
 
 logger = structlog.get_logger()
 
@@ -338,6 +339,7 @@ def build_agent_graph(
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
     context_guard: Callable[[Sequence[Any]], None] | None = None,
+    pseudonymiser: PseudonymSession | None = None,
     *,
     run_grant: RunGrant | None,
 ) -> StateGraph:
@@ -368,6 +370,10 @@ def build_agent_graph(
             source text can never reach the model
             (``docs/security/untrusted-content.md``). ``None`` keeps the
             existing behaviour.
+        pseudonymiser: The case's pseudonymisation session (flag
+            ``pseudonymisation.pre_model``). Every message is pseudonymised
+            immediately before each model call, and tools restore arguments
+            and pseudonymise results through it.
 
     Returns:
         A compiled LangGraph graph ready for invocation.
@@ -382,6 +388,7 @@ def build_agent_graph(
         domain=domain,
         capability_authorization=capability_authorization,
         pii_token_map=pii_token_map,
+        pseudonymiser=pseudonymiser,
     )
 
     # Bug sheet #14 (2026-09-14): ``ToolNode`` dispatches by exact name. A
@@ -425,6 +432,11 @@ def build_agent_graph(
         if context_guard is not None:
             context_guard(messages)
         trace.append(f"Calling LLM ({llm_model or 'default'})")
+        if pseudonymiser is not None:
+            # The last step before the model: whatever assembled these
+            # messages (runner, tool results, a resumed checkpoint), no raw
+            # value leaves in the request.
+            messages = await pseudonymiser.pseudonymise_messages(messages)
         response = await _get_llm().ainvoke(messages)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)

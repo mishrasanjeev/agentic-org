@@ -21,6 +21,7 @@ from core.governance.action_policy import (
     database_feature_flag_resolver,
     evaluate_action,
 )
+from core.pii.pseudonymiser import PseudonymisationError, PseudonymSession, refusal
 from core.tool_gateway.audit_logger import AuditLogger
 from core.tool_gateway.idempotency import IdempotencyStore
 from core.tool_gateway.pii_masker import mask_pii
@@ -91,8 +92,13 @@ class ToolGateway:
         capability_authorization: CapabilityAuthorization | None = None,
         run_grant: RunGrant | None = None,
         agent_type: str = "",
+        pseudonymiser: PseudonymSession | None = None,
     ) -> dict[str, Any]:
         """Execute a tool call through the gateway pipeline.
+
+        ``pseudonymiser`` restores pseudonymised model arguments before any
+        check or dispatch; a call whose pseudonyms cannot all be restored is
+        refused and audited, never dispatched.
 
         PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
         (``auth/grant_enforcement.py``) runs first, and then every legacy check
@@ -101,6 +107,21 @@ class ToolGateway:
         a check ``off`` makes.
         """
         start_time = time.monotonic()
+
+        if pseudonymiser is not None:
+            try:
+                params = await pseudonymiser.restore_arguments(params)
+            except PseudonymisationError as exc:
+                if self.audit:
+                    await self.audit.log(
+                        tenant_id=tenant_id,
+                        agent_id=agent_id,
+                        tool_name=tool_name,
+                        action="pseudonym_restore_failed",
+                        outcome="blocked",
+                        details={"reason": exc.reason},
+                    )
+                return refusal(exc)
 
         # In strict runtimes every tool dispatch must carry exact company and
         # domain context. Relaxed runtimes preserve legacy callers unless they

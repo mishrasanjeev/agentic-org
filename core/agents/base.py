@@ -13,6 +13,7 @@ import structlog
 from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import RunGrant, refresh_run_grant, resolve_run_grant
 from core.llm.router import LLMResponse, llm_router
+from core.pii import pseudonymiser as pseudonymisation
 from core.schemas.messages import (
     DecisionOption,
     DecisionRequired,
@@ -26,6 +27,17 @@ from core.schemas.messages import (
 )
 
 logger = structlog.get_logger()
+
+
+def _with_pseudonymiser(pseudonymiser: pseudonymisation.PseudonymSession | None) -> dict[str, Any]:
+    """Keyword argument for a pseudonymisation session, omitted when there is none.
+
+    Keeps router, gateway and subclass overrides written against the older
+    signatures working while the flag is off.
+    """
+    return {"pseudonymiser": pseudonymiser} if pseudonymiser is not None else {}
+
+
 PROMPTS_DIR = os.path.join(os.path.dirname(__file__), "prompts")
 
 
@@ -106,15 +118,27 @@ class BaseAgent:
             if tool_descriptions:
                 context["available_tools"] = tool_descriptions
 
+            # F-5: with ``pseudonymisation.pre_model`` on, the model only sees
+            # pseudonyms; tools restore them and the output is restored before
+            # it is returned. The map is keyed by the server-side workflow run,
+            # never by anything in the task.
+            pseudonymiser: pseudonymisation.PseudonymSession | None = None
+            if await pseudonymisation.pseudonymisation_enabled(self.tenant_id):
+                case_id = pseudonymisation.case_key(task.workflow_run_id or msg_id)
+                pseudonymiser = await pseudonymisation.open_session(self.tenant_id, case_id)
+                context = await pseudonymiser.pseudonymise_value(context)
+
             # 2. Reason with LLM
-            output = await self._reason(context, trace)
+            output = await self._reason(context, trace, **_with_pseudonymiser(pseudonymiser))
 
             # 3. Execute tool calls if the LLM requested any. Without an
             # injected ToolGateway the call goes through the same governed
             # connector path LangGraph uses (see ``_call_tool``).
             requested_tools = output.pop("tool_calls", None)
             if requested_tools and isinstance(requested_tools, list):
-                tool_results = await self._execute_tool_calls(requested_tools, trace, tool_calls)
+                tool_results = await self._execute_tool_calls(
+                    requested_tools, trace, tool_calls, **_with_pseudonymiser(pseudonymiser)
+                )
                 failed_call = next(
                     (tr for tr in tool_results if isinstance(tr.get("result"), dict) and tr["result"].get("error")),
                     None,
@@ -142,7 +166,17 @@ class BaseAgent:
                     )
                 # Feed tool results back to LLM for final synthesis
                 if tool_results:
-                    output = await self._synthesize_with_tools(context, output, tool_results, trace)
+                    # Field-aware: ``full_name``, ``dob``, ``address`` ... in a
+                    # structured result are pseudonymised, not only patterns.
+                    model_tool_results = tool_results
+                    if pseudonymiser is not None:
+                        model_tool_results = await pseudonymiser.pseudonymise_value(tool_results)
+                    output = await self._synthesize_with_tools(
+                        context, output, model_tool_results, trace, **_with_pseudonymiser(pseudonymiser)
+                    )
+
+            if pseudonymiser is not None:
+                output = pseudonymiser.restore_value(output)
 
             # 4. Validate output
             if not self._validate_output(output):
@@ -239,16 +273,26 @@ class BaseAgent:
 
         return None  # Unknown model → global default
 
-    async def _reason(self, context: dict, trace: list[str]) -> dict[str, Any]:
+    def _system_prompt_for(self, pseudonymiser: pseudonymisation.PseudonymSession | None) -> str:
+        if pseudonymiser is None:
+            return self.system_prompt
+        return pseudonymisation.with_model_guidance(self.system_prompt)
+
+    async def _reason(
+        self,
+        context: dict,
+        trace: list[str],
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None,
+    ) -> dict[str, Any]:
         """Call LLM with system prompt and task context."""
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": self._system_prompt_for(pseudonymiser)},
             {"role": "user", "content": json.dumps(context, default=str)},
         ]
         model_override = self._resolve_llm_model()
         trace.append(f"Calling LLM for reasoning (model: {model_override or 'default'})")
         response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override, tenant_id=self.tenant_id
+            messages, model_override=model_override, tenant_id=self.tenant_id, **_with_pseudonymiser(pseudonymiser)
         )
         trace.append(f"LLM responded: {response.model}, {response.tokens_used} tokens")
 
@@ -383,6 +427,7 @@ class BaseAgent:
         requested_tools: list[dict],
         trace: list[str],
         tool_records: list[ToolCallRecord],
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None,
     ) -> list[dict[str, Any]]:
         """Execute tool calls requested by the LLM and return results."""
         results = []
@@ -400,6 +445,7 @@ class BaseAgent:
                     connector_name=connector,
                     tool_name=tool,
                     params=params,
+                    **_with_pseudonymiser(pseudonymiser),
                 )
                 latency = int((time.monotonic() - call_start) * 1000)
                 status = "error" if "error" in result else "success"
@@ -444,11 +490,12 @@ class BaseAgent:
         initial_output: dict,
         tool_results: list[dict],
         trace: list[str],
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None,
     ) -> dict[str, Any]:
         """Call LLM again with tool results for final synthesis."""
         trace.append("Synthesizing final output with tool results")
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": self._system_prompt_for(pseudonymiser)},
             {"role": "user", "content": json.dumps(original_context, default=str)},
             {"role": "assistant", "content": json.dumps(initial_output, default=str)},
             {
@@ -462,7 +509,7 @@ class BaseAgent:
         ]
         model_override = self._resolve_llm_model()
         response: LLMResponse = await llm_router.complete(
-            messages, model_override=model_override, tenant_id=self.tenant_id
+            messages, model_override=model_override, tenant_id=self.tenant_id, **_with_pseudonymiser(pseudonymiser)
         )
         trace.append(f"Synthesis LLM: {response.model}, {response.tokens_used} tokens")
 
@@ -488,6 +535,7 @@ class BaseAgent:
         tool_name: str = "",
         params: dict | None = None,
         idempotency_key: str = "",
+        pseudonymiser: pseudonymisation.PseudonymSession | None = None,
     ) -> dict[str, Any]:
         """Call a connector tool.
 
@@ -497,6 +545,9 @@ class BaseAgent:
         in ``authorized_tools``, Grantex ``enforce`` runs when a grant token is
         attached, and the connector is resolved from the tenant/company scoped
         encrypted config. Every denial comes back as ``{"error": {...}}``.
+
+        ``pseudonymiser`` restores the model's pseudonymised arguments inside
+        the gateway; a call with a pseudonym it cannot restore is refused.
 
         PRD F-1: both paths check the agent's run grant in the tenant's
         ``grants.enforce_closed`` mode.
@@ -517,6 +568,7 @@ class BaseAgent:
                 run_grant=run_grant,
                 agent_id=str(self.agent_id or ""),
                 agent_type=str(self.agent_type or ""),
+                **_with_pseudonymiser(pseudonymiser),
             )
 
         gateway_args: dict[str, Any] = {
@@ -538,6 +590,7 @@ class BaseAgent:
             # ``run_grant`` keep working unchanged in ``off``.
             gateway_args["run_grant"] = run_grant
             gateway_args["agent_type"] = str(self.agent_type or "")
+        gateway_args.update(_with_pseudonymiser(pseudonymiser))
         return await self.tool_gateway.execute(**gateway_args)
 
     async def _run_grant_for_calls(self) -> RunGrant:

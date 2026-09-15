@@ -131,7 +131,7 @@ async def test_a_reused_thread_does_not_inherit_an_earlier_turns_denial(scripted
         patch("core.database.get_tenant_session", MagicMock(side_effect=RuntimeError("no database in unit tests"))),
         patch.object(runner, "prefetch_llm_credential", AsyncMock(return_value=None)),
         patch.object(runner, "generate_explanation", AsyncMock(return_value={})),
-        patch.object(runner, "_checkpointer", MemorySaver()),
+        patch.object(runner, "get_checkpointer", AsyncMock(return_value=MemorySaver())),
         patch("core.langgraph.tool_adapter._execute_connector_tool", executed),
         patch("core.langgraph.agent_graph.get_grantex_client", return_value=_enforcer()),
     ):
@@ -163,7 +163,7 @@ async def test_resume_clears_any_denial_on_the_thread():
     ):
         await runner.resume_agent(
             agent_id=AGENT,
-            thread_id="t-1",
+            thread_id=runner._run_thread_id(TENANT, "t-1", AGENT),
             decision={"action": "approve"},
             system_prompt="scripted",
             authorized_tools=[],

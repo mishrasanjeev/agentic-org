@@ -20,7 +20,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `docs/operations/grant-enforcement.md`. **Do not switch a tenant to `deny`
   yet if its agents rely on minted grants:** agents are registered with
   `execute` scopes that Grantex's check cannot satisfy, so a minted grant
-  denies every call today (FINDINGS A-29); the warn-mode report shows this as
+  denies every call today (FINDINGS A-32); the warn-mode report shows this as
   `tool_not_granted` on every call.
 
 ### Added
@@ -199,8 +199,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   must pass mod 97 and VAT numbers their national check digits where the
   scheme has one (17 country prefixes); shapes that are otherwise ordinary
   numbers are only recognised next to a label such as "SSN" or "company
-  number". Nothing uses them yet, so behaviour is unchanged; pre-model
-  pseudonymisation builds on them.
+  number". Used by pre-model pseudonymisation (below).
+- Pseudonymisation before the model, per tenant behind the flag
+  `pseudonymisation.pre_model` (off by default). Names, dates of birth,
+  addresses and identifiers are replaced with placeholders such as
+  `[[PERSON_1:3fa9c2]]` before every model call on both model paths
+  (LangGraph agents and `LLMRouter`), system prompt included, and restored
+  inside the tool boundary so connectors receive the real values. A value
+  keeps its placeholder for the run and its resumes; the case is always the
+  server-generated run id, never a `case_id` from a request, and only
+  placeholders issued into the run's own conversation are restored. The map is
+  stored encrypted per tenant in the new `case_pseudonym_maps` table (migration
+  `v6z24_case_pseudonym_maps`, additive, row-level security). Fails closed: if
+  the flag or the map cannot be read, or the map cannot be written, no model
+  call is made; a tool call whose placeholder cannot be restored is refused
+  with `E1012 pseudonym_restore_failed` and audited instead of being sent. New
+  metrics `agenticorg_pii_pseudonymised_total{entity_type}`,
+  `agenticorg_pii_pseudonym_restore_refused_total{reason}` and
+  `agenticorg_pii_pseudonymisation_unavailable_total{reason}`. New
+  `core.feature_flags.is_enabled_strict`, which raises on a failed lookup
+  instead of returning the default. With the flag off behaviour is unchanged.
+  See `docs/security/pseudonymisation.md`.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy
