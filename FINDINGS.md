@@ -472,3 +472,24 @@ Remove an entry in the pull request that fixes it.
   business in insolvency is `high` (via `registry_active`), never `blocked`.
 - **Fix:** match `in_insolvency` in the examples, or have the policy loader
   check `verification.status` operands against the interface vocabulary.
+
+## A-40 — The integration `client` fixture cannot run twice against one database
+
+- **Found:** re-running governed case API tests against a reused local
+  PostgreSQL container (2026-09-15).
+- **What:** `tests/integration/conftest.py::client` seeds the test tenant with a
+  fresh random id but the fixed slug `test-tenant` and
+  `ON CONFLICT (id) DO NOTHING`, so a second session against the same database
+  fails at setup with a unique violation on `tenants_slug_key`. CI is unaffected
+  because it starts from an empty database.
+- **Fix:** derive the slug from the tenant id, or conflict on the slug.
+
+## A-41 — `alembic upgrade head` fails on an empty database
+
+- **Found:** generating the audit record for `v6z26_case_push` (2026-09-15).
+- **What:** early revisions assume tables created by the legacy SQL bootstrap
+  (`migrations/*.sql`), so upgrading an empty schema stops at the first of them.
+  New migrations can only be rehearsed on a database built with
+  `BaseModel.metadata.create_all` or restored from an existing one.
+- **Fix:** document the bootstrap order, or add a baseline revision that
+  creates the legacy tables so the chain runs from empty.
