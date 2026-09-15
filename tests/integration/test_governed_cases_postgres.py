@@ -118,6 +118,7 @@ def _runtime(provider: MockProvider | None = None, **overrides: Any) -> CaseRunt
         "clock": lambda: FROZEN,
         "llm_model": "scripted",
         "require_os_isolation": False,
+        "push_kick": lambda tenant_id: None,
     }
     values.update(overrides)
     return CaseRuntime(**values)

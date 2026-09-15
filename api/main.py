@@ -28,6 +28,7 @@ from api.v1 import (
     ca_billing,
     ca_operations,
     capability_readiness,
+    case_push,
     cdc_webhooks,
     chat,
     client_portal,
@@ -271,6 +272,7 @@ app.include_router(tenant_ai_settings.router, prefix="/api/v1", tags=["Tenant AI
 app.include_router(tenant_ai_settings.registry_router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
 app.include_router(governed_cases.router, prefix="/api/v1", tags=["Governed Cases"])
+app.include_router(case_push.router, prefix="/api/v1", tags=["Governed Cases"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
 app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])

@@ -5,6 +5,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Portable case hand-off for governed cases (`core/cases/push.py`, PRD A-8):
+  a `case_push` event is written to `case_push_outbox` in the same transaction
+  as the case change (`case.completed`, `case.updated`, `case.decided`) and
+  delivered to the tenant's configured endpoint with an HMAC-SHA256 signature
+  over `<event id>.<timestamp>.<body>` in `AgenticOrg-Signature`
+  (`v1=<key_id>:<hex>`, one entry per key so keys rotate without downtime),
+  retried with exponential backoff and dead-lettered on rejection or after 10
+  attempts; dead letters replay with the same event id. REST retrieval of the
+  same document. Inbound provider webhooks at
+  `/api/v1/webhooks/providers/{tenant_id}/{provider}` are verified with the
+  provider, de-duplicated by event id, and only ever trigger a re-investigation
+  from the provider; unverifiable bodies are untrusted triggers. Signing keys
+  are stored encrypted per tenant. Migration `v6z26_case_push` (three tables,
+  forced RLS). Celery tasks `dispatch_case_pushes` and `sweep_case_pushes` (the
+  sweep is a no-op unless `AGENTICORG_CASE_PUSH_SWEEP_ENABLED=true`). Metrics
+  `agenticorg_case_push_{enqueued,deliveries,dead_letters}_total`,
+  `agenticorg_case_push_dead_letter_backlog`,
+  `agenticorg_case_push_attempt_duration_seconds` and
+  `agenticorg_provider_webhook_receipts_total{outcome}`; alert
+  `case_push_dead_letters_present`. Requires `governed_cases.enabled` and a
+  configured endpoint. See `docs/governance/case-hand-off.md` and the runbook.
 - Governed business cases (`core/cases/`, PRD A-8), behind the per-tenant
   flag `governed_cases.enabled` (default off; unreadable counts as off): case
   lifecycle `submitted`/`in_progress`/`awaiting_decision`/`decided`/

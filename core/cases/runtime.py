@@ -31,7 +31,7 @@ from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDepen
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
 from core.cases.decisions import DecisionVerifier, RequireDecisionGrant, record_decision
 from core.cases.states import CaseError, CaseState
-from core.cases.store import CASE_REF_RE, get_case, transition
+from core.cases.store import CASE_REF_RE, get_case, record_update, transition
 from core.policy import EXAMPLES_DIR, Policy, PolicyLoadError, load_policies
 from core.tool_gateway.provider_gateway import ToolAuthorizer
 
@@ -97,6 +97,8 @@ class CaseRuntime:
     llm_model: str = field(default_factory=lambda: _settings().case_llm_model)
     pseudonym_store: Any = None
     require_os_isolation: bool | None = None
+    #: Ask for immediate delivery of queued case push events once a change has committed.
+    push_kick: Callable[[uuid.UUID], None] = field(default=lambda tenant_id: _kick(tenant_id))
 
     async def require_enabled(self, tenant_id: uuid.UUID) -> None:
         try:
@@ -107,6 +109,12 @@ class CaseRuntime:
             enabled = False
         if not enabled:
             raise CaseError("governed_cases_disabled", status=404)
+
+
+def _kick(tenant_id: uuid.UUID) -> None:
+    from core.cases.push import kick_dispatch
+
+    kick_dispatch(tenant_id)
 
 
 def _settings() -> Any:
@@ -178,6 +186,14 @@ async def investigate_case(
                 else ("" if outcome.status == "completed" else outcome.failure_reason)
             )
 
+    result = await _store_investigation(tenant, case_ref, runtime, actor, started_version, outcome, failure)
+    runtime.push_kick(tenant)
+    return result
+
+
+async def _store_investigation(
+    tenant: uuid.UUID, case_ref: str, runtime: CaseRuntime, actor: str, started_version: int, outcome: Any, failure: str
+) -> dict[str, Any]:
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         if case.version != started_version:
@@ -280,8 +296,8 @@ async def dispose_screening_hits(
             raise CaseError("case_version_conflict", f"expected {version}, found {case.version}")
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
-        case.version = case.version + 1
-        case.updated_at = runtime.clock()
+        await record_update(session, case, now=runtime.clock())
+    runtime.push_kick(tenant)
     return {
         "case_ref": case_ref,
         "proposed": len(proposed),
@@ -306,7 +322,9 @@ async def decide_case(
             actor=actor,
             now=runtime.clock(),
         )
-        return {"case_ref": case_ref, "state": case.state}
+        result = {"case_ref": case_ref, "state": case.state}
+    runtime.push_kick(tenant)
+    return result
 
 
 # --- workflow step ------------------------------------------------------------------------------

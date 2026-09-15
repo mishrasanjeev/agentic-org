@@ -28,7 +28,15 @@ from core.agents.business_underwriter.information_request import InformationRequ
 from core.agents.screening_disposition import DispositionReviewError, DispositionReviewRequest, apply_review
 from core.cases.runtime import CaseRuntime, decide_case, default_policy_id, investigate_case
 from core.cases.states import CaseError, CaseState
-from core.cases.store import business_case_document, counts_by_state, create_case, get_case, list_cases, transition
+from core.cases.store import (
+    business_case_document,
+    counts_by_state,
+    create_case,
+    get_case,
+    list_cases,
+    record_update,
+    transition,
+)
 from core.cases.store import transitions_for as case_transitions
 
 logger = structlog.get_logger()
@@ -271,7 +279,9 @@ async def withdraw_case(
             await transition(
                 session, case, CaseState.WITHDRAWN, actor=_actor(user), reason="withdrawn", now=runtime.clock()
             )
-            return {"case_ref": case_ref, "state": case.state}
+            result = {"case_ref": case_ref, "state": case.state}
+        runtime.push_kick(uuid.UUID(tenant_id))
+        return result
     except CaseError as exc:
         return _error(exc)
 
@@ -329,9 +339,10 @@ async def review_screening_disposition(
             except DispositionReviewError as exc:
                 raise CaseError(exc.reason, status=409 if exc.reason == "already_reviewed" else 422) from exc
             case.screening_dispositions = dispositions
-            case.version = case.version + 1
-            case.updated_at = runtime.clock()
-            return dispositions[index]
+            await record_update(session, case, now=runtime.clock())
+            result = dispositions[index]
+        runtime.push_kick(uuid.UUID(tenant_id))
+        return result
     except CaseError as exc:
         return _error(exc)
 
@@ -361,8 +372,7 @@ async def propose_information_request(
                 r for r in case.information_requests or [] if r.get("proposal_sha256") != proposal["proposal_sha256"]
             ]
             case.information_requests = [*existing, {**proposal, "status": "awaiting_approval"}]
-            case.version = case.version + 1
-            case.updated_at = runtime.clock()
+            await record_update(session, case, now=runtime.clock())
             return JSONResponse(status_code=201, content={**proposal, "status": "awaiting_approval"})
     except CaseError as exc:
         return _error(exc)
@@ -402,8 +412,9 @@ async def approve_information_request(
                 **proposal, "status": "approved", "request": rendered, "approved_at": datetime.now(UTC).isoformat(),
             }  # fmt: skip
             case.information_requests = requests
-            case.version = case.version + 1
-            case.updated_at = runtime.clock()
-            return requests[index]
+            await record_update(session, case, now=runtime.clock())
+            result = requests[index]
+        runtime.push_kick(uuid.UUID(tenant_id))
+        return result
     except CaseError as exc:
         return _error(exc)

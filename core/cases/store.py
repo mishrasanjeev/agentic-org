@@ -4,7 +4,8 @@
 Every function takes a tenant-scoped session (``core.database.get_tenant_session``) *and* filters
 by tenant explicitly, so isolation holds even if row-level security were misconfigured. Writes
 use the row's ``version`` to refuse a concurrent change (``case_version_conflict``) instead of
-overwriting it.
+overwriting it. A transition that a receiver should hear about writes a ``case_push`` event to the
+outbox in the same transaction (``core.cases.push``).
 """
 
 from __future__ import annotations
@@ -188,6 +189,10 @@ async def transition(
             to_state=target.value, actor=actor[:256], reason=reason[:128], created_at=at,
         )
     )  # fmt: skip
+    # The hand-off is written in this transaction, so the push can never be lost while the change commits.
+    from core.cases.push import enqueue_for_transition
+
+    await enqueue_for_transition(session, case, target, at)
     await session.flush()
     case_transitions_total.labels(from_state=current.value, to_state=target.value).inc()
     logger.info(
@@ -208,3 +213,15 @@ async def transitions_for(session: AsyncSession, case: GovernedCase) -> list[Gov
         .order_by(GovernedCaseTransition.case_version)
     )
     return list(rows.scalars())
+
+
+async def record_update(session: AsyncSession, case: GovernedCase, *, now: datetime | None = None) -> GovernedCase:
+    """Bump the version of a case whose documents changed without a state change, and queue ``case.updated``."""
+    from core.cases.push import enqueue
+
+    at = now or _utc_now()
+    case.version = case.version + 1
+    case.updated_at = at
+    await enqueue(session, case, "case.updated", now=at)
+    await session.flush()
+    return case

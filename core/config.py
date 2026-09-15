@@ -133,6 +133,8 @@ class Settings(BaseSettings):
     case_policy_dir: str = ""
     # Model the reference agents use for prose (memo summaries, rationales).
     case_llm_model: str = ""
+    # Periodic delivery sweep for the case push outbox (core/tasks/case_push_tasks.py).
+    case_push_sweep_enabled: bool = False
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
