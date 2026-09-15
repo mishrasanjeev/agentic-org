@@ -5,6 +5,36 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Untrusted content extractor (`core/extraction/`): websites, registry
+  documents and applicant uploads are parsed in a separate worker process
+  with no network access and a wall-clock limit (on Linux a seccomp filter is
+  required by default; an audit hook, resource limits and a network namespace
+  are added where available) and return typed, length-capped,
+  character-class-constrained fields only. Excerpts are stored separately and
+  cited by `excerpt_ref`. Timeouts, crashes, oversized or off-schema output
+  fail closed with a reason code and no fields. `build_model_context` renders
+  evidence for a model with untrusted text replaced by references, and the
+  new optional `build_agent_graph(context_guard=...)` stops a run before any
+  model call that would carry untrusted text. Metrics
+  `agenticorg_extraction_total{kind,outcome}` and
+  `agenticorg_extraction_duration_seconds{kind}`. Nothing calls the extractor
+  yet and `context_guard` defaults to `None`, so existing behaviour is
+  unchanged. PDF and office documents are refused, not parsed. See
+  `docs/security/untrusted-content.md`.
+- Deterministic case policy engine (`core/policy/`): versioned YAML policies
+  evaluated over a case's evidence fields into a tier (`low` < `medium` <
+  `high` < `blocked`), a score and ordered reasons naming the rules that fired,
+  with the policy version, file hash and inputs recorded in every result. No
+  model is involved and model confidence is never an input. Policies load
+  strictly and fail closed at load with a reason code; missing evidence moves
+  a case towards the stricter tier. A policy can only be marked `production`
+  with `reviewed_by`, and loading an example policy logs a warning. Ships
+  `business_onboarding_us` and `business_onboarding_uk` **examples, which
+  require a compliance owner's review before any real use**. Metrics
+  `agenticorg_policy_evaluations_total{tier,policy_status}` and
+  `agenticorg_policy_load_total{outcome,reason}`. Nothing calls the engine
+  yet, so existing behaviour is unchanged. See `docs/policies/authoring.md`
+  and ADR 0011.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret

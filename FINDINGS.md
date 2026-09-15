@@ -130,7 +130,26 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
-## A-13 — Encrypted-migration gates cannot read JSONB ciphertext containers
+## A-19 — Approval step conditions that fail to evaluate are skipped
+
+- **Found:** reading `core/approvals/policy_engine.py` while adding the case
+  policy engine (2026-09-15).
+- **What:** `_condition_matches` catches every exception from
+  `workflows.condition_evaluator.evaluate_condition`, logs a warning and
+  returns `False`. `first_applicable_step` and `next_step_after` treat `False`
+  as "this step does not apply", so an approval step whose condition is
+  malformed, references a missing context key or raises for any other reason
+  is silently skipped. In `api/v1/approvals.py` an `advance` with no further
+  applicable step marks the item `decided`, so a broken condition on, for
+  example, a second sign-off step lets the item complete with fewer approvals
+  than the policy requires. This fails open on an authority path.
+- **Fix:** validate step conditions when an approval policy is created or
+  updated (refuse unparseable ones with a reason), and at decision time treat
+  an evaluation error as "step applies" (or refuse the decision with a reason
+  code) rather than skipping it, with a test for a malformed condition on a
+  later step.
+
+## A-20 — Encrypted-migration gates cannot read JSONB ciphertext containers
 
 - **Found:** re-running `v6z22_case_pseudonym_maps` on a table with rows
   (2026-09-15).
@@ -146,7 +165,7 @@ Remove an entry in the pull request that fixes it.
   both sampling methods the way `core.crypto.verify_all.parse_encrypted_container`
   does, with a test over a JSONB column.
 
-## A-14 — Key rewrap silently skips JSONB ciphertext outside `*credentials_encrypted`
+## A-21 — Key rewrap silently skips JSONB ciphertext outside `*credentials_encrypted`
 
 - **Found:** registering `case_pseudonym_maps.mapping_encrypted` with
   `core/crypto/verify_all.py` (2026-09-15).
@@ -162,7 +181,7 @@ Remove an entry in the pull request that fixes it.
   and `_wrap_ciphertext_for_column`, skip or separately handle `env1:` values
   with an explicit count, and add both columns to the rewrap tests.
 
-## A-15 — Some model calls send personal data without redaction
+## A-22 — Some model calls send personal data without redaction
 
 - **Found:** tracing every model caller for pre-model pseudonymisation
   (2026-09-15).

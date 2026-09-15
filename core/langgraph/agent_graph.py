@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import json
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import structlog
@@ -240,6 +241,7 @@ def build_agent_graph(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
+    context_guard: Callable[[Sequence[Any]], None] | None = None,
     pseudonymiser: PseudonymSession | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
@@ -259,6 +261,12 @@ def build_agent_graph(
         llm_provider: Explicit catalog provider id pinned on the agent
             (``agents.llm_provider``, else ``llm_config["provider"]``).
             ``None`` keeps the legacy model-name inference for old rows.
+        context_guard: Called with the full message list before every model
+            call; raising stops the run before anything is sent. Governed case
+            agents pass ``UntrustedTextRegistry.guard_messages`` so untrusted
+            source text can never reach the model
+            (``docs/security/untrusted-content.md``). ``None`` keeps the
+            existing behaviour.
         pseudonymiser: The case's pseudonymisation session (flag
             ``pseudonymisation.pre_model``). Every message is pseudonymised
             immediately before each model call, and tools restore arguments
@@ -318,6 +326,8 @@ def build_agent_graph(
         if not messages or not isinstance(messages[0], SystemMessage):
             messages = [SystemMessage(content=system_prompt), *messages]
 
+        if context_guard is not None:
+            context_guard(messages)
         trace.append(f"Calling LLM ({llm_model or 'default'})")
         if pseudonymiser is not None:
             # The last step before the model: whatever assembled these
