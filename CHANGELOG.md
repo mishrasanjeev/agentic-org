@@ -5,6 +5,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Local Grantex in the development stack: the Grantex auth service from its
+  published image, pinned by digest, with its own `grantex` role and database
+  on the stack's Postgres (created once by `grantex-db`) and Redis index 2.
+  The API and worker use it through `GRANTEX_BASE_URL` and a seeded
+  development `GRANTEX_API_KEY`. The smoke test checks its health and keys and
+  that the API container reaches it with the configured key. See "Local
+  Grantex" in `docs/quickstart-local.md`.
 - OpenAI-compatible model stub in the local stack (`model-stub`,
   `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
   from scripted sequences (`scripted/<name>`, ids matching the in-process

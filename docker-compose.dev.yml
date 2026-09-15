@@ -28,6 +28,10 @@ x-backend-env: &backend-env
   AGENTICORG_MOCK_PROVIDER_URL: http://mock-provider:8080
   # `vllm:` models go to the OpenAI-compatible model stub (tools/model_stub).
   VLLM_BASE_URL: http://model-stub:8080
+  # Local Grantex auth service (grantex service below); the key is the
+  # development developer key it seeds at start.
+  GRANTEX_BASE_URL: http://grantex:3001
+  GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
 
 x-backend-build: &backend-build
   context: .
@@ -111,6 +115,8 @@ services:
         condition: service_completed_successfully
       model-stub:
         condition: service_healthy
+      grantex:
+        condition: service_healthy
 
   worker:
     image: agenticorg-api:dev
@@ -134,6 +140,8 @@ services:
       migrate:
         condition: service_completed_successfully
       model-stub:
+        condition: service_healthy
+      grantex:
         condition: service_healthy
 
   # The mock verification provider as its own service, so the provider seam is
@@ -208,6 +216,61 @@ services:
       - ./tests/cassettes/model_stub:/cassettes
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}:8080"
+
+  # One-shot: a separate `grantex` role and database on the stack's Postgres,
+  # so the Grantex auth service never shares tables with the application.
+  grantex-db:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    environment:
+      PGHOST: postgres
+      PGUSER: agenticorg
+      PGPASSWORD: agenticorg_dev
+      PGDATABASE: agenticorg
+    command:
+      - bash
+      - -ceu
+      - |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        SELECT 'CREATE ROLE grantex LOGIN PASSWORD ''grantex_dev'''
+          WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'grantex')\gexec
+        SELECT 'CREATE DATABASE grantex OWNER grantex'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'grantex')\gexec
+        SQL
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Grantex auth service from the published image, pinned by digest. It runs
+  # its own migrations at start, keeps its data in the `grantex` database and
+  # Redis index 2, generates signing keys, and seeds the development developer
+  # key the API uses (GRANTEX_API_KEY above).
+  grantex:
+    image: ghcr.io/mishrasanjeev/grantex-auth-service@sha256:788c5e37382530d47b2c6c48eb1d4d9200310f1c8cfe738e48c56c16e0309c7d
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "3001"
+      DATABASE_URL: postgres://grantex:grantex_dev@postgres:5432/grantex
+      REDIS_URL: redis://redis:6379/2
+      AUTO_GENERATE_KEYS: "true"
+      PUBLIC_BASE_URL: http://grantex:3001
+      JWT_ISSUER: http://grantex:3001
+      SEED_API_KEY: agenticorg-dev-grantex-api-key
+      LOG_PRETTY: "false"
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 30
+    depends_on:
+      grantex-db:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   # Test and check runner for `make test` and `make check`; `make dev` never
   # starts it. The checkout is mounted, so code changes need no rebuild.

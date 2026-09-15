@@ -26,6 +26,7 @@ When it finishes:
 | Mock verification provider | <http://127.0.0.1:8081> (`/healthz`) |
 | OIDC stub | <http://127.0.0.1:9400> (`/.well-known/openid-configuration`) |
 | Model stub | <http://127.0.0.1:8090> (`/v1/models`, `/v1/chat/completions`) |
+| Grantex auth service | <http://127.0.0.1:3001> (`/health`, `/.well-known/jwks.json`) |
 
 All ports bind to `127.0.0.1` only.
 
@@ -50,6 +51,8 @@ All ports bind to `127.0.0.1` only.
   [Development identity provider](#development-identity-provider)
 - **model-stub** — an OpenAI-compatible model service answering from scripts
   and recorded cassettes; see [Model stub](#model-stub)
+- **grantex-db** and **grantex** — the Grantex auth service from its published
+  image, with its own database; see [Local Grantex](#local-grantex)
 
 Every base image is pinned by digest. The API and worker set
 `AGENTICORG_TEST_FAKE_LLM=1` (see `docs/hermetic_test_doubles.md`), so
@@ -278,6 +281,29 @@ forwarded to `MODEL_STUB_UPSTREAM_URL` (default the OpenAI API) and saved. The
 stub refuses to start in record mode without the key. Review recorded
 cassettes like any other fixture before committing them.
 
+## Local Grantex
+
+The API authorises agents through Grantex. Locally it uses the **grantex**
+service instead of the hosted one:
+
+- Image `ghcr.io/mishrasanjeev/grantex-auth-service`, pinned by digest in
+  `docker-compose.dev.yml`. Move the digest deliberately, like any base image.
+  It is pulled from the GitHub Container Registry, so the first `make dev`
+  needs network access to `ghcr.io` (no login: the image is public). Later runs
+  use the local copy; to work offline, run `make dev` once while connected.
+- **grantex-db** creates a `grantex` role and database on the stack's Postgres
+  once (idempotent), so Grantex never shares tables with AgenticOrg. Grantex
+  applies its own migrations at start and uses Redis index 2.
+- It generates its signing keys at start (`AUTO_GENERATE_KEYS`), so tokens it
+  issued do not survive `make clean`, and seeds a development developer key.
+- The API and worker get `GRANTEX_BASE_URL=http://grantex:3001` and that key as
+  `GRANTEX_API_KEY` (a development placeholder). Its issuer is
+  `http://grantex:3001`.
+
+The smoke test checks that Grantex is healthy, publishes its keys, and that the
+API container reaches it and the key is accepted. `make clean` removes its data
+with the rest of the stack.
+
 ## Changing ports
 
 If a port is already taken, override it for the whole session:
@@ -286,8 +312,12 @@ If a port is already taken, override it for the whole session:
 AGENTICORG_DEV_API_PORT=18000 AGENTICORG_DEV_UI_PORT=13000 \
 AGENTICORG_DEV_POSTGRES_PORT=15432 AGENTICORG_DEV_REDIS_PORT=16379 \
 AGENTICORG_DEV_OIDC_PORT=19400 AGENTICORG_DEV_MOCK_PROVIDER_PORT=18081 \
-AGENTICORG_DEV_MODEL_STUB_PORT=18090 make dev
+AGENTICORG_DEV_MODEL_STUB_PORT=18090 AGENTICORG_DEV_GRANTEX_PORT=13001 make dev
 ```
+
+The smoke test runs its API-to-Grantex check through `$COMPOSE` (make passes
+its own); set `COMPOSE` when you run `scripts/dev_stack_smoke.sh` by hand
+against a stack started with a different project name.
 
 Use the same variables with `make ps`, `make logs` and the smoke test.
 
