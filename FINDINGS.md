@@ -142,8 +142,9 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** running `make test-integration` from a Windows worktree
   (2026-09-15).
-- **What:** the repository has no `.gitattributes`, so Git for Windows'
-  default `core.autocrlf=true` checks shell scripts out with CRLF endings.
+- **What:** `.gitattributes` fixes line endings only for
+  `core/policy/examples/*.yaml`, so Git for Windows' default
+  `core.autocrlf=true` checks shell scripts out with CRLF endings.
   Bash inside the Linux containers then rejects them:
   `tests/regression/test_bug_sheet_platform_20260914.py::test_deploy_script_pins_worker_and_beat_entrypoints`
   fails on `bash -n scripts/deploy_cloud_run.sh`, and the scripts `make`
@@ -208,3 +209,48 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** renormalise the file to LF in its own commit and add a
   `.gitattributes` rule (`*.md text eol=lf`, together with A-14's `*.sh`
   rule) so line endings are fixed at the repository level.
+
+## A-19 — Approval step conditions that fail to evaluate are skipped
+
+- **Found:** reading `core/approvals/policy_engine.py` while adding the case
+  policy engine (2026-09-15).
+- **What:** `_condition_matches` catches every exception from
+  `workflows.condition_evaluator.evaluate_condition`, logs a warning and
+  returns `False`. `first_applicable_step` and `next_step_after` treat `False`
+  as "this step does not apply", so an approval step whose condition is
+  malformed, references a missing context key or raises for any other reason
+  is silently skipped. In `api/v1/approvals.py` an `advance` with no further
+  applicable step marks the item `decided`, so a broken condition on, for
+  example, a second sign-off step lets the item complete with fewer approvals
+  than the policy requires. This fails open on an authority path.
+- **Fix:** validate step conditions when an approval policy is created or
+  updated (refuse unparseable ones with a reason), and at decision time treat
+  an evaluation error as "step applies" (or refuse the decision with a reason
+  code) rather than skipping it, with a test for a malformed condition on a
+  later step.
+
+## A-26 — Multi-step approvals do not require distinct approvers
+
+- **Found:** review of the development seed's approval policy (2026-09-15).
+- **What:** `api/v1/approvals.py` only refuses a second vote by the same person
+  on the *same* step ("This reviewer has already voted on the current approval
+  step"). Nothing compares approvers across steps, and no code reads a
+  distinct-approver setting, so one user holding the step roles can approve
+  every step of a multi-step policy alone. A policy described as four-eyes is
+  therefore not enforced as such.
+- **Fix:** record approvers per item and refuse a decision by anyone who
+  decided an earlier step when the policy requires distinct approvers, with a
+  reason code and a test. The governed-actions decision grants will enforce
+  four-eyes for case decisions; the generic approval flow still needs this.
+
+## A-27 — Approval steps for an unknown role can be decided by any known role
+
+- **Found:** same review (2026-09-15).
+- **What:** `_can_decide` in `api/v1/approvals.py` compares role levels from
+  `_ROLE_HIERARCHY`, where an unknown role is level 0. An item whose
+  `assignee_role` is not in the map (the approval policy API accepts any
+  string for `approver_role`) needs level 0, so every user with a known role
+  passes the check. This fails open on an authority path.
+- **Fix:** refuse to create or update a policy step whose `approver_role` is
+  not a known role, and have `_can_decide` deny (with a reason) when the
+  assignee role is unknown.

@@ -548,3 +548,74 @@ def test_full_flow_over_http(running: str, key: oidc.SigningKey) -> None:
 
         assert client.post("/token", content=b"{}", headers={"Content-Type": "application/json"}).status_code == 400
         assert client.get("/nothing-here").status_code == 404
+
+
+# ── Review follow-ups: session lifetime, auth_time, max_age, repeated parameters ──
+
+
+def test_session_expires_after_its_lifetime(stub: OIDCStub, clock: Clock) -> None:
+    _, challenge = pkce()
+    _, done = sign_in(stub, challenge)
+    session = session_of(done)
+    assert f"Max-Age={oidc.SESSION_TTL_SECONDS}" in done.headers["Set-Cookie"]
+    clock.now += oidc.SESSION_TTL_SECONDS - 1
+    assert "code" in query_of(stub.authorize(auth_params(challenge), session))
+    clock.now += 1
+    page = stub.authorize(auth_params(challenge), session)
+    assert page.status == HTTPStatus.OK, "an expired session must sign in again"
+    assert b"Approver B" in page.body, "an expired session no longer pins the user"
+
+
+def test_reused_session_keeps_the_original_auth_time_in_both_tokens(
+    stub: OIDCStub, key: oidc.SigningKey, clock: Clock
+) -> None:
+    verifier, challenge = pkce()
+    _, first = sign_in(stub, challenge)
+    signed_in_at = int(clock.now)
+    clock.now += 600
+    again = stub.authorize(auth_params(challenge), session_of(first))
+    tokens = body(exchange(stub, query_of(again)["code"], verifier))
+    assert verify_id_token(tokens["id_token"], key)["auth_time"] == signed_in_at
+    access = jwt.decode(tokens["access_token"], options={"verify_signature": False})
+    assert access["auth_time"] == signed_in_at
+
+
+def test_stepped_up_session_answers_a_basic_request_with_step_up_claims(
+    stub: OIDCStub, key: oidc.SigningKey
+) -> None:
+    verifier, challenge = pkce()
+    _, done = sign_in(stub, challenge, second_factor=True, acr_values=ACR_STEP_UP)
+    basic = stub.authorize(auth_params(challenge), session_of(done))
+    claims = verify_id_token(body(exchange(stub, query_of(basic)["code"], verifier))["id_token"], key)
+    assert (claims["acr"], claims["amr"]) == (ACR_STEP_UP, ["pwd", "hwk"])
+
+
+@pytest.mark.parametrize("value", ["²", "٣", "1e3", " 5", "5 ", "+5", "9999999999"])
+def test_max_age_accepts_ascii_digits_only(stub: OIDCStub, value: str) -> None:
+    _, challenge = pkce()
+    params = query_of(stub.authorize(auth_params(challenge, max_age=value), None))
+    assert params["error"] == "invalid_request"
+
+
+def test_single_valued_reports_the_first_repeated_parameter() -> None:
+    assert oidc.single_valued([("a", "1"), ("b", "2")]) == ({"a": "1", "b": "2"}, None)
+    assert oidc.single_valued([("a", "1"), ("b", "2"), ("a", "3")])[1] == "a"
+
+
+def test_repeated_parameters_are_rejected_over_http(running: str) -> None:
+    _, challenge = pkce()
+    base = auth_params(challenge)
+    pairs = [*base.items(), ("redirect_uri", "https://attacker.example.com/cb")]
+    with httpx.Client(base_url=running, follow_redirects=False, timeout=10) as client:
+        page = client.get("/authorize", params=pairs)
+        assert page.status_code == 400
+        assert "location" not in page.headers
+        assert "redirect_uri" in page.text
+
+        token = client.post(
+            "/token",
+            content="grant_type=authorization_code&code=x&code=y",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert token.status_code == 400
+        assert token.json()["error"] == "invalid_request"
