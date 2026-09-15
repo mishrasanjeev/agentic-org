@@ -1,0 +1,11 @@
+# Build context filter for tools/model_stub/Dockerfile (replaces the root
+# .dockerignore for this image): only the files the stub imports.
+*
+!core/__init__.py
+!core/config.py
+!core/model_replay.py
+!core/test_doubles/__init__.py
+!core/test_doubles/scripted_model.py
+!tools/__init__.py
+!tools/model_stub/
+**/__pycache__
