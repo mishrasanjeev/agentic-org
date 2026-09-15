@@ -31,7 +31,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from langchain_core.messages import HumanMessage, SystemMessage
 from prometheus_client import Counter
 from pydantic import ValidationError
 
@@ -69,6 +68,7 @@ from core.agents.business_underwriter.memo import (
 )
 from core.agents.business_underwriter.prompts import NARRATIVE, PromptIntegrityError, PromptRecord, load_prompt
 from core.agents.business_underwriter.reconciliation import DEFAULT_THRESHOLD_PCT, reconcile
+from core.agents.case_model_call import call_case_model
 from core.domain_schemas import DomainSchemaError, validate
 from core.extraction import (
     CONTENT_TYPES,
@@ -80,7 +80,6 @@ from core.extraction import (
     build_model_context,
     extract,
 )
-from core.model_replay import CassetteError
 from core.policy import Policy, PolicyResult, evaluate
 from core.policy.document import policy_result_document
 from core.tool_gateway.provider_gateway import (
@@ -468,64 +467,26 @@ async def _narrate(
     A leak of untrusted text fails the run. Any other failure to get a narrative leaves the memo
     without summaries - the deterministic memo is complete without them - and says why.
     """
-    from core.langgraph.agent_graph import build_agent_graph
-    from core.pii import pseudonymiser as pseudonymisation
-
-    session = None
-    system_prompt = prompt.text
-    try:
-        if await pseudonymisation.pseudonymisation_enabled(tenant_id):
-            session = await pseudonymisation.open_session(
-                tenant_id, pseudonymisation.case_key(run_id), store=deps.pseudonym_store
-            )
-            system_prompt = pseudonymisation.with_model_guidance(system_prompt)
-    except pseudonymisation.PseudonymisationError as exc:
-        logger.warning("underwriter_narrative_skipped", reason="pseudonymisation_unavailable", detail=exc.reason)
-        return NarrativeReport((), (("", "pseudonymisation_unavailable"),), None), False
-
-    graph = build_agent_graph(
-        system_prompt=system_prompt,
-        authorized_tools=[],
+    result = await call_case_model(
+        agent=AGENT_NAME,
+        tenant_id=tenant_id,
+        run_id=run_id,
+        system_prompt=prompt.text,
+        context=context,
+        untrusted=untrusted,
         llm_model=config.llm_model,
-        confidence_floor=0.0,
-        tenant_id=tenant_id or None,
         llm_provider=config.llm_provider,
-        context_guard=untrusted.guard_messages,
-        pseudonymiser=session,
+        pseudonym_store=deps.pseudonym_store,
     )
-    state = {
-        "messages": [SystemMessage(content=system_prompt), HumanMessage(content=context)],
-        "agent_id": AGENT_NAME,
-        "agent_type": AGENT_NAME,
-        "domain": "compliance",
-        "tenant_id": tenant_id,
-        "grant_token": "",
-        "confidence": 0.0,
-        "status": "running",
-        "output": {},
-        "reasoning_trace": [],
-        "tool_calls_log": [],
-        "hitl_trigger": "",
-        "error": "",
-    }
-    try:
-        final = await graph.compile().ainvoke(state)
-    except (UntrustedContentLeakError, CassetteError, asyncio.CancelledError):
-        # A leak fails the run closed; a cassette miss is a test-harness error, never a model outage.
-        raise
-    # enterprise-gate: broad-except-ok reason=model-outage-omits-narrative-deterministic-memo-still-complete
-    except Exception as exc:
-        logger.warning("underwriter_narrative_skipped", reason="model_call_failed", error=type(exc).__name__)
-        return NarrativeReport((), (("", "model_call_failed"),), None), session is not None
-    output = final.get("output") if isinstance(final, Mapping) else None
-    restore = session.restore_text if session is not None else (lambda text: text)
+    if result.output is None:
+        return NarrativeReport((), (("", result.failure),), None), result.pseudonymised
     report = accept_narrative(
         sections,
-        output if isinstance(output, Mapping) else {},
-        restore=restore,
+        result.output,
+        restore=result.restore,
         contains_untrusted=lambda text: bool(untrusted.find(text)),
     )
-    return report, session is not None
+    return report, result.pseudonymised
 
 
 # --- run ----------------------------------------------------------------------------------------

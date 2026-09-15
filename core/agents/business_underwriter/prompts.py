@@ -45,16 +45,23 @@ def _digest(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
-def load_prompt(prompt_id: str, version: str) -> PromptRecord:
-    pinned = PINNED.get((prompt_id, version))
-    if pinned is None:
+def load_versioned_prompt(
+    directory: Path, pinned: dict[tuple[str, str], str], prompt_id: str, version: str
+) -> PromptRecord:
+    """Load ``<directory>/<last part of prompt_id>-<version>.txt`` and check it against its pinned digest."""
+    digest_pinned = pinned.get((prompt_id, version))
+    if digest_pinned is None:
         raise PromptIntegrityError(f"prompt_unknown: {prompt_id}@{version}")
-    path = PROMPTS_DIR / f"{prompt_id.rsplit('.', 1)[-1]}-{version}.txt"
+    path = directory / f"{prompt_id.rsplit('.', 1)[-1]}-{version}.txt"
     try:
         data = path.read_bytes()
     except OSError as exc:
         raise PromptIntegrityError(f"prompt_unreadable: {prompt_id}@{version}") from exc
     digest = _digest(data)
-    if digest != pinned:
+    if digest != digest_pinned:
         raise PromptIntegrityError(f"prompt_digest_mismatch: {prompt_id}@{version}")
     return PromptRecord(prompt_id=prompt_id, version=version, sha256=digest, text=data.decode("utf-8"))
+
+
+def load_prompt(prompt_id: str, version: str) -> PromptRecord:
+    return load_versioned_prompt(PROMPTS_DIR, PINNED, prompt_id, version)
