@@ -163,6 +163,7 @@ async def create_task(
             _assert_connectors_ready_for_dispatch,
             _load_connector_configs_for_agent,
             _resolve_agent_connector_ids_for_type,
+            _resolve_run_grant_for_type,
         )
         from core.langgraph.runner import run_agent as langgraph_run
 
@@ -230,6 +231,15 @@ async def create_task(
             company_id=company_uuid,
         )
 
+        # PRD F-1: the caller's grant, else the grant of the agent this type
+        # runs as; checked per tool call in the tenant's enforcement mode.
+        run_grant = await _resolve_run_grant_for_type(
+            tenant_id=tenant_id,
+            agent_type=body.agent_type,
+            company_id=company_uuid,
+            supplied_token=grant_token,
+            runtime="a2a",
+        )
         result = await langgraph_run(
             agent_id=task_id,
             agent_type=body.agent_type,
@@ -243,6 +253,7 @@ async def create_task(
                 "context": body.context,
             },
             grant_token=grant_token,
+            run_grant=run_grant,
             connector_config=connector_config,
             company_id=str(company_uuid),
         )

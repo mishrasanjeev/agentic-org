@@ -23,7 +23,8 @@ from api.deps import (
     require_tenant_admin,
 )
 from api.route_metadata import route_meta
-from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
+from auth.grant_enforcement import EnforcementMode, resolve_enforcement_mode
+from auth.run_grants import RunGrant, direct_tool_call_permitted, resolve_run_grant
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -1078,12 +1079,6 @@ async def _resolve_agent_connector_ids_for_type(
 
     import uuid as _uuid
 
-    from sqlalchemy import case, select
-
-    from core.database import get_tenant_session
-    from core.models.agent import Agent
-    from core.models.company import Company
-
     try:
         tid = _uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
     except (TypeError, ValueError):
@@ -1098,6 +1093,28 @@ async def _resolve_agent_connector_ids_for_type(
     except (TypeError, ValueError):
         return []
 
+    row = await _select_agent_for_type(tid, agent_type, company_uuid)
+    return list(getattr(row, "connector_ids", None) or []) if row is not None else []
+
+
+async def _select_agent_for_type(
+    tid: _uuid.UUID,
+    agent_type: str,
+    company_uuid: _uuid.UUID | None,
+) -> Any:
+    """The shared agent of ``agent_type`` that routes without an agent id run as.
+
+    Active before shadow before anything else; never a personal agent.
+    Returns ``None`` when there is none; raises ``RuntimeError`` when the
+    lookup fails or the company does not belong to the tenant.
+    """
+    from sqlalchemy import case, select
+
+    from core.database import get_tenant_session
+    from core.models.agent import Agent
+    from core.models.company import Company
+
+    tenant_id = str(tid)
     try:
         async with get_tenant_session(tid) as session:
             if company_uuid is not None:
@@ -1133,9 +1150,7 @@ async def _resolve_agent_connector_ids_for_type(
                     .limit(1)
                 )
             ).scalar_one_or_none()
-            if row is None:
-                return []
-            return list(getattr(row, "connector_ids", None) or [])
+            return row
     except (RuntimeError, SQLAlchemyError) as exc:
         logger.warning(
             "resolve_agent_connector_ids_failed",
@@ -1144,6 +1159,48 @@ async def _resolve_agent_connector_ids_for_type(
             error=str(exc),
         )
         raise RuntimeError("Failed to resolve agent connector bindings") from exc
+
+
+async def _resolve_run_grant_for_type(
+    *,
+    tenant_id: str,
+    agent_type: str,
+    company_id: str | _uuid.UUID | None,
+    supplied_token: str | None,
+    runtime: str,
+) -> RunGrant:
+    """PRD F-1 run grant for routes that run an agent *type* (A2A, MCP).
+
+    The caller's grant wins. Otherwise the grant is resolved for the same
+    shared agent those routes take connector bindings from; with no such
+    agent, or a failed lookup, the run has no grant and every tool call is
+    recorded (warn) or refused (deny).
+    """
+    mode = await resolve_enforcement_mode(tenant_id)
+    if mode is EnforcementMode.OFF or (supplied_token or "").strip():
+        return await resolve_run_grant(
+            tenant_id=tenant_id, agent_id="", supplied_token=supplied_token, mode=mode, runtime=runtime
+        )
+    try:
+        tid = _uuid.UUID(str(tenant_id))
+        company_uuid = (
+            company_id if isinstance(company_id, _uuid.UUID) else _uuid.UUID(str(company_id)) if company_id else None
+        )
+        row = await _select_agent_for_type(tid, agent_type, company_uuid)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        logger.warning("grant_resolution_type_lookup_failed", agent_type=agent_type, error_type=type(exc).__name__)
+        return RunGrant(mode=mode, source="none", missing_sub_reason="lookup_failed")
+    if row is None:
+        return await resolve_run_grant(tenant_id=tenant_id, agent_id="", mode=mode, runtime=runtime)
+    config = getattr(row, "config", None) or {}
+    grantex = config.get("grantex") if isinstance(config, dict) else None
+    return await resolve_run_grant(
+        tenant_id=tenant_id,
+        agent_id=str(row.id),
+        grantex_config=grantex if isinstance(grantex, dict) else {},
+        mode=mode,
+        runtime=runtime,
+    )
 
 
 async def _resolve_connector_configs(

@@ -73,6 +73,7 @@ is recorded as `grant_missing` with a sub-reason:
 | `minting_unconfigured` | No root grant or no Grantex client configured |
 | `mint_failed` | Grantex refused or failed the delegation (for example an expired root grant) |
 | `lookup_failed` | The agent's Grantex registration could not be read |
+| `no_agent` | The call is not made by a stored agent, so there is nothing to resolve a grant for (see Coverage) |
 
 The token itself is never logged or put in a metric.
 
@@ -100,13 +101,29 @@ and increments `agenticorg_grant_enforcement_denials_total{mode, reason}`.
 | `manifest_unknown_tool` | No manifest for the connector (`connector_unknown`) or the tool is not in it (`tool_unknown`) |
 | `enforcement_unavailable` | The check itself could not run (`sub_reason` is the error type, for example `ValueError` when `GRANTEX_API_KEY` is missing) |
 
-`runtime` says which path made the call: `langgraph` for agent graph tool
-calls, `deterministic_tds` for the shadow-sample TDS route on
-`POST /agents/{id}/run`.
+`runtime` says which path made the call (see Coverage).
 
 ## Coverage
 
-This release checks tool calls from `POST /agents/{id}/run` and from every
-caller of `core.langgraph.runner.run_agent` that does not pass its own grant.
-Other run entry points are covered separately; until then they keep the
-legacy behaviour.
+Every path that starts an agent run resolves its grant and checks each tool
+call in the tenant's mode:
+
+| Entry point | How the grant is resolved | `runtime` |
+|---|---|---|
+| `POST /agents/{id}/run` | the agent's grant, resolved once for the run | `langgraph`; `deterministic_tds` for the shadow TDS route |
+| Chat (`POST /chat/query`) | the caller's Grantex token, else the routed agent's grant | `langgraph`; `deterministic_tds` for the TDS route |
+| A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the caller's Grantex token, else the grant of the shared agent of that type the route takes connector bindings from | `langgraph` |
+| Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first | `langgraph` |
+| `core.langgraph.runner.resume_agent` | resolved again on resume; in warn/deny the fresh token replaces the checkpointed one | `langgraph` |
+| Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline | `BaseAgent` resolves the agent's grant on its first tool call; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
+| Workflow `connector_tool` steps | none — the step is not made by an agent | `workflow_connector_tool` |
+
+Paths that cannot resolve a grant are not exempt: a workflow `connector_tool`
+step, a workflow agent step whose agent is not stored, and an A2A/MCP call for
+a type with no shared agent all have no grant, so each tool call is recorded as
+`grant_missing` (`no_agent`) in warn and refused in deny. Check the warn-mode
+report for these before moving a tenant to deny.
+
+In the `ToolGateway`, a call warn allows without the grant covering it still
+goes through the gateway's legacy scope checks, so warn never skips a check
+`off` makes.

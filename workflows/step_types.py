@@ -545,17 +545,32 @@ async def _execute_connector_tool_step(step: dict, state: dict) -> dict[str, Any
             output=result,
         )
 
+    from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
     from core.langgraph.tool_adapter import _execute_connector_tool
 
-    result = await _execute_connector_tool(
-        connector,
-        tool,
-        _connector_step_inputs(step, state),
-        config,
-        tenant_id=tenant_id or None,
-        company_id=str(company_uuid),
-        domain=step.get("domain") or _state_lookup(state, "domain"),
-    )
+    # PRD F-1: a connector step is not made by an agent, so there is no
+    # Grantex registration to resolve a grant for. Off keeps the legacy
+    # behaviour; warn records ``grant_missing``/``no_agent``; deny refuses it.
+    step_grant = await resolve_run_grant(tenant_id=tenant_id or None, agent_id="", runtime="workflow_connector_tool")
+    if not await direct_tool_call_permitted(
+        step_grant,
+        connector=connector,
+        tool=tool,
+        tenant_id=tenant_id,
+        agent_id="",
+        runtime="workflow_connector_tool",
+    ):
+        result = {"error": {"code": "E1007", "message": "grant_denied: grant_missing", "reason": "grant_missing"}}
+    else:
+        result = await _execute_connector_tool(
+            connector,
+            tool,
+            _connector_step_inputs(step, state),
+            config,
+            tenant_id=tenant_id or None,
+            company_id=str(company_uuid),
+            domain=step.get("domain") or _state_lookup(state, "domain"),
+        )
     if isinstance(result, dict) and result.get("error"):
         return failure_result(
             step_id=str(step.get("id", "")),

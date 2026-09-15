@@ -210,7 +210,18 @@ async def call_tool(
         }
 
     # Execute via LangGraph
+    from api.v1.agents import _resolve_run_grant_for_type
     from core.langgraph.runner import run_agent as langgraph_run
+
+    # PRD F-1: the caller's grant, else the grant of the agent this type runs
+    # as; checked per tool call in the tenant's enforcement mode.
+    run_grant = await _resolve_run_grant_for_type(
+        tenant_id=tenant_id,
+        agent_type=agent_type,
+        company_id=company_uuid,
+        supplied_token=grant_token,
+        runtime="mcp",
+    )
 
     try:
         result = await langgraph_run(
@@ -226,6 +237,7 @@ async def call_tool(
                 "context": body.arguments.get("context", {}),
             },
             grant_token=grant_token,
+            run_grant=run_grant,
             connector_config=connector_config,
             company_id=str(company_uuid),
         )

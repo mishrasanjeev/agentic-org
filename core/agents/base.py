@@ -10,6 +10,8 @@ from typing import Any
 
 import structlog
 
+from auth.grant_enforcement import EnforcementMode
+from auth.run_grants import RunGrant, resolve_run_grant
 from core.llm.router import LLMResponse, llm_router
 from core.schemas.messages import (
     DecisionOption,
@@ -63,6 +65,9 @@ class BaseAgent:
         self.llm_model = llm_model
         self.cost_controls = cost_controls or {}
         self._system_prompt: str | None = None
+        # PRD F-1: the grant this agent's tool calls are checked against,
+        # resolved on the first tool call (``_run_grant_for_calls``).
+        self._run_grant: RunGrant | None = None
 
     @property
     def system_prompt(self) -> str:
@@ -492,7 +497,11 @@ class BaseAgent:
         in ``authorized_tools``, Grantex ``enforce`` runs when a grant token is
         attached, and the connector is resolved from the tenant/company scoped
         encrypted config. Every denial comes back as ``{"error": {...}}``.
+
+        PRD F-1: both paths check the agent's run grant in the tenant's
+        ``grants.enforce_closed`` mode.
         """
+        run_grant = await self._run_grant_for_calls()
         if not self.tool_gateway:
             from core.langgraph.tool_adapter import execute_agent_tool
 
@@ -505,6 +514,8 @@ class BaseAgent:
                 domain=self.domain or None,
                 authorized_tools=self.authorized_tools,
                 grant_token=getattr(self, "grant_token", None),
+                run_grant=run_grant,
+                agent_id=str(self.agent_id or ""),
             )
 
         gateway_args: dict[str, Any] = {
@@ -521,7 +532,22 @@ class BaseAgent:
         # context is absent because its optional parameters default to None.
         if self.company_id:
             gateway_args.update(company_id=self.company_id, domain=self.domain)
+        if run_grant.mode is not EnforcementMode.OFF:
+            # Only passed when enforcement is on, so gateways that predate
+            # ``run_grant`` keep working unchanged in ``off``.
+            gateway_args["run_grant"] = run_grant
         return await self.tool_gateway.execute(**gateway_args)
+
+    async def _run_grant_for_calls(self) -> RunGrant:
+        """Resolve (once per agent instance) the grant tool calls are checked against."""
+        if self._run_grant is None:
+            self._run_grant = await resolve_run_grant(
+                tenant_id=self.tenant_id,
+                agent_id=str(self.agent_id or ""),
+                supplied_token=getattr(self, "grant_token", None) or "",
+                runtime="base_agent",
+            )
+        return self._run_grant
 
     def _make_result(
         self,

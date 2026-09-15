@@ -64,6 +64,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg_grant_enforcement_denials_total{mode,reason}`, including runs
   with no grant at all (`grant_missing`). `deny` is not switchable yet and
   runs as `warn`. See `docs/operations/grant-enforcement.md`.
+- Grant enforcement now covers every agent run entry point: chat, A2A and
+  MCP (the caller's Grantex token, else the type's shared agent), voice and
+  per-type wrappers through the runner, `resume_agent`, and workflow agent
+  steps, collaboration steps, workflow resume and the sales pipeline through
+  `BaseAgent` and the tool gateway. Workflow `connector_tool` steps have no
+  agent and therefore no grant: recorded in `warn`, refused in `deny`.
+  `off` is unchanged.
 
 ### Fixed
 - The console images (`Dockerfile.ui`, `Dockerfile.ui.cloudrun`) report

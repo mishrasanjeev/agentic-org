@@ -111,6 +111,11 @@ async def resolve_run_grant(
         )
         return RunGrant(mode=mode, source="none", missing_sub_reason=sub_reason)
 
+    if not agent:
+        # Nothing to resolve a grant for: the call is not made by an agent
+        # with a Grantex registration (for example a workflow connector step).
+        return _missing("no_agent")
+
     if grantex_config is None:
         try:
             grantex_config = await _load_agent_grantex_config(tenant, agent)
