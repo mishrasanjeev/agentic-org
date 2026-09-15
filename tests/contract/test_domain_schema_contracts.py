@@ -397,3 +397,17 @@ def test_disposition_compares_every_identifier_exactly_once() -> None:
 )
 def test_timestamps_are_strict_rfc3339(timestamp: str, valid: bool) -> None:
     assert (not _errors_after("screening_result", lambda d: d.update(screened_at=timestamp))) is valid
+
+
+def test_excerpt_refs_from_the_untrusted_content_extractor_are_citable() -> None:
+    from core.extraction import excerpt_ref
+
+    ref = excerpt_ref("website", "declared_activity", "Hand-finished brass lanterns")
+
+    def cite(doc: dict[str, Any]) -> None:
+        _memo_section(doc, "registry")["evidence"][0]["excerpt_ref"] = ref
+
+    assert not _errors_after("underwriting_memo", cite)
+    assert _errors_after(
+        "underwriting_memo", lambda d: _memo_section(d, "registry")["evidence"][0].update(excerpt_ref="x y")
+    )

@@ -74,3 +74,25 @@ def _schema_enum(schema: str, *path: str) -> set[str]:
 )
 def test_vocabularies_match_the_schemas(enum: type[StrEnum], schema: str, path: tuple[str, ...]) -> None:
     assert {member.value for member in enum} == _schema_enum(schema, *path)
+
+
+def test_evidence_accepts_the_same_excerpt_references_as_the_schema() -> None:
+    from datetime import UTC, datetime
+
+    from core.extraction import excerpt_ref
+
+    ref = excerpt_ref("website", "declared_activity", "Hand-finished brass lanterns")
+    evidence = Evidence(
+        provider="acme_kyb",
+        record_id="acme:1",
+        field="content",
+        retrieved_at=datetime(2026, 9, 1, tzinfo=UTC),
+        excerpt_ref=ref,
+    )
+    memo_evidence = {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence"}
+    from jsonschema import Draft202012Validator
+
+    from core import domain_schemas
+
+    validator = Draft202012Validator(memo_evidence, registry=domain_schemas._registry())
+    assert list(validator.iter_errors(evidence.model_dump(mode="json"))) == []

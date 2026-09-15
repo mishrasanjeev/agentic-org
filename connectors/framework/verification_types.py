@@ -39,7 +39,7 @@ IdempotencyKey = Annotated[str, StringConstraints(min_length=8, max_length=128, 
 Jurisdiction = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}(-[A-Z0-9]{1,3})?$")]
 CountryCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")]
 PartialDate = Annotated[str, StringConstraints(pattern=r"^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$")]
-ExcerptRef = Annotated[str, StringConstraints(pattern=r"^excerpt:[A-Za-z0-9._:\-]{1,128}$")]
+ExcerptRef = Annotated[str, StringConstraints(pattern=r"^[A-Za-z][A-Za-z0-9._:-]{2,128}$")]
 FieldPath = Annotated[str, StringConstraints(max_length=256, pattern=r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+|\[[0-9]+\])*$")]
 Sha256Digest = Annotated[str, StringConstraints(pattern=r"^sha256:[0-9a-f]{64}$")]
 VocabularyTerm = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{1,63}$")]

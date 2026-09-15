@@ -130,7 +130,26 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
-## A-13 — Importing the provider interface loads every connector
+## A-19 — Approval step conditions that fail to evaluate are skipped
+
+- **Found:** reading `core/approvals/policy_engine.py` while adding the case
+  policy engine (2026-09-15).
+- **What:** `_condition_matches` catches every exception from
+  `workflows.condition_evaluator.evaluate_condition`, logs a warning and
+  returns `False`. `first_applicable_step` and `next_step_after` treat `False`
+  as "this step does not apply", so an approval step whose condition is
+  malformed, references a missing context key or raises for any other reason
+  is silently skipped. In `api/v1/approvals.py` an `advance` with no further
+  applicable step marks the item `decided`, so a broken condition on, for
+  example, a second sign-off step lets the item complete with fewer approvals
+  than the policy requires. This fails open on an authority path.
+- **Fix:** validate step conditions when an approval policy is created or
+  updated (refuse unparseable ones with a reason), and at decision time treat
+  an evaluation error as "step applies" (or refuse the decision with a reason
+  code) rather than skipping it, with a test for a malformed condition on a
+  later step.
+
+## A-23 — Importing the provider interface loads every connector
 
 - **Found:** building the provider conformance suite (2026-09-15).
 - **What:** `connectors/__init__.py` imports all connector modules at package
@@ -143,7 +162,7 @@ Remove an entry in the pull request that fixes it.
   package import, or move `connectors/framework` into a package with no
   import-time side effects. Keep the native-before-plugin ordering test.
 
-## A-14 — mypy skips every module under connectors/
+## A-24 — mypy skips every module under connectors/
 
 - **Found:** type-checking the provider seam (2026-09-15).
 - **What:** `pyproject.toml` sets `ignore_errors = true` for `connectors.*`,
@@ -153,7 +172,7 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** replace the blanket override with a per-module list of the legacy
   connectors that still fail, so new code under `connectors/` is checked.
 
-## A-15 — CLAUDE.md lists the preflight test suites without tests/contract
+## A-25 — CLAUDE.md lists the preflight test suites without tests/contract
 
 - **Found:** adding `tests/contract/` to the CI unit job and
   `scripts/preflight.sh` (2026-09-15).
