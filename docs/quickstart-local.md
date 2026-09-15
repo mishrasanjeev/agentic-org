@@ -281,6 +281,9 @@ service instead of the hosted one:
 
 - Image `ghcr.io/mishrasanjeev/grantex-auth-service`, pinned by digest in
   `docker-compose.dev.yml`. Move the digest deliberately, like any base image.
+  It is pulled from the GitHub Container Registry, so the first `make dev`
+  needs network access to `ghcr.io` (no login: the image is public). Later runs
+  use the local copy; to work offline, run `make dev` once while connected.
 - **grantex-db** creates a `grantex` role and database on the stack's Postgres
   once (idempotent), so Grantex never shares tables with AgenticOrg. Grantex
   applies its own migrations at start and uses Redis index 2.
