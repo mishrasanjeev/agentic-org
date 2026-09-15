@@ -21,11 +21,15 @@ import coverage
 ROOT = Path(__file__).resolve().parents[2]
 TEMP_DIRS = ("codex-pytest-basetemp", "codex-pytest-temp", "codex-pytest-cache", "codex-pytest-artifacts")
 
+# The driver measures one throwaway module under basetemp and one real,
+# dependency-free repository file, so the report still has data once the
+# throwaway module is gone (and needs no installed project dependencies).
 DRIVER = """\
+import runpy
 import sys
 sys.path.insert(0, sys.argv[1])
 import probe_module
-import core
+runpy.run_path(sys.argv[2], run_name="coverage_probe")
 print(probe_module.VALUE)
 """
 
@@ -51,6 +55,7 @@ def test_report_survives_a_deleted_module_written_under_basetemp(tmp_path: Path)
             [
                 sys.executable, "-m", "coverage", "run", rcfile,
                 f"--data-file={data_file}", "--source=.", str(driver), str(work),
+                str(ROOT / "scripts" / "check_license_headers.py"),
             ],
             cwd=ROOT, capture_output=True, text=True, check=False, timeout=120,
         )
