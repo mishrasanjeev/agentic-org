@@ -103,8 +103,15 @@ class BaseConnector(abc.ABC):
             return False
         # Check common credential keys
         cred_keys = [
-            "api_key", "access_token", "client_id", "client_secret",
-            "secret_ref", "email", "password", "token", "refresh_token",
+            "api_key",
+            "access_token",
+            "client_id",
+            "client_secret",
+            "secret_ref",
+            "email",
+            "password",
+            "token",
+            "refresh_token",
         ]
         for key in cred_keys:
             val = self.config.get(key, "")
@@ -248,9 +255,7 @@ class BaseConnector(abc.ABC):
             return ""
 
         resource_name = (
-            f"projects/{match.group('project')}"
-            f"/secrets/{match.group('secret')}"
-            f"/versions/{match.group('version')}"
+            f"projects/{match.group('project')}/secrets/{match.group('secret')}/versions/{match.group('version')}"
         )
 
         try:

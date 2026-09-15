@@ -61,7 +61,12 @@ class ProviderRegistry:
 
     @classmethod
     def register_plugin(cls, provider_cls: Any) -> str:
-        """Register a :class:`VerificationProvider` subclass from a plugin; returns its name."""
+        """Register a :class:`VerificationProvider` subclass from a plugin; returns its name.
+
+        ``name`` and ``capabilities`` must be declared on the class itself: they are checked here,
+        before the class is ever constructed. :meth:`create` constructs it with no arguments; an
+        instance may narrow its capabilities, but registration validates the class-level declaration.
+        """
         if not (isinstance(provider_cls, type) and issubclass(provider_cls, VerificationProvider)):
             raise ProviderRegistryError(
                 "invalid_type", f"expected a VerificationProvider subclass, got {provider_cls!r}"
@@ -94,7 +99,8 @@ class ProviderRegistry:
             provider = registration.factory()
         # enterprise-gate: broad-except-ok reason=provider-factory-failure-is-reported-as-construction-failed
         except Exception as exc:  # noqa: BLE001
-            raise ProviderRegistryError("construction_failed", f"{name}: {type(exc).__name__}: {exc}") from exc
+            # Only the exception type: a constructor's message can carry configuration or credentials.
+            raise ProviderRegistryError("construction_failed", f"{name}: {type(exc).__name__}") from exc
         if not isinstance(provider, VerificationProvider):
             raise ProviderRegistryError("invalid_provider", f"{name}: factory returned {type(provider).__name__}")
         problem = _well_formed_identity(getattr(provider, "name", None), getattr(provider, "capabilities", None))
