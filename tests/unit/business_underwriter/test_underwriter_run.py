@@ -529,3 +529,26 @@ async def test_documented_example_runs(narrative) -> None:
     # docs-snippet: end run-underwriter
     assert memo["recommendation"]["requires_human_decision"] is True
     assert record["prompt"]["version"] == "1.0.0"
+
+
+async def test_a_new_run_re_queries_the_provider_while_a_retry_within_a_run_does_not(narrative) -> None:
+    from connectors.framework.verification_provider import ProviderEventType
+    from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
+
+    narrative(runs=2)
+    provider = MockProvider(MockConfig(clock=frozen))
+    application = provider.fixture("gb-clean-brightwater").application
+    config = UnderwriterConfig(policy=policy_for("gb-"), require_os_isolation=False, llm_model="scripted")
+
+    async def run(run_id: str) -> Any:
+        return await run_underwriter(
+            tenant_id="", case_id="case-requery", run_id=run_id, application=application, config=config,
+            deps=UnderwriterDependencies(provider=provider, clock=frozen),
+        )  # fmt: skip
+
+    first = await run("run-1")
+    assert first.policy_evidence["verification"]["status"] == "active"
+    provider.emit_event(provider.ref_for("gb-clean-brightwater"), ProviderEventType.BUSINESS_DISSOLVED)
+    second = await run("run-2")
+    assert second.policy_evidence["verification"]["status"] == "dissolved"
+    assert second.memo["recommendation"]["proposed"] == "decline"
