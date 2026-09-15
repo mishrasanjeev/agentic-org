@@ -295,7 +295,7 @@ def test_conditions_nested_too_deeply_are_rejected() -> None:
             "    effect: {<<: {tier: high}, reason: r}\n",
             R.YAML_ALIAS,
         ),
-        ("policy: !!binary aGVsbG8=\nversion: 1.0.0\n", R.INVALID_VALUE),
+        ("policy: !!binary aGVsbG8=\nversion: 1.0.0\n", R.YAML_INVALID),
         ("policy: !custom p\n", R.YAML_INVALID),
         ("? [a, b]\n: 1\n", R.INVALID_VALUE),
     ],
@@ -385,3 +385,65 @@ def test_one_invalid_file_refuses_the_whole_directory(tmp_path: Path) -> None:
         load_policies(tmp_path)
     assert info.value.reason is R.INVALID_OPERAND
     assert info.value.source.endswith("b.yaml")
+
+
+# ── Review hardening ────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _policy_with_when("{a: {gt: !!int abc}}"),
+        _policy_with_when("{a: {gt: !!float abc}}"),
+        _policy_with_when("{a: {eq: !!timestamp notadate}}"),
+        "policy: !!str p\nversion: 1.0.0\n",
+        "policy: ! p\nversion: 1.0.0\n",
+        "policy: p\nversion: 1.0.0\nrules: !!seq []\n",
+        "policy: p\nversion: 1.0.0\nrules:\n  - !!map {id: r, when: {a: {gt: 0}}, effect: {tier: high, reason: r}}\n",
+    ],
+)
+def test_explicit_yaml_tags_are_refused_with_a_reason(text: str) -> None:
+    with structlog.testing.capture_logs() as logs:
+        assert _reason_of(text) is R.YAML_INVALID
+    assert [entry["reason"] for entry in logs if entry["event"] == "policy_load_rejected"] == [R.YAML_INVALID.value]
+
+
+def test_an_integer_longer_than_the_digit_limit_is_refused_with_a_reason() -> None:
+    digits = "9" * 5000
+    assert _reason_of(_policy_with_when(f"{{a: {{gt: {digits}}}}}")) is R.YAML_INVALID
+
+
+@pytest.mark.parametrize("operand", [str(2**53 + 1), str(-(2**53) - 1), "1" * 40])
+def test_integer_operands_outside_the_safe_range_are_refused(operand: str) -> None:
+    assert _reason_of(_policy_with_when(f"{{a: {{gt: {operand}}}}}")) is R.INVALID_OPERAND
+    assert _reason_of(_policy_with_when(f"{{a: {{in: [{operand}]}}}}")) is R.INVALID_OPERAND
+
+
+def test_integer_operands_at_the_safe_limit_load() -> None:
+    _load(_policy_with_when(f"{{a: {{lte: {2**53}}}}}"))
+
+
+@pytest.mark.parametrize(
+    "reviewer",
+    ["TODO", "tbd", "T.B.D.", "n/a", "N/A", "none", "x", "-", "??", "xxx", "Reviewer", "placeholder", "  todo  ", "zz"],
+)
+def test_placeholder_reviewers_are_refused(reviewer: str) -> None:
+    production = PRD_EXAMPLE.replace("version: 1.2.0", f"version: 1.2.0\nstatus: production\nreviewed_by: '{reviewer}'")
+    assert _reason_of(production) in (R.PRODUCTION_UNREVIEWED, R.INVALID_VALUE)
+    if reviewer.strip():
+        assert _reason_of(production) is R.PRODUCTION_UNREVIEWED
+    example = PRD_EXAMPLE.replace("version: 1.2.0", f"version: 1.2.0\nreviewed_by: '{reviewer}'")
+    assert _reason_of(example) is R.INVALID_VALUE
+
+
+def test_named_reviewers_are_accepted() -> None:
+    for reviewer in ("Compliance Owner A", "J. Doe", "mlro@example.com", "Li"):
+        text = PRD_EXAMPLE.replace("version: 1.2.0", f"version: 1.2.0\nstatus: production\nreviewed_by: '{reviewer}'")
+        assert _load(text).reviewed_by == reviewer
+
+
+def test_policy_directory_loads_upper_case_suffixes(tmp_path: Path) -> None:
+    (tmp_path / "A.YAML").write_text(PRD_EXAMPLE, encoding="utf-8")
+    (tmp_path / "b.Yml").write_text(PRD_EXAMPLE.replace("business_onboarding_uk", "second_policy"), encoding="utf-8")
+    (tmp_path / "notes.txt").write_text("not a policy", encoding="utf-8")
+    assert sorted(load_policies(tmp_path)) == ["business_onboarding_uk", "second_policy"]

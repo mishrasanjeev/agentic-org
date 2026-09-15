@@ -28,6 +28,7 @@ from prometheus_client import Counter
 
 from core.policy.types import (
     DEFAULT_TIER_SCORE,
+    MAX_SAFE_INTEGER,
     MAX_SCORE,
     AllOf,
     AnyOf,
@@ -103,6 +104,14 @@ class _StrictLoader(yaml.SafeLoader):
             raise _YamlRejectedError(
                 PolicyLoadReason.YAML_ALIAS,
                 f"aliases are not allowed (line {event.start_mark.line + 1})",
+            )
+        event = self.peek_event()
+        if getattr(event, "tag", None) is not None:
+            # Explicit tags (``!!int``, ``!!timestamp``, ``!custom``, ``!``) select
+            # constructors that can fail in ways a policy file has no need for.
+            raise _YamlRejectedError(
+                PolicyLoadReason.YAML_INVALID,
+                f"explicit YAML tags are not allowed (line {event.start_mark.line + 1})",
             )
         return super().compose_node(parent, index)
 
@@ -183,12 +192,46 @@ def _require(ctx: _Context, mapping: Mapping[str, Any], key: str, *, location: s
     return mapping[key]
 
 
+_PLACEHOLDER_REVIEWERS = frozenset(
+    {
+        "anonymous",
+        "changeme",
+        "example",
+        "fixme",
+        "na",
+        "nobody",
+        "none",
+        "notreviewed",
+        "null",
+        "pending",
+        "placeholder",
+        "reviewer",
+        "someone",
+        "tba",
+        "tbc",
+        "tbd",
+        "test",
+        "todo",
+        "unknown",
+        "unreviewed",
+        "xxx",
+        "yourname",
+    }
+)
+
+
+def _is_placeholder_reviewer(value: str) -> bool:
+    folded = "".join(ch for ch in value.casefold() if ch.isalnum())
+    letters = sum(1 for ch in folded if ch.isalpha())
+    return letters < 2 or folded in _PLACEHOLDER_REVIEWERS or len(set(folded)) == 1
+
+
 def _kind(value: Any) -> str | None:
     """The comparison kind of a scalar, or None when it is not a usable scalar."""
     if isinstance(value, bool):
         return "bool"
     if isinstance(value, int):
-        return "number"
+        return "number" if -MAX_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER else None
     if isinstance(value, float):
         return "number" if math.isfinite(value) else None
     if isinstance(value, str):
@@ -201,7 +244,7 @@ def _scalar_operand(ctx: _Context, value: Any, *, location: str) -> Scalar:
     if kind is None:
         ctx.fail(
             PolicyLoadReason.INVALID_OPERAND,
-            f"operand must be a string, finite number or boolean, got {type(value).__name__}",
+            f"operand must be a string, a finite number within +/-2**53 or a boolean, got {type(value).__name__}",
             location,
         )
     if kind == "string" and len(value) > MAX_STRING_OPERAND_CHARS:
@@ -243,7 +286,7 @@ def _compile_compare(ctx: _Context, path: str, spec: Any, *, location: str) -> C
         compiled = True
     elif op in _NUMERIC_OPERATORS:
         if _kind(operand) != "number":
-            ctx.fail(PolicyLoadReason.INVALID_OPERAND, f"{op.value} takes a finite number", op_location)
+            ctx.fail(PolicyLoadReason.INVALID_OPERAND, f"{op.value} takes a finite number within +/-2**53", op_location)
         compiled = operand
     elif op in _LIST_OPERATORS:
         if not isinstance(operand, list) or not operand:
@@ -403,6 +446,14 @@ def _compile_policy(ctx: _Context, document: Any, content_hash: str) -> Policy:
     reviewed_by = None
     if document.get("reviewed_by") is not None:
         reviewed_by = _text(ctx, document["reviewed_by"], location="reviewed_by", max_chars=MAX_STRING_OPERAND_CHARS)
+        if _is_placeholder_reviewer(reviewed_by):
+            ctx.fail(
+                PolicyLoadReason.PRODUCTION_UNREVIEWED
+                if status is PolicyStatus.PRODUCTION
+                else PolicyLoadReason.INVALID_VALUE,
+                f"reviewed_by {reviewed_by!r} is a placeholder, not a named reviewer",
+                "reviewed_by",
+            )
     if status is PolicyStatus.PRODUCTION and reviewed_by is None:
         ctx.fail(
             PolicyLoadReason.PRODUCTION_UNREVIEWED,
@@ -520,6 +571,10 @@ def _load(data: bytes, *, source: str, require_production: bool) -> Policy:
         ctx.fail(PolicyLoadReason.YAML_INVALID, " ".join(str(exc).split()))
     except RecursionError:
         ctx.fail(PolicyLoadReason.LIMIT_EXCEEDED, "YAML nesting is too deep")
+    except (ValueError, TypeError, AttributeError, OverflowError) as exc:
+        # A scalar the YAML constructors could not build (for example an integer
+        # longer than Python's digit limit). Never let it escape without a reason.
+        ctx.fail(PolicyLoadReason.YAML_INVALID, f"a value could not be read: {type(exc).__name__}")
     content_hash = "sha256:" + hashlib.sha256(data).hexdigest()
     policy = _compile_policy(ctx, document, content_hash)
     if require_production and policy.status is not PolicyStatus.PRODUCTION:
@@ -555,7 +610,7 @@ def load_policies(directory: str | os.PathLike[str], *, require_production: bool
     source = str(root)
     if not root.is_dir():
         raise PolicyLoadError(PolicyLoadReason.DIRECTORY_INVALID, "not a directory", source=source)
-    files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix in POLICY_SUFFIXES)
+    files = sorted(p for p in root.iterdir() if p.is_file() and p.suffix.lower() in POLICY_SUFFIXES)
     if not files:
         raise PolicyLoadError(PolicyLoadReason.DIRECTORY_INVALID, "contains no policy files", source=source)
     policies: dict[str, Policy] = {}

@@ -39,6 +39,9 @@ _TIER_RANK: dict[Tier, int] = {Tier.LOW: 0, Tier.MEDIUM: 1, Tier.HIGH: 2, Tier.B
 # Score a fired rule contributes when its effect does not declare one.
 DEFAULT_TIER_SCORE: dict[Tier, int] = {Tier.LOW: 0, Tier.MEDIUM: 20, Tier.HIGH: 50, Tier.BLOCKED: 100}
 MAX_SCORE = 100
+# Integers outside +/-2**53 (the range JSON consumers agree on) are refused as
+# operands and treated as unusable evidence.
+MAX_SAFE_INTEGER = 2**53
 
 
 class PolicyStatus(enum.StrEnum):
