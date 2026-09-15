@@ -246,6 +246,10 @@ omit = [
     "*/codex-pytest-cache/*",
     "*/codex-pytest-artifacts/*",
 ]
+# SQLAlchemy's asyncio layer runs database calls in greenlets. Without greenlet
+# tracing, coverage stops recording a coroutine's lines after its first awaited
+# query, so async request handlers and repositories were under-reported.
+concurrency = ["greenlet", "thread"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -263,12 +267,6 @@ addopts = "--basetemp=codex-pytest-basetemp --cov=core --cov=api --cov=auth --co
 # ~13% of tests against the full package, so a global addopts floor
 # would falsely fail that job. `scripts/check_module_coverage.py`
 # handles per-module floors after the unit run.
-
-[tool.coverage.run]
-# SQLAlchemy's asyncio layer runs database calls in greenlets. Without greenlet
-# tracing, coverage stops recording a coroutine's lines after its first awaited
-# query, so async request handlers and repositories were under-reported.
-concurrency = ["greenlet", "thread"]
 
 [tool.mypy]
 python_version = "3.12"
