@@ -38,6 +38,7 @@ import structlog
 from prometheus_client import Counter
 from sqlalchemy import select
 
+from auth.run_grants import CALLER_GRANT_KEY, caller_grant_for_run, resolve_run_grant
 from core.database import get_tenant_session
 from core.langgraph.thread_ids import thread_belongs_to_tenant
 from core.models.agent import Agent
@@ -273,6 +274,16 @@ async def resume_approved_agent_run(tenant_id: uuid.UUID, hitl_id: uuid.UUID) ->
         return {"outcome": OUTCOME_REFUSED, "reason": claim.refusal}
 
     spec = claim.spec
+    # PRD F-1: a run started with a caller Grantex token recorded that binding;
+    # the token itself is not kept, so the resumed run's tool calls are refused.
+    bound_grant: dict[str, Any] = {}
+    if isinstance(spec.get(CALLER_GRANT_KEY), dict):
+        bound_grant["run_grant"] = await resolve_run_grant(
+            tenant_id=str(tenant_id),
+            agent_id=str(claim.agent_id),
+            runtime="langgraph_resume",
+            **caller_grant_for_run(spec[CALLER_GRANT_KEY]).resolve_kwargs(),
+        )
     try:
         result = await runner.resume_agent(
             agent_id=str(claim.agent_id),
@@ -290,6 +301,7 @@ async def resume_approved_agent_run(tenant_id: uuid.UUID, hitl_id: uuid.UUID) ->
             domain=spec.get("domain"),
             llm_provider=spec.get("llm_provider"),
             require_paused=True,
+            **bound_grant,
         )
     except CheckpointerUnavailableError as exc:
         result = {"status": "failed", "error": str(exc), "reason": exc.reason}

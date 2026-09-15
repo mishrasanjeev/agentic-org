@@ -11,7 +11,7 @@ from typing import Any
 import structlog
 
 from auth.grant_enforcement import EnforcementMode
-from auth.run_grants import RunGrant, refresh_run_grant, resolve_run_grant
+from auth.run_grants import NO_CALLER, CallerGrant, RunGrant, refresh_run_grant, resolve_run_grant
 from core.llm.router import LLMResponse, llm_router
 from core.pii import pseudonymiser as pseudonymisation
 from core.schemas.messages import (
@@ -80,6 +80,15 @@ class BaseAgent:
         # PRD F-1: the grant this agent's tool calls are checked against,
         # resolved on the first tool call (``_run_grant_for_calls``).
         self._run_grant: RunGrant | None = None
+        # The Grantex token of the request (or workflow run) that started this
+        # agent, when it authenticated with one: every tool call must be
+        # allowed by it as well (``bind_caller``).
+        self.caller_grant: CallerGrant = NO_CALLER
+
+    def bind_caller(self, caller: CallerGrant) -> None:
+        """Check this agent's tool calls against ``caller`` too (set before the first call)."""
+        self.caller_grant = caller
+        self._run_grant = None
 
     @property
     def system_prompt(self) -> str:
@@ -606,6 +615,7 @@ class BaseAgent:
                 agent_id=str(self.agent_id or ""),
                 supplied_token=getattr(self, "grant_token", None) or "",
                 runtime="base_agent",
+                **getattr(self, "caller_grant", NO_CALLER).resolve_kwargs(),
             )
         else:
             self._run_grant = await refresh_run_grant(self._run_grant)

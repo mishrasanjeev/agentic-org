@@ -14,6 +14,13 @@ from sqlalchemy.orm import selectinload
 
 from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
 from api.route_metadata import route_meta
+from auth.run_grants import (
+    CALLER_GRANT_KEY,
+    NO_CALLER,
+    CallerGrant,
+    bind_caller_grant,
+    caller_grant_from_request,
+)
 from core.database import get_tenant_session
 from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
@@ -627,11 +634,29 @@ async def delete_workflow(
 # ── Background workflow execution ──────────────────────────────────────────
 
 
+async def _run_workflow_in_background(
+    tenant_id: _uuid.UUID,
+    run_id: _uuid.UUID,
+    definition: dict,
+    trigger_payload: dict | None,
+    caller: CallerGrant = NO_CALLER,
+) -> None:
+    """Background task for a started run: execute it bound to its caller grant.
+
+    PRD F-1: ``caller`` is the Grantex token the run was started with, if
+    any. It is held in memory for this execution only; the run's state
+    records the binding, so a later resume without it refuses tool calls.
+    """
+    with bind_caller_grant(caller):
+        await _execute_workflow_bg(tenant_id, run_id, definition, trigger_payload, caller)
+
+
 async def _execute_workflow_bg(
     tenant_id: _uuid.UUID,
     run_id: _uuid.UUID,
     definition: dict,
     trigger_payload: dict | None,
+    caller: CallerGrant = NO_CALLER,
 ) -> None:
     """Execute workflow steps in background and sync each result to the DB."""
     from core.models.agent import Agent
@@ -651,6 +676,7 @@ async def _execute_workflow_bg(
             trigger_payload,
             tenant_id=str(tenant_id),
             workflow_run_id=str(run_id),
+            caller_grant=caller.marker(),
         )
 
         # Persist engine_run_id so HITL resume can find it later
@@ -878,6 +904,12 @@ async def run_workflow(
             from workflows.run_sync import WORKFLOW_RUN_INITIATOR_KEY
 
             run_context[WORKFLOW_RUN_INITIATOR_KEY] = str(initiator.user_id)
+        # PRD F-1: a run started with a Grantex token is bound to it; every
+        # agent and connector step checks its tool calls against it too.
+        run_caller = caller_grant_from_request(request)
+        caller_marker = run_caller.marker()
+        if caller_marker is not None:
+            run_context[CALLER_GRANT_KEY] = caller_marker
 
         run = WorkflowRun(
             tenant_id=tid,
@@ -894,7 +926,7 @@ async def run_workflow(
 
     # Execute workflow steps in the background
     background_tasks.add_task(
-        _execute_workflow_bg, tid, run.id, definition, body.payload
+        _run_workflow_in_background, tid, run.id, definition, body.payload, run_caller
     )
 
     return {

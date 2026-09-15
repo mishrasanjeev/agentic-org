@@ -341,6 +341,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   agent and therefore no grant: recorded in `warn`, refused in `deny`. In
   warn and deny the tool gateway runs the grant check and all of its legacy
   checks. `off` is unchanged.
+- A caller Grantex token is bound on every route that starts a run:
+  `POST /agents/{id}/run`, `POST /workflows/{id}/run` (every step type that
+  calls tools, and sub-workflows) and the sales pipeline routes, as well as
+  chat, A2A and MCP. A run started with a caller token and resumed later
+  without it refuses tool calls in warn and deny
+  (`grant_missing`/`caller_token_unavailable`); only the caller's agent id is
+  stored, never the token.
 
 ### Fixed
 - Four shipped industry-pack agents no longer send every run to human review.

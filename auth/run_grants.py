@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
@@ -72,6 +74,10 @@ class RunGrant:
     # so a caller can never borrow another agent's tools or grant.
     caller_token: str = field(default="", repr=False)
     caller_agent_id: str = ""
+    # The run was started by a caller Grantex token that is no longer
+    # available (a workflow or approval resumed later, in another request).
+    # Every tool call is refused rather than run without the caller's check.
+    caller_token_unavailable: bool = False
 
     @property
     def call_mode(self) -> EnforcementMode:
@@ -84,6 +90,79 @@ class RunGrant:
         if self.mode is EnforcementMode.WARN and self.token and self.source in LEGACY_ENFORCED_SOURCES:
             return EnforcementMode.DENY
         return self.mode
+
+
+@dataclass(frozen=True)
+class CallerGrant:
+    """The Grantex token a request authenticated with, and the agent it was issued to.
+
+    ``required`` without a ``token`` means the work belongs to a run a caller
+    token started, but the token is not available here: tool calls are refused.
+    """
+
+    token: str = field(default="", repr=False)
+    agent_id: str = ""
+    required: bool = False
+
+    @property
+    def bound(self) -> bool:
+        return bool(self.token) or self.required
+
+    def resolve_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for ``resolve_run_grant``."""
+        return {"caller_token": self.token, "caller_agent_id": self.agent_id, "caller_required": self.required}
+
+    def marker(self) -> dict[str, str] | None:
+        """What a run persists to remember it was started by a caller token (never the token)."""
+        return {"agent_id": self.agent_id} if self.bound else None
+
+
+NO_CALLER: Final = CallerGrant()
+
+# Key under which workflow state and approval context record a caller binding.
+CALLER_GRANT_KEY: Final = "grant_caller"
+
+_ACTIVE_CALLER: ContextVar[CallerGrant] = ContextVar("run_grant_active_caller", default=NO_CALLER)
+
+
+def caller_grant_from_request(request: Any) -> CallerGrant:
+    """The caller grant of an API request: its Grantex token, if it authenticated with one.
+
+    Only the Grantex middleware sets ``request.state.grant_token``; its agent id
+    is taken only alongside that token, never from a legacy session.
+    """
+    state = getattr(request, "state", None)
+    token = getattr(state, "grant_token", None) if state is not None else None
+    if not isinstance(token, str) or not token.strip():
+        return NO_CALLER
+    agent_id = getattr(state, "agent_id", None)
+    return CallerGrant(token=token.strip(), agent_id=str(agent_id) if isinstance(agent_id, str) else "")
+
+
+@contextmanager
+def bind_caller_grant(caller: CallerGrant) -> Iterator[None]:
+    """Make ``caller`` available to the work started in this context (workflow steps)."""
+    reset = _ACTIVE_CALLER.set(caller)
+    try:
+        yield
+    finally:
+        _ACTIVE_CALLER.reset(reset)
+
+
+def caller_grant_for_run(marker: Any) -> CallerGrant:
+    """Caller grant for work belonging to a run that recorded ``marker`` (``CallerGrant.marker``).
+
+    A run with no marker was not started by a caller token; the active caller
+    (if any) still applies. A run with a marker gets the active caller when it
+    is that same caller, else the binding is required but unavailable.
+    """
+    active = _ACTIVE_CALLER.get()
+    if not isinstance(marker, Mapping):
+        return active
+    agent_id = str(marker.get("agent_id") or "")
+    if active.token and active.agent_id == agent_id:
+        return active
+    return CallerGrant(agent_id=agent_id, required=True)
 
 
 async def _load_agent_grantex_config(tenant_id: str, agent_id: str) -> Mapping[str, Any]:
@@ -117,6 +196,7 @@ async def resolve_run_grant(
     runtime: str = "",
     caller_token: str | None = "",
     caller_agent_id: str | None = "",
+    caller_required: bool = False,
 ) -> RunGrant:
     """Resolve the enforcement mode and grant token for one agent run.
 
@@ -124,7 +204,9 @@ async def resolve_run_grant(
     token the request authenticated with, issued to ``caller_agent_id``: when
     that is the run agent it is used as the run grant; otherwise the run
     agent's own grant is resolved as usual and the caller token is kept
-    alongside it, so both must allow every tool call.
+    alongside it, so both must allow every tool call. ``caller_required``
+    without a ``caller_token`` (a run a caller token started, resumed without
+    it) makes every tool call a denial.
     """
     if mode is None:
         mode = await resolve_enforcement_mode(tenant_id)
@@ -153,6 +235,15 @@ async def resolve_run_grant(
             runtime=runtime,
         )
         grant = replace(grant, caller_token=caller, caller_agent_id=str(caller_agent_id or ""))
+    elif caller_required and not (caller_token or "").strip():
+        logger.warning(
+            "grant_resolution_caller_token_unavailable",
+            mode=mode.value,
+            agent_id=str(agent_id or ""),
+            caller_agent_id=str(caller_agent_id or ""),
+            runtime=runtime,
+        )
+        grant = replace(grant, caller_agent_id=str(caller_agent_id or ""), caller_token_unavailable=True)
     return grant
 
 
@@ -285,8 +376,21 @@ async def check_run_grant(
 
     With a ``caller_token`` the call must be allowed by the caller's token
     first - always strictly, because the legacy path enforced caller tokens
-    strictly - and then by the run agent's grant in the run's mode.
+    strictly - and then by the run agent's grant in the run's mode. A run
+    whose caller token is required but unavailable is refused
+    (``grant_missing``/``caller_token_unavailable``).
     """
+    if run_grant.caller_token_unavailable and not run_grant.caller_token:
+        return await check_tool_grant(
+            mode=EnforcementMode.DENY,
+            grant_token="",
+            connector=connector,
+            tool=tool,
+            context=replace(context, grant_source="caller"),
+            amount=amount,
+            missing_sub_reason="caller_token_unavailable",
+            client_factory=client_factory,
+        )
     if run_grant.caller_token:
         caller_check = await check_tool_grant(
             mode=EnforcementMode.DENY,

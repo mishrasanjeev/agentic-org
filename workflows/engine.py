@@ -137,8 +137,13 @@ class WorkflowEngine:
         *,
         tenant_id: str | None = None,
         workflow_run_id: str | None = None,
+        caller_grant: dict[str, str] | None = None,
     ) -> str:
-        """Parse a workflow definition, persist initial state, and return the run_id."""
+        """Parse a workflow definition, persist initial state, and return the run_id.
+
+        ``caller_grant`` (``auth.run_grants.CallerGrant.marker``) records that a
+        caller Grantex token started the run; the token itself is never stored.
+        """
         run_id = f"wfr_{uuid.uuid4().hex[:12]}"
         parsed = self.parser.parse(definition)
         state = {
@@ -157,6 +162,10 @@ class WorkflowEngine:
             state["tenant_id"] = tenant_id
         if workflow_run_id:
             state["workflow_run_id"] = workflow_run_id
+        if caller_grant:
+            from auth.run_grants import CALLER_GRANT_KEY
+
+            state[CALLER_GRANT_KEY] = dict(caller_grant)
         await self.state_store.save(
             state,
             actor="workflow_engine",

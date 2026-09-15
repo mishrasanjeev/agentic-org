@@ -109,6 +109,7 @@ is recorded as `grant_missing` with a sub-reason:
 | `mint_failed` | Grantex refused or failed the delegation (for example an expired root grant) |
 | `lookup_failed` | The agent's Grantex registration could not be read |
 | `no_agent` | The call is not made by a stored agent, so there is nothing to resolve a grant for (see Coverage) |
+| `caller_token_unavailable` | The run was started with a caller Grantex token that is not available to the resumed run (refused in warn too; see Coverage) |
 
 The token itself is never logged or put in a metric.
 
@@ -159,12 +160,12 @@ call in the tenant's mode:
 
 | Entry point | How the grant is resolved | `runtime` |
 |---|---|---|
-| `POST /agents/{id}/run` | the agent's grant, resolved once for the run | `langgraph`; `deterministic_tds` for the shadow TDS route |
+| `POST /agents/{id}/run` | the agent's grant, resolved once for the run; a caller Grantex token is bound as for chat | `langgraph`; `deterministic_tds` for the shadow TDS route |
 | Chat (`POST /chat/query`) | the routed agent's grant; a caller Grantex token issued to that agent is used as it, a caller token for any other agent must **also** allow every call | `langgraph`; `deterministic_tds` for the TDS route |
 | A2A (`POST /a2a/tasks`), MCP (`POST /mcp/call`) | the grant of the shared agent of that type the route takes connector bindings from; a caller token is bound the same way as for chat | `langgraph` |
-| Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first | `langgraph` |
+| Voice, per-type wrappers (`core/langgraph/agents/*`) and any other caller of `core.langgraph.runner.run_agent` | the runner resolves it from the agent id, with the caller's token first; the Twilio voice webhook is signed by the telephony provider and carries no Grantex token | `langgraph` |
 | `core.langgraph.runner.resume_agent` | resolved again on resume; in warn/deny the fresh token replaces the checkpointed one | `langgraph` |
-| Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline | `BaseAgent` resolves the agent's grant on its first tool call; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
+| Workflow agent steps, collaboration steps, workflow resume (Celery `resume_workflow_wait`, HITL resume), sales pipeline (`process-lead`, `followups/run`, `seed-prospects`, `import-csv`, `process-inbox`) | `BaseAgent` resolves the agent's grant on its first tool call, bound to the caller token of the request that started the run; calls go through `execute_agent_tool` or the `ToolGateway` | `base_agent`, `tool_gateway` |
 | Workflow `connector_tool` steps | none — the step is not made by an agent | `workflow_connector_tool` |
 
 Paths that cannot resolve a grant are not exempt: a workflow `connector_tool`
@@ -182,6 +183,22 @@ run agent's grant in the tenant's mode. A caller can therefore never run
 another agent - or an A2A/MCP agent type with its default tools - on the
 strength of its own scopes. A denial by the caller token is logged with
 `grant_source=caller`.
+
+This holds on every route that starts a run: `POST /agents/{id}/run`, chat,
+A2A, MCP, `POST /workflows/{id}/run` (agent, collaboration, parallel,
+connector and sub-workflow steps) and the sales pipeline routes. Grantex agent
+tokens skip the route scope checks, so this binding is what keeps them to
+their own grant.
+
+**A binding outlives the request, the token does not.** A workflow run started
+with a caller token keeps the token in memory for the execution the request
+started, and records only the caller's agent id in the run state
+(`grant_caller`); an agent run that pauses for approval records it in the
+approval's resume spec. When such a run is resumed later - after an approval,
+a delay or an event - the token is not available, so in warn and deny every
+tool call of the resumed run is refused as `grant_missing` with sub-reason
+`caller_token_unavailable`. `off` is unchanged. Start runs that must survive a
+pause with a user session or API key rather than an agent token.
 
 In the `ToolGateway` the grant check runs first and then every legacy check
 runs exactly as in `off`, including strict enforcement of a token passed to the
