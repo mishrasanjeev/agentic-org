@@ -33,6 +33,19 @@ UNIT_SUITES ?= tests/unit tests/security
 CONTRACT_SUITES ?= tests/contract tests/connector_harness
 INTEGRATION_SUITES ?= tests/integration tests/regression
 COVERAGE_FLOOR ?= 55
+# `make coverage-gate`: changed lines (diff-cover) and each new module.
+DIFF_COVER_FLOOR ?= 75
+NEW_MODULE_FLOOR ?= 75
+# Extra coverage arguments for the integration run; `make test` appends it to
+# the unit run's data so coverage.xml covers both.
+INTEGRATION_COV_ARGS ?=
+# One coverage source for the runs the gate reads. pyproject.toml's addopts add
+# --cov=core --cov=api ...; together with --cov=. coverage.py writes some
+# filenames relative to core/ or api/ instead of the repository root, which
+# the new-module check cannot attribute reliably. -o addopts replaces them.
+GATE_COV_ARGS = -o addopts=--basetemp=codex-pytest-basetemp --cov=. --cov-report=xml --cov-report=term
+# Not gated for changed-line coverage: tests and test infrastructure.
+DIFF_COVER_EXCLUDE ?= */tests/* */test_doubles/* */fixtures/* conftest.py
 
 # Integration tests get their own database and Redis index on the stack's
 # servers; the database is dropped and recreated at the start of every run.
@@ -72,7 +85,7 @@ DEV_DB_NAME ?= agenticorg
 DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 
 .PHONY: help dev seed down clean logs ps \
-	tools-image test test-unit test-contract test-integration test-db \
+	tools-image test test-unit test-contract test-integration test-db coverage-gate \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
 	e2e
 
@@ -84,6 +97,7 @@ help:
 	@echo "make logs    follow logs"
 	@echo "make ps      service status"
 	@echo "make test    unit + contract + integration tests (or test-unit, test-contract, test-integration)"
+	@echo "make coverage-gate  after make test: 75% of changed lines and of each new module"
 	@echo "make check   ruff, mypy, bandit, gitleaks, licence headers, schemas, vendor denylist, pip-audit"
 	@echo "make e2e     Playwright suite against the running stack (needs make dev)"
 
@@ -125,8 +139,8 @@ endif
 # the CI unit-tests job runs them; then the integration suites.
 test: tools-image
 	$(TOOLS) $(TEST_ENV) $(PY) -m pytest $(UNIT_SUITES) $(CONTRACT_SUITES) \
-		--cov=. --cov-report=xml --cov-fail-under=$(COVERAGE_FLOOR) $(PYTEST_ARGS)
-	$(MAKE) --no-print-directory test-integration
+		$(GATE_COV_ARGS) --cov-fail-under=$(COVERAGE_FLOOR) $(PYTEST_ARGS)
+	$(MAKE) --no-print-directory test-integration INTEGRATION_COV_ARGS="$(GATE_COV_ARGS) --cov-append"
 
 test-unit: tools-image
 	$(TOOLS) $(TEST_ENV) $(PY) -m pytest $(UNIT_SUITES) $(PYTEST_ARGS)
@@ -139,7 +153,16 @@ test-db:
 	$(TOOLS) $(INTEGRATION_ENV) $(PY) scripts/reset_test_database.py
 
 test-integration: tools-image test-db
-	$(TOOLS) $(INTEGRATION_ENV) $(PY) -m pytest $(INTEGRATION_SUITES) $(PYTEST_ARGS)
+	$(TOOLS) $(INTEGRATION_ENV) $(PY) -m pytest $(INTEGRATION_SUITES) $(INTEGRATION_COV_ARGS) $(PYTEST_ARGS)
+
+# Needs coverage.xml from `make test`. diff-cover gates the lines changed since
+# BASE_REF; check_new_module_coverage.py gates every module added since then,
+# including ones the tests never import.
+coverage-gate: tools-image
+	$(TOOLS) $(PY) -m diff_cover.diff_cover_tool coverage.xml --compare-branch="$(BASE_REF)" \
+		--fail-under=$(DIFF_COVER_FLOOR) --exclude $(foreach p,$(DIFF_COVER_EXCLUDE),'$(p)')
+	$(TOOLS) $(PY) scripts/check_new_module_coverage.py --coverage-xml coverage.xml \
+		--base "$(BASE_REF)" --head HEAD --floor $(NEW_MODULE_FLOOR)
 
 # ── Checks ───────────────────────────────────────────────────────────────────
 
@@ -170,10 +193,10 @@ check-schemas: tools-image
 check-denylist: tools-image
 	$(TOOLS) $(PY) scripts/check_denylist.py scan --base "$(BASE_REF)" --head HEAD
 
+# The project and both requirements files, with the reviewed exceptions in
+# config/pip-audit-exceptions.toml.
 check-pip-audit: tools-image
-	$(TOOLS) $(PY) -m pip_audit --desc on --timeout 60 .
-	$(TOOLS) $(PY) -m pip_audit --desc on --timeout 60 -r requirements.txt
-	$(TOOLS) $(PY) -m pip_audit --desc on --timeout 60 -r requirements-v4.txt
+	$(TOOLS) $(PY) scripts/run_pip_audit.py
 
 # ── Browser end-to-end ───────────────────────────────────────────────────────
 

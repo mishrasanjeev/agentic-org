@@ -90,11 +90,12 @@ build takes several minutes.
 
 | Command | Runs |
 |---|---|
-| `make test` | `tests/unit`, `tests/security` and the contract suites `tests/contract` and `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` |
+| `make test` | `tests/unit`, `tests/security` and the contract suites `tests/contract` and `tests/connector_harness` in one run with coverage and the 55% floor, then `make test-integration` with its coverage added, so `coverage.xml` covers both |
 | `make test-unit` | the unit suites only, no coverage floor |
 | `make test-contract` | the contract suites only |
 | `make test-integration` | `tests/integration` and `tests/regression` against real Postgres and Redis. The regression suite runs once, here, so its database-backed tests run too |
-| `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files |
+| `make coverage-gate` | after `make test`: at least 75% of the lines changed since `BASE_REF` (diff-cover) and 75% of every Python module added since then; tests, test doubles and fixtures are not counted |
+| `make check` | `ruff check .`, `mypy`, `bandit -ll` on `core/ connectors/ api/ auth/`, gitleaks over this branch's commits, SPDX headers on new files, JSON Schema validation of `schemas/`, the vendor-name denylist over this branch, `pip-audit` of the project and both requirements files with the reviewed exceptions in `config/pip-audit-exceptions.toml` |
 
 Each check is also a target of its own (`make check-ruff`, `check-mypy`,
 `check-bandit`, `check-secrets`, `check-licence-headers`, `check-schemas`,
@@ -123,6 +124,15 @@ Useful variables:
 
 Test output (`coverage.xml`, pytest scratch directories) is written into the
 checkout and owned by your user.
+
+### CI
+
+`.github/workflows/local-stack.yml` runs this path on fresh GitHub runners for
+every pull request and push to `main`: one job runs `make check`; another runs
+`make dev`, `make test`, `make coverage-gate` (pull requests), `make seed` and
+`make e2e`, then `make clean`. It uses nothing but Docker and make, so a green
+run means a new contributor's clone works too. The coverage report and browser
+reports are uploaded as the `local-stack-<sha>` artifact.
 
 ## Browser end-to-end tests
 
