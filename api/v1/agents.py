@@ -3143,7 +3143,13 @@ async def run_agent(
                 }
 
     # 5b. Execute via LangGraph runner
+    from core.langgraph.checkpointer import CheckpointerUnavailableError
     from core.langgraph.runner import run_agent as langgraph_run
+    from core.langgraph.thread_ids import new_thread_id
+
+    # Server-generated and tenant-prefixed; the only copy a later resume can
+    # use is the one stored on the approval row below (F-2).
+    run_thread_id = new_thread_id(tid)
 
     # Ramesh/Uday CA Firms 2026-04-27: Shadow accuracy was stuck at
     # ~40% because the agent's connector_ids never got resolved into
@@ -3365,7 +3371,19 @@ async def run_agent(
                 connector_config=resolved_connector_config,
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
+                thread_id=run_thread_id,
             )
+    except CheckpointerUnavailableError as exc:
+        # Postgres checkpoint store configured but unusable: refuse the run
+        # (a HITL pause could not be resumed) instead of running unpersisted.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "agent_checkpoint_store_unavailable",
+                "reason": exc.reason,
+                "message": "The agent run store is unavailable. Retry later.",
+            },
+        ) from None
     except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
         # Surface enough information for the caller to act on without
         # leaking secrets from the exception message. The full traceback
@@ -3443,6 +3461,30 @@ async def run_agent(
 
     # 6b. Create HITL queue entry if HITL was triggered
     if hitl_trigger:
+        # The runner echoes the thread only when the graph is paused on it.
+        paused_thread_id = run_thread_id if lg_result.get("thread_id") == run_thread_id else None
+        if paused_thread_id is None:
+            logger.warning("agent_run_hitl_without_checkpoint_thread", agent_id=str(agent_id))
+        # The exact graph parameters of this run, so a resume after approval
+        # re-evaluates the approval gate as it paused (core/approvals/agent_run_resume.py).
+        # Server-only: stripped from every approval API response.
+        resume_spec: dict[str, Any] = {}
+        if paused_thread_id is not None:
+            from core.approvals.agent_run_resume import RESUME_SPEC_KEY
+
+            resume_spec[RESUME_SPEC_KEY] = {
+                # Same expressions as the langgraph_run call above.
+                "confidence_floor": float(review_learning["effective_confidence_floor"]),
+                "hitl_condition": (
+                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
+                ),
+                "authorized_tools": list(authorized_tools or []),
+                "connector_names": connector_names_for_tools,
+                "llm_model": agent_config.get("llm_model", ""),
+                "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+                "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
+                "domain": agent_config.get("domain", "ops"),
+            }
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
@@ -3470,8 +3512,10 @@ async def run_agent(
                     "reasoning_trace": task_trace,
                     "trigger": hitl_trigger,
                     "output": task_output,
+                    **resume_spec,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),
+                checkpoint_thread_id=paused_thread_id,
             )
             session.add(hitl_entry)
         from core.push.sender import notify_approval_created
