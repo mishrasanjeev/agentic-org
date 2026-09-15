@@ -13,7 +13,14 @@ from typing import Any
 import structlog.contextvars
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish, setup_logging, task_postrun, task_prerun, worker_process_init
+from celery.signals import (
+    before_task_publish,
+    setup_logging,
+    task_postrun,
+    task_prerun,
+    worker_process_init,
+    worker_process_shutdown,
+)
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
@@ -183,6 +190,27 @@ def _load_plugins_in_worker(**_kwargs: Any) -> None:
     from connectors.plugins import load_configured_plugins
 
     load_configured_plugins()
+
+
+# The agent checkpoint store is deliberately NOT opened in worker_process_init:
+# Celery prefork kills a child that has not reported ready within a few
+# seconds, so a slow or unreachable checkpoint database would respawn-loop
+# every worker and stop all queues. The first agent run opens it lazily on the
+# worker's persistent run_async loop and fails that run closed with a reason
+# code (core/langgraph/checkpointer.py::get_checkpointer).
+
+
+@worker_process_shutdown.connect
+def _close_checkpointer_in_worker(**_kwargs: Any) -> None:
+    """Close the checkpoint pool, if a run opened one, on the loop that owns it."""
+    from core.langgraph.checkpointer import close_checkpointer
+    from core.tasks.async_runner import run_async
+
+    try:
+        run_async(close_checkpointer())
+    # enterprise-gate: broad-except-ok reason=process-exit-cleanup-only-connections-die-with-the-worker
+    except Exception as exc:
+        structlog.get_logger().warning("langgraph_checkpointer_worker_close_failed", error_type=type(exc).__name__)
 
 
 @before_task_publish.connect

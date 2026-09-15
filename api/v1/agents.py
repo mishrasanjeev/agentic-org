@@ -3143,6 +3143,7 @@ async def run_agent(
                 }
 
     # 5b. Execute via LangGraph runner
+    from core.langgraph.checkpointer import CheckpointerUnavailableError
     from core.langgraph.runner import run_agent as langgraph_run
 
     # Ramesh/Uday CA Firms 2026-04-27: Shadow accuracy was stuck at
@@ -3366,6 +3367,17 @@ async def run_agent(
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
             )
+    except CheckpointerUnavailableError as exc:
+        # Postgres checkpoint store configured but unusable: refuse the run
+        # (a HITL pause could not be resumed) instead of running unpersisted.
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "agent_checkpoint_store_unavailable",
+                "reason": exc.reason,
+                "message": "The agent run store is unavailable. Retry later.",
+            },
+        ) from None
     except (AttributeError, KeyError, RuntimeError, TypeError, ValueError) as exc:
         # Surface enough information for the caller to act on without
         # leaking secrets from the exception message. The full traceback
