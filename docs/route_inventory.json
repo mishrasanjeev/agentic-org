@@ -3956,7 +3956,7 @@
     "public_exempt_reason": null,
     "rate_limit": "feature-flag-read",
     "scope": "feature_flags.runtime_control.sensitive.list",
-    "source_line": 110,
+    "source_line": 128,
     "tenant_required": true
   },
   {
@@ -3974,7 +3974,7 @@
     "public_exempt_reason": null,
     "rate_limit": "feature-flag-write",
     "scope": "feature_flags.runtime_control.sensitive.write",
-    "source_line": 56,
+    "source_line": 73,
     "tenant_required": true
   },
   {
@@ -3992,7 +3992,7 @@
     "public_exempt_reason": null,
     "rate_limit": "feature-flag-write",
     "scope": "feature_flags.runtime_control.sensitive.write",
-    "source_line": 160,
+    "source_line": 178,
     "tenant_required": true
   },
   {
@@ -4010,7 +4010,7 @@
     "public_exempt_reason": null,
     "rate_limit": "feature-flag-evaluate",
     "scope": "feature_flags.runtime_control.evaluate",
-    "source_line": 140,
+    "source_line": 158,
     "tenant_required": true
   },
   {

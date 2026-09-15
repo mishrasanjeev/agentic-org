@@ -90,7 +90,7 @@ async def test_warn_mode_runs_the_tool_and_records_the_would_deny(scripted_model
 
 async def test_warn_mode_with_a_valid_grant_records_nothing(scripted_model):
     client = MagicMock()
-    client.enforce.return_value = MagicMock(allowed=True, reason="", grant_id="grnt_placeholder")
+    client.enforce.return_value = MagicMock(allowed=True, reason="", reason_code="", grant_id="grnt_placeholder")
     with patch("core.langgraph.agent_graph.get_grantex_client", return_value=client):
         result, executed, logs = await _run(
             RunGrant(mode=EnforcementMode.WARN, token=PLACEHOLDER_TOKEN, source="minted"),
@@ -107,7 +107,11 @@ async def test_warn_mode_with_a_valid_grant_records_nothing(scripted_model):
 async def test_deny_mode_stops_the_tool_call_before_the_connector(scripted_model):
     client = MagicMock()
     client.enforce.return_value = MagicMock(
-        allowed=False, reason="No scope grants access to connector 'gmail'.", grant_id="grnt_placeholder"
+        allowed=False,
+        reason="No scope grants access to connector 'gmail'.",
+        reason_code="tool_not_granted",
+        sub_reason="",
+        grant_id="grnt_placeholder",
     )
     with patch("core.langgraph.agent_graph.get_grantex_client", return_value=client):
         result, executed, logs = await _run(

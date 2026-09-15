@@ -5,6 +5,36 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Untrusted content extractor (`core/extraction/`): websites, registry
+  documents and applicant uploads are parsed in a separate worker process
+  with no network access and a wall-clock limit (on Linux a seccomp filter is
+  required by default; an audit hook, resource limits and a network namespace
+  are added where available) and return typed, length-capped,
+  character-class-constrained fields only. Excerpts are stored separately and
+  cited by `excerpt_ref`. Timeouts, crashes, oversized or off-schema output
+  fail closed with a reason code and no fields. `build_model_context` renders
+  evidence for a model with untrusted text replaced by references, and the
+  new optional `build_agent_graph(context_guard=...)` stops a run before any
+  model call that would carry untrusted text. Metrics
+  `agenticorg_extraction_total{kind,outcome}` and
+  `agenticorg_extraction_duration_seconds{kind}`. Nothing calls the extractor
+  yet and `context_guard` defaults to `None`, so existing behaviour is
+  unchanged. PDF and office documents are refused, not parsed. See
+  `docs/security/untrusted-content.md`.
+- Deterministic case policy engine (`core/policy/`): versioned YAML policies
+  evaluated over a case's evidence fields into a tier (`low` < `medium` <
+  `high` < `blocked`), a score and ordered reasons naming the rules that fired,
+  with the policy version, file hash and inputs recorded in every result. No
+  model is involved and model confidence is never an input. Policies load
+  strictly and fail closed at load with a reason code; missing evidence moves
+  a case towards the stricter tier. A policy can only be marked `production`
+  with `reviewed_by`, and loading an example policy logs a warning. Ships
+  `business_onboarding_us` and `business_onboarding_uk` **examples, which
+  require a compliance owner's review before any real use**. Metrics
+  `agenticorg_policy_evaluations_total{tier,policy_status}` and
+  `agenticorg_policy_load_total{outcome,reason}`. Nothing calls the engine
+  yet, so existing behaviour is unchanged. See `docs/policies/authoring.md`
+  and ADR 0011.
 - Secret scanning with gitleaks 8.30.1 on every pull request, every push to
   `main` and weekly over the full history, plus a pre-commit hook and a
   `scripts/preflight.sh` step (`SKIP_SECRETS=1` to skip). See "Secret
@@ -76,19 +106,34 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   fails closed if the registry cannot be loaded. See "Prompt tool references"
   in `CONTRIBUTING.md`.
 - Grant enforcement modes for agent tool calls (`grants.enforce_closed`:
-  `off`, `warn`, `deny`). `AGENTICORG_GRANTS_ENFORCE_CLOSED` sets the
-  deployment default (`off`, which keeps today's behaviour); the
-  `grants.enforce_closed.warn` / `.deny` feature flags make a tenant stricter.
-  In `warn`, runs from `POST /agents/{id}/run` and other callers of the
-  LangGraph runner resolve a grant per run — the caller's token, the agent's
-  configured token, or one the token pool now mints by delegating from
-  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent — and
-  every tool call that grant would deny still runs (a token supplied by the
-  caller or configured on the agent stays enforced as before) but is logged as
-  `grant_enforcement_would_deny` and counted in
-  `agenticorg_grant_enforcement_denials_total{mode,reason}`, including runs
-  with no grant at all (`grant_missing`). `deny` is not switchable yet and
-  runs as `warn`. See `docs/operations/grant-enforcement.md`.
+  `off`, `warn`, `deny`). The mode is the strictest of
+  `AGENTICORG_GRANTS_ENFORCE_CLOSED` (default `off`, which keeps today's
+  behaviour) and the global and tenant rows of the
+  `grants.enforce_closed.warn` / `.deny` flags, each read on its own. In
+  `warn`, runs from `POST /agents/{id}/run` and other callers of the LangGraph
+  runner resolve a grant per run — the caller's token, the agent's configured
+  token, or one the token pool now mints by delegating from
+  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent (cached
+  per tenant, agent and scope set, refreshed before it expires, at most one
+  mint per key per process) — and every tool call that grant would deny still
+  runs (a token supplied by the caller or configured on the agent stays
+  enforced as before) but is logged as `grant_enforcement_would_deny` and
+  counted in `agenticorg_grant_enforcement_denials_total{mode,reason}` with
+  the Grantex SDK's reason code, including runs with no grant at all
+  (`grant_missing`). If the flag table cannot be read and the process has no
+  recent mode for the tenant, the run falls back to the strictest mode.
+  `deny` is not switchable yet and runs as `warn`. See
+  `docs/operations/grant-enforcement.md`.
+- **Break:** the authority flags (`grants.enforce_closed.*`,
+  `pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
+  `decisions.required`, `caps.enforce`) can no longer be created, changed or
+  deleted through `/api/v1/feature-flags`; the API answers
+  `403 flag_key_reserved`. Platform operators manage them with
+  `scripts/authority_flags.py`.
+- **Break (Python API):** `core.langgraph.agent_graph.build_agent_graph` and
+  every `build_*_graph` builder in `core/langgraph/agents/` take a required
+  keyword `run_grant`, so a graph can no longer be built with grant
+  enforcement silently left off.
 - Grant enforcement now covers every agent run entry point: chat, A2A and
   MCP (the caller's Grantex token, else the type's shared agent), voice and
   per-type wrappers through the runner, `resume_agent`, and workflow agent
