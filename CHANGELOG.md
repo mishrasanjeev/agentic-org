@@ -5,6 +5,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Added
+- Untrusted content extractor (`core/extraction/`): websites, registry
+  documents and applicant uploads are parsed in a separate worker process
+  with no network access and a wall-clock limit (on Linux a seccomp filter is
+  required by default; an audit hook, resource limits and a network namespace
+  are added where available) and return typed, length-capped,
+  character-class-constrained fields only. Excerpts are stored separately and
+  cited by `excerpt_ref`. Timeouts, crashes, oversized or off-schema output
+  fail closed with a reason code and no fields. `build_model_context` renders
+  evidence for a model with untrusted text replaced by references, and the
+  new optional `build_agent_graph(context_guard=...)` stops a run before any
+  model call that would carry untrusted text. Metrics
+  `agenticorg_extraction_total{kind,outcome}` and
+  `agenticorg_extraction_duration_seconds{kind}`. Nothing calls the extractor
+  yet and `context_guard` defaults to `None`, so existing behaviour is
+  unchanged. PDF and office documents are refused, not parsed. See
+  `docs/security/untrusted-content.md`.
 - Deterministic case policy engine (`core/policy/`): versioned YAML policies
   evaluated over a case's evidence fields into a tier (`low` < `medium` <
   `high` < `blocked`), a score and ordered reasons naming the rules that fired,
