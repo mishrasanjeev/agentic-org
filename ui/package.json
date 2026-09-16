@@ -44,7 +44,7 @@
     "reactflow": "^11.11.0",
     "recharts": "^3.10.1",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.6.2"
+    "zod": "^4.6.4"
   },
   "overrides": {
     "@babel/core": "7.29.6",
