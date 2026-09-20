@@ -24,7 +24,13 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from api.deps import (
+    ActiveHumanAdmin,
+    get_active_human_admin,
+    get_current_tenant,
+    get_current_user,
+    require_tenant_admin,
+)
 from api.route_metadata import route_meta
 from api.v1.governed_cases import _actor, _error, _session, get_case_runtime
 from core.cases.provider_webhooks import (
@@ -268,11 +274,16 @@ async def get_provider_webhook_inbox(
     provider: str = Query(pattern=PROVIDER_PATTERN, max_length=64),
     tenant_id: str = Depends(get_current_tenant),
     _admin: Any = require_tenant_admin,
+    _human_admin: ActiveHumanAdmin = Depends(get_active_human_admin),
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
-    """The path this tenant's provider must deliver to. Treat it as a credential: it is what binds
-    a delivery to this tenant, so anyone holding it can present events for this tenant (they still
-    have to be signed)."""
+    """The path this tenant's provider must deliver to.
+
+    Treat it as a credential: it is what binds a delivery to this tenant, so anyone holding it can
+    present events for this tenant (they still have to be signed). An active same-tenant human
+    administrator is required - an API key or an agent token holding the admin scope cannot read
+    another tenant's, or its own tenant's, inbox path.
+    """
     try:
         tenant = uuid.UUID(tenant_id)
         await runtime.require_enabled(tenant)

@@ -362,3 +362,34 @@ a new id triggers one re-investigation. A re-investigation that cannot reach the
 case in `awaiting_decision` with its previous memo and the transition reason
 `re_evaluation_failed:<reason>`; replay the event once the provider is back.
 
+### Moving a provider to the per-tenant inbox path (one-off, required)
+
+The tokenless path `POST /api/v1/webhooks/providers/{tenant_id}/{provider}` no longer exists: it
+answers 404 from the release that added the path token. Until a provider is re-pointed, its events
+are lost (they are not queued anywhere), so do this for **every** tenant that has
+`governed_cases.enabled` on and a provider delivering events, in this order:
+
+1. **List the tenants to migrate** before deploying:
+   `SELECT DISTINCT tenant_id FROM provider_webhook_receipts WHERE verified = true;` — those are the
+   tenants a provider is currently delivering to. Note the `provider` column with each.
+2. **Deploy the release.** From this moment the old path answers 404 and deliveries to it are lost.
+   Keep the window short: have step 3 ready first.
+3. **Read each tenant's new path** as an active human administrator of that tenant:
+   `GET /api/v1/case-push/provider-webhook-inbox?provider=<provider>` returns
+   `{"provider": …, "path": "/api/v1/webhooks/providers/<tenant>/<provider>/<token>"}`. The route
+   needs a human admin session; an API key or agent token holding the admin scope is refused.
+   Treat the path like a credential: it is what binds a delivery to the tenant.
+4. **Update the provider's delivery URL** to `https://<your host><path>` in the provider's own
+   configuration. Do not send the path over an unencrypted channel or paste it into a ticket.
+5. **Confirm** within a few minutes:
+   `SELECT outcome, count(*) FROM provider_webhook_receipts WHERE tenant_id = :t AND received_at >
+   now() - interval '15 minutes' GROUP BY outcome;` — expect `accepted`, not `unverified`, and no
+   growth in `agenticorg_provider_webhook_receipts_total{outcome="unbound"}` (unbound means the
+   provider is still using an old path).
+6. **Backfill anything missed** by asking the provider to redeliver events from the deployment
+   window, or by re-investigating the affected cases from the console. A verified event id is
+   processed once, so redelivery is safe.
+
+Rotating `AGENTICORG_SECRET_KEY` changes every tenant's path, so it means repeating steps 3-5 for
+every tenant; schedule it with that in mind.
+

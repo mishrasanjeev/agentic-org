@@ -1976,7 +1976,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 178,
+    "source_line": 184,
     "tenant_required": true
   },
   {
@@ -1994,7 +1994,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "approvals.case_push.write",
-    "source_line": 200,
+    "source_line": 206,
     "tenant_required": true
   },
   {
@@ -2012,7 +2012,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 85,
+    "source_line": 91,
     "tenant_required": true
   },
   {
@@ -2030,7 +2030,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 108,
+    "source_line": 114,
     "tenant_required": true
   },
   {
@@ -2048,7 +2048,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 159,
+    "source_line": 165,
     "tenant_required": true
   },
   {
@@ -2066,7 +2066,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 137,
+    "source_line": 143,
     "tenant_required": true
   },
   {
@@ -2084,7 +2084,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 267,
+    "source_line": 273,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 244,
+    "source_line": 250,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 221,
+    "source_line": 227,
     "tenant_required": true
   },
   {
@@ -6728,7 +6728,7 @@
     "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-and-body-treated-as-untrusted-trigger",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.providers",
-    "source_line": 322,
+    "source_line": 333,
     "tenant_required": true
   },
   {

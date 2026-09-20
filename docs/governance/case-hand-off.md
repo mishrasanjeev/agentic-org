@@ -112,9 +112,12 @@ with 413) before any database work.
 The path token binds an inbox to one tenant: it is derived from the application secret key, and a
 delivery whose token does not match is counted (`unbound`) and dropped before anything is read or
 written, so an event signed with a provider's shared secret cannot be replayed at another tenant's
-inbox. A tenant admin reads the path to configure with the provider from
-`GET /api/v1/case-push/provider-webhook-inbox?provider={provider}`; treat it as a credential, and
-note that rotating `AGENTICORG_SECRET_KEY` changes every tenant's inbox path.
+inbox. An active human administrator of the tenant reads the path to configure with the provider from
+`GET /api/v1/case-push/provider-webhook-inbox?provider={provider}` (an API key or agent token with
+the admin scope is refused); treat it as a credential, and note that rotating
+`AGENTICORG_SECRET_KEY` changes every tenant's inbox path. Moving an already-configured provider
+onto the path is an ordered procedure - see
+[Moving a provider to the per-tenant inbox path](../RUNBOOKS.md#moving-a-provider-to-the-per-tenant-inbox-path-one-off-required).
 
 `VerificationProvider.verify_webhook` decides authenticity, and a webhook **never changes a case**:
 
