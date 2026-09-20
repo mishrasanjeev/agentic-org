@@ -81,6 +81,7 @@ async def call_case_model(
         llm_provider=llm_provider,
         context_guard=untrusted.guard_messages,
         pseudonymiser=session,
+        run_grant=None,
     )
     state = {
         "messages": [SystemMessage(content=system_prompt), HumanMessage(content=context)],
