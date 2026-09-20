@@ -5,6 +5,32 @@ Jev receives structured state and typed questions and returns structured answers
 probabilities, and confidence. AgenticOrg remains responsible for execution,
 authentication, policy, approvals, persistence, connectors, and audit.
 
+## Current availability
+
+The AgenticOrg integration is shipped as a provider adapter, offline evaluator,
+and bounded shadow-mode seam. TypeSafe Jev enrollment is currently closed to
+new users, so AgenticOrg production is configured with `AGENTICORG_JEV_MODE=off`
+and does not make Jev calls. The live evaluator cannot be run until TypeSafe
+grants access and issues an API key.
+
+To request access, use the [TypeSafe Console](https://console.typesafe.ai/).
+If enrollment is unavailable, join the TypeSafe waitlist or contact
+[hello@typesafe.ai](mailto:hello@typesafe.ai). AgenticOrg does not issue Jev
+credentials. Never commit a `TYPESAFE_API_KEY`, place it in tenant data, or
+paste it into an issue, pull request, chat, log, or evaluation report.
+
+Current production truth:
+
+| Control | Current state |
+| --- | --- |
+| Jev adapter and tests | Shipped |
+| Offline synthetic evaluator | Shipped; provider-free by default |
+| Shadow hook | Shipped; opt-in only |
+| TypeSafe enrollment | Closed / waitlist reported by the operator |
+| `AGENTICORG_JEV_MODE` | `off` |
+| Live Jev evaluation | Not run; requires TypeSafe access and an approved key |
+| Active routing | Disabled |
+
 ## Boundary
 
 ```text
@@ -106,8 +132,10 @@ run:
 python scripts/run_jev_shadow_evaluation.py --dry-run
 ```
 
-An explicit measured run requires a server-side `TYPESAFE_API_KEY` and the
-`--live` flag. The key is read from the environment and is never printed:
+An explicit measured run requires TypeSafe access, a server-side
+`TYPESAFE_API_KEY`, and the `--live` flag. The key is read from the environment
+and is never printed. Do not run this command while enrollment is closed or
+without an approved TypeSafe key:
 
 ```text
 python scripts/run_jev_shadow_evaluation.py --live \

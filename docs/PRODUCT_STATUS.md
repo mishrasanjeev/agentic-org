@@ -1,6 +1,6 @@
 # Current Product Status
 
-Last verified: 2026-08-29
+Last verified: 2026-09-20
 
 This page is the concise capability truth for AgenticOrg. It distinguishes
 shipped runtime behavior from tenant configuration and external-provider
@@ -20,10 +20,9 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. The inventor / owner is
 - Public commerce discovery remains off unless explicitly enabled by platform
   and merchant configuration.
 
-The last verified release used commit
-`2348d6ba839a22005912379f7c84f2d9fdba0c27`. This commit is retained as release
-evidence, not as a permanent version string. Check the live endpoints for the
-current deployment.
+The production release is commit-pinned; use the live health endpoint and deployment
+evidence for the current SHA rather than relying on a stale document value. This page
+records product behavior and availability, not deployment state.
 
 ## Capability Matrix
 
@@ -36,6 +35,7 @@ current deployment.
 | RPA | Built-in Playwright script discovery, tenant-scoped execution, schedules, durable history, screenshots/results, timeout handling, and approved-domain egress controls | Browser runtime, tenant-approved domains, credentials, and target-site stability | RPA runs are explicit external actions; catalog presence does not authorize a run or bypass anti-bot/provider policy |
 | Connectors | Native connector registry, health/configuration surfaces, scoped tool gateway, optional integration gateways, and merchant-scoped Shopify credential custody | Provider accounts, scopes, secrets, rate limits, and tenant approval | A listed connector is not proof of a live tenant connection |
 | Developer surfaces | REST, OpenAPI, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces | Compatible client, authentication, tenant/company context, and server version | Discovery metadata does not create tool or transaction authority |
+| Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
 | Billing and operations | Hosted plan catalog, billing routes, health, migrations, observability hooks, security checks, and reviewed Cloud Run rollout helper | Payment-provider configuration and operational ownership | Billing integration is separate from OACP buyer-payment execution |
 
@@ -76,6 +76,8 @@ their outcomes.
   claims.
 - Public OACP standardization, certification, or third-party conformance is not
   claimed.
+- Jev is not currently an active production router. TypeSafe access is waitlist-
+  gated, and no live Jev evaluation result is published.
 
 ## Verification Pointers
 

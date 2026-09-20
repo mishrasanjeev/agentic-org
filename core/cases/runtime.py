@@ -136,15 +136,28 @@ def _run_id(tenant: uuid.UUID, case_ref: str, kind: str) -> str:
 
 
 async def investigate_case(
-    tenant_id: str | uuid.UUID, case_ref: str, *, runtime: CaseRuntime, actor: str
+    tenant_id: str | uuid.UUID,
+    case_ref: str,
+    *,
+    runtime: CaseRuntime,
+    actor: str,
+    reason: str = "investigation_started",
+    keep_state_on_failure: bool = False,
 ) -> dict[str, Any]:
+    """Run the underwriter for a case and save what it hands off.
+
+    ``reason`` is recorded on the ``in_progress`` transition, so a re-investigation says what
+    started it. With ``keep_state_on_failure`` a case that was already awaiting a decision goes
+    back to ``awaiting_decision`` with the memo it had when the run fails, instead of being
+    failed: a provider that is briefly unreachable must not cost a tenant a completed case. The
+    provider webhook re-query path uses it.
+    """
     tenant = _tenant(tenant_id)
     await runtime.require_enabled(tenant)
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
-        await transition(
-            session, case, CaseState.IN_PROGRESS, actor=actor, reason="investigation_started", now=runtime.clock()
-        )
+        started_state = case.state
+        await transition(session, case, CaseState.IN_PROGRESS, actor=actor, reason=reason, now=runtime.clock())
         started_version = case.version
         application, provider_name, policy_id = dict(case.application), case.provider, case.policy_id
 
@@ -186,13 +199,30 @@ async def investigate_case(
                 else ("" if outcome.status == "completed" else outcome.failure_reason)
             )
 
-    result = await _store_investigation(tenant, case_ref, runtime, actor, started_version, outcome, failure)
+    result = await _store_investigation(
+        tenant,
+        case_ref,
+        runtime,
+        actor,
+        started_version,
+        outcome,
+        failure,
+        keep_state_on_failure=keep_state_on_failure and started_state == CaseState.AWAITING_DECISION.value,
+    )
     runtime.push_kick(tenant)
     return result
 
 
 async def _store_investigation(
-    tenant: uuid.UUID, case_ref: str, runtime: CaseRuntime, actor: str, started_version: int, outcome: Any, failure: str
+    tenant: uuid.UUID,
+    case_ref: str,
+    runtime: CaseRuntime,
+    actor: str,
+    started_version: int,
+    outcome: Any,
+    failure: str,
+    *,
+    keep_state_on_failure: bool = False,
 ) -> dict[str, Any]:
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
@@ -203,7 +233,16 @@ async def _store_investigation(
         if outcome is not None:
             case.agent_records = [*(case.agent_records or []), outcome.case_record()]
         if failure or outcome is None or outcome.memo is None:
-            case.failure_reason = (failure or "investigation_failed")[:128]
+            reason = (failure or "investigation_failed")[:128]
+            if keep_state_on_failure and case.memo:
+                # A re-query that could not complete: the case keeps the memo it already had.
+                kept = f"re_evaluation_failed:{reason}"[:128]
+                logger.warning("governed_case_re_evaluation_failed", case_ref=case_ref, reason=reason)
+                await transition(
+                    session, case, CaseState.AWAITING_DECISION, actor=actor, reason=kept, now=runtime.clock()
+                )
+                return {"case_ref": case_ref, "state": case.state, "re_evaluation": kept}
+            case.failure_reason = reason
             await transition(
                 session, case, CaseState.FAILED, actor=actor, reason=case.failure_reason, now=runtime.clock()
             )

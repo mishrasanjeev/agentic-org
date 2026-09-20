@@ -419,6 +419,10 @@ export default function Evals() {
                 AgenticOrg&apos;s existing route. Loading this page does not call Jev, execute tools,
                 or change routing authority.
               </p>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-amber-800">
+                TypeSafe enrollment is currently closed to new users. This deployment remains off
+                and no live Jev evaluation has been run. Access requests belong with TypeSafe.
+              </p>
             </div>
             <span className="inline-flex w-fit rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
               Advisory only
