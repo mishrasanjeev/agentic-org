@@ -409,6 +409,10 @@
       "answer": "The Open Agentic Commerce Protocol boundary separates merchant source facts, Grantex authority artifacts, AgenticOrg's scoped cache, buyer-safe answers, and provider-owned execution. Cached evidence can support discovery and a prepared handoff, but it does not create an order, mandate, payment, inventory hold, refund, or paid state."
     },
     {
+      "question": "Is Jev available in production?",
+      "answer": "AgenticOrg ships a Jev/System One adapter, offline evaluator, and bounded advisory shadow seam, but TypeSafe enrollment is currently closed to new users. Production Jev mode is off, no live evaluation has been run, and Jev cannot authorize or execute actions."
+    },
+    {
       "question": "Can AgenticOrg be self-hosted?",
       "answer": "Yes. The repository is Apache-2.0 licensed and includes Docker and deployment assets. The current managed production path uses Google Cloud Run with commit-pinned images, health verification, explicit traffic movement, and rollback-aware deployment tooling."
     },
