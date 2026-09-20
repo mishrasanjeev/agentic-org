@@ -11,6 +11,7 @@ from core.decisioning.contracts import (
     DecisionRequest,
 )
 from core.decisioning.jev import JevDecisionProvider
+from core.decisioning.runtime import build_jev_provider
 
 
 def _request() -> DecisionRequest:
@@ -29,6 +30,28 @@ def _request() -> DecisionRequest:
             ),
         },
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_builder_requires_explicit_server_side_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="TYPESAFE_API_KEY is required"):
+        await build_jev_provider()
+
+
+@pytest.mark.asyncio
+async def test_runtime_builder_constructs_jev_from_platform_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TYPESAFE_API_KEY", "test-only-platform-secret")
+
+    provider = await build_jev_provider(tenant_id="tenant-1")
+
+    assert isinstance(provider, JevDecisionProvider)
+    assert provider.provider_name == "jev"
 
 
 @pytest.mark.asyncio
