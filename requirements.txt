@@ -28,7 +28,7 @@ python-multipart==0.0.32
 websockets==15.0.1
 
 # ─── Database & ORM ──────────────────────────────────────────────────────────
-sqlalchemy[asyncio]==2.0.52
+sqlalchemy[asyncio]==2.0.54
 asyncpg==0.31.0
 # psycopg 3 is the driver langgraph-checkpoint-postgres uses for the agent
 # checkpoint store (core/langgraph/checkpoint_postgres.py). The binary extra
