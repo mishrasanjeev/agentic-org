@@ -556,3 +556,19 @@ Remove an entry in the pull request that fixes it.
   `tests/security/test_underwriter_adversarial.py::_sanitised` (which must keep
   producing the same policy outcome as the hostile copy minus the injection),
   with a test that the case's policy result fires the rule on a true mismatch.
+
+## A-47 — The provider interface reports no filing status
+
+- **Found:** removing the example policies' `filings_overdue` rule (2026-09-20).
+- **What:** `connectors/framework/verification_types.py::BusinessVerification`
+  carries status, addresses, identifiers and officers, but nothing about
+  statutory filings, although most registries publish whether a company's
+  accounts or confirmation statement are overdue. A policy therefore cannot
+  score an overdue filing at all: the UK example's rule read
+  `verification.overdue_filings`, which the evidence mapping always left
+  unresolved, and it has been removed rather than left firing on every case.
+- **Fix:** if the domain wants the signal, add it to `BusinessVerification`
+  (for example a `filings` block with the last filing date and an overdue
+  count), to `schemas/`, to the mock provider's fixtures and to the provider
+  conformance suite, then reinstate the rule in the UK example; until then no
+  policy may read a filing field.

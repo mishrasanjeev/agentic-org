@@ -469,7 +469,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `RegistryStatus` member, so an insolvent business can reach `blocked`.
   `verification.overdue_filings` is gone from the evidence mapping; a
   filings-overdue signal has to reach the provider interface, the mock provider
-  and the conformance suite first. UK example `1.3.0`, US example `1.1.0`.
+  and the conformance suite first (FINDINGS A-47). Dropping a `medium` rule
+  can make a case less strict, which `docs/policies/authoring.md` treats as a
+  major change: UK example `2.0.0`, US example `1.1.0`.
 - The declared-activity vocabulary is published
   (`core.agents.business_underwriter.facts.DECLARED_ACTIVITY_CATEGORIES`, see
   `docs/policies/authoring.md`) and the mock provider's website fixtures are

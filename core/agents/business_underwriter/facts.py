@@ -204,17 +204,25 @@ def observed_activity_categories(extractions: list[Mapping[str, Any]]) -> set[st
 
 
 # Published mapping from the declared-activity vocabulary (the application's
-# ``declared_activity`` term) to the extractor's activity categories
-# (``core.extraction._worker.ACTIVITY_KEYWORDS``). Without it a declared term
-# that shares no word with a category cannot be compared with what a website
-# says, and ``web_presence.activity_mismatch`` stays unresolved, which fires
-# the example policies' activity rule as indeterminate on every such case.
-# Terms not listed here still fall back to the extractor's own keywords.
+# ``declared_activity`` term, ``schemas/business_case.schema.json``) to the
+# extractor's activity categories (``core.extraction._worker.ACTIVITY_KEYWORDS``).
+#
+# It belongs here rather than with the fixtures because the underwriter needs
+# it at run time for real applications: without it a declared term that shares
+# no word with a category cannot be compared with what a website says, and
+# ``web_presence.activity_mismatch`` stays unresolved, which fires the example
+# policies' activity rule as indeterminate. Terms not listed fall back to the
+# extractor's own keywords.
+#
+# A term maps to the categories it genuinely means, and to no more than those:
+# the comparison intersects the declared set with the observed one, so every
+# category added beyond the term's meaning hides a real mismatch. A bakery is
+# both manufacturing and food service; a wholesaler is not a manufacturer.
 # Documented in docs/policies/authoring.md ("Declared activity vocabulary").
 DECLARED_ACTIVITY_CATEGORIES: Mapping[str, tuple[str, ...]] = {
     "beverage_production": ("manufacturing",),
     "building_services": ("construction",),
-    "food_production": ("manufacturing", "food_service"),
+    "food_production": ("food_service", "manufacturing"),
     "freight_brokerage": ("logistics",),
     "freight_forwarding": ("logistics",),
     "industrial_machining": ("manufacturing",),
@@ -224,8 +232,8 @@ DECLARED_ACTIVITY_CATEGORIES: Mapping[str, tuple[str, ...]] = {
     "retail_home_goods": ("retail",),
     "software_services": ("software",),
     "solar_installation": ("construction",),
-    "textile_wholesale": ("retail", "manufacturing"),
-    "wholesale_veterinary_supplies": ("retail", "healthcare"),
+    "textile_wholesale": ("retail",),
+    "wholesale_veterinary_supplies": ("healthcare", "retail"),
 }
 
 

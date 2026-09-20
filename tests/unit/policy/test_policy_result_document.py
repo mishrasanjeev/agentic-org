@@ -32,7 +32,7 @@ def test_document_validates_and_lists_each_fired_rules_inputs() -> None:
     assert reasons["screening_possible_match"]["inputs"] == {"screening.unresolved_possible_matches": None}
     assert document["policy"] == {
         "policy_id": "business_onboarding_uk",
-        "version": "1.3.0",
+        "version": "2.0.0",
         "example": True,
         "reviewed_by": None,
     }

@@ -22,6 +22,13 @@ from core.policy.types import AllOf, AnyOf, Compare, Condition, Not, Operator, P
 from tests.unit.business_underwriter.conftest import ALL_FIXTURES
 
 EXAMPLE_POLICY_FILES = ("business_onboarding_uk.yaml", "business_onboarding_us.yaml")
+# Which fixtures each example decides: `conftest.policy_for` picks the UK
+# example for `gb-` fixtures and the US one for the rest, so each policy is
+# checked against its own jurisdiction only.
+POLICY_FIXTURE_PREFIX = {"business_onboarding_uk.yaml": "gb-", "business_onboarding_us.yaml": "us-"}
+# One clean fixture per jurisdiction, and the tier it must reach: a clean case
+# has to come out `low`, not `medium` on indeterminate reasons.
+CLEAN_FIXTURES = {"gb-clean-brightwater": "low", "us-clean-quillfeather": "low", "us-clean-hollowbrook": "low"}
 STATUS_PATH = "verification.status"
 # Operators whose operand is a status value rather than a presence test.
 VALUE_OPERATORS = (Operator.EQ, Operator.NE, Operator.IN, Operator.NOT_IN)
@@ -83,34 +90,49 @@ def test_every_registry_status_operand_exists_in_the_interface_enum() -> None:
 
 
 @pytest.mark.timeout(300)
-async def test_every_referenced_path_is_produced_for_at_least_one_mock_fixture(
+async def test_every_referenced_path_is_produced_for_a_fixture_of_its_own_jurisdiction(
     run_case: Callable[..., Any], narrative: Callable[..., Any]
 ) -> None:
-    """Every path the examples read must resolve on at least one mock fixture."""
+    """Each example's paths must resolve on a fixture that example decides.
+
+    Checked per jurisdiction: a path only a GB fixture produces must not excuse
+    a rule in the US example.
+    """
     narrative(len(ALL_FIXTURES))
-    resolved: set[str] = set()
-    indeterminate_cases: dict[str, int] = {}
+    resolved: dict[str, set[str]] = {}
+    indeterminate: dict[str, dict[str, int]] = {}
+    tiers: dict[str, str] = {}
     for key in ALL_FIXTURES:
         outcome = await run_case(key)
         assert outcome.status == "completed", outcome.failure_reason
-        resolved |= _resolved_paths(outcome.policy_evidence)
+        prefix = key[:3]
+        resolved.setdefault(prefix, set()).update(_resolved_paths(outcome.policy_evidence))
+        tiers[key] = outcome.policy_result["tier"]
         for reason in outcome.policy_result["reasons"]:
             if reason["indeterminate"]:
-                indeterminate_cases[reason["rule_id"]] = indeterminate_cases.get(reason["rule_id"], 0) + 1
+                counts = indeterminate.setdefault(prefix, {})
+                counts[reason["rule_id"]] = counts.get(reason["rule_id"], 0) + 1
 
-    for policy in _examples():
-        never_produced = [path for path in policy.referenced_paths if path not in resolved]
+    for name, policy in zip(EXAMPLE_POLICY_FILES, _examples(), strict=True):
+        prefix = POLICY_FIXTURE_PREFIX[name]
+        fixtures = [key for key in ALL_FIXTURES if key.startswith(prefix)]
+        never_produced = [path for path in policy.referenced_paths if path not in resolved[prefix]]
         assert not never_produced, (
             f"{policy.policy_id} reads {never_produced}, which the underwriter's evidence "
             "mapping (core.agents.business_underwriter.facts.policy_evidence) never "
-            "produces, so those rules fire as indeterminate on every case"
+            f"produces for any {prefix} fixture, so those rules fire as indeterminate "
+            "on every case it decides"
         )
+        # A rule indeterminate on every fixture of its jurisdiction is the
+        # shape of a rule reading evidence nothing supplies.
+        always = sorted(
+            rule_id
+            for rule_id, count in indeterminate.get(prefix, {}).items()
+            if count == len(fixtures)
+        )
+        assert not always, f"{always} fired as indeterminate on all {len(fixtures)} {prefix} fixtures"
 
-    # No rule may be indeterminate on every fixture: that is the shape of a
-    # rule reading evidence nothing supplies.
-    always_indeterminate = sorted(
-        rule_id for rule_id, count in indeterminate_cases.items() if count == len(ALL_FIXTURES)
-    )
-    assert not always_indeterminate, (
-        f"{always_indeterminate} fired as indeterminate on all {len(ALL_FIXTURES)} mock fixtures"
-    )
+    for key, expected in CLEAN_FIXTURES.items():
+        assert tiers[key] == expected, (
+            f"{key} is a clean case and must come out {expected}, not {tiers[key]}"
+        )

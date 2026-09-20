@@ -72,7 +72,7 @@ async def test_clean_case_runs_to_completion_in_process_with_a_cited_memo(run_ca
     assert memo["recommendation"]["basis"] == "policy_result"
     assert memo["recommendation"]["requires_human_decision"] is True
     assert memo["policy_result"]["policy"] == {
-        "policy_id": "business_onboarding_uk", "version": "1.3.0", "example": True, "reviewed_by": None,
+        "policy_id": "business_onboarding_uk", "version": "2.0.0", "example": True, "reviewed_by": None,
     }  # fmt: skip
     assert "narrative_summary" in _codes(memo, "identity")
     assert len(model.calls) == 1

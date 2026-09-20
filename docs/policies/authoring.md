@@ -100,6 +100,11 @@ that is not listed falls back to the extractor's own keywords. Add a term there
 when a new declared-activity value should be comparable, otherwise the
 comparison is unresolved and the rule fires as indeterminate.
 
+Map a term to the categories it means and to no more than those. The
+comparison intersects the declared set with the categories observed on the
+website, so every category added beyond the term's meaning hides a real
+mismatch.
+
 ## Conditions and operators
 
 A condition is a mapping with **exactly one key**: either a dotted path mapped

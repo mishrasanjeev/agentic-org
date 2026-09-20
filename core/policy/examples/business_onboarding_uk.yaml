@@ -11,7 +11,7 @@
 #  See docs/policies/authoring.md.
 # ============================================================================
 policy: business_onboarding_uk
-version: 1.3.0
+version: 2.0.0
 status: example
 reviewed_by: null
 description: >-
