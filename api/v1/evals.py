@@ -19,6 +19,8 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Response
 
 from api.route_metadata import route_meta
+from core.config import settings
+from core.decisioning.evaluation import build_routing_evaluation_plan, load_routing_cases
 
 logger = logging.getLogger(__name__)
 
@@ -190,3 +192,28 @@ async def get_agent_evals(agent_type: str, response: Response):
         "cases": case_results,
         "data_quality": quality,
     }
+
+
+@router.get("/evals/jev-shadow")
+@route_meta(
+    auth_required=False,
+    tenant_required=False,
+    scope="public:evals.jev_shadow_plan.read",
+    rate_limit="public-evals-read",
+    idempotency="read-only",
+    audit_event="none-public-evals-jev-shadow-plan-read",
+    public_reason="public-jev-shadow-plan-is-redacted-and-non-executing",
+)
+async def get_jev_shadow_plan():
+    """Describe the Jev shadow evaluation contract without running Jev."""
+    cases = load_routing_cases()
+    plan = build_routing_evaluation_plan(
+        cases,
+        sample_rate=settings.jev_shadow_sample_rate,
+        max_calls=settings.jev_shadow_max_calls_per_process,
+        failure_threshold=settings.jev_shadow_failure_threshold,
+        cooldown_seconds=settings.jev_shadow_cooldown_seconds,
+    )
+    plan["configured_mode"] = settings.jev_mode
+    plan["effective_mode"] = "shadow_observation" if settings.jev_mode == "shadow" else "off"
+    return plan

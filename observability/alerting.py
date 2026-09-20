@@ -101,6 +101,14 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
         label_filters={"priority": "critical"},
     ),
     ThresholdRule(
+        name="case_push_dead_letters_present",
+        metric_name="agenticorg_case_push_dead_letter_backlog",
+        operator="gt",
+        threshold=0.0,
+        severity=Severity.WARNING,
+        description="Governed case hand-offs are dead-lettered and need replay (docs/RUNBOOKS.md)",
+    ),
+    ThresholdRule(
         name="circuit_breaker_open",
         metric_name="agenticorg_circuit_breaker_state",
         operator="eq",

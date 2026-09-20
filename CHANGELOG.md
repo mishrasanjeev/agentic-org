@@ -4,7 +4,193 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed — breaking for tenants that turn it on
+- `grants.enforce_closed` can now be set to `deny` (tenant flag
+  `grants.enforce_closed.deny` or `AGENTICORG_GRANTS_ENFORCE_CLOSED=deny`).
+  **This will refuse tool calls that have been quietly succeeding:** scope
+  enforcement was effectively off on the common path, so an agent without a
+  resolvable grant, or with one that does not cover a tool, now fails the
+  run instead of calling the tool. Run the tenant in `warn` first and review
+  `scripts/grant_enforcement_report.py`. A refused call fails the run with
+  `error` `grant_denied: <reason>`; run results gain an optional
+  `grant_denial` object, which `POST /agents/{id}/run` also returns and
+  writes to its audit row. Default stays `off`; nothing changes unless a
+  tenant or the deployment opts in. Rollback: disable the tenant's deny flag
+  or reset the deployment default. See the runbook in
+  `docs/operations/grant-enforcement.md`. Agents registered before this
+  release carry scopes Grantex's check cannot satisfy: run
+  `scripts/refresh_grantex_scopes.py --apply` before switching their tenant
+  to `deny`.
+
 ### Added
+- Governance documentation (`docs/governance/README.md`): how grants, policy
+  scores and human decisions interact for governed cases - read-only tool sets
+  and the grant check at the tool gateway, deterministic policy tiers that
+  gate the recommendation while model confidence stays metadata, decisions
+  recorded only with verified decision grants, analyst reviews and approved
+  information requests, the signed hand-off, and what is recorded for audit.
+  Links the case lifecycle, hand-off, agent and security pages.
+- Portable case hand-off for governed cases (`core/cases/push.py`, PRD A-8):
+  a `case_push` event is written to `case_push_outbox` in the same transaction
+  as the case change (`case.completed`, `case.updated`, `case.decided`) and
+  delivered to the tenant's configured endpoint with an HMAC-SHA256 signature
+  over `<event id>.<timestamp>.<body>` in `AgenticOrg-Signature`
+  (`v1=<key_id>:<hex>`, one entry per key so keys rotate without downtime),
+  retried with exponential backoff and dead-lettered on rejection or after 10
+  attempts; dead letters replay with the same event id. REST retrieval of the
+  same document. Inbound provider webhooks at
+  `/api/v1/webhooks/providers/{tenant_id}/{provider}` are verified with the
+  provider, de-duplicated by event id, and only ever trigger a re-investigation
+  from the provider; unverifiable bodies are untrusted triggers. Signing keys
+  are stored encrypted per tenant. Migration `v6z26_case_push` (three tables,
+  forced RLS). Celery tasks `dispatch_case_pushes` and `sweep_case_pushes` (the
+  sweep is a no-op unless `AGENTICORG_CASE_PUSH_SWEEP_ENABLED=true`). Metrics
+  `agenticorg_case_push_{enqueued,deliveries,dead_letters}_total`,
+  `agenticorg_case_push_dead_letter_backlog`,
+  `agenticorg_case_push_attempt_duration_seconds` and
+  `agenticorg_provider_webhook_receipts_total{outcome}`; alert
+  `case_push_dead_letters_present`. Requires `governed_cases.enabled` and a
+  configured endpoint. See `docs/governance/case-hand-off.md` and the runbook.
+- Governed business cases (`core/cases/`, PRD A-8), behind the per-tenant
+  flag `governed_cases.enabled` (default off; unreadable counts as off): case
+  lifecycle `submitted`/`in_progress`/`awaiting_decision`/`decided`/
+  `withdrawn`/`failed` with version-guarded transitions recorded in
+  `governed_case_transitions`; a runtime that runs the Business Onboarding
+  Underwriter and Screening Disposition agents for a case and stores the memo,
+  policy result, screening results, dispositions and agent case records;
+  decisions recorded only with verified decision grants (the shipped verifier
+  refuses everything with `decision_required` until decision grants land).
+  New workflow step type `case_agent` and example workflows
+  `workflows/examples/business_onboarding.yaml` and `screening_disposition.yaml`.
+  New API under `/api/v1/governed-cases` (submit, list, stats, detail, case
+  record, investigate, withdraw, decision, disposition review, information
+  requests). Migration `v6z25_governed_cases` adds two tables with row-level
+  security. Metric `agenticorg_governed_case_transitions_total{from_state,to_state}`.
+  Settings `AGENTICORG_CASE_PROVIDER`, `AGENTICORG_CASE_POLICY_DIR`,
+  `AGENTICORG_CASE_LLM_MODEL`. See `docs/governance/case-lifecycle.md`.
+- Screening Disposition reference agent (`core/agents/screening_disposition/`,
+  PRD A-7 / US-3): for one screening hit it re-screens the subject through
+  the provider tool gateway to confirm the hit, compares name, date of birth,
+  nationality, address and associated entities, and proposes `true_match`,
+  `false_positive` or `insufficient_information` with a confidence band by
+  fixed rules, producing a schema-valid, cited `screening_disposition` with
+  `review: null`. The model writes the rationale from comparison results only;
+  a rationale that states another outcome, talks of closing the hit or repeats
+  untrusted text is replaced by a template rationale. No automatic closure in
+  any configuration: the tool set is read-only screening and no closing tool
+  can be configured. `apply_review` records an analyst's acceptance or
+  override (reason required, analyst identity from the authenticated session,
+  written once). Metric
+  `agenticorg_screening_dispositions_proposed_total{outcome,band}`. Shared
+  `core/agents/case_model_call.py` makes the guarded, pseudonymised prose call
+  for both reference agents. Nothing in the platform runs the agent yet. See
+  `docs/agents/screening-disposition.md`.
+- Business Onboarding Underwriter reference agent
+  (`core/agents/business_underwriter/`, PRD A-7): resolves an application
+  through a verification provider, starts verification and polls while it is
+  pending, reconciles ownership against declared owners (`missing_owner`,
+  `undeclared_owner` at a configurable threshold, 25% by default), screens
+  every party, analyses web presence only through the sandboxed extractor,
+  evaluates the deterministic policy and assembles a schema-valid, cited
+  `underwriting_memo` with a policy-gated recommendation and a missing-items
+  list. The model writes section summaries only, from codes and counts, behind
+  the untrusted-content guard and (when `pseudonymisation.pre_model` is on)
+  pseudonymisation; each summary is checked against its section's citations.
+  Every memo evidence entry is checked against the records returned in the run,
+  and the run fails closed otherwise. A capability the provider does not offer
+  yields a `not_available` section. Prompts are versioned and pinned by
+  SHA-256, recorded with every tool call's request and response hashes in the
+  case record. Requests for more information use approved templates released
+  only by a human approval bound to the proposal digest. New provider tool
+  gateway (`core/tool_gateway/provider_gateway.py`) holds read tools only and
+  takes the run's grant check as an authorizer that fails closed. Metrics
+  `agenticorg_provider_calls_total{capability,outcome}`,
+  `agenticorg_provider_call_duration_seconds{capability}` and
+  `agenticorg_case_agent_runs_total{agent,outcome}`. New
+  `core.policy.document.policy_result_document`. Nothing in the platform runs
+  the agent yet, so existing behaviour is unchanged. See
+  `docs/agents/business-underwriter.md`.
+- **Coverage gate (pull requests):** 75% of changed lines (diff-cover) and 75%
+  of every new Python module (`scripts/check_new_module_coverage.py`; a new
+  module no test imports counts as 0%), on top of the existing 55% total and
+  per-module floors. Tests, test doubles and fixtures are not counted, renamed
+  modules count as new, and a coverage report whose filenames cannot be
+  attributed to exactly one module fails the gate. Runs as
+  `make coverage-gate` and in the new Local Stack workflow. **Break:** pull requests that add or change Python code below
+  these floors now fail.
+- Local Stack workflow: `make check`, and `make dev && make test` followed by
+  the coverage gate, `make seed` and `make e2e`, on fresh runners for every
+  pull request and push to `main`.
+- `pip-audit` now runs through `scripts/run_pip_audit.py` in CI, nightly and
+  `make check`, with dated, owned exceptions in
+  `config/pip-audit-exceptions.toml` (at most 90 days; expired or malformed
+  entries fail). A dependency pip-audit could not audit fails too unless a
+  `[[skip]]` entry accepts it.
+  See "Dependency audit exceptions" in `CONTRIBUTING.md`.
+- Nightly Cassette Re-record workflow: re-records every `model_cassette` test
+  against a live model with the `MODEL_RECORD_API_KEY` secret and reports
+  cassette differences without gating. Its dependencies are hash-pinned
+  (`requirements-rerecord.lock`). See `docs/testing/record-replay.md`.
+- Local Grantex in the development stack: the Grantex auth service from its
+  published image, pinned by digest, with its own `grantex` role and database
+  on the stack's Postgres (created once by `grantex-db`) and Redis index 2.
+  The API and worker use it through `GRANTEX_BASE_URL` and a seeded
+  development `GRANTEX_API_KEY`. The smoke test checks its health and keys and
+  that the API container reaches it with the configured key. See "Local
+  Grantex" in `docs/quickstart-local.md`.
+- OpenAI-compatible model stub in the local stack (`model-stub`,
+  `tools/model_stub`): `POST /v1/chat/completions` with tool calls, answered
+  from scripted sequences (`scripted/<name>`, ids matching the in-process
+  scripted model) or from cassettes keyed and stored by `core/model_replay.py`.
+  Options that change the answer (`tool_choice`, `response_format`, `seed`, ...)
+  are part of the key and unknown request fields are rejected. Replay misses
+  are errors and are never forwarded; record mode forwards to a
+  real provider and refuses to start without `MODEL_RECORD_API_KEY`. The API
+  and worker send `vllm:` models to it, and the agents `make seed` creates use
+  `vllm:scripted/final-only`, so agents run locally without model credentials.
+  Refuses to start outside development and test. See "Model stub" in
+  `docs/quickstart-local.md`.
+- `make seed` (`scripts/seed_dev.py`): an idempotent development tenant with
+  Approver A and Approver B (the OIDC stub's identities, matched by email), a
+  disabled `dev-oidc` sign-in configuration for the stub, two sample agents in
+  shadow mode with no tools, and a two-step sequential approval policy (it does
+  not require distinct approvers). Fixed ids make repeated runs a no-op; a
+  conflicting existing row fails the run without writes; it refuses
+  production-like runtimes and non-local database hosts unless
+  `AGENTICORG_SEED_ALLOW_REMOTE_DB=1`. Optional
+  `AGENTICORG_SEED_PASSWORD` enables email sign-in. See "Development data" in
+  `docs/quickstart-local.md`.
+- Development OpenID Connect provider in the local stack (`oidc-stub`,
+  `tools/oidc_stub`): discovery, JWKS, authorization code with mandatory PKCE,
+  token and userinfo endpoints, and step-up through `acr_values`, `max_age`
+  and `prompt=login`, with `acr`, `amr` (`["pwd"]` or `["pwd", "hwk"]`) and
+  `auth_time` in its tokens. Seeds Approver A and Approver B from
+  `tools/oidc_stub/config.dev.json`. Refuses to start unless `AGENTICORG_ENV`
+  is development, local or test. Sessions last eight hours, repeated request
+  parameters are rejected, and step-up clients must send `max_age`. `tools/` is
+  excluded from the API image. See "Development identity provider" in
+  `docs/quickstart-local.md`.
+- Vendor-name denylist: `scripts/check_denylist.py` fails a change whose added
+  lines, file paths, commit messages, branch name or pull request title and
+  description name a denylisted verification, identity-data or screening
+  vendor. Terms are matched through salted SHA-256 hashes in
+  `config/denylist.sha256` (80 terms; the plain list is not committed, though
+  the salted hashes are not secret), independent of case, spacing, punctuation
+  and a term glued to the end of a word. Runs in the new Vendor Denylist workflow
+  and in `make check`; `audit` checks the whole tree. See "Vendor-neutral
+  names" in `CONTRIBUTING.md`.
+- `make test`, `make check` and `make e2e`. `make test` runs the unit and
+  contract suites with the 55% coverage floor, then the integration and
+  regression suites against the local stack's Postgres and Redis in a separate `agenticorg_test`
+  database that is recreated each run (the development database is never
+  touched). `make check` runs ruff, mypy, bandit, gitleaks, the licence-header
+  check, JSON Schema validation of `schemas/` and pip-audit. Both run in a new
+  `agenticorg-tools` image (`Dockerfile.tools`, Python 3.12) so only Docker
+  and make are needed; `RUNNER=local` uses a local interpreter. `make e2e`
+  runs the new `ui/e2e/dev-stack.config.ts` Playwright suite against the
+  running stack in the official Playwright image. See "Tests and checks" in
+  `docs/quickstart-local.md`.
+
 - Untrusted content extractor (`core/extraction/`): websites, registry
   documents and applicant uploads are parsed in a separate worker process
   with no network access and a wall-clock limit (on Linux a seccomp filter is
@@ -69,12 +255,106 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `docs/testing/record-replay.md` and ADR 0008.
 - Connectors and agents can ship as separate packages through the
   `agenticorg.connectors` and `agenticorg.agents` entry-point groups
-  (`agenticorg.providers` and `agenticorg.workflows` are discovered and
-  rejected until their registries exist). Off by default
+  (`agenticorg.workflows` is discovered and rejected until its registry
+  exists). Off by default
   (`AGENTICORG_PLUGIN_LOADING`); only distributions in
   `AGENTICORG_PLUGIN_ALLOWLIST` are imported; native implementations keep
   priority; every rejection is logged with a reason and counted in
   `agenticorg_plugin_load_total`. See `docs/providers/plugin-packages.md`.
+- Agent runs paused for human approval can be checkpointed in Postgres
+  instead of process memory: `AGENTICORG_LANGGRAPH_CHECKPOINTER=postgres`
+  (default `memory`, unchanged behaviour). A new migration
+  (`v6z22_langgraph_checkpoints`) creates the LangGraph checkpoint tables;
+  they are not created at runtime. Checkpoint data is encrypted with the
+  credential-vault keyring and bound to its thread, so a blob copied into
+  another thread is refused; no channel value is stored in plaintext. With
+  the Postgres store selected and unreachable, its schema missing or stale,
+  its keyring malformed, or an unverified checkpoint library installed, the
+  API refuses to start and agent runs fail (the run endpoint returns
+  `503 agent_checkpoint_store_unavailable`); nothing falls back to memory.
+  Celery workers open the store on their first agent run, so a store outage
+  fails those runs but never stops a worker from starting. Refusals are
+  counted in `agenticorg_checkpointer_unavailable_total` by reason. A keyring
+  change needs a restart of the API and workers.
+  `core.langgraph.checkpointer.delete_tenant_checkpoints` removes a tenant's
+  checkpoints for offboarding. Adds `psycopg[binary]` 3.3.5 and `psycopg-pool`
+  3.3.1 as direct dependencies and pins `langgraph-checkpoint-postgres` 3.1.2
+  and `langgraph-checkpoint` 4.2.0 exactly (previously `>=3.1.2` and
+  unpinned).
+- Agent runs checkpoint under a server-generated thread id prefixed with the
+  run's tenant (`tenant:<tenant id>:run:<random>`). A run paused for approval
+  records that thread on its approval row (`hitl_queue.checkpoint_thread_id`,
+  migration `v6z23_hitl_checkpoint_thread`, with a check constraint that the
+  thread belongs to the row's tenant). The thread id is never returned by the
+  API or accepted from a request, and resuming a thread outside the caller's
+  tenant is refused (`checkpoint_thread_tenant_mismatch`).
+- Approving a paused standalone agent run can resume it from its checkpoint,
+  behind the per-tenant feature flag `approvals.resume_agent_runs` (default
+  off; decisions behave as before). With the flag on, an `approve` or `reject`
+  decision resumes the run in the background under the approval's tenant,
+  using the parameters recorded when the run paused. The outcome is recorded
+  in the approval's `context.checkpoint_resume`, in an `agent.run.resumed`
+  audit event and in `agenticorg_agent_run_resumes_total{outcome}`, and a
+  finished run's checkpoints are deleted. Any other decision leaves the run
+  paused; an approve or reject left paused because the flag is off or cannot
+  be read is logged (`agent_run_resume_skipped`) and counted as
+  `outcome="skipped"`. A resume is refused, with a reason code, when the checkpoint is
+  missing, not at the approval gate, undecryptable or outside the tenant.
+  Approval responses gain `context.checkpoint_resume` for resumed runs; the
+  resume parameters stored with a paused run are never returned. See
+  "Agent runs paused for approval" in `docs/RUNBOOKS.md` for the flag,
+  reason codes and checkpoint retention.
+- Governed-case domain schemas (JSON Schema 2020-12, versioned `$id`s):
+  `business_case`, `ownership_graph`, `screening_result`,
+  `screening_disposition`, `policy_result`, `underwriting_memo` and
+  `case_push`, with shared definitions in `common`. Every memo section and
+  finding cites `evidence[]` of `{provider, record_id, field, retrieved_at,
+  excerpt_ref}`. `core/domain_schemas.py` validates documents and fails closed
+  with a reason code. A new `tests/contract/` suite, added to the CI unit job
+  and `scripts/preflight.sh`, validates every fixture in `schemas/examples/`,
+  fails on a fixture without a schema, and checks that documentation code
+  examples match the tests they come from. The schemas are not seeded into
+  tenant schema registries. See `docs/schemas/domain-schemas.md`.
+- `VerificationProvider` (`connectors/framework/verification_provider.py`):
+  one provider-neutral interface for business resolution, verification,
+  ownership, person and business screening, web presence and monitoring.
+  Providers declare a `Capability` set and callers degrade an undeclared
+  capability to `not_available` (`call_capability`); verification is
+  start-and-poll with `Pending` as a value; every I/O method takes a
+  `Deadline`; errors form a closed taxonomy with reason codes; webhook
+  verification returns `None` for anything unverifiable. Typed domain values
+  serialise to the published schemas. Providers register in
+  `connectors/providers/registry.py`, and plugin packages add them through the
+  `agenticorg.providers` entry-point group (still behind
+  `AGENTICORG_PLUGIN_LOADING` and the allowlist; natives keep priority). See
+  ADR 0009 and `docs/providers/plugin-packages.md`.
+- The `mock` verification provider (`connectors/providers/mock`), registered
+  natively: twelve synthetic US and UK businesses covering clean cases, a
+  missing and an undeclared owner, probable false-positive and true-match
+  screening hits, a dissolved company, a thin file with no registry match, and
+  adversarial text in website copy, a company name and a screening alias.
+  Configurable latency, failure injection and pending polls, deterministic
+  under a seed; HMAC-signed webhook events (including company dissolved) with
+  recorded genuine and forged deliveries. It runs in-process or as a separate
+  HTTP service with a client provider; `make dev` now starts it as
+  `mock-provider` (host port `AGENTICORG_DEV_MOCK_PROVIDER_PORT`, default 8081;
+  fault-injection and event endpoints only with
+  `AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true`) and points the API and worker at
+  it. It runs only when `AGENTICORG_ENV` is explicitly local, development or
+  test; elsewhere the registry neither lists nor creates it. See
+  `docs/providers/mock-provider.md`.
+- Provider conformance suite, published in the full distribution as
+  `agenticorg.testing.provider_conformance` (source: `testing/provider_conformance`).
+  A provider package subclasses `ProviderConformanceSuite` and supplies a
+  `ConformanceTarget`; twelve checks cover identity, capability honesty,
+  pending-then-result, expired and overrun deadlines (including polls),
+  cancellation, the error taxonomy, webhook verification including forged
+  payloads, webhook replay protection (stale deliveries, stable event ids),
+  pagination of candidates and monitor alerts, idempotency and schema
+  conformance, each failing with a readable reason. `strict=True` turns a
+  skipped check into a failure. The mock provider passes strictly in-process
+  and over HTTP; deliberately broken providers fail each check. Documentation code examples are extracted from tests. See
+  `docs/providers/writing-a-verification-provider.md`.
 - Python and TypeScript SDK `0.4.0` resources for knowledge/OCR, voice, RPA,
   local bridges, connector diagnostics, workflow cancellation, and the
   seller/buyer commerce runtime.
@@ -86,8 +366,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   must pass mod 97 and VAT numbers their national check digits where the
   scheme has one (17 country prefixes); shapes that are otherwise ordinary
   numbers are only recognised next to a label such as "SSN" or "company
-  number". Nothing uses them yet, so behaviour is unchanged; pre-model
-  pseudonymisation builds on them.
+  number". Used by pre-model pseudonymisation (below).
+- Pseudonymisation before the model, per tenant behind the flag
+  `pseudonymisation.pre_model` (off by default). Names, dates of birth,
+  addresses and identifiers are replaced with placeholders such as
+  `[[PERSON_1:3fa9c2]]` before every model call on both model paths
+  (LangGraph agents and `LLMRouter`), system prompt included, and restored
+  inside the tool boundary so connectors receive the real values. A value
+  keeps its placeholder for the run and its resumes; the case is always the
+  server-generated run id, never a `case_id` from a request, and only
+  placeholders issued into the run's own conversation are restored. The map is
+  stored encrypted per tenant in the new `case_pseudonym_maps` table (migration
+  `v6z24_case_pseudonym_maps`, additive, row-level security). Fails closed: if
+  the flag or the map cannot be read, or the map cannot be written, no model
+  call is made; a tool call whose placeholder cannot be restored is refused
+  with `E1012 pseudonym_restore_failed` and audited instead of being sent. New
+  metrics `agenticorg_pii_pseudonymised_total{entity_type}`,
+  `agenticorg_pii_pseudonym_restore_refused_total{reason}` and
+  `agenticorg_pii_pseudonymisation_unavailable_total{reason}`. New
+  `core.feature_flags.is_enabled_strict`, which raises on a failed lookup
+  instead of returning the default. With the flag off behaviour is unchanged.
+  See `docs/security/pseudonymisation.md`.
 - HITL conditions can be checked when they are saved
   (`AGENTICORG_HITL_CONDITION_VALIDATION` = `off`/`warn`/`reject`, default
   `off`). Agent create, replace, update, generate-and-deploy and SOP deploy
@@ -105,8 +404,79 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   default tool list names an unregistered tool. It runs with no baseline and
   fails closed if the registry cannot be loaded. See "Prompt tool references"
   in `CONTRIBUTING.md`.
+- Grant enforcement modes for agent tool calls (`grants.enforce_closed`:
+  `off`, `warn`, `deny`). The mode is the strictest of
+  `AGENTICORG_GRANTS_ENFORCE_CLOSED` (default `off`, which keeps today's
+  behaviour) and the global and tenant rows of the
+  `grants.enforce_closed.warn` / `.deny` flags, each read on its own. In
+  `warn`, runs from `POST /agents/{id}/run` and other callers of the LangGraph
+  runner resolve a grant per run — the caller's token, the agent's configured
+  token, or one the token pool now mints by delegating from
+  `GRANTEX_ROOT_GRANT_TOKEN` to the agent's registered Grantex agent (cached
+  per tenant, agent and scope set, refreshed before it expires, at most one
+  mint per key per process) — and every tool call that grant would deny still
+  runs (a token supplied by the caller or configured on the agent stays
+  enforced as before) but is logged as `grant_enforcement_would_deny` and
+  counted in `agenticorg_grant_enforcement_denials_total{mode,reason}` with
+  the Grantex SDK's reason (exact messages of the pinned 0.5.x SDK mapped to
+  the Appendix B reasons until the Grantex 0.6 SDK with reason codes is
+  published), including runs with no grant at all
+  (`grant_missing`). If the flag table cannot be read and the process has no
+  recent mode for the tenant, the run falls back to the strictest mode.
+  See `docs/operations/grant-enforcement.md`.
+- The Grantex SDK pin moves from `grantex==0.5.0` to `grantex==0.5.1`
+  (amount and malformed-cap checks in `enforce`; no API change).
+- **Break:** the authority flags (`grants.enforce_closed.*`,
+  `pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
+  `decisions.required`, `caps.enforce`) can no longer be created, changed or
+  deleted through `/api/v1/feature-flags`; the API answers
+  `403 flag_key_reserved`. Platform operators manage them with
+  `scripts/authority_flags.py`.
+- **Break (Python API):** `core.langgraph.agent_graph.build_agent_graph` and
+  every `build_*_graph` builder in `core/langgraph/agents/` take a required
+  keyword `run_grant`, so a graph can no longer be built with grant
+  enforcement silently left off.
+- **Break (Python API):** `core.langgraph.tool_adapter.execute_agent_tool` and
+  `core.tool_gateway.gateway.ToolGateway.execute` take a required keyword
+  `run_grant` as well. `BaseAgent` passes its run grant in every mode; tests
+  that exercise only the legacy checks pass
+  `auth.run_grants.NO_RUN_GRANT_FOR_TESTS`, which production code may not use.
+- Grant enforcement now covers every agent run entry point: chat, A2A and
+  MCP (the run agent's grant; a caller Grantex token issued to another agent
+  must also allow every call), voice and
+  per-type wrappers through the runner, `resume_agent`, and workflow agent
+  steps, collaboration steps, workflow resume and the sales pipeline through
+  `BaseAgent` and the tool gateway. Workflow `connector_tool` steps have no
+  agent and therefore no grant: recorded in `warn`, refused in `deny`. In
+  warn and deny the tool gateway runs the grant check and all of its legacy
+  checks. `off` is unchanged.
+- A caller Grantex token is bound on every route that starts a run:
+  `POST /agents/{id}/run`, `POST /workflows/{id}/run` (every step type that
+  calls tools, and sub-workflows) and the sales pipeline routes, as well as
+  chat, A2A and MCP. A run started with a caller token and resumed later
+  without it refuses tool calls in warn and deny
+  (`grant_missing`/`caller_token_unavailable`); only the caller's agent id is
+  stored, never the token.
 
 ### Fixed
+- Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
+  with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
+  connector's Grantex manifest instead of `...:execute:...`, which Grantex's
+  permission check never satisfies, so grants delegated for them allowed
+  nothing. `scripts/refresh_grantex_scopes.py` re-scopes agents registered
+  before (report only by default; `--apply` updates Grantex, then only
+  `config.grantex.grantex_scopes`; deleted agents are skipped and a failure
+  for one agent is reported without stopping the run).
+- `PATCH /agents/{id}` updates a registered agent's scopes on Grantex before
+  storing them, and refuses the change with a `reason_code` when Grantex
+  cannot take them (`grantex_update_failed`, `grantex_unconfigured`,
+  `scope_computation_failed`, or `scope_limit_exceeded` above 100 scopes).
+  Previously it stored scopes the registration did not have.
+- The token pool delegates only the stored scopes the agent's Grantex
+  registration also carries.
+- The token pool refreshes agent tokens by delegating from the root grant
+  (`grants.delegate`) instead of an OAuth grant type the Grantex auth service
+  does not serve.
 - Four shipped industry-pack agents no longer send every run to human review.
   Their HITL conditions were bare labels (`high_value_or_complex_risk`,
   `high_value_or_fraud_indicator`, `cancellation_or_major_endorsement`,

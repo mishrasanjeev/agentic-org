@@ -27,6 +27,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.extraction import (
     ExtractionResult,
     InMemoryExcerptStore,
@@ -160,6 +161,7 @@ async def _run_agent(scripted_model: Any, context: str, *, guard: Any, steps: li
             connector_names=["gmail"],
             confidence_floor=0.5,
             context_guard=guard,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         result = await graph.compile().ainvoke(_state(context))
     return model, result, executed
@@ -271,6 +273,7 @@ async def test_control_the_guard_catches_untrusted_text_returned_by_a_tool(scrip
             connector_names=["gmail"],
             confidence_floor=0.5,
             context_guard=hostile.untrusted.guard_messages,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         with pytest.raises(UntrustedContentLeakError) as info:
             await graph.compile().ainvoke(_state(context))

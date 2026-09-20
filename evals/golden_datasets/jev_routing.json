@@ -1,0 +1,50 @@
+[
+  {
+    "case_id": "jev-route-001",
+    "agent_type": "commerce_sales_agent",
+    "domain": "commerce",
+    "action": "answer_catalog_question",
+    "available_tool_names": ["catalog.search", "catalog.get_item"],
+    "proposed_tool_names": []
+  },
+  {
+    "case_id": "jev-route-002",
+    "agent_type": "commerce_sales_agent",
+    "domain": "commerce",
+    "action": "search_catalog",
+    "available_tool_names": ["catalog.search", "catalog.get_item"],
+    "proposed_tool_names": ["catalog.search"]
+  },
+  {
+    "case_id": "jev-route-003",
+    "agent_type": "support_agent",
+    "domain": "support",
+    "action": "explain_policy",
+    "available_tool_names": ["knowledge.search"],
+    "proposed_tool_names": []
+  },
+  {
+    "case_id": "jev-route-004",
+    "agent_type": "finance_agent",
+    "domain": "finance",
+    "action": "lookup_invoice_status",
+    "available_tool_names": ["erp.invoice_status", "erp.invoice_detail"],
+    "proposed_tool_names": ["erp.invoice_status"]
+  },
+  {
+    "case_id": "jev-route-005",
+    "agent_type": "hr_agent",
+    "domain": "hr",
+    "action": "summarize_candidate_guidance",
+    "available_tool_names": ["knowledge.search"],
+    "proposed_tool_names": []
+  },
+  {
+    "case_id": "jev-route-006",
+    "agent_type": "operations_agent",
+    "domain": "operations",
+    "action": "check_inventory_status",
+    "available_tool_names": ["inventory.read"],
+    "proposed_tool_names": ["inventory.read"]
+  }
+]

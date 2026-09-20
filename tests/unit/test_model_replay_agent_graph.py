@@ -10,6 +10,7 @@ import pytest
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core import model_replay
 from core.langgraph import llm_factory
 from core.langgraph.agent_graph import build_agent_graph
@@ -45,6 +46,7 @@ async def _run(task: str) -> dict[str, Any]:
         authorized_tools=[],
         llm_model="gemini-2.5-flash",
         confidence_floor=0.5,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     return await graph.compile().ainvoke(_state(task))
 

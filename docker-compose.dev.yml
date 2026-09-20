@@ -9,8 +9,9 @@
 # core/llm/router.py use the deterministic fake LLM
 # (core/test_doubles/fake_llm.py), honoured only in development and test
 # environments. LangGraph agent runs build their model through
-# core/langgraph/llm_factory.py, which the fake does not cover; running agents
-# locally without a model provider needs the model stub service.
+# core/langgraph/llm_factory.py; an agent whose model is
+# `vllm:scripted/<script>` (or any `vllm:` model with a recorded cassette) is
+# answered by the model-stub service below, with no credentials.
 
 name: agenticorg-dev
 
@@ -23,6 +24,14 @@ x-backend-env: &backend-env
   AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
   AGENTICORG_PII_MASKING: "true"
   AGENTICORG_TEST_FAKE_LLM: "1"
+  # The registered "mock" verification provider calls the mock-provider service.
+  AGENTICORG_MOCK_PROVIDER_URL: http://mock-provider:8080
+  # `vllm:` models go to the OpenAI-compatible model stub (tools/model_stub).
+  VLLM_BASE_URL: http://model-stub:8080
+  # Local Grantex auth service (grantex service below); the key is the
+  # development developer key it seeds at start.
+  GRANTEX_BASE_URL: http://grantex:3001
+  GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
 
 x-backend-build: &backend-build
   context: .
@@ -104,6 +113,10 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      model-stub:
+        condition: service_healthy
+      grantex:
+        condition: service_healthy
 
   worker:
     image: agenticorg-api:dev
@@ -126,6 +139,38 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      model-stub:
+        condition: service_healthy
+      grantex:
+        condition: service_healthy
+
+  # The mock verification provider as its own service, so the provider seam is
+  # exercised over the network (connectors/providers/mock). It refuses to start
+  # unless AGENTICORG_ENV is local, development or test. Its /v1/admin endpoints
+  # (fault injection, provider events) answer only when
+  # AGENTICORG_DEV_MOCK_PROVIDER_ADMIN=true is set for `make dev`.
+  mock-provider:
+    image: agenticorg-api:dev
+    pull_policy: never
+    environment:
+      # Only what the mock needs: no database, cache or application secret.
+      AGENTICORG_ENV: development
+      AGENTICORG_MOCK_PROVIDER_SEED: "0"
+      # Fault injection and signed-event endpoints; off unless explicitly enabled.
+      AGENTICORG_MOCK_PROVIDER_ADMIN: "${AGENTICORG_DEV_MOCK_PROVIDER_ADMIN:-false}"
+    command: ["uvicorn", "connectors.providers.mock.service:app", "--host", "0.0.0.0", "--port", "8080"]
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_MOCK_PROVIDER_PORT:-8081}:8080"
+    healthcheck:
+      # The image healthcheck probes the API port, which this service does not serve.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=4).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    depends_on:
+      # migrate builds the shared image.
+      migrate:
+        condition: service_completed_successfully
 
   ui:
     build:
@@ -138,7 +183,127 @@ services:
       api:
         condition: service_healthy
 
+  # Development OpenID Connect provider with step-up (tools/oidc_stub). The
+  # issuer is the browser-facing URL; other containers reach the token, JWKS
+  # and userinfo endpoints at http://oidc-stub:9400. Refuses to start unless
+  # AGENTICORG_ENV is development, local or test.
+  oidc-stub:
+    build:
+      context: ./tools
+      dockerfile: oidc_stub/Dockerfile
+    image: agenticorg-oidc-stub:dev
+    environment:
+      AGENTICORG_ENV: development
+      OIDC_STUB_PUBLIC_URL: http://127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}
+      OIDC_STUB_INTERNAL_URL: http://oidc-stub:9400
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}:9400"
+
+  # OpenAI-compatible model stub (tools/model_stub): `scripted/<name>` models
+  # answer from tools/model_stub/scripts, every other model from cassettes in
+  # tests/cassettes/model_stub. Replay never calls a model; MODEL_STUB_MODE=record
+  # forwards to a real provider and refuses to start without MODEL_RECORD_API_KEY.
+  model-stub:
+    build:
+      context: .
+      dockerfile: tools/model_stub/Dockerfile
+    image: agenticorg-model-stub:dev
+    environment:
+      AGENTICORG_ENV: development
+      MODEL_STUB_MODE: ${MODEL_STUB_MODE:-replay}
+      MODEL_RECORD_API_KEY: ${MODEL_RECORD_API_KEY:-}
+    volumes:
+      - ./tests/cassettes/model_stub:/cassettes
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}:8080"
+
+  # One-shot: a separate `grantex` role and database on the stack's Postgres,
+  # so the Grantex auth service never shares tables with the application.
+  grantex-db:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    environment:
+      PGHOST: postgres
+      PGUSER: agenticorg
+      PGPASSWORD: agenticorg_dev
+      PGDATABASE: agenticorg
+    command:
+      - bash
+      - -ceu
+      - |
+        psql -v ON_ERROR_STOP=1 <<'SQL'
+        SELECT 'CREATE ROLE grantex LOGIN PASSWORD ''grantex_dev'''
+          WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'grantex')\gexec
+        SELECT 'CREATE DATABASE grantex OWNER grantex'
+          WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'grantex')\gexec
+        SQL
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Grantex auth service from the published image, pinned by digest. It runs
+  # its own migrations at start, keeps its data in the `grantex` database and
+  # Redis index 2, generates signing keys, and seeds the development developer
+  # key the API uses (GRANTEX_API_KEY above).
+  grantex:
+    image: ghcr.io/mishrasanjeev/grantex-auth-service@sha256:788c5e37382530d47b2c6c48eb1d4d9200310f1c8cfe738e48c56c16e0309c7d
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: "3001"
+      DATABASE_URL: postgres://grantex:grantex_dev@postgres:5432/grantex
+      REDIS_URL: redis://redis:6379/2
+      AUTO_GENERATE_KEYS: "true"
+      PUBLIC_BASE_URL: http://grantex:3001
+      JWT_ISSUER: http://grantex:3001
+      SEED_API_KEY: agenticorg-dev-grantex-api-key
+      LOG_PRETTY: "false"
+    ports:
+      - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:3001"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 30
+    depends_on:
+      grantex-db:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Test and check runner for `make test` and `make check`; `make dev` never
+  # starts it. The checkout is mounted, so code changes need no rebuild.
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      dockerfile: Dockerfile.tools
+    image: agenticorg-tools:dev
+    working_dir: /src
+    volumes:
+      - .:/src
+    healthcheck:
+      disable: true
+
+  # Playwright runner for `make e2e`, against the console on this network.
+  e2e:
+    profiles: [e2e]
+    image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    working_dir: /src
+    environment:
+      BASE_URL: http://ui
+      CI: "true"
+    volumes:
+      - .:/src
+      # Container-only dependencies, kept apart from any host ui/node_modules.
+      - e2e-node-modules:/src/ui/node_modules
+    ipc: host
+    healthcheck:
+      disable: true
+
 volumes:
   pgdata:
   redisdata:
   miniodata:
+  e2e-node-modules:

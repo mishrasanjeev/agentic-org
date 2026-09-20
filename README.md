@@ -83,6 +83,9 @@ A source definition is not evidence that a specific tenant has connected the pro
 - Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
 - Document OCR ships with Tesseract, Poppler, and LibreOffice in the production image. See [Knowledge ingestion](docs/knowledge-ingestion.md).
 - The production voice path uses signed Twilio webhooks with provider-managed STT/TTS and encrypted transcript storage. See [Voice runtime](docs/voice-runtime.md).
+- Optional Jev/System One decision support can provide typed, confidence-bearing routing judgments; it is advisory only and never replaces AgenticOrg policy, approvals, tenant checks, or Grantex commerce authority. See [Jev integration](docs/jev-agenticorg-integration.md).
+- The public [evaluation page](https://agenticorg.ai/evals) includes a read-only Jev shadow plan: synthetic corpus coverage, bounded sampling and budget controls, and explicit review gates. It does not call Jev or enable active routing.
+- The measured Jev shadow runner is explicit and local: `python scripts/run_jev_shadow_evaluation.py --dry-run`; `--live` requires `TYPESAFE_API_KEY`, bounded gates, and an operator-approved output path.
 - Browser automation includes tenant-scoped scripts, schedules, durable history,
   and approved-domain egress controls. A run remains an explicit external
   action. See [RPA runtime](docs/rpa-runtime.md).

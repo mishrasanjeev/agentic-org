@@ -19,12 +19,18 @@ from __future__ import annotations
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, inspect, pool
 
 # Register every ORM model so MetaData is complete for autogenerate.
 import core.models  # noqa: F401
 from core.config import settings
 from core.models.base import BaseModel
+from core.schema_bootstrap import (
+    BASELINE_REVISION,
+    create_orm_baseline,
+    plan_empty_database_bootstrap,
+    target_reaches_baseline,
+)
 
 config = context.config
 
@@ -52,6 +58,29 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
+def _bootstrap_empty_database(conn) -> None:
+    """Create and stamp the legacy-compatible baseline for a bare database."""
+    migration_context = context.get_context()
+    current_heads = migration_context.get_current_heads()
+    table_names = inspect(conn).get_table_names()
+    if current_heads or set(table_names) - {"alembic_version"}:
+        # scripts/alembic_migrate.py creates and stamps the ORM baseline before
+        # upgrading. Do not reinterpret that programmatic stamp as an upgrade.
+        return
+    should_bootstrap = plan_empty_database_bootstrap(
+        command=context.get_revision_argument() and "upgrade",
+        current_heads=current_heads,
+        table_names=table_names,
+        reaches_baseline=target_reaches_baseline(
+            context.script,
+            context.get_revision_argument() or "head",
+        ),
+    )
+    if should_bootstrap:
+        create_orm_baseline(conn)
+        migration_context.stamp(context.script, BASELINE_REVISION)
+
+
 def run_migrations_online() -> None:
     ini_section = config.get_section(config.config_ini_section) or {}
     ini_section["sqlalchemy.url"] = _resolve_sync_url()
@@ -67,6 +96,7 @@ def run_migrations_online() -> None:
             compare_type=True,
         )
         with context.begin_transaction():
+            _bootstrap_empty_database(connection)
             context.run_migrations()
 
 

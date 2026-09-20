@@ -1,0 +1,25 @@
+# Reviewed exceptions for scripts/run_pip_audit.py.
+#
+# Add an entry only when a vulnerable dependency cannot be upgraded yet and the
+# finding has been assessed as not exploitable here, or mitigated. Every field
+# is required; `expires` is at most 90 days ahead, and an expired entry fails
+# the audit until the dependency is fixed or the review is renewed. Match on
+# the advisory id or any alias (for example a CVE id) together with the
+# package name. See "Dependency audit exceptions" in CONTRIBUTING.md.
+#
+# A dependency pip-audit could not audit at all (it reports a skip reason, for
+# example a package that is not on PyPI) also fails the audit unless a
+# [[skip]] entry accepts it, with the same fields except `id`.
+#
+# [[exception]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# package = "example-package"
+# reason = "Only the unaffected parser is imported; upgrade blocked by <dependency> until <version>."
+# owner = "@github-handle"
+# expires = 2026-12-01
+#
+# [[skip]]
+# package = "example-internal-package"
+# reason = "Built from this repository; its own requirements are audited."
+# owner = "@github-handle"
+# expires = 2026-12-01

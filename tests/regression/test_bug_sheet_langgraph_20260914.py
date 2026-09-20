@@ -37,6 +37,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.errors import GraphInterrupt
 from langgraph.types import Interrupt
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph import runner
 from core.langgraph.agent_graph import (
     _rewrite_tool_call_names,
@@ -189,6 +190,7 @@ class TestSheet14ConnectorQualifiedToolNames:
                 connector_config={},
                 connector_names=["gmail"],
                 confidence_floor=0.5,
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
             )
             compiled = graph.compile()
             result = await compiled.ainvoke(
@@ -404,7 +406,7 @@ class TestSheet36HitlUsage:
 
         assert result["status"] == "hitl_triggered"
         assert result["hitl_trigger"] == "confidence 0.400 < floor 0.88"
-        assert result["thread_id"] == "thread-36"
+        assert result["thread_id"] == "tenant:00000000-0000-0000-0000-000000000000:thread-36"
         assert result["performance"]["llm_tokens_used"] == 340
         assert result["performance"]["llm_cost_usd"] == round(340 * 0.000375 / 1000, 6)
         assert result["performance"]["total_latency_ms"] >= 0
@@ -430,7 +432,7 @@ class TestSheet36HitlUsage:
 
         assert result["status"] == "hitl_triggered"
         assert result["hitl_trigger"] == "manual"
-        assert result["thread_id"] == "thread-36"
+        assert result["thread_id"] == "tenant:00000000-0000-0000-0000-000000000000:thread-36"
         assert result["performance"]["llm_tokens_used"] == 150
         assert result["performance"]["llm_cost_usd"] == round(150 * 0.000375 / 1000, 6)
 
@@ -617,6 +619,7 @@ class TestPinnedLlmProviderRuntimeWiring:
             confidence_floor=0.5,
             tenant_id=tenant,
             llm_provider="openai",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         result = await graph.compile().ainvoke(_minimal_state())
 

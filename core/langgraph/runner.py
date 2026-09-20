@@ -19,26 +19,41 @@ from typing import Any
 
 import structlog
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.errors import GraphInterrupt
 
+from auth.grant_enforcement import EnforcementMode
+from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.langgraph.agent_graph import build_agent_graph
+from core.langgraph.checkpointer import (
+    BACKEND_POSTGRES,
+    CheckpointIntegrityError,
+    configured_backend,
+    get_checkpointer,
+)
 from core.langgraph.llm_factory import prefetch_llm_credential, reset_prefetched_llm_credential
 from core.langgraph.state import AgentState
+from core.langgraph.thread_ids import (
+    CheckpointThreadError,
+    canonical_tenant_id,
+    scoped_thread_id,
+    thread_belongs_to_tenant,
+)
+from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
+from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
+
+# Graph state carries the run's grant token; keep it out of LangSmith traces.
+install_trace_redaction()
 
 # Resource limits — prevent runaway agents from exhausting budget or the
 # checkpoint store. Tuned to cover the 99th percentile of legitimate runs;
 # see docs/PERFORMANCE.md for baselines.
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
-
-# In-memory checkpointer for now — will switch to PostgreSQL in production
-_checkpointer = MemorySaver()
 
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
@@ -88,6 +103,47 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
             tokens_used += int(_message_token_total(msg) or 0)
     cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
     return tokens_used, cost_usd
+
+
+def _run_thread_id(tenant_id: str, thread_id: str | None, agent_id: str) -> str:
+    """Checkpoint thread for a run, always under the run's tenant prefix.
+
+    Only the memory backend keeps the legacy unscoped id, and only for callers
+    without a tenant; the Postgres backend refuses them (core/langgraph/thread_ids.py).
+    """
+    if canonical_tenant_id(tenant_id) is not None:
+        return scoped_thread_id(tenant_id, thread_id)
+    if configured_backend() == BACKEND_POSTGRES:
+        raise CheckpointThreadError("checkpoint_thread_tenant_invalid")
+    return thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}"
+
+
+def _pseudonymisation_failed(exc: pseudonymisation.PseudonymisationError) -> dict[str, Any]:
+    """Run result when pre-model pseudonymisation is on but cannot be applied: no model call is made."""
+    logger.warning("pseudonymisation_refused_run", reason=exc.reason)
+    return {
+        "status": "failed",
+        "output": {},
+        "confidence": 0.0,
+        "reasoning_trace": [f"Pseudonymisation unavailable: {exc.reason}"],
+        "tool_calls_log": [],
+        "tool_calls": [],  # BUG-11 dual-emit
+        "hitl_trigger": "",
+        "error": f"pseudonymisation_unavailable: {exc.reason}",
+        "explanation": {},
+        "performance": {"total_latency_ms": 0, "llm_tokens_used": 0, "llm_cost_usd": 0},
+    }
+
+
+async def _checkpoint_pseudonym_state(checkpointer: Any, config: dict[str, Any]) -> tuple[str | None, list[Any]]:
+    """The pseudonym case recorded in a thread's checkpoint (if the run was pseudonymised) and its messages."""
+    saved = await checkpointer.aget_tuple(config)
+    if saved is None:
+        return None, []
+    values = saved.checkpoint.get("channel_values") or {}
+    case_id = values.get("pseudonym_case_id")
+    messages = values.get("messages") or []
+    return (case_id if isinstance(case_id, str) and case_id else None), list(messages)
 
 
 def _hitl_trigger_from_interrupts(interrupts: Any) -> str:
@@ -157,6 +213,7 @@ async def run_agent(
     thread_id: str | None = None,
     company_id: str | None = None,
     llm_provider: str | None = None,
+    run_grant: RunGrant | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -175,8 +232,15 @@ async def run_agent(
         confidence_floor: Minimum confidence before HITL.
         hitl_condition: Additional HITL condition expression.
         grant_token: Grantex grant JWT for authorization.
+        run_grant: The run's resolved grant and ``grants.enforce_closed``
+            mode, when the caller already resolved it. Otherwise it is
+            resolved here from ``tenant_id``/``agent_id`` with
+            ``grant_token`` as the supplied token (``auth/run_grants.py``).
         connector_config: Config for connectors (auth, secrets).
-        thread_id: Conversation thread ID for checkpointing.
+        thread_id: Checkpoint thread. The API passes a server-generated,
+            tenant-prefixed id (``thread_ids.new_thread_id``); any other id is
+            namespaced under ``tenant_id``, and one scoped to another tenant
+            is refused.
         llm_provider: Explicit catalog provider id (``agent.llm_provider``,
             else ``llm_config["provider"]``). ``None`` keeps the legacy
             model-name inference.
@@ -191,6 +255,18 @@ async def run_agent(
     limit_block = await gate_agent_run(tenant_id)
     if limit_block is not None:
         return limit_block
+
+    run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
+
+    # PRD F-1: resolve the grant the run's tool calls are checked against.
+    # In ``off`` this passes ``grant_token`` through untouched.
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph",
+        )
 
     # --- Step 1: Load prompt amendments (self-improving agents) ---
     prompt_amendments: list[str] = []
@@ -241,6 +317,18 @@ async def run_agent(
             "user data to LLM without sanitization."
         )
 
+    # F-5: with ``pseudonymisation.pre_model`` on for the tenant, a persistent
+    # pseudonym map replaces the per-run redaction below. It covers the system
+    # prompt, and every later model turn is pseudonymised again inside the
+    # graph. The map is keyed by the server-generated thread id, never by
+    # anything in the request: whoever names a case can read its values back.
+    pseudonymiser: pseudonymisation.PseudonymSession | None = None
+    try:
+        if await pseudonymisation.pseudonymisation_enabled(tenant_id):
+            pseudonymiser = await pseudonymisation.open_session(tenant_id, pseudonymisation.case_key(run_thread_id))
+    except pseudonymisation.PseudonymisationError as exc:
+        return _pseudonymisation_failed(exc)
+
     # Build user message FROM ALREADY-REDACTED task_input
     # Apply redaction at the source (each task_input field) so no concatenation
     # ever sees raw PII.
@@ -252,7 +340,15 @@ async def run_agent(
         and task_input["inputs"].get("shadow_fixture_origin") is True
         and isinstance(task_input["inputs"].get("shadow_prompt"), str)
     )
-    if pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
+    if pseudonymiser is not None:
+        try:
+            masked_input = await pseudonymiser.pseudonymise_value(task_input)
+            user_message, amended_prompt = await pseudonymiser.pseudonymise_texts(
+                [_build_user_message(masked_input), pseudonymisation.with_model_guidance(amended_prompt)]
+            )
+        except pseudonymisation.PseudonymisationError as exc:
+            return _pseudonymisation_failed(exc)
+    elif pii_mode in ("before_llm", "before_log") and not trusted_shadow_fixture_prompt:
         # Recursively redact all string values in task_input
         from copy import deepcopy
 
@@ -290,14 +386,18 @@ async def run_agent(
             tenant_id=tenant_id,
             company_id=company_id,
             domain=domain,
-            pii_token_map=pii_token_map if pii_mode == "before_llm" else None,
+            pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
             llm_provider=llm_provider,
+            run_grant=run_grant,
+            pseudonymiser=pseudonymiser,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
 
     # Compile with checkpointer
-    compiled = graph.compile(checkpointer=_checkpointer)
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    compiled = graph.compile(checkpointer=await get_checkpointer())
 
     initial_state: AgentState = {
         "messages": [
@@ -308,7 +408,10 @@ async def run_agent(
         "agent_type": agent_type,
         "domain": domain,
         "tenant_id": tenant_id,
-        "grant_token": grant_token,
+        "grant_token": run_grant.token,
+        # A reused thread (voice ``voice:{call_sid}``) must not inherit a
+        # denial from an earlier turn.
+        "grant_denial": {},
         "confidence": 0.0,
         "status": "running",
         "output": {},
@@ -317,11 +420,13 @@ async def run_agent(
         "hitl_trigger": "",
         "error": "",
     }
+    if pseudonymiser is not None:
+        initial_state["pseudonym_case_id"] = pseudonymiser.case_id
 
     # Config for checkpointing
     config = {
         "configurable": {
-            "thread_id": thread_id or f"{agent_id}:{uuid.uuid4().hex[:8]}",
+            "thread_id": run_thread_id,
         }
     }
 
@@ -351,7 +456,16 @@ async def run_agent(
             logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
 
         # --- Step 6: PII de-anonymization (after LLM) ---
-        if pii_token_map:
+        # The explanation below is written by a model, so it gets the
+        # pseudonymised output and trace; its bullets are restored after.
+        masked_output = result.get("output", {})
+        masked_trace = result.get("reasoning_trace", [])
+        if pseudonymiser is not None:
+            result["output"] = pseudonymiser.restore_value(masked_output)
+            result["reasoning_trace"] = pseudonymiser.restore_value(masked_trace)
+            if result.get("hitl_trigger"):
+                result["hitl_trigger"] = pseudonymiser.restore_text(result["hitl_trigger"])
+        elif pii_token_map:
             output = result.get("output", {})
             if isinstance(output, dict):
                 import json as _json
@@ -416,7 +530,12 @@ async def run_agent(
                     for tc in result.get("tool_calls_log", [])
                     if isinstance(tc, dict) and tc.get("tool")
                 ]
-                explanation = await generate_explanation(trace, out, tools)
+                if pseudonymiser is not None:
+                    explanation = pseudonymiser.restore_value(
+                        await generate_explanation(masked_trace, masked_output, tools)
+                    )
+                else:
+                    explanation = await generate_explanation(trace, out, tools)
             # enterprise-gate: broad-except-ok reason=explanation-sidecar-failure-does-not-change-run-status
             except Exception as exc:
                 logger.warning("explanation_generation_failed", error=str(exc))
@@ -440,7 +559,12 @@ async def run_agent(
             "reasoning_trace": result.get("reasoning_trace", []),
             "tool_calls_log": tool_log,
             "tool_calls": tool_log,
-            "hitl_trigger": result.get("hitl_trigger", "") or _hitl_trigger_from_interrupts(interrupts),
+            "hitl_trigger": result.get("hitl_trigger", "")
+            or (
+                pseudonymiser.restore_text(_hitl_trigger_from_interrupts(interrupts))
+                if pseudonymiser is not None
+                else _hitl_trigger_from_interrupts(interrupts)
+            ),
             "error": result.get("error", ""),
             "explanation": explanation,
             "content_safety": content_safety_result,
@@ -453,6 +577,8 @@ async def run_agent(
         if interrupts:
             # The resume endpoint needs the checkpoint thread to continue.
             response["thread_id"] = config["configurable"]["thread_id"]
+        if result.get("grant_denial"):
+            response["grant_denial"] = result["grant_denial"]
         return response
 
     except GraphInterrupt as gi:
@@ -482,6 +608,13 @@ async def run_agent(
 
         # BUG-11 dual-emit (see comment above): keep both keys.
         hitl_tool_log = state_values.get("tool_calls_log", [])
+        if pseudonymiser is not None:
+            state_values = {
+                **state_values,
+                "output": pseudonymiser.restore_value(state_values.get("output", {})),
+                "reasoning_trace": pseudonymiser.restore_value(state_values.get("reasoning_trace", [])),
+            }
+            hitl_trigger = pseudonymiser.restore_text(hitl_trigger)
         return {
             "status": "hitl_triggered",
             "output": state_values.get("output", {}),
@@ -570,13 +703,74 @@ async def resume_agent(
     company_id: str | None = None,
     domain: str | None = None,
     llm_provider: str | None = None,
+    grant_token: str = "",
+    run_grant: RunGrant | None = None,
+    require_paused: bool = False,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
     Uses LangGraph's Command(resume=...) to continue from the
     interrupt point with the human's decision.
+
+    ``thread_id`` must be scoped to ``tenant_id``; otherwise the resume is
+    refused before any checkpoint is read. Without a tenant only the memory
+    backend proceeds (legacy callers).
+
+    ``require_paused``: refuse unless the thread has a checkpoint waiting at
+    the approval gate (``checkpoint_not_found`` / ``checkpoint_not_paused``).
+    Resuming a thread with no checkpoint would otherwise start a new, empty run.
+    Refusals and failures carry a ``reason`` code.
+
+    PRD F-1: the grant is resolved again for the resumed run (the tenant's
+    mode may have changed and the checkpointed token may have expired); in
+    ``warn``/``deny`` the fresh token replaces the checkpointed one.
     """
     from langgraph.types import Command
+
+    if canonical_tenant_id(tenant_id) is not None or configured_backend() == BACKEND_POSTGRES:
+        if not thread_belongs_to_tenant(thread_id, tenant_id):
+            reason = (
+                "checkpoint_thread_tenant_mismatch"
+                if canonical_tenant_id(tenant_id) is not None
+                else "checkpoint_thread_tenant_invalid"
+            )
+            logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
+            return {"status": "failed", "error": reason, "reason": reason}
+
+    config = {"configurable": {"thread_id": thread_id}}
+    # The configured store (core/langgraph/checkpointer.py); raises rather
+    # than falling back to memory when a Postgres store is unavailable.
+    checkpointer = await get_checkpointer()
+
+    # A run started with pseudonymisation holds tokens in its checkpoint: its
+    # map is required to resume, whatever the flag says now, and only the
+    # tokens in that conversation may be restored.
+    pseudonymiser: pseudonymisation.PseudonymSession | None = None
+    try:
+        case_id, checkpoint_messages = await _checkpoint_pseudonym_state(checkpointer, config)
+        if case_id is not None:
+            pseudonymiser = await pseudonymisation.open_session(tenant_id, case_id, require_existing=True)
+            pseudonymiser.note_issued(checkpoint_messages)
+    except pseudonymisation.PseudonymisationError as exc:
+        logger.warning("langgraph_resume_pseudonymisation_unavailable", agent_id=agent_id, reason=exc.reason)
+        return {
+            "status": "failed",
+            "error": f"pseudonymisation_unavailable: {exc.reason}",
+            "reason": "pseudonymisation_unavailable",
+        }
+    # enterprise-gate: broad-except-ok reason=checkpoint-read-failure-returns-explicit-failed-status
+    except Exception as e:
+        logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
+        reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
+        return {"status": "failed", "error": str(e), "reason": reason}
+
+    if run_grant is None:
+        run_grant = await resolve_run_grant(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            supplied_token=grant_token,
+            runtime="langgraph_resume",
+        )
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:
@@ -592,17 +786,33 @@ async def resume_agent(
             company_id=company_id,
             domain=domain,
             llm_provider=llm_provider,
+            pseudonymiser=pseudonymiser,
+            run_grant=run_grant,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
-    compiled = graph.compile(checkpointer=_checkpointer)
+    compiled = graph.compile(checkpointer=checkpointer)
 
-    config = {"configurable": {"thread_id": thread_id}}
+    resume_command: Command[Any] = (
+        Command(resume=decision)
+        if run_grant.mode is EnforcementMode.OFF
+        else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
+    )
 
     t0 = time.perf_counter()
     try:
+        if require_paused:
+            snapshot = await compiled.aget_state(config)  # type: ignore[arg-type]
+            refusal = ""
+            if snapshot is None or not snapshot.values:
+                refusal = "checkpoint_not_found"
+            elif "hitl_gate" not in (snapshot.next or ()):
+                refusal = "checkpoint_not_paused"
+            if refusal:
+                logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
+                return {"status": "failed", "error": refusal, "reason": refusal}
         result = await compiled.ainvoke(  # type: ignore[call-overload]
-            Command(resume=decision),
+            resume_command,
             config=config,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
@@ -610,6 +820,9 @@ async def resume_agent(
         # thread, so this is the whole-thread usage (pre-interrupt reasoning
         # included), not just the post-resume delta.
         tokens_used, cost_usd = _sum_usage(result.get("messages", []))
+        if pseudonymiser is not None:
+            result["output"] = pseudonymiser.restore_value(result.get("output", {}))
+            result["reasoning_trace"] = pseudonymiser.restore_value(result.get("reasoning_trace", []))
         return {
             "status": result.get("status", "completed"),
             "output": result.get("output", {}),
@@ -624,7 +837,8 @@ async def resume_agent(
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
-        return {"status": "failed", "error": str(e)}
+        reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
+        return {"status": "failed", "error": str(e), "reason": reason}
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:

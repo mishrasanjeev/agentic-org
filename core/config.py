@@ -125,6 +125,16 @@ class Settings(BaseSettings):
     grantex_audience: str = ""
     # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
     route_enforcement_mode: str = "enforce"
+    # Governed business cases (core/cases, flag governed_cases.enabled per tenant).
+    # Verification provider new cases use, by registered name.
+    case_provider: str = "mock"
+    # Directory of case policy files; empty uses the shipped examples, which a
+    # strict runtime refuses because they are not reviewed for production.
+    case_policy_dir: str = ""
+    # Model the reference agents use for prose (memo summaries, rationales).
+    case_llm_model: str = ""
+    # Periodic delivery sweep for the case push outbox (core/tasks/case_push_tasks.py).
+    case_push_sweep_enabled: bool = False
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60
@@ -161,12 +171,36 @@ class Settings(BaseSettings):
     plugin_loading: bool = False
     plugin_allowlist: str = ""
 
+    # Grant enforcement on agent tool calls (auth/grant_enforcement.py,
+    # docs/operations/grant-enforcement.md). Deployment default for
+    # ``grants.enforce_closed``: ``off`` keeps the legacy behaviour, ``warn``
+    # allows and records every call that would be denied, ``deny`` refuses it.
+    # Tenants override it with the ``grants.enforce_closed.warn`` and
+    # ``grants.enforce_closed.deny`` feature flags. An unknown value fails
+    # startup. Env: AGENTICORG_GRANTS_ENFORCE_CLOSED.
+    grants_enforce_closed: Literal["off", "warn", "deny"] = "off"
+    # Lifetime requested for a per-run grant delegated from the root grant
+    # (auth/token_pool.py). At least 300 s: a grant is handed out only with
+    # max(120 s, 10%) left, so a shorter lifetime would mint on nearly every
+    # call. Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
+    grants_run_token_ttl_seconds: int = Field(default=900, ge=300, le=86_400)
     # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
     # when an agent or SOP config is saved: "off" accepts them as before,
     # "warn" accepts them but logs and counts them, "reject" answers 422 with
     # the parse reason. Any other value fails startup.
     # Env: AGENTICORG_HITL_CONDITION_VALIDATION.
     hitl_condition_validation: Literal["off", "warn", "reject"] = "off"
+
+    # LangGraph checkpoint store (core/langgraph/checkpointer.py). "memory"
+    # keeps paused runs in process memory, lost on restart; "postgres" stores
+    # them encrypted in the Alembic-managed checkpoint tables and refuses to
+    # run agents when that store is unreachable (no fallback to memory).
+    # Env: AGENTICORG_LANGGRAPH_CHECKPOINTER, AGENTICORG_LANGGRAPH_CHECKPOINT_*.
+    langgraph_checkpointer: Literal["memory", "postgres"] = "memory"
+    # Empty derives the libpq URL from db_url.
+    langgraph_checkpoint_db_url: str = ""
+    langgraph_checkpoint_pool_max_size: int = Field(default=5, ge=1, le=100)
+    langgraph_checkpoint_connect_timeout_seconds: float = Field(default=10.0, ge=0.5, le=120.0)
 
     # Platform behaviour
     pii_masking: bool = True
@@ -176,6 +210,16 @@ class Settings(BaseSettings):
     default_hitl_threshold_inr: int = 500_000
     default_confidence_floor: float = 0.88
     max_agent_retries: int = 3
+
+    # Optional semantic decision layer. ``off`` preserves current behavior;
+    # ``shadow`` records comparison data without changing execution; ``active``
+    # is reserved for a later, explicitly reviewed integration.
+    jev_mode: Literal["off", "shadow", "active"] = "off"
+    jev_timeout_seconds: float = Field(default=0.8, ge=0.1, le=10.0)
+    jev_shadow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    jev_shadow_max_calls_per_process: int = Field(default=100, ge=0, le=100_000)
+    jev_shadow_failure_threshold: int = Field(default=3, ge=1, le=20)
+    jev_shadow_cooldown_seconds: float = Field(default=60.0, ge=1.0, le=3600.0)
 
     # Resource-intensive local runtimes. These per-worker caps prevent one API
     # process from spawning unbounded Tesseract and Chromium processes.
@@ -262,6 +306,10 @@ class ExternalKeys(BaseSettings):
     grantex_token_server: str = ""
     grantex_api_key: str = ""  # Grantex SDK API key
     grantex_base_url: str = "https://api.grantex.dev"  # Configurable for self-hosted
+    # Root grant the platform delegates per-run agent grants from
+    # (auth/token_pool.py). A credential: set it from a secret manager.
+    # Env: GRANTEX_ROOT_GRANT_TOKEN.
+    grantex_root_grant_token: str = ""
     langsmith_api_key: str = ""
     langsmith_project: str = "agenticorg-production"
     otel_exporter_otlp_endpoint: str = ""
@@ -275,6 +323,8 @@ class ExternalKeys(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_contact_email: str = "mailto:push@agenticorg.ai"
+    typesafe_api_base_url: str = "https://api.typesafe.ai"
+    typesafe_model: str = "jev-latest"
 
 
 settings = Settings()

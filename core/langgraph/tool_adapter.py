@@ -23,6 +23,8 @@ import structlog
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
 from core.config import is_strict_runtime_env, settings
@@ -33,6 +35,7 @@ from core.governance.action_policy import (
     database_feature_flag_resolver,
     evaluate_action,
 )
+from core.pii.pseudonymiser import PseudonymisationError, PseudonymSession, refusal
 
 logger = structlog.get_logger()
 
@@ -729,6 +732,11 @@ async def execute_agent_tool(
     authorized_tools: list[str],
     grant_token: str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
+    run_grant: RunGrant | None,
+    agent_id: str = "",
+    runtime: str = "base_agent",
+    agent_type: str = "",
+    pseudonymiser: PseudonymSession | None = None,
 ) -> dict[str, Any]:
     """Governed tool dispatch for ``BaseAgent`` callers without a ToolGateway.
 
@@ -737,7 +745,22 @@ async def execute_agent_tool(
     connector config, then ``_execute_connector_tool`` (which applies the
     action policy). Every denial is an explicit ``{"error": ...}`` payload;
     the agent runtime turns those into a failed step.
+
+    With ``pseudonymiser`` the model's pseudonymised arguments are restored
+    first; a call whose pseudonyms cannot all be restored is refused.
+
+    PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
+    replaces the legacy ``grant_token`` check (``auth/grant_enforcement.py``).
+    ``run_grant`` is required so the grant check cannot be left out by
+    omission; only tests that exercise the legacy checks alone pass
+    ``auth.run_grants.NO_RUN_GRANT_FOR_TESTS``.
     """
+    if pseudonymiser is not None:
+        try:
+            params = await pseudonymiser.restore_arguments(params)
+        except PseudonymisationError as exc:
+            await _audit_pseudonym_refusal(tenant_id, connector_name, tool_name, exc.reason)
+            return refusal(exc)
     connector_name = _canonical_connector_name(connector_name)
     if not is_tool_authorized(authorized_tools, connector_name, tool_name):
         logger.warning(
@@ -753,7 +776,31 @@ async def execute_agent_tool(
             }
         }
 
-    if grant_token:
+    if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
+        amount = params.get("amount")
+        check = await check_run_grant(
+            run_grant,
+            connector=connector_name,
+            tool=tool_name,
+            amount=amount if isinstance(amount, int | float) and not isinstance(amount, bool) else None,
+            context=GrantCallContext(
+                tenant_id=str(tenant_id or ""),
+                agent_id=agent_id,
+                agent_type=agent_type,
+                runtime=runtime,
+                grant_source=run_grant.source,
+            ),
+        )
+        if not check.dispatch_allowed and check.denial is not None:
+            return {
+                "error": {
+                    "code": "E1007",
+                    "message": f"grant_denied: {check.denial.reason.value}",
+                    "reason": check.denial.reason.value,
+                    "sub_reason": check.denial.sub_reason,
+                }
+            }
+    elif grant_token:
         from core.langgraph.grantex_auth import get_grantex_client
 
         # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
@@ -800,6 +847,37 @@ async def execute_agent_tool(
         company_id=company_id,
         domain=domain,
         capability_authorization=capability_authorization,
+    )
+
+
+async def _audit_pseudonym_refusal(tenant_id: str | None, connector_name: str, tool_name: str, reason: str) -> None:
+    """Audit a tool call refused because its pseudonyms could not be restored, as ``ToolGateway`` does.
+
+    The audit row is written in the tenant's RLS context; a write failure is
+    logged by ``AuditLogger`` and never turns the refusal into a dispatch.
+    """
+    import uuid as _uuid
+
+    from core.database import get_tenant_session
+    from core.tool_gateway.audit_logger import AuditLogger
+
+    session_factory = None
+    if tenant_id:
+        try:
+            tid = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            tid = None
+        if tid is not None:
+
+            def session_factory() -> Any:
+                return get_tenant_session(tid)
+
+    await AuditLogger(session_factory).log(
+        tenant_id=str(tenant_id or ""),
+        tool_name=tool_name,
+        action="pseudonym_restore_failed",
+        outcome="blocked",
+        details={"reason": reason, "connector": connector_name},
     )
 
 
@@ -871,6 +949,7 @@ def build_tools_for_agent(
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
+    pseudonymiser: PseudonymSession | None = None,
 ) -> list[StructuredTool]:
     """Build LangChain tools from an agent's authorized_tools list.
 
@@ -892,6 +971,12 @@ def build_tools_for_agent(
     the connector call and the connector result is re-masked (extending the
     same map) before it is returned to the model. Trace/audit logging only
     ever sees the masked side.
+
+    ``pseudonymiser`` (flag ``pseudonymisation.pre_model``) replaces that
+    map with the case's persistent one: arguments are restored strictly (a
+    call with a pseudonym that cannot be restored is refused, never sent)
+    and results are pseudonymised before they reach the model. When it is
+    set ``pii_token_map`` is ignored.
 
     Returns a list of callable LangChain tools ready for LangGraph.
     """
@@ -970,7 +1055,14 @@ def build_tools_for_agent(
                 )
                 # Live execution payloads carry the real values; masking is
                 # for the model, logs and traces only.
-                if pii_token_map:
+                if pseudonymiser is not None:
+                    try:
+                        params = await pseudonymiser.restore_arguments(params)
+                    except PseudonymisationError as exc:
+                        logger.warning("tool_call_refused_pseudonym", connector=cn, tool=tn, reason=exc.reason)
+                        await _audit_pseudonym_refusal(tenant_id, cn, tn, exc.reason)
+                        return refusal(exc)
+                elif pii_token_map:
                     params = _deanonymize_value(params, pii_token_map)
                 result = await _execute_connector_tool(
                     cn,
@@ -982,6 +1074,8 @@ def build_tools_for_agent(
                     domain=domain,
                     capability_authorization=capability_authorization,
                 )
+                if pseudonymiser is not None:
+                    return await pseudonymiser.pseudonymise_value(result)
                 if pii_token_map is not None:
                     from core.pii.redactor import PIIRedactor
 

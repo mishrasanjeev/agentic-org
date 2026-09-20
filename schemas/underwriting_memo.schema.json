@@ -1,0 +1,162 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agenticorg.ai/schemas/underwriting_memo/1.0.0",
+  "title": "Underwriting memo",
+  "description": "A cited memo for one business case. Every section states what was found and the upstream records it came from. The recommendation is gated by the policy result and always needs a human decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "memo_id", "case_id", "created_at", "subject", "sections", "policy_result", "recommendation", "missing_items", "excerpts", "provenance"],
+  "properties": {
+    "schema_version": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/schema_version"},
+    "memo_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "case_id": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/identifier_token"},
+    "created_at": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/timestamp"},
+    "subject": {
+      "oneOf": [
+        {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/business_ref"},
+        {"type": "null"}
+      ],
+      "description": "The resolved business, or null when no registry match was found."
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/section"}
+    },
+    "policy_result": {"$ref": "https://agenticorg.ai/schemas/policy_result/1.0.0"},
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposed", "basis", "requires_human_decision"],
+      "properties": {
+        "proposed": {
+          "type": "string",
+          "enum": ["approve", "decline", "refer", "request_information"]
+        },
+        "basis": {
+          "description": "Recommendations are gated by the policy result, never by model confidence.",
+          "const": "policy_result"
+        },
+        "requires_human_decision": {"const": true}
+      }
+    },
+    "missing_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item", "reason"],
+        "properties": {
+          "item": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "reason": {"type": "string", "minLength": 1, "maxLength": 512}
+        }
+      }
+    },
+    "excerpts": {
+      "description": "Excerpts attached for the human reviewer, referenced from evidence by excerpt_ref. Content is stored separately and never inlined here.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/excerpt"}
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent", "agent_version", "prompt_version", "model_id"],
+      "properties": {
+        "agent": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+        "agent_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "prompt_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "model_id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "model_confidence": {
+          "description": "Self-reported by the model. Metadata only, never a gate.",
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["section_id", "status", "findings", "evidence"],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "enum": ["identity", "registry", "ownership", "screening", "web_presence", "activity"]
+        },
+        "status": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/section_status"},
+        "not_available_reason": {
+          "description": "Why a not_available section has no content.",
+          "type": "string",
+          "enum": ["capability_not_supported", "no_registry_match"]
+        },
+        "error_reason": {
+          "description": "The provider error, as its taxonomy reason code, that stopped an error section.",
+          "type": "string",
+          "enum": ["provider_timeout", "provider_unavailable", "provider_rate_limited", "provider_authentication_failed", "provider_response_invalid", "invalid_query", "not_found"]
+        },
+        "findings": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/finding"}
+        },
+        "evidence": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "not_available"}}},
+          "then": {
+            "required": ["not_available_reason"],
+            "not": {"required": ["error_reason"]},
+            "properties": {"findings": {"maxItems": 0}}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "error"}}},
+          "then": {
+            "required": ["error_reason"],
+            "not": {"required": ["not_available_reason"]},
+            "properties": {"findings": {"maxItems": 0}}
+          }
+        },
+        {
+          "if": {"properties": {"status": {"enum": ["complete", "partial"]}}},
+          "then": {
+            "allOf": [{"not": {"required": ["not_available_reason"]}}, {"not": {"required": ["error_reason"]}}],
+            "properties": {"evidence": {"minItems": 1}}
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "statement", "evidence"],
+      "properties": {
+        "code": {
+          "description": "Machine-readable finding, e.g. missing_owner, undeclared_owner, registry_not_active, name_mismatch, screening_hit.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "severity": {"type": "string", "enum": ["info", "low", "medium", "high"]},
+        "statement": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "evidence": {
+          "$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/evidence_list",
+          "minItems": 1
+        }
+      }
+    },
+    "excerpt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["excerpt_ref", "provider", "record_id", "media_type", "sha256"],
+      "properties": {
+        "excerpt_ref": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/excerpt_ref"},
+        "provider": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/provider_name"},
+        "record_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "media_type": {"type": "string", "pattern": "^[a-z]+/[a-z0-9.+\\-]+$"},
+        "sha256": {"$ref": "https://agenticorg.ai/schemas/common/1.0.0#/$defs/sha256_digest"}
+      }
+    }
+  }
+}

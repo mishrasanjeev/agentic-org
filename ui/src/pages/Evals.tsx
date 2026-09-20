@@ -53,6 +53,34 @@ interface EvalsData {
   agents: AgentScore[];
 }
 
+interface JevShadowPlan {
+  status: string;
+  effective_mode: string;
+  active_routing_enabled: boolean;
+  non_executing: boolean;
+  corpus: {
+    case_count: number;
+    domains: string[];
+    content_policy: string;
+  };
+  controls: {
+    sample_rate: number;
+    max_calls_per_run: number;
+    failure_threshold: number;
+    cooldown_seconds: number;
+  };
+  review_gates: {
+    minimum_agreement_rate: number;
+    maximum_invalid_or_unavailable: number;
+    maximum_p95_latency_ms: number;
+    human_review_required: boolean;
+  };
+  reporting: {
+    status: string;
+    run_policy: string;
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
@@ -154,6 +182,8 @@ function formatDate(iso: string): string {
 
 export default function Evals() {
   const [data, setData] = useState<EvalsData | null>(null);
+  const [jevPlan, setJevPlan] = useState<JevShadowPlan | null>(null);
+  const [jevPlanError, setJevPlanError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [domainFilter, setDomainFilter] = useState<string>("all");
@@ -240,6 +270,16 @@ export default function Evals() {
         setError(e instanceof Error ? e.message : "Failed to load evals");
         setLoading(false);
       });
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/v1/evals/jev-shadow")
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((plan: JevShadowPlan) => setJevPlan(plan))
+      .catch((e: unknown) => setJevPlanError(e instanceof Error ? e.message : "Unavailable"));
   }, []);
 
   const handleSort = useCallback((key: SortKey) => {
@@ -365,6 +405,61 @@ export default function Evals() {
             Values are rendered from <code className="rounded bg-white px-1.5 py-0.5">GET /api/v1/evals</code>.
             They describe the reported test cases, evaluator version, and timestamp shown on this page. They are not a production SLA, a guarantee for every prompt, or a substitute for tenant-specific evaluation and human review.
           </p>
+        </section>
+
+        <section
+          className="rounded-2xl border border-slate-200 bg-slate-50 p-6"
+          data-testid="jev-shadow-plan"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Jev Shadow Evaluation</h2>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600">
+                A redacted operator contract for comparing Jev&apos;s typed routing advice with
+                AgenticOrg&apos;s existing route. Loading this page does not call Jev, execute tools,
+                or change routing authority.
+              </p>
+            </div>
+            <span className="inline-flex w-fit rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+              Advisory only
+            </span>
+          </div>
+          {jevPlanError ? (
+            <p className="mt-5 text-sm text-slate-500">Shadow plan unavailable: {jevPlanError}</p>
+          ) : jevPlan ? (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Corpus</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{jevPlan.corpus.case_count}</p>
+                  <p className="text-xs text-slate-500">synthetic cases</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Effective mode</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{jevPlan.effective_mode}</p>
+                  <p className="text-xs text-slate-500">existing runtime remains authoritative</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Per-run budget</p>
+                  <p className="mt-1 text-2xl font-bold text-slate-900">{jevPlan.controls.max_calls_per_run}</p>
+                  <p className="text-xs text-slate-500">maximum provider calls</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Evaluation status</p>
+                  <p className="mt-1 text-lg font-bold text-slate-900">{jevPlan.reporting.status}</p>
+                  <p className="text-xs text-slate-500">explicit CLI run required</p>
+                </div>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-600">
+                <span>Agreement gate: {Math.round(jevPlan.review_gates.minimum_agreement_rate * 100)}%+</span>
+                <span>P95 latency gate: {jevPlan.review_gates.maximum_p95_latency_ms} ms</span>
+                <span>Sample rate: {Math.round(jevPlan.controls.sample_rate * 100)}%</span>
+                <span>Human review: {jevPlan.review_gates.human_review_required ? "required" : "not required"}</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-5 text-sm text-slate-500">Loading shadow plan...</p>
+          )}
         </section>
 
         {/* ---- Section 1: Reported Platform Metrics ---- */}
