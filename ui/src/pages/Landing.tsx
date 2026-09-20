@@ -198,6 +198,13 @@ const SHIPPED_RUNTIME = [
   },
 ];
 
+const JEV_AVAILABILITY = {
+  title: "Jev decision support",
+  status: "Waitlist / shadow-ready",
+  copy: "The TypeSafe Jev adapter, offline evaluator, and bounded shadow seam are shipped. TypeSafe enrollment is currently closed, so production stays off until access and a measured review are complete.",
+  href: "https://console.typesafe.ai/",
+};
+
 /* ------------------------------------------------------------------ */
 /*  Check icon reused across sections                                  */
 /* ------------------------------------------------------------------ */
@@ -748,6 +755,20 @@ export default function Landing() {
                 <a key={capability.title} href={capability.href} className={className}>{content}</a>
               );
             })}
+          </div>
+
+          <div className="mt-6 flex flex-col gap-4 rounded-xl border border-amber-300/20 bg-amber-300/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between" data-testid="jev-availability-note">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-200">{JEV_AVAILABILITY.status}</p>
+              <h3 className="mt-1 text-base font-bold text-white">{JEV_AVAILABILITY.title}</h3>
+              <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-300">{JEV_AVAILABILITY.copy}</p>
+            </div>
+            <a
+              href={JEV_AVAILABILITY.href}
+              className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-200/40 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-200/10"
+            >
+              Check TypeSafe access
+            </a>
           </div>
         </div>
       </section>

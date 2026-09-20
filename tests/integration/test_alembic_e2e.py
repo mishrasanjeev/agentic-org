@@ -15,6 +15,11 @@ Runs against the CI Postgres service. Three scenarios exercise
 3. Already-managed DB (subsequent wrapper invocation) -> wrapper
    takes the ``upgrade head`` path, stays idempotent, and exits 0.
 
+A bare ``alembic upgrade head`` on an empty DB must reach head too
+(``migrations/env.py`` builds the same baseline), and the resulting schema
+must match the ORM models apart from the reviewed differences in
+``alembic_schema_drift_allowlist.py``.
+
 Skipped when Postgres is not reachable (e.g. local Windows machine
 without Docker). CI ``integration-tests`` always has Postgres.
 """
@@ -1203,3 +1208,227 @@ def test_connector_config_rls_isolates_exact_global_and_company_scopes():
             conn.execute(text("DROP OWNED BY connector_config_rls_probe"))
             conn.execute(text("DROP ROLE connector_config_rls_probe"))
         engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Bare `alembic upgrade head` on an empty database, and drift from the models
+# ---------------------------------------------------------------------------
+
+
+def _drift_key(diff: object) -> tuple[str, ...] | None:
+    """Reduce one autogenerate difference to (kind, table[, object])."""
+    if not isinstance(diff, tuple) or not diff:
+        return None
+    kind = diff[0]
+    if kind in {"add_table", "remove_table"}:
+        return (kind, diff[1].name)
+    if kind in {"add_index", "remove_index", "add_constraint", "remove_constraint"}:
+        return (kind, diff[1].table.name, diff[1].name or "")
+    if kind in {"add_fk", "remove_fk"}:
+        return (kind, diff[1].parent.name, diff[1].name or "")
+    if kind in {"add_column", "remove_column"}:
+        return (kind, diff[2], diff[3].name)
+    return None
+
+
+def _schema_drift_from_orm() -> tuple[list[str], list[str]]:
+    """Compare the database with the ORM; return (unexpected, stale allowlist)."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.runtime.migration import MigrationContext
+
+    import core.models  # noqa: F401 - register every model
+    from core.models.base import BaseModel
+    from tests.integration.alembic_schema_drift_allowlist import (
+        MIGRATION_ONLY_INDEXES,
+        MIGRATION_OWNED_TABLES,
+        ORM_INDEXES_DROPPED_BY_MIGRATIONS,
+    )
+
+    engine = create_engine(_SYNC_URL)
+    try:
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn, opts={"compare_type": True})
+            diffs = compare_metadata(context, BaseModel.metadata)
+    finally:
+        engine.dispose()
+
+    unexpected: list[str] = []
+    seen_tables: set[str] = set()
+    seen_db_indexes: set[tuple[str, str]] = set()
+    seen_orm_indexes: set[tuple[str, str]] = set()
+    for diff in diffs:
+        # Column changes (type, nullability) arrive as lists: never allowed.
+        key = _drift_key(diff)
+        if key is None:
+            unexpected.append(repr(diff))
+            continue
+        kind, table = key[0], key[1]
+        if kind == "remove_table" and table in MIGRATION_OWNED_TABLES:
+            seen_tables.add(table)
+        elif kind == "remove_index" and table in MIGRATION_OWNED_TABLES:
+            continue
+        elif kind == "remove_index" and (table, key[2]) in MIGRATION_ONLY_INDEXES:
+            seen_db_indexes.add((table, key[2]))
+        elif kind == "add_index" and (table, key[2]) in ORM_INDEXES_DROPPED_BY_MIGRATIONS:
+            seen_orm_indexes.add((table, key[2]))
+        else:
+            unexpected.append(" ".join(key))
+    stale = sorted(
+        [f"table {name}" for name in set(MIGRATION_OWNED_TABLES) - seen_tables]
+        + [f"index {t}.{i}" for t, i in MIGRATION_ONLY_INDEXES - seen_db_indexes]
+        + [f"orm index {t}.{i}" for t, i in ORM_INDEXES_DROPPED_BY_MIGRATIONS - seen_orm_indexes]
+    )
+    return sorted(unexpected), stale
+
+
+def _assert_no_schema_drift_from_orm() -> None:
+    unexpected, stale = _schema_drift_from_orm()
+    assert not unexpected, (
+        "the migrated schema differs from core.models; change the model and its "
+        "migration together (or, after review, list the difference in "
+        "tests/integration/alembic_schema_drift_allowlist.py):\n  " + "\n  ".join(unexpected)
+    )
+    assert not stale, (
+        "tests/integration/alembic_schema_drift_allowlist.py lists differences that "
+        "no longer exist; remove them:\n  " + "\n  ".join(stale)
+    )
+
+
+def _version_num() -> str | None:
+    engine = create_engine(_SYNC_URL)
+    try:
+        with engine.connect() as conn:
+            if "alembic_version" not in set(inspect(conn).get_table_names()):
+                return None
+            return conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.timeout(300)
+def test_bare_alembic_upgrade_head_builds_empty_database_to_head_without_orm_drift():
+    """`alembic upgrade head` from the command line on an empty database.
+
+    PRD 8.1 and 11 need a clean machine to work from the documented command,
+    so this runs what a developer types rather than the deploy wrapper, then
+    compares the result with the ORM models.
+    """
+    _reset_schema()
+    assert _table_names() == set()
+
+    env = os.environ.copy()
+    env["AGENTICORG_DB_URL"] = _DB_URL
+    env.setdefault("AGENTICORG_SECRET_KEY", "ci-test-secret-key-minimum-16")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr[-4000:]
+    assert "empty database" in result.stderr
+
+    assert _version_num() == _current_head()
+    tables = _table_names()
+    assert {"tenants", "connector_configs"} <= tables
+    assert _READINESS_TABLES <= tables
+    assert _REPAIRED_RUNTIME_TABLES <= tables
+    _assert_readiness_controls()
+    _assert_connector_config_controls()
+    _assert_database_index_health()
+    _assert_no_schema_drift_from_orm()
+
+
+@pytest.mark.timeout(300)
+def test_bare_upgrade_of_a_managed_database_changes_nothing():
+    """The shape every deployed environment is in: already at head.
+
+    A second `alembic upgrade head` must apply no revision and must not
+    bootstrap, whatever tables the database has.
+    """
+    _reset_schema()
+    command.upgrade(_alembic_cfg(), "head")
+    before = _table_names()
+
+    env = os.environ.copy()
+    env["AGENTICORG_DB_URL"] = _DB_URL
+    env.setdefault("AGENTICORG_SECRET_KEY", "ci-test-secret-key-minimum-16")
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr[-4000:]
+    assert "Running upgrade" not in result.stderr
+    assert "empty database" not in result.stderr
+    assert _table_names() == before
+    assert _version_num() == _current_head()
+    _assert_no_schema_drift_from_orm()
+
+
+def test_alembic_commands_other_than_upgrade_do_not_bootstrap_an_empty_database():
+    _reset_schema()
+    cfg = _alembic_cfg()
+
+    command.current(cfg)
+    assert _table_names() == set()
+
+    command.stamp(cfg, "v480_baseline")
+    assert _table_names() == {"alembic_version"}
+    assert _version_num() == "v480_baseline"
+    _reset_schema()
+
+
+def test_upgrade_of_empty_database_to_a_revision_before_the_baseline_is_refused():
+    from core.schema_bootstrap import REASON_TARGET_BEFORE_BASELINE, EmptyDatabaseBootstrapError
+
+    _reset_schema()
+    with pytest.raises(EmptyDatabaseBootstrapError) as exc_info:
+        command.upgrade(_alembic_cfg(), "v470_sso_invoices")
+    assert exc_info.value.reason == REASON_TARGET_BEFORE_BASELINE
+    assert _table_names() == set()
+
+
+def test_upgrade_of_unmanaged_database_with_tables_is_refused():
+    from core.schema_bootstrap import REASON_UNMANAGED_DATABASE, EmptyDatabaseBootstrapError
+
+    _reset_schema()
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE unmanaged_probe (id integer PRIMARY KEY)"))
+    engine.dispose()
+    try:
+        with pytest.raises(EmptyDatabaseBootstrapError) as exc_info:
+            command.upgrade(_alembic_cfg(), "head")
+        assert exc_info.value.reason == REASON_UNMANAGED_DATABASE
+        assert "unmanaged_probe" in str(exc_info.value)
+        assert _table_names() == {"unmanaged_probe"}
+    finally:
+        _reset_schema()
+
+
+@pytest.mark.timeout(300)
+def test_head_revision_downgrades_one_step_and_upgrades_again_without_orm_drift():
+    """Rollback is forward-only, but the newest step must re-apply cleanly.
+
+    migrations/README.md ("Downgrades and rollback"): an environment rolls back
+    by restoring its pre-migration backup or by shipping a forward fix. A
+    one-step downgrade followed by `upgrade head` is still rehearsed here so
+    the head revision stays re-runnable and leaves no drift.
+    """
+    _reset_schema()
+    cfg = _alembic_cfg()
+    command.upgrade(cfg, "head")
+    head = _current_head()
+    assert _version_num() == head
+
+    command.downgrade(cfg, "-1")
+    assert _version_num() != head
+
+    command.upgrade(cfg, "head")
+    assert _version_num() == head
+    _assert_database_index_health()
+    _assert_no_schema_drift_from_orm()
