@@ -61,10 +61,16 @@ def run_migrations_offline() -> None:
 def _bootstrap_empty_database(conn) -> None:
     """Create and stamp the legacy-compatible baseline for a bare database."""
     migration_context = context.get_context()
+    current_heads = migration_context.get_current_heads()
+    table_names = inspect(conn).get_table_names()
+    if current_heads or set(table_names) - {"alembic_version"}:
+        # scripts/alembic_migrate.py creates and stamps the ORM baseline before
+        # upgrading. Do not reinterpret that programmatic stamp as an upgrade.
+        return
     should_bootstrap = plan_empty_database_bootstrap(
         command=context.get_revision_argument() and "upgrade",
-        current_heads=migration_context.get_current_heads(),
-        table_names=inspect(conn).get_table_names(),
+        current_heads=current_heads,
+        table_names=table_names,
         reaches_baseline=target_reaches_baseline(
             context.script,
             context.get_revision_argument() or "head",
