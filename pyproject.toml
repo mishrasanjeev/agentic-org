@@ -246,6 +246,10 @@ omit = [
     "*/codex-pytest-cache/*",
     "*/codex-pytest-artifacts/*",
 ]
+# SQLAlchemy's asyncio layer runs database calls in greenlets. Without greenlet
+# tracing, coverage stops recording a coroutine's lines after its first awaited
+# query, so async request handlers and repositories were under-reported.
+concurrency = ["greenlet", "thread"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

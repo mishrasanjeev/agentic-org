@@ -125,6 +125,16 @@ class Settings(BaseSettings):
     grantex_audience: str = ""
     # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
     route_enforcement_mode: str = "enforce"
+    # Governed business cases (core/cases, flag governed_cases.enabled per tenant).
+    # Verification provider new cases use, by registered name.
+    case_provider: str = "mock"
+    # Directory of case policy files; empty uses the shipped examples, which a
+    # strict runtime refuses because they are not reviewed for production.
+    case_policy_dir: str = ""
+    # Model the reference agents use for prose (memo summaries, rationales).
+    case_llm_model: str = ""
+    # Periodic delivery sweep for the case push outbox (core/tasks/case_push_tasks.py).
+    case_push_sweep_enabled: bool = False
     jwt_public_key_url: str = ""
     jwt_issuer: str = ""  # Grantex token server issuer URI (AGENTICORG_JWT_ISSUER)
     token_ttl_minutes: int = 60

@@ -479,7 +479,66 @@ Remove an entry in the pull request that fixes it.
   generator entry. New screening integrations go through the
   `VerificationProvider` interface instead.
 
-## A-41 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
+## A-37 — Example onboarding policies read evidence no provider supplies
+
+- **Found:** running the Business Onboarding Underwriter against every mock
+  fixture (2026-09-15).
+- **What:** `core/policy/examples/business_onboarding_uk.yaml` rule
+  `filings_overdue` reads `verification.overdue_filings`, but no field of the
+  provider-neutral interface (`connectors/framework/verification_types.py`)
+  reports filing status, so the rule fires as indeterminate on every UK case.
+  `web_presence_activity_mismatch` in both examples is also indeterminate
+  whenever the declared activity term has no extractor activity category (10 of
+  12 mock fixtures). With the UK `score_thresholds.high: 60`, a clean UK case
+  with one screening hit reaches `high` on unresolved evidence alone.
+- **Fix:** either add filing status to `BusinessVerification` (a domain concept
+  most registries publish) or drop the rule from the example; publish a mapping
+  from declared activity vocabulary to extractor categories.
+
+## A-38 — An empty web presence carries no evidence to cite
+
+- **Found:** assembling memo sections for businesses with no website
+  (2026-09-15).
+- **What:** `WebPresence.evidence` may be empty, and the mock provider returns
+  no evidence when a business has no web record
+  (`connectors/providers/mock/provider.py::web_presence`). The absence of a web
+  presence therefore cannot be cited on its own; the underwriter cites the
+  resolved registry record instead.
+- **Fix:** require at least one evidence entry on `WebPresence` (the search that
+  found nothing) in the interface and the conformance suite.
+
+## A-39 — Example policies test registry statuses the interface never returns
+
+- **Found:** comparing policy operands with `RegistryStatus` (2026-09-15).
+- **What:** `registry_dissolved` in the UK example matches
+  `[dissolved, liquidation]` and in the US example `[dissolved, revoked]`, but
+  `RegistryStatus` has `in_insolvency` and no `liquidation` or `revoked`, so a
+  business in insolvency is `high` (via `registry_active`), never `blocked`.
+- **Fix:** match `in_insolvency` in the examples, or have the policy loader
+  check `verification.status` operands against the interface vocabulary.
+
+## A-41 — The integration `client` fixture cannot run twice against one database
+
+- **Found:** re-running governed case API tests against a reused local
+  PostgreSQL container (2026-09-15).
+- **What:** `tests/integration/conftest.py::client` seeds the test tenant with a
+  fresh random id but the fixed slug `test-tenant` and
+  `ON CONFLICT (id) DO NOTHING`, so a second session against the same database
+  fails at setup with a unique violation on `tenants_slug_key`. CI is unaffected
+  because it starts from an empty database.
+- **Fix:** derive the slug from the tenant id, or conflict on the slug.
+
+## A-42 — `alembic upgrade head` fails on an empty database
+
+- **Found:** generating the audit record for `v6z26_case_push` (2026-09-15).
+- **What:** early revisions assume tables created by the legacy SQL bootstrap
+  (`migrations/*.sql`), so upgrading an empty schema stops at the first of them.
+  New migrations can only be rehearsed on a database built with
+  `BaseModel.metadata.create_all` or restored from an existing one.
+- **Fix:** document the bootstrap order, or add a baseline revision that
+  creates the legacy tables so the chain runs from empty.
+
+## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
 - **Found:** binding caller tokens on every run route (PRD F-1b review,
   2026-09-15).
@@ -494,7 +553,7 @@ Remove an entry in the pull request that fixes it.
   have `enforce` check the tool; run A2A and MCP calls with the shared agent's
   stored `authorized_tools` instead of the type defaults.
 
-## A-42 — The Grantex Python SDK's `agents.update` calls a route the auth service does not serve
+## A-44 — The Grantex Python SDK's `agents.update` calls a route the auth service does not serve
 
 - **Found:** pushing agent scopes to Grantex on `PATCH /agents/{id}`, verified
   against the Grantex auth service image (PRD F-1 review, 2026-09-15).
