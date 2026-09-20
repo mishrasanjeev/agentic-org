@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Contracts shared by semantic decision providers and AgenticOrg callers.
 
 Decision providers advise the runtime. They do not authenticate callers,

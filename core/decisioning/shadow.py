@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Shadow-mode Jev observation for bounded agent routing comparisons.
 
 This module observes the existing route proposed by the LLM. It never changes

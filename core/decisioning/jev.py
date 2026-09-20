@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """TypeSafe Jev adapter using the documented System One HTTP contract."""
 
 from __future__ import annotations

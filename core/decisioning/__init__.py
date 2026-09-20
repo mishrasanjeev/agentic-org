@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Provider-neutral semantic decision services for AgenticOrg."""
 
 from core.decisioning.contracts import (

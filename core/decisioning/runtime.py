@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Configuration-aware construction for the optional Jev provider."""
 
 from __future__ import annotations

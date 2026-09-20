@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Run the explicit, redacted Jev routing shadow evaluation.
 
 The default command is a local dry-run. Provider calls require ``--live`` and

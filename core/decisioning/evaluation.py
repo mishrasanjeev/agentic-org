@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Offline Jev routing evaluation over synthetic, redacted cases."""
 
 from __future__ import annotations
