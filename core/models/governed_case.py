@@ -54,6 +54,8 @@ class GovernedCase(BaseModel):
     parties: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     agent_records: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     information_requests: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
+    #: Decision requests made for this case at the decision-grant issuer (never a grant token).
+    decision_requests: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     decision: Mapped[dict[str, Any] | None] = mapped_column(CASE_JSON, nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

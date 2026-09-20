@@ -45,6 +45,25 @@ _PLACEHOLDER = re.compile(r"^\$([a-z][a-z0-9_]*)$")
 SessionFactory = Callable[[uuid.UUID], AbstractAsyncContextManager[AsyncSession]]
 
 
+def _default_decision_service() -> Any:
+    """The configured decision-grant service, or ``None`` when decisions cannot be requested."""
+    from core.cases.decision_requests import DecisionServiceError, decision_service
+
+    try:
+        return decision_service()
+    except DecisionServiceError as exc:
+        logger.error("case_decision_service_unavailable", reason=exc.reason, detail=exc.detail)
+        return None
+
+
+def _default_decision_verifier() -> DecisionVerifier:
+    """Verify decisions against the configured service; refuse everything when there is none."""
+    from core.cases.decision_requests import ServiceDecisionVerifier
+
+    service = _default_decision_service()
+    return ServiceDecisionVerifier(service) if service is not None else RequireDecisionGrant()
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -92,7 +111,9 @@ class CaseRuntime:
     session_factory: SessionFactory = _default_session_factory
     flag: Callable[[uuid.UUID], Awaitable[bool]] = _default_flag
     authorizer_factory: Callable[[str, str], ToolAuthorizer | None] = lambda tenant_id, case_ref: None
-    decision_verifier: DecisionVerifier = field(default_factory=RequireDecisionGrant)
+    decision_verifier: DecisionVerifier = field(default_factory=_default_decision_verifier)
+    #: Returns the decision-grant service the decision-request routes use, or ``None``.
+    decision_service: Callable[[], Any] = _default_decision_service
     clock: Callable[[], datetime] = _utc_now
     llm_model: str = field(default_factory=lambda: _settings().case_llm_model)
     pseudonym_store: Any = None
