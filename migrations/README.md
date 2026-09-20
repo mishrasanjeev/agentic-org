@@ -9,7 +9,7 @@ step in `.github/workflows/deploy.yml`. The wrapper is idempotent:
 | ------------------------------------------------------- | -------------------------------------- |
 | `alembic_version` table present                         | `alembic upgrade head`                 |
 | Legacy schema (tables but no `alembic_version`)         | `stamp v480_baseline` + `upgrade head` |
-| Empty DB                                                | `alembic upgrade head` from base       |
+| Empty DB                                                | `alembic upgrade head` (see below)     |
 
 Application startup is now verify-only in strict runtimes
 (`production`, `staging`, `preview`, and unknown environments).
@@ -41,6 +41,66 @@ v480_baseline              → v4.8.0  Alembic cutover (kpi_cache,
                                       audit_log immutability)
 ```
 
+## Empty databases
+
+The version chain does not start from nothing: `v400_apex` and the revisions
+up to `v470_sso_invoices` alter a schema that predates Alembic (the raw SQL
+files `001_*.sql` onwards, which no longer apply to Postgres 16, and
+`init_db()`). So when `alembic upgrade` runs against a database with no
+tables and no `alembic_version`, `migrations/env.py` first creates the ORM
+schema (`core.models`, plus the `uuid-ossp` and `pgcrypto` extensions) and
+stamps `v480_baseline`, inside the same transaction, then applies every
+revision after the baseline. `scripts/alembic_migrate.py` goes through the
+same code (`core/schema_bootstrap.py`), so `alembic upgrade head`, the deploy
+wrapper and `make dev` build an empty database identically.
+
+This is deliberate rather than a frozen baseline revision: every environment
+since the cutover was built this way, the pre-Alembic revisions are never
+rewritten, and a replacement baseline would have to reproduce a schema that
+no longer exists anywhere. The cost is the rule in step 3 below: revisions
+after the baseline must be idempotent against the current ORM shape, because
+on an empty database the tables they create already exist.
+
+The bootstrap refuses, with a reason code, rather than guessing:
+
+| Situation | Reason |
+| --- | --- |
+| Tables exist but no `alembic_version` (a legacy or hand-built schema) | `unmanaged_database_not_empty` — run `scripts/alembic_migrate.py`, which stamps it |
+| Empty database, target before `v480_baseline` (e.g. `alembic upgrade v470_sso_invoices`) | `target_before_baseline` |
+| Empty database, relative or branch target (`+1`, `heads@branch`) | `target_unresolved` |
+
+Other commands (`current`, `stamp`, `history`, `check`) never bootstrap, and
+offline `--sql` mode is unchanged.
+
+`tests/integration/test_alembic_e2e.py` runs `alembic upgrade head` on an
+empty Postgres in CI, then compares the resulting schema with the ORM models
+(tables, columns, types, nullability, indexes, unique constraints, foreign
+keys). Any difference fails unless it is listed, with a reason, in
+`tests/integration/alembic_schema_drift_allowlist.py`, and an entry that is no
+longer a difference fails too. Two foreign keys are not compared: SQLAlchemy
+cannot order the `departments` ↔ `users` cycle.
+
+## Downgrades and rollback
+
+Migrations are forward-only (PRD §10). An environment rolls back a bad
+migration by restoring the backup taken before it ran, or by shipping a new
+forward revision; `alembic downgrade` is not a production rollback path.
+
+- Many revisions keep a `downgrade()` for local work, and the integration
+  suite rehearses specific round trips (`v6z4`, `v6z5`, `v6z7`, `v6z9`) and a
+  one-step downgrade of the head followed by `upgrade head` with no drift.
+- Some revisions are intentionally no-op downgrades because undoing them would
+  lose data or strand running work (`v6z13_knowledge_documents_repair`,
+  `v6z24_case_pseudonym_maps`; `v6z22` drops checkpoints and abandons paused
+  runs).
+- Downgrading below the baseline is unsupported. On a bootstrapped database a
+  downgrade from head currently fails at `v4913_feed_events` (its downgrade
+  drops `ix_feed_events_tenant_sequence`, which does not exist there), and
+  revisions that use
+  `autocommit_block()` (`v482`, `v6z9`, `v6z10`) commit as they go, so a
+  failed multi-step downgrade can leave the database at an intermediate
+  revision.
+
 ## Workflow for a schema change
 
 1. Edit the ORM model under `core/models/`.
@@ -48,8 +108,12 @@ v480_baseline              → v4.8.0  Alembic cutover (kpi_cache,
    `alembic revision -m "<title>"` or copy a neighbor). Set
    `down_revision` to the current head.
 3. Write idempotent DDL in `upgrade()` (`CREATE ... IF NOT EXISTS`,
-   guarded `ALTER`). Include a matching `downgrade()` when safe.
-4. Run `alembic upgrade head` locally against a dev DB to validate.
+   guarded `ALTER`): on an empty database the ORM baseline already has the
+   model's new tables and columns when the revision runs. Include a matching
+   `downgrade()` when safe, or a comment saying why it is forward-only.
+4. Run `alembic upgrade head` locally against a dev DB and against an empty
+   database to validate; declare new indexes and constraints on the model too
+   (the drift check in the integration suite fails otherwise).
 5. Push. CI enforces that any ORM model change, or any new schema DDL
    added to `core/database.py`, includes a new migration
    (`scripts/check_migration_required.py`). The same guard fails on
@@ -69,7 +133,7 @@ AGENTICORG_DB_URL=<url> alembic stamp v480_baseline
 ## Local development
 
 ```bash
-# fresh DB
+# fresh (empty) DB: builds the ORM baseline, stamps v480_baseline, upgrades
 alembic upgrade head
 
 # stamp a DB that was built via init_db()
