@@ -31,7 +31,8 @@ test.describe("governed cases in the approvals console @dev-stack", () => {
     await page.getByRole("link", { name: "Governed cases" }).click();
     await expect(page).toHaveURL(/\/dashboard\/approvals\/cases$/);
 
-    const row = page.getByTestId("governed-case-row").filter({ hasText: clean.legal_name });
+    // Seeding submits a new case each run, so the row is found by its case reference.
+    const row = page.getByTestId("governed-case-row").filter({ hasText: clean.case_ref });
     await expect(row).toBeVisible({ timeout: 20_000 });
     await expect(row).toContainText("Awaiting decision");
     await expect(row).toContainText("risk");
@@ -46,7 +47,11 @@ test.describe("governed cases in the approvals console @dev-stack", () => {
   }, testInfo) => {
     const hit = seededCase("us-false-positive-oakhollow");
     await page.goto("/dashboard/approvals/cases");
-    await page.getByRole("link", { name: hit.legal_name }).click();
+    await page
+      .getByTestId("governed-case-row")
+      .filter({ hasText: hit.case_ref })
+      .getByRole("link", { name: hit.legal_name })
+      .click();
     await expect(page).toHaveURL(new RegExp(`/dashboard/approvals/cases/${hit.case_ref}$`));
 
     await expect(page.getByRole("heading", { level: 1, name: hit.legal_name })).toBeVisible();
