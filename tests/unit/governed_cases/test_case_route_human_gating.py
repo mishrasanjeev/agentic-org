@@ -137,17 +137,23 @@ def test_a_legacy_session_whose_subject_looks_like_an_api_key_is_still_a_machine
 
 
 def test_a_session_token_minted_for_an_agent_is_a_machine_even_in_legacy_mode() -> None:
-    """A human session names the person it belongs to; a token with only an agent id does not."""
+    """No token a person signs in with carries an agent id, so one that does is a machine."""
     agent_session = _request({"sub": "runner", "agenticorg:agent_id": "5f0a"}, "legacy", ["approvals:write"])
     assert actor_for(agent_session) == "agent:5f0a"
     with pytest.raises(CaseError):
         human_actor_for(agent_session)
+    with_user_claim = _human(**{"agenticorg:user_id": "u-1", "agenticorg:agent_id": "5f0a"})
+    assert actor_for(with_user_claim) == "agent:5f0a"
+    with pytest.raises(CaseError):
+        human_actor_for(with_user_claim)
 
 
-def test_a_person_whose_token_also_carries_an_agent_id_is_still_a_person() -> None:
-    """Session tokens carry an agent id for the tool gateway; that must not lock a person out."""
-    person = _human(**{"agenticorg:user_id": "u-1", "agenticorg:agent_id": "5f0a"})
-    assert human_actor_for(person) == "user:u-1"
+def test_a_request_whose_auth_mode_was_never_set_is_a_machine() -> None:
+    """A middleware that authenticates without naming its mode fails closed here."""
+    unset = _request({"sub": "someone", "agenticorg:user_id": "u-1"}, None, ["approvals:write"])
+    assert actor_for(unset) == "machine:unset"
+    with pytest.raises(CaseError):
+        human_actor_for(unset)
 
 
 def test_agent_tokens_skip_the_rbac_scope_family_so_the_route_gate_is_what_refuses_them() -> None:

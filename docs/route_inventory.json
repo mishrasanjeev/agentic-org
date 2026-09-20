@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 195,
+    "source_line": 197,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 164,
+    "source_line": 166,
     "tenant_required": true
   },
   {
@@ -4262,7 +4262,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 212,
+    "source_line": 214,
     "tenant_required": true
   },
   {
@@ -4280,7 +4280,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 225,
+    "source_line": 227,
     "tenant_required": true
   },
   {
@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 260,
+    "source_line": 262,
     "tenant_required": true
   },
   {
@@ -4316,7 +4316,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 343,
+    "source_line": 345,
     "tenant_required": true
   },
   {
@@ -4334,7 +4334,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 408,
+    "source_line": 410,
     "tenant_required": true
   },
   {
@@ -4352,7 +4352,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 439,
+    "source_line": 441,
     "tenant_required": true
   },
   {
@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 285,
+    "source_line": 287,
     "tenant_required": true
   },
   {
@@ -4424,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 369,
+    "source_line": 371,
     "tenant_required": true
   },
   {
@@ -4442,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 319,
+    "source_line": 321,
     "tenant_required": true
   },
   {

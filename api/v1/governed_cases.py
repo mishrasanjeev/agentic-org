@@ -58,8 +58,10 @@ def get_case_runtime() -> CaseRuntime:
     return CaseRuntime()
 
 
-#: Authentication modes that can carry a person. ``None`` is the legacy session middleware.
-HUMAN_AUTH_MODES: frozenset[str | None] = frozenset({None, "legacy"})
+#: The only authentication mode that carries a person: a user session verified by
+#: ``auth.grantex_middleware``. Anything else - including a request whose mode was never set -
+#: is a machine, so a middleware that forgets to name its mode fails closed.
+HUMAN_AUTH_MODES: frozenset[str] = frozenset({"legacy"})
 
 
 def _machine_actor(request: Request, claims: dict[str, Any]) -> str | None:
@@ -76,10 +78,10 @@ def _machine_actor(request: Request, claims: dict[str, Any]) -> str | None:
     if auth_mode == "api_key" or subject.startswith("apikey:"):
         return f"api_key:{subject.removeprefix('apikey:') or 'unknown'}"[:256]
     if auth_mode not in HUMAN_AUTH_MODES:
-        return f"machine:{auth_mode}"[:256]
-    if agent_id and not claims.get("agenticorg:user_id"):
-        # A session token minted for an agent rather than a person: a human session names the
-        # person it belongs to, an agent's does not.
+        return f"machine:{auth_mode or 'unset'}"[:256]
+    if agent_id:
+        # A token minted for an agent, not a person: no token a person signs in with carries an
+        # agent id.
         return f"agent:{agent_id}"[:256]
     return None
 
