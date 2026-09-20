@@ -22,9 +22,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
-from api.v1.governed_cases import _actor, _error, _session, get_case_runtime
+from api.v1.governed_cases import _error, _session, actor_for, get_case_runtime
 from core.cases.provider_webhooks import receive_provider_webhook
 from core.cases.push import (
     build_case_push,
@@ -98,8 +98,8 @@ async def get_push_endpoint(
 )  # fmt: skip
 async def put_push_endpoint(
     body: EndpointRequest,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
-    user: dict[str, Any] = Depends(get_current_user),
     _admin: Any = require_tenant_admin,
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
@@ -111,7 +111,9 @@ async def put_push_endpoint(
                 session, tenant, url=body.url, enabled=body.enabled, now=runtime.clock()
             )
             view = endpoint_view(endpoint, [key.key_id] if key else [])
-        logger.info("case_push_endpoint_configured", tenant_id=tenant_id, actor=_actor(user), created=key is not None)
+        logger.info(
+            "case_push_endpoint_configured", tenant_id=tenant_id, actor=actor_for(request), created=key is not None
+        )
         if key is not None:
             # Shown once: the only time the secret leaves the server.
             view = {**view, "signing_key": {"key_id": key.key_id, "secret": key.secret}}
@@ -126,8 +128,8 @@ async def put_push_endpoint(
     idempotency="not-idempotent-each-call-adds-a-key", audit_event="case_push.signing_key_rotated",
 )  # fmt: skip
 async def rotate_push_key(
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
-    user: dict[str, Any] = Depends(get_current_user),
     _admin: Any = require_tenant_admin,
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
@@ -136,7 +138,7 @@ async def rotate_push_key(
         await runtime.require_enabled(tenant)
         async with _session(tenant_id) as session:
             key = await rotate_signing_key(session, tenant, now=runtime.clock())
-        logger.info("case_push_signing_key_rotated", tenant_id=tenant_id, actor=_actor(user), key_id=key.key_id)
+        logger.info("case_push_signing_key_rotated", tenant_id=tenant_id, actor=actor_for(request), key_id=key.key_id)
         return {"signing_key": {"key_id": key.key_id, "secret": key.secret}}
     except CaseError as exc:
         return _error(exc)
@@ -148,8 +150,8 @@ async def rotate_push_key(
     idempotency="idempotent-keeps-only-the-active-key", audit_event="case_push.signing_keys_retired",
 )  # fmt: skip
 async def retire_push_keys(
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
-    user: dict[str, Any] = Depends(get_current_user),
     _admin: Any = require_tenant_admin,
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
@@ -158,7 +160,7 @@ async def retire_push_keys(
         await runtime.require_enabled(tenant)
         async with _session(tenant_id) as session:
             remaining = await retire_previous_keys(session, tenant, now=runtime.clock())
-        logger.info("case_push_signing_keys_retired", tenant_id=tenant_id, actor=_actor(user))
+        logger.info("case_push_signing_keys_retired", tenant_id=tenant_id, actor=actor_for(request))
         return {"key_ids": remaining}
     except CaseError as exc:
         return _error(exc)
@@ -190,8 +192,8 @@ async def get_dead_letters(
 )  # fmt: skip
 async def replay_push_dead_letter(
     outbox_id: uuid.UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
-    user: dict[str, Any] = Depends(get_current_user),
     _admin: Any = require_tenant_admin,
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
@@ -199,7 +201,7 @@ async def replay_push_dead_letter(
         tenant = uuid.UUID(tenant_id)
         await runtime.require_enabled(tenant)
         async with _session(tenant_id) as session:
-            row = await replay_dead_letter(session, tenant, outbox_id, actor=_actor(user), now=runtime.clock())
+            row = await replay_dead_letter(session, tenant, outbox_id, actor=actor_for(request), now=runtime.clock())
             view = _outbox_view(row)
         runtime.push_kick(tenant)
         return view

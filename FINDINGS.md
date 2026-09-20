@@ -566,3 +566,19 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
   publish it, pin it here, and call `agents.update` again from
   `update_agent_scopes`.
+
+## A-45 — `developer` holds `approvals:write` and `analyst` does not
+
+- **Found:** gating the human-only governed-case routes (PRD A-8 review,
+  2026-09-20), reading `core/rbac.py::ROLE_SCOPES`.
+- **What:** the `developer` role carries `approvals:write`, which is the write
+  scope of the `approvals` family that the governed-case routes declare, so a
+  developer session satisfies the RBAC check on decide, withdraw, review and
+  approve. `core/ownership.py` limits developer approval decisions to their own
+  personal agents, but governed cases are not agent-owned, so that limit does
+  not reach them. The `analyst` role, whose job the disposition-review route
+  exists for, carries only `approvals:read` and is refused instead.
+- **Fix:** decide who may act on a governed case as a matter of product policy
+  and either split a `governed_cases` scope family out of `approvals` or move
+  the two roles' scopes; needs a data migration for existing tokens and roles,
+  so it is not a side change to the route gate.
