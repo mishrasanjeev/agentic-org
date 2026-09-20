@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Business onboarding on a governed case (PRD A-8). Requires the
+# governed_cases.enabled flag; every case_agent step is refused while it is off.
+# The recommendation is gated by the case policy, and the final step records a
+# decision only when a valid decision grant proves a named human approved it.
+name: business_onboarding
+version: "1.0"
+description: >
+  Investigates a submitted business application with the Business Onboarding
+  Underwriter (registry verification, ownership reconciliation, screening,
+  web presence, deterministic policy, cited memo), proposes a disposition for
+  every screening hit, hands the case to an underwriter and records their
+  decision only with a verified decision grant. No step approves, declines,
+  closes or files anything on its own.
+domain: operations
+
+trigger:
+  type: api_event
+  event_type: governed_case.submitted
+  description: "Emitted when a case is submitted through POST /api/v1/governed-cases; payload carries case_ref"
+
+timeout_hours: 168
+
+steps:
+  - id: investigate
+    name: Investigate the application and assemble the cited memo
+    type: case_agent
+    agent: business_underwriter
+    action: investigate
+    case_ref: $case_ref
+
+  - id: propose_screening_dispositions
+    name: Propose a disposition for every screening hit
+    type: case_agent
+    agent: screening_disposition
+    action: dispose_screening_hits
+    case_ref: $case_ref
+    depends_on: [investigate]
+
+  - id: underwriting_decision
+    name: Underwriter reviews the memo and decides
+    type: human_in_loop
+    depends_on: [propose_screening_dispositions]
+    assignee_role: underwriter
+    decision_options: [approve, decline]
+    timeout_hours: 72
+    context:
+      summary: "Governed case $case_ref awaits an underwriting decision"
+
+  - id: record_decision
+    name: Record the decision against a verified decision grant
+    type: case_agent
+    agent: none
+    action: record_decision
+    case_ref: $case_ref
+    decision_step: underwriting_decision
+    decision_grants: $decision_grants
+    depends_on: [underwriting_decision]
+
+notifications:
+  on_failure:
+    - channel: email
+      to: "{{underwriting_team}}"
+      subject: "Business onboarding workflow needs attention"
