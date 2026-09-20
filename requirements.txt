@@ -35,7 +35,7 @@ asyncpg==0.31.0
 # bundles libpq so images need no system package.
 psycopg[binary]==3.3.5
 psycopg-pool==3.3.1
-alembic==1.19.2
+alembic==1.20.0
 pgvector==0.5.0
 
 # ─── Cache, Task Queue & Message Broker ──────────────────────────────────────

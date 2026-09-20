@@ -68,7 +68,7 @@ dependencies = [
     # extra bundles libpq.
     "psycopg[binary]>=3.3.5",
     "psycopg-pool>=3.3.1",
-    "alembic>=1.19.2",
+    "alembic>=1.20.0",
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
