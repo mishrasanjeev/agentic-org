@@ -15,16 +15,21 @@ import {
   signIn,
 } from "./helpers/governed-cases";
 
+/**
+ * The first disposition still awaiting a review, located by its hit id so the
+ * locator keeps matching once the review is recorded and the form disappears.
+ */
 async function unreviewedDisposition(page: Page): Promise<Locator> {
-  const card = page
+  const pending = page
     .getByTestId("screening-disposition")
     .filter({ has: page.getByTestId("disposition-review-form") })
     .first();
   await expect(
-    card,
+    pending,
     "no disposition on this case is awaiting review: run `make seed-cases` for fresh cases",
   ).toBeVisible({ timeout: 20_000 });
-  return card;
+  const hitId = await pending.getAttribute("data-hit-id");
+  return page.locator(`[data-testid="screening-disposition"][data-hit-id="${hitId}"]`);
 }
 
 test.describe("screening dispositions in the console @dev-stack", () => {

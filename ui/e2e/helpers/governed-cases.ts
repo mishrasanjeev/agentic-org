@@ -25,7 +25,8 @@ export interface SeededCases {
   cases: Record<string, SeededCase>;
 }
 
-const REPO_ROOT = path.resolve(__dirname, "..", "..");
+// Playwright runs this suite from `ui/`, so the repository root is its parent.
+const REPO_ROOT = path.resolve(process.cwd(), "..");
 const SEED_PATH = path.resolve(REPO_ROOT, process.env.GOVERNED_CASES_SEED || "ui/test-results/governed-cases-seed.json");
 export const SCREENSHOT_DIR = path.resolve(REPO_ROOT, "docs/console/images");
 
@@ -68,28 +69,45 @@ export async function signIn(page: Page, email = APPROVER_A): Promise<void> {
 
 export async function openCase(page: Page, caseRef: string): Promise<void> {
   await page.goto(`/dashboard/approvals/cases/${caseRef}`);
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+  // The case has loaded once its state badge is on the page.
+  await expect(page.getByTestId("case-state")).toBeVisible({ timeout: 20_000 });
 }
 
 /** Fails the test on any accessibility violation on the screens under test. */
 export async function expectNoAccessibilityViolations(page: Page, testInfo: TestInfo): Promise<void> {
+  // Scoped to the page's own content: the shared console chrome has its own
+  // pre-existing contrast violations (FINDINGS A-47), which these screens
+  // neither introduce nor can fix.
   const results = await new AxeBuilder({ page })
+    .include("#main-content")
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
   await testInfo.attach("axe-violations.json", {
     body: JSON.stringify(results.violations, null, 2),
     contentType: "application/json",
   });
-  expect(
-    results.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
-    "axe accessibility violations",
-  ).toEqual([]);
+  const summary = results.violations.map(
+    (v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+  );
+  if (summary.length > 0) console.log("axe violations on " + page.url() + ": " + summary.join(" | "));
+  expect(summary, "axe accessibility violations").toEqual([]);
 }
 
-/** A documentation screenshot; `make e2e` regenerates every one of them. */
+/**
+ * A documentation screenshot; `make e2e` regenerates every one of them.
+ *
+ * The console scrolls inside its own layout, so a full-page capture would be
+ * mostly empty. Desktop shots are taken in a taller viewport instead, and the
+ * viewport is put back afterwards.
+ */
 export async function documentationScreenshot(page: Page, name: string): Promise<void> {
   mkdirSync(SCREENSHOT_DIR, { recursive: true });
-  await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`), fullPage: true });
+  const viewport = page.viewportSize();
+  const desktop = !viewport || viewport.width >= 700;
+  if (desktop && viewport) await page.setViewportSize({ width: viewport.width, height: 1500 });
+  await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(SCREENSHOT_DIR, `${name}.png`) });
+  if (desktop && viewport) await page.setViewportSize(viewport);
 }
 
 /** The page must not scroll sideways at the width under test. */

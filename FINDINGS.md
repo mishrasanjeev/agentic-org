@@ -603,3 +603,19 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** give the sync path its own engine (or a short-lived
   `NullPool` engine) for the credential read, or make the callers await the
   async resolver.
+
+## A-47 — The console chrome fails the contrast check on every page
+
+- **Found:** running the axe scan for the governed case screens against the
+  local stack (PRD A-9, 2026-09-20).
+- **What:** an axe scan of a whole console page reports `color-contrast`
+  (serious) for the shared layout, not for the page content: the natural
+  language query box (`ui/src/components/NLQueryBar.tsx`, `text-slate-300`
+  placeholder and `text-slate-200` input on the light header) and the company
+  switcher (`ui/src/components/CompanySwitcher.tsx`, `text-slate-300`). They are
+  dark-theme colours on a light surface, so they fail WCAG 1.4.3 on every
+  signed-in page. The governed case suite therefore scans `#main-content` only,
+  which is the content those screens own.
+- **Fix:** give the header components tokens that follow the theme
+  (`text-muted-foreground` / `text-foreground`), then widen the accessibility
+  scan in `ui/e2e/helpers/governed-cases.ts` back to the whole page.
