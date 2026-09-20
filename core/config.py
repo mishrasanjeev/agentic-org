@@ -171,6 +171,19 @@ class Settings(BaseSettings):
     plugin_loading: bool = False
     plugin_allowlist: str = ""
 
+    # Grant enforcement on agent tool calls (auth/grant_enforcement.py,
+    # docs/operations/grant-enforcement.md). Deployment default for
+    # ``grants.enforce_closed``: ``off`` keeps the legacy behaviour, ``warn``
+    # allows and records every call that would be denied, ``deny`` refuses it.
+    # Tenants override it with the ``grants.enforce_closed.warn`` and
+    # ``grants.enforce_closed.deny`` feature flags. An unknown value fails
+    # startup. Env: AGENTICORG_GRANTS_ENFORCE_CLOSED.
+    grants_enforce_closed: Literal["off", "warn", "deny"] = "off"
+    # Lifetime requested for a per-run grant delegated from the root grant
+    # (auth/token_pool.py). At least 300 s: a grant is handed out only with
+    # max(120 s, 10%) left, so a shorter lifetime would mint on nearly every
+    # call. Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
+    grants_run_token_ttl_seconds: int = Field(default=900, ge=300, le=86_400)
     # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
     # when an agent or SOP config is saved: "off" accepts them as before,
     # "warn" accepts them but logs and counts them, "reject" answers 422 with
@@ -293,6 +306,10 @@ class ExternalKeys(BaseSettings):
     grantex_token_server: str = ""
     grantex_api_key: str = ""  # Grantex SDK API key
     grantex_base_url: str = "https://api.grantex.dev"  # Configurable for self-hosted
+    # Root grant the platform delegates per-run agent grants from
+    # (auth/token_pool.py). A credential: set it from a secret manager.
+    # Env: GRANTEX_ROOT_GRANT_TOKEN.
+    grantex_root_grant_token: str = ""
     langsmith_api_key: str = ""
     langsmith_project: str = "agenticorg-production"
     otel_exporter_otlp_endpoint: str = ""

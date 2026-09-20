@@ -10,11 +10,57 @@ When an agent is created in AgenticOrg, this module:
 from __future__ import annotations
 
 import os
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, Final
+from urllib.parse import quote
 
 import structlog
 
 logger = structlog.get_logger()
+
+
+# Most scopes one Grantex agent registration carries.
+MAX_AGENT_SCOPES: Final = 100
+
+
+class ScopeLimitExceededError(ValueError):
+    """An agent's tools map to more distinct Grantex scopes than a registration can carry."""
+
+    def __init__(self, count: int) -> None:
+        super().__init__(
+            f"the agent's authorized tools map to {count} distinct Grantex scopes; "
+            f"at most {MAX_AGENT_SCOPES} can be registered - remove tools or split the agent"
+        )
+        self.count = count
+
+
+def bounded_scopes(scopes: Iterable[str]) -> list[str]:
+    """``scopes`` without duplicates (first occurrence kept), at most ``MAX_AGENT_SCOPES``.
+
+    Raises ``ScopeLimitExceededError`` rather than silently dropping scopes.
+    """
+    unique = list(dict.fromkeys(s for s in scopes if isinstance(s, str) and s))
+    if len(unique) > MAX_AGENT_SCOPES:
+        raise ScopeLimitExceededError(len(unique))
+    return unique
+
+
+def update_agent_scopes(client: Any, grantex_agent_id: str, scopes: Iterable[str]) -> None:
+    """Replace a registered agent's scopes on Grantex. Blocking: call it off the event loop.
+
+    Compatibility: the Grantex Python SDK's ``agents.update`` (0.5.x, and its
+    main branch at the time of writing) sends ``POST /v1/agents/{id}``, a route
+    the Grantex auth service does not serve - it serves ``PATCH`` - so the SDK
+    call always fails. Until the SDK is fixed this sends the ``PATCH`` through
+    the SDK's own HTTP client (same key, base URL and error mapping). Grantex
+    refuses duplicate scopes and more than 100; pass ``bounded_scopes`` output.
+    Any failure raises. See FINDINGS.md A-42.
+    """
+    http = getattr(client, "_http", None)
+    send_patch = getattr(http, "patch", None)
+    if not callable(send_patch):
+        raise RuntimeError("the Grantex client cannot send PATCH requests")
+    send_patch(f"/v1/agents/{quote(grantex_agent_id, safe='')}", {"scopes": list(scopes)})
 
 
 def _get_grantex_client():
@@ -119,8 +165,13 @@ def _tools_to_scopes(
 ) -> list[str]:
     """Map tool names to Grantex scopes.
 
-    Format: tool:{connector}:execute:{tool_name}
-    Also adds domain-level read scope.
+    Format: ``tool:{connector}:{permission}:{tool_name}``, plus a domain-level
+    read scope. ``permission`` is what ``grantex.enforce`` understands
+    (``read < write < delete < admin``): the level the connector's shipped
+    Grantex manifest declares for the tool, else a conservative name
+    heuristic (``core.langgraph.grantex_auth._tool_permission``). An
+    ``execute`` segment - used before - resolves to no permission, so a grant
+    carrying only such scopes denied every call.
 
     BUG-07 (Uday CA Firms 2026-05-02): tool names like ``list_invoices``
     and ``get_balance_sheet`` are registered by multiple connectors
@@ -133,6 +184,11 @@ def _tools_to_scopes(
     declare any connector_ids continue to use the unscoped index — for
     them we have no signal that *should* have constrained the choice.
     """
+    from core.langgraph.grantex_auth import _tool_permission
+
+    def _scope(connector_name: str, tool: str) -> str:
+        return f"tool:{connector_name}:{_tool_permission(connector_name, tool)}:{tool}"
+
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
@@ -150,7 +206,7 @@ def _tools_to_scopes(
     # enterprise-gate: broad-except-ok reason=tool-index-failure-falls-back-to-agenticorg-scopes
     except Exception:
         # Fallback: use tool names directly as scopes
-        return scopes + [f"tool:agenticorg:execute:{t}" for t in tools]
+        return scopes + [_scope("agenticorg", t) for t in tools]
 
     for tool_name in tools:
         connector_hint, bare_tool = _split_connector_tool_ref(tool_name)
@@ -159,15 +215,14 @@ def _tools_to_scopes(
             # to a first-wins match of the bare name.
             qualified = qualified_index.get(f"{connector_hint}:{bare_tool}")
             if qualified:
-                scopes.append(f"tool:{qualified[0]}:execute:{bare_tool}")
+                scopes.append(_scope(qualified[0], bare_tool))
             else:
-                scopes.append(f"tool:agenticorg:execute:{tool_name}")
+                scopes.append(_scope("agenticorg", tool_name))
             continue
         match = scoped_index.get(tool_name) or global_index.get(tool_name)
         if match:
-            connector_name = match[0]
-            scopes.append(f"tool:{connector_name}:execute:{tool_name}")
+            scopes.append(_scope(match[0], tool_name))
         else:
-            scopes.append(f"tool:agenticorg:execute:{tool_name}")
+            scopes.append(_scope("agenticorg", tool_name))
 
     return scopes

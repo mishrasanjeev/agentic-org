@@ -180,8 +180,12 @@ gate pauses in a LangGraph checkpoint. Two switches control what happens next:
 | `AGENTICORG_LANGGRAPH_CHECKPOINTER` | process (API and workers, set together) | `memory` | `memory`: checkpoints live in process memory and are lost on restart or on another replica. `postgres`: checkpoints are stored encrypted (credential-vault keyring) in `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` (migration `v6z22`). |
 | `approvals.resume_agent_runs` | per tenant feature flag | off | On: deciding the approval with `approve` or `reject` resumes the paused run from its checkpoint. Off: the decision is recorded and the run stays paused. |
 
-Enable the flag for a tenant as a tenant admin:
-`POST /api/v1/feature-flags` with `{"flag_key": "approvals.resume_agent_runs", "enabled": true, "rollout_percentage": 100}`.
+`approvals.resume_agent_runs` is an operator-managed authority flag: the
+tenant feature-flag API refuses it (`403 flag_key_reserved`). A platform
+operator enables it for a tenant with
+`python scripts/authority_flags.py set approvals.resume_agent_runs --tenant <tenant id> --operator <name>`.
+A global row that disables it keeps runs paused for every tenant; otherwise the
+tenant row decides, else the global row.
 Resuming across restarts and replicas needs `postgres`.
 
 Operating the Postgres store:

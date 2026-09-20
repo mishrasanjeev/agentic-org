@@ -37,6 +37,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from workflows.engine import WorkflowEngine
 from workflows.state_store import (
     STATE_VERSION_KEY,
@@ -811,6 +812,7 @@ async def test_execute_agent_tool_runs_grant_enforce_off_event_loop() -> None:
             domain=None,
             authorized_tools=["hubspot.list_contacts"],
             grant_token="grant-token",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
     assert result["error"]["code"] == "E1007"
@@ -831,6 +833,7 @@ async def test_tool_gateway_runs_grant_enforce_off_event_loop() -> None:
             tool_name="list_contacts",
             params={},
             grant_token="grant-token",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
     assert result["error"]["code"] == "E1007"

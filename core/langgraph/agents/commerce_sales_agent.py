@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from auth.run_grants import RunGrant
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.runner import run_agent
@@ -30,6 +31,8 @@ def build_graph(
     hitl_condition: str = "",
     authorized_tools: list[str] | None = None,
     connector_config: dict[str, Any] | None = None,
+    *,
+    run_grant: RunGrant | None,
 ):
     return build_agent_graph(
         system_prompt=load_prompt(prompt_variables),
@@ -38,6 +41,7 @@ def build_graph(
         confidence_floor=confidence_floor,
         hitl_condition=hitl_condition,
         connector_config=connector_config,
+        run_grant=run_grant,
     )
 
 
