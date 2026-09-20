@@ -331,25 +331,65 @@ immediately and ask the receiver to drop the old key.
 
 ## Provider webhooks: verification failures and replays
 
-Inbound provider events arrive at `POST /api/v1/webhooks/providers/{tenant_id}/{provider}`
-(`core/cases/provider_webhooks.py`). A webhook never changes a case: it only triggers a
-re-investigation of matching cases awaiting a decision, which re-reads everything from the provider.
+Inbound provider events arrive at
+`POST /api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}`
+(`core/cases/provider_webhooks.py`). A webhook never changes a case: only a delivery that reaches
+the tenant's own inbox path **and** verifies triggers a re-investigation of matching cases awaiting
+a decision, which re-reads everything from the provider.
 
 **Detect:** `agenticorg_provider_webhook_receipts_total{outcome="unverified"}` rising (forged,
 stale, tampered or unsigned deliveries, or a signing secret that no longer matches);
-`outcome="duplicate"` rising (the provider or an attacker is replaying event ids).
+`outcome="duplicate"` rising (the provider or an attacker is replaying event ids);
+`outcome="unbound"` rising (deliveries to a wrong or stale inbox path - usually a provider still
+configured with an old path after `AGENTICORG_SECRET_KEY` was rotated, otherwise scanning).
 
 **Diagnose:** `provider_webhook_receipts` records every delivery's outcome, event id (verified only),
-body SHA-256 and how many cases it re-queried; bodies are never stored. A sudden switch from
-`accepted` to `unverified` for one provider usually means its webhook secret was rotated on one
-side only.
+body SHA-256 and how many cases it re-queried; bodies are never stored, and unbound deliveries are
+not recorded at all (they are counted). A sudden switch from `accepted` to `unverified` for one
+provider usually means its webhook secret was rotated on one side only; a switch to `unbound` means
+the path changed.
 
-**Mitigate:** the route answers 202 either way and is rate limited (`provider-webhook`). An
-unverified delivery can re-query a matching case at most once per 10 minutes, so forged traffic
-costs at most that many provider calls. If a provider is compromised, set its webhook secret to a
-new value (or stop routing its traffic) - verified events cannot bypass re-querying.
+**Mitigate:** the route answers 202 for every outcome and is rate limited (`provider-webhook`).
+Unverified deliveries cost one receipt row each and nothing else - they never start an
+investigation. If a provider is compromised, set its webhook secret to a new value (or stop routing
+its traffic); to invalidate every inbox path at once, rotate `AGENTICORG_SECRET_KEY` and give each
+tenant's provider the new path from `GET /api/v1/case-push/provider-webhook-inbox`.
 
 **Fix:** align the provider's webhook secret with its configuration (for the mock:
-`AGENTICORG_MOCK_PROVIDER_WEBHOOK_SECRET`). Missed events are harmless to replay from the provider:
-a verified event id is processed once; a new id triggers one re-investigation.
+`AGENTICORG_MOCK_PROVIDER_WEBHOOK_SECRET`) and its delivery URL with the tenant's current inbox
+path. Missed events are harmless to replay from the provider: a verified event id is processed once;
+a new id triggers one re-investigation. A re-investigation that cannot reach the provider leaves the
+case in `awaiting_decision` with its previous memo and the transition reason
+`re_evaluation_failed:<reason>`; replay the event once the provider is back.
+
+### Moving a provider to the per-tenant inbox path (one-off, required)
+
+The tokenless path `POST /api/v1/webhooks/providers/{tenant_id}/{provider}` no longer exists: it
+answers 404 from the release that added the path token. Until a provider is re-pointed, its events
+are lost (they are not queued anywhere), so do this for **every** tenant that has
+`governed_cases.enabled` on and a provider delivering events, in this order:
+
+1. **List the tenants to migrate** before deploying:
+   `SELECT DISTINCT tenant_id FROM provider_webhook_receipts WHERE verified = true;` — those are the
+   tenants a provider is currently delivering to. Note the `provider` column with each.
+2. **Deploy the release.** From this moment the old path answers 404 and deliveries to it are lost.
+   Keep the window short: have step 3 ready first.
+3. **Read each tenant's new path** as an active human administrator of that tenant:
+   `GET /api/v1/case-push/provider-webhook-inbox?provider=<provider>` returns
+   `{"provider": …, "path": "/api/v1/webhooks/providers/<tenant>/<provider>/<token>"}`. The route
+   needs a human admin session; an API key or agent token holding the admin scope is refused.
+   Treat the path like a credential: it is what binds a delivery to the tenant.
+4. **Update the provider's delivery URL** to `https://<your host><path>` in the provider's own
+   configuration. Do not send the path over an unencrypted channel or paste it into a ticket.
+5. **Confirm** within a few minutes:
+   `SELECT outcome, count(*) FROM provider_webhook_receipts WHERE tenant_id = :t AND received_at >
+   now() - interval '15 minutes' GROUP BY outcome;` — expect `accepted`, not `unverified`, and no
+   growth in `agenticorg_provider_webhook_receipts_total{outcome="unbound"}` (unbound means the
+   provider is still using an old path).
+6. **Backfill anything missed** by asking the provider to redeliver events from the deployment
+   window, or by re-investigating the affected cases from the console. A verified event id is
+   processed once, so redelivery is safe.
+
+Rotating `AGENTICORG_SECRET_KEY` changes every tenant's path, so it means repeating steps 3-5 for
+every tenant; schedule it with that in mind.
 

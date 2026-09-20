@@ -31,10 +31,12 @@ from connectors.framework.verification_provider import ProviderEventType
 from connectors.providers.mock import MockConfig, MockProvider
 from connectors.providers.mock import webhooks as mock_webhooks
 from core.cases import push as case_push
-from core.cases.provider_webhooks import receive_provider_webhook
+from core.cases.provider_webhooks import RequeryRequest, receive_provider_webhook, webhook_path_token
 from core.cases.push import CasePushDispatcher, PushSettings, configure_endpoint, verify_signature
 from core.cases.runtime import CaseRuntime, investigate_case
+from core.cases.states import CaseError
 from core.cases.store import create_case, get_case
+from core.cases.store import transitions_for as case_transitions
 from core.domain_schemas import validate
 from core.models.case_push import CasePushOutbox, ProviderWebhookReceipt
 from core.test_doubles.scripted_model import final
@@ -377,16 +379,18 @@ async def test_provider_webhooks_valid_forged_and_replayed(engine: Engine, tenan
     provider = MockProvider(MockConfig(clock=clock))
     case_ref = await _completed_case(tenant, clock, provider=provider)
     runtime = _runtime(clock, provider)
-    requeried: list[tuple[str, str]] = []
+    requeried: list[tuple[str, str, str]] = []
 
-    async def requery(tenant_id: uuid.UUID, ref: str, actor: str) -> None:
-        requeried.append((ref, actor))
-        await investigate_case(tenant_id, ref, runtime=runtime, actor=actor)
+    async def requery(request: RequeryRequest) -> None:
+        requeried.append((request.case_ref, request.actor, request.reason))
+        await investigate_case(
+            request.tenant_id, request.case_ref, runtime=runtime, actor=request.actor, reason=request.reason
+        )
 
     async def receive(headers: dict[str, str], body: bytes) -> Any:
         return await receive_provider_webhook(
-            tenant_id=uuid.UUID(tenant), provider_name="mock", headers=headers, body=body, runtime=runtime,
-            requery=requery, now=clock(),
+            tenant_id=uuid.UUID(tenant), provider_name="mock", path_token=webhook_path_token(tenant, "mock"),
+            headers=headers, body=body, runtime=runtime, requery=requery, now=clock(),
         )  # fmt: skip
 
     headers, body = provider.emit_event(provider.ref_for("gb-clean-brightwater"), ProviderEventType.BUSINESS_DISSOLVED)
@@ -394,18 +398,20 @@ async def test_provider_webhooks_valid_forged_and_replayed(engine: Engine, tenan
     assert valid.outcome == "accepted" and valid.requeried == (case_ref,)
     async with get_tenant_session(uuid.UUID(tenant)) as session:
         case = await get_case(session, tenant, case_ref)
+        history = await case_transitions(session, case)
     # Re-investigated from the provider, which now reports the business dissolved.
     assert case.state == "awaiting_decision" and case.policy_result["tier"] == "blocked"
     assert len(case.agent_records) == 2
+    # The re-investigation says which event started it instead of looking like a fresh run.
+    started = [t.reason for t in history if t.to_state == "in_progress"]
+    assert started[-1].startswith("provider_event:business.dissolved")
 
     replayed = await receive(headers, body)
     assert replayed.outcome == "duplicate" and replayed.requeried == ()
 
     forged_body = body.replace(b"business.dissolved", b"business.status_changed")
     forged = await receive(headers, forged_body)
-    assert forged.outcome == "unverified"
-    # The hint in the forged body matches the case, but it was re-queried from a provider event moments ago.
-    assert forged.requeried == ()
+    assert forged.outcome == "unverified" and forged.requeried == ()
 
     stale_headers = mock_webhooks.sign(
         provider.config.webhook_secret,
@@ -415,7 +421,7 @@ async def test_provider_webhooks_valid_forged_and_replayed(engine: Engine, tenan
     )
     assert (await receive(stale_headers, body)).outcome == "unverified"
     assert (await receive({}, b"not json")).outcome == "unverified"
-    assert requeried == [(case_ref, "provider_event:mock")]
+    assert requeried == [(case_ref, "provider_event:mock", requeried[0][2])]
 
     async with get_tenant_session(uuid.UUID(tenant)) as session:
         receipts = (
@@ -430,29 +436,134 @@ async def test_provider_webhooks_valid_forged_and_replayed(engine: Engine, tenan
     assert [r.event_type for r in outbox] == []  # no endpoint configured for this tenant
 
 
-async def test_an_unverified_trigger_requeries_only_after_the_window(
+async def test_an_unverified_delivery_never_reaches_a_case_or_its_reviews(
     engine: Engine, tenant: str, scripted_model: Any
 ) -> None:
+    """An unsigned body naming a real subject is evidence of an attempt, never an instruction."""
+    from core.agents.screening_disposition import apply_review
+    from core.cases.runtime import dispose_screening_hits
+    from core.cases.store import record_update
+    from core.database import get_tenant_session
+
     scripted_model([_respond, _respond])
     clock = Clock(T0)
     provider = MockProvider(MockConfig(clock=clock))
-    case_ref = await _completed_case(tenant, clock, provider=provider)
     runtime = _runtime(clock, provider)
+    case_ref = await _completed_case(tenant, clock, "gb-missing-owner-marlpit", provider=provider)
+    await dispose_screening_hits(tenant, case_ref, runtime=runtime, actor="user:analyst")
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        case = await get_case(session, tenant, case_ref, for_update=True)
+        [disposition] = case.screening_dispositions
+        case.screening_dispositions = [
+            apply_review(
+                disposition,
+                {"action": "overridden", "final_outcome": "insufficient_information", "reason": "Passport needed."},
+                analyst_id="user:analyst",
+                reviewed_at=clock(),
+            )
+        ]
+        await record_update(session, case, now=clock())
+
     calls: list[str] = []
 
-    async def requery(tenant_id: uuid.UUID, ref: str, actor: str) -> None:
-        calls.append(ref)
-        await investigate_case(tenant_id, ref, runtime=runtime, actor=actor)
+    async def requery(request: RequeryRequest) -> None:
+        calls.append(request.case_ref)
 
-    subject = provider.ref_for("gb-clean-brightwater").model_dump(mode="json")
+    subject = provider.ref_for("gb-missing-owner-marlpit").model_dump(mode="json")
     forged = json.dumps({"subject": subject, "event_type": "business.dissolved", "note": "trust me"}).encode()
     for _ in range(2):
+        clock.advance(60 * 11)
         result = await receive_provider_webhook(
-            tenant_id=uuid.UUID(tenant), provider_name="mock", headers={"X-Mock-Signature": "v1=00"}, body=forged,
-            runtime=runtime, requery=requery, now=clock(),
+            tenant_id=uuid.UUID(tenant), provider_name="mock", path_token=webhook_path_token(tenant, "mock"),
+            headers={"X-Mock-Signature": "v1=00"}, body=forged, runtime=runtime, requery=requery, now=clock(),
         )  # fmt: skip
-        assert result.outcome == "unverified"
-    assert calls == [case_ref]
+        assert result.outcome == "unverified" and result.requeried == ()
+    assert calls == []
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        case = await get_case(session, tenant, case_ref)
+        history = await case_transitions(session, case)
+    assert case.state == "awaiting_decision"
+    assert case.screening_dispositions[0]["review"]["final_outcome"] == "insufficient_information"
+    assert [t for t in history if t.actor.startswith("provider_event:")] == []
+
+
+async def test_a_signed_event_is_refused_at_another_tenants_inbox(
+    engine: Engine, tenant: str, scripted_model: Any
+) -> None:
+    """The per-tenant path token binds a delivery to one tenant, whoever signed the body."""
+    scripted_model([_respond])
+    clock = Clock(T0)
+    provider = MockProvider(MockConfig(clock=clock))
+    runtime = _runtime(clock, provider)
+    case_ref = await _completed_case(tenant, clock, provider=provider)
+    other_tenant = uuid.uuid4()
+    headers, body = provider.emit_event(provider.ref_for("gb-clean-brightwater"), ProviderEventType.BUSINESS_DISSOLVED)
+
+    async def requery(request: RequeryRequest) -> None:  # pragma: no cover - must never run
+        raise AssertionError("an unbound delivery must not trigger a re-query")
+
+    with pytest.raises(CaseError) as refused:
+        await receive_provider_webhook(
+            tenant_id=uuid.UUID(tenant), provider_name="mock", path_token=webhook_path_token(other_tenant, "mock"),
+            headers=headers, body=body, runtime=runtime, requery=requery, now=clock(),
+        )  # fmt: skip
+    assert refused.value.reason == "webhook_not_bound"
+    with pytest.raises(CaseError):
+        await receive_provider_webhook(
+            tenant_id=uuid.UUID(tenant), provider_name="mock", path_token=webhook_path_token(tenant, "other_provider"),
+            headers=headers, body=body, runtime=runtime, requery=requery, now=clock(),
+        )  # fmt: skip
+
+    from core.database import get_tenant_session
+
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        receipts = (
+            await session.execute(
+                select(ProviderWebhookReceipt.id).where(ProviderWebhookReceipt.tenant_id == uuid.UUID(tenant))
+            )
+        ).all()
+        case = await get_case(session, tenant, case_ref)
+    assert receipts == [] and len(case.agent_records) == 1
+
+
+async def test_a_re_query_that_cannot_reach_the_provider_keeps_the_case_awaiting_decision(
+    engine: Engine, tenant: str, scripted_model: Any
+) -> None:
+    """A provider outage during a re-query must not cost the tenant a completed case."""
+    from core.database import get_tenant_session
+
+    scripted_model([_respond])
+    clock = Clock(T0)
+    provider = MockProvider(MockConfig(clock=clock))
+    case_ref = await _completed_case(tenant, clock, provider=provider)
+    calls = {"n": 0}
+
+    def flaky(name: str) -> MockProvider:
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("provider outage")
+        return provider
+
+    runtime = _runtime(clock, provider, provider_factory=flaky)
+    headers, body = provider.emit_event(provider.ref_for("gb-clean-brightwater"), ProviderEventType.BUSINESS_DISSOLVED)
+
+    async def requery(request: RequeryRequest) -> None:
+        await investigate_case(
+            request.tenant_id, request.case_ref, runtime=runtime, actor=request.actor, reason=request.reason,
+            keep_state_on_failure=True,
+        )  # fmt: skip
+
+    receipt = await receive_provider_webhook(
+        tenant_id=uuid.UUID(tenant), provider_name="mock", path_token=webhook_path_token(tenant, "mock"),
+        headers=headers, body=body, runtime=runtime, requery=requery, now=clock(),
+    )  # fmt: skip
+    assert receipt.requeried == (case_ref,)
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        case = await get_case(session, tenant, case_ref)
+        history = await case_transitions(session, case)
+    assert case.state == "awaiting_decision" and case.failure_reason is None and case.memo is not None
+    assert history[-1].reason == "re_evaluation_failed:provider_unavailable"
 
 
 async def test_provider_webhook_http_route(client: Any, engine: Engine) -> None:
@@ -473,14 +584,44 @@ async def test_provider_webhook_http_route(client: Any, engine: Engine) -> None:
         headers, body = provider.emit_event(
             provider.ref_for("us-clean-hollowbrook"), ProviderEventType.OFFICERS_CHANGED
         )
-        url = f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/mock"
+        token = webhook_path_token(TEST_TENANT_ID, "mock")
+        url = f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/mock/{token}"
         for request_headers, request_body in ((headers, body), (headers, body), ({"X-Mock-Signature": "v1=ff"}, body)):
             response = await client.post(url, content=request_body, headers=request_headers)
             assert response.status_code == 202 and response.json() == {"status": "received"}
         too_large = await client.post(url, content=b"x" * (256 * 1024 + 1), headers=headers)
         assert too_large.status_code == 413
-        unknown = await client.post(f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/unknown_provider", content=body)
-        assert unknown.status_code == 404 and unknown.json()["error"]["reason"] == "provider_unknown"
+        # Uniform 202: neither an unknown provider nor a wrong token says anything about the tenant.
+        unknown_token = webhook_path_token(TEST_TENANT_ID, "unknown_provider")
+        unknown = await client.post(
+            f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/unknown_provider/{unknown_token}", content=body
+        )
+        assert unknown.status_code == 202 and unknown.json() == {"status": "received"}
+        wrong_token = await client.post(
+            f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/mock/{'0' * 32}", content=body, headers=headers
+        )
+        assert wrong_token.status_code == 202 and wrong_token.json() == {"status": "received"}
+        # The old tokenless path no longer exists.
+        legacy = await client.post(f"/api/v1/webhooks/providers/{TEST_TENANT_ID}/mock", content=body, headers=headers)
+        assert legacy.status_code == 404
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_provider_webhook_inbox_path_is_admin_only(
+    client: Any, auth_headers: dict[str, str], engine: Engine
+) -> None:
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from tests.integration.conftest import TEST_TENANT_ID
+
+    clock = Clock(T0)
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _runtime(clock)
+    try:
+        response = await client.get("/api/v1/case-push/provider-webhook-inbox?provider=mock", headers=auth_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["path"].endswith(webhook_path_token(TEST_TENANT_ID, "mock"))
+        assert (await client.get("/api/v1/case-push/provider-webhook-inbox?provider=mock")).status_code in (401, 403)
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
 
