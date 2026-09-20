@@ -4028,7 +4028,7 @@
     "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
     "rate_limit": "public-evals-read",
     "scope": "public:evals.scorecard.read",
-    "source_line": 150,
+    "source_line": 152,
     "tenant_required": false
   },
   {
@@ -4046,7 +4046,25 @@
     "public_exempt_reason": "public-product-scorecard-data-quality-labeled",
     "rate_limit": "public-evals-read",
     "scope": "public:evals.agent_scorecard.read",
-    "source_line": 173,
+    "source_line": 175,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-evals-jev-shadow-plan-read",
+    "auth_required": false,
+    "function": "get_jev_shadow_plan",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/evals/jev-shadow api/v1/evals.py:get_jev_shadow_plan",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/evals.py",
+    "path": "/api/v1/evals/jev-shadow",
+    "public_exempt_reason": "public-jev-shadow-plan-is-redacted-and-non-executing",
+    "rate_limit": "public-evals-read",
+    "scope": "public:evals.jev_shadow_plan.read",
+    "source_line": 207,
     "tenant_required": false
   },
   {

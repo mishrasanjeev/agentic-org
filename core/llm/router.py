@@ -77,8 +77,8 @@ def _load_routellm_controller_cls() -> type[Any] | None:
         openai_error_types = (OpenAIError,)
 
     try:
-        from routellm.controller import (
-            Controller as RouteLLMControllerClass,  # type: ignore[import-untyped,import-not-found]
+        from routellm.controller import (  # type: ignore[import-not-found]
+            Controller as RouteLLMControllerClass,
         )
     except ImportError as exc:
         logger.info("routellm_unavailable", error=str(exc))

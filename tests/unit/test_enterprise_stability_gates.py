@@ -1183,7 +1183,7 @@ def test_final_control_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 44
+    assert len(routes) == 45
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -1213,6 +1213,7 @@ def test_final_control_public_routes_include_public_reason() -> None:
         ("POST", "/api/v1/cron/compliance-alerts"),
         ("GET", "/api/v1/evals"),
         ("GET", "/api/v1/evals/agent/{agent_type}"),
+        ("GET", "/api/v1/evals/jev-shadow"),
         ("GET", "/api/v1/mcp/tools"),
         ("GET", "/api/v1/product-facts"),
         ("GET", "/api/v1/status"),
