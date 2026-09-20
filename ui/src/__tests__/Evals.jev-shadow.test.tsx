@@ -58,5 +58,6 @@ describe("Evals Jev shadow panel", () => {
     expect(screen.getByText("not_run")).toBeInTheDocument();
     expect(screen.getByText("existing runtime remains authoritative")).toBeInTheDocument();
     expect(screen.getByText("Agreement gate: 95%+")).toBeInTheDocument();
+    expect(screen.getByText(/TypeSafe enrollment is currently closed/)).toBeInTheDocument();
   });
 });
