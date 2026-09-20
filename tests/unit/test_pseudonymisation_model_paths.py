@@ -30,6 +30,7 @@ from unittest.mock import AsyncMock
 import pytest
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.pii.pseudonymiser import PseudonymMap
 from core.test_doubles.pseudonym_store import InMemoryPseudonymMapStore
 from core.test_doubles.scripted_model import final, tool_call
@@ -389,6 +390,7 @@ async def test_tool_gateway_restores_arguments_and_refuses_unrestorable_ones(
         "connector_name": "gmail",
         "tool_name": "send_email",
         "pseudonymiser": session,
+        "run_grant": NO_RUN_GRANT_FOR_TESTS,
     }
 
     refused = await gateway.execute(**arguments, params={"to": "[[EMAIL_ADDRESS_2:ffffff]]"})
@@ -411,7 +413,11 @@ async def test_graph_pseudonymises_every_message_immediately_before_the_model_ca
     session = await open_session(case.TENANT_ID, case.CASE_ID)
     model = scripted_model([final({"status": "completed", "confidence": 0.95})])
     graph = build_agent_graph(
-        system_prompt=case.system_prompt(), authorized_tools=[], confidence_floor=0.5, pseudonymiser=session
+        system_prompt=case.system_prompt(),
+        authorized_tools=[],
+        confidence_floor=0.5,
+        pseudonymiser=session,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     state = {
         "messages": [
@@ -455,6 +461,7 @@ async def test_agent_tool_dispatch_without_a_gateway_refuses_unrestorable_argume
         domain=None,
         authorized_tools=["gmail:send_email"],
         pseudonymiser=session,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     assert result == {"error": {"code": "E1012", "message": "pseudonym_restore_failed: unknown_pseudonym"}}
     assert connector_calls == []

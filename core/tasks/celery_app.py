@@ -40,6 +40,7 @@ app = Celery(
     include=[
         "core.cron.tasks",
         "core.tasks.budget_tasks",
+        "core.tasks.case_push_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
         "core.tasks.report_tasks",
@@ -85,6 +86,13 @@ app.conf.update(
 
 # ── Beat schedule — periodic tasks ──────────────────────────────────
 app.conf.beat_schedule = {
+    "sweep-case-pushes": {
+        # Governed case hand-off retries and missed kicks (core/cases/push.py).
+        # A no-op unless AGENTICORG_CASE_PUSH_SWEEP_ENABLED is true.
+        "task": "core.tasks.case_push_tasks.sweep_case_pushes",
+        "schedule": 30.0,
+        "options": {"queue": "delivery"},
+    },
     "generate-scheduled-reports": {
         "task": "core.tasks.report_tasks.generate_scheduled_reports",
         "schedule": 300.0,  # every 5 minutes

@@ -69,6 +69,23 @@ circuit_breaker_state = Gauge(
     ["connector_name"],
 )
 
+# ── Grant enforcement ───────────────────────────────────────────────
+# One series per (mode, reason): mode is ``warn`` (the call was allowed and
+# would have been denied) or ``deny`` (the call was refused); reason is the
+# fixed denial vocabulary in auth/grant_enforcement.py. Grant ids, tools and
+# tenants go to the structured log event, never to labels.
+
+grant_enforcement_denials_total = Counter(
+    "agenticorg_grant_enforcement_denials_total",
+    "Agent tool calls denied, or that would be denied in warn mode, by grant enforcement",
+    ["mode", "reason"],
+)
+grant_enforcement_mode_fallbacks_total = Counter(
+    "agenticorg_grant_enforcement_mode_fallbacks_total",
+    "Runs whose grants.enforce_closed mode could not be read from the flag store",
+    ["outcome"],
+)
+
 # ── LLM cost ────────────────────────────────────────────────────────
 
 llm_tokens_total = Counter(

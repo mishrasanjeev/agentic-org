@@ -11,12 +11,13 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from auth.run_grants import NO_CALLER, CallerGrant, caller_grant_from_request
 from core.agents.registry import AgentRegistry
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
@@ -204,10 +205,15 @@ async def get_due_followups(tenant_id: str = Depends(get_current_tenant)):
     audit_event="sales.lead.process",
 )
 async def process_lead_with_agent(
+    request: Request,
     payload: dict | None = None,
     tenant_id: str = Depends(get_current_tenant),
 ):
-    """Run the sales agent against a specific lead for qualification + outreach."""
+    """Run the sales agent against a specific lead for qualification + outreach.
+
+    PRD F-1: a request that authenticated with a Grantex token is bound to it;
+    the agent's tool calls must be allowed by that token too.
+    """
     if payload is None:
         payload = {}
     lead_id = payload.get("lead_id")
@@ -219,6 +225,7 @@ async def process_lead_with_agent(
         lead_id=lead_id,
         action=payload.get("action", "qualify_and_respond"),
         sequence_step=payload.get("sequence_step", 0),
+        caller=caller_grant_from_request(request),
     )
     if "error" in result:
         logger.error("sales_agent_error", lead_id=str(lead_id), error=result["error"])
@@ -318,8 +325,13 @@ async def update_lead(
 async def _run_sales_agent_on_lead(
     tenant_id: str, lead_id: str,
     action: str = "qualify_and_respond", sequence_step: int = 0,
+    caller: CallerGrant = NO_CALLER,
 ) -> dict:
-    """Core logic: run sales agent on a lead. Called from API endpoint and demo request trigger."""
+    """Core logic: run sales agent on a lead. Called from API endpoint and demo request trigger.
+
+    ``caller`` is the Grantex token of the request that triggered the run, if
+    any (PRD F-1): the agent's tool calls are checked against it as well.
+    """
     tid = _uuid.UUID(tenant_id)
 
     if not lead_id:
@@ -367,6 +379,7 @@ async def _run_sales_agent_on_lead(
 
     import core.agents  # noqa: F401
     agent_instance = AgentRegistry.create_from_config(agent_config)
+    agent_instance.bind_caller(caller)
 
     task_assignment = TaskAssignment(
         message_id=f"msg_{_uuid.uuid4().hex[:12]}",
@@ -578,6 +591,7 @@ async def get_sales_metrics(tenant_id: str = Depends(get_current_tenant)):
 )
 async def import_leads_csv(
     file: UploadFile,
+    request: Request,
     auto_process: bool = True,
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -694,6 +708,7 @@ async def import_leads_csv(
             try:
                 # Call process_lead internally
                 await process_lead_with_agent(
+                    request=request,
                     payload={"lead_id": lead_info["id"], "action": "qualify_and_respond"},
                     tenant_id=tenant_id,
                 )
@@ -735,6 +750,7 @@ FOLLOWUP_SCHEDULE = {
     audit_event="sales.followups.run",
 )
 async def run_automated_followups(
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Process all leads that need follow-up based on their sequence step and timing.
@@ -785,6 +801,7 @@ async def run_automated_followups(
             # Trigger sales agent for this lead
             try:
                 resp = await process_lead_with_agent(
+                    request=request,
                     payload={
                         "lead_id": str(lead.id),
                         "action": "followup",
@@ -851,6 +868,7 @@ TARGET_PROSPECTS = [
     audit_event="sales.prospects.seed",
 )
 async def seed_target_prospects(
+    request: Request,
     auto_process: bool = False,
     tenant_id: str = Depends(get_current_tenant),
 ):
@@ -896,6 +914,7 @@ async def seed_target_prospects(
         for lead_info in imported:
             try:
                 await process_lead_with_agent(
+                    request=request,
                     payload={"lead_id": lead_info["id"]},
                     tenant_id=tenant_id,
                 )
@@ -929,6 +948,7 @@ DEFAULT_TENANT = "00000000-0000-0000-0000-000000000001"
     audit_event="sales.inbox.process",
 )
 async def process_inbox(
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
     """Read recent inbox replies, match to pipeline leads, trigger sales agent for response.
@@ -1019,6 +1039,7 @@ async def process_inbox(
                 lead_id=lead_id,
                 action="respond_to_reply",
                 sequence_step=len(prev_emails),
+                caller=caller_grant_from_request(request),
             )
 
             # Send the response via Gmail API (in-thread)

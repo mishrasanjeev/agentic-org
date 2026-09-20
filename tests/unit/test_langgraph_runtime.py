@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+
 # ═══════════════════════════════════════════════════════════════════════════
 # State
 # ═══════════════════════════════════════════════════════════════════════════
@@ -24,7 +26,8 @@ class TestAgentState:
         assert "hitl_trigger" in fields
         assert "output" in fields
         assert "pseudonym_case_id" in fields
-        assert len(fields) == 14
+        assert "grant_denial" in fields
+        assert len(fields) == 15
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -128,6 +131,7 @@ class TestAgentGraph:
         graph = build_agent_graph(
             system_prompt="Test prompt",
             authorized_tools=["fetch_bank_statement"],
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         compiled = graph.compile()
         nodes = list(compiled.get_graph().nodes.keys())
@@ -142,6 +146,7 @@ class TestAgentGraph:
         graph = build_agent_graph(
             system_prompt="Test prompt",
             authorized_tools=[],
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         compiled = graph.compile()
         nodes = list(compiled.get_graph().nodes.keys())
@@ -318,6 +323,7 @@ class TestApProcessor:
 
         graph = build_ap_processor_graph(
             prompt_variables={"org_name": "TestCorp"},
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
         compiled = graph.compile()
         nodes = list(compiled.get_graph().nodes.keys())
