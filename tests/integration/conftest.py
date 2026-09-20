@@ -55,6 +55,18 @@ def _int_to_base64url(n: int) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+def tenant_slug(tenant_id: str) -> str:
+    """Return a tenant slug unique to ``tenant_id``.
+
+    ``tenants.slug`` is globally unique, so a fixed slug makes a second test
+    session against the same database fail at setup with a unique violation
+    even though every session mints a fresh tenant id. The whole id (32 hex
+    characters) is used, not a prefix: tests also use fixed ids that share
+    their first characters.
+    """
+    return f"test-tenant-{uuid.UUID(tenant_id).hex}"
+
+
 TEST_KID = "test-kid-001"
 TEST_JWKS = {
     "keys": [
@@ -100,6 +112,44 @@ def _make_jwt(
         "grantex:scopes": scopes or ["agenticorg:admin"],
     }
     return jwt.encode(claims, _private_pem, algorithm="RS256", headers={"kid": TEST_KID})
+
+
+async def seed_tenant_and_admin(conn, tenant_id: str, user_id: str, email: str) -> None:
+    """Seed one tenant and its admin user, idempotently and per run.
+
+    Every session mints fresh ids, and the slug is derived from the tenant id,
+    so the same database can be used by any number of runs.
+    """
+    from sqlalchemy import text as sa_text
+
+    await conn.execute(
+        sa_text(
+            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+            "VALUES (:id, :name, :slug, :plan, :region, :settings) "
+            "ON CONFLICT (id) DO NOTHING"
+        ),
+        {
+            "id": tenant_id,
+            "name": "test-tenant",
+            "slug": tenant_slug(tenant_id),
+            "plan": "enterprise",
+            "region": "IN",
+            "settings": "{}",
+        },
+    )
+    await conn.execute(
+        sa_text(
+            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
+            "VALUES (:id, :tenant_id, :email, :name, 'admin', 'active', false) "
+            "ON CONFLICT (tenant_id, email) DO NOTHING"
+        ),
+        {
+            "id": user_id,
+            "tenant_id": tenant_id,
+            "email": email,
+            "name": "Integration Admin",
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -216,28 +266,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         await conn.run_sync(ORMBase.metadata.create_all)
 
     # Seed the test tenant so FK constraints are satisfied (idempotent)
-    from sqlalchemy import text as sa_text
-
     async with test_engine.begin() as conn:
-        await conn.execute(sa_text(
-            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
-            "VALUES (:id, :name, :slug, :plan, :region, :settings) "
-            "ON CONFLICT (id) DO NOTHING"
-        ), {
-            "id": TEST_TENANT_ID, "name": "test-tenant",
-            "slug": "test-tenant", "plan": "enterprise",
-            "region": "IN", "settings": "{}",
-        })
-        await conn.execute(sa_text(
-            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
-            "VALUES (:id, :tenant_id, :email, :name, 'admin', 'active', false) "
-            "ON CONFLICT (tenant_id, email) DO NOTHING"
-        ), {
-            "id": TEST_USER_ID,
-            "tenant_id": TEST_TENANT_ID,
-            "email": TEST_USER_SUB,
-            "name": "Integration Admin",
-        })
+        await seed_tenant_and_admin(conn, TEST_TENANT_ID, TEST_USER_ID, TEST_USER_SUB)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -286,7 +316,7 @@ def _ensure_user_row(tenant_id: str, email: str) -> None:
             "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
             "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb) "
             "ON CONFLICT (id) DO NOTHING"
-        ), {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": f"tenant-{tenant_id[:8]}"})
+        ), {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": tenant_slug(tenant_id)})
         conn.execute(sa_text(
             "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
             "VALUES (:id, :tenant_id, :email, 'Integration Admin', 'admin', 'active', false) "
