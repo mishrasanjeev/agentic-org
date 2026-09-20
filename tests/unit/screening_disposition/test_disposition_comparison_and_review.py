@@ -207,6 +207,22 @@ def test_overriding_records_the_reason_and_analyst() -> None:
             "analyst_invalid",
         ),
         (unreviewed(), {"action": "accepted", "final_outcome": "false_positive"}, " ", "analyst_invalid"),
+        # Every identity that is not a human session's is refused, not only ``agent:``.
+        (
+            unreviewed(),
+            {"action": "accepted", "final_outcome": "false_positive"},
+            "api_key:ao_key_prefix",
+            "analyst_invalid",
+        ),
+        (
+            unreviewed(),
+            {"action": "accepted", "final_outcome": "false_positive"},
+            "workflow:business_onboarding",
+            "analyst_invalid",
+        ),
+        (unreviewed(), {"action": "accepted", "final_outcome": "false_positive"}, "machine:mtls", "analyst_invalid"),
+        (unreviewed(), {"action": "accepted", "final_outcome": "false_positive"}, "analyst-a", "analyst_invalid"),
+        (unreviewed(), {"action": "accepted", "final_outcome": "false_positive"}, "user:", "analyst_invalid"),
         (unreviewed(), {"action": "closed", "final_outcome": "false_positive"}, "user:a", "request_invalid"),
         (
             unreviewed(),
