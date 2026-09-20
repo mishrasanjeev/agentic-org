@@ -528,16 +528,6 @@ Remove an entry in the pull request that fixes it.
   because it starts from an empty database.
 - **Fix:** derive the slug from the tenant id, or conflict on the slug.
 
-## A-42 — `alembic upgrade head` fails on an empty database
-
-- **Found:** generating the audit record for `v6z26_case_push` (2026-09-15).
-- **What:** early revisions assume tables created by the legacy SQL bootstrap
-  (`migrations/*.sql`), so upgrading an empty schema stops at the first of them.
-  New migrations can only be rehearsed on a database built with
-  `BaseModel.metadata.create_all` or restored from an existing one.
-- **Fix:** document the bootstrap order, or add a baseline revision that
-  creates the legacy tables so the chain runs from empty.
-
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
 - **Found:** binding caller tokens on every run route (PRD F-1b review,
@@ -566,8 +556,28 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
   publish it, pin it here, and call `agents.update` again from
   `update_agent_scopes`.
+## A-45 — Unique and redundant indexes differ between the models and the migrations
 
-## A-45 — Memo evidence cites excerpts the memo never carries, and no excerpt text is stored
+- **Found:** comparing an empty database built by `alembic upgrade head` with
+  `core.models` (2026-09-15).
+- **What:** migrations create unique or partial indexes the models do not
+  declare, among them `uq_agents_industry_pack_company_type`,
+  `uq_c6z_connector_evidence_idempotency`, `uq_c6z_onboarding_scope`,
+  `uq_c6z_pos_handoff_idempotency`, the four `uq_oacp_*` indexes and
+  `ix_rpa_schedules_tenant_name`. Databases built with
+  `BaseModel.metadata.create_all` (the integration `client` and `db_session`
+  fixtures) therefore lack those uniqueness guarantees, so tests there cannot
+  catch a duplicate that production rejects. In the other direction,
+  `a2a_tasks.tenant_id`, `bridge_registry.tenant_id`,
+  `ca_subscriptions.tenant_id` and `report_schedules.tenant_id` still declare
+  `index=True`, although `v6z9_query_performance` drops those indexes as
+  redundant; every empty-database bootstrap creates them and drops them again.
+  Both sets are listed in `tests/integration/alembic_schema_drift_allowlist.py`.
+- **Fix:** declare the unique and partial indexes on their models
+  (`Index(..., unique=True, postgresql_where=...)`), remove `index=True` from
+  the four columns, and delete the corresponding allowlist entries (the drift
+  test fails on entries that no longer differ).
+## A-48 — Memo evidence cites excerpts the memo never carries, and no excerpt text is stored
 
 - **Found:** rendering memo citations in the approvals console against the
   local stack (PRD A-9, 2026-09-20).
@@ -586,7 +596,7 @@ Remove an entry in the pull request that fixes it.
   the case (encrypted, tenant-scoped) so the console and the evidence package
   can show it.
 
-## A-46 — Synchronous credential resolution runs a coroutine on another event loop
+## A-49 — Synchronous credential resolution runs a coroutine on another event loop
 
 - **Found:** running the reference agents for sample cases against the local
   stack (`scripts/seed_governed_cases.py`, 2026-09-20).
@@ -604,7 +614,7 @@ Remove an entry in the pull request that fixes it.
   `NullPool` engine) for the credential read, or make the callers await the
   async resolver.
 
-## A-47 — The console chrome fails the contrast check on every page
+## A-50 — The console chrome fails the contrast check on every page
 
 - **Found:** running the axe scan for the governed case screens against the
   local stack (PRD A-9, 2026-09-20).

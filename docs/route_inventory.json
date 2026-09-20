@@ -1976,7 +1976,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 169,
+    "source_line": 184,
     "tenant_required": true
   },
   {
@@ -1994,7 +1994,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "approvals.case_push.write",
-    "source_line": 191,
+    "source_line": 206,
     "tenant_required": true
   },
   {
@@ -2012,7 +2012,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 76,
+    "source_line": 91,
     "tenant_required": true
   },
   {
@@ -2030,7 +2030,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 99,
+    "source_line": 114,
     "tenant_required": true
   },
   {
@@ -2048,7 +2048,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 150,
+    "source_line": 165,
     "tenant_required": true
   },
   {
@@ -2066,7 +2066,25 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 128,
+    "source_line": 143,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_provider_webhook_inbox",
+    "idempotency": null,
+    "key": "GET /api/v1/case-push/provider-webhook-inbox api/v1/case_push.py:get_provider_webhook_inbox",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/case_push.py",
+    "path": "/api/v1/case-push/provider-webhook-inbox",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.case_push.read",
+    "source_line": 273,
     "tenant_required": true
   },
   {
@@ -4406,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 235,
+    "source_line": 250,
     "tenant_required": true
   },
   {
@@ -4424,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 212,
+    "source_line": 227,
     "tenant_required": true
   },
   {
@@ -6736,17 +6754,17 @@
     "auth_required": false,
     "function": "receive_provider_event",
     "idempotency": "verified-event-id-is-single-use",
-    "key": "POST /api/v1/webhooks/providers/{tenant_id}/{provider} api/v1/case_push.py:receive_provider_event",
+    "key": "POST /api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token} api/v1/case_push.py:receive_provider_event",
     "metadata_present": true,
     "methods": [
       "POST"
     ],
     "module": "api/v1/case_push.py",
-    "path": "/api/v1/webhooks/providers/{tenant_id}/{provider}",
-    "public_exempt_reason": "provider-signature-verified-and-body-treated-as-untrusted-trigger",
+    "path": "/api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}",
+    "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-and-body-treated-as-untrusted-trigger",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.providers",
-    "source_line": 272,
+    "source_line": 333,
     "tenant_required": true
   },
   {

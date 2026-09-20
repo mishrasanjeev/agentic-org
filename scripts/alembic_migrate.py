@@ -4,10 +4,11 @@
 Handles three environment states safely:
 
 1. Fresh DB — no tables at all.
-   Creates the ORM baseline schema, stamps the Alembic cutover revision,
-   then runs ``alembic upgrade head``. The Alembic chain starts after
-   the original raw-SQL baseline, so an empty DB cannot safely run the
-   first Alembic revision directly.
+   Runs ``alembic upgrade head``; ``migrations/env.py`` creates the ORM
+   baseline schema and stamps the Alembic cutover revision first
+   (``core.schema_bootstrap``). The Alembic chain starts after the
+   original raw-SQL baseline, so an empty DB cannot run the first Alembic
+   revision directly.
 
 2. Legacy DB — schema was created by ``init_db()`` with no
    ``alembic_version`` table.
@@ -32,15 +33,15 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from core.config import settings  # noqa: E402
+from core.schema_bootstrap import BASELINE_REVISION  # noqa: E402
 
-BASELINE_REVISION = "v480_baseline"
 # A table that exists after the full init_db() / v480 chain.
 BASELINE_PROBE_TABLE = "connector_configs"
 ALEMBIC_VERSION_TABLE = "alembic_version"
@@ -79,22 +80,6 @@ def _alembic_cfg() -> Config:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", _sync_url())
     return cfg
-
-
-def _ensure_bootstrap_extensions(engine) -> None:
-    """Install extensions required by the historical baseline schema."""
-    with engine.begin() as conn:
-        conn.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
-
-
-def _create_orm_baseline(engine) -> None:
-    """Create the legacy baseline shape before stamping the cutover revision."""
-    import core.models  # noqa: F401, PLC0415 - register every ORM model
-    from core.models.base import BaseModel  # noqa: PLC0415
-
-    _ensure_bootstrap_extensions(engine)
-    BaseModel.metadata.create_all(engine)
 
 
 def _assert_required_runtime_tables(engine) -> None:
@@ -158,8 +143,7 @@ def main() -> int:
             "empty database — creating ORM baseline, stamping %s, then upgrading head",
             BASELINE_REVISION,
         )
-        _create_orm_baseline(engine)
-        command.stamp(cfg, BASELINE_REVISION)
+        # migrations/env.py builds and stamps the baseline inside the upgrade.
         _upgrade_head_and_verify(cfg, engine, "empty database bootstrap + upgrade complete")
         return 0
 

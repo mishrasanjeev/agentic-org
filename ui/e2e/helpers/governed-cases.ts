@@ -76,7 +76,7 @@ export async function openCase(page: Page, caseRef: string): Promise<void> {
 /** Fails the test on any accessibility violation on the screens under test. */
 export async function expectNoAccessibilityViolations(page: Page, testInfo: TestInfo): Promise<void> {
   // Scoped to the page's own content: the shared console chrome has its own
-  // pre-existing contrast violations (FINDINGS A-47), which these screens
+  // pre-existing contrast violations (FINDINGS A-50), which these screens
   // neither introduce nor can fix.
   const results = await new AxeBuilder({ page })
     .include("#main-content")

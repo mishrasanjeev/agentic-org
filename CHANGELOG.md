@@ -22,6 +22,31 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `scripts/refresh_grantex_scopes.py --apply` before switching their tenant
   to `deny`.
 
+### Security — breaking for anyone already receiving provider webhooks
+- Inbound provider webhooks for governed cases no longer act on a delivery
+  they cannot verify, and are bound to one tenant. Previously an unsigned or
+  forged body posted to the unauthenticated route was used as a trigger: a
+  subject reference was read out of it and every matching case awaiting a
+  decision was re-investigated, which replaced the memo and cleared the
+  analyst's screening-disposition reviews, and could fail the case outright if
+  the provider was briefly unreachable. Now an unverifiable delivery is
+  recorded and counted only (nothing is read from the body, no case is looked
+  up, no investigation runs), and the route has moved to
+  `POST /api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}` with an
+  unguessable per-tenant path token, so an event signed with a provider's
+  shared secret cannot be replayed at another tenant's inbox. A re-query
+  triggered by a verified event records that event on the `in_progress`
+  transition, and a case that was awaiting a decision returns to
+  `awaiting_decision` with the memo it had (transition reason
+  `re_evaluation_failed:<reason>`) instead of failing when the provider cannot
+  be reached. Every refusal answers the same 202, and the body is read under
+  the 256 KiB cap before any database work. **Action required:** re-point each
+  provider at the tenant's new path, read from
+  `GET /api/v1/case-push/provider-webhook-inbox?provider={provider}` (tenant
+  admin); the old tokenless path is gone and answers 404. Rotating
+  `AGENTICORG_SECRET_KEY` changes every tenant's path. New counter outcome
+  `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
+
 ### Added
 - Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
   `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
@@ -92,9 +117,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   retried with exponential backoff and dead-lettered on rejection or after 10
   attempts; dead letters replay with the same event id. REST retrieval of the
   same document. Inbound provider webhooks at
-  `/api/v1/webhooks/providers/{tenant_id}/{provider}` are verified with the
-  provider, de-duplicated by event id, and only ever trigger a re-investigation
-  from the provider; unverifiable bodies are untrusted triggers. Signing keys
+  `/api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}` are verified
+  with the provider, de-duplicated by event id, and only ever trigger a
+  re-investigation from the provider; unverifiable bodies are recorded and
+  counted and change nothing (see the security entry above). Signing keys
   are stored encrypted per tenant. Migration `v6z26_case_push` (three tables,
   forced RLS). Celery tasks `dispatch_case_pushes` and `sweep_case_pushes` (the
   sweep is a no-op unless `AGENTICORG_CASE_PUSH_SWEEP_ENABLED=true`). Metrics
@@ -530,6 +556,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - The token pool refreshes agent tokens by delegating from the root grant
   (`grants.delegate`) instead of an OAuth grant type the Grantex auth service
   does not serve.
+- `alembic upgrade head` works on an empty database. It stopped at the first
+  revision (`v400_apex`, which alters tables from the pre-Alembic SQL files)
+  with `function uuid_generate_v4() does not exist`, so only
+  `scripts/alembic_migrate.py` could build a fresh database. `migrations/env.py`
+  creates the ORM baseline and stamps `v480_baseline` first, and the wrapper
+  now uses that one path instead of its own copy.
+- Only `alembic upgrade` bootstraps an empty database. `alembic current` (and
+  any other command with no revision argument) raised
+  `KeyError: 'destination_rev'`, and `alembic stamp <revision>` on an empty
+  database created all 93 ORM tables before writing the version row. The
+  environment now recognises the upgrade command itself. An upgrade of a
+  database that has tables but no Alembic revision, or of an empty database to
+  a revision before the baseline or to a relative target, is refused with a
+  reason code instead of failing part-way.
+- The integration suite runs `alembic upgrade head` on an empty database, and
+  on a database already at head, and fails on any schema difference from the
+  ORM models not listed in
+  `tests/integration/alembic_schema_drift_allowlist.py`. Migrations stay
+  forward-only; `migrations/README.md` documents the bootstrap, the refusals
+  and the downgrade limits.
 - Four shipped industry-pack agents no longer send every run to human review.
   Their HITL conditions were bare labels (`high_value_or_complex_risk`,
   `high_value_or_fraud_indicator`, `cancellation_or_major_endorsement`,
