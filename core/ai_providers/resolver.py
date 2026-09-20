@@ -53,7 +53,6 @@ _PLATFORM_ENV_VARS: dict[tuple[str, str], tuple[str, ...]] = {
     ("stt_azure", "stt"): ("AZURE_SPEECH_KEY",),
     ("tts_elevenlabs", "tts"): ("ELEVENLABS_API_KEY",),
     ("tts_azure", "tts"): ("AZURE_SPEECH_KEY",),
-    ("typesafe", "decision"): ("TYPESAFE_API_KEY", "AGENTICORG_TYPESAFE_API_KEY"),
 }
 
 
@@ -263,7 +262,7 @@ async def get_provider_credential(
         One of the allowlist values in
         ``core.models.tenant_ai_credential.PROVIDER_ALLOWLIST``.
     kind : str
-        Credential kind — ``llm | embedding | rag | stt | tts | decision``.
+        Credential kind — ``llm | embedding | rag | stt | tts``.
     require_tenant_token : bool
         When ``True`` the resolver refuses to fall back to platform env
         even if the tenant's policy allows it. Used by regulated

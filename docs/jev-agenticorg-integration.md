@@ -38,10 +38,10 @@ TYPESAFE_API_BASE_URL=https://api.typesafe.ai
 TYPESAFE_MODEL=jev-latest
 ```
 
-The server-side key is resolved through the existing provider credential
-resolver. A tenant can use an encrypted `typesafe` / `decision` credential;
-otherwise the platform `TYPESAFE_API_KEY` fallback is used according to the
-existing tenant fallback policy. Raw keys are never returned or logged.
+The first integration uses one server-side platform credential supplied through
+`TYPESAFE_API_KEY`; it is never stored in the tenant AI credential model and is
+never returned or logged. Tenant-specific credential custody is deliberately
+deferred until a separate provider-contract and migration review.
 
 ## First uses
 
