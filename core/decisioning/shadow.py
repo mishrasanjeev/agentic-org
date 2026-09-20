@@ -230,7 +230,7 @@ async def observe_tool_routing(
         _shadow_total.labels(outcome="unavailable", agreement="na").inc()
         logger.info("jev_shadow_unavailable", error_type=type(exc).__name__)
         return ShadowObservation(outcome="unavailable", latency_ms=latency_ms)
-    except Exception as exc:  # enterprise-gate: shadow-observer-never-fails-agent-execution
+    except Exception as exc:  # enterprise-gate: broad-except-ok reason=shadow-observer-never-fails-agent-execution
         latency_ms = round((time.perf_counter() - started) * 1000, 2)
         _record_failure()
         _shadow_total.labels(outcome="invalid", agreement="na").inc()
