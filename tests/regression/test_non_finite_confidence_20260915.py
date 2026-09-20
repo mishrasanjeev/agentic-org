@@ -23,6 +23,7 @@ import math
 from typing import Any
 
 import pytest
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
@@ -78,6 +79,7 @@ async def _run(hitl_condition: str = "") -> dict[str, Any]:
         authorized_tools=[],
         confidence_floor=0.88,
         hitl_condition=hitl_condition,
+        run_grant=NO_RUN_GRANT_FOR_TESTS,
     )
     compiled = graph.compile(checkpointer=MemorySaver())
     return await compiled.ainvoke(_state(), {"configurable": {"thread_id": "non-finite"}})
