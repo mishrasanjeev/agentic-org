@@ -12,14 +12,21 @@ Cutover steps for an existing environment:
 
     # normal flow
     alembic upgrade head
+
+An upgrade of an empty database first creates the ORM schema and stamps
+``v480_baseline`` (``core.schema_bootstrap``), because the revisions before
+the baseline alter a pre-Alembic schema. A database with tables but no
+revision is refused; ``scripts/alembic_migrate.py`` stamps those.
 """
 
 from __future__ import annotations
 
+import logging
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, inspect, pool
+from sqlalchemy.engine import Connection
 
 # Register every ORM model so MetaData is complete for autogenerate.
 import core.models  # noqa: F401
@@ -38,6 +45,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = BaseModel.metadata
+logger = logging.getLogger("alembic.env")
 
 
 def _resolve_sync_url() -> str:
@@ -58,27 +66,26 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def _bootstrap_empty_database(conn) -> None:
-    """Create and stamp the legacy-compatible baseline for a bare database."""
+def _bootstrap_empty_database(connection: Connection) -> None:
+    """Build and stamp the baseline schema before upgrading an empty database."""
     migration_context = context.get_context()
+    # env.py runs for every command (current, stamp, check, ...); only the
+    # function `alembic.command.upgrade` hands to the context is named "upgrade".
+    command_name = getattr(migration_context.opts.get("fn"), "__name__", None)
     current_heads = migration_context.get_current_heads()
-    table_names = inspect(conn).get_table_names()
-    if current_heads or set(table_names) - {"alembic_version"}:
-        # scripts/alembic_migrate.py creates and stamps the ORM baseline before
-        # upgrading. Do not reinterpret that programmatic stamp as an upgrade.
+    if command_name != "upgrade" or current_heads:
         return
-    should_bootstrap = plan_empty_database_bootstrap(
-        command=context.get_revision_argument() and "upgrade",
+    script = context.script
+    if not plan_empty_database_bootstrap(
+        command=command_name,
         current_heads=current_heads,
-        table_names=table_names,
-        reaches_baseline=target_reaches_baseline(
-            context.script,
-            context.get_revision_argument() or "head",
-        ),
-    )
-    if should_bootstrap:
-        create_orm_baseline(conn)
-        migration_context.stamp(context.script, BASELINE_REVISION)
+        table_names=inspect(connection).get_table_names(),
+        reaches_baseline=target_reaches_baseline(script, migration_context.opts.get("destination_rev")),
+    ):
+        return
+    logger.info("empty database: creating the ORM baseline schema and stamping %s", BASELINE_REVISION)
+    create_orm_baseline(connection)
+    migration_context.stamp(script, BASELINE_REVISION)
 
 
 def run_migrations_online() -> None:
