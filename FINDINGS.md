@@ -121,22 +121,19 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
-## A-13 — Test runs rewrite tracked files
+## A-13 — A test run rewrites the tracked coverage report
 
 - **Found:** running `make test` and `make test-integration` in a fresh clone
-  (2026-09-15).
-- **What:** two suites write into tracked files, so every local run dirties
-  the working tree and the changes are easy to commit by accident.
-  `tests/integration/test_alembic_e2e.py` runs the real migrations, and
-  `core/crypto/migration_helpers.py` writes each encrypted-column migration's
-  audit record to `migrations/audit/<revision>.json` in the checkout
-  (`v6z12_voice_runtime.json` gets new `started_at`/`completed_at`).
-  `tests/unit/test_check_module_coverage.py` runs
+  (2026-09-15); narrowed 2026-09-20.
+- **What:** `tests/unit/test_check_module_coverage.py` runs
   `scripts/check_module_coverage.py`, which rewrites the tracked
-  `coverage_report.json`.
-- **Fix:** let both output locations be overridden (environment variables the
-  tests point at a temporary directory), or have the tests restore the files;
-  keep the committed records as they are.
+  `coverage_report.json`, so every local run dirties the working tree and the
+  change is easy to commit by accident. The encrypted-migration audit records
+  under `migrations/audit/` had the same problem; the writer now honours
+  `AGENTICORG_MIGRATION_AUDIT_DIR`, which the test session points at a
+  temporary directory.
+- **Fix:** let the report location be overridden the same way (an environment
+  variable the test points at `tmp_path`), or have the test restore the file.
 
 ## A-14 — Shell scripts break on Windows checkouts with `core.autocrlf=true`
 
@@ -556,6 +553,7 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
   publish it, pin it here, and call `agents.update` again from
   `update_agent_scopes`.
+
 ## A-45 — Unique and redundant indexes differ between the models and the migrations
 
 - **Found:** comparing an empty database built by `alembic upgrade head` with

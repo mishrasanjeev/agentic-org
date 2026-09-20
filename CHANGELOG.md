@@ -485,6 +485,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Two migrate jobs started together no longer race on an empty database:
+  `migrations/env.py` takes the same transaction-scoped advisory lock
+  `init_db()` uses before deciding whether to build the baseline, and rechecks
+  the recorded revision after acquiring it. A database holding only views,
+  materialised views or sequences counts as occupied (the check reads
+  `pg_class`, not just the tables), so a bare `alembic upgrade` refuses it
+  with `unmanaged_database_not_empty` instead of creating a baseline beside
+  them.
+- Encrypted-column migrations write their audit record to
+  `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
+  rewrites the committed records under `migrations/audit/`.
 - Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
   with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
   connector's Grantex manifest instead of `...:execute:...`, which Grantex's

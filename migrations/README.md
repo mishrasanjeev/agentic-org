@@ -69,8 +69,13 @@ The bootstrap refuses, with a reason code, rather than guessing:
 | Empty database, target before `v480_baseline` (e.g. `alembic upgrade v470_sso_invoices`) | `target_before_baseline` |
 | Empty database, relative or branch target (`+1`, `heads@branch`) | `target_unresolved` |
 
-Other commands (`current`, `stamp`, `history`, `check`) never bootstrap, and
-offline `--sql` mode is unchanged.
+Other commands (`current`, `stamp`, `history`, `check`) never bootstrap.
+Offline `--sql` mode cannot bootstrap: it has no connection to inspect, so
+`alembic upgrade head --sql` on an empty database emits the chain from
+`v400_apex` and fails on the pre-Alembic tables, as it did before this path
+existed. Generating a script for an empty database is not supported; generate
+one from the revision a database is actually at (`alembic upgrade <rev>:head
+--sql`).
 
 `tests/integration/test_alembic_e2e.py` runs `alembic upgrade head` on an
 empty Postgres in CI, then compares the resulting schema with the ORM models
