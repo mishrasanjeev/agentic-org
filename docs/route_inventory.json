@@ -1976,7 +1976,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.case_push.read",
-    "source_line": 169,
+    "source_line": 171,
     "tenant_required": true
   },
   {
@@ -1994,7 +1994,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "approvals.case_push.write",
-    "source_line": 191,
+    "source_line": 193,
     "tenant_required": true
   },
   {
@@ -2048,7 +2048,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 150,
+    "source_line": 152,
     "tenant_required": true
   },
   {
@@ -2066,7 +2066,7 @@
     "public_exempt_reason": null,
     "rate_limit": "credential-write",
     "scope": "approvals.case_push.write",
-    "source_line": 128,
+    "source_line": 130,
     "tenant_required": true
   },
   {
@@ -4208,7 +4208,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 146,
+    "source_line": 195,
     "tenant_required": true
   },
   {
@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 116,
+    "source_line": 164,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 163,
+    "source_line": 212,
     "tenant_required": true
   },
   {
@@ -4262,7 +4262,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 176,
+    "source_line": 225,
     "tenant_required": true
   },
   {
@@ -4280,7 +4280,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 211,
+    "source_line": 260,
     "tenant_required": true
   },
   {
@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 294,
+    "source_line": 343,
     "tenant_required": true
   },
   {
@@ -4316,7 +4316,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 355,
+    "source_line": 408,
     "tenant_required": true
   },
   {
@@ -4334,7 +4334,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 386,
+    "source_line": 439,
     "tenant_required": true
   },
   {
@@ -4352,7 +4352,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 236,
+    "source_line": 285,
     "tenant_required": true
   },
   {
@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 235,
+    "source_line": 237,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 212,
+    "source_line": 214,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 319,
+    "source_line": 369,
     "tenant_required": true
   },
   {
@@ -4424,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 269,
+    "source_line": 319,
     "tenant_required": true
   },
   {
@@ -6710,7 +6710,7 @@
     "public_exempt_reason": "provider-signature-verified-and-body-treated-as-untrusted-trigger",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.providers",
-    "source_line": 272,
+    "source_line": 274,
     "tenant_required": true
   },
   {
