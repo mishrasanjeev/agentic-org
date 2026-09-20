@@ -57,6 +57,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   with a different outcome and a mandatory written reason; the analyst identity comes from the
   session, a review is written once, and the form appears only while the case is awaiting a
   decision. Nothing closes a screening hit.
+- The decision action in the approvals console
+  (`ui/src/components/governed-cases/DecisionPanel.tsx`, PRD A-9): request a decision, open the
+  decision-grant issuer's own approval page in a new window, watch the approvals arrive and record
+  the decision once the grants exist. The console has no approve control at all - step-up, the
+  dwell measurement and four eyes happen on the issuer's page - and "Record decision" stays
+  disabled until the approvals are complete. The four-eyes state names the first approver and says
+  the same person will be refused; a case that changed after the approval, a missing issuer and
+  every refusal reason (`decision_required`, `decision_not_approved`, `same_approver`,
+  `case_changed`) are surfaced with their code. An outcome that differs from the memo's
+  recommendation needs a written reason, which is shown to the approver. The console's own dwell
+  (case screen render to submit) is sent as advisory telemetry only; the authoritative dwell is the
+  one the approval page measured, and it is shown per approval.
 - `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
   cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
   provider fixture and runs the reference agents against the stack, writing the new case
