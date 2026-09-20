@@ -23,10 +23,10 @@ import math
 from typing import Any
 
 import pytest
-from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.langgraph.agent_graph import (
     _extract_confidence,
     _replace_non_finite,
