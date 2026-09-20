@@ -477,6 +477,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - The token pool refreshes agent tokens by delegating from the root grant
   (`grants.delegate`) instead of an OAuth grant type the Grantex auth service
   does not serve.
+- `alembic upgrade head` works on an empty database. It stopped at the first
+  revision (`v400_apex`, which alters tables from the pre-Alembic SQL files)
+  with `function uuid_generate_v4() does not exist`, so only
+  `scripts/alembic_migrate.py` could build a fresh database. `migrations/env.py`
+  creates the ORM baseline and stamps `v480_baseline` first, and the wrapper
+  now uses that one path instead of its own copy.
+- Only `alembic upgrade` bootstraps an empty database. `alembic current` (and
+  any other command with no revision argument) raised
+  `KeyError: 'destination_rev'`, and `alembic stamp <revision>` on an empty
+  database created all 93 ORM tables before writing the version row. The
+  environment now recognises the upgrade command itself. An upgrade of a
+  database that has tables but no Alembic revision, or of an empty database to
+  a revision before the baseline or to a relative target, is refused with a
+  reason code instead of failing part-way.
+- The integration suite runs `alembic upgrade head` on an empty database, and
+  on a database already at head, and fails on any schema difference from the
+  ORM models not listed in
+  `tests/integration/alembic_schema_drift_allowlist.py`. Migrations stay
+  forward-only; `migrations/README.md` documents the bootstrap, the refusals
+  and the downgrade limits.
 - Four shipped industry-pack agents no longer send every run to human review.
   Their HITL conditions were bare labels (`high_value_or_complex_risk`,
   `high_value_or_fraud_indicator`, `cancellation_or_major_endorsement`,
