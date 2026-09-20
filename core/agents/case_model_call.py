@@ -25,6 +25,8 @@ from typing import Any
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from auth.grant_enforcement import EnforcementMode
+from auth.run_grants import RunGrant
 from core.extraction import UntrustedContentLeakError, UntrustedTextRegistry
 from core.model_replay import CassetteError
 
@@ -81,7 +83,10 @@ async def call_case_model(
         llm_provider=llm_provider,
         context_guard=untrusted.guard_messages,
         pseudonymiser=session,
-        run_grant=None,
+        # This graph is deliberately built without tools. Pass an explicit
+        # non-enforcing grant rather than the test-only None sentinel required
+        # by tool-capable production graphs.
+        run_grant=RunGrant(mode=EnforcementMode.OFF, source="case_model_no_tools"),
     )
     state = {
         "messages": [SystemMessage(content=system_prompt), HumanMessage(content=context)],
