@@ -217,6 +217,18 @@ class TestEvalsEndpoints:
         assert response.headers["X-Data-Quality"] == "measured"
 
     @pytest.mark.asyncio
+    async def test_jev_shadow_plan_is_read_only_and_does_not_call_provider(self):
+        from api.v1.evals import get_jev_shadow_plan
+
+        result = await get_jev_shadow_plan()
+
+        assert result["execution_mode"] == "offline_provider_evaluation"
+        assert result["active_routing_enabled"] is False
+        assert result["reporting"]["status"] == "not_run"
+        assert result["guardrails"]["tool_execution"] is False
+        assert result["corpus"]["content_policy"] == "synthetic_metadata_only"
+
+    @pytest.mark.asyncio
     async def test_get_evals_file_not_found_returns_baseline(self, tmp_path):
         """Post-2026-04-23 contract: /api/v1/evals serves a baseline
         scorecard when evals/scorecard.json is missing instead of

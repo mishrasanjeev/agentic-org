@@ -130,6 +130,18 @@ class BaseAgent:
             # injected ToolGateway the call goes through the same governed
             # connector path LangGraph uses (see ``_call_tool``).
             requested_tools = output.pop("tool_calls", None)
+            from core.decisioning.shadow import observe_tool_routing
+
+            shadow_observation = await observe_tool_routing(
+                tenant_id=self.tenant_id,
+                agent_type=self.agent_type or "custom",
+                domain=self.domain or "general",
+                action=task.task.action,
+                available_tools=tool_descriptions or [],
+                requested_tools=requested_tools,
+            )
+            if shadow_observation.outcome != "disabled":
+                trace.append(f"Jev shadow routing: {shadow_observation.outcome}")
             if requested_tools and isinstance(requested_tools, list):
                 tool_results = await self._execute_tool_calls(
                     requested_tools, trace, tool_calls, **_with_pseudonymiser(pseudonymiser)

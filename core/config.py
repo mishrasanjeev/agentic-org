@@ -188,6 +188,16 @@ class Settings(BaseSettings):
     default_confidence_floor: float = 0.88
     max_agent_retries: int = 3
 
+    # Optional semantic decision layer. ``off`` preserves current behavior;
+    # ``shadow`` records comparison data without changing execution; ``active``
+    # is reserved for a later, explicitly reviewed integration.
+    jev_mode: Literal["off", "shadow", "active"] = "off"
+    jev_timeout_seconds: float = Field(default=0.8, ge=0.1, le=10.0)
+    jev_shadow_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    jev_shadow_max_calls_per_process: int = Field(default=100, ge=0, le=100_000)
+    jev_shadow_failure_threshold: int = Field(default=3, ge=1, le=20)
+    jev_shadow_cooldown_seconds: float = Field(default=60.0, ge=1.0, le=3600.0)
+
     # Resource-intensive local runtimes. These per-worker caps prevent one API
     # process from spawning unbounded Tesseract and Chromium processes.
     document_extraction_max_concurrency: int = Field(default=2, ge=1, le=32)
@@ -286,6 +296,8 @@ class ExternalKeys(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_contact_email: str = "mailto:push@agenticorg.ai"
+    typesafe_api_base_url: str = "https://api.typesafe.ai"
+    typesafe_model: str = "jev-latest"
 
 
 settings = Settings()

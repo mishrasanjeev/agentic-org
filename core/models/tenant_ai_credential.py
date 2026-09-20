@@ -40,6 +40,7 @@ PROVIDER_ALLOWLIST = frozenset({
     "stt_azure",
     "tts_elevenlabs",
     "tts_azure",
+    "typesafe",
 })
 
 CREDENTIAL_KIND_ALLOWLIST = frozenset({
@@ -48,6 +49,7 @@ CREDENTIAL_KIND_ALLOWLIST = frozenset({
     "rag",
     "stt",
     "tts",
+    "decision",
 })
 
 STATUS_ALLOWLIST = frozenset({
