@@ -51,6 +51,8 @@ const WorkflowCreate = lazyRetry(() => import("./pages/WorkflowCreate"));
 const WorkflowDetail = lazyRetry(() => import("./pages/WorkflowDetail"));
 const WorkflowRun = lazyRetry(() => import("./pages/WorkflowRun"));
 const Approvals = lazyRetry(() => import("./pages/Approvals"));
+const GovernedCases = lazyRetry(() => import("./pages/GovernedCases"));
+const GovernedCaseDetail = lazyRetry(() => import("./pages/GovernedCaseDetail"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
 const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
 const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
@@ -477,6 +479,26 @@ export default function App() {
           <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
             <Layout>
               <Approvals />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/approvals/cases"
+        element={
+          <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
+            <Layout>
+              <GovernedCases />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/approvals/cases/:caseRef"
+        element={
+          <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
+            <Layout>
+              <GovernedCaseDetail />
             </Layout>
           </ProtectedRoute>
         }
