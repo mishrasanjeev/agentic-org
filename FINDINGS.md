@@ -479,22 +479,6 @@ Remove an entry in the pull request that fixes it.
   generator entry. New screening integrations go through the
   `VerificationProvider` interface instead.
 
-## A-37 — Example onboarding policies read evidence no provider supplies
-
-- **Found:** running the Business Onboarding Underwriter against every mock
-  fixture (2026-09-15).
-- **What:** `core/policy/examples/business_onboarding_uk.yaml` rule
-  `filings_overdue` reads `verification.overdue_filings`, but no field of the
-  provider-neutral interface (`connectors/framework/verification_types.py`)
-  reports filing status, so the rule fires as indeterminate on every UK case.
-  `web_presence_activity_mismatch` in both examples is also indeterminate
-  whenever the declared activity term has no extractor activity category (10 of
-  12 mock fixtures). With the UK `score_thresholds.high: 60`, a clean UK case
-  with one screening hit reaches `high` on unresolved evidence alone.
-- **Fix:** either add filing status to `BusinessVerification` (a domain concept
-  most registries publish) or drop the rule from the example; publish a mapping
-  from declared activity vocabulary to extractor categories.
-
 ## A-38 — An empty web presence carries no evidence to cite
 
 - **Found:** assembling memo sections for businesses with no website
@@ -506,16 +490,6 @@ Remove an entry in the pull request that fixes it.
   resolved registry record instead.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
-
-## A-39 — Example policies test registry statuses the interface never returns
-
-- **Found:** comparing policy operands with `RegistryStatus` (2026-09-15).
-- **What:** `registry_dissolved` in the UK example matches
-  `[dissolved, liquidation]` and in the US example `[dissolved, revoked]`, but
-  `RegistryStatus` has `in_insolvency` and no `liquidation` or `revoked`, so a
-  business in insolvency is `high` (via `registry_active`), never `blocked`.
-- **Fix:** match `in_insolvency` in the examples, or have the policy loader
-  check `verification.status` operands against the interface vocabulary.
 
 ## A-41 — The integration `client` fixture cannot run twice against one database
 
@@ -566,3 +540,19 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
   publish it, pin it here, and call `agents.update` again from
   `update_agent_scopes`.
+
+## A-46 — No mock fixture exercises an activity mismatch
+
+- **Found:** aligning the example policies with the evidence mapping (2026-09-20).
+- **What:** `web_presence.activity_mismatch` now resolves for seven of the
+  twelve mock fixtures, but it is `false` on every one of them: no fixture's
+  website states an activity that contradicts the declared one, so the example
+  policies' `web_presence_activity_mismatch` rule is never exercised in its
+  fired-on-true form, and neither is the memo's `activity_mismatch` finding.
+  `us-hostile-web-glintmoor`, whose second page sells investment returns while
+  the application declares solar installation, is the natural home for it.
+- **Fix:** give that fixture's pages titles that state the two different
+  activities, and update the sanitised mirror in
+  `tests/security/test_underwriter_adversarial.py::_sanitised` (which must keep
+  producing the same policy outcome as the hostile copy minus the injection),
+  with a test that the case's policy result fires the rule on a true mismatch.

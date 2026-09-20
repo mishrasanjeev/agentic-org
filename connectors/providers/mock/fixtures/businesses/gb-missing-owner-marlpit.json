@@ -122,7 +122,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "Small-batch cider pressed from our own orchard."
+        "content": "<!doctype html><html><head><title>Marlpit Cider - small-batch beverage manufacturing</title></head><body><h1>Cider manufacturing from our own orchard</h1><p>Small-batch cider pressed from our own orchard.</p></body></html>"
       }
     ]
   }

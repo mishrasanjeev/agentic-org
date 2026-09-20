@@ -203,10 +203,43 @@ def observed_activity_categories(extractions: list[Mapping[str, Any]]) -> set[st
     return observed
 
 
+# Published mapping from the declared-activity vocabulary (the application's
+# ``declared_activity`` term) to the extractor's activity categories
+# (``core.extraction._worker.ACTIVITY_KEYWORDS``). Without it a declared term
+# that shares no word with a category cannot be compared with what a website
+# says, and ``web_presence.activity_mismatch`` stays unresolved, which fires
+# the example policies' activity rule as indeterminate on every such case.
+# Terms not listed here still fall back to the extractor's own keywords.
+# Documented in docs/policies/authoring.md ("Declared activity vocabulary").
+DECLARED_ACTIVITY_CATEGORIES: Mapping[str, tuple[str, ...]] = {
+    "beverage_production": ("manufacturing",),
+    "building_services": ("construction",),
+    "food_production": ("manufacturing", "food_service"),
+    "freight_brokerage": ("logistics",),
+    "freight_forwarding": ("logistics",),
+    "industrial_machining": ("manufacturing",),
+    "manufacturing_lighting": ("manufacturing",),
+    "printing_services": ("manufacturing",),
+    "professional_services": ("consulting",),
+    "retail_home_goods": ("retail",),
+    "software_services": ("software",),
+    "solar_installation": ("construction",),
+    "textile_wholesale": ("retail", "manufacturing"),
+    "wholesale_veterinary_supplies": ("retail", "healthcare"),
+}
+
+
 def declared_activity_categories(declared_activity: str | None) -> set[str]:
-    """Extractor activity categories a declared activity term maps to, by the extractor's own keywords."""
+    """Extractor activity categories a declared activity term maps to.
+
+    The published vocabulary first (``DECLARED_ACTIVITY_CATEGORIES``), then the
+    extractor's own keywords for terms outside it.
+    """
     if not declared_activity:
         return set()
+    published = DECLARED_ACTIVITY_CATEGORIES.get(declared_activity)
+    if published:
+        return set(published)
     tokens = set(declared_activity.split("_"))
     return {
         category
@@ -277,8 +310,6 @@ def policy_evidence(
             "status": verification.registry_status.value if verification else None,
             "registry_match": registry_match,
             "tax_id_match": tax_id_match(application, registry_identifiers),
-            # No provider-neutral interface field reports filing status; left unresolved.
-            "overdue_filings": None,
         },
         "ownership": {
             "missing_owners": len(reconciliation.missing_owners) if reconciliation else None,

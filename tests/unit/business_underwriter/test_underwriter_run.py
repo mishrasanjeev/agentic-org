@@ -22,6 +22,7 @@ from core.domain_schemas import validate
 from core.policy import EXAMPLES_DIR, Policy, evaluate, load_policy
 from core.test_doubles.scripted_model import final
 from core.tool_gateway.provider_gateway import READ_TOOLS, ToolDecision
+from tests.unit.business_underwriter.conftest import ALL_FIXTURES
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
@@ -43,22 +44,6 @@ def narrative_step(messages: list[BaseMessage]) -> AIMessage:
         if s["status"] in ("complete", "partial") and s["evidence_count"] > 0
     ]
     return final({"summaries": summaries, "confidence": 0.61})
-
-
-ALL_FIXTURES = (
-    "gb-adversarial-northgate",
-    "gb-clean-brightwater",
-    "gb-dissolved-ashcombe",
-    "gb-missing-owner-marlpit",
-    "gb-true-match-corvane",
-    "us-clean-hollowbrook",
-    "us-clean-quillfeather",
-    "us-false-positive-oakhollow",
-    "us-hostile-web-glintmoor",
-    "us-missing-owner-cinderpath",
-    "us-thin-file-brambleway",
-    "us-undeclared-owner-larkspur",
-)
 
 
 def _codes(memo: dict[str, Any], section_id: str) -> list[str]:

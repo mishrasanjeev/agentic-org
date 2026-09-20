@@ -116,7 +116,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "A worker-owned bakery making sourdough and rye loaves since 2021."
+        "content": "<!doctype html><html><head><title>Oakhollow Bakery - sourdough and rye bakery</title></head><body><h1>A worker-owned bakery</h1><p>A worker-owned bakery making sourdough and rye loaves since 2021.</p></body></html>"
       }
     ]
   }

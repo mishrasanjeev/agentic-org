@@ -118,7 +118,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "Hollowbrook Tool and Die makes precision dies and fixtures for regional manufacturers. Call 555-0101."
+        "content": "<!doctype html><html><head><title>Hollowbrook Tool and Die - precision manufacturing</title></head><body><h1>Die and fixture manufacturing</h1><p>Hollowbrook Tool and Die makes precision dies and fixtures for regional manufacturers. Call 555-0101.</p></body></html>"
       }
     ]
   }
