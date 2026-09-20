@@ -2,7 +2,8 @@
 import { formatTimestamp, type Evidence } from "@/lib/governedCases";
 
 export interface CitationAnchors {
-  recordId: (provider: string, recordId: string) => string;
+  /** The element id of the cited record on this page, or null when it is not indexed here. */
+  recordId: (provider: string, recordId: string) => string | null;
   excerptId: (ref: string) => string | null;
 }
 
@@ -27,6 +28,7 @@ export default function EvidenceList({
     <ul aria-label={label} className="space-y-1.5" data-testid="evidence-list">
       {evidence.map((entry, index) => {
         const excerptAnchor = entry.excerpt_ref ? anchors.excerptId(entry.excerpt_ref) : null;
+        const recordAnchor = anchors.recordId(entry.provider, entry.record_id);
         return (
           <li
             key={`${entry.provider}-${entry.record_id}-${entry.field}-${index}`}
@@ -35,13 +37,17 @@ export default function EvidenceList({
           >
             <span className="font-semibold">{entry.provider}</span>
             <span aria-hidden="true"> · </span>
-            <a
-              href={`#${anchors.recordId(entry.provider, entry.record_id)}`}
-              className="break-all font-mono underline underline-offset-2"
-              aria-label={`Cited record ${entry.record_id} from ${entry.provider}`}
-            >
-              {entry.record_id}
-            </a>
+            {recordAnchor ? (
+              <a
+                href={`#${recordAnchor}`}
+                className="break-all font-mono underline underline-offset-2"
+                aria-label={`Cited record ${entry.record_id} from ${entry.provider}`}
+              >
+                {entry.record_id}
+              </a>
+            ) : (
+              <code className="break-all font-mono">{entry.record_id}</code>
+            )}
             <span aria-hidden="true"> · </span>
             <span>
               field <code className="break-all font-mono">{entry.field}</code>
