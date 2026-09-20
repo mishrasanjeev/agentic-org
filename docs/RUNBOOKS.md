@@ -331,25 +331,34 @@ immediately and ask the receiver to drop the old key.
 
 ## Provider webhooks: verification failures and replays
 
-Inbound provider events arrive at `POST /api/v1/webhooks/providers/{tenant_id}/{provider}`
-(`core/cases/provider_webhooks.py`). A webhook never changes a case: it only triggers a
-re-investigation of matching cases awaiting a decision, which re-reads everything from the provider.
+Inbound provider events arrive at
+`POST /api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}`
+(`core/cases/provider_webhooks.py`). A webhook never changes a case: only a delivery that reaches
+the tenant's own inbox path **and** verifies triggers a re-investigation of matching cases awaiting
+a decision, which re-reads everything from the provider.
 
 **Detect:** `agenticorg_provider_webhook_receipts_total{outcome="unverified"}` rising (forged,
 stale, tampered or unsigned deliveries, or a signing secret that no longer matches);
-`outcome="duplicate"` rising (the provider or an attacker is replaying event ids).
+`outcome="duplicate"` rising (the provider or an attacker is replaying event ids);
+`outcome="unbound"` rising (deliveries to a wrong or stale inbox path - usually a provider still
+configured with an old path after `AGENTICORG_SECRET_KEY` was rotated, otherwise scanning).
 
 **Diagnose:** `provider_webhook_receipts` records every delivery's outcome, event id (verified only),
-body SHA-256 and how many cases it re-queried; bodies are never stored. A sudden switch from
-`accepted` to `unverified` for one provider usually means its webhook secret was rotated on one
-side only.
+body SHA-256 and how many cases it re-queried; bodies are never stored, and unbound deliveries are
+not recorded at all (they are counted). A sudden switch from `accepted` to `unverified` for one
+provider usually means its webhook secret was rotated on one side only; a switch to `unbound` means
+the path changed.
 
-**Mitigate:** the route answers 202 either way and is rate limited (`provider-webhook`). An
-unverified delivery can re-query a matching case at most once per 10 minutes, so forged traffic
-costs at most that many provider calls. If a provider is compromised, set its webhook secret to a
-new value (or stop routing its traffic) - verified events cannot bypass re-querying.
+**Mitigate:** the route answers 202 for every outcome and is rate limited (`provider-webhook`).
+Unverified deliveries cost one receipt row each and nothing else - they never start an
+investigation. If a provider is compromised, set its webhook secret to a new value (or stop routing
+its traffic); to invalidate every inbox path at once, rotate `AGENTICORG_SECRET_KEY` and give each
+tenant's provider the new path from `GET /api/v1/case-push/provider-webhook-inbox`.
 
 **Fix:** align the provider's webhook secret with its configuration (for the mock:
-`AGENTICORG_MOCK_PROVIDER_WEBHOOK_SECRET`). Missed events are harmless to replay from the provider:
-a verified event id is processed once; a new id triggers one re-investigation.
+`AGENTICORG_MOCK_PROVIDER_WEBHOOK_SECRET`) and its delivery URL with the tenant's current inbox
+path. Missed events are harmless to replay from the provider: a verified event id is processed once;
+a new id triggers one re-investigation. A re-investigation that cannot reach the provider leaves the
+case in `awaiting_decision` with its previous memo and the transition reason
+`re_evaluation_failed:<reason>`; replay the event once the provider is back.
 

@@ -6,10 +6,12 @@ exactly once, when it is created; it is stored encrypted and never returned agai
 returns the same ``case_push`` document a webhook delivery carries, so a system of record can pull
 instead of (or as well as) receiving pushes.
 
-``POST /webhooks/providers/{tenant_id}/{provider}`` is unauthenticated by design - providers sign
-their deliveries - and treats every body as an untrusted trigger (``core.cases.provider_webhooks``).
-It answers 202 whether or not the signature verified, so it does not tell a forger which attempts
-were close.
+``POST /webhooks/providers/{tenant_id}/{provider}/{path_token}`` carries no session - providers sign
+their deliveries - but it is not open: the path token binds the inbox to one tenant, and only a
+delivery whose signature verifies can trigger anything (``core.cases.provider_webhooks``). The body
+is read under a size cap before any database work, and every outcome answers the same 202, so a
+caller learns neither which attempts were close nor whether the tenant has governed cases enabled.
+Tenant admins read their own inbox path from ``GET /case-push/provider-webhook-inbox``.
 """
 
 from __future__ import annotations
@@ -18,14 +20,19 @@ import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Path, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
 from api.v1.governed_cases import _actor, _error, _session, get_case_runtime
-from core.cases.provider_webhooks import receive_provider_webhook
+from core.cases.provider_webhooks import (
+    MAX_BODY_BYTES,
+    RequeryRequest,
+    receive_provider_webhook,
+    webhook_path,
+)
 from core.cases.push import (
     build_case_push,
     configure_endpoint,
@@ -45,6 +52,8 @@ from core.cases.store import get_case
 logger = structlog.get_logger()
 
 router = APIRouter()
+
+PROVIDER_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
 
 
 class EndpointRequest(BaseModel):
@@ -253,39 +262,85 @@ async def get_case_push_deliveries(
         return _error(exc)
 
 
+@router.get("/case-push/provider-webhook-inbox")
+@route_meta(auth_required=True, tenant_required=True, scope="approvals.case_push.read", rate_limit="standard")
+async def get_provider_webhook_inbox(
+    provider: str = Query(pattern=PROVIDER_PATTERN, max_length=64),
+    tenant_id: str = Depends(get_current_tenant),
+    _admin: Any = require_tenant_admin,
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """The path this tenant's provider must deliver to. Treat it as a credential: it is what binds
+    a delivery to this tenant, so anyone holding it can present events for this tenant (they still
+    have to be signed)."""
+    try:
+        tenant = uuid.UUID(tenant_id)
+        await runtime.require_enabled(tenant)
+        return {"provider": provider, "path": webhook_path(tenant, provider)}
+    except CaseError as exc:
+        return _error(exc)
+
+
 async def _requery_in_background(runtime: CaseRuntime) -> Any:
-    async def requery(tenant_id: uuid.UUID, case_ref: str, actor: str) -> None:
+    async def requery(request: RequeryRequest) -> None:
         try:
-            await investigate_case(tenant_id, case_ref, runtime=runtime, actor=actor)
+            await investigate_case(
+                request.tenant_id,
+                request.case_ref,
+                runtime=runtime,
+                actor=request.actor,
+                reason=request.reason,
+                keep_state_on_failure=True,
+            )
         except CaseError as exc:
-            logger.warning("provider_event_requery_refused", case_ref=case_ref, reason=exc.reason)
+            logger.warning("provider_event_requery_refused", case_ref=request.case_ref, reason=exc.reason)
 
     return requery
 
 
-@router.post("/webhooks/providers/{tenant_id}/{provider}", status_code=202)
+async def _read_capped_body(request: Request) -> bytes:
+    """Read at most ``MAX_BODY_BYTES``, refusing on the declared length before reading anything."""
+    declared = request.headers.get("content-length") or ""
+    if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        raise CaseError("webhook_body_too_large", status=413)
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_BODY_BYTES:
+            raise CaseError("webhook_body_too_large", status=413)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+@router.post("/webhooks/providers/{tenant_id}/{provider}/{path_token}", status_code=202)
 @route_meta(
     auth_required=False, tenant_required=True, scope="public:webhooks.providers", rate_limit="provider-webhook",
     idempotency="verified-event-id-is-single-use", audit_event="providers.webhook_received",
-    public_reason="provider-signature-verified-and-body-treated-as-untrusted-trigger",
+    public_reason="per-tenant-path-token-plus-provider-signature-and-body-treated-as-untrusted-trigger",
 )  # fmt: skip
 async def receive_provider_event(
     tenant_id: uuid.UUID,
-    provider: str,
     request: Request,
     background: BackgroundTasks,
+    provider: str = Path(pattern=PROVIDER_PATTERN, max_length=64),
+    path_token: str = Path(pattern=r"^[0-9a-f]{32}$"),
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
-    body = await request.body()
     try:
-        scheduled: list[tuple[uuid.UUID, str, str]] = []
+        body = await _read_capped_body(request)
+    except CaseError as exc:
+        return _error(exc)
+    try:
+        scheduled: list[RequeryRequest] = []
 
-        async def schedule(tenant: uuid.UUID, case_ref: str, actor: str) -> None:
-            scheduled.append((tenant, case_ref, actor))
+        async def schedule(request_to_run: RequeryRequest) -> None:
+            scheduled.append(request_to_run)
 
         receipt = await receive_provider_webhook(
             tenant_id=tenant_id,
             provider_name=provider,
+            path_token=path_token,
             headers=dict(request.headers),
             body=body,
             runtime=runtime,
@@ -293,9 +348,11 @@ async def receive_provider_event(
             now=runtime.clock(),
         )
         requery = await _requery_in_background(runtime)
-        for tenant, case_ref, actor in scheduled:
-            background.add_task(requery, tenant, case_ref, actor)
+        for scheduled_requery in scheduled:
+            background.add_task(requery, scheduled_requery)
         logger.info("provider_event_accepted_for_processing", outcome=receipt.outcome, requeried=len(receipt.requeried))
-        return JSONResponse(status_code=202, content={"status": "received"})
     except CaseError as exc:
-        return _error(exc)
+        # One answer for every refusal: an unauthenticated caller learns nothing about the tenant,
+        # the feature flag or the provider from the status code.
+        logger.info("provider_event_not_processed", reason=exc.reason)
+    return JSONResponse(status_code=202, content={"status": "received"})

@@ -104,19 +104,29 @@ then retire the previous key. Secrets are stored encrypted with the tenant's key
 ## Inbound provider webhooks
 
 Providers post events (for example `business.dissolved`) to
-`POST /api/v1/webhooks/providers/{tenant_id}/{provider}`. The route is unauthenticated - the
-provider signs - and always answers 202, so it does not tell a forger which attempts were close.
+`POST /api/v1/webhooks/providers/{tenant_id}/{provider}/{path_token}`. The route carries no session -
+the provider signs - and always answers 202, so it tells a caller neither which attempts were close
+nor whether the tenant has governed cases enabled. The body is read under a 256 KiB cap (refused
+with 413) before any database work.
+
+The path token binds an inbox to one tenant: it is derived from the application secret key, and a
+delivery whose token does not match is counted (`unbound`) and dropped before anything is read or
+written, so an event signed with a provider's shared secret cannot be replayed at another tenant's
+inbox. A tenant admin reads the path to configure with the provider from
+`GET /api/v1/case-push/provider-webhook-inbox?provider={provider}`; treat it as a credential, and
+note that rotating `AGENTICORG_SECRET_KEY` changes every tenant's inbox path.
 
 `VerificationProvider.verify_webhook` decides authenticity, and a webhook **never changes a case**:
 
 | Delivery | Recorded as | Effect |
 |---|---|---|
-| verified, new event id | `accepted` | every case of the tenant awaiting a decision on the event's subject is re-investigated: all data is re-read from the provider through the tool gateway, producing a new memo and a `case.updated` push |
+| verified, new event id | `accepted` | up to 25 cases of the tenant awaiting a decision on the event's subject are re-investigated: all data is re-read from the provider through the tool gateway, producing a new memo and a `case.updated` push. The `in_progress` transition records the event (`provider_event:<type>:<event id>`), and if the provider cannot be reached the case returns to `awaiting_decision` with its existing memo and the reason `re_evaluation_failed:<reason>` |
 | verified, event id already accepted | `duplicate` | nothing |
-| forged, tampered, stale or unsigned | `unverified` | an untrusted trigger: only a subject reference is read from the body, to find matching cases; each is re-investigated at most once per 10 minutes |
+| forged, tampered, stale or unsigned | `unverified` | recorded and counted, nothing else: nothing is read out of the body, no case is looked up and no investigation runs |
+| wrong or missing path token | `unbound` (counter only) | nothing; no database access at all |
 
 `provider_webhook_receipts` records each delivery's outcome, event id (verified only), body SHA-256
-and how many cases it re-queried; the body is never stored. Bodies over 256 KiB are refused with 413.
+and how many cases it re-queried; the body is never stored.
 See [Provider webhooks: verification failures and replays](../RUNBOOKS.md#provider-webhooks-verification-failures-and-replays).
 
 ## Metrics and alerts
@@ -128,7 +138,7 @@ See [Provider webhooks: verification failures and replays](../RUNBOOKS.md#provid
 | `agenticorg_case_push_dead_letters_total` | `reason` (`endpoint_rejected`, `max_attempts_exceeded`, `payload_invalid`) |
 | `agenticorg_case_push_dead_letter_backlog` | none (gauge, set by the sweep) |
 | `agenticorg_case_push_attempt_duration_seconds` | none |
-| `agenticorg_provider_webhook_receipts_total` | `outcome` (`accepted`, `duplicate`, `unverified`) |
+| `agenticorg_provider_webhook_receipts_total` | `outcome` (`accepted`, `duplicate`, `unverified`, `unbound`) |
 
 Alert `case_push_dead_letters_present` (`observability/alerting.py`) fires while the dead-letter
 backlog is above zero. Suggested Prometheus rules: dead-letter growth
