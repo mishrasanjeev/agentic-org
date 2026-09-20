@@ -196,13 +196,14 @@ class TestReportSchedulesIntegration:
         from sqlalchemy import text as sa_text
 
         import core.database as db_mod
+        from tests.integration.conftest import tenant_slug
         async with db_mod.engine.begin() as conn:
-            for tid, slug in ((tenant_a, "iso-a"), (tenant_b, "iso-b")):
+            for tid, name in ((tenant_a, "iso-a"), (tenant_b, "iso-b")):
                 await conn.execute(sa_text(
                     "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
-                    "VALUES (:id, :slug, :slug, 'enterprise', 'IN', '{}') "
+                    "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}') "
                     "ON CONFLICT (id) DO NOTHING"
-                ), {"id": tid, "slug": slug})
+                ), {"id": tid, "name": name, "slug": tenant_slug(tid, name)})
 
         a_hdr = make_auth_headers(tenant_id=tenant_a, scopes=["agenticorg:admin"])
         b_hdr = make_auth_headers(tenant_id=tenant_b, scopes=["agenticorg:admin"])

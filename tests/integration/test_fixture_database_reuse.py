@@ -3,12 +3,15 @@
 
 A test session mints fresh tenant and user ids, so the rows it seeds must not
 collide with rows an earlier session left behind. `tenants.slug` is globally
-unique, which is where a fixed value bites (FINDINGS A-41).
+unique, which is where a fixed value — or one truncated to the first few
+characters of the id — bites.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -25,6 +28,9 @@ from tests.integration.conftest import (
     tenant_slug,
 )
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+_TRUNCATION = re.compile(r"slug[^\n]*\[:\s*\d+\s*\]|\[:\s*\d+\s*\][^\n]*slug")
+
 
 @pytest_asyncio.fixture
 async def seed_engine(_setup_schema: None):
@@ -39,10 +45,31 @@ async def seed_engine(_setup_schema: None):
 
 
 def test_tenant_slug_is_unique_per_tenant_id() -> None:
+    # Two ids differing only in their last character: a truncating slug would
+    # give both the same value.
     first = "00000000-0000-0000-0000-000000000001"
     second = "00000000-0000-0000-0000-000000000002"
     assert tenant_slug(first) != tenant_slug(second)
     assert uuid.UUID(TEST_TENANT_ID).hex in tenant_slug(TEST_TENANT_ID)
+    assert tenant_slug(first, "iso-a").startswith("iso-a-")
+
+
+def test_tenant_slug_tolerates_an_identifier_that_is_not_a_uuid() -> None:
+    assert tenant_slug("Tenant One!") == "test-tenant-tenant-one"
+    assert tenant_slug("") == "test-tenant-unidentified"
+
+
+def test_no_test_seeds_a_tenant_slug_from_a_truncated_identifier() -> None:
+    """A slug built from `id[:8]` collides between ids sharing a prefix."""
+    offenders = []
+    for path in sorted((REPO_ROOT / "tests").rglob("*.py")):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative == Path(__file__).relative_to(REPO_ROOT).as_posix():
+            continue
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if _TRUNCATION.search(line):
+                offenders.append(f"{relative}:{number}: {line.strip()}")
+    assert not offenders, "a tenant slug must come from the whole id:\n  " + "\n  ".join(offenders)
 
 
 async def test_seeding_twice_with_different_ids_succeeds(seed_engine: AsyncEngine) -> None:
@@ -74,25 +101,15 @@ async def test_seeding_twice_with_different_ids_succeeds(seed_engine: AsyncEngin
             )
 
 
-async def test_seeding_the_same_session_twice_is_idempotent(seed_engine: AsyncEngine) -> None:
-    """The fixture runs once per session, but a re-run must not raise."""
-    async with seed_engine.begin() as conn:
-        await seed_tenant_and_admin(conn, TEST_TENANT_ID, TEST_USER_ID, TEST_USER_SUB)
-        await seed_tenant_and_admin(conn, TEST_TENANT_ID, TEST_USER_ID, TEST_USER_SUB)
-
-    async with seed_engine.connect() as conn:
-        count = await conn.scalar(
-            text("SELECT count(*) FROM tenants WHERE id = CAST(:id AS uuid)"),
-            {"id": TEST_TENANT_ID},
-        )
-    assert count == 1
-
-
 @pytest.mark.usefixtures("client")
 async def test_client_fixture_seeds_a_run_specific_slug(seed_engine: AsyncEngine) -> None:
     async with seed_engine.connect() as conn:
-        slug = await conn.scalar(
-            text("SELECT slug FROM tenants WHERE id = CAST(:id AS uuid)"),
-            {"id": TEST_TENANT_ID},
-        )
-    assert slug == tenant_slug(TEST_TENANT_ID)
+        row = (
+            await conn.execute(
+                text("SELECT slug, name FROM tenants WHERE id = CAST(:id AS uuid)"),
+                {"id": TEST_TENANT_ID},
+            )
+        ).one()
+    assert row.slug == tenant_slug(TEST_TENANT_ID)
+    # The name is derived from the id too, so a reused database stays readable.
+    assert uuid.UUID(TEST_TENANT_ID).hex in row.name

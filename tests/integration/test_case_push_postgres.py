@@ -131,7 +131,7 @@ def tenant(engine: Engine) -> str:
                 "INSERT INTO tenants (id, name, slug, plan, data_region, settings, byok_kek_resource) "
                 "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb, '')"
             ),
-            {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": f"tenant-{tenant_id}"},
+            {"id": tenant_id, "name": f"tenant-{tenant_id}", "slug": f"tenant-{tenant_id}"},
         )
     return tenant_id
 
