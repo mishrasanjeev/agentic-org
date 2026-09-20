@@ -13,7 +13,7 @@
  *     user what was blocked and why.
  */
 import { expect, test } from "@playwright/test";
-import { DEMO_ROLE_CREDENTIALS, setSessionToken } from "./helpers/auth";
+import { DEMO_ROLE_CREDENTIALS, requireDemoRoleCredentials, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 const E2E_TOKEN = process.env.E2E_TOKEN || "";
@@ -36,6 +36,7 @@ async function seedSession(
 ): Promise<void> {
   let token = E2E_TOKEN;
   if (role !== "admin") {
+    requireDemoRoleCredentials([role as keyof typeof DEMO_ROLE_CREDENTIALS]);
     const creds = ROLE_CREDS[role];
     if (!creds) throw new Error(`No demo credentials configured for role ${role}`);
     const resp = await page.request.post(`${APP}/api/v1/auth/login`, {
