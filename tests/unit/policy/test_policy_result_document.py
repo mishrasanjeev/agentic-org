@@ -13,7 +13,7 @@ from core.policy.document import policy_result_document
 def test_document_validates_and_lists_each_fired_rules_inputs() -> None:
     policy = load_policy(EXAMPLES_DIR / "business_onboarding_uk.yaml")
     evidence = {
-        "verification": {"status": "dissolved", "registry_match": True, "overdue_filings": 0},
+        "verification": {"status": "dissolved", "registry_match": True},
         "ownership": {"missing_owners": 1, "undeclared_owners": 0},
         "screening": {"unresolved_true_matches": 0, "unresolved_possible_matches": {"nested": 1}},
         "web_presence": {"activity_mismatch": False},
@@ -32,7 +32,7 @@ def test_document_validates_and_lists_each_fired_rules_inputs() -> None:
     assert reasons["screening_possible_match"]["inputs"] == {"screening.unresolved_possible_matches": None}
     assert document["policy"] == {
         "policy_id": "business_onboarding_uk",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "example": True,
         "reviewed_by": None,
     }

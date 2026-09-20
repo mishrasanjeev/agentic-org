@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "key": "sha256:beff152c6aed8f8663cfe4462e37951ff29a8974a4ac5805c39521e3b90fa461",
+  "key": "sha256:aea1a7a7c79ea2ed3e9fd6b3b7c9090e9c1f23218c68afb6f5e680db3f39b70b",
   "model": "gemini-2.5-flash",
   "request": {
     "messages": [
@@ -9,7 +9,7 @@
         "role": "system"
       },
       {
-        "content": "{\"missing_items\":[\"owner_date_of_birth\"],\"policy\":{\"fired_rules\":[\"ownership_reconciled\",\"filings_overdue\",\"screening_possible_match\",\"web_presence_activity_mismatch\"],\"score\":70,\"tier\":\"high\"},\"recommendation\":\"refer\",\"sections\":[{\"evidence_count\":1,\"finding_codes\":[\"registry_match\"],\"section_id\":\"identity\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"current_officers\",\"registry_active\"],\"section_id\":\"registry\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"missing_owner\"],\"section_id\":\"ownership\",\"status\":\"complete\"},{\"evidence_count\":3,\"finding_codes\":[\"screening_hit\",\"screening_clear\"],\"section_id\":\"screening\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"web_domain_observed\",\"web_page_analysed\"],\"section_id\":\"web_presence\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"activity_not_comparable\"],\"section_id\":\"activity\",\"status\":\"partial\"}]}",
+        "content": "{\"missing_items\":[\"owner_date_of_birth\"],\"policy\":{\"fired_rules\":[\"ownership_reconciled\",\"screening_possible_match\"],\"score\":40,\"tier\":\"medium\"},\"recommendation\":\"request_information\",\"sections\":[{\"evidence_count\":1,\"finding_codes\":[\"registry_match\"],\"section_id\":\"identity\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"current_officers\",\"registry_active\"],\"section_id\":\"registry\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"missing_owner\"],\"section_id\":\"ownership\",\"status\":\"complete\"},{\"evidence_count\":3,\"finding_codes\":[\"screening_hit\",\"screening_clear\"],\"section_id\":\"screening\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"web_domain_observed\",\"web_page_analysed\"],\"section_id\":\"web_presence\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"activity_consistent\"],\"section_id\":\"activity\",\"status\":\"complete\"}]}",
         "role": "human"
       }
     ],
