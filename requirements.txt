@@ -28,14 +28,14 @@ python-multipart==0.0.32
 websockets==15.0.1
 
 # ─── Database & ORM ──────────────────────────────────────────────────────────
-sqlalchemy[asyncio]==2.0.52
+sqlalchemy[asyncio]==2.0.54
 asyncpg==0.31.0
 # psycopg 3 is the driver langgraph-checkpoint-postgres uses for the agent
 # checkpoint store (core/langgraph/checkpoint_postgres.py). The binary extra
 # bundles libpq so images need no system package.
 psycopg[binary]==3.3.5
 psycopg-pool==3.3.1
-alembic==1.19.2
+alembic==1.20.0
 pgvector==0.5.0
 
 # ─── Cache, Task Queue & Message Broker ──────────────────────────────────────
@@ -51,7 +51,7 @@ jsonschema==4.26.0
 cryptography>=50.0.1
 PyJWT[crypto]==2.14.0
 passlib[bcrypt]==1.7.4
-grantex==0.5.0
+grantex==0.5.1
 
 # ─── HTTP Client & DNS ───────────────────────────────────────────────────────
 httpx==0.28.1
@@ -71,7 +71,7 @@ openai==2.54.0
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
 langgraph==1.2.11
 langchain==1.4.0
-langchain-core==1.6.2
+langchain-core==1.6.3
 langchain-google-genai==4.4.0
 langchain-anthropic==1.7.2
 langchain-openai==1.6.2
@@ -79,7 +79,7 @@ langchain-openai==1.6.2
 # (core/langgraph/checkpoint_postgres.py) is verified against these versions.
 langgraph-checkpoint-postgres==3.1.2
 langgraph-checkpoint==4.2.0
-langsmith==0.12.4
+langsmith==0.12.6
 
 # ─── Google Cloud Platform ───────────────────────────────────────────────────
 google-cloud-storage==2.19.0

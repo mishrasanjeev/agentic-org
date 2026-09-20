@@ -12,9 +12,13 @@ United Kingdom and European identifiers are in
 
 ## Turning it on
 
-The flag is off by default. A tenant administrator enables it for their tenant
-through the feature-flag API (`POST /api/v1/feature-flags` with flag key
-`pseudonymisation.pre_model`, `enabled` true and `rollout_percentage` 100).
+The flag is off by default. It is an operator-managed authority flag: the
+tenant feature-flag API refuses it (`403 flag_key_reserved`). A platform
+operator enables it for a tenant with
+`python scripts/authority_flags.py set pseudonymisation.pre_model --tenant <tenant id> --operator <name>`,
+or for every tenant with `--global`. Pseudonymisation is on when either the
+global row or the tenant's row enables it, so a tenant row cannot switch off a
+global setting.
 
 The flag is read once when a run starts; successful reads are cached for 30
 seconds. The read is strict: no flag row means off, but a lookup that fails

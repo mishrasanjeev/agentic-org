@@ -61,14 +61,14 @@ classifiers = [
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.52.4",
-    "sqlalchemy[asyncio]>=2.0.52",
+    "sqlalchemy[asyncio]>=2.0.54",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
     # extra bundles libpq.
     "psycopg[binary]>=3.3.5",
     "psycopg-pool>=3.3.1",
-    "alembic>=1.19.2",
+    "alembic>=1.20.0",
     "redis[hiredis]>=5.2.0",
     "pydantic>=2.13.5",
     "pydantic-settings>=2.15.0",
@@ -108,8 +108,8 @@ dependencies = [
     # of these versions and refuses to start the Postgres store with any other.
     "langgraph-checkpoint-postgres==3.1.2",
     "langgraph-checkpoint==4.2.0",
-    "grantex>=0.5.0",
-    "langsmith>=0.12.4",
+    "grantex>=0.5.1",
+    "langsmith>=0.12.6",
     "pypdf>=6.18.1",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
@@ -246,6 +246,10 @@ omit = [
     "*/codex-pytest-cache/*",
     "*/codex-pytest-artifacts/*",
 ]
+# SQLAlchemy's asyncio layer runs database calls in greenlets. Without greenlet
+# tracing, coverage stops recording a coroutine's lines after its first awaited
+# query, so async request handlers and repositories were under-reported.
+concurrency = ["greenlet", "thread"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

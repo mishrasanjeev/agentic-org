@@ -47,6 +47,7 @@ Every agent-execution endpoint returns the same JSON shape:
 | `explanation` | no | Present when the agent produces a structured explanation; `null` otherwise. |
 | `hitl_trigger` | no | The human-gate reason string when `status == "hitl_triggered"`; `null` otherwise. |
 | `error` | no | Human-readable error string when `status == "failed"`; `null` otherwise. |
+| `grant_denial` | no | Present only when grant enforcement refused a tool call (`grants.enforce_closed` deny, see `docs/operations/grant-enforcement.md`): `reason`, `sub_reason`, `grant_id`, `connector`, `tool`. The run's `status` is `failed` and `error` is `grant_denied: <reason>`. |
 
 ## Legacy aliases (deprecated, removed in v5.0)
 

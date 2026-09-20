@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -34,6 +35,12 @@ def mock_session():
     session.add = MagicMock()
     session.get = AsyncMock()
     return session
+
+
+def _unauthenticated_request():
+    """Request double with no auth state: the sales routes read the caller's
+    Grantex token (PRD F-1) from ``request.state`` and find none."""
+    return SimpleNamespace(state=SimpleNamespace())
 
 
 def _make_tenant_session_ctx(mock_session):
@@ -2142,7 +2149,7 @@ class TestSeedTargetProspects:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await seed_target_prospects(
-                auto_process=False, tenant_id=tenant_id
+                request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["seeded"] == 20
@@ -2170,7 +2177,7 @@ class TestSeedTargetProspects:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await seed_target_prospects(
-                auto_process=False, tenant_id=tenant_id
+                request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["seeded"] == 15
@@ -2187,7 +2194,7 @@ class TestSeedTargetProspects:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await seed_target_prospects(
-                auto_process=False, tenant_id=tenant_id
+                request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["seeded"] == 0
@@ -2219,7 +2226,7 @@ class TestImportLeadsCsv:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await import_leads_csv(
-                file=file, auto_process=False, tenant_id=tenant_id
+                file=file, request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["imported"] == 2
@@ -2239,7 +2246,7 @@ class TestImportLeadsCsv:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await import_leads_csv(
-                file=file, auto_process=False, tenant_id=tenant_id
+                file=file, request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["imported"] == 0
@@ -2262,7 +2269,7 @@ class TestImportLeadsCsv:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await import_leads_csv(
-                file=file, auto_process=False, tenant_id=tenant_id
+                file=file, request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["imported"] == 0
@@ -2284,7 +2291,7 @@ class TestImportLeadsCsv:
         with patch("api.v1.sales.get_tenant_session") as mock_gts:
             mock_gts.return_value = _make_tenant_session_ctx(mock_session)
             result = await import_leads_csv(
-                file=file, auto_process=False, tenant_id=tenant_id
+                file=file, request=_unauthenticated_request(), auto_process=False, tenant_id=tenant_id
             )
 
         assert result["imported"] == 1
@@ -2382,7 +2389,7 @@ class TestProcessLeadWithAgent:
         from api.v1.sales import process_lead_with_agent
 
         with pytest.raises(HTTPException) as exc_info:
-            await process_lead_with_agent(payload={}, tenant_id=tenant_id)
+            await process_lead_with_agent(request=_unauthenticated_request(), payload={}, tenant_id=tenant_id)
 
         assert exc_info.value.status_code == 400
 
@@ -2391,7 +2398,7 @@ class TestProcessLeadWithAgent:
         from api.v1.sales import process_lead_with_agent
 
         with pytest.raises(HTTPException) as exc_info:
-            await process_lead_with_agent(payload=None, tenant_id=tenant_id)
+            await process_lead_with_agent(request=_unauthenticated_request(), payload=None, tenant_id=tenant_id)
 
         assert exc_info.value.status_code == 400
 

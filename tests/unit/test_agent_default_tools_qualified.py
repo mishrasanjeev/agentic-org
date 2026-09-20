@@ -83,15 +83,15 @@ def test_unknown_connector_qualifier_never_matches():
 
 def test_scopes_use_the_named_connector_not_the_first_registered_one():
     scopes = _tools_to_scopes(["jira:create_issue", "salesforce:query", "create_issue"], "ops")
-    assert "tool:jira:execute:create_issue" in scopes
-    assert "tool:salesforce:execute:query" in scopes
+    assert "tool:jira:write:create_issue" in scopes
+    assert "tool:salesforce:read:query" in scopes
     # The bare name keeps its historical first-wins resolution.
-    assert "tool:github:execute:create_issue" in scopes
+    assert "tool:github:write:create_issue" in scopes
 
 
 def test_scopes_for_unknown_qualifier_grant_no_connector():
     scopes = _tools_to_scopes(["nonexistent_connector:create_issue"], "ops")
-    assert scopes == ["agenticorg:ops:read", "tool:agenticorg:execute:nonexistent_connector:create_issue"]
+    assert scopes == ["agenticorg:ops:read", "tool:agenticorg:write:nonexistent_connector:create_issue"]
 
 
 def test_runtime_binds_the_named_connector():

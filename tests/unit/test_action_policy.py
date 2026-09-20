@@ -8,6 +8,7 @@ import pytest
 
 import core.langgraph.tool_adapter as tool_adapter_module
 import core.tool_gateway.gateway as gateway_module
+from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
 from core.governance.action_policy import (
     FORCE_SHADOW_FLAG,
     ActionContext,
@@ -283,6 +284,7 @@ class TestToolGatewayContainment:
             params={},
             company_id=COMPANY_ID,
             domain="marketing",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result["error"]["code"] == "E1011"
@@ -315,6 +317,7 @@ class TestToolGatewayContainment:
             tool_name="get_trial_balance",
             params={},
             domain="finance",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result["error"]["code"] == "E1011"
@@ -346,6 +349,7 @@ class TestToolGatewayContainment:
             params={"as_of": "2026-06-30"},
             company_id=COMPANY_ID,
             domain="finance",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result == {"status": "ok"}
@@ -379,6 +383,7 @@ class TestToolGatewayContainment:
             params={"idempotency_key": "cart-1"},
             company_id=COMPANY_ID,
             domain="commerce",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result["error"]["code"] == "E1011"
@@ -410,6 +415,7 @@ class TestToolGatewayContainment:
             params={"amount": 100},
             company_id=COMPANY_ID,
             domain="finance",
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result["error"]["code"] == "E1011"
@@ -450,6 +456,7 @@ class TestToolGatewayContainment:
             company_id=COMPANY_ID,
             domain="finance",
             capability_authorization=authorization,
+            run_grant=NO_RUN_GRANT_FOR_TESTS,
         )
 
         assert result["error"]["code"] == "E1011"

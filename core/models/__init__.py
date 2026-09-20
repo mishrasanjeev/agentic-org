@@ -44,6 +44,9 @@ from core.models.capability_readiness import (
     CapabilityReadinessRecord as CapabilityReadinessRecord,
 )
 from core.models.case_pseudonym_map import CasePseudonymMap as CasePseudonymMap
+from core.models.case_push import CasePushEndpoint as CasePushEndpoint
+from core.models.case_push import CasePushOutbox as CasePushOutbox
+from core.models.case_push import ProviderWebhookReceipt as ProviderWebhookReceipt
 from core.models.cdc import CDCEvent as CDCEvent
 from core.models.cdc import CDCEventDeadLetter as CDCEventDeadLetter
 from core.models.client_portal import ClientPortalDocument as ClientPortalDocument
@@ -70,6 +73,8 @@ from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
 from core.models.governance_config import GovernanceConfig as GovernanceConfig
+from core.models.governed_case import GovernedCase as GovernedCase
+from core.models.governed_case import GovernedCaseTransition as GovernedCaseTransition
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
 from core.models.hitl import HITLQueue as HITLQueue

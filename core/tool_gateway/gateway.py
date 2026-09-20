@@ -9,6 +9,8 @@ from typing import Any
 
 import structlog
 
+from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.run_grants import RunGrant, check_run_grant
 from auth.scopes import check_scope
 from core.config import is_strict_runtime_env, settings
 from core.governance.action_policy import (
@@ -88,6 +90,9 @@ class ToolGateway:
         company_id: str | None = None,
         domain: ActionDomain | str | None = None,
         capability_authorization: CapabilityAuthorization | None = None,
+        *,
+        run_grant: RunGrant | None,
+        agent_type: str = "",
         pseudonymiser: PseudonymSession | None = None,
     ) -> dict[str, Any]:
         """Execute a tool call through the gateway pipeline.
@@ -95,6 +100,14 @@ class ToolGateway:
         ``pseudonymiser`` restores pseudonymised model arguments before any
         check or dispatch; a call whose pseudonyms cannot all be restored is
         refused and audited, never dispatched.
+
+        PRD F-1: with a ``run_grant`` in ``warn`` or ``deny`` the grant check
+        (``auth/grant_enforcement.py``) runs first, and then every legacy check
+        below runs exactly as in ``off`` - including strict enforcement of a
+        token passed to the gateway - so enforcement never skips or downgrades
+        a check ``off`` makes. ``run_grant`` is required so the grant check
+        cannot be left out by omission; only tests that exercise the legacy
+        checks alone pass ``auth.run_grants.NO_RUN_GRANT_FOR_TESTS``.
         """
         start_time = time.monotonic()
 
@@ -151,6 +164,43 @@ class ToolGateway:
 
         # 1. Validate scope via Grantex enforce (manifest-based, offline JWT verification)
         effective_token = grant_token or getattr(self, "_current_grant_token", None)
+        if run_grant is not None and run_grant.mode is not EnforcementMode.OFF:
+            check = await check_run_grant(
+                run_grant,
+                connector=connector_name,
+                tool=tool_name,
+                amount=amount,
+                context=GrantCallContext(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    agent_type=agent_type,
+                    runtime="tool_gateway",
+                    grant_source=run_grant.source,
+                ),
+            )
+            if not check.dispatch_allowed and check.denial is not None:
+                if self.audit:
+                    await self.audit.log(
+                        tenant_id=tenant_id,
+                        agent_id=agent_id,
+                        tool_name=tool_name,
+                        action="scope_denied",
+                        outcome="blocked",
+                        details={
+                            "reason": f"grant_denied: {check.denial.reason.value}",
+                            "sub_reason": check.denial.sub_reason,
+                            "grant_id": check.denial.grant_id,
+                        },
+                    )
+                return {
+                    "error": {
+                        "code": "E1007",
+                        "message": f"grant_denied: {check.denial.reason.value}",
+                        "reason": check.denial.reason.value,
+                        "sub_reason": check.denial.sub_reason,
+                    }
+                }
+
         if effective_token:
             from core.langgraph.grantex_auth import get_grantex_client
 

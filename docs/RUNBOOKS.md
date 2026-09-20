@@ -15,6 +15,8 @@ Full DR procedures live in `docs/BACKUP_AND_DR.md`.
 7. [Plural webhook backlog](#plural-webhook-backlog)
 8. [Audit log trigger blocking an upgrade](#audit-log-trigger-blocking-an-upgrade)
 9. [Agent runs paused for approval: checkpoint store and resume](#agent-runs-paused-for-approval-checkpoint-store-and-resume)
+10. [Governed case push: dead letters and replay](#governed-case-push-dead-letters-and-replay)
+11. [Provider webhooks: verification failures and replays](#provider-webhooks-verification-failures-and-replays)
 
 ---
 
@@ -178,8 +180,12 @@ gate pauses in a LangGraph checkpoint. Two switches control what happens next:
 | `AGENTICORG_LANGGRAPH_CHECKPOINTER` | process (API and workers, set together) | `memory` | `memory`: checkpoints live in process memory and are lost on restart or on another replica. `postgres`: checkpoints are stored encrypted (credential-vault keyring) in `checkpoints`, `checkpoint_blobs`, `checkpoint_writes` (migration `v6z22`). |
 | `approvals.resume_agent_runs` | per tenant feature flag | off | On: deciding the approval with `approve` or `reject` resumes the paused run from its checkpoint. Off: the decision is recorded and the run stays paused. |
 
-Enable the flag for a tenant as a tenant admin:
-`POST /api/v1/feature-flags` with `{"flag_key": "approvals.resume_agent_runs", "enabled": true, "rollout_percentage": 100}`.
+`approvals.resume_agent_runs` is an operator-managed authority flag: the
+tenant feature-flag API refuses it (`403 flag_key_reserved`). A platform
+operator enables it for a tenant with
+`python scripts/authority_flags.py set approvals.resume_agent_runs --tenant <tenant id> --operator <name>`.
+A global row that disables it keeps runs paused for every tenant; otherwise the
+tenant row decides, else the global row.
 Resuming across restarts and replicas needs `postgres`.
 
 Operating the Postgres store:
@@ -275,4 +281,75 @@ deletes every `tenant:<id>:` thread (runs and voice sessions) from the configure
 store; run it with the backend settings of the API. No offboarding flow calls it
 yet, and subject-level DSAR erasure does not reach checkpoint content (FINDINGS
 A-22), which is removed only by deleting the thread.
+
+---
+
+## Governed case push: dead letters and replay
+
+Case hand-offs (`core/cases/push.py`, `docs/governance/case-hand-off.md`) are written to
+`case_push_outbox` with the case change, so a receiver outage never loses a case. They are
+delivered by the `dispatch_case_pushes` Celery task (queued after each change) and the
+`sweep_case_pushes` beat task every 30 seconds (`AGENTICORG_CASE_PUSH_SWEEP_ENABLED=true`).
+
+**Detect:** alert `case_push_dead_letters_present` (gauge
+`agenticorg_case_push_dead_letter_backlog > 0`); a rise in
+`agenticorg_case_push_dead_letters_total{reason}` or in
+`agenticorg_case_push_deliveries_total{outcome="retry_scheduled"}`; the receiver reports missing
+cases.
+
+**Diagnose:**
+- `GET /api/v1/case-push/dead-letters` (tenant admin) lists dead-lettered events with `attempts`,
+  `last_status_code` and `last_error`:
+  - `endpoint_rejected:http_4xx` - the receiver refused the delivery (bad signature on its side,
+    wrong URL, schema rejected). Not retried.
+  - `max_attempts_exceeded:<error>` - the receiver was unreachable or answered 5xx, 408, 425 or 429
+    through every retry (about 17 minutes of backoff across 10 attempts).
+  - `payload_invalid` - the case did not produce a valid `case_push` document; the case itself is
+    unaffected. Check the API logs for `case_push_payload_invalid`.
+- `GET /api/v1/governed-cases/{case_ref}/push-deliveries` shows every event for one case.
+- Rows stuck `pending` with `next_attempt_at` far in the past mean no worker is delivering: check
+  the Celery `delivery` queue and that the sweep is enabled.
+
+**Mitigate:**
+- Fix the receiver (URL, TLS, signing key). To change the URL: `PUT /api/v1/case-push/endpoint`.
+- The system of record can pull the current document at any time:
+  `GET /api/v1/governed-cases/{case_ref}/push-payload` (same event id as the push for that case
+  version).
+
+**Fix / replay:** once the receiver is healthy,
+`POST /api/v1/case-push/dead-letters/{outbox_id}/replay` for each dead letter. Replay keeps the
+event id, so a receiver that already processed it de-duplicates; it resets attempts and delivers
+immediately. A `payload_invalid` event is rebuilt from the case on replay and refused again with
+422 if the case still cannot produce a valid document.
+
+**Signing key rotation:** `POST /api/v1/case-push/endpoint/rotate-key` returns the new secret once;
+deliveries are then signed with both keys. After the receiver accepts the new key,
+`POST /api/v1/case-push/endpoint/retire-previous-keys`. If a secret leaked, rotate and retire
+immediately and ask the receiver to drop the old key.
+
+---
+
+## Provider webhooks: verification failures and replays
+
+Inbound provider events arrive at `POST /api/v1/webhooks/providers/{tenant_id}/{provider}`
+(`core/cases/provider_webhooks.py`). A webhook never changes a case: it only triggers a
+re-investigation of matching cases awaiting a decision, which re-reads everything from the provider.
+
+**Detect:** `agenticorg_provider_webhook_receipts_total{outcome="unverified"}` rising (forged,
+stale, tampered or unsigned deliveries, or a signing secret that no longer matches);
+`outcome="duplicate"` rising (the provider or an attacker is replaying event ids).
+
+**Diagnose:** `provider_webhook_receipts` records every delivery's outcome, event id (verified only),
+body SHA-256 and how many cases it re-queried; bodies are never stored. A sudden switch from
+`accepted` to `unverified` for one provider usually means its webhook secret was rotated on one
+side only.
+
+**Mitigate:** the route answers 202 either way and is rate limited (`provider-webhook`). An
+unverified delivery can re-query a matching case at most once per 10 minutes, so forged traffic
+costs at most that many provider calls. If a provider is compromised, set its webhook secret to a
+new value (or stop routing its traffic) - verified events cannot bypass re-querying.
+
+**Fix:** align the provider's webhook secret with its configuration (for the mock:
+`AGENTICORG_MOCK_PROVIDER_WEBHOOK_SECRET`). Missed events are harmless to replay from the provider:
+a verified event id is processed once; a new id triggers one re-investigation.
 

@@ -28,6 +28,7 @@ from api.v1 import (
     ca_billing,
     ca_operations,
     capability_readiness,
+    case_push,
     cdc_webhooks,
     chat,
     client_portal,
@@ -46,6 +47,7 @@ from api.v1 import (
     evals,
     feature_flags,
     governance,
+    governed_cases,
     health,
     integrations_status,
     invoices,
@@ -130,6 +132,13 @@ async def lifespan(app: FastAPI):
 
         logging.getLogger(__name__).debug("Blacklist cleanup skipped: %s", exc)
 
+    # Per-run grant cache (PRD F-1): one Redis client for this loop and the
+    # revocation listener. Never blocks startup; Celery workers create their
+    # client lazily on first use instead.
+    from auth.token_pool import token_pool
+
+    await token_pool.init()
+
     # Pre-warm Grantex JWKS cache so first real enforce() call is <1ms
     try:
         from core.langgraph.grantex_auth import get_grantex_client
@@ -145,6 +154,7 @@ async def lifespan(app: FastAPI):
     from api.v1.health import close_health_resources
     from core.database import close_db
 
+    await token_pool.close()
     await close_health_resources()
     await close_checkpointer()
     await close_db()
@@ -269,6 +279,8 @@ app.include_router(tenant_ai_credentials.router, prefix="/api/v1", tags=["Tenant
 app.include_router(tenant_ai_settings.router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(tenant_ai_settings.registry_router, prefix="/api/v1", tags=["Tenant AI Settings"])
 app.include_router(cdc_webhooks.router, prefix="/api/v1", tags=["CDC Webhooks"])
+app.include_router(governed_cases.router, prefix="/api/v1", tags=["Governed Cases"])
+app.include_router(case_push.router, prefix="/api/v1", tags=["Governed Cases"])
 app.include_router(content_safety.router, prefix="/api/v1", tags=["Content Safety"])
 app.include_router(knowledge.router, prefix="/api/v1", tags=["Knowledge Base"])
 app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])

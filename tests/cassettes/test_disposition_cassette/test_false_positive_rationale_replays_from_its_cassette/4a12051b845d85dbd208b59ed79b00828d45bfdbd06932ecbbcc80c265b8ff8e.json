@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "key": "sha256:4a12051b845d85dbd208b59ed79b00828d45bfdbd06932ecbbcc80c265b8ff8e",
+  "model": "gemini-2.5-flash",
+  "request": {
+    "messages": [
+      {
+        "content": "You write the rationale for a proposed disposition of one screening hit.\n\nYou are given structured facts as JSON: the list type and entry kind of the hit, the result of comparing the screened subject with the hit on each identifier (name, date_of_birth, nationality, address, associated_entities), the proposed outcome and its confidence band. Values that could carry text from outside the platform are replaced by {\"untrusted_ref\": \"<path>\"}; never guess what they contain.\n\nRules:\n- Explain, in two to four plain sentences, how the identifier comparisons support the proposed outcome.\n- Mention only the comparison results you were given. Do not add names, dates, places or facts.\n- Do not change, question or restate a different outcome. Do not say the hit is closed, cleared or dismissed; an analyst reviews every proposal.\n- At most 1200 characters.\n\nAnswer with JSON only, in exactly this shape:\n{\"rationale\": \"<text>\", \"confidence\": <number between 0 and 1>}\n",
+        "role": "system"
+      },
+      {
+        "content": "{\"comparisons\":[{\"identifier\":\"name\",\"result\":\"partial_match\"},{\"identifier\":\"date_of_birth\",\"result\":\"mismatch\"},{\"identifier\":\"nationality\",\"result\":\"mismatch\"},{\"identifier\":\"address\",\"result\":\"not_comparable\"},{\"identifier\":\"associated_entities\",\"result\":\"mismatch\"}],\"confidence_band\":\"high\",\"hit\":{\"entry_kind\":\"person\",\"list_type\":\"sanctions\"},\"hit_confirmed_on_rescreen\":true,\"proposed_outcome\":\"false_positive\"}",
+        "role": "human"
+      }
+    ],
+    "model": "gemini-2.5-flash",
+    "params": {
+      "max_tokens": 4096,
+      "stop": null,
+      "temperature": 0.1
+    },
+    "tools": []
+  },
+  "response": {
+    "data": {
+      "additional_kwargs": {},
+      "content": "{\"confidence\": 0.8, \"rationale\": \"The names are close, but the date of birth and nationality do not agree and no associated entity is shared, so the hit is proposed as a false positive.\"}",
+      "invalid_tool_calls": [],
+      "name": null,
+      "response_metadata": {},
+      "tool_calls": [],
+      "type": "ai",
+      "usage_metadata": null
+    },
+    "type": "ai"
+  }
+}
