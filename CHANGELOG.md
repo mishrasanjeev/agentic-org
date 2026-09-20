@@ -23,6 +23,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   to `deny`.
 
 ### Added
+- Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
+  `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
+  `GET .../decision-requests/{request_id}`): AgenticOrg asks the Grantex auth service for a
+  decision on one semantic action, records the request on the case and reports the live status of
+  the approvals; the person approves only on the auth service's own approval page, which handles
+  sign-in, step-up, the four-eyes rule and the authoritative dwell measurement.
+  `POST .../decision` accepts `decision_request_id`, fetches the minted grants server-side (a
+  decision grant never reaches the browser) and consumes them for the exact action and the case's
+  current version through `CaseRuntime.decision_verifier`, so a case that changed after the
+  approval is refused with `case_changed`. `client_dwell_ms` on both routes is advisory telemetry
+  only (`agenticorg_case_console_dwell_seconds{stage}`), never the authoritative dwell. Off by
+  default: without `AGENTICORG_CASE_DECISION_SERVICE=grantex` decision requests answer
+  `decision_service_not_configured` and every decision is still refused with `decision_required`.
+  New metrics `agenticorg_case_decision_requests_total{outcome,result}` and
+  `agenticorg_case_decision_grants_consumed_total{outcome,result}`; new documentation
+  `docs/governance/decision-requests.md`. Migration `v6z27_case_decisions` adds
+  `governed_cases.decision_requests` (additive, forward-only).
 - Governance documentation (`docs/governance/README.md`): how grants, policy
   scores and human decisions interact for governed cases - read-only tool sets
   and the grant check at the tool gateway, deterministic policy tiers that
