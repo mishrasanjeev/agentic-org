@@ -740,11 +740,25 @@ def _page(title: str, body: str) -> str:
 # ── HTTP server ──────────────────────────────────────────────────────────────
 
 
-def oauth_error_detail(response: Response) -> dict[str, str]:
-    """The OAuth error a refusal carried, for the request log.
+#: OAuth 2.0 error codes (RFC 6749 and RFC 6750), which are the only values a
+#: refusal contributes to the request log. The accompanying description is not
+#: logged: it is written per call site and could quote a request parameter.
+OAUTH_ERROR_CODES = frozenset({
+    "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client",
+    "unsupported_grant_type", "unsupported_response_type", "invalid_scope",
+    "access_denied", "server_error", "temporarily_unavailable", "invalid_token",
+    "login_required", "interaction_required", "consent_required", "account_selection_required",
+    "not_found",
+})
 
-    A development stub that refuses without saying why costs an afternoon. An unreadable body says
-    nothing rather than failing the response that is already on its way out.
+
+def oauth_error_detail(response: Response) -> dict[str, str]:
+    """The OAuth error code a refusal carried, for the request log.
+
+    A development stub that refuses without saying why costs an afternoon, and the code is enough
+    to say which check refused. Only codes from :data:`OAUTH_ERROR_CODES` are returned, so nothing
+    a caller supplied can reach the log through here, and an unreadable body says nothing rather
+    than failing the response that is already on its way out.
     """
     if int(response.status) < 400 or not response.content_type.startswith("application/json"):
         return {}
@@ -754,7 +768,8 @@ def oauth_error_detail(response: Response) -> dict[str, str]:
         return {}
     if not isinstance(body, dict):
         return {}
-    return {k: str(body[k]) for k in ("error", "error_description") if k in body}
+    code = body.get("error")
+    return {"error": code} if isinstance(code, str) and code in OAUTH_ERROR_CODES else {}
 
 
 def _log(event: str, **fields: Any) -> None:

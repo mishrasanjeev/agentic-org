@@ -683,7 +683,8 @@ def test_a_refusal_is_logged_with_its_oauth_error(running: str, capfd: pytest.Ca
     logged = [json.loads(line) for line in capfd.readouterr().err.splitlines() if line.startswith("{")]
     refusals = [entry for entry in logged if entry.get("path") == "/token" and entry.get("status") == 400]
     assert refusals and refusals[-1]["error"] == "unsupported_grant_type"
-    assert "only authorization_code" in refusals[-1]["error_description"]
+    # Only the code: the description is written per call site and could quote a request parameter.
+    assert "error_description" not in refusals[-1]
 
 
 # --- redirect URIs the stack chooses at run time --------------------------------------------------
@@ -753,8 +754,10 @@ def test_a_chunked_body_with_trailers_is_read(running: str) -> None:
 
 def test_the_logged_detail_of_a_refusal_ignores_anything_it_cannot_read() -> None:
     refusal = Response.json(HTTPStatus.BAD_REQUEST, {"error": "invalid_grant", "error_description": "no", "x": 1})
-    assert oidc.oauth_error_detail(refusal) == {"error": "invalid_grant", "error_description": "no"}
-    assert oidc.oauth_error_detail(Response.json(HTTPStatus.OK, {"error": "not a refusal"})) == {}
+    assert oidc.oauth_error_detail(refusal) == {"error": "invalid_grant"}
+    assert oidc.oauth_error_detail(Response.json(HTTPStatus.OK, {"error": "invalid_grant"})) == {}
+    # Anything that is not a known OAuth error code is not logged.
+    assert oidc.oauth_error_detail(Response.json(HTTPStatus.BAD_REQUEST, {"error": "secret=hunter2"})) == {}
     assert oidc.oauth_error_detail(Response.html(HTTPStatus.BAD_REQUEST, "<p>error</p>")) == {}
     assert oidc.oauth_error_detail(oidc.Response(400, b"\xff\xfe", "application/json")) == {}
     assert oidc.oauth_error_detail(oidc.Response(400, b"[1, 2]", "application/json")) == {}
