@@ -1,0 +1,37 @@
+# Test files outside tests/integration/ that still reach a Redis when the machine
+# has one. The connection is refused (tests/conftest.py), so a run is hermetic
+# either way and the machine cannot decide a result; this list exists so a NEW
+# one fails instead of joining them quietly. See FINDINGS A-59.
+#
+# Files, not test ids: which test in a file opens the connection depends on what
+# ran before it, so a per-test list is not reproducible.
+#
+# It only shrinks. To take a file off it: give the code under test an explicit
+# client or a fake (see `no_auth_state_redis` in tests/unit/test_v490_reqs.py),
+# move the test to tests/integration/, or mark it `ambient_redis` if it is about
+# the lazy client itself.
+#
+# Measured 2026-09-22 over tests/unit, tests/security, tests/regression and
+# tests/contract.
+tests/regression/test_auth_tenancy_audit_20260912.py
+tests/regression/test_bug_sheet_agents_chat_20260914.py
+tests/regression/test_bug_sheet_langgraph_20260914.py
+tests/regression/test_bugs_march2026.py
+tests/regression/test_ownership_approvals_20260914.py
+tests/regression/test_prod_incidents_20260613.py
+tests/regression/test_project_audit_20260710.py
+tests/regression/test_qa_cafirms_may01_runtime_path_bugs.py
+tests/regression/test_workflow_connector_audit_20260913.py
+tests/regression/test_workflow_runtime_fail_closed_20260913.py
+tests/security/test_auth_security_full.py
+tests/unit/test_api_error_handling.py
+tests/unit/test_auth_and_core.py
+tests/unit/test_billing.py
+tests/unit/test_checkpoint_thread_ids.py
+tests/unit/test_company_isolation.py
+tests/unit/test_negative_cases.py
+tests/unit/test_phase3_apis.py
+tests/unit/test_run_grant_lifecycle.py
+tests/unit/test_tier1_features.py
+tests/unit/test_websocket_feed_resilience.py
+tests/unit/test_workflow_event_wait_durability.py

@@ -161,13 +161,17 @@ class TestABEngine:
 
     @pytest.fixture(autouse=True)
     def engine(self):
-        """Create an engine with Redis disabled (in-memory fallback)."""
-        with patch("core.marketing.ab_test.redis", create=True):
-            from core.marketing.ab_test import ABTestEngine
+        """Create an engine with Redis disabled (in-memory fallback).
 
+        `ABTestEngine.__init__` connects straight away, so clearing `_redis`
+        afterwards is too late — the client has already reached whatever Redis
+        the machine runs (FINDINGS A-59). Stop the connection instead.
+        """
+        from core.marketing.ab_test import ABTestEngine
+
+        with patch.object(ABTestEngine, "_init_redis", lambda _self: None):
             self.engine = ABTestEngine(redis_url=None)
-            # Force in-memory mode
-            self.engine._redis = None
+            assert self.engine._redis is None
             yield
 
     def _make_variants(self) -> list[dict]:
