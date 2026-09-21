@@ -94,6 +94,18 @@ is recorded and the grants are consumed. The issuer is never polled for it.
 If more than half of approvals are being submitted inside fifteen seconds, over six hours, with
 enough decisions for that to mean something, the memo is not being read.
 
+**It is blind for the first 1h44m**, and that is longer than the rule reads. The `for` is one
+hour, so an hour is the natural guess; the real figure is measured and pinned in
+`agenticorg-alerts-windows.test.yml`. While the series is younger than the six-hour range window,
+`rate()` still divides the increase by the *full* six hours, so the sample-rate floor
+(`> 0.002`) is not cleared until roughly 43 minutes of samples exist - and the one-hour `for`
+only starts counting from there.
+
+This matters after a release. If you have just deployed and are watching for rubber-stamping, the
+alert cannot help you for the first hour and three-quarters; look at the dwell panel on the
+dashboard instead, which has no such delay. The same applies the first time a deployment ever
+records a decision, because that is when the series first appears.
+
 ### authoritative dwell missing
 
 The companion. Cases are being decided and no issuer-measured dwell is arriving, which means the

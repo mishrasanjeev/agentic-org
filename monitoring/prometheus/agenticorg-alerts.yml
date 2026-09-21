@@ -47,6 +47,12 @@ groups:
         # Rubber-stamping. The number read here is the dwell the ISSUER measured on its own
         # approval page (dwell_source="server"); the console's render-to-submit figure measures
         # how fast a browser posted a form and is never admissible here.
+        #
+        # WARM-UP: this cannot fire for 1h44m after the series first appears - after a deploy, or
+        # the first decision a deployment ever records - not the ~1h the `for` suggests. While the
+        # series is younger than the 6h range, rate() still divides by the full 6h window, so the
+        # sample floor below is not cleared for about 43 minutes, and the `for` only starts from
+        # there. Measured, and pinned in agenticorg-alerts-windows.test.yml.
         expr: |
           (
             sum(rate(agenticorg_case_decision_dwell_seconds_bucket{dwell_source="server",le="15"}[6h]))
