@@ -533,6 +533,27 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- The example onboarding policies read only evidence the Business Onboarding
+  Underwriter produces, and only registry statuses the provider interface can
+  return. `business_onboarding_uk` dropped `filings_overdue`: it read
+  `verification.overdue_filings`, which no provider field supplies, so it fired
+  as indeterminate on every UK case and added a tier and score on nothing. Both
+  examples now match `in_insolvency` for an insolvent registry record instead
+  of `liquidation` (UK) and `revoked` (US), neither of which is a
+  `RegistryStatus` member, so an insolvent business can reach `blocked`.
+  `verification.overdue_filings` is gone from the evidence mapping; a
+  filings-overdue signal has to reach the provider interface, the mock provider
+  and the conformance suite first (FINDINGS A-51). Dropping a `medium` rule
+  can make a case less strict, which `docs/policies/authoring.md` treats as a
+  major change: UK example `2.0.0`, US example `1.1.0`.
+- The declared-activity vocabulary is published
+  (`core.agents.business_underwriter.facts.DECLARED_ACTIVITY_CATEGORIES`, see
+  `docs/policies/authoring.md`) and the mock provider's website fixtures are
+  HTML documents with a title and a heading, as a real site is. The extractor
+  classifies a page's activity from its title, meta description and headings,
+  so before this the observed activity was empty for every fixture and
+  `web_presence.activity_mismatch` never resolved. It now resolves for seven of
+  the twelve fixtures.
 - Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
   with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
   connector's Grantex manifest instead of `...:execute:...`, which Grantex's

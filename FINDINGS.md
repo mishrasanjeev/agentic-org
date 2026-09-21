@@ -479,22 +479,6 @@ Remove an entry in the pull request that fixes it.
   generator entry. New screening integrations go through the
   `VerificationProvider` interface instead.
 
-## A-37 — Example onboarding policies read evidence no provider supplies
-
-- **Found:** running the Business Onboarding Underwriter against every mock
-  fixture (2026-09-15).
-- **What:** `core/policy/examples/business_onboarding_uk.yaml` rule
-  `filings_overdue` reads `verification.overdue_filings`, but no field of the
-  provider-neutral interface (`connectors/framework/verification_types.py`)
-  reports filing status, so the rule fires as indeterminate on every UK case.
-  `web_presence_activity_mismatch` in both examples is also indeterminate
-  whenever the declared activity term has no extractor activity category (10 of
-  12 mock fixtures). With the UK `score_thresholds.high: 60`, a clean UK case
-  with one screening hit reaches `high` on unresolved evidence alone.
-- **Fix:** either add filing status to `BusinessVerification` (a domain concept
-  most registries publish) or drop the rule from the example; publish a mapping
-  from declared activity vocabulary to extractor categories.
-
 ## A-38 — An empty web presence carries no evidence to cite
 
 - **Found:** assembling memo sections for businesses with no website
@@ -506,16 +490,6 @@ Remove an entry in the pull request that fixes it.
   resolved registry record instead.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
-
-## A-39 — Example policies test registry statuses the interface never returns
-
-- **Found:** comparing policy operands with `RegistryStatus` (2026-09-15).
-- **What:** `registry_dissolved` in the UK example matches
-  `[dissolved, liquidation]` and in the US example `[dissolved, revoked]`, but
-  `RegistryStatus` has `in_insolvency` and no `liquidation` or `revoked`, so a
-  business in insolvency is `high` (via `registry_active`), never `blocked`.
-- **Fix:** match `in_insolvency` in the examples, or have the policy loader
-  check `verification.status` operands against the interface vocabulary.
 
 
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
@@ -584,6 +558,22 @@ Remove an entry in the pull request that fixes it.
   the two roles' scopes; needs a data migration for existing tokens and roles,
   so it is not a side change to the route gate.
 
+## A-47 — No mock fixture exercises an activity mismatch
+
+- **Found:** aligning the example policies with the evidence mapping (2026-09-20).
+- **What:** `web_presence.activity_mismatch` now resolves for seven of the
+  twelve mock fixtures, but it is `false` on every one of them: no fixture's
+  website states an activity that contradicts the declared one, so the example
+  policies' `web_presence_activity_mismatch` rule is never exercised in its
+  fired-on-true form, and neither is the memo's `activity_mismatch` finding.
+  `us-hostile-web-glintmoor`, whose second page sells investment returns while
+  the application declares solar installation, is the natural home for it.
+- **Fix:** give that fixture's pages titles that state the two different
+  activities, and update the sanitised mirror in
+  `tests/security/test_underwriter_adversarial.py::_sanitised` (which must keep
+  producing the same policy outcome as the hostile copy minus the injection),
+  with a test that the case's policy result fires the rule on a true mismatch.
+
 ## A-48 — Memo evidence cites excerpts the memo never carries, and no excerpt text is stored
 
 - **Found:** rendering memo citations in the approvals console against the
@@ -618,3 +608,19 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** give the header components tokens that follow the theme
   (`text-muted-foreground` / `text-foreground`), then widen the accessibility
   scan in `ui/e2e/helpers/governed-cases.ts` back to the whole page.
+
+## A-51 — The provider interface reports no filing status
+
+- **Found:** removing the example policies' `filings_overdue` rule (2026-09-20).
+- **What:** `connectors/framework/verification_types.py::BusinessVerification`
+  carries status, addresses, identifiers and officers, but nothing about
+  statutory filings, although most registries publish whether a company's
+  accounts or confirmation statement are overdue. A policy therefore cannot
+  score an overdue filing at all: the UK example's rule read
+  `verification.overdue_filings`, which the evidence mapping always left
+  unresolved, and it has been removed rather than left firing on every case.
+- **Fix:** if the domain wants the signal, add it to `BusinessVerification`
+  (for example a `filings` block with the last filing date and an overdue
+  count), to `schemas/`, to the mock provider's fixtures and to the provider
+  conformance suite, then reinstate the rule in the UK example; until then no
+  policy may read a filing field.
