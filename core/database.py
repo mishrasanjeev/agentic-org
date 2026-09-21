@@ -115,22 +115,27 @@ async_session_factory: Any = _GuardedSessionFactory(_shared_session_factory, eng
 # error is not a disconnect). The guard checks in three places: when a session
 # is opened on a foreign loop (the wrapper below, which sees every one), when
 # the pool opens a connection there, and when it hands an existing connection
-# out there. Measured against this engine, the last two alternate and catch
-# about half each: a warm connection is caught at checkout, dies and is
-# invalidated, so the next violation finds an empty pool and is caught at
-# connect.
+# out there. Against a warm pool only the wrapper fires, because
+# ``pool_pre_ping`` sends its ping on the foreign loop and dies before the
+# checkout listener is reached; that kills the pooled connection, so the next
+# violation finds an empty pool and trips all three — the wrapper, then
+# ``connect`` and ``checkout`` together for the replacement.
 CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
 CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
 _LOOP_KEY = "agenticorg_owning_loop"
 
-# One cross-loop use trips the guard about twice. Measured against this engine
-# by counting trips per call site (1 -> 1, 2 -> 4, 3 -> 5, 5 -> 9, 10 -> 20,
-# 20 -> 40): the session wrapper trips on every violation, while ``connect``
-# and ``checkout`` alternate and catch about half each. The first violation
-# against a cold pool trips once, because the connection dies before a
-# replacement is opened. The metric therefore counts *trips*, not distinct
-# mistakes — fine for a ratchet, which needs only to be monotonic and
-# reproducible, but do not read it as a count of violations.
+# One cross-loop use trips the guard once or three times, averaging about two.
+# A violation against a warm pool trips once: the session wrapper sees it, and
+# ``pool_pre_ping`` fails on the foreign loop before ``checkout`` is reached.
+# That kills the pooled connection, so the next violation finds an empty pool
+# and trips three times — the wrapper, then ``connect`` and ``checkout``
+# together for the replacement. The two pool hooks therefore always fire
+# together, on about half the violations. Measured against this engine by
+# counting trips per call site, from a warm start: 1 -> 1, 2 -> 4, 3 -> 5,
+# 5 -> 9, 10 -> 20, 20 -> 40 (a cold start adds 2 at small n and washes out by
+# 10). The metric therefore counts *trips*, not distinct mistakes — fine for a
+# ratchet, which needs only to be monotonic and reproducible, but do not read
+# it as a count of violations.
 _cross_loop_checkouts_total = Counter(
     "agenticorg_db_cross_loop_checkouts_total",
     "Guard trips: a pooled engine used from an event loop other than the one that owns it",
@@ -255,13 +260,14 @@ def install_cross_loop_guard(target: AsyncEngine) -> None:
 
     Two hooks are added here — the pool opening a connection, and the pool
     handing an existing one out — and :class:`_GuardedSessionFactory` checks
-    when a session is opened. All three fire on this engine: the wrapper on
-    every violation, and ``connect`` and ``checkout`` alternately on about half
-    each, because a warm connection caught at checkout is invalidated and the
-    next violation then finds an empty pool. The wrapper is what makes a
-    warm-pool reuse visible to a caller that binds ``async_session_factory``
-    itself (FINDINGS A-53): ``pool_pre_ping`` can fail on the foreign loop
-    before the ``checkout`` listener is reached.
+    when a session is opened. All three fire on this engine, but not together
+    on every violation: against a warm pool the wrapper fires alone, because
+    ``pool_pre_ping`` fails on the foreign loop before ``checkout`` is reached,
+    and that kills the pooled connection; the next violation then finds an
+    empty pool and trips all three, ``connect`` and ``checkout`` together for
+    the replacement. The wrapper is therefore what makes a warm-pool reuse
+    visible to a caller that binds ``async_session_factory`` itself
+    (FINDINGS A-53).
     """
     _guarded_engines[target] = {"loop": None}
 

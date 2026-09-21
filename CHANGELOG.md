@@ -618,9 +618,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   raising would turn latent pool problems into new 500s. A test run counts the
   guard's trips and fails when they exceed the committed
   `cross_loop_baseline.txt` (54 trips, measured in CI, roughly 27 distinct
-  uses — one use trips the guard about twice: the session check sees every
-  violation and the two pool hooks alternate over the rest; the unit job trips
-  it 0 times), and `scripts/check_cross_loop_baseline.py` refuses a raised baseline.
+  uses — one use trips the guard once or three times, averaging about two: the
+  session check sees every violation and the two pool hooks fire together on
+  about half of them; the unit job trips it 0 times), and `scripts/check_cross_loop_baseline.py` refuses a raised baseline.
   Both overrides remain deliberate and silent-free: `AGENTICORG_CROSS_LOOP_BASELINE`
   replaces the number for one run and `AGENTICORG_DB_CROSS_LOOP_GUARD=off`
   stops the counting, and a run with the guard off says so on its summary line, so the existing debt (FINDINGS

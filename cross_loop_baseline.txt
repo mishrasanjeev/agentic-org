@@ -1,14 +1,16 @@
 54  # cross-loop guard trips tolerated in a test run.
 #
-# Trips, not distinct violations: one cross-loop use trips the guard about
-# twice, so 54 trips is roughly 27 uses. Measured against this engine by
-# counting trips per call site - 1 violation -> 1 trip, 2 -> 4, 3 -> 5,
-# 5 -> 9, 10 -> 20, 20 -> 40 - the session wrapper trips on every violation
-# while the connect and checkout hooks alternate, catching about half each
-# (a warm connection is caught at checkout and invalidated, so the next
-# violation finds an empty pool and is caught at connect). The first
-# violation against a cold pool trips once. What matters for a ratchet is
-# that the number is monotonic and reproducible.
+# Trips, not distinct violations: one cross-loop use trips the guard once or
+# three times, averaging about two, so 54 trips is roughly 27 uses. A
+# violation against a warm pool trips once - the session wrapper sees it, and
+# pool_pre_ping fails on the foreign loop before checkout is reached - which
+# kills the pooled connection, so the next violation finds an empty pool and
+# trips three times: the wrapper, then connect and checkout together for the
+# replacement. The two pool hooks always fire together, on about half the
+# violations. Measured against this engine from a warm start: 1 violation ->
+# 1 trip, 2 -> 4, 3 -> 5, 5 -> 9, 10 -> 20, 20 -> 40 (a cold start adds 2 at
+# small n and washes out by 10). What matters for a ratchet is that the
+# number is monotonic and reproducible.
 #
 # Measured by the CI integration job (pytest tests/integration tests/regression)
 # on 2026-09-22; the unit job reports 0. See FINDINGS A-58. This number only
