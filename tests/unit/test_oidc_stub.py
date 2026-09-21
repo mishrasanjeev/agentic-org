@@ -792,3 +792,12 @@ def test_extra_redirect_uris_from_the_environment_reach_the_clients(
         stub_main.main()
     assert extra in built[0].config.clients["c"].redirect_uris
     assert "http://127.0.0.1:58392/cb" in built[0].config.clients["c"].redirect_uris
+
+
+def test_only_a_known_method_and_route_are_logged() -> None:
+    """Nothing a caller chose reaches the log: the request line is mapped to a fixed set."""
+    assert oidc.request_label("POST", "/token?client_secret=x") == ("POST", "/token")
+    discovery = "/.well-known/openid-configuration"
+    assert oidc.request_label("GET", discovery) == ("GET", discovery)
+    assert oidc.request_label("PATCH", "/token") == ("other", "/token")
+    assert oidc.request_label("GET", "/admin?password=x") == ("GET", "other")

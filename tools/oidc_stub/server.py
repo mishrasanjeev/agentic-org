@@ -772,6 +772,18 @@ def oauth_error_detail(response: Response) -> dict[str, str]:
     return {"error": code} if isinstance(code, str) and code in OAUTH_ERROR_CODES else {}
 
 
+#: The routes this stub serves. Anything else is logged as "other", so nothing
+#: a caller chose - a path, a query string, a method - is written to the log.
+ROUTES = ("/healthz", "/.well-known/openid-configuration", "/jwks", "/authorize", "/token", "/userinfo")
+METHODS = ("GET", "HEAD", "POST")
+
+
+def request_label(method: str, path: str) -> tuple[str, str]:
+    """The method and route to log, each from a fixed set."""
+    route = urlsplit(path).path
+    return (method if method in METHODS else "other", route if route in ROUTES else "other")
+
+
 def _log(event: str, **fields: Any) -> None:
     print(json.dumps({"event": event, **fields}, sort_keys=True), file=sys.stderr, flush=True)
 
@@ -861,8 +873,9 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(response.body)
+            method, route = request_label(self.command, self.path)
             _log(
-                "oidc_stub_request", method=self.command, path=urlsplit(self.path).path,
+                "oidc_stub_request", method=method, path=route,
                 status=int(response.status), **oauth_error_detail(response),
             )  # fmt: skip
 
