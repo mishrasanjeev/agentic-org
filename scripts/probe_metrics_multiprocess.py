@@ -78,8 +78,11 @@ def main() -> int:
 
     previous_value_class = prometheus_values.ValueClass
     previous_directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
+    # allow_existing: run from the test suite, instruments already exist, and that is the
+    # situation being probed rather than a mistake - the probe's own instruments are created
+    # after this call, which is what matters.
     directory = metrics_export.enable_multiprocess(
-        previous_directory or tempfile.mkdtemp(prefix="agenticorg-mp-")
+        previous_directory or tempfile.mkdtemp(prefix="agenticorg-mp-"), allow_existing=True
     )
 
     global _COUNTER, _GAUGE
