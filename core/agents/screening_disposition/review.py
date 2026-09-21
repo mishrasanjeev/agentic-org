@@ -23,6 +23,8 @@ from core.domain_schemas import DomainSchemaError, validate
 
 Outcome = Literal["true_match", "false_positive", "insufficient_information"]
 MAX_REASON_CHARS = 4000
+#: Only a human session's identity may review (``api.v1.governed_cases.actor_for``).
+HUMAN_ACTOR_PREFIX = "user:"
 
 
 class DispositionReviewError(ValueError):
@@ -70,7 +72,9 @@ def apply_review(
     except ValidationError as exc:
         raise DispositionReviewError("request_invalid", str(exc.errors()[0].get("msg", ""))) from exc
     analyst = analyst_id.strip() if isinstance(analyst_id, str) else ""
-    if not analyst or analyst.startswith("agent:") or len(analyst) > 256:
+    # A review is a person's act: the identity must be a human session's (``user:``), not an
+    # agent's, an API key's, a workflow's or anything else a caller might pass.
+    if not analyst.startswith(HUMAN_ACTOR_PREFIX) or len(analyst) > 256 or analyst == HUMAN_ACTOR_PREFIX:
         raise DispositionReviewError("analyst_invalid")
     if reviewed_at.tzinfo is None:
         raise DispositionReviewError("reviewed_at_naive")
