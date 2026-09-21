@@ -55,6 +55,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   which mutates the alert definitions and checks the gate catches each one.
 
 ### Removed
+- `scripts/generate_batch2.py`, `generate_batch3.py`, `generate_batch4.py` and
+  `generate_batch5.py`. They were the original scaffold for 107 paths, 85 of
+  which exist today and have years of hand editing behind them - `api/main.py`,
+  `api/deps.py`, `auth/jwt.py`, `auth/grantex.py`, `auth/scopes.py`,
+  `observability/metrics.py`, `observability/alerting.py`, `core/agents/*`,
+  `audit/*`, `scaling/*`. Each was written with a bare `open(path, "w")` and no
+  guard, nothing referenced them, and the metrics they would restore carry
+  per-tenant, per-agent labels that `observability/metrics.py` forbids. Git
+  holds the day-one version of every generated file, and how it changed since,
+  which the scripts cannot.
 - The `budget_pct_high` threshold rule and the Grafana "Budget Utilization"
   panel, with the `agenticorg_agent_budget_pct` gauge behind them. The gauge
   has never been given a value by anything, so the rule could not fire and the
