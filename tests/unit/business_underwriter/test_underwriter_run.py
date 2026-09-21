@@ -186,8 +186,15 @@ async def test_every_memo_assertion_traces_to_a_record_the_provider_returned(run
         assert item["provider"] == "mock", where
         assert item["record_id"] in recorded_ids, where
         assert item["retrieved_at"], where
-    excerpt_refs = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
-    assert all(ref.startswith("exc_") for ref in excerpt_refs)
+    # Every excerpt reference the memo's evidence cites is attached to the memo, whether the
+    # sandboxed extractor produced it (exc_...) or the provider cited one on a record it returned.
+    attached = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
+    cited = {item["excerpt_ref"] for _, item in iter_memo_evidence(memo) if item.get("excerpt_ref")}
+    assert cited <= attached, sorted(cited - attached)
+    for excerpt in memo["excerpts"]:
+        assert excerpt["provider"] == "mock"
+        assert excerpt["record_id"]
+        assert excerpt["sha256"].startswith("sha256:")
 
 
 async def test_a_memo_citing_a_record_never_retrieved_fails_the_run_closed(
@@ -537,3 +544,27 @@ async def test_a_new_run_re_queries_the_provider_while_a_retry_within_a_run_does
     second = await run("run-2")
     assert second.policy_evidence["verification"]["status"] == "dissolved"
     assert second.memo["recommendation"]["proposed"] == "decline"
+
+
+async def test_the_extractors_own_passages_are_handed_to_the_case(run_case, narrative) -> None:
+    """A passage the sandboxed extractor kept must reach the case store, not only the memo's index.
+
+    The extractor keeps its excerpts for the run; before this they were attached to the memo by
+    reference and then dropped with the run, so every such citation read "not attached to this
+    memo" for a reviewer (FINDINGS A-48). This drives the real extraction over the mock provider's
+    website content - no stubbing - and checks the passages come back with the run.
+    """
+    narrative(1)
+    outcome = await run_case("gb-clean-brightwater")
+    assert outcome.status == "completed"
+
+    passages = {entry["excerpt_ref"]: entry for entry in outcome.excerpts}
+    extracted = {ref: entry for ref, entry in passages.items() if ref.startswith("exc_")}
+    assert extracted, sorted(passages)
+    for entry in extracted.values():
+        assert entry["text"], entry["excerpt_ref"]
+        assert entry["fields"], entry["excerpt_ref"]
+
+    # Every reference the memo attaches has a passage with it, whichever produced it.
+    attached = {excerpt["excerpt_ref"] for excerpt in outcome.memo["excerpts"]}
+    assert attached == set(passages), sorted(attached ^ set(passages))

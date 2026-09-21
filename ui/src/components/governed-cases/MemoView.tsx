@@ -1,7 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
+import { useState } from "react";
 import EvidenceList, { type CitationAnchors } from "@/components/governed-cases/EvidenceList";
+import { Button } from "@/components/ui/button";
 import { SectionStatusBadge, SeverityBadge } from "@/components/governed-cases/CaseBadges";
 import {
+  describeCaseReason,
+  governedCasesApi,
+  citedRecordKey,
+  retrievedRecordIds,
+  toCaseApiError,
+  type CaseExcerpt,
+  type CaseExcerptReference,
+  type CaseToolCall,
   ERROR_REASON_MESSAGES,
   NOT_AVAILABLE_MESSAGES,
   RECOMMENDATION_LABELS,
@@ -85,9 +95,79 @@ function SectionCard({ section, anchors }: { section: MemoSection; anchors: Cita
   );
 }
 
+/** The passage behind one citation, read on demand. Provider content: rendered as text only. */
+function ExcerptPassage({ caseRef, excerptRef }: { caseRef: string; excerptRef: string }) {
+  const [excerpt, setExcerpt] = useState<CaseExcerpt | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function show() {
+    setLoading(true);
+    setError(null);
+    try {
+      setExcerpt(await governedCasesApi.excerpt(caseRef, excerptRef));
+    } catch (e) {
+      const refusal = toCaseApiError(e);
+      setError(`${describeCaseReason(refusal.reason)} (${refusal.reason})`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (excerpt) {
+    return (
+      <div className="mt-2" data-testid="excerpt-passage">
+        <p className="text-xs text-muted-foreground">
+          The record as {excerpt.provider} returned it, captured by the platform as{" "}
+          {excerpt.media_type} and re-hashed when it was read back
+          {excerpt.verified === false ? " (the server could not confirm the digest)" : ""}.
+        </p>
+        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/40 p-2 text-xs">
+          {excerpt.text}
+        </pre>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2">
+      <Button type="button" variant="outline" size="sm" onClick={show} disabled={loading} data-testid="show-passage">
+        {loading ? "Loading…" : "Show the passage"}
+      </Button>
+      {error && (
+        <p role="alert" className="mt-1 text-xs text-red-800">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** The underwriting memo: recommendation, cited sections and the record index the citations link to. */
-export default function MemoView({ memo }: { memo: UnderwritingMemo }) {
-  const anchors = citationAnchors(memo);
+export default function MemoView({
+  memo,
+  caseRef,
+  toolCalls = [],
+  excerpts = [],
+}: {
+  memo: UnderwritingMemo;
+  caseRef: string;
+  /** The run's own provider calls, used to check every cited record. */
+  toolCalls?: CaseToolCall[];
+  /** The excerpts the case holds, by reference. */
+  excerpts?: CaseExcerptReference[];
+}) {
+  const retrieved = retrievedRecordIds({ tool_calls: toolCalls });
+  const held = new Set(excerpts.map((excerpt) => excerpt.excerpt_ref));
+  const checkable = toolCalls.length > 0;
+  const memoAnchors = citationAnchors(memo);
+  const anchors: CitationAnchors = {
+    ...memoAnchors,
+    // With no tool calls nothing can be checked; the screen says so once, loudly, instead of
+    // letting every citation default to "traced".
+    retrieved: checkable
+      ? (recordId: string, provider: string) => retrieved.has(citedRecordKey(provider, recordId))
+      : undefined,
+  };
   const records = citedRecords(memo);
   const confidence = memo.provenance.model_confidence;
 
@@ -135,9 +215,20 @@ export default function MemoView({ memo }: { memo: UnderwritingMemo }) {
           Cited records
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Every upstream record the memo cites. Excerpt content is stored apart from the memo; the digest identifies the
-          exact passage the provider returned.
+          Every upstream record the memo cites, checked against the provider calls this case's run actually made. A
+          passage the case holds can be read here; its digest covers the copy the platform captured (a very large
+          record is stored truncated), and the server re-hashes that copy before showing it.
         </p>
+        {!checkable && (
+          <p
+            role="note"
+            className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900"
+            data-testid="citations-uncheckable"
+          >
+            This case carries no record of the provider calls its run made, so these citations cannot be checked
+            against it. Treat them as unverified.
+          </p>
+        )}
         {records.length === 0 ? (
           <p className="mt-3 text-sm">The memo cites no records.</p>
         ) : (
@@ -159,6 +250,17 @@ export default function MemoView({ memo }: { memo: UnderwritingMemo }) {
                   {record.sections.map((s) => SECTION_LABELS[s] ?? s).join(", ")} · Retrieved:{" "}
                   {record.retrieved_at.map((at) => formatTimestamp(at)).join(", ")}
                 </p>
+                {checkable && (
+                  <p className="mt-1 text-xs" data-testid="record-traced">
+                    {retrieved.has(citedRecordKey(record.provider, record.record_id)) ? (
+                      <span className="text-muted-foreground">This run fetched this record.</span>
+                    ) : (
+                      <strong className="text-red-800">
+                        This run&apos;s tool calls never returned this record.
+                      </strong>
+                    )}
+                  </p>
+                )}
                 {record.excerpts.length > 0 && (
                   <ul className="mt-2 space-y-1">
                     {record.excerpts.map((excerpt) => (
@@ -171,6 +273,13 @@ export default function MemoView({ memo }: { memo: UnderwritingMemo }) {
                       >
                         Excerpt <code className="font-mono">{excerpt.excerpt_ref}</code> ({excerpt.media_type}) digest{" "}
                         <code className="font-mono">{excerpt.sha256}</code>
+                        {held.has(excerpt.excerpt_ref) ? (
+                          <ExcerptPassage caseRef={caseRef} excerptRef={excerpt.excerpt_ref} />
+                        ) : (
+                          <p className="mt-1 text-xs text-muted-foreground" data-testid="excerpt-not-held">
+                            The case does not hold this passage, so only its digest can be checked.
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>

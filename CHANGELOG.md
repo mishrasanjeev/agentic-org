@@ -66,6 +66,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
 
 ### Added
+- Citations that a reviewer can check end to end (PRD A-6, `core/tool_gateway/provider_gateway.py`,
+  `core/cases/runtime.py`, `api/v1/governed_cases.py`, `ui/src/components/governed-cases/MemoView.tsx`).
+  The tool gateway now captures the record each piece of provider evidence is attached to, exactly
+  as it arrived; the underwriting memo attaches every excerpt reference its evidence cites (before,
+  `memo.excerpts` was empty on every case, so every citation read "not attached to this memo"), and
+  the case keeps the passages in `governed_cases.excerpts`.
+  `GET /governed-cases/{case_ref}` gains `tool_calls` (each provider call with the provider and
+  the record ids it returned) and `excerpts` (references only), and
+  `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` serves one passage, decrypted and
+  re-hashed: a passage that no longer matches the digest the memo cites is refused
+  (`excerpt_integrity_failed`), never shown. `DELETE /governed-cases/{case_ref}/excerpts` forgets
+  the passages and keeps the references, and a case keeps at most its 200 most recent passages,
+  newest capture per reference winning. The console shows a passage on request, marks a citation
+  whose record the run never returned (provider and record id together), and says plainly when a
+  case carries no tool calls to check citations against. Passages are stored encrypted with the
+  tenant's key in `governed_cases.excerpts_encrypted` (migration `v6z28_case_excerpts`, additive
+  and forward-only). Closes FINDINGS A-48.
 - Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
   `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
   `GET .../decision-requests/{request_id}`): AgenticOrg asks the Grantex auth service for a
@@ -595,7 +612,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   it; warn is the default in production, where the call fails either way and
   raising would turn latent pool problems into new 500s. A test run counts the
   uses and fails when it exceeds the committed `cross_loop_baseline.txt`, so
-  the existing debt (FINDINGS A-55) burns down and a new violation fails
+  the existing debt (FINDINGS A-58) burns down and a new violation fails
   immediately.
 - `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
   entrypoints and in the development stack, so a worker started with
@@ -603,6 +620,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `worker_process_init` — is still recognised as a worker. See `RUNBOOKS.md`. The live feed, workflow state, workflow event-wait and bridge
   state stores resolve their session factory per call rather than caching the
   shared one, so a synchronous caller's private engine reaches them too.
+- Storing a governed case's cited passages no longer opens a database session
+  per passage while the case row is locked. The tenant's key is resolved once,
+  before the write session (`core.cases.excerpts.tenant_key`), and each passage
+  is encrypted with it off the event loop; the retention bound is applied
+  first, so a capture larger than the bound does no key work for the passages
+  it is about to drop.
 - Two migrate jobs started together no longer race on an empty database:
   `migrations/env.py` takes the same transaction-scoped advisory lock
   `init_db()` uses before deciding whether to build the baseline, and rechecks

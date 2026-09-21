@@ -21,6 +21,7 @@ from api.v1.governed_cases import (
     actor_for,
     approve_information_request,
     decide_governed_case,
+    forget_case_excerpts,
     human_actor_for,
     request_case_decision,
     review_screening_disposition,
@@ -79,6 +80,8 @@ async def _call_route(name: str, request: Any) -> Any:
         return await decide_governed_case(
             CASE_REF, DecisionRequest(outcome="approve"), request, tenant_id=TENANT, runtime=runtime
         )
+    if name == "forget_excerpts":
+        return await forget_case_excerpts(CASE_REF, request, tenant_id=TENANT, runtime=runtime)
     if name == "decision_request":
         return await request_case_decision(
             CASE_REF, NewDecisionRequest(outcome="approve"), request, tenant_id=TENANT, runtime=runtime
@@ -101,6 +104,8 @@ HUMAN_ONLY_ROUTES = [
     "decision_request",
     "disposition_review",
     "information_request_approval",
+    # Forgetting a case's stored passages is a person's decision about that case's data.
+    "forget_excerpts",
 ]
 
 

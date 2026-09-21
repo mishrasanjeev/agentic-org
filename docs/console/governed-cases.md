@@ -54,8 +54,29 @@ instead of a recommendation.
 - **Citations** — every evidence entry names the provider, the upstream record,
   the field within it and when it was retrieved. The record links to the cited
   records index at the foot of the memo, and an attached excerpt reference links
-  to the excerpt's digest. An excerpt reference the memo does not carry is
-  labelled as such rather than silently dropped.
+  to that excerpt.
+  - **The passage can be read.** The case keeps the record each citation points
+    at, as the provider returned it; "Show the passage" fetches it from
+    `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` and renders it as
+    text. Provider content is never rendered as markup and never goes near a
+    prompt. The passage is stored encrypted with the tenant's key and re-hashed
+    when it is read: one that no longer matches the digest the memo cites is
+    refused (`excerpt_integrity_failed`), never shown beside a digest that would
+    make it look verified. The digest covers the copy the platform captured - a
+    very large record is stored truncated - not the provider's original byte
+    stream.
+  - **Citations are checked against the run.** The case carries the provider
+    calls its agent runs made, with the provider and record ids each returned. A
+    citation naming a record those calls never returned - or naming a real record
+    under a different provider - is marked "not in this run's tool calls", and the
+    record index says the same, instead of presenting it as traced evidence. A
+    case that carries no tool calls says so once, at the top of the record index:
+    the citations cannot be checked against it, so nothing is marked as traced.
+  - **Passages can be forgotten.** `DELETE /governed-cases/{case_ref}/excerpts`
+    (a signed-in person, while the case is any state) drops the passages and
+    keeps the references, digests and memo. The console then says the passage is
+    no longer held. A case keeps at most the 200 most recent passages, so a case
+    re-investigated repeatedly does not grow without limit.
 - **Policy score** — the score, the tier, the policy id and version, the inputs
   digest, and every fired rule in evaluation order with the evidence field values
   it read. A shipped example policy is flagged as unreviewed.
@@ -64,6 +85,8 @@ instead of a recommendation.
 
 Agent-authored text is rendered as text. Nothing from a memo, a provider record
 or an excerpt is ever rendered as markup.
+
+![A citation read back, with the passage behind it](images/governed-case-citations.png)
 
 ## Screening dispositions
 

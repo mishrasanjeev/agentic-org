@@ -5,6 +5,8 @@ export interface CitationAnchors {
   /** The element id of the cited record on this page, or null when it is not indexed here. */
   recordId: (provider: string, recordId: string) => string | null;
   excerptId: (ref: string) => string | null;
+  /** True when the run's own tool calls returned this record from this provider. */
+  retrieved?: (recordId: string, provider: string) => boolean;
 }
 
 /**
@@ -28,6 +30,9 @@ export default function EvidenceList({
     <ul aria-label={label} className="space-y-1.5" data-testid="evidence-list">
       {evidence.map((entry, index) => {
         const excerptAnchor = entry.excerpt_ref ? anchors.excerptId(entry.excerpt_ref) : null;
+        // A record the run never fetched is not traced evidence, whatever the memo says.
+        // Only claimed when the case carries the run's tool calls; the memo says so once otherwise.
+        const traced = anchors.retrieved ? anchors.retrieved(entry.record_id, entry.provider) : true;
         const recordAnchor = anchors.recordId(entry.provider, entry.record_id);
         return (
           <li
@@ -56,6 +61,14 @@ export default function EvidenceList({
             <span>
               retrieved <time dateTime={entry.retrieved_at}>{formatTimestamp(entry.retrieved_at)}</time>
             </span>
+            {!traced && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <strong className="text-red-800" data-testid="evidence-untraced">
+                  not in this run&apos;s tool calls
+                </strong>
+              </>
+            )}
             {entry.excerpt_ref && (
               <>
                 <span aria-hidden="true"> · </span>

@@ -107,7 +107,7 @@ def _migration_audit_dir_outside_the_checkout(tmp_path_factory):
 #
 # The guard reports rather than raises (core/database.py), so a test run would
 # otherwise accumulate cross-loop uses silently. Count them and fail the run
-# when it exceeds the committed baseline: existing debt (FINDINGS A-55) burns
+# when it exceeds the committed baseline: existing debt (FINDINGS A-58) burns
 # down, new violations fail immediately. Update the baseline downwards only.
 CROSS_LOOP_BASELINE_FILE = Path(__file__).resolve().parents[1] / "cross_loop_baseline.txt"
 CROSS_LOOP_BASELINE_ENV = "AGENTICORG_CROSS_LOOP_BASELINE"
@@ -154,7 +154,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         terminalreporter.write_line(
             f"FAILED: {counted - baseline} new cross-loop database use(s). Run synchronous "
             "database work through core.database.run_db_coroutine_sync, or "
-            "core.tasks.async_runner.run_async in a worker process. See FINDINGS A-55; "
+            "core.tasks.async_runner.run_async in a worker process. See FINDINGS A-58; "
             f"the baseline lives in {CROSS_LOOP_BASELINE_FILE.name} and only moves down.",
             red=True,
         )
