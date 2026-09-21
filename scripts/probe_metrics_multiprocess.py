@@ -25,7 +25,7 @@ import multiprocessing
 import os
 import sys
 import tempfile
-import urllib.request
+from http.client import HTTPConnection
 from typing import Any
 
 EXPECTED_TOTAL = 15.0  # parent 5 + children 3 and 7
@@ -42,6 +42,16 @@ _GAUGE: Any = None
 def _child(value: int) -> None:
     _COUNTER.labels(who=f"child{value}").inc(value)
     _GAUGE.labels(who=f"child{value}").set(value)
+
+
+def _scrape(port: int) -> str:
+    """Read the exposition text over loopback (http.client, so no URL scheme can be anything else)."""
+    connection = HTTPConnection("127.0.0.1", port, timeout=10)
+    try:
+        connection.request("GET", "/metrics")
+        return connection.getresponse().read().decode()
+    finally:
+        connection.close()
 
 
 def _sum(body: str, prefix: str) -> float:
@@ -85,7 +95,7 @@ def main() -> int:
         print("FAILED: the exporter did not start")
         return 1
     try:
-        body = urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=10).read().decode()
+        body = _scrape(port)
         counter = _sum(body, "agenticorg_mp_probe_total{")
         gauge = _sum(body, "agenticorg_mp_gauge{")
         print(f"counter across processes: {counter} (expected {EXPECTED_TOTAL})")
@@ -97,7 +107,7 @@ def main() -> int:
 
         for process in children:
             metrics_export.mark_process_dead(process.pid)
-        body = urllib.request.urlopen(f"http://127.0.0.1:{port}/metrics", timeout=10).read().decode()
+        body = _scrape(port)
         counter = _sum(body, "agenticorg_mp_probe_total{")
         gauge = _sum(body, "agenticorg_mp_gauge{")
         print(f"counter after the children exited: {counter} (expected {EXPECTED_TOTAL}, the work happened)")
