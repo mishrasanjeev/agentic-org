@@ -154,7 +154,9 @@ describe("decision action: approval page, four eyes and recording", () => {
     });
     mockPost.mockResolvedValueOnce({ data: view });
     fireEvent.click(screen.getByRole("button", { name: "Request decision" }));
-    return screen.findByTestId("decision-request");
+    // A request the issuer already closed puts the form back instead of a live request.
+    const closed = view.case_changed === true || ["superseded", "cancelled", "expired", "consumed"].includes(view.status);
+    return screen.findByTestId(closed ? "decision-request-closed" : "decision-request");
   }
 
   it("opens the issuer's approval page in a new window, never in this app", async () => {
@@ -235,12 +237,75 @@ describe("decision action: approval page, four eyes and recording", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("same_approver");
   });
 
-  it("stops the decision when the case changed after the approval", async () => {
+  it("stops a decision whose case changed and offers a new request in its place", async () => {
     await requestDecision(
-      requestView({ status: "approved", grants_ready: true, approvals_received: 2, case_changed: true, case_version_now: "5" }),
+      requestView({
+        status: "approved",
+        grants_ready: true,
+        approvals_received: 2,
+        case_changed: true,
+        case_version_now: "5",
+      }),
     );
-    expect(screen.getByTestId("decision-case-changed")).toHaveTextContent("now version 5");
-    expect(screen.getByTestId("record-decision")).toBeDisabled();
+    // The request is closed: no Record control at all, and the form is back with an explanation.
+    expect(screen.queryByTestId("record-decision")).not.toBeInTheDocument();
+    expect(screen.getByTestId("decision-request-closed")).toHaveTextContent("now version 5");
+    expect(screen.getByTestId("decision-request-form")).toBeInTheDocument();
+    expect(screen.getByTestId("request-decision")).toHaveTextContent("Ask for a new decision");
+  });
+
+  it.each([
+    ["superseded", "superseded by the issuer"],
+    ["cancelled", "cancelled at the issuer"],
+    ["expired", "expired before it was approved"],
+  ])("offers a new request when the last one is %s", async (status, message) => {
+    await requestDecision(requestView({ status }));
+    expect(screen.getByTestId("decision-request-closed")).toHaveTextContent(message);
+    expect(screen.getByTestId("decision-request-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("record-decision")).not.toBeInTheDocument();
+  });
+
+  it("asks for a new decision after one that is still open, without reloading into the old one", async () => {
+    await requestDecision();
+    fireEvent.click(screen.getByTestId("ask-again"));
+    expect(screen.getByTestId("decision-request-form")).toBeInTheDocument();
+    expect(screen.queryByTestId("decision-request")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Decline" }));
+    fireEvent.change(screen.getByLabelText(/Reason for a decision other than the recommendation/), {
+      target: { value: "The applicant withdrew two owners." },
+    });
+    const replacement = requestView({ request_id: "dr_00000002" });
+    mockPost.mockResolvedValueOnce({ data: replacement });
+    fireEvent.click(screen.getByTestId("request-decision"));
+    await waitFor(() => expect(screen.getByTestId("decision-request")).toHaveTextContent("dr_00000002"));
+  });
+
+  it("re-enters the recorded request when the case screen is opened again", async () => {
+    // The case carries the request, so reopening the screen shows its live status, not a blank form.
+    const base = caseDetailFixture();
+    renderCase(
+      {
+        ...base,
+        decision_requests: [
+          {
+            request_id: "dr_00000001",
+            outcome: "decline",
+            case_version: "4",
+            approval_page: "https://auth.grantex.invalid/decisions/dr_00000001",
+            approvals_required: 2,
+            action_hash: `sha256:${"1".repeat(64)}`,
+            override_reason: "The applicant withdrew two owners.",
+            requested_by: "user:u-1",
+            requested_at: "2026-09-20T09:59:00Z",
+            console_dwell_ms: 45_000,
+          },
+        ],
+      },
+      requestView({ approvals: [FIRST_APPROVAL], approvals_received: 1 }),
+    );
+    await waitFor(() => expect(screen.getByTestId("decision-approvals")).toHaveTextContent("1 of 2 approvals"));
+    expect(screen.queryByTestId("decision-request-form")).not.toBeInTheDocument();
   });
 });
 

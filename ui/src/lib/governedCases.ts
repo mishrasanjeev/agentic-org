@@ -388,11 +388,18 @@ export function formatDwell(ms: number | null | undefined): string {
   return `${minutes} min ${Math.round(seconds - minutes * 60)} s`;
 }
 
-/** Only an http(s) approval page may be opened, never a javascript: or data: URL. */
-export function isSafeApprovalPage(url: string): boolean {
+/**
+ * Only an https approval page may be opened - never a javascript:, data: or file: URL, and never
+ * a plain-http issuer, because the approval session's cookies and the grants depend on it. A
+ * console served over http is a development stack, and only there is http accepted.
+ */
+export function isSafeApprovalPage(url: string, consoleOrigin?: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    if (parsed.protocol === "https:") return true;
+    if (parsed.protocol !== "http:") return false;
+    const origin = consoleOrigin ?? (typeof window === "undefined" ? "" : window.location.protocol);
+    return origin.startsWith("http:");
   } catch {
     return false;
   }

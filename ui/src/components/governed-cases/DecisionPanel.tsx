@@ -20,6 +20,16 @@ import {
 
 const POLL_MS = 5000;
 
+/** Statuses a request never leaves: the only way on is to ask for a new decision. */
+const CLOSED_STATUSES = ["superseded", "cancelled", "expired", "consumed"];
+
+const CLOSED_MESSAGES: Record<string, string> = {
+  superseded: "The case changed, so this request was superseded by the issuer.",
+  cancelled: "This request was cancelled at the issuer.",
+  expired: "This request expired before it was approved.",
+  consumed: "The grants for this request have already been used.",
+};
+
 type Outcome = "approve" | "decline";
 
 const OUTCOME_LABELS: Record<Outcome, string> = { approve: "Approve", decline: "Decline" };
@@ -119,8 +129,11 @@ export default function DecisionPanel({
   const [request, setRequest] = useState<DecisionRequestView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "requesting" | "recording">("");
-  const requestId = request?.request_id ?? latest?.request_id ?? "";
+  // The case's own record of the last request is followed until the reviewer asks for a new one.
+  const [followed, setFollowed] = useState<string>(latest?.request_id ?? "");
+  const requestId = request?.request_id ?? followed;
   const pollRef = useRef<number | null>(null);
+  const closed = request !== null && (CLOSED_STATUSES.includes(request.status) || request.case_changed === true);
 
   const refresh = useCallback(async () => {
     if (!requestId) return;
@@ -132,9 +145,9 @@ export default function DecisionPanel({
     }
   }, [caseRef, requestId]);
 
-  // Poll while an approval is outstanding; stop as soon as the grants exist.
+  // Poll while an approval is outstanding; stop as soon as the grants exist or the request closes.
   useEffect(() => {
-    if (!requestId) return;
+    if (!requestId || closed) return;
     void refresh();
     const tick = () => {
       if (typeof document !== "undefined" && document.hidden) return;
@@ -144,7 +157,7 @@ export default function DecisionPanel({
     return () => {
       if (pollRef.current !== null) window.clearInterval(pollRef.current);
     };
-  }, [requestId, refresh]);
+  }, [requestId, refresh, closed]);
 
   useEffect(() => {
     if (request?.grants_ready && pollRef.current !== null) {
@@ -179,6 +192,13 @@ export default function DecisionPanel({
     );
   }
 
+  /** Put the request form back: this request can never be approved, so a new one is needed. */
+  function askAgain() {
+    setRequest(null);
+    setFollowed("");
+    setError(null);
+  }
+
   const overriding = isOverride(outcome, recommendation);
   const trimmedReason = reason.trim();
   const canRequest = !overriding || trimmedReason.length > 0;
@@ -198,6 +218,7 @@ export default function DecisionPanel({
         client_dwell_ms: dwellMs(),
       });
       setRequest(created);
+      setFollowed(created.request_id);
     } catch (e) {
       const refusal = toCaseApiError(e);
       setError(`${describeCaseReason(refusal.reason)} (${refusal.reason})`);
@@ -251,8 +272,20 @@ export default function DecisionPanel({
         approves there. Only then can the decision be recorded here.
       </p>
 
-      {!request ? (
+      {!request || closed ? (
         <form onSubmit={ask} className="mt-4 space-y-3" data-testid="decision-request-form">
+          {closed && request && (
+            <p
+              role="note"
+              className="rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900"
+              data-testid="decision-request-closed"
+            >
+              {request.case_changed
+                ? `The case changed after the last request (it is now version ${request.case_version_now ?? "newer"}), so its decision grants no longer apply.`
+                : (CLOSED_MESSAGES[request.status] ?? `The last request is ${request.status}.`)}{" "}
+              Ask for a new decision on the memo as it stands.
+            </p>
+          )}
           <fieldset className="space-y-2">
             <legend className="text-sm font-semibold">
               Decision to ask for
@@ -303,8 +336,8 @@ export default function DecisionPanel({
             </p>
           )}
 
-          <Button type="submit" disabled={busy !== "" || !canRequest}>
-            {busy === "requesting" ? "Requesting…" : "Request decision"}
+          <Button type="submit" disabled={busy !== "" || !canRequest} data-testid="request-decision">
+            {busy === "requesting" ? "Requesting…" : closed ? "Ask for a new decision" : "Request decision"}
           </Button>
         </form>
       ) : (
@@ -345,12 +378,7 @@ export default function DecisionPanel({
 
           <ApprovalList request={request} />
 
-          {request.case_changed && (
-            <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="decision-case-changed">
-              The case changed after this request was made (now version {request.case_version_now}). These decision
-              grants no longer apply; ask for a decision again.
-            </p>
-          )}
+
 
           {error && (
             <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
@@ -374,6 +402,9 @@ export default function DecisionPanel({
             )}
             <Button type="button" variant="ghost" size="sm" onClick={() => void refresh()}>
               Refresh status
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={askAgain} data-testid="ask-again">
+              Ask for a new decision
             </Button>
           </div>
         </div>

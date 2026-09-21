@@ -118,7 +118,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `case_changed`) are surfaced with their code. An outcome that differs from the memo's
   recommendation needs a written reason, which is shown to the approver. The console's own dwell
   (case screen render to submit) is sent as advisory telemetry only; the authoritative dwell is the
-  one the approval page measured, and it is shown per approval.
+  one the approval page measured, and it is shown per approval. A request that can never be
+  approved (the case changed under it, or the issuer reports it superseded, cancelled or expired)
+  stops the polling, drops the Record control and puts the request form back, so asking for a new
+  decision is always possible; the approval page is opened only over https, except on a console
+  served over http (a development stack).
 - `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
   cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
   provider fixture and runs the reference agents against the stack, writing the new case

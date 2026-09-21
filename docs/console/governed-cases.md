@@ -126,8 +126,18 @@ approve control in it. A decision is taken in four steps:
 
 Refusals are shown with their reason code, never swallowed: `decision_required`
 (nothing proves a person decided), `decision_not_approved`, `same_approver`,
-`case_changed` (the case changed after the approval — ask again),
-`decision_service_not_configured` (no issuer in this deployment).
+`case_changed`, `decision_service_not_configured` (no issuer in this
+deployment).
+
+A request that can never be approved — the case changed under it, or the issuer
+reports it `superseded`, `cancelled` or `expired` — is not a dead end: the panel
+says why, stops polling, drops the Record control and puts the request form back
+so the reviewer can ask for a new decision on the memo as it stands. "Ask for a
+new decision" does the same for a request that is still open.
+
+The approval page is opened only when its address is `https`; a plain-`http`
+issuer is accepted only by a console that is itself served over `http`, which
+means a development stack.
 
 ### Dwell time
 
