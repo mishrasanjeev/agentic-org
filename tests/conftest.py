@@ -144,6 +144,13 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
+    allowlisted = _ambient_redis_allowlist()
+    if allowlisted and not os.environ.get("AGENTICORG_REDIS_URL"):
+        reached = len(_AMBIENT_REDIS_SEEN & allowlisted)
+        terminalreporter.write_line(
+            f"test files still reaching an ambient Redis: {reached} of {len(allowlisted)} allowlisted "
+            f"({AMBIENT_REDIS_ALLOWLIST_FILE.name}; the connection is refused either way)"
+        )
     counted, baseline = getattr(
         config, "_cross_loop_counts", (_cross_loop_uses(), _cross_loop_baseline())
     )
@@ -160,6 +167,42 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         )
 
 
+# Test files that still reach a Redis if the machine has one. The connection is
+# refused either way, so the run is hermetic; the list exists so a new one
+# fails instead of joining them quietly. Files rather than test ids: which test
+# in a file opens the connection depends on what ran before it, so a per-test
+# list is not reproducible. It only shrinks (FINDINGS A-59).
+AMBIENT_REDIS_ALLOWLIST_FILE = Path(__file__).resolve().parent / "ambient_redis_allowlist.txt"
+_AMBIENT_REDIS_SEEN: set[str] = set()
+
+
+def _ambient_redis_allowlist() -> frozenset[str]:
+    try:
+        lines = AMBIENT_REDIS_ALLOWLIST_FILE.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return frozenset()
+    return frozenset(
+        line.split("#", 1)[0].strip() for line in lines if line.split("#", 1)[0].strip()
+    )
+
+
+def _uses_ambient_infrastructure(request) -> bool:
+    """Whether this test may reach the Redis this run has.
+
+    Three ways to qualify: the test lives in ``tests/integration/``, it carries
+    the ``ambient_redis`` marker, or the run itself declared a Redis by setting
+    ``AGENTICORG_REDIS_URL`` (the integration job does; the unit job does not).
+    A run that declared one has chosen it; the protection is for the run that
+    did not and would otherwise pick up whatever the machine happens to have.
+    """
+    if os.environ.get("AGENTICORG_REDIS_URL"):
+        return True
+    node_id = request.node.nodeid.replace("\\", "/")
+    return node_id.startswith("tests/integration/") or bool(
+        request.node.get_closest_marker("ambient_redis")
+    )
+
+
 @pytest.fixture(autouse=True)
 def _token_pool_never_uses_ambient_redis(request, monkeypatch):
     """Keep the run-grant token pool off whatever Redis this machine happens to run.
@@ -172,12 +215,80 @@ def _token_pool_never_uses_ambient_redis(request, monkeypatch):
     wrong reason. Tests that want Redis set ``pool.redis`` themselves; the
     integration suite and anything marked ``ambient_redis`` are left alone.
     """
-    node_id = request.node.nodeid.replace("\\", "/")
-    if node_id.startswith("tests/integration/") or request.node.get_closest_marker("ambient_redis"):
+    if _uses_ambient_infrastructure(request):
         return
     from auth.token_pool import TokenPool
 
     monkeypatch.setattr(TokenPool, "_redis_client", lambda self: self.redis)
+
+
+@pytest.fixture(autouse=True)
+def _no_test_connects_to_an_ambient_redis(request, monkeypatch):
+    """Fail a test that opens a connection to a Redis this machine happens to run.
+
+    Every lazy Redis client in the platform degrades quietly when Redis is
+    unreachable — correct in production, and in a test it means the machine
+    decides the result. Security controls make that concrete: the token
+    blacklist (`auth:blacklist:<hash>`), login-failure lockout
+    (`auth:failures:<ip>`) and signup rate limiting (`auth:signup:<ip>`) are
+    all Redis state, so "this token is revoked" or "the sixth attempt is
+    locked out" can be answered by what an earlier run left behind, and this
+    run leaves its own state for the next one (FINDINGS A-59).
+
+    The connection is refused, so the code under test takes the fallback it
+    would take against an unreachable Redis, and the attempt is recorded and
+    reported when the test ends: a fixture cannot fail a test by raising into
+    product code that catches everything. Tests that want real Redis live in
+    `tests/integration/`, or carry `@pytest.mark.ambient_redis`.
+    """
+    if _uses_ambient_infrastructure(request):
+        yield
+        return
+
+    import redis.asyncio.connection as async_connection
+    import redis.connection as sync_connection
+
+    attempts: list[str] = []
+    refused = "a test outside tests/integration/ tried to reach Redis (FINDINGS A-59)"
+
+    def _record(connection: object) -> None:
+        attempts.append(f"{getattr(connection, 'host', '?')}:{getattr(connection, 'port', '?')}")
+
+    # Refuse at the socket, not at ``connect``: redis-py wraps a failure here in
+    # its own ConnectionError and cleans the connection up, so the code under
+    # test sees exactly what an unreachable Redis looks like.
+    async def _refuse_async(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        _record(self)
+        raise OSError(refused)
+
+    def _refuse_sync(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003
+        _record(self)
+        raise OSError(refused)
+
+    # The concrete classes, not ``AbstractConnection``: each one defines
+    # ``_connect`` itself, so patching the base would do nothing.
+    for module, refuse in ((async_connection, _refuse_async), (sync_connection, _refuse_sync)):
+        for name in ("Connection", "SSLConnection", "UnixDomainSocketConnection"):
+            connection_class = getattr(module, name, None)
+            if connection_class is not None and "_connect" in vars(connection_class):
+                monkeypatch.setattr(connection_class, "_connect", refuse)
+
+    yield
+
+    if not attempts:
+        return
+    node_id = request.node.nodeid.replace("\\", "/")
+    test_file = node_id.split("::", 1)[0]
+    _AMBIENT_REDIS_SEEN.add(test_file)
+    if test_file in _ambient_redis_allowlist():
+        return
+    pytest.fail(
+        f"this test opened {len(attempts)} Redis connection(s) "
+        f"({', '.join(sorted(set(attempts)))}). Whatever Redis the machine runs then "
+        "decides the result, and the state outlives the run. Use a fake, move it to "
+        f"tests/integration/, or mark it ambient_redis. If it is genuinely unavoidable, "
+        f"add it to {AMBIENT_REDIS_ALLOWLIST_FILE.name} with a reason. See FINDINGS A-59."
+    )
 
 
 def pytest_configure(config):
