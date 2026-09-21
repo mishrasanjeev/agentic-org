@@ -62,6 +62,11 @@ def _serve_health() -> None:
 
 def _run_celery_worker() -> int:
     queues = os.environ.get("CELERY_QUEUES", DEFAULT_QUEUES)
+    # Mark the process before any task code runs. ``run_async`` keeps its
+    # persistent loop only in a worker process; the Celery signals do not fire
+    # for ``--pool=solo``, ``threads`` or gevent, so set it here as well.
+    os.environ.setdefault("AGENTICORG_WORKER_PROCESS", "1")
+
 
     # Importing the celery_app first makes any task-import error visible
     # in the container logs immediately, instead of after Celery's own

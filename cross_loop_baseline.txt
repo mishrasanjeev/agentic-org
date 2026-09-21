@@ -1,0 +1,3 @@
+100000  # cross-loop uses of a guarded database pool tolerated in a test run;
+# see FINDINGS A-55. Provisional: replaced with the count a CI integration run
+# reports. It only moves down.

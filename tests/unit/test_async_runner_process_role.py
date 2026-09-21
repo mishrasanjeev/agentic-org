@@ -64,13 +64,16 @@ def test_outside_a_worker_the_work_runs_through_the_private_engine(
 
     monkeypatch.setattr(db_mod, "run_db_coroutine_sync", _fake_run_db_coroutine_sync)
 
+    ran_on: list[Any] = []
+
     async def _work() -> str:
+        ran_on.append(asyncio.get_running_loop())
         return "done"
 
     assert async_runner.run_async(_work()) == "done"
     assert len(calls) == 1
-    # And the persistent loop was never created.
-    assert async_runner._runner_loop is None
+    # And not on the persistent runner loop, whether or not one exists.
+    assert ran_on and ran_on[0] is not async_runner._runner_loop
 
 
 def test_in_a_worker_the_persistent_loop_is_used_and_reused() -> None:
@@ -103,17 +106,25 @@ _FORK_CHILD_PROGRAM = textwrap.dedent(
     os.environ.setdefault("AGENTICORG_SECRET_KEY", "fork-test-secret-key-minimum-16")
     from core.tasks import async_runner
 
-    async def loop_id():
-        return id(asyncio.get_running_loop())
+    async def mark_loop():
+        # Identify the loop by a mark it carries, not by an address: after a
+        # fork the parent's loop object still exists in the child at the same
+        # address, so only a mark distinguishes "the same loop" from "a new one".
+        loop = asyncio.get_running_loop()
+        marked_by = getattr(loop, "agenticorg_marked_by_pid", None)
+        if marked_by is None:
+            marked_by = os.getpid()
+            loop.agenticorg_marked_by_pid = marked_by
+        return marked_by
 
-    parent_loop = async_runner.run_async(loop_id())
+    parent_loop = async_runner.run_async(mark_loop())
     parent_pid = os.getpid()
 
     read_fd, write_fd = os.pipe()
     pid = os.fork()
     if pid == 0:
         os.close(read_fd)
-        child_loop = async_runner.run_async(loop_id())
+        child_loop = async_runner.run_async(mark_loop())
         payload = json.dumps({{"loop": child_loop, "pid": os.getpid()}}).encode()
         with os.fdopen(write_fd, "wb") as handle:
             handle.write(payload)
@@ -155,7 +166,9 @@ def test_a_forked_child_builds_its_own_loop(tmp_path: Any) -> None:
     result = json.loads(completed.stdout.strip().splitlines()[-1])
 
     assert result["pid"] != result["parent_pid"], "the child must be a separate process"
-    assert result["loop"] != result["parent_loop"], (
-        "the forked child reused the parent's event loop; the PID guard in "
-        "core/tasks/async_runner.py is not working"
+    assert result["loop"] == result["pid"], (
+        "the forked child ran on a loop it did not create (the mark belongs to "
+        f"pid {result['loop']}); the PID guard in core/tasks/async_runner.py is "
+        "not working"
     )
+    assert result["parent_loop"] == result["parent_pid"]

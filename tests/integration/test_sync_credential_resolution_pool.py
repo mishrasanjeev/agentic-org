@@ -53,7 +53,11 @@ async def shared_pool(monkeypatch: pytest.MonkeyPatch, _setup_schema: None) -> A
     db_mod.install_cross_loop_guard(engine)  # as on the shared engine
     factory = async_sessionmaker(engine, class_=db_mod.AsyncSession, expire_on_commit=False)
     monkeypatch.setattr(db_mod, "engine", engine)
-    monkeypatch.setattr(db_mod, "async_session_factory", factory)
+    monkeypatch.setattr(db_mod, "_shared_session_factory", factory)
+    # Wrapped as the module-level one is, so a direct binder is checked here too.
+    monkeypatch.setattr(
+        db_mod, "async_session_factory", db_mod._GuardedSessionFactory(factory, engine)
+    )
     try:
         yield engine
     finally:
@@ -213,7 +217,7 @@ async def test_the_guard_refuses_the_shared_pool_on_a_foreign_loop(
     """
     import core.database as db_mod
 
-    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "raise")
+    monkeypatch.setattr(db_mod, "_guard_mode_value", "raise")
     tenant_id = uuid.uuid4()
     await _unrelated_request(tenant_id)  # binds the pool to this loop
 
@@ -235,7 +239,7 @@ async def test_the_guard_only_reports_by_default(
 
     tenant_id = uuid.uuid4()
     await _unrelated_request(tenant_id)
-    monkeypatch.delenv(db_mod.CROSS_LOOP_GUARD_ENV, raising=False)
+    assert db_mod.cross_loop_guard_mode() == "warn"
 
     def _use_the_shared_engine_on_another_loop() -> None:
         asyncio.run(_unrelated_request(tenant_id))
@@ -245,3 +249,32 @@ async def test_the_guard_only_reports_by_default(
     with pytest.raises(Exception) as exc_info:  # noqa: PT011 - asyncpg's own failure
         await asyncio.to_thread(_use_the_shared_engine_on_another_loop)
     assert not isinstance(exc_info.value, db_mod.CrossLoopConnectionError)
+
+
+async def test_the_guard_sees_a_warm_pooled_connection_reused_on_another_loop(
+    shared_pool: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The masked failure: nothing new is opened, so only checkout can see it.
+
+    A caller that binds `async_session_factory` itself — as the modules in
+    FINDINGS A-53 do — is handed the connection this loop left in the pool, so
+    no `connect` event fires. The factory is wrapped for exactly this: the
+    pool's own checkout event is too late, because `pool_pre_ping` runs its
+    ping on the foreign loop first and fails there.
+    """
+    import core.database as db_mod
+
+    tenant_id = uuid.uuid4()
+    await _unrelated_request(tenant_id)  # binds the pool and leaves a connection
+    assert shared_pool.pool.checkedin() == 1
+    monkeypatch.setattr(db_mod, "_guard_mode_value", "raise")
+
+    def _reuse_the_warm_connection() -> None:
+        async def _bypass_the_seam() -> None:
+            async with db_mod.async_session_factory() as session:
+                await session.execute(text("SELECT 1"))
+
+        asyncio.run(_bypass_the_seam())
+
+    with pytest.raises(db_mod.CrossLoopConnectionError, match="opening a session"):
+        await asyncio.to_thread(_reuse_the_warm_connection)

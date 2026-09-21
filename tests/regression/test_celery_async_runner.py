@@ -88,9 +88,16 @@ def test_outside_a_worker_each_call_gets_its_own_loop(monkeypatch: pytest.Monkey
     monkeypatch.setattr(async_runner, "_worker_process_pid", None)
     monkeypatch.delenv(async_runner.WORKER_PROCESS_ENV, raising=False)
 
-    async def loop_id() -> int:
-        return id(asyncio.get_running_loop())
+    async def was_already_used() -> bool:
+        # Identify the loop by a mark, not by an address: CPython reuses the
+        # address of a loop it has just collected.
+        loop = asyncio.get_running_loop()
+        seen = getattr(loop, "agenticorg_seen", False)
+        loop.agenticorg_seen = True
+        return bool(seen)
 
-    first = run_async(loop_id())
-    second = run_async(loop_id())
-    assert first != second
+    assert run_async(was_already_used()) is False
+    assert run_async(was_already_used()) is False, (
+        "a second call reused the first call's loop; outside a worker each call "
+        "must get its own"
+    )

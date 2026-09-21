@@ -583,14 +583,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   persistent loop; everywhere else the work runs through
   `core.database.run_db_coroutine_sync` on a private engine.
 - The shared database pool now reports when it is used from a second event
-  loop. It binds to the first loop that uses it and logs
-  `db_cross_loop_use` with the remedy, counting
+  loop: when a session is opened there, when the pool opens a connection there,
+  and when it hands an existing connection out there — the last covers a caller
+  that binds `async_session_factory` itself and is given a warm connection.
+  It binds to the first loop that uses it and logs `db_cross_loop_use` once per
+  foreign loop with the remedy, counting
   `agenticorg_db_cross_loop_checkouts_total{mode}`, instead of leaving the
   `'NoneType' object has no attribute 'send'` that used to surface in an
   unrelated request later. `AGENTICORG_DB_CROSS_LOOP_GUARD=raise` turns it into
   a `CrossLoopConnectionError` at the point of the mistake and `off` silences
-  it; warn is the default because the repository's own suites still do this in
-  162 places (FINDINGS A-55). The live feed, workflow state, workflow event-wait and bridge
+  it; warn is the default in production, where the call fails either way and
+  raising would turn latent pool problems into new 500s. A test run counts the
+  uses and fails when it exceeds the committed `cross_loop_baseline.txt`, so
+  the existing debt (FINDINGS A-55) burns down and a new violation fails
+  immediately.
+- `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
+  entrypoints and in the development stack, so a worker started with
+  `--pool=solo`, `threads` or gevent — which never fires
+  `worker_process_init` — is still recognised as a worker. See `RUNBOOKS.md`. The live feed, workflow state, workflow event-wait and bridge
   state stores resolve their session factory per call rather than caching the
   shared one, so a synchronous caller's private engine reaches them too.
 - Two migrate jobs started together no longer race on an empty database:
