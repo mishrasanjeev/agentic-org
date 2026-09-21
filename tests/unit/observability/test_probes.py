@@ -35,6 +35,11 @@ def _free_port() -> int:
 
 def test_the_multiprocess_probe_still_proves_aggregation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """On a platform that forks this runs the real thing; elsewhere it reports that it cannot."""
+    import prometheus_client.values as prometheus_values
+
+    # Belt and braces with the probe's own restore: a leaked multiprocess value class breaks every
+    # later test that creates an instrument, a long way from here.
+    monkeypatch.setattr(prometheus_values, "ValueClass", prometheus_values.ValueClass)
     monkeypatch.setenv("METRICS_PORT", str(_free_port()))
     monkeypatch.delenv("PORT", raising=False)
     monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path))

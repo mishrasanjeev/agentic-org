@@ -72,8 +72,14 @@ def main() -> int:
     # Works whether or not prometheus_client was already imported - which is the point: if it was,
     # and nothing reselected the value class, this probe would report zeroes and so would the
     # worker.
+    # Switching modes is global to the process, so put it back afterwards: anything that creates
+    # an instrument later would otherwise get a multiprocess value with nowhere to write it.
+    import prometheus_client.values as prometheus_values  # noqa: PLC0415
+
+    previous_value_class = prometheus_values.ValueClass
+    previous_directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR")
     directory = metrics_export.enable_multiprocess(
-        os.environ.get("PROMETHEUS_MULTIPROC_DIR") or tempfile.mkdtemp(prefix="agenticorg-mp-")
+        previous_directory or tempfile.mkdtemp(prefix="agenticorg-mp-")
     )
 
     global _COUNTER, _GAUGE
@@ -122,6 +128,11 @@ def main() -> int:
             failures.append("a dead child is still reported as a live gauge")
     finally:
         metrics_export.stop_metrics_server()
+        prometheus_values.ValueClass = previous_value_class
+        if previous_directory is None:
+            os.environ.pop("PROMETHEUS_MULTIPROC_DIR", None)
+        else:
+            os.environ["PROMETHEUS_MULTIPROC_DIR"] = previous_directory
 
     for failure in failures:
         print(f"FAILED: {failure}", file=sys.stderr)
