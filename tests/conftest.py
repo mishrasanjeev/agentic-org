@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from core.crypto.migration_helpers import AUDIT_DIR_ENV
+
 _TEST_TMPDIR = Path.cwd() / "codex-pytest-temp"
 _TEST_TMPDIR.mkdir(parents=True, exist_ok=True)
 tempfile.tempdir = str(_TEST_TMPDIR)
@@ -79,6 +81,26 @@ def _reset_fake_doubles_between_tests():
             # Module not yet shipped on this branch.
             pass
     yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _migration_audit_dir_outside_the_checkout(tmp_path_factory):
+    """Encrypted-column migrations write an audit record per revision.
+
+    Re-running one in a test otherwise rewrites the tracked file under
+    ``migrations/audit/``, so every local run dirties the working tree
+    (FINDINGS A-13). Point the writer at a temporary directory for the session.
+    """
+    directory = tmp_path_factory.mktemp("migration-audit")
+    previous = os.environ.get(AUDIT_DIR_ENV)
+    os.environ[AUDIT_DIR_ENV] = str(directory)
+    try:
+        yield directory
+    finally:
+        if previous is None:
+            os.environ.pop(AUDIT_DIR_ENV, None)
+        else:
+            os.environ[AUDIT_DIR_ENV] = previous
 
 
 def pytest_configure(config):

@@ -495,3 +495,58 @@ Sister memory files (author's private reference):
 - `~/.claude/projects/.../memory/feedback_rootcause_fix_discipline.md` — four failure modes Codex flagged.
 - `~/.claude/projects/.../memory/feedback_enterprise_audit_discipline.md` — seven control-plane patterns.
 - `~/.claude/projects/.../memory/feedback_bug_sweep_patterns.md` — twelve low-level bug classes.
+
+---
+
+## Rule 17 - Readiness, status, and execution must share one binding contract
+
+Added 2026-09-21 after BUG-01: the connector screen showed healthy tenant
+state, but a company-bound agent run queried only the company-scoped row and
+returned `connector_not_ready_for_dispatch`.
+
+Discipline:
+
+1. Define the scope precedence once: an exact company binding wins; a
+   tenant-global binding is the only safe fallback; another company's binding
+   is never eligible.
+2. Reuse that precedence in status/readiness, dispatch validation, and runtime
+   credential/config resolution. A green status screen is not useful if the
+   producer uses a different lookup contract.
+3. Test all three cases: exact company success, tenant-global fallback success,
+   and other-company refusal. Do not test only the happy path.
+4. When a scope mismatch is reported, trace both the UI read path and the
+   runtime write/dispatch path before changing either one. Fix the shared
+   resolver or contract, not only the visible error string.
+
+## Rule 18 - Tenant context is mandatory across AI generation boundaries
+
+Added 2026-09-21 after BUG-02: `/agents/generate` authenticated a tenant but
+called the generator without passing that tenant into the LLM router. A
+tenant-configured provider credential could therefore be ignored while the
+router attempted an unrelated platform path.
+
+Discipline:
+
+1. Carry authenticated tenant context from the route through the service,
+   router, credential resolver, budget cap, and provider call.
+2. Review every sibling provider path when fixing one provider. Gemini,
+   Claude, OpenAI, embeddings, STT, and TTS must not silently diverge on
+   tenant credential policy.
+3. Add a route/service test that asserts the tenant ID reaches the provider
+   boundary, and a resolver test that proves a tenant-owned credential is
+   selected without exposing its value in logs or artifacts.
+4. Never treat a generic provider 502 as proof that the model is unavailable;
+   first distinguish missing tenant configuration (503), provider failure
+   (502), and invalid request data (4xx). Preserve actionable error classes.
+
+## Rule 19 - A browser regression is required for every reopened user flow
+
+Added 2026-09-21 after both bug-sheet items reopened at visible workflow
+boundaries.
+
+For a UI-reported defect, a backend unit test alone is insufficient. Add a
+Playwright test that starts from the named page, performs the recorded clicks
+and form input, observes the route response, and asserts the visible result.
+Use deterministic route fixtures for CI, and separately record when a
+credentialed deployed recheck is still pending. The test must not claim a
+live deployment was verified when it only exercised mocks.
