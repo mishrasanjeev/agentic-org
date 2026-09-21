@@ -78,7 +78,7 @@ async def test_cdc_event_store_persists_and_dedupes_in_postgres(
                     "VALUES (:id, 'cdc tenant', :slug, 'enterprise', 'IN', '{}'::jsonb) "
                     "ON CONFLICT (id) DO NOTHING"
                 ),
-                {"id": tenant_id, "slug": f"cdc-{tenant_id.hex[:8]}"},
+                {"id": tenant_id, "slug": f"cdc-{tenant_id.hex}"},
             )
 
         first = await handle_cdc_webhook(
@@ -139,7 +139,7 @@ async def test_cdc_replay_failure_writes_postgres_dead_letter(
                     "VALUES (:id, 'cdc tenant', :slug, 'enterprise', 'IN', '{}'::jsonb) "
                     "ON CONFLICT (id) DO NOTHING"
                 ),
-                {"id": tenant_id, "slug": f"cdc-{tenant_id.hex[:8]}"},
+                {"id": tenant_id, "slug": f"cdc-{tenant_id.hex}"},
             )
 
         monkeypatch.setattr("core.cdc.triggers.evaluate_triggers", _boom)
