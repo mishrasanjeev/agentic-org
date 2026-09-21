@@ -28,7 +28,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   with an OAuth error about the wrong thing. It also logs the error it returns,
   and its health check honours `OIDC_STUB_PORT`.
 - `.gitattributes` keeps shell scripts LF, so the stack's Linux containers can
-  run them from a Windows checkout (FINDINGS A-59).
+  run them from a Windows checkout (FINDINGS A-60).
 
 ### Changed — breaking for tenants that turn it on
 - `grants.enforce_closed` can now be set to `deny` (tenant flag
