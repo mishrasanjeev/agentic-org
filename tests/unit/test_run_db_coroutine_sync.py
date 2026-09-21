@@ -110,3 +110,48 @@ def test_no_engine_is_built_for_a_coroutine_that_opens_no_session(
 
     assert db_mod.run_db_coroutine_sync(_no_database) == "nothing to do"
     assert created == []
+
+
+def test_the_cross_loop_message_reads_as_one_instruction() -> None:
+    """The diagnostic is the whole user-facing payload of the guard."""
+    message = db_mod.cross_loop_message("opening a session")
+
+    assert message.startswith("the shared database pool was used from a second event loop")
+    assert "(opening a session)" in message
+    # The remedy, in one piece.
+    assert "through core.database.run_db_coroutine_sync" in message
+    assert "core.tasks.async_runner.run_async in a worker process" in message
+    assert "never call asyncio.run against the shared engine." in message
+    # The knob, as its own sentence — not swallowed by the clause before it.
+    assert f"Set {db_mod.CROSS_LOOP_GUARD_ENV}=raise to make this a failure" in message
+    assert "never Set" not in message
+    # Every sentence ends where a sentence should.
+    for sentence in message.split(". "):
+        assert sentence.strip(), message
+
+
+def test_the_guard_mode_is_read_once_and_can_be_overridden(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "raise")
+    # The environment is read at import, so setting it later changes nothing.
+    assert db_mod.cross_loop_guard_mode() == "warn"
+
+    previous = db_mod.set_cross_loop_guard_mode("raise")
+    try:
+        assert db_mod.cross_loop_guard_mode() == "raise"
+    finally:
+        db_mod.set_cross_loop_guard_mode(previous)
+    assert db_mod.cross_loop_guard_mode() == previous
+
+    with pytest.raises(ValueError, match="mode must be one of"):
+        db_mod.set_cross_loop_guard_mode("shout")
+
+
+def test_an_unknown_mode_in_the_environment_falls_back_to_warn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "shout")
+    assert db_mod._initial_guard_mode() == "warn"
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "RAISE")
+    assert db_mod._initial_guard_mode() == "raise"

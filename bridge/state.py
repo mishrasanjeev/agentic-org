@@ -1142,9 +1142,10 @@ def get_bridge_state_repository() -> BridgeStateRepository:
     if _repository_override is not None:
         return _repository_override
     if _default_repository is None:
-        from core.database import async_session_factory
+        from core.database import current_session_factory
 
-        _default_repository = SqlAlchemyBridgeStateRepository(async_session_factory)
+        # Resolved per call, not captured (FINDINGS A-53).
+        _default_repository = SqlAlchemyBridgeStateRepository(lambda: current_session_factory()())
     return _default_repository
 
 

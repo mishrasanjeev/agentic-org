@@ -372,9 +372,10 @@ class WorkflowEventWaitStore:
         if not self._redis_explicit:
             self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if not self._repository_explicit:
-            from core.database import async_session_factory
+            from core.database import current_session_factory
 
-            self.repository = SqlAlchemyWorkflowEventWaitRepository(async_session_factory)
+            # Resolved per call, not captured (FINDINGS A-53).
+            self.repository = SqlAlchemyWorkflowEventWaitRepository(lambda: current_session_factory()())
 
     async def close(self) -> None:
         if not self.redis or self._redis_explicit:
