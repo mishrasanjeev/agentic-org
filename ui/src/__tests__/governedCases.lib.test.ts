@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CaseApiError,
   citationAnchors,
+  isSafeApprovalPage,
   citedRecords,
   describeCaseReason,
   toCaseApiError,
@@ -27,6 +28,20 @@ describe("governed case API errors", () => {
 
   it("shows an unknown reason code rather than hiding it", () => {
     expect(describeCaseReason("something_new")).toContain("something_new");
+  });
+});
+
+describe("the approval page address", () => {
+  it("opens an https issuer, and refuses anything that is not a URL to one", () => {
+    expect(isSafeApprovalPage("https://auth.grantex.invalid/decisions/dr_1", "https:")).toBe(true);
+    for (const url of ["javascript:alert(1)", "data:text/html,<script>", "file:///etc/passwd", "not a url", ""]) {
+      expect(isSafeApprovalPage(url, "https:")).toBe(false);
+    }
+  });
+
+  it("accepts a plain-http issuer only on a console that is itself served over http", () => {
+    expect(isSafeApprovalPage("http://localhost:3001/decisions/dr_1", "http:")).toBe(true);
+    expect(isSafeApprovalPage("http://auth.grantex.invalid/decisions/dr_1", "https:")).toBe(false);
   });
 });
 
