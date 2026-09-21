@@ -113,16 +113,22 @@ async_session_factory: Any = _GuardedSessionFactory(_shared_session_factory, eng
 # `AttributeError: 'NoneType' object has no attribute 'send'` or "attached to
 # a different loop", and `pool_pre_ping` does not rescue it (a cross-loop
 # error is not a disconnect). The guard names the mistake where it is made:
-# when a session is opened on a foreign loop, when the pool opens a connection
-# there, and when a connection is checked out there — the last one is the
-# warm-pool case, where nothing new is opened and the damage is worst.
+# when a session is opened on a foreign loop, and when the pool opens a
+# connection there. A third check on connection checkout is installed for
+# completeness but never fires on this engine, because pre-ping runs on the
+# foreign loop and fails before the checkout event is reached; the warm-pool
+# case — a caller handed an existing connection, where nothing new is opened
+# and the damage is worst — is caught by the session wrapper instead.
 CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
 CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
 _LOOP_KEY = "agenticorg_owning_loop"
 
-# One logical cross-loop use trips the guard more than once: the wrapper sees
-# the session and, where ``pool_pre_ping`` is off, the ``checkout`` hook sees
-# the connection too. The metric therefore counts *trips*, not distinct
+# One logical cross-loop use usually trips the guard twice: the session
+# wrapper sees it, then the poisoned connection is invalidated and the pool
+# opens a replacement on the foreign loop, which the ``connect`` hook sees.
+# (The first violation against a pool trips once: the connection dies before a
+# replacement is opened.) Measured against this engine: 1 use -> 1 trip,
+# 5 -> 11, 20 -> 40. The metric therefore counts *trips*, not distinct
 # mistakes — fine for a ratchet, which needs only to be monotonic and
 # reproducible, but do not read it as a count of violations.
 _cross_loop_checkouts_total = Counter(

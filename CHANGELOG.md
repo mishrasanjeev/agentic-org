@@ -620,8 +620,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   raising would turn latent pool problems into new 500s. A test run counts the
   guard's trips and fails when they exceed the committed
   `cross_loop_baseline.txt` (54 trips, measured in CI, roughly 27 distinct
-  uses; the unit job trips it 0 times), and `scripts/check_cross_loop_baseline.py`
-  refuses a raised baseline, so the existing debt (FINDINGS
+  uses — one use usually trips the guard twice; the unit job trips it 0
+  times), and `scripts/check_cross_loop_baseline.py` refuses a raised baseline.
+  Both overrides remain deliberate and silent-free: `AGENTICORG_CROSS_LOOP_BASELINE`
+  replaces the number for one run and `AGENTICORG_DB_CROSS_LOOP_GUARD=off`
+  stops the counting, and a run with the guard off says so on its summary line, so the existing debt (FINDINGS
   A-58) burns down and a new violation fails immediately.
 - `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
   entrypoints and in the development stack, so a worker started with

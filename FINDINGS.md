@@ -741,9 +741,11 @@ Remove an entry in the pull request that fixes it.
   code. They pass today because nothing later in the run happens to check that
   connection out, which is luck, and is a plausible source of the flakiness
   this suite has shown. Two cautions about the number: it counts **trips, not
-  distinct violations** (one logical use trips the guard once on the shared
-  engine and twice on an engine without `pool_pre_ping`, so 54 is roughly 27
-  uses), and which files contribute depends on ordering and on which fixture
+  distinct violations** — one cross-loop use usually trips the guard twice,
+  because the session wrapper sees it and then the pool opens a replacement
+  connection on the foreign loop, which the `connect` hook sees (measured
+  against this engine: 1 use gives 1 trip, 5 give 11, 20 give 40), so 54 trips
+  is roughly 27 uses — and which files contribute depends on ordering and on which fixture
   bound the engine first — running a few files alone trips nothing, because
   their own synchronous engines never touch `core.database.engine`.
 - **Fix:** move those bodies onto `core.database.run_db_coroutine_sync` (or an
