@@ -245,12 +245,6 @@ omit = [
     "*/codex-pytest-temp/*",
     "*/codex-pytest-cache/*",
     "*/codex-pytest-artifacts/*",
-    # The probes under scripts/ are standalone tools: CI runs them as processes and judges them
-    # by their exit code (see the workflow), not by importing them from a test. Line coverage
-    # cannot see that, so measuring them would report 0% for code that is in fact exercised on
-    # every run.
-    "scripts/probe_*.py",
-    "*/scripts/probe_*.py",
 ]
 # SQLAlchemy's asyncio layer runs database calls in greenlets. Without greenlet
 # tracing, coverage stops recording a coroutine's lines after its first awaited
