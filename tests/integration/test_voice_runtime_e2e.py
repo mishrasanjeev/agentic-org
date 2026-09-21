@@ -198,7 +198,7 @@ async def test_signed_voice_runtime_persists_encrypted_tenant_safe_calls(
                 "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
                 "VALUES (:id, 'other', :slug, 'enterprise', 'IN', '{}')"
             ),
-            {"id": other_tenant, "slug": f"other-{other_tenant[:8]}"},
+            {"id": other_tenant, "slug": f"other-{other_tenant}"},
         )
     isolated = await client.get(
         f"/api/v1/voice/calls?agent_id={agent_id}",

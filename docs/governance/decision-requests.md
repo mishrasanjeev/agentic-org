@@ -31,9 +31,10 @@ own approval page, in the approver's browser, on the auth service's origin.
 | What is being approved | AgenticOrg's semantic action, hashed by the service | decision request |
 | Whether the case may be decided | AgenticOrg's case lifecycle and the consumed grants | case API |
 
-The semantic action is `{case_id, action: "case_decision", decision, subject}` — never the raw tool
-payload, so re-planning or a new timestamp cannot invalidate a person's decision, and a grant for
-one case or outcome cannot decide another.
+The semantic action is `{case_id, action: "case_decision", decision, subject, extra: {tenant}}` —
+never the raw tool payload, so re-planning or a new timestamp cannot invalidate a person's
+decision, and a grant for one case, tenant or outcome cannot decide another. (`case_ref` is unique
+per tenant, not per issuer developer, so the tenant is bound into the action.)
 
 ## Making a request
 
@@ -104,13 +105,32 @@ same consumption and the same refusals apply.
 | `AGENTICORG_CASE_DECISION_SERVICE` | `""` (off) | `grantex` to enable decision requests |
 | `AGENTICORG_CASE_DECISION_CONNECTOR` | `governed_cases` | connector the request is made under |
 | `AGENTICORG_CASE_DECISION_FOUR_EYES_ON` | `decline` | outcomes needing two different approvers |
-| `GRANTEX_BASE_URL`, `GRANTEX_API_KEY` | — | the issuer and the platform's developer key |
+| `GRANTEX_BASE_URL`, `GRANTEX_API_KEY` | — | the issuer and the platform's developer key; **both are required** when the service is on, and an unset `GRANTEX_BASE_URL` is refused (`decision_service_not_configured`) rather than falling back to a default origin |
 
 Decision requests also need the tenant's `governed_cases.enabled` flag. With the service off, the
 case API behaves exactly as before: every decision is refused with `decision_required`.
 
 The auth service must run with decision grants enabled and with the approver identity providers
 allow-listed by its administrator; AgenticOrg's developer key cannot do either, by design.
+
+## Before turning it on outside a development stack
+
+- **Set the issuer explicitly.** With `AGENTICORG_CASE_DECISION_SERVICE=grantex` and no
+  `GRANTEX_BASE_URL`, decision requests are refused: nothing should be asked of an issuer nobody
+  chose.
+- **Verify the grants here as well.** Today this platform does not check the decision grants
+  itself: it consumes them at the issuer, which verifies the signature and key, the audience and
+  issuer, the action hash, the dwell source, the memo and policy hashes and the four-eyes
+  structure under its own row locks, and refuses anything that does not match. That is fail-closed
+  but single-sided. Verifying them locally as well (decision-grant profile §6 steps 2 and 3) needs
+  the Grantex Python SDK's `grantex.decisions` verifier, which is not published yet. Wire it into
+  `ServiceDecisionVerifier` when it is, and treat that as a prerequisite for enabling this outside
+  a development stack.
+- **The endpoint shapes are provisional.** Answers are parsed strictly: any field the console
+  states as fact - the action, its hash, the case version, how many approvals are required, and
+  each approval's subject, authentication, position and dwell source - is refused when absent
+  (`decision_service_response_invalid`) rather than defaulted, so a renamed field fails loudly
+  instead of showing one approver where four eyes were required.
 
 ## What is recorded
 

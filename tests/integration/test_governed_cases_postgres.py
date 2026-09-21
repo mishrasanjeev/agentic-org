@@ -101,7 +101,7 @@ def tenants(engine: Engine) -> tuple[str, str]:
                     "INSERT INTO tenants (id, name, slug, plan, data_region, settings, byok_kek_resource) "
                     "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb, '')"
                 ),
-                {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": f"tenant-{tenant_id}"},
+                {"id": tenant_id, "name": f"tenant-{tenant_id}", "slug": f"tenant-{tenant_id}"},
             )
     return ids
 
@@ -687,8 +687,6 @@ async def test_case_api_decision_request_reaches_the_approval_page_and_four_eyes
         assert request_body["status"] == "pending" and request_body["grants_ready"] is False
         assert request_body["requested_by"].startswith("user:")
         assert request_body["override_reason"] == "The applicant withdrew."
-        # No grant token is ever sent to the browser.
-        assert "decision_grants" not in requested.text and "decisionGrants" not in requested.text
 
         # The request is bound to the case version and to this exact action.
         assert request_body["action"]["decision"] == "decline"
@@ -716,11 +714,17 @@ async def test_case_api_decision_request_reaches_the_approval_page_and_four_eyes
         assert same.value.detail == "same_approver"
 
         fake.approve(request_id, "user:9f:approver-b", dwell_ms=30_000)
-        status = (
-            await client.get(f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers)
-        ).json()
+        approved = await client.get(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers
+        )
+        status = approved.json()
         assert status["status"] == "approved" and status["grants_ready"] is True
         assert [a["approver"] for a in status["approvals"]] == ["user:9f:approver-a", "user:9f:approver-b"]
+        # The status answer is the one that could carry grants, and it must not: the tokens stay
+        # on the server and only their ids are ever recorded.
+        tokens = await fake.grants(request_id)
+        assert tokens and all(token not in approved.text for token in tokens)
+        assert "decision_grants" not in approved.text and "decisionGrants" not in approved.text
 
         # A decision without grants is still refused, and the request cannot decide another outcome.
         bare = await client.post(
@@ -742,9 +746,16 @@ async def test_case_api_decision_request_reaches_the_approval_page_and_four_eyes
         assert decided.status_code == 200, decided.text
         assert decided.json()["state"] == "decided"
 
-        detail = (await client.get(f"/api/v1/governed-cases/{case_ref}", headers=auth_headers)).json()
+        fetched = await client.get(f"/api/v1/governed-cases/{case_ref}", headers=auth_headers)
+        detail = fetched.json()
         approvers = [a["approver"] for a in detail["decision"]["approvers"]]
         assert approvers == ["user:9f:approver-a", "user:9f:approver-b"]
+        # The case records the grant ids, never the tokens themselves.
+        assert [a["decision_grant_id"] for a in detail["decision"]["approvers"]] == [
+            f"jti-{request_id}-1",
+            f"jti-{request_id}-2",
+        ]
+        assert all(token not in fetched.text for token in tokens)
         assert detail["case"]["state"] == "decided"
         assert [r["request_id"] for r in detail["decision_requests"]] == [request_id]
 

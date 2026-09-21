@@ -82,7 +82,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   New metrics `agenticorg_case_decision_requests_total{outcome,result}` and
   `agenticorg_case_decision_grants_consumed_total{outcome,result}`; new documentation
   `docs/governance/decision-requests.md`. Migration `v6z27_case_decisions` adds
-  `governed_cases.decision_requests` (additive, forward-only).
+  `governed_cases.decision_requests` (additive, forward-only). The issuer's answers are parsed
+  strictly - a field the console states as fact (the action and its hash, the case version, how
+  many approvals are required, each approval's subject, authentication, position and dwell
+  source) is refused when absent rather than defaulted - the semantic action is bound to the
+  tenant as well as the case, `GRANTEX_BASE_URL` must be set explicitly when the service is on,
+  and consumption runs with its own shorter deadline while the case row is locked.
+- Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
+  `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
+  state counts, policy tier and proposed recommendation, and a case screen with the cited
+  underwriting memo (every evidence entry naming the provider, upstream record, field and
+  retrieval time, linked to the cited-records index and to attached excerpt references), the
+  policy score with every fired rule and the evidence values it read, and the case history.
+  Sections the provider could not supply are shown as unchecked rather than clear. The
+  screens are read-only: no decision, review or state change is made from them. A tenant
+  without `governed_cases.enabled` is told so instead of seeing an empty queue.
+- `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
+  cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
+  provider fixture and runs the reference agents against the stack, writing the new case
+  references for the browser suite. It refuses any runtime that is not development or test.
+- Browser end-to-end coverage for the console screens (`ui/e2e/governed-cases.spec.ts`), with
+  an axe accessibility scan (WCAG 2.1 A and AA) and a phone-width pass; the run regenerates
+  the screenshots in `docs/console/governed-cases.md`.
 - Governance documentation (`docs/governance/README.md`): how grants, policy
   scores and human decisions interact for governed cases - read-only tool sets
   and the grant check at the tool gateway, deterministic policy tiers that

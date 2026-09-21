@@ -393,7 +393,7 @@ def _seed_tenant_and_companies(tenant_id: uuid.UUID, company_ids: list[uuid.UUID
                 INSERT INTO tenants (id, name, slug, plan, data_region, settings, byok_kek_resource)
                 VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb, '')
             """),
-            {"id": tenant_id, "name": f"tenant-{tenant_id.hex[:8]}", "slug": f"tenant-{tenant_id.hex}"},
+            {"id": tenant_id, "name": f"tenant-{tenant_id.hex}", "slug": f"tenant-{tenant_id.hex}"},
         )
         for index, company_id in enumerate(company_ids):
             conn.execute(

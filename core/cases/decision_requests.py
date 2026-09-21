@@ -25,6 +25,7 @@ Everything here is inert unless a tenant has ``governed_cases.enabled`` *and* th
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -281,34 +282,80 @@ def _canonical_size(document: Mapping[str, Any]) -> int:
     return len(json.dumps(document, separators=(",", ":"), sort_keys=True, default=str).encode())
 
 
+def case_action(case: GovernedCase, outcome: str) -> dict[str, Any]:
+    """The semantic action a decision grant is bound to, qualified by tenant.
+
+    ``case_ref`` is unique per tenant, not per issuer developer, so the tenant goes into the
+    action's manifest-declared ``extra`` fields. Both the request and the consumption use this
+    function, so the hashes match.
+    """
+    action = dict(semantic_action(case, outcome))
+    action["extra"] = {"tenant": str(case.tenant_id)}
+    return action
+
+
+def _required_text(field: str, value: Any) -> str:
+    """A field the screen states as fact. A missing one is a refusal, never a default."""
+    if not isinstance(value, str) or not value.strip():
+        raise DecisionServiceError("decision_service_response_invalid", f"{field} is missing")
+    return value
+
+
+def _required_count(field: str, value: Any) -> int:
+    """A positive whole number. ``approvalsRequired`` must never quietly become one approver."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise DecisionServiceError("decision_service_response_invalid", f"{field} is missing")
+    return value
+
+
 def _approval(entry: Mapping[str, Any]) -> Approval:
+    """One approval, as the screen shows it: who approved, how, in what position, for how long.
+
+    Every one of those is an assertion about an authority event, so a payload that omits one is
+    refused rather than shown with a blank or a default.
+    """
     dwell = entry.get("dwellMs")
+    if dwell is not None and (isinstance(dwell, bool) or not isinstance(dwell, int) or dwell < 0):
+        raise DecisionServiceError("decision_service_response_invalid", "dwellMs is not a duration")
     return Approval(
-        approver=str(entry.get("sub") or ""),
-        approver_auth=str(entry.get("approverAuth") or ""),
-        dwell_ms=int(dwell) if isinstance(dwell, (int, float)) else None,
-        dwell_source=str(entry.get("dwellSource") or ""),
-        position=int(entry.get("position") or 0),
-        issued_at=str(entry.get("issuedAt") or ""),
+        approver=_required_text("approval sub", entry.get("sub")),
+        approver_auth=_required_text("approval approverAuth", entry.get("approverAuth")),
+        dwell_ms=dwell,
+        dwell_source=_required_text("approval dwellSource", entry.get("dwellSource")),
+        position=_required_count("approval position", entry.get("position")),
+        issued_at=_required_text("approval issuedAt", entry.get("issuedAt")),
         consumed_at=str(entry["consumedAt"]) if entry.get("consumedAt") else None,
     )
 
 
-def _view(payload: Mapping[str, Any], *, approval_page: str = "") -> DecisionRequestView:
-    request_id = str(payload.get("requestId") or "")
-    if not request_id:
-        raise DecisionServiceError("decision_service_response_invalid", "no request id")
-    approvals = tuple(_approval(a) for a in payload.get("approvals") or [] if isinstance(a, Mapping))
+def _view(payload: Mapping[str, Any], *, require_approval_page: bool = False) -> DecisionRequestView:
+    """The issuer's answer, parsed strictly.
+
+    The console states what this carries - which action is being approved, how many approvals it
+    needs, who has approved and how long they looked at it - so a field the issuer did not send is
+    ``decision_service_response_invalid``, not a default. The field names are provisional
+    (see the module docstring); a rename has to fail loudly rather than show one approver where
+    four eyes were required.
+    """
+    approvals_entries = payload.get("approvals") or []
+    if not isinstance(approvals_entries, list):
+        raise DecisionServiceError("decision_service_response_invalid", "approvals is not a list")
+    approvals = tuple(_approval(a) for a in approvals_entries if isinstance(a, Mapping))
+    if len(approvals) != len(approvals_entries):
+        raise DecisionServiceError("decision_service_response_invalid", "an approval is not an object")
+    action = payload.get("action")
+    if not isinstance(action, Mapping) or not action:
+        raise DecisionServiceError("decision_service_response_invalid", "action is missing")
     return DecisionRequestView(
-        request_id=request_id,
-        status=str(payload.get("status") or "unknown"),
-        approval_page=str(payload.get("approvalPage") or approval_page),
-        action=dict(payload.get("action") or {}),
-        action_hash=str(payload.get("actionHash") or ""),
-        case_version=str(payload.get("caseVersion") or ""),
-        approvals_required=int(payload.get("approvalsRequired") or 1),
+        request_id=_required_text("requestId", payload.get("requestId")),
+        status=_required_text("status", payload.get("status")),
+        approval_page=_required_text("approvalPage", payload.get("approvalPage")) if require_approval_page else "",
+        action=dict(action),
+        action_hash=_required_text("actionHash", payload.get("actionHash")),
+        case_version=_required_text("caseVersion", payload.get("caseVersion")),
+        approvals_required=_required_count("approvalsRequired", payload.get("approvalsRequired")),
         approvals=approvals,
-        expires_at=str(payload.get("expiresAt") or ""),
+        expires_at=_required_text("expiresAt", payload.get("expiresAt")),
     )
 
 
@@ -330,11 +377,15 @@ class GrantexDecisionGrantService:
     base_url: str
     api_key: str
     timeout_seconds: float = 10.0
+    #: Consuming grants happens inside the case's row lock, so it gets a tighter deadline.
+    consume_timeout_seconds: float = 5.0
     #: Injected in tests.
     client_factory: Any = None
     connector: str = "governed_cases"
     expires_in_seconds: int = 24 * 60 * 60
     _headers: dict[str, str] = field(init=False, default_factory=dict)
+    #: One client per running event loop; the console polls every few seconds per open case.
+    _clients: dict[int, httpx.AsyncClient] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.base_url or not self.api_key:
@@ -343,14 +394,38 @@ class GrantexDecisionGrantService:
         self._headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
 
     def _client(self) -> httpx.AsyncClient:
+        """The client for this event loop, kept open: a case screen polls every few seconds.
+
+        Keyed by loop so a client is never used from a loop other than the one that created its
+        connections (tests and workers each have their own).
+        """
         if self.client_factory is not None:
             return self.client_factory()
-        return httpx.AsyncClient(base_url=self.base_url, timeout=httpx.Timeout(self.timeout_seconds))
+        loop_key = id(asyncio.get_running_loop())
+        client = self._clients.get(loop_key)
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=httpx.Timeout(self.timeout_seconds),
+                limits=httpx.Limits(max_connections=8, max_keepalive_connections=4),
+            )
+            self._clients[loop_key] = client
+        return client
 
-    async def _call(self, method: str, path: str, body: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    async def _call(
+        self, method: str, path: str, body: Mapping[str, Any] | None = None, *, timeout: float | None = None
+    ) -> dict[str, Any]:
+        client = self._client()
+        owned = self.client_factory is not None
         try:
-            async with self._client() as client:
-                response = await client.request(method, path, headers=self._headers, json=body)
+            try:
+                response = await client.request(
+                    method, path, headers=self._headers, json=body,
+                    **({"timeout": httpx.Timeout(timeout)} if timeout is not None else {}),
+                )  # fmt: skip
+            finally:
+                if owned:
+                    await client.aclose()
         # enterprise-gate: broad-except-ok reason=decision-service-transport-failure-fails-closed
         except Exception as exc:
             logger.warning("case_decision_service_unreachable", path=path, error=type(exc).__name__)
@@ -406,7 +481,8 @@ class GrantexDecisionGrantService:
             "expiresInSeconds": self.expires_in_seconds,
         }
         payload = await self._call("POST", "/v1/decisions/requests", body)
-        return _view(payload)
+        # Only the create answer carries the approval page; the status answer does not.
+        return _view(payload, require_approval_page=True)
 
     async def get_request(self, request_id: str) -> DecisionRequestView:
         payload = await self._call("GET", f"/v1/decisions/requests/{request_id}")
@@ -424,6 +500,8 @@ class GrantexDecisionGrantService:
             "POST",
             "/v1/decisions/consume",
             {"decisionGrants": list(grants), "action": dict(action), "caseVersion": case_version},
+            # The caller holds the case row locked while this runs.
+            timeout=self.consume_timeout_seconds,
         )
         approvers = payload.get("approvers") or []
         jtis = payload.get("jtis") or []
@@ -450,6 +528,15 @@ class ServiceDecisionVerifier:
     It consumes the grants at their issuer for the exact semantic action and the case's current
     version, so a case that changed since the approval is refused (``case_changed``) and a grant
     can be spent once. Anything other than a confirmed consumption is a refusal.
+
+    **This platform does not verify the decision grants themselves.** The issuer checks the
+    signature and key, the audience and issuer, the action hash, the dwell source, the memo and
+    policy hashes and the four-eyes structure under its own row locks when it consumes them, and
+    refuses anything that does not match. Verifying them here as well (decision-grant profile
+    §6 steps 2 and 3) needs the Grantex Python SDK's ``grantex.decisions`` verifier, which is not
+    published yet; wiring it in is a prerequisite for turning
+    ``AGENTICORG_CASE_DECISION_SERVICE`` on outside a development stack, and is recorded as such
+    in ``docs/governance/decision-requests.md``.
     """
 
     service: DecisionGrantService
@@ -459,7 +546,7 @@ class ServiceDecisionVerifier:
     ) -> DecisionCheck:
         if not grants:
             return DecisionCheck(allowed=False, reason="decision_required")
-        action = semantic_action(case, outcome)
+        action = case_action(case, outcome)
         try:
             consumed = await self.service.consume(
                 grants=grants, action=action, case_version=str(case.version)
@@ -496,7 +583,7 @@ def decision_service() -> DecisionGrantService | None:
     """
     import os
 
-    from core.config import external_keys, grantex_base_url_for_env, settings
+    from core.config import external_keys, settings
 
     kind = str(getattr(settings, "case_decision_service", "") or "").strip().lower()
     if kind in ("", "none", "off"):
@@ -504,8 +591,18 @@ def decision_service() -> DecisionGrantService | None:
     if kind != "grantex":
         logger.error("case_decision_service_unknown", kind=kind)
         raise DecisionServiceError("decision_service_not_configured", "unknown service", status=503)
+    # The issuer has to be named explicitly. `grantex_base_url_for_env()` falls back to the
+    # production origin when nothing is set, and a decision request must never be created against
+    # an issuer nobody chose.
+    base_url = (os.getenv("GRANTEX_BASE_URL", "").strip() or str(external_keys.grantex_base_url or "").strip()
+                if "grantex_base_url" in external_keys.model_fields_set or os.getenv("GRANTEX_BASE_URL")
+                else "")  # fmt: skip
+    if not base_url:
+        raise DecisionServiceError(
+            "decision_service_not_configured", "GRANTEX_BASE_URL is not set", status=503
+        )
     return GrantexDecisionGrantService(
-        base_url=grantex_base_url_for_env(),
+        base_url=base_url,
         api_key=os.getenv("GRANTEX_API_KEY", "") or external_keys.grantex_api_key,
         connector=str(getattr(settings, "case_decision_connector", "governed_cases")),
     )

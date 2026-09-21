@@ -151,6 +151,19 @@ def _tenant(tenant_id: str | uuid.UUID) -> uuid.UUID:
         raise CaseError("tenant_invalid", status=401) from exc
 
 
+async def _cap_idle_in_transaction(session: AsyncSession, seconds: int = 15) -> None:
+    """Postgres only, and never fatal: a cap that cannot be set is logged, not raised."""
+    from sqlalchemy import text
+
+    if session.bind is None or session.bind.dialect.name != "postgresql":
+        return
+    try:
+        await session.execute(text(f"SET LOCAL idle_in_transaction_session_timeout = '{seconds}s'"))
+    # enterprise-gate: broad-except-ok reason=timeout-cap-is-best-effort-and-never-fails-the-decision
+    except Exception as exc:
+        logger.warning("case_idle_timeout_cap_failed", error=type(exc).__name__)
+
+
 def _run_id(tenant: uuid.UUID, case_ref: str, kind: str) -> str:
     """Server-generated and tenant-prefixed: it keys the run's pseudonym map."""
     return f"tenant:{tenant}:case:{case_ref}:{kind}:{uuid.uuid4().hex}"
@@ -372,6 +385,9 @@ async def decide_case(
     tenant = _tenant(tenant_id)
     await runtime.require_enabled(tenant)
     async with runtime.session_factory(tenant) as session:
+        # The decision grants are consumed at their issuer while this transaction holds the case
+        # row, so bound how long the row can stay locked if the issuer stalls.
+        await _cap_idle_in_transaction(session)
         case = await get_case(session, tenant, case_ref, for_update=True)
         await record_decision(
             session,

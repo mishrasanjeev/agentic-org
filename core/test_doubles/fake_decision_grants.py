@@ -42,6 +42,8 @@ class _Request:
     status: str = "pending"
     approvals: list[Approval] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)
+    #: The grant ids (``jti``), which is what a consumed decision records - never the token.
+    jtis: list[str] = field(default_factory=list)
     consumed: bool = False
 
 
@@ -117,7 +119,7 @@ class FakeDecisionGrantService:
         request.status = "consumed"
         return ConsumedDecision(
             request_id=request.request_id,
-            approvers=tuple((a.approver, g) for a, g in zip(request.approvals, request.grants, strict=False)),
+            approvers=tuple((a.approver, jti) for a, jti in zip(request.approvals, request.jtis, strict=False)),
             action_hash=f"sha256:{abs(hash(_canonical(action))):064x}"[:71],
         )
 
@@ -140,7 +142,10 @@ class FakeDecisionGrantService:
                 issued_at="2026-09-20T10:00:00Z",
             )
         )
-        request.grants.append(f"decision-grant-{request.request_id}-{len(request.approvals)}")
+        # A token and its ``jti`` are different things: only the id is ever recorded on a case.
+        position = len(request.approvals)
+        request.grants.append(f"decision+jwt.{request.request_id}.{position}.signature-not-a-real-token")
+        request.jtis.append(f"jti-{request.request_id}-{position}")
         if len(request.approvals) >= request.approvals_required:
             request.status = "approved"
         return self._view(request)
