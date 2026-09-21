@@ -25,7 +25,7 @@ import logging
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, inspect, pool
+from sqlalchemy import engine_from_config, pool, text
 from sqlalchemy.engine import Connection
 
 # Register every ORM model so MetaData is complete for autogenerate.
@@ -35,9 +35,18 @@ from core.models.base import BaseModel
 from core.schema_bootstrap import (
     BASELINE_REVISION,
     create_orm_baseline,
+    existing_relations,
     plan_empty_database_bootstrap,
     target_reaches_baseline,
 )
+
+# Transaction-scoped lock shared with ``core.database.init_db``: two migrate
+# jobs started together serialize on the bootstrap decision instead of both
+# deciding the database is empty and racing to create the baseline. It guards
+# that decision only — it is taken just when there is no recorded revision,
+# and a revision that opens an ``autocommit_block()`` commits and releases it
+# part-way through the chain (migrations/README.md).
+MIGRATION_ADVISORY_LOCK = 4815162342
 
 config = context.config
 
@@ -75,11 +84,19 @@ def _bootstrap_empty_database(connection: Connection) -> None:
     current_heads = migration_context.get_current_heads()
     if command_name != "upgrade" or current_heads:
         return
+    connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_ADVISORY_LOCK})
+    # Another job may have created and stamped the baseline while this one
+    # waited for the lock. This reread sees that commit because the connection
+    # runs at READ COMMITTED, where each statement takes a fresh snapshot; at
+    # REPEATABLE READ it would still see the empty database it started with.
+    current_heads = migration_context.get_current_heads()
+    if current_heads:
+        return
     script = context.script
     if not plan_empty_database_bootstrap(
         command=command_name,
         current_heads=current_heads,
-        table_names=inspect(connection).get_table_names(),
+        table_names=existing_relations(connection),
         reaches_baseline=target_reaches_baseline(script, migration_context.opts.get("destination_rev")),
     ):
         return

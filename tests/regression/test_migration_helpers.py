@@ -161,14 +161,27 @@ def test_audit_json_written_even_when_block_raises(conn, tmp_path, monkeypatch) 
     assert payload["row_counts"]["sample_secrets"] == 20
 
 
-def test_audit_dir_default_is_under_repo_migrations() -> None:
-    from core.crypto.migration_helpers import _audit_dir
+def test_audit_dir_default_is_under_repo_migrations(monkeypatch: pytest.MonkeyPatch) -> None:
+    from core.crypto.migration_helpers import AUDIT_DIR_ENV, _audit_dir
 
+    # The test session points the writer at a temporary directory so a run does
+    # not rewrite the committed records; this checks the default it falls back
+    # to when nothing overrides it.
+    monkeypatch.delenv(AUDIT_DIR_ENV, raising=False)
     p = _audit_dir()
     assert p.name == "audit"
     assert p.parent.name == "migrations"
     # Idempotent — calling twice doesn't error.
     assert _audit_dir() == p
+
+
+def test_audit_dir_honours_the_environment_override(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from core.crypto.migration_helpers import AUDIT_DIR_ENV, _audit_dir
+
+    target = tmp_path / "audit-records"
+    monkeypatch.setenv(AUDIT_DIR_ENV, str(target))
+    assert _audit_dir() == target
+    assert target.is_dir()
 
 
 def test_happy_path_end_to_end_with_connection_escape_hatch(

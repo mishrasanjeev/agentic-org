@@ -517,6 +517,9 @@ def test_legacy_db_gets_stamped_at_baseline():
     _assert_readiness_controls()
     _assert_connector_config_controls()
     _assert_database_index_health()
+    # The shape every deployed environment was born in: check it against the
+    # models too, not only the from-empty bootstrap.
+    _assert_no_schema_drift_from_orm()
 
 
 def test_stamped_legacy_db_repairs_missing_agent_feedback_table():
@@ -1432,3 +1435,188 @@ def test_head_revision_downgrades_one_step_and_upgrades_again_without_orm_drift(
     assert _version_num() == head
     _assert_database_index_health()
     _assert_no_schema_drift_from_orm()
+
+
+@pytest.mark.timeout(300)
+def test_populated_legacy_database_upgrades_to_head_without_drift_or_data_loss():
+    """The same genesis shape, with rows in it.
+
+    A migration that only fails on populated tables (a backfill, a new NOT
+    NULL, a unique index over existing rows) passes every empty-database check
+    there is, so the legacy path is rehearsed with data as well.
+    """
+    _reset_schema()
+    _build_legacy_schema()
+    tenant_id = uuid.uuid4()
+    company_ids = [uuid.uuid4(), uuid.uuid4()]
+    _seed_tenant_and_companies(tenant_id, company_ids)
+
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO audit_log (id, tenant_id, event_type, actor_type, actor_id, "
+                "resource_type, resource_id, action, outcome, details, created_at) VALUES "
+                "(:id, :tenant_id, 'seed.populated', 'system', 'migration-rehearsal', "
+                "'tenant', :resource_id, 'seed', 'success', '{}'::jsonb, NOW())"
+            ),
+            {"id": uuid.uuid4(), "tenant_id": tenant_id, "resource_id": str(tenant_id)},
+        )
+    engine.dispose()
+
+    result = _run_migrate_wrapper()
+    assert result.returncode == 0, result.stderr[-4000:]
+
+    engine = create_engine(_SYNC_URL)
+    with engine.connect() as conn:
+        version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        tenants = conn.execute(
+            text("SELECT count(*) FROM tenants WHERE id = :id"), {"id": tenant_id}
+        ).scalar_one()
+        companies = conn.execute(
+            text("SELECT count(*) FROM companies WHERE tenant_id = :id"), {"id": tenant_id}
+        ).scalar_one()
+        audit_rows = conn.execute(
+            text("SELECT count(*) FROM audit_log WHERE tenant_id = :id"), {"id": tenant_id}
+        ).scalar_one()
+    engine.dispose()
+
+    assert version == _current_head()
+    assert (tenants, companies, audit_rows) == (1, len(company_ids), 1)
+    _assert_readiness_controls()
+    _assert_connector_config_controls()
+    _assert_database_index_health()
+    _assert_no_schema_drift_from_orm()
+    _reset_schema()
+
+
+def test_database_holding_only_a_view_is_not_treated_as_empty():
+    """Views, materialised views and sequences are relations too."""
+    from core.schema_bootstrap import REASON_UNMANAGED_DATABASE, EmptyDatabaseBootstrapError
+
+    _reset_schema()
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(text("CREATE VIEW unmanaged_view AS SELECT 1 AS one"))
+        conn.execute(text("CREATE SEQUENCE unmanaged_sequence"))
+    engine.dispose()
+    try:
+        with pytest.raises(EmptyDatabaseBootstrapError) as exc_info:
+            command.upgrade(_alembic_cfg(), "head")
+        assert exc_info.value.reason == REASON_UNMANAGED_DATABASE
+        assert "unmanaged_view" in str(exc_info.value)
+        assert _table_names() == set()
+    finally:
+        _reset_schema()
+
+
+@pytest.mark.timeout(300)
+def test_a_second_migrate_job_waits_for_the_first_on_the_advisory_lock():
+    """Two overlapping migrate jobs serialize instead of racing to bootstrap."""
+    import threading
+
+    _reset_schema()
+    holder = create_engine(_SYNC_URL)
+    connection = holder.connect()
+    connection.execution_options(isolation_level="AUTOCOMMIT")
+    connection.execute(text("BEGIN"))
+    connection.execute(text("SELECT pg_advisory_xact_lock(4815162342)"))
+
+    finished = threading.Event()
+    failure: list[BaseException] = []
+
+    def upgrade() -> None:
+        try:
+            command.upgrade(_alembic_cfg(), "head")
+        except BaseException as exc:  # noqa: BLE001 - reported to the test thread
+            failure.append(exc)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=upgrade, daemon=True)
+    worker.start()
+    try:
+        assert not finished.wait(timeout=5), "the upgrade did not wait for the advisory lock"
+        assert _table_names() == set()
+    finally:
+        connection.execute(text("ROLLBACK"))
+        connection.close()
+        holder.dispose()
+
+    worker.join(timeout=240)
+    assert not worker.is_alive(), "the upgrade did not finish after the lock was released"
+    assert not failure, failure
+    assert _version_num() == _current_head()
+    _reset_schema()
+
+
+@pytest.mark.timeout(300)
+def test_a_waiting_migrate_job_does_not_bootstrap_after_the_holder_stamped_it():
+    """The reread after the lock: the waiter must see the other job's baseline.
+
+    The lock holder creates the ORM baseline and stamps it while the second
+    upgrade is blocked, so the waiter wakes on a database that is no longer
+    empty and must apply the revisions after the baseline instead of building
+    a second one.
+    """
+    import threading
+
+    _reset_schema()
+    holder = create_engine(_SYNC_URL)
+    connection = holder.connect()
+    connection.execution_options(isolation_level="AUTOCOMMIT")
+    connection.execute(text("BEGIN"))
+    connection.execute(text("SELECT pg_advisory_xact_lock(4815162342)"))
+
+    finished = threading.Event()
+    failure: list[BaseException] = []
+
+    def upgrade() -> None:
+        try:
+            command.upgrade(_alembic_cfg(), "head")
+        except BaseException as exc:  # noqa: BLE001 - reported to the test thread
+            failure.append(exc)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=upgrade, daemon=True)
+    worker.start()
+    try:
+        assert not finished.wait(timeout=5), "the upgrade did not wait for the advisory lock"
+        # Do what the other job would have done: build the baseline and stamp
+        # it, then let the waiter through.
+        import core.models  # noqa: F401 - register every ORM model
+        from core.models.base import BaseModel
+
+        connection.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+        BaseModel.metadata.create_all(connection)
+        # Stamped in SQL rather than through `command.stamp`: Alembic's context
+        # is a process-wide proxy, and the worker thread is inside an upgrade.
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS alembic_version ("
+                "version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            )
+        )
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('v480_baseline')"))
+        # Read on the holder's own connection: the work is not committed yet,
+        # which is exactly why the waiter must reread after taking the lock.
+        staged = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        assert staged == "v480_baseline"
+    finally:
+        connection.execute(text("COMMIT"))
+        connection.close()
+        holder.dispose()
+
+    worker.join(timeout=240)
+    assert not worker.is_alive(), "the upgrade did not finish after the lock was released"
+    assert not failure, failure
+    assert _version_num() == _current_head()
+    # One baseline, not two: the waiter continued the stamped chain.
+    with create_engine(_SYNC_URL).connect() as conn:
+        versions = conn.execute(text("SELECT count(*) FROM alembic_version")).scalar_one()
+    assert versions == 1
+    _assert_no_schema_drift_from_orm()
+    _reset_schema()

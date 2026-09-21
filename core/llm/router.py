@@ -501,6 +501,29 @@ class LLMRouter:
         self.fallback_model = settings.llm_fallback
         self.temperature = settings.llm_temperature
 
+    async def _provider_secret(self, provider: str, tenant_id: str | None) -> str:
+        """Resolve provider credentials with tenant context when available."""
+        if tenant_id:
+            from core.ai_providers.resolver import (
+                ProviderNotConfigured,
+                get_provider_credential,
+            )
+
+            try:
+                resolved = await get_provider_credential(tenant_id, provider, "llm")
+            except ProviderNotConfigured as exc:
+                raise LLMProviderConfigurationError(str(exc)) from exc
+            return resolved.secret
+
+        env_secret = {
+            "gemini": external_keys.google_gemini_api_key,
+            "anthropic": external_keys.anthropic_api_key,
+            "openai": external_keys.openai_api_key,
+        }.get(provider)
+        if not env_secret:
+            raise LLMProviderConfigurationError(f"{provider.title()} provider is not configured")
+        return env_secret
+
     async def complete(
         self,
         messages: list[dict[str, str]],
@@ -614,9 +637,13 @@ class LLMRouter:
                 model, messages, temperature, max_tokens, start, tenant_id=tenant_id
             )
         elif "claude" in model:
-            return await self._call_claude(model, messages, temperature, max_tokens, start)
+            return await self._call_claude(
+                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
+            )
         else:  # gpt
-            return await self._call_openai(model, messages, temperature, max_tokens, start)
+            return await self._call_openai(
+                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
+            )
 
     async def _call_gemini(
         self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
@@ -635,10 +662,8 @@ class LLMRouter:
         # Hard daily cap — fail-closed BEFORE we mint a new charge.
         await assert_under_gemini_cap(tenant_id=tenant_id)
 
-        if not external_keys.google_gemini_api_key:
-            raise LLMProviderConfigurationError("Gemini provider is not configured")
-
-        client = genai.Client(api_key=external_keys.google_gemini_api_key)
+        api_key = await self._provider_secret("gemini", tenant_id)
+        client = genai.Client(api_key=api_key)
 
         # Separate system instruction from conversation
         system_instruction = None
@@ -686,14 +711,14 @@ class LLMRouter:
             raw={"candidates": str(response.candidates)},
         )
 
-    async def _call_claude(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+    async def _call_claude(
+        self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
+    ) -> LLMResponse:
         """Call Anthropic Claude API using the current Messages contract."""
         import anthropic
 
-        if not external_keys.anthropic_api_key:
-            raise LLMProviderConfigurationError("Anthropic provider is not configured")
-
-        client = anthropic.AsyncAnthropic(api_key=external_keys.anthropic_api_key)
+        api_key = await self._provider_secret("anthropic", tenant_id)
+        client = anthropic.AsyncAnthropic(api_key=api_key)
 
         system_msg = ""
         user_msgs = []
@@ -733,14 +758,14 @@ class LLMRouter:
             raw=response.model_dump(),
         )
 
-    async def _call_openai(self, model, messages, temperature, max_tokens, start) -> LLMResponse:
+    async def _call_openai(
+        self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
+    ) -> LLMResponse:
         """Call OpenAI API."""
         import openai
 
-        if not external_keys.openai_api_key:
-            raise LLMProviderConfigurationError("OpenAI provider is not configured")
-
-        client = openai.AsyncOpenAI(api_key=external_keys.openai_api_key)
+        api_key = await self._provider_secret("openai", tenant_id)
+        client = openai.AsyncOpenAI(api_key=api_key)
         response = await client.chat.completions.create(
             model=model,
             messages=messages,

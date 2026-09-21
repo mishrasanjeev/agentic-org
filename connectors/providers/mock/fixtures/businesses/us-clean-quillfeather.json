@@ -182,7 +182,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "Quillfeather Analytics builds demand forecasting dashboards for independent retailers."
+        "content": "<!doctype html><html><head><title>Quillfeather Analytics - demand forecasting software</title></head><body><h1>Forecasting software for wholesalers</h1><p>Quillfeather Analytics builds demand forecasting dashboards for independent retailers.</p></body></html>"
       }
     ]
   }

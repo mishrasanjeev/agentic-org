@@ -514,12 +514,15 @@ def _parse_llm_response(raw: str) -> dict[str, Any]:
 async def generate_agent_config(
     description: str,
     llm: LLMRouter | None = None,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate agent configuration from a natural-language description.
 
     Args:
         description: Plain-English description of the desired agent.
         llm: Optional LLM router instance (defaults to the global singleton).
+        tenant_id: Authenticated tenant used for tenant-owned provider
+            credentials and budget accounting.
 
     Returns:
         Dict with ``suggestions`` key containing 1+ agent config suggestions,
@@ -550,7 +553,12 @@ async def generate_agent_config(
 
     logger.info("agent_generator_call", description_length=len(sanitized))
 
-    response = await router.complete(messages=messages, temperature=0.3, max_tokens=2048)
+    response = await router.complete(
+        messages=messages,
+        temperature=0.3,
+        max_tokens=2048,
+        tenant_id=tenant_id,
+    )
 
     try:
         parsed = _parse_llm_response(response.content)
@@ -572,7 +580,10 @@ async def generate_agent_config(
         ]
         try:
             retry_response = await router.complete(
-                messages=retry_messages, temperature=0.1, max_tokens=1024,
+                messages=retry_messages,
+                temperature=0.1,
+                max_tokens=1024,
+                tenant_id=tenant_id,
             )
             parsed = _parse_llm_response(retry_response.content)
         except (json.JSONDecodeError, ValueError) as retry_exc:
