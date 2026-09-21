@@ -584,3 +584,58 @@ async def test_case_api_refusals_withdrawal_and_information_requests(
         assert record["decision"] is None and len(record["agent_records"]) == 2
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_reviews_and_approvals_need_the_case_awaiting_decision(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    """A disposition review and an information-request approval are refused outside the window.
+
+    Both write onto documents produced by the investigation, so they must not land on a case that
+    is being investigated, has been withdrawn or has already been decided.
+    """
+    from api.main import app
+    from api.v1 import governed_cases as routes
+
+    scripted_model([_respond])
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _runtime()
+    base = "/api/v1/governed-cases"
+    try:
+        fixture = MockProvider().fixture("us-missing-owner-cinderpath").application
+        case_ref = (await client.post(base, json={"application": fixture}, headers=auth_headers)).json()["case_ref"]
+        # Still `submitted`: the state is checked before the disposition is even looked up.
+        early_review = await client.post(
+            f"{base}/{case_ref}/screening-dispositions/hit-unknown/review",
+            json={"action": "accepted", "final_outcome": "false_positive"},
+            headers=auth_headers,
+        )
+        assert early_review.status_code == 409
+        assert early_review.json()["error"]["reason"] == "transition_not_allowed"
+
+        assert (await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)).status_code == 202
+        proposed = await client.post(
+            f"{base}/{case_ref}/information-requests",
+            json={"template_id": "onboarding_missing_items", "template_version": "1.0.0"},
+            headers=auth_headers,
+        )
+        assert proposed.status_code == 201, proposed.text
+        digest = proposed.json()["proposal_sha256"]
+        assert (await client.post(f"{base}/{case_ref}/withdraw", headers=auth_headers)).status_code == 200
+
+        # Withdrawn: the pending proposal can no longer be approved, so no text is ever rendered
+        # from a memo the case has moved past.
+        late_approval = await client.post(
+            f"{base}/{case_ref}/information-requests/{digest}/approve", headers=auth_headers
+        )
+        assert late_approval.status_code == 409
+        assert late_approval.json()["error"]["reason"] == "transition_not_allowed"
+        late_review = await client.post(
+            f"{base}/{case_ref}/screening-dispositions/hit-unknown/review",
+            json={"action": "accepted", "final_outcome": "false_positive"},
+            headers=auth_headers,
+        )
+        assert late_review.status_code == 409 and late_review.json()["error"]["reason"] == "transition_not_allowed"
+        detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
+        assert detail["information_requests"][0]["status"] == "awaiting_approval"
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
