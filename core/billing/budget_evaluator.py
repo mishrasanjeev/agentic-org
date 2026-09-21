@@ -70,10 +70,7 @@ async def _spend_since(
         # cost_center attribution is on agents, not agent_task_results — we
         # join through in a follow-up when cost_ledger gains cost_center_id.
         if cost_center_id is not None:
-            q += (
-                " AND agent_id IN (SELECT id FROM agents "
-                "WHERE cost_center_id = :ccid)"
-            )
+            q += " AND agent_id IN (SELECT id FROM agents WHERE cost_center_id = :ccid)"
             params["ccid"] = str(cost_center_id)
         result = await session.execute(text(q), params)
         total = result.scalar_one()
@@ -143,10 +140,7 @@ async def _send_notification(
                     continue
                 # core.email.send_email is synchronous; wrap the HTML
                 # body since that's the signature it expects.
-                html_body = (
-                    f"<h2>{subject}</h2>"
-                    f"<p>{body}</p>"
-                )
+                html_body = f"<h2>{subject}</h2><p>{body}</p>"
                 await asyncio.to_thread(
                     send_email,
                     to,
@@ -190,6 +184,8 @@ async def evaluate_budget_alerts() -> dict:
 
     Returns a summary dict for logging/metrics.
     """
+    from observability.metrics import budget_cap_events_total
+
     now = datetime.now(UTC)
     checked = 0
     triggered = 0
@@ -201,18 +197,13 @@ async def evaluate_budget_alerts() -> dict:
     async with async_session_factory() as session:
         await session.execute(text("SET LOCAL row_security = off"))
         tenant_ids = [
-            row[0]
-            for row in (
-                await session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))
-            ).all()
+            row[0] for row in (await session.execute(select(Tenant.id).where(Tenant.deleted_at.is_(None)))).all()
         ]
 
     alerts: list[BudgetAlert] = []
     for tid in tenant_ids:
         async with get_tenant_session(tid) as session:
-            result = await session.execute(
-                select(BudgetAlert).where(BudgetAlert.tenant_id == tid)
-            )
+            result = await session.execute(select(BudgetAlert).where(BudgetAlert.tenant_id == tid))
             alerts.extend(result.scalars().all())
 
     for alert in alerts:
@@ -221,10 +212,7 @@ async def evaluate_budget_alerts() -> dict:
             period_start = _period_start(alert.period, now)
 
             # Idempotency — if already triggered in this period, skip.
-            if (
-                alert.last_triggered_at is not None
-                and alert.last_triggered_at >= period_start
-            ):
+            if alert.last_triggered_at is not None and alert.last_triggered_at >= period_start:
                 continue
 
             spend = await _spend_since(
@@ -239,6 +227,9 @@ async def evaluate_budget_alerts() -> dict:
             if percent < alert.warn_at_percent:
                 continue
 
+            # Low-cardinality by design: which tenant is in the notification and the logs, never
+            # in a label (observability/metrics.py).
+            budget_cap_events_total.labels(outcome="exhausted" if percent >= 100 else "warned").inc()
             await _send_notification(alert, spend, percent)
 
             # Persist the trigger (tenant session: RLS WITH CHECK on UPDATE)

@@ -125,6 +125,18 @@ def _event_payload(event: CapabilityPromotionEvent) -> dict[str, object]:
 
 def verify_event_chain(events: list[CapabilityPromotionEvent]) -> str | None:
     """Fail closed unless ordered persisted events form the canonical chain."""
+    from observability.metrics import chain_verifications_total
+
+    try:
+        result = _verify_event_chain(events)
+    except ReadinessConflictError:
+        chain_verifications_total.labels(chain="capability_promotion", outcome="failed").inc()
+        raise
+    chain_verifications_total.labels(chain="capability_promotion", outcome="verified").inc()
+    return result
+
+
+def _verify_event_chain(events: list[CapabilityPromotionEvent]) -> str | None:
     previous_hash: str | None = None
     scope: tuple[object, object, object, object] | None = None
     for expected_sequence, event in enumerate(events):
