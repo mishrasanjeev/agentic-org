@@ -554,6 +554,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Task code called outside a worker no longer runs on the Celery runner loop.
+  `core.tasks.async_runner.run_async` kept one event loop per process, which is
+  right in a worker — it is the only loop there — but an API process that
+  reached a task body from a thread with no running loop (an `asyncio.to_thread`
+  call, of which `api/` has two dozen) left shared-pool connections bound to a
+  loop no request runs on, and the next request to check one out failed. The
+  choice is now made by the role of the process: a worker or beat process
+  (marked by the Celery signals, or by `AGENTICORG_WORKER_PROCESS=1`) keeps the
+  persistent loop; everywhere else the work runs through
+  `core.database.run_db_coroutine_sync` on a private engine.
+- The shared database pool refuses to be used from a second event loop. A
+  `CrossLoopConnectionError` names the mistake — with the remedy — where it is
+  made, instead of the `'NoneType' object has no attribute 'send'` that used to
+  surface in an unrelated request later, and
+  `agenticorg_db_cross_loop_checkouts_total{mode}` counts it.
+  `AGENTICORG_DB_CROSS_LOOP_GUARD=warn` downgrades it to a log line and `off`
+  disables it. The live feed, workflow state, workflow event-wait and bridge
+  state stores resolve their session factory per call rather than caching the
+  shared one, so a synchronous caller's private engine reaches them too.
 - A synchronous credential lookup no longer breaks the next request. An
   asyncpg connection belongs to the event loop that opened it, and
   `get_provider_credential_sync` ran the resolver on a throwaway loop while

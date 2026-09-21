@@ -14,6 +14,7 @@ import structlog.contextvars
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import (
+    beat_init,
     before_task_publish,
     setup_logging,
     task_postrun,
@@ -190,6 +191,27 @@ def _configure_celery_logging(**_kwargs: Any) -> None:
     from core.logging_config import configure_logging
 
     configure_logging()
+
+
+@worker_process_init.connect
+def _mark_worker_process(**_kwargs: Any) -> None:
+    """Tell the async runner this process is a worker.
+
+    ``run_async`` uses its persistent loop only here; in a process that serves
+    requests it takes a private engine instead, so the shared pool never holds
+    a connection bound to the runner loop (FINDINGS A-54).
+    """
+    from core.tasks.async_runner import mark_worker_process
+
+    mark_worker_process()
+
+
+@beat_init.connect
+def _mark_beat_process(**_kwargs: Any) -> None:
+    """Beat runs the same task bodies in its own process."""
+    from core.tasks.async_runner import mark_worker_process
+
+    mark_worker_process()
 
 
 @worker_process_init.connect

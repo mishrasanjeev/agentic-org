@@ -50,6 +50,7 @@ async def shared_pool(monkeypatch: pytest.MonkeyPatch, _setup_schema: None) -> A
         max_overflow=0,
         pool_pre_ping=True,
     )
+    db_mod.install_cross_loop_guard(engine)  # as on the shared engine
     factory = async_sessionmaker(engine, class_=db_mod.AsyncSession, expire_on_commit=False)
     monkeypatch.setattr(db_mod, "engine", engine)
     monkeypatch.setattr(db_mod, "async_session_factory", factory)
@@ -198,3 +199,48 @@ async def test_the_report_generator_bridge_does_not_poison_the_pool(
 
     assert shared_pool.pool.checkedin() == 0
     assert await _unrelated_request(tenant_id) == 1
+
+
+async def test_the_guard_refuses_the_shared_pool_on_a_foreign_loop(
+    shared_pool: AsyncEngine,
+) -> None:
+    """The structural half: a bridge that reaches the shared pool fails loudly.
+
+    A synchronous caller that runs `asyncio.run` against the shared engine —
+    the next careless `asyncio.to_thread` under `api/` — gets a named error at
+    the moment of the mistake instead of `'NoneType' object has no attribute
+    'send'` in whatever request checks that connection out later.
+    """
+    import core.database as db_mod
+
+    tenant_id = uuid.uuid4()
+    await _unrelated_request(tenant_id)  # binds the pool to this loop
+
+    def _use_the_shared_engine_on_another_loop() -> None:
+        asyncio.run(_unrelated_request(tenant_id))
+
+    with pytest.raises(db_mod.CrossLoopConnectionError, match="second event loop"):
+        await asyncio.to_thread(_use_the_shared_engine_on_another_loop)
+
+    # The mistake cost the pool nothing: this loop's request still works.
+    assert await _unrelated_request(tenant_id) == 1
+
+
+async def test_the_guard_can_be_downgraded_to_a_log_line(
+    shared_pool: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Operators can turn the refusal into a warning without a code change."""
+    import core.database as db_mod
+
+    tenant_id = uuid.uuid4()
+    await _unrelated_request(tenant_id)
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "warn")
+
+    def _use_the_shared_engine_on_another_loop() -> None:
+        asyncio.run(_unrelated_request(tenant_id))
+
+    # Warn mode lets it through, and it then fails the way it always did: the
+    # guard changes the message, never the outcome.
+    with pytest.raises(Exception) as exc_info:  # noqa: PT011 - asyncpg's own failure
+        await asyncio.to_thread(_use_the_shared_engine_on_another_loop)
+    assert not isinstance(exc_info.value, db_mod.CrossLoopConnectionError)
