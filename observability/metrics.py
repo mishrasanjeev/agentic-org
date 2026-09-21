@@ -114,10 +114,19 @@ agent_replicas = Gauge(
     "Agent replicas running",
     ["agent_type"],
 )
-agent_budget_pct = Gauge(
-    "agenticorg_agent_budget_pct",
-    "Agent budget utilization percentage",
-    ["agent_type"],
+# ── Tamper-evident chains and spend caps (PRD §10 alerts) ───────────
+
+chain_verifications_total = Counter(
+    "agenticorg_chain_verifications_total",
+    "Verifications of a tamper-evident chain, by chain and outcome. A failure means stored "
+    "evidence no longer matches the digest recorded for it: it is never a transient error.",
+    ["chain", "outcome"],
+)
+budget_cap_events_total = Counter(
+    "agenticorg_budget_cap_events_total",
+    "Spend caps crossed, by outcome: warned (past the configured warning point) or exhausted "
+    "(at or past the cap itself, where work starts being refused).",
+    ["outcome"],
 )
 
 # ── HITL conditions ─────────────────────────────────────────────────

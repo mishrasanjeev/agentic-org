@@ -150,7 +150,15 @@ async def lifespan(app: FastAPI):
     except Exception:  # noqa: S110
         pass  # Expected to fail - we only care about the JWKS fetch side effect
 
+    # The Prometheus registry is served on its own port for the in-instance collector
+    # (observability/metrics_export.py). It is never routed from outside the instance, and a
+    # failure to start it is logged, not raised: metrics must not keep the API from serving.
+    from observability.metrics_export import start_metrics_server, stop_metrics_server
+
+    start_metrics_server()
+
     yield
+    stop_metrics_server()
     from api.v1.health import close_health_resources
     from core.database import close_db
 

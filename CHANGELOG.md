@@ -22,6 +22,45 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `scripts/refresh_grantex_scopes.py --apply` before switching their tenant
   to `deny`.
 
+### Added
+- Prometheus metrics are now readable. Every service (API, Celery worker, beat)
+  serves the registry at `GET /metrics` on `METRICS_PORT` (default 9090), a
+  port Cloud Run does not route, so the endpoint has no external surface and no
+  credential to manage; a service refuses to start the listener on the port it
+  serves traffic on. The worker exports in multiprocess mode, because Celery's
+  prefork pool means counters are incremented in forked children. Until now
+  every instrument in the codebase was write-only (FINDINGS A-56).
+- The six PRD §10 alerts and one companion, as committed definitions. This
+  makes PRD §10 achievable, not met: no sample has yet travelled the whole path
+  from a process to a notification. Files:
+  `monitoring/prometheus/agenticorg-alerts.yml`, unit-tested with `promtool
+  test rules` in CI, with the Cloud Monitoring policies in
+  `infra/terraform/monitoring/` built from that same file and a dashboard in
+  `monitoring/dashboards/`. `scripts/check_alert_rules.py` refuses a rule that
+  reads a raw counter (instances scale to zero, so a counter's value depends on
+  which are alive), a rule without a `for`, or a rule reading an instrument not
+  declared in `observability/alert_contract.py`.
+- `agenticorg_case_decision_dwell_seconds{dwell_source,approval_stage}`: the
+  dwell the issuer's approval page measured, recorded when a decision is
+  recorded. This is the authoritative figure the rubber-stamping alert reads;
+  the console's own render-to-submit metric remains advisory telemetry and is
+  never read by an alert.
+- `agenticorg_chain_verifications_total` (cited passages and promotion-history
+  chains verified against their digests) and
+  `agenticorg_budget_cap_events_total` (spend caps warned and exhausted).
+
+### Removed
+- The `budget_pct_high` threshold rule and the Grafana "Budget Utilization"
+  panel, with the `agenticorg_agent_budget_pct` gauge behind them. The gauge
+  has never been given a value by anything, so the rule could not fire and the
+  panel could not draw: both were reporting on a metric that does not exist.
+  Restoring them means writing the gauge first, with labels that are not
+  per-tenant and per-agent.
+
+### Fixed
+- `docs/deployment.md` told operators to `curl http://localhost:8000/metrics`,
+  which has never served anything.
+
 ### Security — breaking for machine callers of the governed-case routes
 - Deciding, withdrawing, reviewing a screening disposition and approving an
   information request on a governed case now need a human session. API keys

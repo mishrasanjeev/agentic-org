@@ -28,9 +28,23 @@ import os
 import signal
 import sys
 import threading
+import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 DEFAULT_QUEUES = "celery,reports,maintenance,workflows,delivery,rpa"
+
+
+# Celery's default pool is prefork: tasks run in forked children, and a counter a child
+# increments is invisible to this process, which is the one the collector scrapes. In
+# multiprocess mode every process writes its samples to PROMETHEUS_MULTIPROC_DIR and the exporter
+# merges them, so the directory has to exist before any instrument is imported. Cloud Run gives
+# the service an in-memory volume for it; locally it falls back to a temporary directory.
+def _enable_multiprocess_metrics() -> None:
+    directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+    if not directory:
+        directory = os.path.join(tempfile.gettempdir(), "agenticorg-metrics")
+        os.environ["PROMETHEUS_MULTIPROC_DIR"] = directory
+    os.makedirs(directory, exist_ok=True)
 
 
 class _HealthHandler(BaseHTTPRequestHandler):
@@ -90,6 +104,17 @@ def _run_celery_worker() -> int:
     return celery_main()
 
 
+def _register_child_cleanup() -> None:
+    """Drop a forked child's gauges when Celery retires it, so a dead child stops being reported."""
+    from celery.signals import worker_process_shutdown  # noqa: PLC0415
+
+    from observability.metrics_export import mark_process_dead  # noqa: PLC0415
+
+    @worker_process_shutdown.connect
+    def _on_child_exit(**_kwargs: object) -> None:
+        mark_process_dead(os.getpid())
+
+
 def main() -> int:
     # Health server runs as a daemon thread so it dies cleanly when the
     # main worker process exits. Celery worker runs in the foreground so
@@ -97,6 +122,13 @@ def main() -> int:
     # and it shuts down gracefully — partially-processed tasks are NACK'd
     # back to the broker.
     threading.Thread(target=_serve_health, daemon=True).start()
+
+    # Metrics on their own port, scraped inside the instance and routed from nowhere.
+    _enable_multiprocess_metrics()
+    from observability.metrics_export import start_metrics_server  # noqa: PLC0415
+
+    start_metrics_server()
+    _register_child_cleanup()
 
     # Be explicit about signal handling so a misconfigured signal handler
     # in some imported module doesn't swallow SIGTERM. Default is fine

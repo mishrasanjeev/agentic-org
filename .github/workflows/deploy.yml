@@ -216,6 +216,15 @@ jobs:
             python scripts/check_license_headers.py
       - name: Enterprise stability release gates
         run: python scripts/check_enterprise_stability_gates.py
+      - name: Enforce alert-definition conventions
+        run: python scripts/check_alert_rules.py
+      - name: Check and unit-test the alert rules with promtool
+        run: |
+          set -euo pipefail
+          # Pinned by digest: the rules are a deploy artefact and the tool that validates them
+          # should not change underneath them.
+          docker run --rm -v "$PWD/monitoring/prometheus:/rules" -w /rules             --entrypoint promtool             prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218             check rules agenticorg-alerts.yml
+          docker run --rm -v "$PWD/monitoring/prometheus:/rules" -w /rules             --entrypoint promtool             prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218             test rules agenticorg-alerts.test.yml
       - name: Enforce evidence-backed public claims
         run: python scripts/lint_public_claims.py
       - name: Enforce billing catalog consistency

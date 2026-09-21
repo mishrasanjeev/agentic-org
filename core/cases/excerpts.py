@@ -56,6 +56,13 @@ excerpt_reads_total = Counter(
 )
 
 
+def _chain_verifications() -> Any:
+    """The shared digest-verification counter (PRD §10 chain-verification alert)."""
+    from observability.metrics import chain_verifications_total
+
+    return chain_verifications_total
+
+
 class ExcerptError(ValueError):
     """A passage could not be returned. ``reason`` is a stable code."""
 
@@ -174,9 +181,11 @@ def read(entry: Mapping[str, Any]) -> str:
     expected = str(entry.get("sha256") or "")
     if digest(text) != expected:
         excerpt_reads_total.labels(result="integrity_failed").inc()
+        _chain_verifications().labels(chain="case_excerpt", outcome="failed").inc()
         logger.error("case_excerpt_integrity_failed", excerpt_ref=str(entry.get("excerpt_ref") or ""))
         raise ExcerptError("excerpt_integrity_failed", "the stored passage does not match its digest")
     excerpt_reads_total.labels(result="served").inc()
+    _chain_verifications().labels(chain="case_excerpt", outcome="verified").inc()
     return text
 
 

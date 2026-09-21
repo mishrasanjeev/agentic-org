@@ -69,6 +69,15 @@ decision_grants_consumed_total = Counter(
     "Decision grant consumption attempts at the issuer, by outcome and result",
     ["outcome", "result"],
 )
+decision_dwell_seconds = Histogram(
+    "agenticorg_case_decision_dwell_seconds",
+    "Dwell between the approval page rendering and the approver submitting, as the issuer measured "
+    "it, recorded when the decision is recorded. ``dwell_source=server`` is the authoritative "
+    "series and the only one an alert may read; any other value means the issuer did not measure "
+    "it and the number is not evidence of anything.",
+    ["dwell_source", "approval_stage"],
+    buckets=(1, 5, 15, 30, 60, 120, 300, 900),
+)
 
 
 class DecisionServiceError(RuntimeError):
@@ -511,9 +520,7 @@ class GrantexDecisionGrantService:
         grants = payload.get("decisionGrants")
         return [str(g) for g in grants] if isinstance(grants, list) else []
 
-    async def consume(
-        self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str
-    ) -> ConsumedDecision:
+    async def consume(self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str) -> ConsumedDecision:
         payload = await self._call(
             "POST",
             "/v1/decisions/consume",
@@ -559,21 +566,15 @@ class ServiceDecisionVerifier:
 
     service: DecisionGrantService
 
-    async def verify(
-        self, *, tenant_id: str, case: GovernedCase, outcome: str, grants: list[str]
-    ) -> DecisionCheck:
+    async def verify(self, *, tenant_id: str, case: GovernedCase, outcome: str, grants: list[str]) -> DecisionCheck:
         if not grants:
             return DecisionCheck(allowed=False, reason="decision_required")
         action = case_action(case, outcome)
         try:
-            consumed = await self.service.consume(
-                grants=grants, action=action, case_version=str(case.version)
-            )
+            consumed = await self.service.consume(grants=grants, action=action, case_version=str(case.version))
         except DecisionServiceError as exc:
             decision_grants_consumed_total.labels(outcome=outcome, result="refused").inc()
-            logger.warning(
-                "case_decision_grants_refused", case_ref=case.case_ref, reason=exc.reason, detail=exc.detail
-            )
+            logger.warning("case_decision_grants_refused", case_ref=case.case_ref, reason=exc.reason, detail=exc.detail)
             return DecisionCheck(allowed=False, reason=exc.reason if exc.reason != "decision_invalid" else exc.detail)
         decision_grants_consumed_total.labels(outcome=outcome, result="consumed").inc()
         logger.info(
@@ -583,6 +584,55 @@ class ServiceDecisionVerifier:
             approvers=len(consumed.approvers),
         )
         return DecisionCheck(allowed=True, approvers=consumed.approvers)
+
+
+#: The only dwell source an alert may read: the issuer measured it on its own approval page.
+AUTHORITATIVE_DWELL_SOURCE = "server"
+
+
+def _dwell_source(reported: str) -> str:
+    """Bound the label: the issuer's value is free text, and a metric label is not.
+
+    Anything that is not the authoritative source becomes ``other``. What matters on a dashboard
+    is "the issuer measured this" against "it did not"; keeping every value the issuer might send
+    would let a remote system decide this metric's cardinality.
+    """
+    return AUTHORITATIVE_DWELL_SOURCE if reported == AUTHORITATIVE_DWELL_SOURCE else "other"
+
+
+def _approval_stage(position: int) -> str:
+    """Low-cardinality position label: an approval is the first, the second, or a later one."""
+    return {1: "first", 2: "second"}.get(position, "later")
+
+
+def record_decision_dwell(view: DecisionRequestView, case_ref: str = "") -> None:
+    """Record the issuer-measured dwell of every approval behind a decision that was just recorded.
+
+    This is the authoritative dwell. The console's own render-to-submit figure
+    (``agenticorg_case_console_dwell_seconds``) measures how fast a browser posted a form, which is
+    not a constraint on anyone determined to rubber-stamp; this one is measured by the approval
+    page, under the issuer's control, and is what the rubber-stamping alert reads.
+
+    An approval whose dwell the issuer did not measure is recorded under ``dwell_source="other"``
+    rather than dropped or counted as zero: a series that quietly stops arriving and a dwell that
+    collapses to nothing must not look the same on a dashboard. The label is mapped rather than
+    passed through, because the value comes from a remote system, and a label a remote system
+    chooses is cardinality a remote system chooses.
+    """
+    for approval in view.approvals:
+        if approval.dwell_ms is None:
+            continue
+        decision_dwell_seconds.labels(
+            dwell_source=_dwell_source(approval.dwell_source),
+            approval_stage=_approval_stage(approval.position),
+        ).observe(approval.dwell_ms / 1000)
+    logger.info(
+        "case_decision_dwell_recorded",
+        case_ref=case_ref,
+        request_id=view.request_id,
+        approvals=len(view.approvals),
+        sources=sorted({a.dwell_source or "unreported" for a in view.approvals}),
+    )
 
 
 def four_eyes_on() -> tuple[str, ...]:
@@ -616,9 +666,7 @@ def decision_service() -> DecisionGrantService | None:
                 if "grantex_base_url" in external_keys.model_fields_set or os.getenv("GRANTEX_BASE_URL")
                 else "")  # fmt: skip
     if not base_url:
-        raise DecisionServiceError(
-            "decision_service_not_configured", "GRANTEX_BASE_URL is not set", status=503
-        )
+        raise DecisionServiceError("decision_service_not_configured", "GRANTEX_BASE_URL is not set", status=503)
     return GrantexDecisionGrantService(
         base_url=base_url,
         api_key=os.getenv("GRANTEX_API_KEY", "") or external_keys.grantex_api_key,

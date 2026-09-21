@@ -663,63 +663,6 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "Budget utilization percentage per agent",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "orange", "value": 85 },
-              { "color": "red", "value": 95 }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 28 },
-      "id": 11,
-      "options": {
-        "minVizHeight": 75,
-        "minVizWidth": 75,
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true
-      },
-      "pluginVersion": "10.2.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "agenticorg_agent_budget_pct{tenant=~\"$tenant\"}",
-          "legendFormat": "{{agent_id}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Budget Utilization (%)",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
       "description": "Circuit breaker state per connector (0=closed, 1=half-open, 2=open)",
       "fieldConfig": {
         "defaults": {
