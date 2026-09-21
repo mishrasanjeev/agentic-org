@@ -108,10 +108,10 @@ def _migration_audit_dir_outside_the_checkout(tmp_path_factory):
 # The guard reports rather than raises (core/database.py), so a test run would
 # otherwise accumulate cross-loop uses silently. Count the guard's trips and
 # fail the run when they exceed the committed baseline: existing debt (FINDINGS
-# A-58) burns down, a new violation fails immediately. One cross-loop use
-# usually trips the guard twice (the session wrapper, then the replacement
-# connection the pool opens on the foreign loop), so this is a reproducible
-# number rather than a count of mistakes.
+# A-58) burns down, a new violation fails immediately. One cross-loop use trips
+# the guard about twice - the session wrapper sees every violation, and the
+# connect and checkout hooks alternate over the rest - so this is a
+# reproducible number rather than a count of mistakes.
 # Update the baseline downwards only; `scripts/check_cross_loop_baseline.py`
 # enforces that against main.
 CROSS_LOOP_BASELINE_FILE = Path(__file__).resolve().parents[1] / "cross_loop_baseline.txt"

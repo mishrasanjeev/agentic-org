@@ -112,23 +112,23 @@ async_session_factory: Any = _GuardedSessionFactory(_shared_session_factory, eng
 # connection used from a different loop fails a few frames later with
 # `AttributeError: 'NoneType' object has no attribute 'send'` or "attached to
 # a different loop", and `pool_pre_ping` does not rescue it (a cross-loop
-# error is not a disconnect). The guard names the mistake where it is made:
-# when a session is opened on a foreign loop, and when the pool opens a
-# connection there. A third check on connection checkout is installed for
-# completeness but never fires on this engine, because pre-ping runs on the
-# foreign loop and fails before the checkout event is reached; the warm-pool
-# case — a caller handed an existing connection, where nothing new is opened
-# and the damage is worst — is caught by the session wrapper instead.
+# error is not a disconnect). The guard checks in three places: when a session
+# is opened on a foreign loop (the wrapper below, which sees every one), when
+# the pool opens a connection there, and when it hands an existing connection
+# out there. Measured against this engine, the last two alternate and catch
+# about half each: a warm connection is caught at checkout, dies and is
+# invalidated, so the next violation finds an empty pool and is caught at
+# connect.
 CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
 CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
 _LOOP_KEY = "agenticorg_owning_loop"
 
-# One logical cross-loop use usually trips the guard twice: the session
-# wrapper sees it, then the poisoned connection is invalidated and the pool
-# opens a replacement on the foreign loop, which the ``connect`` hook sees.
-# (The first violation against a pool trips once: the connection dies before a
-# replacement is opened.) Measured against this engine: 1 use -> 1 trip,
-# 5 -> 11, 20 -> 40. The metric therefore counts *trips*, not distinct
+# One cross-loop use trips the guard about twice. Measured against this engine
+# by counting trips per call site (1 -> 1, 2 -> 4, 3 -> 5, 5 -> 9, 10 -> 20,
+# 20 -> 40): the session wrapper trips on every violation, while ``connect``
+# and ``checkout`` alternate and catch about half each. The first violation
+# against a cold pool trips once, because the connection dies before a
+# replacement is opened. The metric therefore counts *trips*, not distinct
 # mistakes — fine for a ratchet, which needs only to be monotonic and
 # reproducible, but do not read it as a count of violations.
 _cross_loop_checkouts_total = Counter(
@@ -255,12 +255,13 @@ def install_cross_loop_guard(target: AsyncEngine) -> None:
 
     Two hooks are added here — the pool opening a connection, and the pool
     handing an existing one out — and :class:`_GuardedSessionFactory` checks
-    when a session is opened. On the production configuration
-    (``pool_pre_ping=True``) only two of the three ever fire: the ping runs on
-    the foreign loop and fails before the ``checkout`` listener is reached, so
-    a warm-pool reuse is caught by the factory wrapper, and a cold pool by the
-    ``connect`` hook. The ``checkout`` hook earns its place on an engine
-    without pre-ping, where it is the only one that sees a reuse.
+    when a session is opened. All three fire on this engine: the wrapper on
+    every violation, and ``connect`` and ``checkout`` alternately on about half
+    each, because a warm connection caught at checkout is invalidated and the
+    next violation then finds an empty pool. The wrapper is what makes a
+    warm-pool reuse visible to a caller that binds ``async_session_factory``
+    itself (FINDINGS A-53): ``pool_pre_ping`` can fail on the foreign loop
+    before the ``checkout`` listener is reached.
     """
     _guarded_engines[target] = {"loop": None}
 
