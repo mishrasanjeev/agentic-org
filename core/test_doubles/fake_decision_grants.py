@@ -58,6 +58,19 @@ class FakeDecisionGrantService:
 
     # ── the platform's side ──────────────────────────────────────────────────────────────────
 
+    async def set_case_version(self, case_id: str, case_version: str) -> None:
+        """What the issuer does with a new case version: supersede what is bound to an older one."""
+        self._raise_if_asked()
+        for request in self.requests.values():
+            if (
+                str(request.action.get("case_id")) == case_id
+                and request.status in ("pending", "approved")
+                and request.case_version != case_version
+            ):
+                request.status = "superseded"
+                request.grants.clear()
+                request.jtis.clear()
+
     async def create_request(
         self,
         *,
@@ -70,6 +83,7 @@ class FakeDecisionGrantService:
         policy_score_ref: str = "",
     ) -> DecisionRequestView:
         self._raise_if_asked()
+        await self.set_case_version(str(action["case_id"]), case_version)
         for existing in self.requests.values():
             if (
                 existing.status in ("pending", "approved")

@@ -33,7 +33,13 @@ from api.deps import get_current_tenant, get_current_user
 from api.route_metadata import route_meta
 from core.agents.business_underwriter.information_request import InformationRequestError, propose, render
 from core.agents.screening_disposition import DispositionReviewError, DispositionReviewRequest, apply_review
-from core.cases.runtime import CaseRuntime, decide_case, default_policy_id, investigate_case
+from core.cases.runtime import (
+    CaseRuntime,
+    announce_case_version,
+    decide_case,
+    default_policy_id,
+    investigate_case,
+)
 from core.cases.states import CaseError, CaseState
 from core.cases.store import (
     business_case_document,
@@ -494,6 +500,9 @@ async def get_case_decision_request(
         return {
             **view.as_dict(),
             **record,
+            # The issuer returns the approval page only when it creates the request, so the case's
+            # own record is the source here. Stated explicitly: this must not depend on key order.
+            "approval_page": view.approval_page or str(record.get("approval_page") or ""),
             "case_version_now": case_version,
             # A case that changed since the request can no longer be decided on it.
             "case_changed": record.get("case_version") != case_version,
@@ -526,6 +535,12 @@ async def decide_governed_case(
                 record = _stored_request(case, body.decision_request_id)
             if record.get("outcome") != body.outcome:
                 raise CaseError("decision_outcome_mismatch", "the request was made for another outcome", status=409)
+            if str(record.get("case_version")) != str(case.version):
+                # The case moved on since the request. The issuer has superseded it and revoked
+                # any unused grants; say which it is rather than "no usable grants yet".
+                raise CaseError(
+                    "case_changed", f"the request was made for version {record.get('case_version')}", status=409
+                )
             try:
                 # The grants stay on the server: a decision grant never reaches the browser.
                 grants = await service.grants(body.decision_request_id)
@@ -575,6 +590,8 @@ async def review_screening_disposition(
             case.screening_dispositions = dispositions
             await record_update(session, case, now=runtime.clock())
             result = dispositions[index]
+            version, had_requests = case.version, bool(case.decision_requests)
+        await announce_case_version(runtime, case_ref, version, only_if=had_requests)
         runtime.push_kick(uuid.UUID(tenant_id))
         return result
     except CaseError as exc:
@@ -651,6 +668,8 @@ async def approve_information_request(
             case.information_requests = requests
             await record_update(session, case, now=runtime.clock())
             result = requests[index]
+            version, had_requests = case.version, bool(case.decision_requests)
+        await announce_case_version(runtime, case_ref, version, only_if=had_requests)
         runtime.push_kick(uuid.UUID(tenant_id))
         return result
     except CaseError as exc:

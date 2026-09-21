@@ -151,6 +151,25 @@ def _tenant(tenant_id: str | uuid.UUID) -> uuid.UUID:
         raise CaseError("tenant_invalid", status=401) from exc
 
 
+async def announce_case_version(runtime: CaseRuntime, case_ref: str, version: int, *, only_if: bool) -> None:
+    """Tell the decision-grant issuer that a case moved on, so it supersedes what is now stale.
+
+    Best effort and never fatal: AgenticOrg already refuses a decision whose grants were minted
+    for another version, so this is the issuer's own protection on top - it revokes grants that
+    can no longer be used instead of leaving them live until they expire.
+    """
+    if not only_if:
+        return
+    try:
+        service = runtime.decision_service()
+        if service is None:
+            return
+        await service.set_case_version(case_ref, str(version))
+    # enterprise-gate: broad-except-ok reason=issuer-bookkeeping-never-fails-a-case-change
+    except Exception as exc:
+        logger.warning("case_version_announce_failed", case_ref=case_ref, error=type(exc).__name__)
+
+
 async def _cap_idle_in_transaction(session: AsyncSession, seconds: int = 15) -> None:
     """Postgres only, and never fatal: a cap that cannot be set is logged, not raised."""
     from sqlalchemy import text
@@ -370,6 +389,8 @@ async def dispose_screening_hits(
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
         await record_update(session, case, now=runtime.clock())
+        version, had_requests = case.version, bool(case.decision_requests)
+    await announce_case_version(runtime, case_ref, version, only_if=had_requests)
     runtime.push_kick(tenant)
     return {
         "case_ref": case_ref,

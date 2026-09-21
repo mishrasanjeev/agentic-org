@@ -151,6 +151,10 @@ class ConsumedDecision:
 class DecisionGrantService(Protocol):
     """Decision requests and grant consumption at their issuer."""
 
+    async def set_case_version(self, case_id: str, case_version: str) -> None:
+        """Register the case's current version; the issuer supersedes open requests bound to older ones."""
+        ...
+
     async def create_request(
         self,
         *,
@@ -449,13 +453,21 @@ class GrantexDecisionGrantService:
     def _refusal(status: int, payload: Mapping[str, Any]) -> tuple[str, str]:
         code = str(payload.get("code") or "")
         sub_reason = str(payload.get("subReason") or "")
-        if code == "DECISION_GRANTS_DISABLED" or status == 404:
-            return "decision_service_disabled", code or "not found"
+        if code == "DECISION_GRANTS_DISABLED":
+            return "decision_service_disabled", code
+        if status == 404:
+            # The issuer answers 404 NOT_FOUND for a request it no longer holds - a request that
+            # aged past its ceiling, for example. That is not the service being switched off.
+            return "decision_request_not_found", code or "not found"
         if status == 401 or status == 403:
             return "decision_service_unauthorised", code
         if sub_reason:
             return "decision_invalid", sub_reason
         return "decision_service_refused", code or str(status)
+
+    async def set_case_version(self, case_id: str, case_version: str) -> None:
+        """Tell the issuer the case's current version so it supersedes and revokes what is stale."""
+        await self._call("PUT", f"/v1/decisions/cases/{case_id}", {"caseVersion": case_version})
 
     async def create_request(
         self,
@@ -470,7 +482,7 @@ class GrantexDecisionGrantService:
     ) -> DecisionRequestView:
         # The case version is registered first: a later version supersedes this request, so a case
         # that changes after the request is made can never be decided on the old memo.
-        await self._call("PUT", f"/v1/decisions/cases/{action['case_id']}", {"caseVersion": case_version})
+        await self.set_case_version(str(action["case_id"]), case_version)
         body: dict[str, Any] = {
             "action": dict(action),
             "connector": self.connector,
