@@ -740,6 +740,23 @@ def _page(title: str, body: str) -> str:
 # ── HTTP server ──────────────────────────────────────────────────────────────
 
 
+def oauth_error_detail(response: Response) -> dict[str, str]:
+    """The OAuth error a refusal carried, for the request log.
+
+    A development stub that refuses without saying why costs an afternoon. An unreadable body says
+    nothing rather than failing the response that is already on its way out.
+    """
+    if int(response.status) < 400 or not response.content_type.startswith("application/json"):
+        return {}
+    try:
+        body = json.loads(response.body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    if not isinstance(body, dict):
+        return {}
+    return {k: str(body[k]) for k in ("error", "error_description") if k in body}
+
+
 def _log(event: str, **fields: Any) -> None:
     print(json.dumps({"event": event, **fields}, sort_keys=True), file=sys.stderr, flush=True)
 
@@ -829,18 +846,9 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(response.body)
-            # A refusal says why: an OAuth error is a two-line fix in a
-            # development stack, and silence about it is not.
-            detail: dict[str, Any] = {}
-            if int(response.status) >= 400 and response.content_type.startswith("application/json"):
-                try:
-                    body = json.loads(response.body.decode("utf-8"))
-                    detail = {k: body[k] for k in ("error", "error_description") if k in body}
-                except (ValueError, UnicodeDecodeError):
-                    detail = {}
             _log(
                 "oidc_stub_request", method=self.command, path=urlsplit(self.path).path,
-                status=int(response.status), **detail,
+                status=int(response.status), **oauth_error_detail(response),
             )  # fmt: skip
 
         def do_GET(self) -> None:  # noqa: N802 - http.server naming

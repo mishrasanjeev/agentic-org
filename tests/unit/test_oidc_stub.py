@@ -8,6 +8,7 @@ import hashlib
 import json
 import re
 import secrets
+import socket
 import threading
 from collections.abc import Iterator
 from http import HTTPStatus
@@ -619,3 +620,172 @@ def test_repeated_parameters_are_rejected_over_http(running: str) -> None:
         )
         assert token.status_code == 400
         assert token.json()["error"] == "invalid_request"
+
+
+# --- a body framed by chunks, not by length -------------------------------------------------------
+
+
+def _chunked(payload: str) -> Iterator[bytes]:
+    """The payload in two chunks, as an HTTP client with no known length sends it."""
+    half = len(payload) // 2
+    for part in (payload[:half], payload[half:]):
+        if part:
+            yield part.encode()
+
+
+def test_a_chunked_form_body_is_read(running: str) -> None:
+    """Clients that do not know the length in advance send Transfer-Encoding: chunked.
+
+    Reading only Content-Length bodies made such a request look like an empty form, and the stub
+    then answered with an OAuth error about the wrong thing - `unsupported_grant_type` for a
+    request whose grant type was there all along.
+    """
+    with httpx.Client(base_url=running, follow_redirects=False, timeout=10) as client:
+        chunked = client.post(
+            "/token",
+            content=_chunked("grant_type=authorization_code&code=unknown&client_id=spa&code_verifier=" + "a" * 43),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        # The client framed it by chunks, which is the point of this test.
+        assert chunked.request.headers.get("transfer-encoding") == "chunked"
+        assert chunked.status_code == 400
+        # The grant type was read; the code is what is unknown.
+        assert chunked.json()["error"] == "invalid_grant"
+
+        repeated = client.post(
+            "/token",
+            content=_chunked("grant_type=authorization_code&code=x&code=y"),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert repeated.status_code == 400
+        assert repeated.json()["error"] == "invalid_request"
+
+
+def test_an_oversized_chunked_body_is_refused(running: str) -> None:
+    with httpx.Client(base_url=running, follow_redirects=False, timeout=10) as client:
+        response = client.post(
+            "/token",
+            content=_chunked("grant_type=authorization_code&code=" + "a" * (oidc.MAX_BODY_BYTES + 1)),
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        assert response.status_code == 400
+        assert response.json()["error"] == "invalid_request"
+
+
+def test_a_refusal_is_logged_with_its_oauth_error(running: str, capfd: pytest.CaptureFixture[str]) -> None:
+    """A development stub that refuses without saying why costs an afternoon."""
+    with httpx.Client(base_url=running, follow_redirects=False, timeout=10) as client:
+        assert client.post(
+            "/token",
+            content="grant_type=client_credentials",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        ).status_code == 400
+    logged = [json.loads(line) for line in capfd.readouterr().err.splitlines() if line.startswith("{")]
+    refusals = [entry for entry in logged if entry.get("path") == "/token" and entry.get("status") == 400]
+    assert refusals and refusals[-1]["error"] == "unsupported_grant_type"
+    assert "only authorization_code" in refusals[-1]["error_description"]
+
+
+# --- redirect URIs the stack chooses at run time --------------------------------------------------
+
+
+def test_extra_redirect_uris_are_added_to_every_client_and_validated() -> None:
+    extra = "http://127.0.0.1:58391/decisions/callback"
+    widened = oidc.with_extra_redirect_uris(CONFIG, [extra])
+    assert all(extra in client.redirect_uris for client in widened.clients.values())
+    # The configured ones are kept, and the originals are untouched.
+    assert APP_REDIRECT in widened.clients["app"].redirect_uris
+    assert widened.clients["app"].client_secret == APP_SECRET
+    assert extra not in CONFIG.clients["app"].redirect_uris
+
+    assert oidc.with_extra_redirect_uris(CONFIG, []) is CONFIG
+    # Added twice is added once.
+    assert list(oidc.with_extra_redirect_uris(CONFIG, [extra, extra]).clients["app"].redirect_uris).count(extra) == 1
+    with pytest.raises(oidc.ConfigError):
+        oidc.with_extra_redirect_uris(CONFIG, ["not-a-url"])
+
+
+def _raw_post(origin: str, body: bytes, headers: str) -> str:
+    """Send a request the HTTP client libraries will not send, and return the status line."""
+    parts = urlsplit(origin)
+    with socket.create_connection((parts.hostname or "127.0.0.1", parts.port or 80), timeout=10) as sock:
+        sock.sendall(
+            f"POST /token HTTP/1.1\r\nHost: {parts.netloc}\r\n"
+            f"Content-Type: application/x-www-form-urlencoded\r\n{headers}\r\n".encode()
+            + body
+        )
+        received = b""
+        while b"\r\n\r\n" not in received:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            received += chunk
+    return received.split(b"\r\n", 1)[0].decode()
+
+
+@pytest.mark.parametrize(
+    ("body", "headers"),
+    [
+        # A chunk size that is not hexadecimal.
+        (b"zz\r\ngrant_type=x\r\n0\r\n\r\n", "Transfer-Encoding: chunked\r\n"),
+        # A chunk not terminated by CRLF.
+        (b"0d\r\ngrant_type=xxx!!\r\n\r\n", "Transfer-Encoding: chunked\r\n"),
+        # A Content-Length that is not a number, and one past the limit.
+        (b"grant_type=authorization_code", "Content-Length: nine\r\n"),
+        (b"grant_type=authorization_code", f"Content-Length: {oidc.MAX_BODY_BYTES + 1}\r\n"),
+    ],
+)
+def test_an_unreadable_body_is_refused_rather_than_read_as_an_empty_form(
+    running: str, body: bytes, headers: str
+) -> None:
+    assert "400" in _raw_post(running, body, headers)
+
+
+def test_a_chunked_body_with_trailers_is_read(running: str) -> None:
+    status = _raw_post(
+        running,
+        b"1d\r\ngrant_type=client_credentials\r\n0\r\nX-Trailer: ignored\r\n\r\n",
+        "Transfer-Encoding: chunked\r\n",
+    )
+    # The form was read: the refusal is about the grant type, not a missing body.
+    assert "400" in status
+
+
+def test_the_logged_detail_of_a_refusal_ignores_anything_it_cannot_read() -> None:
+    refusal = Response.json(HTTPStatus.BAD_REQUEST, {"error": "invalid_grant", "error_description": "no", "x": 1})
+    assert oidc.oauth_error_detail(refusal) == {"error": "invalid_grant", "error_description": "no"}
+    assert oidc.oauth_error_detail(Response.json(HTTPStatus.OK, {"error": "not a refusal"})) == {}
+    assert oidc.oauth_error_detail(Response.html(HTTPStatus.BAD_REQUEST, "<p>error</p>")) == {}
+    assert oidc.oauth_error_detail(oidc.Response(400, b"\xff\xfe", "application/json")) == {}
+    assert oidc.oauth_error_detail(oidc.Response(400, b"[1, 2]", "application/json")) == {}
+
+
+def test_extra_redirect_uris_from_the_environment_reach_the_clients(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`main` widens the configured clients, so a callback whose port the stack picks still works."""
+    config = tmp_path / "approvers.json"
+    config.write_text(
+        json.dumps(
+            {
+                "users": [{"sub": "a", "email": "a@example.com", "name": "A"}],
+                "clients": [{"client_id": "c", "redirect_uris": ["http://127.0.0.1:58392/cb"]}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    extra = "http://127.0.0.1:58393/decisions/callback"
+    monkeypatch.setenv("AGENTICORG_ENV", "development")
+    monkeypatch.setenv("OIDC_STUB_CONFIG", str(config))
+    monkeypatch.setenv("OIDC_STUB_EXTRA_REDIRECT_URIS", f" {extra} , ")
+    built: list[OIDCStub] = []
+
+    def no_server(stub: OIDCStub, host: str, port: int) -> Any:
+        built.append(stub)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(stub_main, "make_server", no_server)
+    with pytest.raises(KeyboardInterrupt):
+        stub_main.main()
+    assert extra in built[0].config.clients["c"].redirect_uris
+    assert "http://127.0.0.1:58392/cb" in built[0].config.clients["c"].redirect_uris
