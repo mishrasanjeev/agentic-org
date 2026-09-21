@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 from collections.abc import AsyncGenerator
@@ -55,6 +56,57 @@ def _int_to_base64url(n: int) -> str:
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 
+def tenant_slug(tenant_id: str, prefix: str = "test-tenant") -> str:
+    """Return a tenant slug unique to ``tenant_id``.
+
+    ``tenants.slug`` is globally unique, so a fixed slug makes a second test
+    session against the same database fail at setup with a unique violation
+    even though every session mints a fresh tenant id. The whole id is used,
+    never a prefix of it: tests also use fixed ids that differ only in their
+    last characters. A value that is not a UUID is slugified whole rather than
+    rejected, so a caller can pass any identifier it already has.
+    """
+    try:
+        token = uuid.UUID(str(tenant_id)).hex
+    except (AttributeError, TypeError, ValueError):
+        token = re.sub(r"[^a-z0-9]+", "-", str(tenant_id).casefold()).strip("-") or "unidentified"
+    return f"{prefix}-{token}"
+
+
+# One definition of the seed statements, used by the async fixture and by the
+# synchronous seeding the token factory does.
+_TENANT_INSERT = (
+    "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
+    "VALUES (:id, :name, :slug, :plan, :region, :settings) "
+    "ON CONFLICT (id) DO NOTHING"
+)
+_USER_INSERT = (
+    "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
+    "VALUES (:id, :tenant_id, :email, :name, 'admin', 'active', false) "
+    "ON CONFLICT (tenant_id, email) DO NOTHING"
+)
+
+
+def tenant_row(tenant_id: str) -> dict[str, str]:
+    return {
+        "id": tenant_id,
+        "name": tenant_slug(tenant_id),
+        "slug": tenant_slug(tenant_id),
+        "plan": "enterprise",
+        "region": "IN",
+        "settings": "{}",
+    }
+
+
+def admin_user_row(tenant_id: str, user_id: str, email: str) -> dict[str, str]:
+    return {
+        "id": user_id,
+        "tenant_id": tenant_id,
+        "email": email,
+        "name": "Integration Admin",
+    }
+
+
 TEST_KID = "test-kid-001"
 TEST_JWKS = {
     "keys": [
@@ -105,6 +157,19 @@ def _make_jwt(
     if agent_id:
         claims["agenticorg:agent_id"] = agent_id
     return jwt.encode(claims, _private_pem, algorithm="RS256", headers={"kid": TEST_KID})
+
+
+async def seed_tenant_and_admin(conn, tenant_id: str, user_id: str, email: str) -> None:
+    """Seed one tenant and its admin user, idempotently and per run.
+
+    Every session mints fresh ids and every derived value (slug, name) comes
+    from the whole tenant id, so the same database can be used by any number
+    of runs.
+    """
+    from sqlalchemy import text as sa_text
+
+    await conn.execute(sa_text(_TENANT_INSERT), tenant_row(tenant_id))
+    await conn.execute(sa_text(_USER_INSERT), admin_user_row(tenant_id, user_id, email))
 
 
 # ---------------------------------------------------------------------------
@@ -221,28 +286,8 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         await conn.run_sync(ORMBase.metadata.create_all)
 
     # Seed the test tenant so FK constraints are satisfied (idempotent)
-    from sqlalchemy import text as sa_text
-
     async with test_engine.begin() as conn:
-        await conn.execute(sa_text(
-            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
-            "VALUES (:id, :name, :slug, :plan, :region, :settings) "
-            "ON CONFLICT (id) DO NOTHING"
-        ), {
-            "id": TEST_TENANT_ID, "name": "test-tenant",
-            "slug": "test-tenant", "plan": "enterprise",
-            "region": "IN", "settings": "{}",
-        })
-        await conn.execute(sa_text(
-            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
-            "VALUES (:id, :tenant_id, :email, :name, 'admin', 'active', false) "
-            "ON CONFLICT (tenant_id, email) DO NOTHING"
-        ), {
-            "id": TEST_USER_ID,
-            "tenant_id": TEST_TENANT_ID,
-            "email": TEST_USER_SUB,
-            "name": "Integration Admin",
-        })
+        await seed_tenant_and_admin(conn, TEST_TENANT_ID, TEST_USER_ID, TEST_USER_SUB)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -287,16 +332,8 @@ def _ensure_user_row(tenant_id: str, email: str) -> None:
         sync_url = DB_URL.replace("postgresql+asyncpg", "postgresql").replace("+asyncpg", "")
         _sync_seed_engine = create_engine(sync_url, poolclass=NullPool)
     with _sync_seed_engine.begin() as conn:
-        conn.execute(sa_text(
-            "INSERT INTO tenants (id, name, slug, plan, data_region, settings) "
-            "VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb) "
-            "ON CONFLICT (id) DO NOTHING"
-        ), {"id": tenant_id, "name": f"tenant-{tenant_id[:8]}", "slug": f"tenant-{tenant_id[:8]}"})
-        conn.execute(sa_text(
-            "INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled) "
-            "VALUES (:id, :tenant_id, :email, 'Integration Admin', 'admin', 'active', false) "
-            "ON CONFLICT (tenant_id, email) DO NOTHING"
-        ), {"id": str(uuid.uuid4()), "tenant_id": tenant_id, "email": email})
+        conn.execute(sa_text(_TENANT_INSERT), tenant_row(tenant_id))
+        conn.execute(sa_text(_USER_INSERT), admin_user_row(tenant_id, str(uuid.uuid4()), email))
 
 
 @pytest.fixture
