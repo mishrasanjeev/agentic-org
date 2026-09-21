@@ -133,6 +133,25 @@ async def test_the_newest_capture_of_a_reference_wins() -> None:
     assert second[0]["sha256"] == case_excerpts.digest("second")
 
 
+async def test_a_passage_without_a_resolved_key_is_refused_not_encrypted_with_the_legacy_one() -> None:
+    """``encrypt_with_kek("")`` falls back to the legacy key, so "no key" must not reach it.
+
+    The caller resolves the key only when there is something to store. If that guard and the list
+    handed to ``store`` ever disagreed, a customer-managed tenant's passage would be encrypted
+    under the deployment key and nothing would say so.
+    """
+    with pytest.raises(case_excerpts.ExcerptError) as refused:
+        await case_excerpts.store(None, [], [{"excerpt_ref": "e1", "text": "Ansel"}])
+    assert refused.value.reason == "excerpt_key_unresolved"
+
+
+async def test_no_key_is_needed_when_there_is_nothing_to_encrypt() -> None:
+    """The refusal is about storing a passage, not about being called."""
+    assert await case_excerpts.store(None, [], []) == []
+    kept = await case_excerpts.store(None, [{"excerpt_ref": "e1", "sha256": "x"}], [])
+    assert [entry["excerpt_ref"] for entry in kept] == ["e1"]
+
+
 async def test_storing_resolves_no_key_of_its_own() -> None:
     """``store`` runs under the case row lock: resolving a key there opens a second session."""
     from core.crypto import tenant_secrets

@@ -589,6 +589,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Storing a governed case's cited passages refuses a passage for which no
+  tenant key was resolved (`excerpt_key_unresolved`) instead of falling back to
+  the deployment's legacy key. Callers pass `None` for "not resolved"; `""`
+  remains the legacy key and encrypts as before.
+
 - Task code called outside a worker no longer runs on the Celery runner loop.
   `core.tasks.async_runner.run_async` kept one event loop per process, which is
   right in a worker — it is the only loop there — but an API process that
