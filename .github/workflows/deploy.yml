@@ -222,6 +222,14 @@ jobs:
         # The Celery worker's prefork pool depends on this, and a broken multiprocess export
         # reports the parent's own activity perfectly happily rather than failing.
         run: python scripts/probe_metrics_multiprocess.py
+      - name: Prove the alert gate catches a broken definition
+        # Mutates the definitions in each of the ways they have actually been broken, restores
+        # them, and fails if the gate missed one. The git check is belt and braces: the probe
+        # restores what it touched, and this proves it.
+        run: |
+          set -euo pipefail
+          python scripts/probe_alert_gate.py
+          git diff --exit-code
       - name: Check and unit-test the alert rules with promtool
         run: |
           set -euo pipefail
