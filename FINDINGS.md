@@ -748,3 +748,27 @@ Remove an entry in the pull request that fixes it.
   engine the test owns and disposes), lowering `cross_loop_baseline.txt` as
   they go, until it reaches 0 and the CI jobs can set
   `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.
+
+## A-59 — Unit tests reached an ambient Redis, and a cached grant hid a refusal
+
+- **Found:** chasing `tests/unit/test_run_grant_resolution.py` failing on its
+  own while passing in the full run (2026-09-22).
+- **What:** `auth/token_pool.py::TokenPool._redis_client` creates a Redis
+  client lazily when none was set — right in production, wrong in a test. On
+  any machine with Redis on `settings.redis_url` (a developer running the
+  development stack; any runner with the service up), a test that mints a run
+  grant wrote it to that **real** Redis, and the next test read it back:
+  `test_pool_refuses_to_mint_without_a_root_grant` and four siblings were
+  answered `source="pool_cache"` with `grant_id="grnt_placeholder"` and never
+  reached the code that raises `GrantMintError("minting_unconfigured")`. They
+  therefore reported DID NOT RAISE on a machine with Redis and passed on one
+  without, which is how a fail-closed assertion on the grant-minting path came
+  to depend on the environment. The cached tokens also outlived the run, so
+  one test run seeded the next.
+- **Fix:** an autouse fixture in `tests/conftest.py` now pins
+  `TokenPool._redis_client` to whatever the test set on `pool.redis` outside
+  `tests/integration/`, so a unit test cannot reach an ambient Redis at all;
+  the one test that is about the lazy client carries `@pytest.mark.ambient_redis`.
+  Fixed here; recorded because the same shape — a product fallback that is
+  correct in production and ambient in a test — is worth looking for elsewhere
+  (`core/cdc/receiver.py` and `core/feature_flags.py` have similar fallbacks).
