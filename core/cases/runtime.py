@@ -45,6 +45,25 @@ _PLACEHOLDER = re.compile(r"^\$([a-z][a-z0-9_]*)$")
 SessionFactory = Callable[[uuid.UUID], AbstractAsyncContextManager[AsyncSession]]
 
 
+def _default_decision_service() -> Any:
+    """The configured decision-grant service, or ``None`` when decisions cannot be requested."""
+    from core.cases.decision_requests import DecisionServiceError, decision_service
+
+    try:
+        return decision_service()
+    except DecisionServiceError as exc:
+        logger.error("case_decision_service_unavailable", reason=exc.reason, detail=exc.detail)
+        return None
+
+
+def _default_decision_verifier() -> DecisionVerifier:
+    """Verify decisions against the configured service; refuse everything when there is none."""
+    from core.cases.decision_requests import ServiceDecisionVerifier
+
+    service = _default_decision_service()
+    return ServiceDecisionVerifier(service) if service is not None else RequireDecisionGrant()
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -92,7 +111,9 @@ class CaseRuntime:
     session_factory: SessionFactory = _default_session_factory
     flag: Callable[[uuid.UUID], Awaitable[bool]] = _default_flag
     authorizer_factory: Callable[[str, str], ToolAuthorizer | None] = lambda tenant_id, case_ref: None
-    decision_verifier: DecisionVerifier = field(default_factory=RequireDecisionGrant)
+    decision_verifier: DecisionVerifier = field(default_factory=_default_decision_verifier)
+    #: Returns the decision-grant service the decision-request routes use, or ``None``.
+    decision_service: Callable[[], Any] = _default_decision_service
     clock: Callable[[], datetime] = _utc_now
     llm_model: str = field(default_factory=lambda: _settings().case_llm_model)
     pseudonym_store: Any = None
@@ -128,6 +149,38 @@ def _tenant(tenant_id: str | uuid.UUID) -> uuid.UUID:
         return tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
     except ValueError as exc:
         raise CaseError("tenant_invalid", status=401) from exc
+
+
+async def announce_case_version(runtime: CaseRuntime, case_ref: str, version: int, *, only_if: bool) -> None:
+    """Tell the decision-grant issuer that a case moved on, so it supersedes what is now stale.
+
+    Best effort and never fatal: AgenticOrg already refuses a decision whose grants were minted
+    for another version, so this is the issuer's own protection on top - it revokes grants that
+    can no longer be used instead of leaving them live until they expire.
+    """
+    if not only_if:
+        return
+    try:
+        service = runtime.decision_service()
+        if service is None:
+            return
+        await service.set_case_version(case_ref, str(version))
+    # enterprise-gate: broad-except-ok reason=issuer-bookkeeping-never-fails-a-case-change
+    except Exception as exc:
+        logger.warning("case_version_announce_failed", case_ref=case_ref, error=type(exc).__name__)
+
+
+async def _cap_idle_in_transaction(session: AsyncSession, seconds: int = 15) -> None:
+    """Postgres only, and never fatal: a cap that cannot be set is logged, not raised."""
+    from sqlalchemy import text
+
+    if session.bind is None or session.bind.dialect.name != "postgresql":
+        return
+    try:
+        await session.execute(text(f"SET LOCAL idle_in_transaction_session_timeout = '{seconds}s'"))
+    # enterprise-gate: broad-except-ok reason=timeout-cap-is-best-effort-and-never-fails-the-decision
+    except Exception as exc:
+        logger.warning("case_idle_timeout_cap_failed", error=type(exc).__name__)
 
 
 def _run_id(tenant: uuid.UUID, case_ref: str, kind: str) -> str:
@@ -350,6 +403,8 @@ async def dispose_screening_hits(
         case.agent_records = [*(case.agent_records or []), *records]
         case.excerpts = _merged_excerpts(case.excerpts, excerpts)
         await record_update(session, case, now=runtime.clock())
+        version, had_requests = case.version, bool(case.decision_requests)
+    await announce_case_version(runtime, case_ref, version, only_if=had_requests)
     runtime.push_kick(tenant)
     return {
         "case_ref": case_ref,
@@ -365,6 +420,9 @@ async def decide_case(
     tenant = _tenant(tenant_id)
     await runtime.require_enabled(tenant)
     async with runtime.session_factory(tenant) as session:
+        # The decision grants are consumed at their issuer while this transaction holds the case
+        # row, so bound how long the row can stay locked if the issuer stalls.
+        await _cap_idle_in_transaction(session)
         case = await get_case(session, tenant, case_ref, for_update=True)
         await record_decision(
             session,

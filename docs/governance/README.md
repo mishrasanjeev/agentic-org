@@ -85,7 +85,13 @@ A case moves to `decided` only through `core.cases.decisions.record_decision`, a
 {"case_id": "case_…", "action": "case_decision", "decision": "approve", "subject": "acme_kyb:…"}
 ```
 
-Until decision grants (PRD G-3) are wired in, the shipped verifier refuses every decision with
+The approval itself never happens here. AgenticOrg asks the Grantex auth service for a *decision
+request* and sends the approver to that service's own approval page, where they sign in, step up,
+read the memo and the policy score, and approve; the service measures how long they looked and
+mints the decision grants. AgenticOrg then consumes those grants for the same action and the case's
+current version. See [decision requests](decision-requests.md).
+
+With no decision service configured (the default), the shipped verifier refuses every decision with
 `decision_required`. That is deliberate: a decision nobody can prove a human made is not recorded.
 The workflow's `human_in_loop` step, the console and `POST /api/v1/governed-cases/{case_ref}/decision`
 all end at the same check.
@@ -124,6 +130,7 @@ package (PRD G-5).
 ## Reading on
 
 - [Case lifecycle](case-lifecycle.md) — states, transitions, workflows, API
+- [Decision requests](decision-requests.md) — how a person approves a case, and what is recorded
 - [Case hand-off](case-hand-off.md) — signed push, REST retrieval, dead letters, provider webhooks
 - [Business Onboarding Underwriter](../agents/business-underwriter.md)
 - [Screening Disposition](../agents/screening-disposition.md)

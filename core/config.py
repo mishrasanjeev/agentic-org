@@ -133,6 +133,16 @@ class Settings(BaseSettings):
     case_policy_dir: str = ""
     # Model the reference agents use for prose (memo summaries, rationales).
     case_llm_model: str = ""
+    # Decision grants for governed cases (PRD G-3): "" (off) or "grantex". Off by
+    # default, and the case decision route then keeps refusing with
+    # decision_required. The human approval always happens on the Grantex auth
+    # service's own approval page, never in this console.
+    case_decision_service: str = ""
+    # Connector name the decision request is made under at the issuer.
+    case_decision_connector: str = "governed_cases"
+    # Decisions that need two different approvers (comma separated, from the
+    # tool manifest's four_eyes_on).
+    case_decision_four_eyes_on: str = "decline"
     # Periodic delivery sweep for the case push outbox (core/tasks/case_push_tasks.py).
     case_push_sweep_enabled: bool = False
     jwt_public_key_url: str = ""

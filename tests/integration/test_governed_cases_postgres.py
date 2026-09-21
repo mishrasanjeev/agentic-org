@@ -696,3 +696,233 @@ async def test_the_case_holds_the_passage_behind_every_citation_and_serves_it(
         assert missing.status_code == 404 and missing.json()["error"]["reason"] == "excerpt_not_found"
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+# --- decision requests (PRD G-3) --------------------------------------------------------------------
+
+
+def _decision_runtime(fake: Any) -> CaseRuntime:
+    """A runtime whose decisions go through a decision service, as production does with Grantex."""
+    from core.cases.decision_requests import ServiceDecisionVerifier
+
+    return _runtime(decision_service=lambda: fake, decision_verifier=ServiceDecisionVerifier(fake))
+
+
+async def test_case_api_decision_request_reaches_the_approval_page_and_four_eyes_decides(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    """A decline needs two different approvers, and neither approval happens in this console."""
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from core.cases.decision_requests import DecisionServiceError
+    from core.test_doubles.fake_decision_grants import FakeDecisionGrantService
+
+    scripted_model([_respond])
+    fake = FakeDecisionGrantService()
+    runtime = _decision_runtime(fake)
+    app.dependency_overrides[routes.get_case_runtime] = lambda: runtime
+    try:
+        application = MockProvider().fixture("us-clean-hollowbrook").application
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        assert (
+            await client.post(f"/api/v1/governed-cases/{case_ref}/investigate", headers=auth_headers)
+        ).status_code == 202
+
+        requested = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests",
+            json={"outcome": "decline", "override_reason": "The applicant withdrew.", "client_dwell_ms": 45_000},
+            headers=auth_headers,
+        )
+        assert requested.status_code == 201, requested.text
+        request_body = requested.json()
+        request_id = request_body["request_id"]
+        # Four eyes on a decline, and the approval happens only on the issuer's page.
+        assert request_body["approvals_required"] == 2
+        assert request_body["approval_page"].endswith(f"/decisions/{request_id}")
+        assert request_body["status"] == "pending" and request_body["grants_ready"] is False
+        assert request_body["requested_by"].startswith("user:")
+        assert request_body["override_reason"] == "The applicant withdrew."
+
+        # The request is bound to the case version and to this exact action.
+        assert request_body["action"]["decision"] == "decline"
+        assert request_body["case_version"] == request_body["case_version"]
+
+        not_yet = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert not_yet.status_code == 409 and not_yet.json()["error"]["reason"] == "decision_not_approved"
+
+        # First approver: the issuer measured the dwell, not this console.
+        fake.approve(request_id, "user:9f:approver-a", dwell_ms=61_250)
+        status = (
+            await client.get(f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers)
+        ).json()
+        assert status["approvals_received"] == 1 and status["grants_ready"] is False
+        assert status["approvals"][0]["dwell_source"] == "server" and status["approvals"][0]["dwell_ms"] == 61_250
+        assert status["case_changed"] is False
+
+        # The second approver cannot be the first.
+        with pytest.raises(DecisionServiceError) as same:
+            fake.approve(request_id, "user:9f:approver-a")
+        assert same.value.detail == "same_approver"
+
+        fake.approve(request_id, "user:9f:approver-b", dwell_ms=30_000)
+        approved = await client.get(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers
+        )
+        status = approved.json()
+        assert status["status"] == "approved" and status["grants_ready"] is True
+        assert [a["approver"] for a in status["approvals"]] == ["user:9f:approver-a", "user:9f:approver-b"]
+        # The status answer is the one that could carry grants, and it must not: the tokens stay
+        # on the server and only their ids are ever recorded.
+        tokens = await fake.grants(request_id)
+        assert tokens and all(token not in approved.text for token in tokens)
+        assert "decision_grants" not in approved.text and "decisionGrants" not in approved.text
+
+        # A decision without grants is still refused, and the request cannot decide another outcome.
+        bare = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision", json={"outcome": "decline"}, headers=auth_headers
+        )
+        assert bare.status_code == 403 and bare.json()["error"]["reason"] == "decision_required"
+        mismatched = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "approve", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert mismatched.status_code == 409 and mismatched.json()["error"]["reason"] == "decision_outcome_mismatch"
+
+        decided = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id, "client_dwell_ms": 120_000},
+            headers=auth_headers,
+        )
+        assert decided.status_code == 200, decided.text
+        assert decided.json()["state"] == "decided"
+
+        fetched = await client.get(f"/api/v1/governed-cases/{case_ref}", headers=auth_headers)
+        detail = fetched.json()
+        approvers = [a["approver"] for a in detail["decision"]["approvers"]]
+        assert approvers == ["user:9f:approver-a", "user:9f:approver-b"]
+        # The case records the grant ids, never the tokens themselves.
+        assert [a["decision_grant_id"] for a in detail["decision"]["approvers"]] == [
+            f"jti-{request_id}-1",
+            f"jti-{request_id}-2",
+        ]
+        assert all(token not in fetched.text for token in tokens)
+        assert detail["case"]["state"] == "decided"
+        assert [r["request_id"] for r in detail["decision_requests"]] == [request_id]
+
+        # The grants are spent: the same request cannot decide the case twice.
+        again = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert again.status_code in (403, 409)
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_a_case_that_changes_after_the_request_can_no_longer_be_decided_on_it(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from core.test_doubles.fake_decision_grants import FakeDecisionGrantService
+    from tests.integration.conftest import TEST_TENANT_ID
+
+    scripted_model([_respond, _respond])
+    fake = FakeDecisionGrantService()
+    runtime = _decision_runtime(fake)
+    app.dependency_overrides[routes.get_case_runtime] = lambda: runtime
+    try:
+        application = MockProvider().fixture("gb-missing-owner-marlpit").application
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        assert (
+            await client.post(f"/api/v1/governed-cases/{case_ref}/investigate", headers=auth_headers)
+        ).status_code == 202
+        await dispose_screening_hits(TEST_TENANT_ID, case_ref, runtime=runtime, actor="user:analyst")
+
+        requested = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests", json={"outcome": "approve"}, headers=auth_headers
+        )
+        assert requested.status_code == 201, requested.text
+        request_id = requested.json()["request_id"]
+        assert requested.json()["approvals_required"] == 1
+        fake.approve(request_id, "user:9f:approver-a")
+
+        # An analyst reviews a disposition: the case has materially changed.
+        detail = (await client.get(f"/api/v1/governed-cases/{case_ref}", headers=auth_headers)).json()
+        hit_id = detail["screening_dispositions"][0]["hit_id"]
+        reviewed = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review",
+            json={"action": "accepted", "final_outcome": detail["screening_dispositions"][0]["proposed_outcome"]},
+            headers=auth_headers,
+        )
+        assert reviewed.status_code == 200, reviewed.text
+
+        status = (
+            await client.get(f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers)
+        ).json()
+        assert status["case_changed"] is True
+        # The issuer heard about the new version and superseded its own request as well.
+        assert status["status"] == "superseded" and status["grants_ready"] is False
+        assert status["approval_page"].endswith(f"/decisions/{request_id}")
+
+        refused = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "approve", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert refused.status_code == 409 and refused.json()["error"]["reason"] == "case_changed"
+        case, _ = await _load(TEST_TENANT_ID, case_ref)
+        assert case.state == "awaiting_decision" and case.decision is None
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_decision_requests_are_refused_without_a_configured_issuer_and_outside_awaiting_decision(
+    client: Any, auth_headers: dict[str, str]
+) -> None:
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from core.test_doubles.fake_decision_grants import FakeDecisionGrantService
+
+    application = MockProvider().fixture("us-clean-hollowbrook").application
+
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _runtime(decision_service=lambda: None)
+    try:
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        # Not investigated yet: no memo to approve against, and no issuer either.
+        refused = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests", json={"outcome": "approve"}, headers=auth_headers
+        )
+        assert refused.status_code == 503
+        assert refused.json()["error"]["reason"] == "decision_service_not_configured"
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+    fake = FakeDecisionGrantService()
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _decision_runtime(fake)
+    try:
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        early = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests", json={"outcome": "approve"}, headers=auth_headers
+        )
+        assert early.status_code == 409 and early.json()["error"]["reason"] == "transition_not_allowed"
+        unknown = await client.get(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests/dr_99999999", headers=auth_headers
+        )
+        assert unknown.status_code == 404 and unknown.json()["error"]["reason"] == "decision_request_not_found"
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)

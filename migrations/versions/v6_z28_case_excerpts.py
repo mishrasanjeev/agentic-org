@@ -2,7 +2,7 @@
 """The passage behind every excerpt a governed case's documents cite.
 
 Revision ID: v6z28_case_excerpts
-Revises: v6z26_case_push
+Revises: v6z27_case_decisions
 Create Date: 2026-09-21
 
 PRD A-6 attaches cited excerpts to the memo for the human reviewer. The memo carries them by
@@ -20,7 +20,7 @@ from alembic import op
 from sqlalchemy import text
 
 revision = "v6z28_case_excerpts"
-down_revision = "v6z26_case_push"
+down_revision = "v6z27_case_decisions"
 branch_labels = None
 depends_on = None
 

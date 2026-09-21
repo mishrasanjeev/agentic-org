@@ -8,8 +8,8 @@ submitted it, who reviewed a disposition, who approved an information request) a
 the authenticated session, never from the request body, and they say what kind of credential
 acted: ``user:``, ``api_key:`` or ``agent:`` (:func:`actor_for`).
 
-The actions a person is accountable for - deciding, withdrawing, reviewing a screening
-disposition and approving an information request - additionally need a human session
+The actions a person is accountable for - deciding, withdrawing, asking for a decision, reviewing
+a screening disposition and approving an information request - additionally need a human session
 (:func:`human_actor_for`): an API key or an agent token is refused with 403
 ``human_session_required``, because RBAC scope families are not applied to agent tokens and an
 API key's scopes say nothing about who is behind it.
@@ -33,7 +33,13 @@ from api.deps import get_current_tenant, get_current_user
 from api.route_metadata import route_meta
 from core.agents.business_underwriter.information_request import InformationRequestError, propose, render
 from core.agents.screening_disposition import DispositionReviewError, DispositionReviewRequest, apply_review
-from core.cases.runtime import CaseRuntime, decide_case, default_policy_id, investigate_case
+from core.cases.runtime import (
+    CaseRuntime,
+    announce_case_version,
+    decide_case,
+    default_policy_id,
+    investigate_case,
+)
 from core.cases.states import CaseError, CaseState
 from core.cases.store import (
     business_case_document,
@@ -134,6 +140,21 @@ class DecisionRequest(BaseModel):
 
     outcome: Literal["approve", "decline"]
     decision_grants: Annotated[list[Annotated[str, Field(min_length=1, max_length=8192)]], Field(max_length=2)] = []
+    #: Record the decision with the grants of this request; the server fetches them from the
+    #: issuer, so a decision grant never reaches the browser.
+    decision_request_id: str | None = Field(default=None, max_length=128, pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    #: Advisory only: milliseconds from the case screen rendering to this submission. The
+    #: authoritative dwell is the one the approval page measured (``dwell_source: server``).
+    client_dwell_ms: int | None = Field(default=None, ge=0, le=86_400_000)
+
+
+class NewDecisionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: Literal["approve", "decline"]
+    #: Why a decision other than the memo's recommendation is being asked for; shown to the approver.
+    override_reason: str = Field(default="", max_length=4000)
+    client_dwell_ms: int | None = Field(default=None, ge=0, le=86_400_000)
 
 
 class InformationRequestProposal(BaseModel):
@@ -248,6 +269,8 @@ async def get_governed_case(
                     {key: value for key, value in dict(excerpt).items() if key != "text"}
                     for excerpt in case.excerpts or []
                 ],
+                "decision_requests": case.decision_requests,
+                "decision": case.decision,
                 "failure_reason": case.failure_reason,
                 "transitions": [
                     {
@@ -392,6 +415,157 @@ async def withdraw_case(
         return _error(exc)
 
 
+def _stored_request(case: Any, request_id: str) -> dict[str, Any]:
+    """The case's own record of a decision request, so no other case's request can be read."""
+    for record in case.decision_requests or []:
+        if record.get("request_id") == request_id:
+            return dict(record)
+    raise CaseError("decision_request_not_found", status=404)
+
+
+def _decision_service(runtime: CaseRuntime) -> Any:
+    service = runtime.decision_service()
+    if service is None:
+        raise CaseError("decision_service_not_configured", "no decision-grant issuer is configured", status=503)
+    return service
+
+
+def _record_console_dwell(stage: str, dwell_ms: int | None, case_ref: str) -> None:
+    """Advisory telemetry only: the authoritative dwell is measured by the approval page."""
+    if dwell_ms is None:
+        return
+    from core.cases.decision_requests import console_dwell_seconds
+
+    console_dwell_seconds.labels(stage=stage).observe(dwell_ms / 1000)
+    logger.info("case_console_dwell", case_ref=case_ref, stage=stage, dwell_ms=dwell_ms, dwell_source="console")
+
+
+@router.post("/governed-cases/{case_ref}/decision-requests", status_code=201)
+@route_meta(
+    auth_required=True, tenant_required=True, scope="approvals.governed_cases.write", rate_limit="standard",
+    idempotency="issuer-returns-the-open-request-for-the-same-action", audit_event="governed_cases.decision_requested",
+)  # fmt: skip
+async def request_case_decision(
+    case_ref: str,
+    body: NewDecisionRequest,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """Ask a named person to decide this case on the issuer's own approval page.
+
+    The console never collects the approval: the answer carries the approval page's URL, and the
+    approver signs in there, steps up, reads the memo and the policy score and approves. This route
+    only creates the request and records it on the case.
+    """
+    from core.cases.decision_requests import (
+        DecisionServiceError,
+        case_action,
+        decision_requests_total,
+        four_eyes_on,
+        policy_score_for_approval,
+        render_memo_for_approval,
+    )
+
+    try:
+        actor = human_actor_for(request)
+        await runtime.require_enabled(uuid.UUID(tenant_id))
+        service = _decision_service(runtime)
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref)
+            if case.state != CaseState.AWAITING_DECISION:
+                raise CaseError("transition_not_allowed", f"a decision needs awaiting_decision, case is {case.state}")
+            if not case.memo or not case.policy_result:
+                raise CaseError("memo_not_ready", "the case has no memo and policy result to approve against")
+            action = case_action(case, body.outcome)
+            case_version = str(case.version)
+            memo_id = str((case.memo or {}).get("memo_id", ""))
+            memo_text = render_memo_for_approval(case, body.outcome, body.override_reason.strip())
+            policy_score = policy_score_for_approval(case)
+
+        # The issuer is called with no database session and no row lock held.
+        try:
+            view = await service.create_request(
+                action=action,
+                case_version=case_version,
+                memo=memo_text,
+                policy_score=policy_score,
+                four_eyes_on=four_eyes_on(),
+                memo_ref=f"{case_ref}:memo:{memo_id}",
+                policy_score_ref=f"{case_ref}:policy:{policy_score.get('inputs_digest', '')}",
+            )
+        except DecisionServiceError as exc:
+            decision_requests_total.labels(outcome=body.outcome, result="refused").inc()
+            raise CaseError(exc.reason, exc.detail, status=exc.status) from exc
+
+        record = {
+            "request_id": view.request_id,
+            "outcome": body.outcome,
+            "case_version": case_version,
+            "approval_page": view.approval_page,
+            "approvals_required": view.approvals_required,
+            "action_hash": view.action_hash,
+            "override_reason": body.override_reason.strip() or None,
+            "requested_by": actor,
+            "requested_at": runtime.clock().isoformat(),
+            "console_dwell_ms": body.client_dwell_ms,
+        }
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref, for_update=True)
+            if str(case.version) != case_version:
+                # The case changed while the request was being created, and the issuer bound the
+                # request to the old version, so it can never be consumed. Say so.
+                raise CaseError("case_version_conflict", f"expected {case_version}, found {case.version}")
+            existing = [r for r in case.decision_requests or [] if r.get("request_id") != view.request_id]
+            # Recording the request must not bump the case version: the request is bound to it.
+            case.decision_requests = [*existing, record]
+        decision_requests_total.labels(outcome=body.outcome, result="created").inc()
+        _record_console_dwell("request", body.client_dwell_ms, case_ref)
+        logger.info(
+            "case_decision_requested", case_ref=case_ref, outcome=body.outcome,
+            approvals_required=view.approvals_required,
+        )  # fmt: skip
+        return JSONResponse(status_code=201, content={**view.as_dict(), **record})
+    except CaseError as exc:
+        return _error(exc)
+
+
+@router.get("/governed-cases/{case_ref}/decision-requests/{request_id}")
+@route_meta(auth_required=True, tenant_required=True, scope="approvals.governed_cases.read", rate_limit="standard")
+async def get_case_decision_request(
+    case_ref: str,
+    request_id: str,
+    tenant_id: str = Depends(get_current_tenant),
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """Live status of one decision request: who approved, the dwell the issuer measured, what is left."""
+    from core.cases.decision_requests import DecisionServiceError
+
+    try:
+        await runtime.require_enabled(uuid.UUID(tenant_id))
+        service = _decision_service(runtime)
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref)
+            record = _stored_request(case, request_id)
+            case_version = str(case.version)
+        try:
+            view = await service.get_request(request_id)
+        except DecisionServiceError as exc:
+            raise CaseError(exc.reason, exc.detail, status=exc.status) from exc
+        return {
+            **view.as_dict(),
+            **record,
+            # The issuer returns the approval page only when it creates the request, so the case's
+            # own record is the source here. Stated explicitly: this must not depend on key order.
+            "approval_page": view.approval_page or str(record.get("approval_page") or ""),
+            "case_version_now": case_version,
+            # A case that changed since the request can no longer be decided on it.
+            "case_changed": record.get("case_version") != case_version,
+        }
+    except CaseError as exc:
+        return _error(exc)
+
+
 @router.post("/governed-cases/{case_ref}/decision")
 @route_meta(
     auth_required=True, tenant_required=True, scope="approvals.governed_cases.write", rate_limit="standard",
@@ -404,16 +578,36 @@ async def decide_governed_case(
     tenant_id: str = Depends(get_current_tenant),
     runtime: CaseRuntime = Depends(get_case_runtime),
 ) -> Any:
+    from core.cases.decision_requests import DecisionServiceError
+
     try:
         actor = human_actor_for(request)
-        return await decide_case(
-            tenant_id,
-            case_ref,
-            runtime=runtime,
-            actor=actor,
-            outcome=body.outcome,
-            grants=list(body.decision_grants),
-        )
+        grants = list(body.decision_grants)
+        if body.decision_request_id:
+            service = _decision_service(runtime)
+            async with _session(tenant_id) as session:
+                case = await get_case(session, tenant_id, case_ref)
+                record = _stored_request(case, body.decision_request_id)
+            if record.get("outcome") != body.outcome:
+                raise CaseError("decision_outcome_mismatch", "the request was made for another outcome", status=409)
+            if str(record.get("case_version")) != str(case.version):
+                # The case moved on since the request. The issuer has superseded it and revoked
+                # any unused grants; say which it is rather than "no usable grants yet".
+                raise CaseError(
+                    "case_changed", f"the request was made for version {record.get('case_version')}", status=409
+                )
+            try:
+                # The grants stay on the server: a decision grant never reaches the browser.
+                grants = await service.grants(body.decision_request_id)
+            except DecisionServiceError as exc:
+                raise CaseError(exc.reason, exc.detail, status=exc.status) from exc
+            if not grants:
+                raise CaseError("decision_not_approved", "the decision request has no usable grants yet", status=409)
+        result = await decide_case(
+            tenant_id, case_ref, runtime=runtime, actor=actor, outcome=body.outcome, grants=grants,
+        )  # fmt: skip
+        _record_console_dwell("record", body.client_dwell_ms, case_ref)
+        return result
     except CaseError as exc:
         return _error(exc)
 
@@ -451,6 +645,8 @@ async def review_screening_disposition(
             case.screening_dispositions = dispositions
             await record_update(session, case, now=runtime.clock())
             result = dispositions[index]
+            version, had_requests = case.version, bool(case.decision_requests)
+        await announce_case_version(runtime, case_ref, version, only_if=had_requests)
         runtime.push_kick(uuid.UUID(tenant_id))
         return result
     except CaseError as exc:
@@ -527,6 +723,8 @@ async def approve_information_request(
             case.information_requests = requests
             await record_update(session, case, now=runtime.clock())
             result = requests[index]
+            version, had_requests = case.version, bool(case.decision_requests)
+        await announce_case_version(runtime, case_ref, version, only_if=had_requests)
         runtime.push_kick(uuid.UUID(tenant_id))
         return result
     except CaseError as exc:

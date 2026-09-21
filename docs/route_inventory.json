@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 197,
+    "source_line": 218,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 166,
+    "source_line": 187,
     "tenant_required": true
   },
   {
@@ -4262,7 +4262,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 214,
+    "source_line": 235,
     "tenant_required": true
   },
   {
@@ -4280,7 +4280,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 227,
+    "source_line": 248,
     "tenant_required": true
   },
   {
@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 317,
+    "source_line": 285,
     "tenant_required": true
   },
   {
@@ -4316,25 +4316,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 400,
+    "source_line": 519,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.decision_requested",
+    "auth_required": true,
+    "function": "request_case_decision",
+    "idempotency": "issuer-returns-the-open-request-for-the-same-action",
+    "key": "POST /api/v1/governed-cases/{case_ref}/decision-requests api/v1/governed_cases.py:request_case_decision",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/decision-requests",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 393,
     "tenant_required": true
   },
   {
     "audit_event": null,
     "auth_required": true,
-    "function": "get_case_excerpt",
+    "function": "get_case_decision_request",
     "idempotency": null,
-    "key": "GET /api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref} api/v1/governed_cases.py:get_case_excerpt",
+    "key": "GET /api/v1/governed-cases/{case_ref}/decision-requests/{request_id} api/v1/governed_cases.py:get_case_decision_request",
     "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/governed_cases.py",
-    "path": "/api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref}",
+    "path": "/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}",
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 291,
+    "source_line": 480,
     "tenant_required": true
   },
   {
@@ -4352,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 465,
+    "source_line": 606,
     "tenant_required": true
   },
   {
@@ -4370,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 496,
+    "source_line": 637,
     "tenant_required": true
   },
   {
@@ -4388,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 342,
+    "source_line": 310,
     "tenant_required": true
   },
   {
@@ -4442,7 +4460,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 426,
+    "source_line": 565,
     "tenant_required": true
   },
   {
@@ -4460,7 +4478,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 376,
+    "source_line": 344,
     "tenant_required": true
   },
   {
