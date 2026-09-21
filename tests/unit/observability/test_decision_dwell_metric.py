@@ -66,13 +66,15 @@ def test_a_dwell_the_issuer_did_not_measure_is_not_recorded_as_authoritative() -
     record_decision_dwell(_view(_approval(1, 900, "client")))
 
     assert _count("server", "first") == before
-    assert _count("client", "first") >= 1
+    # Bounded: whatever the issuer calls it, it lands under "other". A label a remote system
+    # chooses is cardinality a remote system chooses.
+    assert _count("other", "first") >= 1
 
 
 def test_an_approval_with_no_dwell_at_all_records_nothing() -> None:
     """A missing measurement must not become a zero: zero is the alarming value."""
-    before = _count("unknown", "first")
+    before = _count("other", "first")
 
     record_decision_dwell(_view(_approval(1, None, "")))
 
-    assert _count("unknown", "first") == before
+    assert _count("other", "first") == before

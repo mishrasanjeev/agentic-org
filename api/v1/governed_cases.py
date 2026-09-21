@@ -476,13 +476,22 @@ async def _record_authoritative_dwell(runtime: CaseRuntime, request_id: str, cas
     an issuer that cannot answer here costs a data point and nothing else. It is never allowed to
     turn a recorded decision into an error.
     """
-    from core.cases.decision_requests import DecisionServiceError, record_decision_dwell
+    from core.cases.decision_requests import record_decision_dwell
 
     try:
         service = _decision_service(runtime)
         record_decision_dwell(await service.get_request(request_id), case_ref)
-    except (CaseError, DecisionServiceError) as exc:
-        logger.warning("case_decision_dwell_unavailable", case_ref=case_ref, reason=getattr(exc, "reason", ""))
+    # enterprise-gate: broad-except-ok reason=post-decision-telemetry-never-fails-a-recorded-decision
+    except Exception as exc:
+        # The decision is already recorded and the grants already consumed. Anything that happens
+        # here - a refusal, a timeout, a response shape nobody expected - costs a data point. A
+        # narrower except would let the next unexpected error turn a decision that succeeded into
+        # a 500 for the analyst who took it.
+        logger.warning(
+            "case_decision_dwell_unavailable",
+            case_ref=case_ref,
+            reason=getattr(exc, "reason", "") or type(exc).__name__,
+        )
 
 
 def _record_console_dwell(stage: str, dwell_ms: int | None, case_ref: str) -> None:

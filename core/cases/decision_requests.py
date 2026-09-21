@@ -586,6 +586,20 @@ class ServiceDecisionVerifier:
         return DecisionCheck(allowed=True, approvers=consumed.approvers)
 
 
+#: The only dwell source an alert may read: the issuer measured it on its own approval page.
+AUTHORITATIVE_DWELL_SOURCE = "server"
+
+
+def _dwell_source(reported: str) -> str:
+    """Bound the label: the issuer's value is free text, and a metric label is not.
+
+    Anything that is not the authoritative source becomes ``other``. What matters on a dashboard
+    is "the issuer measured this" against "it did not"; keeping every value the issuer might send
+    would let a remote system decide this metric's cardinality.
+    """
+    return AUTHORITATIVE_DWELL_SOURCE if reported == AUTHORITATIVE_DWELL_SOURCE else "other"
+
+
 def _approval_stage(position: int) -> str:
     """Low-cardinality position label: an approval is the first, the second, or a later one."""
     return {1: "first", 2: "second"}.get(position, "later")
@@ -599,15 +613,17 @@ def record_decision_dwell(view: DecisionRequestView, case_ref: str = "") -> None
     not a constraint on anyone determined to rubber-stamp; this one is measured by the approval
     page, under the issuer's control, and is what the rubber-stamping alert reads.
 
-    An approval whose dwell the issuer did not measure is recorded under its own ``dwell_source``
+    An approval whose dwell the issuer did not measure is recorded under ``dwell_source="other"``
     rather than dropped or counted as zero: a series that quietly stops arriving and a dwell that
-    collapses to nothing must not look the same on a dashboard.
+    collapses to nothing must not look the same on a dashboard. The label is mapped rather than
+    passed through, because the value comes from a remote system, and a label a remote system
+    chooses is cardinality a remote system chooses.
     """
     for approval in view.approvals:
         if approval.dwell_ms is None:
             continue
         decision_dwell_seconds.labels(
-            dwell_source=approval.dwell_source or "unknown",
+            dwell_source=_dwell_source(approval.dwell_source),
             approval_stage=_approval_stage(approval.position),
         ).observe(approval.dwell_ms / 1000)
     logger.info(
@@ -615,7 +631,7 @@ def record_decision_dwell(view: DecisionRequestView, case_ref: str = "") -> None
         case_ref=case_ref,
         request_id=view.request_id,
         approvals=len(view.approvals),
-        sources=sorted({a.dwell_source or "unknown" for a in view.approvals}),
+        sources=sorted({a.dwell_source or "unreported" for a in view.approvals}),
     )
 
 

@@ -5,12 +5,13 @@ Every service in this deployment (the API, the Celery worker, the beat scheduler
 Prometheus instruments, and until now nothing read them: the counters lived and died inside a
 container (FINDINGS A-56). This module is the read path.
 
-**Why a second port and not a route.** The endpoint is served on ``METRICS_PORT``, which the Cloud
-Run service does not route: only ``$PORT`` is reachable from outside the instance. A collector that
-runs in the same instance reaches it over the loopback interface, so there is no external surface
-to authenticate and no credential to rotate or leak. Serving it on the application port would mean
-an unauthenticated route (one careless entry in the middleware's public-path list away from being
-public) or an IAM dance for a page that never needs to leave the machine. Refusing to start when
+**Why a second port and not a route.** The endpoint is served on ``METRICS_PORT``, bound to
+loopback. A collector that runs in the same instance - a Cloud Run sidecar shares the network
+namespace - reaches it over ``127.0.0.1``; nothing outside the instance can, whatever the platform
+routes. So there is no external surface to authenticate and no credential to rotate or leak.
+Serving it on the application port would mean an unauthenticated route (one careless entry in
+the middleware's public-path list away from being public) or an IAM dance for a page that never
+needs to leave the machine. Refusing to start when
 ``METRICS_PORT`` equals ``PORT`` keeps that property from being lost by a misconfiguration.
 
 **Why per instance and not aggregated here.** Instances come and go with autoscaling. Each one
@@ -152,10 +153,11 @@ def start_metrics_server(*, serving_port: int | None = None) -> int | None:
             return _server.server_address[1]
         try:
             port = metrics_port(serving_port=serving_port)
-            # nosec B104 - the collector runs in the same instance and reaches this over the
-            # loopback interface; Cloud Run routes only $PORT, so this socket has no external
-            # surface. Binding all interfaces keeps it reachable from a sidecar container.
-            server = ThreadingHTTPServer(("0.0.0.0", port), _Handler)  # noqa: S104
+            # Loopback, not every interface. A Cloud Run sidecar shares the instance's network
+            # namespace, so the collector still reaches this over 127.0.0.1, and the endpoint then
+            # has no external surface under compose, on GKE or on a plain VM either - rather than
+            # depending entirely on Cloud Run routing only $PORT.
+            server = ThreadingHTTPServer(("127.0.0.1", port), _Handler)
         except (MetricsExportError, OSError, ValueError) as exc:
             logger.error("metrics_export_not_started", error=str(exc))
             return None
