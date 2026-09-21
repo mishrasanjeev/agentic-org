@@ -41,8 +41,11 @@ from core.schema_bootstrap import (
 )
 
 # Transaction-scoped lock shared with ``core.database.init_db``: two migrate
-# jobs started together serialize on it instead of both deciding the database
-# is empty and racing to create the baseline.
+# jobs started together serialize on the bootstrap decision instead of both
+# deciding the database is empty and racing to create the baseline. It guards
+# that decision only — it is taken just when there is no recorded revision,
+# and a revision that opens an ``autocommit_block()`` commits and releases it
+# part-way through the chain (migrations/README.md).
 MIGRATION_ADVISORY_LOCK = 4815162342
 
 config = context.config
@@ -83,8 +86,11 @@ def _bootstrap_empty_database(connection: Connection) -> None:
         return
     connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_ADVISORY_LOCK})
     # Another job may have created and stamped the baseline while this one
-    # waited for the lock.
-    if migration_context.get_current_heads():
+    # waited for the lock. This reread sees that commit because the connection
+    # runs at READ COMMITTED, where each statement takes a fresh snapshot; at
+    # REPEATABLE READ it would still see the empty database it started with.
+    current_heads = migration_context.get_current_heads()
+    if current_heads:
         return
     script = context.script
     if not plan_empty_database_bootstrap(

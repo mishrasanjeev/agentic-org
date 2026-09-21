@@ -591,3 +591,23 @@ Remove an entry in the pull request that fixes it.
   and either split a `governed_cases` scope family out of `approvals` or move
   the two roles' scopes; needs a data migration for existing tokens and roles,
   so it is not a side change to the route gate.
+
+## A-49 — Offline `--sql` migration scripts cannot be generated
+
+- **Found:** documenting offline mode for the empty-database bootstrap
+  (2026-09-20).
+- **What:** `alembic upgrade <range> --sql` fails for any range that reaches
+  head. `migrations/versions/v6_z26_case_push.py:120` and
+  `v6_z24_case_pseudonym_maps.py:51` call
+  `op.get_bind().execute(...)` to decide whether their table already exists,
+  and `v6_z5_capability_readiness_ledger.py` inspects the bind; in offline
+  mode there is no connection, so generation dies with
+  `AttributeError: 'NoneType' object has no attribute 'scalar'`. Reproduced
+  from `v6z24_case_pseudonym_maps:head` and from the single-step
+  `v6z25_governed_cases:head`. An empty database cannot be scripted either:
+  the bootstrap needs a connection to inspect. Teams that review SQL before a
+  release therefore cannot get that SQL from Alembic.
+- **Fix:** guard every bind query with `context.is_offline_mode()` and emit the
+  unconditional DDL (or `DO $$ ... $$` blocks that make the same decision in
+  SQL) in offline mode, then add a test that
+  `alembic upgrade <baseline>:head --sql` renders for the whole chain.

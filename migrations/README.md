@@ -70,12 +70,23 @@ The bootstrap refuses, with a reason code, rather than guessing:
 | Empty database, relative or branch target (`+1`, `heads@branch`) | `target_unresolved` |
 
 Other commands (`current`, `stamp`, `history`, `check`) never bootstrap.
-Offline `--sql` mode cannot bootstrap: it has no connection to inspect, so
-`alembic upgrade head --sql` on an empty database emits the chain from
-`v400_apex` and fails on the pre-Alembic tables, as it did before this path
-existed. Generating a script for an empty database is not supported; generate
-one from the revision a database is actually at (`alembic upgrade <rev>:head
---sql`).
+
+Offline `--sql` mode is **not supported for this chain**, at any range.
+`alembic upgrade head --sql` on an empty database cannot bootstrap — it has no
+connection to inspect — and emits the chain from `v400_apex`, which fails on
+the pre-Alembic tables. A range from a later revision fails too: revisions
+that decide what to do by querying the database (`v6z24`, `v6z26`, `v6z5`)
+call `op.get_bind().execute(...)`, which has nothing to execute against in
+offline mode, so script generation raises `AttributeError: 'NoneType' object
+has no attribute 'scalar'` (FINDINGS A-49). Upgrade online, or against a
+restored copy of the database, and read the log.
+
+The advisory lock serialises the **bootstrap decision** on an empty database,
+nothing more: it is taken only when there is no recorded revision, it is
+transaction-scoped, and revisions that open an `autocommit_block()` (`v482`,
+`v6z9`, `v6z10`) commit and release it part-way through the chain. Two
+upgrades of an already-managed database are not serialised at all; run one
+migrate job at a time.
 
 `tests/integration/test_alembic_e2e.py` runs `alembic upgrade head` on an
 empty Postgres in CI, then compares the resulting schema with the ORM models

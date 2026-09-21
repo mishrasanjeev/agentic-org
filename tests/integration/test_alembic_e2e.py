@@ -1548,3 +1548,75 @@ def test_a_second_migrate_job_waits_for_the_first_on_the_advisory_lock():
     assert not failure, failure
     assert _version_num() == _current_head()
     _reset_schema()
+
+
+@pytest.mark.timeout(300)
+def test_a_waiting_migrate_job_does_not_bootstrap_after_the_holder_stamped_it():
+    """The reread after the lock: the waiter must see the other job's baseline.
+
+    The lock holder creates the ORM baseline and stamps it while the second
+    upgrade is blocked, so the waiter wakes on a database that is no longer
+    empty and must apply the revisions after the baseline instead of building
+    a second one.
+    """
+    import threading
+
+    _reset_schema()
+    holder = create_engine(_SYNC_URL)
+    connection = holder.connect()
+    connection.execution_options(isolation_level="AUTOCOMMIT")
+    connection.execute(text("BEGIN"))
+    connection.execute(text("SELECT pg_advisory_xact_lock(4815162342)"))
+
+    finished = threading.Event()
+    failure: list[BaseException] = []
+
+    def upgrade() -> None:
+        try:
+            command.upgrade(_alembic_cfg(), "head")
+        except BaseException as exc:  # noqa: BLE001 - reported to the test thread
+            failure.append(exc)
+        finally:
+            finished.set()
+
+    worker = threading.Thread(target=upgrade, daemon=True)
+    worker.start()
+    try:
+        assert not finished.wait(timeout=5), "the upgrade did not wait for the advisory lock"
+        # Do what the other job would have done: build the baseline and stamp
+        # it, then let the waiter through.
+        import core.models  # noqa: F401 - register every ORM model
+        from core.models.base import BaseModel
+
+        connection.execute(text('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"'))
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
+        BaseModel.metadata.create_all(connection)
+        # Stamped in SQL rather than through `command.stamp`: Alembic's context
+        # is a process-wide proxy, and the worker thread is inside an upgrade.
+        connection.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS alembic_version ("
+                "version_num VARCHAR(32) NOT NULL, "
+                "CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num))"
+            )
+        )
+        connection.execute(text("INSERT INTO alembic_version (version_num) VALUES ('v480_baseline')"))
+        # Read on the holder's own connection: the work is not committed yet,
+        # which is exactly why the waiter must reread after taking the lock.
+        staged = connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one()
+        assert staged == "v480_baseline"
+    finally:
+        connection.execute(text("COMMIT"))
+        connection.close()
+        holder.dispose()
+
+    worker.join(timeout=240)
+    assert not worker.is_alive(), "the upgrade did not finish after the lock was released"
+    assert not failure, failure
+    assert _version_num() == _current_head()
+    # One baseline, not two: the waiter continued the stamped chain.
+    with create_engine(_SYNC_URL).connect() as conn:
+        versions = conn.execute(text("SELECT count(*) FROM alembic_version")).scalar_one()
+    assert versions == 1
+    _assert_no_schema_drift_from_orm()
+    _reset_schema()
