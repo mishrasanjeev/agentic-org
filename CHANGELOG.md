@@ -48,6 +48,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - `agenticorg_chain_verifications_total` (cited passages and promotion-history
   chains verified against their digests) and
   `agenticorg_budget_cap_events_total` (spend caps warned and exhausted).
+- Two more promtool fixture files (fire and no-fire for all seven alerts, and
+  the exact `for` boundaries), and two probes:
+  `scripts/probe_metrics_multiprocess.py`, which proves a forked child's
+  metrics reach the exporter and runs in CI, and `scripts/probe_alert_gate.py`,
+  which mutates the alert definitions and checks the gate catches each one.
 
 ### Removed
 - The `budget_pct_high` threshold rule and the Grafana "Budget Utilization"

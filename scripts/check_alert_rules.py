@@ -29,7 +29,9 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 RULES = ROOT / "monitoring" / "prometheus" / "agenticorg-alerts.yml"
-TESTS = ROOT / "monitoring" / "prometheus" / "agenticorg-alerts.test.yml"
+#: Every promtool fixture file beside the rules. More than one, deliberately: the second set came
+#: from the independent review and covers cases the first did not.
+TESTS = sorted((ROOT / "monitoring" / "prometheus").glob("*.test.yml"))
 DASHBOARD = ROOT / "monitoring" / "dashboards" / "agenticorg-governance.json"
 TERRAFORM = ROOT / "infra" / "terraform" / "monitoring" / "alerts.tf"
 
@@ -118,15 +120,17 @@ def main() -> int:
             failures.append(f"{name}: has no severity label")
 
     tested = set()
-    for case in (yaml.safe_load(TESTS.read_text(encoding="utf-8")) or {}).get("tests", []):
-        for check in case.get("alert_rule_test", []):
-            tested.add(str(check.get("alertname", "")))
+    for fixtures in TESTS:
+        for case in (yaml.safe_load(fixtures.read_text(encoding="utf-8")) or {}).get("tests", []):
+            for check in case.get("alert_rule_test", []):
+                tested.add(str(check.get("alertname", "")))
     # An alert nobody has ever seen fire is a guess. Two expressions in this file were wrong when
     # first written and the fixtures are what showed it, so every alert needs at least one.
     for name in names:
         if name not in tested:
             failures.append(
-                f"{name}: has no promtool fixture in {TESTS.name}. Write one that makes it fire; "
+                f"{name}: has no promtool fixture in monitoring/prometheus. Write one that makes "
+                "it fire; "
                 "an expression that has never been evaluated against a series is a guess."
             )
 

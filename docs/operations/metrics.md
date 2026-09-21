@@ -54,6 +54,21 @@ are what showed it - a single cap exhaustion whose `rate()` window had closed be
 elapsed, so it never fired, and an alert whose selector matched nothing in exactly the case it
 existed to detect (see below).
 
+There are three fixture files, all run together:
+
+| File | Covers |
+| --- | --- |
+| `agenticorg-alerts.test.yml` | one firing case per alert |
+| `agenticorg-alerts-coverage.test.yml` | fire *and* no-fire for all seven, including the proof that the advisory console dwell cannot drive the rubber-stamping alert, and a chain failure surviving an instance dying and its replacement starting from zero |
+| `agenticorg-alerts-windows.test.yml` | the exact `for` boundaries, to the minute, and a cap exhaustion clearing once its event leaves the two-hour lookback |
+
+Two probes sit beside them. `scripts/probe_metrics_multiprocess.py` forks two children and checks
+that their work reaches the endpoint - the Celery worker's prefork pool depends on that, and a
+broken multiprocess export reports the parent's own activity perfectly happily rather than
+failing. It runs in CI. `scripts/probe_alert_gate.py` breaks the definitions in each of the ways
+they have actually been broken and checks that `check_alert_rules.py` notices; it writes to the
+working tree, so it is a tool to run deliberately rather than a CI step.
+
 ### denial-rate spike
 
 `agenticorg_grant_enforcement_denials_total`. Authorization fails closed, so denials are normal; a
