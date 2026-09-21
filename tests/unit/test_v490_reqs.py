@@ -124,6 +124,12 @@ class TestREQ04AuthStateRedis:
             await record_auth_failure(ip)
         assert await is_ip_blocked(ip) is True
 
+        # The deadline that was written is finite and no longer than the
+        # configured lockout: a permanent ban would otherwise pass every
+        # assertion below, since they only read the deadline back.
+        deadline = auth_state._mem_blocked[ip]
+        assert 0 < deadline - time.time() <= auth_state.AUTH_BLOCK_DURATION
+
         # Expire the block rather than waiting 15 minutes for it.
         auth_state._mem_blocked[ip] = time.time() - 1
         assert await is_ip_blocked(ip) is False
@@ -180,10 +186,16 @@ class TestREQ04AuthStateRedis:
         from core.auth_state import blacklist_token, is_token_blacklisted
         auth_state._mem_blacklist.clear()
 
-        await blacklist_token("placeholder-revoked-token")  # noqa: S106 - not a credential
+        token = "placeholder-revoked-token"  # noqa: S105 - not a credential
+        await blacklist_token(token)
         for _ in range(3):
-            assert await is_token_blacklisted("placeholder-revoked-token") is True
+            assert await is_token_blacklisted(token) is True
         assert await is_token_blacklisted("placeholder-other-token") is False
+
+        # The entry expires rather than living forever. A non-JWT token gets
+        # the floor TTL, so that is exactly what should have been written.
+        [entry_deadline] = auth_state._mem_blacklist.values()
+        assert 0 < entry_deadline - time.time() <= auth_state.TOKEN_BLACKLIST_TTL
 
     def test_middleware_imports_auth_state(self):
         """auth/middleware.py imports from core.auth_state, not in-memory dicts."""
