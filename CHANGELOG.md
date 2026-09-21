@@ -87,7 +87,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited
   underwriting memo (every evidence entry naming the provider, upstream record, field and
-  retrieval time, linked to the cited-records index and to attached excerpt references), the
+  retrieval time, linked to the cited-records index; an excerpt reference is linked when the
+  memo carries the excerpt and labelled as not attached when it does not, which today is every
+  case - see FINDINGS A-48), the
   policy score with every fired rule and the evidence values it read, and the case history.
   Sections the provider could not supply are shown as unchecked rather than clear. The
   screens are read-only: no decision, review or state change is made from them. A tenant
