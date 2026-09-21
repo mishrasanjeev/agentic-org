@@ -583,3 +583,56 @@ Remove an entry in the pull request that fixes it.
   and either split a `governed_cases` scope family out of `approvals` or move
   the two roles' scopes; needs a data migration for existing tokens and roles,
   so it is not a side change to the route gate.
+
+## A-48 — Memo evidence cites excerpts the memo never carries, and no excerpt text is stored
+
+- **Found:** rendering memo citations in the approvals console against the
+  local stack (PRD A-9, 2026-09-20).
+- **What:** provider evidence carries `excerpt_ref` values (for example
+  `excerpt:mock-watchlist-wl-0001` from a screening hit and
+  `excerpt:mock-web-…` from web content), but `underwriting_memo.excerpts` is
+  empty on every case the reference agents produce: only excerpts the
+  untrusted-content extractor registered during the run are attached, and even
+  those are kept in a per-process `InMemoryExcerptStore` that nothing persists.
+  A reviewer therefore cannot see the passage a citation points at, and PRD
+  A-6's "cited excerpts are attached to the memo for the human reviewer" does
+  not hold. The console shows such a reference as "not attached to this memo"
+  rather than pretending it resolves.
+- **Fix:** attach every `excerpt_ref` the agent cited to `memo.excerpts` with
+  its provider, record, media type and digest, and persist excerpt content with
+  the case (encrypted, tenant-scoped) so the console and the evidence package
+  can show it.
+
+## A-49 — Synchronous credential resolution runs a coroutine on another event loop
+
+- **Found:** running the reference agents for sample cases against the local
+  stack (`scripts/seed_governed_cases.py`, 2026-09-20).
+- **What:** `core/ai_providers/resolver.py::get_provider_credential_sync`
+  submits `get_provider_credential()` to `asyncio.run` inside a worker thread
+  when it is called from a running loop. That coroutine uses the shared async
+  engine, so its asyncpg connection is bound to the thread's loop and then
+  returned to the pool: the call fails with "got Future … attached to a
+  different loop" (logged as `tenant_ai_credential_decrypt_failed`), and the
+  next user of that pooled connection fails the same way. Every model call on
+  the LangGraph path that resolves a tenant credential hits it; the case agents
+  degrade to a memo without prose, and the seeding script fails at its last
+  database call.
+- **Fix:** give the sync path its own engine (or a short-lived
+  `NullPool` engine) for the credential read, or make the callers await the
+  async resolver.
+
+## A-50 — The console chrome fails the contrast check on every page
+
+- **Found:** running the axe scan for the governed case screens against the
+  local stack (PRD A-9, 2026-09-20).
+- **What:** an axe scan of a whole console page reports `color-contrast`
+  (serious) for the shared layout, not for the page content: the natural
+  language query box (`ui/src/components/NLQueryBar.tsx`, `text-slate-300`
+  placeholder and `text-slate-200` input on the light header) and the company
+  switcher (`ui/src/components/CompanySwitcher.tsx`, `text-slate-300`). They are
+  dark-theme colours on a light surface, so they fail WCAG 1.4.3 on every
+  signed-in page. The governed case suite therefore scans `#main-content` only,
+  which is the content those screens own.
+- **Fix:** give the header components tokens that follow the theme
+  (`text-muted-foreground` / `text-foreground`), then widen the accessibility
+  scan in `ui/e2e/helpers/governed-cases.ts` back to the whole page.

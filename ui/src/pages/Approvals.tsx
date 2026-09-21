@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import ApprovalCard from "@/components/ApprovalCard";
+import ApprovalsSubnav from "@/components/governed-cases/ApprovalsSubnav";
 import api, { extractApiError } from "@/lib/api";
 import type { HITLItem } from "@/types";
 
@@ -109,6 +110,7 @@ export default function Approvals() {
 
   return (
     <div className="space-y-6">
+      <ApprovalsSubnav />
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Approval Queue</h2>
         <Badge variant="destructive">{pendingCount} pending</Badge>
