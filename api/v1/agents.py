@@ -1298,6 +1298,18 @@ async def _resolve_connector_configs(
                 )
                 cc = cc_result.scalar_one_or_none()
 
+                # Prefer a company binding, then use the tenant-global
+                # binding. Never fall through to another company.
+                if cc is None and company_uuid is not None:
+                    cc_result = await session.execute(
+                        select(ConnectorConfig).where(
+                            ConnectorConfig.tenant_id == tid,
+                            ConnectorConfig.company_id.is_(None),
+                            ConnectorConfig.connector_name == connector_name,
+                        )
+                    )
+                    cc = cc_result.scalar_one_or_none()
+
                 # RU-May01-BUG-03: ``connector_ids`` historically stored
                 # connector NAME strings (``"zoho_books"``). Some agents
                 # (created via direct PATCH or older flows) instead store
@@ -1505,6 +1517,16 @@ async def _assert_connectors_ready_for_activation(
                 )
             )
         ).scalar_one_or_none()
+        if cc is None and company_id is not None:
+            cc = (
+                await session.execute(
+                    select(ConnectorConfig).where(
+                        ConnectorConfig.tenant_id == tenant_id,
+                        ConnectorConfig.company_id.is_(None),
+                        ConnectorConfig.connector_name == connector_name,
+                    )
+                )
+            ).scalar_one_or_none()
         if cc is None:
             try:
                 cc_uuid = _uuid.UUID(connector_name)
@@ -2448,7 +2470,7 @@ async def generate_agent(
         )
 
     try:
-        result = await generate_agent_config(description)
+        result = await generate_agent_config(description, tenant_id=tenant_id)
     except LLMProviderConfigurationError as exc:
         # No tenant/platform LLM credentials: a configuration state the
         # operator can fix, not an internal error. Previously this escaped
