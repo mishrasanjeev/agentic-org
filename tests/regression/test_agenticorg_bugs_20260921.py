@@ -94,6 +94,120 @@ async def test_router_resolves_tenant_owned_provider_credential() -> None:
     resolver.assert_awaited_once_with(str(TENANT_ID), "gemini", "llm")
 
 
+@pytest.mark.asyncio
+async def test_router_refuses_missing_tenant_provider_credential() -> None:
+    """BUG-02: a missing tenant credential fails closed without env fallback."""
+    from core.ai_providers.resolver import ProviderNotConfigured
+    from core.llm.router import LLMProviderConfigurationError, LLMRouter
+
+    with patch(
+        "core.ai_providers.resolver.get_provider_credential",
+        new=AsyncMock(side_effect=ProviderNotConfigured("synthetic missing credential")),
+    ):
+        with pytest.raises(LLMProviderConfigurationError, match="synthetic missing credential"):
+            await LLMRouter()._provider_secret("gemini", str(TENANT_ID))
+
+
+@pytest.mark.asyncio
+async def test_router_refuses_missing_environment_provider_credential(monkeypatch) -> None:
+    """The legacy no-tenant path still refuses an absent environment key."""
+    from core.llm import router as router_module
+    from core.llm.router import LLMProviderConfigurationError, LLMRouter
+
+    monkeypatch.setattr(router_module.external_keys, "google_gemini_api_key", "")
+    with pytest.raises(LLMProviderConfigurationError, match="Gemini provider is not configured"):
+        await LLMRouter()._provider_secret("gemini", None)
+
+
+@pytest.mark.asyncio
+async def test_router_dispatches_claude_and_openai_models() -> None:
+    """Provider dispatch stays explicit for non-Gemini configured models."""
+    from core.llm.router import LLMResponse, LLMRouter
+
+    router = LLMRouter()
+    claude = LLMResponse(content="claude", model="claude-test")
+    openai = LLMResponse(content="openai", model="gpt-test")
+    with (
+        patch.object(router, "_call_claude", new=AsyncMock(return_value=claude)) as claude_call,
+        patch.object(router, "_call_openai", new=AsyncMock(return_value=openai)) as openai_call,
+    ):
+        assert (await router._call_provider("claude-test", [], 0.2, 32, 0.0, None)).content == "claude"
+        assert (await router._call_provider("gpt-test", [], 0.2, 32, 0.0, None)).content == "openai"
+
+    claude_call.assert_awaited_once()
+    openai_call.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_router_calls_gemini_with_tenant_credential(monkeypatch) -> None:
+    """BUG-02: Gemini client construction uses the resolved tenant secret."""
+    from google import genai
+
+    from core.llm import router as router_module
+
+    response = SimpleNamespace(
+        text="generated",
+        candidates=["synthetic-candidate"],
+        usage_metadata=SimpleNamespace(prompt_token_count=2, candidates_token_count=3),
+    )
+    generate = AsyncMock(return_value=response)
+    client = SimpleNamespace(aio=SimpleNamespace(models=SimpleNamespace(generate_content=generate)))
+    client_factory = MagicMock(return_value=client)
+
+    monkeypatch.setattr(genai, "Client", client_factory)
+    monkeypatch.setattr(router_module, "assert_under_gemini_cap", AsyncMock())
+    monkeypatch.setattr(router_module.LLMRouter, "_provider_secret", AsyncMock(return_value="synthetic-gemini-secret"))
+
+    result = await router_module.LLMRouter()._call_gemini(
+        "gemini-2.5-flash",
+        [
+            {"role": "system", "content": "Be concise."},
+            {"role": "user", "content": "Summarize this synthetic request."},
+        ],
+        0.2,
+        64,
+        0.0,
+        tenant_id=str(TENANT_ID),
+    )
+
+    assert result.content == "generated"
+    client_factory.assert_called_once_with(api_key="synthetic-gemini-secret")
+    generate.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_router_calls_openai_with_tenant_credential(monkeypatch) -> None:
+    """Tenant-owned OpenAI credentials are passed to the async client."""
+    import openai
+
+    from core.llm import router as router_module
+
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="generated"))],
+        usage=SimpleNamespace(total_tokens=5),
+    )
+    response.model_dump = lambda: {"id": "synthetic-response"}
+    create = AsyncMock(return_value=response)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client_factory = MagicMock(return_value=client)
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", client_factory)
+    monkeypatch.setattr(router_module.LLMRouter, "_provider_secret", AsyncMock(return_value="synthetic-openai-secret"))
+
+    result = await router_module.LLMRouter()._call_openai(
+        "gpt-4o",
+        [{"role": "user", "content": "Summarize this synthetic request."}],
+        0.2,
+        64,
+        0.0,
+        tenant_id=str(TENANT_ID),
+    )
+
+    assert result.content == "generated"
+    client_factory.assert_called_once_with(api_key="synthetic-openai-secret")
+    create.assert_awaited_once()
+
+
 class _Result:
     def __init__(self, value):
         self.value = value
