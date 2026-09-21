@@ -269,11 +269,3 @@ async def evaluate_budget_alerts() -> dict:
     summary = {"checked": checked, "triggered": triggered, "ts": now.isoformat()}
     logger.info("budget_evaluator_run", **summary)
     return summary
-
-
-# Celery task shim — the app's Celery config auto-discovers tasks under
-# core.tasks.  This stub wraps the async evaluator.
-def evaluate_budget_alerts_task() -> dict:
-    import asyncio
-
-    return asyncio.run(evaluate_budget_alerts())

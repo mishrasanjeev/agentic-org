@@ -591,24 +591,6 @@ Remove an entry in the pull request that fixes it.
   the case (encrypted, tenant-scoped) so the console and the evidence package
   can show it.
 
-## A-49 — Synchronous credential resolution runs a coroutine on another event loop
-
-- **Found:** running the reference agents for sample cases against the local
-  stack (`scripts/seed_governed_cases.py`, 2026-09-20).
-- **What:** `core/ai_providers/resolver.py::get_provider_credential_sync`
-  submits `get_provider_credential()` to `asyncio.run` inside a worker thread
-  when it is called from a running loop. That coroutine uses the shared async
-  engine, so its asyncpg connection is bound to the thread's loop and then
-  returned to the pool: the call fails with "got Future … attached to a
-  different loop" (logged as `tenant_ai_credential_decrypt_failed`), and the
-  next user of that pooled connection fails the same way. Every model call on
-  the LangGraph path that resolves a tenant credential hits it; the case agents
-  degrade to a memo without prose, and the seeding script fails at its last
-  database call.
-- **Fix:** give the sync path its own engine (or a short-lived
-  `NullPool` engine) for the credential read, or make the callers await the
-  async resolver.
-
 ## A-50 — The console chrome fails the contrast check on every page
 
 - **Found:** running the axe scan for the governed case screens against the
@@ -660,3 +642,56 @@ Remove an entry in the pull request that fixes it.
   unconditional DDL (or `DO $$ ... $$` blocks that make the same decision in
   SQL) in offline mode, then add a test that
   `alembic upgrade <baseline>:head --sql` renders for the whole chain.
+
+## A-53 — Direct `async_session_factory` use bypasses the private-engine seam
+
+- **Found:** fixing the synchronous credential resolver (A-49, 2026-09-21).
+- **What:** `core.database.run_db_coroutine_sync` lets a synchronous caller run
+  a database coroutine on a private `NullPool` engine, and
+  `get_tenant_session` / `get_session` honour it through
+  `current_session_factory()`. Thirty-four other modules (89 references) bind
+  `core.database.async_session_factory` directly instead. Those are correct on
+  an async request path, but a coroutine reached from a synchronous bridge
+  through one of them still borrows the shared pool, which is the defect A-49
+  described; only the paths the fixed bridges reach were moved to
+  `current_session_factory()`. Four of them are worse than the rest because
+  they capture the factory **by value into a module-level singleton**, so the
+  binding survives every later call and no context override can reach it:
+  `core/live_feed.py:365`, `workflows/state_store.py:309`,
+  `workflows/event_waits.py:377` and `bridge/state.py:1147`. Any new
+  synchronous bridge that `asyncio.run`s a coroutine reaching one of these
+  reopens A-49.
+- **Fix:** have the session helpers be the only way to open a session (make
+  `async_session_factory` private and route every caller through
+  `current_session_factory()`), starting with the four singletons, which
+  should resolve the factory per call as `core/cdc/receiver.py` now does; or
+  add a check that refuses a direct import of `async_session_factory` outside
+  `core/database.py`.
+
+## A-54 — The Celery runner loop is unsafe in a process that also serves requests
+
+- **Found:** testing the report generator's synchronous bridge (2026-09-21).
+- **What:** `core.tasks.async_runner.run_async` keeps one event loop per
+  process, which is right for a Celery worker: every task shares the loop, so
+  the shared engine's pooled connections stay on it. A synchronous caller in a
+  process that *also* runs an API loop takes the same branch
+  (`core/reports/generator.py::_run_coroutine` when no loop is running in the
+  calling thread, for example from `asyncio.to_thread`), and its connections
+  go into the shared pool bound to the runner loop; a later request on the API
+  loop then fails on checkout, exactly as in A-49. Observed while writing
+  `tests/integration/test_sync_credential_resolution_pool.py`: the shared pool
+  gained a connection from the runner loop.
+  It is not live today: every `run_async` caller is a Celery task module or
+  `core/reports/generator.py`, and `ReportGenerator` is reached only through
+  the `generate_report` task, which the API dispatches with `.delay()`. It
+  becomes live the moment any path in the API process reaches `_run_coroutine`
+  — or another `run_async` caller — from a thread with no running loop, and
+  `asyncio.to_thread` already appears in 24 places across seven modules under
+  `api/`, so that is one careless import away.
+- **Fix (near-term, its own pull request):** decide the branch by the process's
+  role rather than by whether this thread has a loop — use `run_async` only in
+  a worker process (the Celery bootstrap can set a flag) and
+  `run_db_coroutine_sync` everywhere else — or give `run_async` its own engine
+  bound to the runner loop. Settle the runner's fork guard in the same change:
+  fork a child, call `run_async` in parent and child, and assert the child
+  built its own loop (no Redis or Celery needed; Linux CI only).

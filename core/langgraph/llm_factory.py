@@ -27,10 +27,11 @@ from core.llm.router import LLMProviderConfigurationError, smart_router
 logger = structlog.get_logger()
 
 # Credentials resolved on the caller's event loop before a graph is built.
-# ``get_provider_credential_sync`` cannot be used from inside a running loop:
-# it runs the async resolver on a fresh loop in a worker thread, where the
-# shared asyncpg pool (bound to the main loop) fails and the tenant lookup is
-# reported as "provider is not configured". Keyed by (tenant_id, provider).
+# ``get_provider_credential_sync`` works from inside a running loop now (it
+# runs the lookup on a worker thread with a private engine), but resolving
+# ahead is still better: it keeps the lookup on the request's own pooled
+# connection, and saves a thread hop and a separate connection per model
+# build. Keyed by (tenant_id, provider).
 _PREFETCHED_LLM_CREDENTIALS: ContextVar[dict[tuple[str, str], object] | None] = ContextVar(
     "_PREFETCHED_LLM_CREDENTIALS", default=None
 )

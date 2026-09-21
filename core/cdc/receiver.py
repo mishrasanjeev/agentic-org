@@ -14,6 +14,7 @@ import hmac
 import json
 import os
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -626,9 +627,12 @@ def get_cdc_event_store() -> CDCEventStore:
         _default_store = InMemoryCDCEventStore()
         return _default_store
 
-    from core.database import async_session_factory
+    from core.database import current_session_factory
 
-    _default_store = SqlAlchemyCDCEventStore(async_session_factory)
+    # Resolved per call rather than captured: a synchronous caller runs on a
+    # private engine (``run_db_coroutine_sync``) and its sessions must come
+    # from that engine, not from the shared pool.
+    _default_store = SqlAlchemyCDCEventStore(lambda: current_session_factory()())
     return _default_store
 
 
@@ -638,11 +642,14 @@ def set_cdc_event_store_for_tests(store: CDCEventStore | None) -> None:
     _default_store = store
 
 
-def _run_sync(coro: Any) -> Any:
+def _run_sync(make_coro: Callable[[], Any]) -> Any:
+    """Run a store coroutine from a synchronous caller, on a private engine."""
+    from core.database import run_db_coroutine_sync
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
-        return asyncio.run(coro)
+        return run_db_coroutine_sync(make_coro)
     raise RuntimeError("Use the async CDC store APIs from an active event loop")
 
 
@@ -819,7 +826,7 @@ def get_stored_events(tenant_id: str | None = None) -> list[dict[str, Any]]:
     store = get_cdc_event_store()
     if isinstance(store, InMemoryCDCEventStore):
         return [_public_event(event) for event in store.list_events_sync(tenant_id=tenant_id)]
-    events, _total = _run_sync(list_stored_events(tenant_id=tenant_id, store=store))
+    events, _total = _run_sync(lambda: list_stored_events(tenant_id=tenant_id, store=store))
     return events
 
 
@@ -829,7 +836,7 @@ def clear_store() -> None:
     if isinstance(store, InMemoryCDCEventStore):
         store.clear_sync()
         return
-    _run_sync(store.clear())
+    _run_sync(store.clear)
 
 
 async def replay_cdc_event(
