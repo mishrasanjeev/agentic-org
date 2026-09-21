@@ -4,6 +4,32 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - the development stack serves decision grants
+- The pinned Grantex auth-service image moves to a build of Grantex `main`
+  (`5b867f68`, `ghcr.io/mishrasanjeev/grantex-auth-service@sha256:b73668a3...`),
+  the first one that serves `/v1/decisions/...` and the approval page (PRD
+  G-3). `docker-compose.dev.yml` configures it: `DECISION_GRANTS_ENABLED`, a
+  vault key, an `ADMIN_API_KEY` and a step-up policy, plus an identity provider
+  for approvers only (`oidc-approvers`, two fixture people, separate from the
+  console's development SSO). The auth service now listens on the port it
+  publishes, because its approval page has to be reached on the same origin it
+  checks form posts against, and that origin must be https or loopback.
+- **`AGENTICORG_CASE_DECISION_SERVICE` still defaults to off**, in the
+  development stack included; a run opts in with
+  `AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex`. Nothing changes for a stack
+  that does not.
+- `scripts/dev_stack_smoke.sh` checks the approval page and the approver
+  identity provider's discovery document.
+
+### Fixed
+- The development OpenID Connect stub reads a chunked request body. Node's HTTP
+  client sends a POST body with `Transfer-Encoding: chunked` when no
+  `Content-Length` is set, which the stub read as an empty form and answered
+  with an OAuth error about the wrong thing. It also logs the error it returns,
+  and its health check honours `OIDC_STUB_PORT`.
+- `.gitattributes` keeps shell scripts LF, so the stack's Linux containers can
+  run them from a Windows checkout (FINDINGS A-57).
+
 ### Changed — breaking for tenants that turn it on
 - `grants.enforce_closed` can now be set to `deny` (tenant flag
   `grants.enforce_closed.deny` or `AGENTICORG_GRANTS_ENFORCE_CLOSED=deny`).

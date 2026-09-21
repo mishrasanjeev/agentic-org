@@ -29,9 +29,15 @@ x-backend-env: &backend-env
   # `vllm:` models go to the OpenAI-compatible model stub (tools/model_stub).
   VLLM_BASE_URL: http://model-stub:8080
   # Local Grantex auth service (grantex service below); the key is the
-  # development developer key it seeds at start.
-  GRANTEX_BASE_URL: http://grantex:3001
+  # development developer key it seeds at start. The service listens on the
+  # same port inside and outside its container - see the grantex service.
+  GRANTEX_BASE_URL: http://grantex:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
   GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
+  # Decision requests (PRD G-3, docs/governance/decision-requests.md). The
+  # stack now serves them, but the flag stays OFF unless a run sets it: it
+  # defaults off everywhere, development included.
+  AGENTICORG_CASE_DECISION_SERVICE: "${AGENTICORG_DEV_CASE_DECISION_SERVICE:-}"
+  AGENTICORG_CASE_DECISION_FOUR_EYES_ON: "${AGENTICORG_DEV_CASE_DECISION_FOUR_EYES_ON:-decline}"
 
 x-backend-build: &backend-build
   context: .
@@ -245,23 +251,59 @@ services:
   # its own migrations at start, keeps its data in the `grantex` database and
   # Redis index 2, generates signing keys, and seeds the development developer
   # key the API uses (GRANTEX_API_KEY above).
+  #
+  # Pinned to grantex main 5b867f6850eb534ee893fec078037fe84c3668ee, the first
+  # image that serves the decision-grant routes and the approval page
+  # (`ghcr.io/mishrasanjeev/grantex-auth-service:sha-5b867f68...`, resolved to
+  # the multi-architecture index digest below).
+  #
+  # The approval page is a real browser page on this service's own origin, and
+  # the service refuses to run decision grants unless that origin is https or
+  # loopback. So the container listens on the *published* port and
+  # PUBLIC_BASE_URL names it: the URL in an approver's address bar, the
+  # `Origin` the page's form post carries and the origin the service checks it
+  # against are then all the same string. Other containers reach the API at
+  # `http://grantex:<that port>`.
   grantex:
-    image: ghcr.io/mishrasanjeev/grantex-auth-service@sha256:788c5e37382530d47b2c6c48eb1d4d9200310f1c8cfe738e48c56c16e0309c7d
+    image: ghcr.io/mishrasanjeev/grantex-auth-service@sha256:b73668a36b10a7fb1ac5fa9f8f67a6dbadc5a1611d8687c6938d72d64151967d
     environment:
       NODE_ENV: development
       HOST: 0.0.0.0
-      PORT: "3001"
+      PORT: "${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
       DATABASE_URL: postgres://grantex:grantex_dev@postgres:5432/grantex
       REDIS_URL: redis://redis:6379/2
       AUTO_GENERATE_KEYS: "true"
-      PUBLIC_BASE_URL: http://grantex:3001
-      JWT_ISSUER: http://grantex:3001
+      PUBLIC_BASE_URL: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
+      JWT_ISSUER: http://grantex:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
       SEED_API_KEY: agenticorg-dev-grantex-api-key
       LOG_PRETTY: "false"
+      # Decision grants (PRD G-3). Off by default in the service; on here so
+      # the local stack can take a real approval end to end.
+      DECISION_GRANTS_ENABLED: "true"
+      # Approver emails are stored as keyed hashes and names encrypted, so the
+      # service requires a vault key before it will mint a decision grant.
+      VAULT_ENCRYPTION_KEY: YWdlbnRpY29yZy1kZXYtZ3JhbnRleC12YXVsdC1rZXk=
+      # CSRF tokens on the approval page; fixed so a restart does not
+      # invalidate a page an approver already has open.
+      DECISION_PAGE_SECRET: agenticorg-dev-grantex-decision-page-secret
+      # Allow-listing an approver identity provider is a service-administrator
+      # action; the developer key above cannot do it, by design.
+      ADMIN_API_KEY: agenticorg-dev-grantex-admin-key
+      # The development identity provider (oidc-approvers below) is reached
+      # over http on a loopback address.
+      SSO_ALLOW_INSECURE_URLS: "true"
+      SSO_ALLOW_PRIVATE_HOSTS: "true"
+      # Step-up: the stub's step-up acr, or a second factor in `amr`.
+      DECISION_STEP_UP_ACR: urn:agenticorg:acr:step-up
+      DECISION_STEP_UP_AMR: mfa,hwk
+      DECISION_MIN_DWELL_MS: "${AGENTICORG_DEV_DECISION_MIN_DWELL_MS:-2000}"
     ports:
-      - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:3001"
+      - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
+      # oidc-approvers shares this network namespace (see below), so its port
+      # is published here.
+      - "127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:'+process.env.PORT+'/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))\""]
       interval: 5s
       timeout: 5s
       start_period: 30s
@@ -270,6 +312,33 @@ services:
       grantex-db:
         condition: service_completed_successfully
       redis:
+        condition: service_healthy
+
+  # The identity provider approvers sign in with, for decision grants only
+  # (tools/oidc_stub with its own fixture users). It shares the auth service's
+  # network namespace so that one URL - http://127.0.0.1:<port> - names the
+  # issuer from the auth service, from the approver's browser and in the
+  # discovery document. OpenID Connect discovery requires all three to be the
+  # same string, and the auth service will not take an approval on an origin
+  # that is neither https nor loopback.
+  oidc-approvers:
+    build:
+      context: ./tools
+      dockerfile: oidc_stub/Dockerfile
+    image: agenticorg-oidc-stub:dev
+    network_mode: "service:grantex"
+    environment:
+      AGENTICORG_ENV: development
+      OIDC_STUB_PORT: "${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}"
+      OIDC_STUB_PUBLIC_URL: http://127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}
+      OIDC_STUB_CONFIG: /etc/oidc-stub/approvers.json
+      # The auth service's callback carries its port, which is configurable
+      # here, so it is added to the fixture client rather than baked into it.
+      OIDC_STUB_EXTRA_REDIRECT_URIS: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}/decisions/callback
+    volumes:
+      - ./tools/oidc_stub/config.approvers.dev.json:/etc/oidc-stub/approvers.json:ro
+    depends_on:
+      grantex:
         condition: service_healthy
 
   # Test and check runner for `make test` and `make check`; `make dev` never

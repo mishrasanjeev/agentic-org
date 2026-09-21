@@ -36,7 +36,7 @@ import secrets
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
@@ -184,6 +184,27 @@ def parse_config(data: Any) -> StubConfig:
             raise ConfigError(f"{where}: duplicate client_id {client.client_id!r}")
         clients[client.client_id] = client
     return StubConfig(users=users, clients=clients)
+
+
+def with_extra_redirect_uris(config: StubConfig, extra: Sequence[str]) -> StubConfig:
+    """Return a copy in which every client also accepts these redirect URIs.
+
+    A relying party's callback carries its port, and the development stack's
+    ports are configurable, so a callback cannot always be baked into the
+    fixture file. Each URI is validated exactly as a configured one is.
+    """
+    checked = tuple(_check_redirect_uri(uri, "OIDC_STUB_EXTRA_REDIRECT_URIS") for uri in extra)
+    if not checked:
+        return config
+    clients = {
+        client_id: Client(
+            client_id=client.client_id,
+            redirect_uris=tuple(dict.fromkeys((*client.redirect_uris, *checked))),
+            client_secret=client.client_secret,
+        )
+        for client_id, client in config.clients.items()
+    }
+    return StubConfig(users=config.users, clients=clients)
 
 
 def load_config(path: Path) -> StubConfig:
@@ -742,17 +763,49 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             morsel = cookie.get(SESSION_COOKIE)
             return morsel.value if morsel else None
 
-        def _form(self) -> tuple[dict[str, str] | None, str | None]:
-            if self.headers.get_content_type() != "application/x-www-form-urlencoded":
-                return None, None
+        def _read_body(self) -> bytes | None:
+            """The request body, whether it is framed by length or chunked.
+
+            A client that does not know the length in advance sends
+            ``Transfer-Encoding: chunked``, which is ordinary HTTP/1.1 and
+            what Node's ``http.request`` does when no ``Content-Length`` is
+            set. Reading only ``Content-Length`` bodies made such a request
+            look like an empty form, which is an OAuth error about the wrong
+            thing.
+            """
+            if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+                chunks = bytearray()
+                while True:
+                    line = self.rfile.readline(64).strip().split(b";", 1)[0]
+                    try:
+                        size = int(line, 16)
+                    except ValueError:
+                        return None
+                    if size < 0 or len(chunks) + size > MAX_BODY_BYTES:
+                        return None
+                    if size == 0:
+                        # Consume the trailer section up to the blank line.
+                        while self.rfile.readline(MAX_BODY_BYTES).strip():
+                            pass
+                        return bytes(chunks)
+                    chunks += self.rfile.read(size)
+                    if self.rfile.read(2) != b"\r\n":
+                        return None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
-                return None, None
+                return None
             if length < 0 or length > MAX_BODY_BYTES:
+                return None
+            return self.rfile.read(length)
+
+        def _form(self) -> tuple[dict[str, str] | None, str | None]:
+            if self.headers.get_content_type() != "application/x-www-form-urlencoded":
                 return None, None
-            body = self.rfile.read(length).decode("utf-8", "replace")
-            return single_valued(parse_qsl(body, keep_blank_values=True))
+            raw = self._read_body()
+            if raw is None:
+                return None, None
+            return single_valued(parse_qsl(raw.decode("utf-8", "replace"), keep_blank_values=True))
 
         def _repeated(self, name: str) -> Response:
             description = f"parameter {name!r} appears more than once"
@@ -776,7 +829,19 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(response.body)
-            _log("oidc_stub_request", method=self.command, path=urlsplit(self.path).path, status=int(response.status))
+            # A refusal says why: an OAuth error is a two-line fix in a
+            # development stack, and silence about it is not.
+            detail: dict[str, Any] = {}
+            if int(response.status) >= 400 and response.content_type.startswith("application/json"):
+                try:
+                    body = json.loads(response.body.decode("utf-8"))
+                    detail = {k: body[k] for k in ("error", "error_description") if k in body}
+                except (ValueError, UnicodeDecodeError):
+                    detail = {}
+            _log(
+                "oidc_stub_request", method=self.command, path=urlsplit(self.path).path,
+                status=int(response.status), **detail,
+            )  # fmt: skip
 
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
             parts = urlsplit(self.path)

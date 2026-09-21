@@ -6,7 +6,9 @@
 # serves its health page, that the console proxies /api to the API, that the
 # mock verification provider service answers, that the OIDC stub publishes its
 # discovery document, that the model stub lists its scripted models, that the
-# Grantex auth service is healthy and publishes its signing keys, and that the
+# Grantex auth service is healthy, publishes its signing keys and serves the
+# decision-grant approval page, that the approver identity provider publishes
+# its discovery document, and that the
 # API container reaches Grantex with the configured URL and developer key.
 # Fails with the failing check and response when any check does not pass.
 #
@@ -20,6 +22,7 @@ mock_provider="http://127.0.0.1:${AGENTICORG_DEV_MOCK_PROVIDER_PORT:-8081}"
 oidc="http://127.0.0.1:${AGENTICORG_DEV_OIDC_PORT:-9400}"
 model="http://127.0.0.1:${AGENTICORG_DEV_MODEL_STUB_PORT:-8090}"
 grantex="http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
+approver_idp="http://127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}"
 compose="${COMPOSE:-docker compose -f docker-compose.dev.yml}"
 attempts="${SMOKE_ATTEMPTS:-60}"
 
@@ -27,6 +30,22 @@ check() {
   local name="$1" url="$2" expect="$3" body=""
   for _ in $(seq 1 "$attempts"); do
     if body="$(curl -fsS --max-time 5 "$url" 2>/dev/null)" && grep -q "$expect" <<<"$body"; then
+      echo "ok   ${name}  ${url}"
+      return 0
+    fi
+    sleep 2
+  done
+  echo "FAIL ${name}  ${url}: expected '${expect}', got: ${body:-<no response>}" >&2
+  return 1
+}
+
+# Like check, but for a page whose HTTP status is deliberately not 2xx: only
+# the body is asserted. The approval page answers 404 for a decision that does
+# not exist, and a different 404 when decision grants are switched off.
+check_body() {
+  local name="$1" url="$2" expect="$3" body=""
+  for _ in $(seq 1 "$attempts"); do
+    if body="$(curl -sS --max-time 5 "$url" 2>/dev/null)" && grep -q "$expect" <<<"$body"; then
       echo "ok   ${name}  ${url}"
       return 0
     fi
@@ -45,6 +64,11 @@ check "oidc stub discovery"           "$oidc/.well-known/openid-configuration" '
 check "model stub scripted models"    "$model/v1/models"            '"scripted/final-only"'
 check "grantex health (db + redis)"   "$grantex/health"             '"status": *"healthy"'
 check "grantex signing keys"          "$grantex/.well-known/jwks.json" '"keys": *\[{'
+# Decision grants (PRD G-3): the approval page, and the identity provider
+# approvers sign in with. With DECISION_GRANTS_ENABLED unset the page answers
+# "Decision grants are not enabled", so this check proves the routes are live.
+check_body "grantex approval page"    "$grantex/decisions/dreq_00000000000000000000000000" "This decision does not exist"
+check "approver idp discovery"        "$approver_idp/.well-known/openid-configuration" "\"issuer\": *\"$approver_idp\""
 
 # From inside the api container, with the API's own GRANTEX_BASE_URL and
 # GRANTEX_API_KEY: the keys are reachable and the developer key is accepted.

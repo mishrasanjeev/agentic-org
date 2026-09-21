@@ -14,5 +14,5 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 USER nobody
 EXPOSE 9400
 HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20 \
-  CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9400/healthz', timeout=3).read()"]
+  CMD ["python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('OIDC_STUB_PORT', '9400') + '/healthz', timeout=3).read()"]
 CMD ["python", "-m", "tools.oidc_stub"]
