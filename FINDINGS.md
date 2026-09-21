@@ -700,13 +700,28 @@ Remove an entry in the pull request that fixes it.
   case transitions, decision requests and grants, provider calls, the new
   excerpt reads) but serves no `/metrics` endpoint: there is no
   `prometheus_client.make_asgi_app()` mount and no metrics route in `api/`.
-  Every counter is therefore process-local and unobservable, so an alert on a
-  denial-rate spike or on dwell collapsing towards zero (PRD §10) cannot be
-  built from them, and each new metric adds an instrument nobody can read.
-- **Fix:** mount the Prometheus ASGI app behind the platform's own
-  authentication (or export through the existing observability pipeline),
-  document the endpoint, and make one alert from an existing counter to prove
-  the path end to end.
+  Every counter is therefore process-local: nothing outside the process that
+  incremented it can read it, and each new metric adds an instrument nobody
+  can see.
+
+  To be accurate about what does exist: `observability/alerting.py` is an
+  in-process alerter that reads the default `REGISTRY` directly and dispatches
+  to Slack or email, so it is not true that no alert can be built at all. Its
+  limits are the ones an exported registry fixes - it sees only the process it
+  runs in, so on Cloud Run with several API instances plus a worker and beat it
+  alerts on a fraction of the traffic and cannot know which fraction; it
+  compares raw counter values rather than rates, which on autoscaled instances
+  is a number without a meaning; and most of its rules have no sustain window.
+  The PRD §10 alerts cannot be built on that foundation.
+- **Fix:** export the registry (see `docs/operations/metrics.md`), and prove
+  the whole path - process, endpoint, collector, managed Prometheus, policy,
+  notification - by driving one alert end to end from a real metric to a real
+  notification.
+- **Status (2026-09-21):** partly addressed. The endpoint, the instruments and
+  the committed alert definitions are on main. PRD §10 is **achievable, not
+  met**: no sample has yet travelled the full path. What remains is the
+  collector sidecar with the worker's volume, one real `terraform apply`, and
+  one alert driven end to end.
 
 ## A-57 — The encrypted-migration gate waves through an empty exemption and never reads an edited migration
 

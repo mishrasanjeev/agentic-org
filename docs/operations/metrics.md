@@ -106,15 +106,26 @@ the stored copy needs investigating.
 
 `observability/alert_contract.py` declares which instruments each alert may read.
 `tests/unit/observability/test_alert_instruments.py` asserts that each one is registered **and**
-that something other than its definition site records a value for it. That second assertion is the
-point: `agenticorg_agent_budget_pct` has been defined in this repository for a long time and
-nothing has ever set it, and an alert on an instrument like that never fires and looks exactly
-like a healthy system.
+that somewhere in the codebase a value is actually recorded on it. That check reads the syntax
+tree rather than the text, so a mention left behind in a comment does not count as a writer -
+which is exactly what a half-finished removal looks like.
+
+The check earns its place: `agenticorg_agent_budget_pct` was defined in `observability/metrics.py`,
+read by a live threshold rule in `observability/alerting.py` and plotted on the Grafana dashboard,
+and nothing had ever given it a value. The rule and the panel were removed along with the gauge -
+an alert on an instrument like that never fires and looks exactly like a healthy system. (Its
+labels were `tenant` and `agent_id`, which is per-tenant, per-agent cardinality; if it is ever
+written, it needs different labels.)
 
 ## What is not here yet
 
-The collector itself. This change is the app side: the endpoint, the instruments and the
-definitions, all testable locally and in CI. Adding the Managed Service for Prometheus sidecar to
-the Cloud Run services, with the service-spec deploy that multiple containers require and the
-worker's in-memory volume for `PROMETHEUS_MULTIPROC_DIR`, is a separate change against the release
-helper. Until it lands, the endpoint is serving and the policies have no samples to evaluate.
+**PRD §10 is achievable, not met.** The full path - process, endpoint, collector, managed
+Prometheus, policy, notification - has never carried a single sample. Nothing here should be
+relied on until it has.
+
+What remains: the Managed Service for Prometheus sidecar on each Cloud Run service, with the
+service-spec deploy that multiple containers require and the worker's in-memory volume for
+`PROMETHEUS_MULTIPROC_DIR`; one real `terraform apply` of the policies (the only thing that would
+have caught a `duration` in Prometheus's `15m` form rather than the protobuf `900s` the API
+demands, which `terraform validate` cannot see); and one alert driven end to end, from a real
+metric to a real notification.

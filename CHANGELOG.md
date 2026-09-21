@@ -30,7 +30,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   serves traffic on. The worker exports in multiprocess mode, because Celery's
   prefork pool means counters are incremented in forked children. Until now
   every instrument in the codebase was write-only (FINDINGS A-56).
-- The six PRD §10 alerts and one companion, as committed definitions:
+- The six PRD §10 alerts and one companion, as committed definitions. This
+  makes PRD §10 achievable, not met: no sample has yet travelled the whole path
+  from a process to a notification. Files:
   `monitoring/prometheus/agenticorg-alerts.yml`, unit-tested with `promtool
   test rules` in CI, with the Cloud Monitoring policies in
   `infra/terraform/monitoring/` built from that same file and a dashboard in
@@ -46,6 +48,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - `agenticorg_chain_verifications_total` (cited passages and promotion-history
   chains verified against their digests) and
   `agenticorg_budget_cap_events_total` (spend caps warned and exhausted).
+
+### Removed
+- The `budget_pct_high` threshold rule and the Grafana "Budget Utilization"
+  panel, with the `agenticorg_agent_budget_pct` gauge behind them. The gauge
+  has never been given a value by anything, so the rule could not fire and the
+  panel could not draw: both were reporting on a metric that does not exist.
+  Restoring them means writing the gauge first, with labels that are not
+  per-tenant and per-agent.
 
 ### Fixed
 - `docs/deployment.md` told operators to `curl http://localhost:8000/metrics`,
