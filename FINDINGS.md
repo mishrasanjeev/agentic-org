@@ -707,3 +707,26 @@ Remove an entry in the pull request that fixes it.
   authentication (or export through the existing observability pipeline),
   document the endpoint, and make one alert from an existing counter to prove
   the path end to end.
+
+## A-57 — The encrypted-migration gate waves through an empty exemption and never reads an edited migration
+
+- **Found:** adding the exemption marker to the case-excerpt migration and
+  reading what the marker actually has to satisfy (PRD A-9 review follow-up,
+  2026-09-21).
+- **What:** `scripts/check_encrypted_migration_uses_helpers.py` has two holes
+  that between them let a real ciphertext transform ship unexamined.
+  - The exemption is `if EXEMPT_MARKER in body: continue` - a substring test
+    over the whole file. The reason the message promises (`# ENCRYPTED_MIGRATION_HELPER_EXEMPT: <reason>`)
+    is never parsed and never required to be non-empty, so a bare marker, a
+    marker inside a docstring, or a marker in a comment about something else
+    exempts the file. The gate's own instruction ("read on review") is the only
+    thing enforcing it, and a reviewer cannot notice a reason that is not there.
+  - `_added_files` uses `git diff --diff-filter=A`, so the gate examines only
+    migrations *added* in the branch. A migration that already exists on the
+    base and is edited to backfill or re-encrypt a column - the change most
+    likely to be written by hand against a live table - is never read at all.
+    The same applies to a migration renamed into place (`R`).
+- **Fix:** require the marker to match `^\s*#\s*ENCRYPTED_MIGRATION_HELPER_EXEMPT:\s*\S.+`
+  at the start of a line with a reason of some minimum length, and widen the
+  discovery to `--diff-filter=AMR` so an edited migration is scanned on the
+  same terms as a new one.

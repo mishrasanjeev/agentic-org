@@ -589,6 +589,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Storing a governed case's cited passages no longer opens a database session
+  per passage while the case row is locked. The tenant's key is resolved once,
+  before the write session (`core.cases.excerpts.tenant_key`), and each passage
+  is encrypted with it off the event loop; the retention bound is applied
+  first, so a capture larger than the bound does no key work for the passages
+  it is about to drop.
 - Two migrate jobs started together no longer race on an empty database:
   `migrations/env.py` takes the same transaction-scoped advisory lock
   `init_db()` uses before deciding whether to build the baseline, and rechecks

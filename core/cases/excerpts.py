@@ -26,6 +26,7 @@ returning a passage: a passage that no longer matches its digest is refused, nev
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import uuid
 from collections.abc import Mapping, Sequence
@@ -73,23 +74,42 @@ def reference(entry: Mapping[str, Any]) -> dict[str, Any]:
     return {key: entry[key] for key in REFERENCE_KEYS if key in entry}
 
 
+async def tenant_key(tenant_id: uuid.UUID | str) -> str:
+    """The tenant's key encryption key, resolved *before* the case's write session is opened.
+
+    Resolving it reads the tenant row, and :func:`store` runs inside the transaction that holds
+    the case row locked; opening a second session there is what ``resolve_tenant_kek`` exists to
+    avoid. ``""`` means the deployment's legacy key.
+    """
+    from core.crypto.tenant_secrets import resolve_tenant_kek
+
+    tenant = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+    return await resolve_tenant_kek(tenant)
+
+
 async def store(
-    tenant_id: uuid.UUID | str,
+    kek: str,
     existing: Sequence[Mapping[str, Any]] | None,
     captured: Sequence[Mapping[str, Any]],
     *,
     now: str = "",
     limit: int = MAX_CASE_EXCERPTS,
 ) -> list[dict[str, Any]]:
-    """Merge freshly captured passages into a case's store, encrypted, newest first, bounded."""
-    from core.crypto.tenant_secrets import encrypt_for_tenant
+    """Merge freshly captured passages into a case's store, encrypted, newest first, bounded.
 
-    tenant = tenant_id if isinstance(tenant_id, uuid.UUID) else uuid.UUID(str(tenant_id))
+    Takes the key from :func:`tenant_key`, which the caller resolves before opening the write
+    session, and encrypts off the event loop (a customer-managed key is a gRPC call to a key
+    manager). Only the passages that survive the bound are encrypted: trimming happens first, so a
+    capture larger than the limit does no key work for entries it is about to drop.
+    """
+    from core.crypto.tenant_secrets import encrypt_with_kek
+
     merged: dict[str, dict[str, Any]] = {}
     for entry in existing or []:
         ref = str(entry.get("excerpt_ref") or "")
         if ref:
             merged[ref] = dict(entry)
+    pending: dict[str, str] = {}
     for sequence, entry in enumerate(captured):
         ref = str(entry.get("excerpt_ref") or "")
         text = entry.get("text")
@@ -101,8 +121,8 @@ async def store(
         stored[SEQUENCE_KEY] = sequence
         # The newest capture replaces an older passage for the same reference: the memo cites the
         # digest of the newest one.
-        stored[CIPHERTEXT_KEY] = await encrypt_for_tenant(text, tenant)
         merged[ref] = stored
+        pending[ref] = text
     # Oldest first, and within one capture the order it was captured in, so trimming drops the
     # oldest passages rather than whichever references sort first.
     ordered = sorted(
@@ -112,7 +132,12 @@ async def store(
     dropped = max(0, len(ordered) - max(1, limit))
     if dropped:
         logger.info("case_excerpts_trimmed", dropped=dropped, kept=max(1, limit))
-    return ordered[dropped:]
+    kept = ordered[dropped:]
+    for entry in kept:
+        text = pending.get(str(entry["excerpt_ref"]))
+        if text is not None:
+            entry[CIPHERTEXT_KEY] = await asyncio.to_thread(encrypt_with_kek, text, kek)
+    return kept
 
 
 def read(entry: Mapping[str, Any]) -> str:

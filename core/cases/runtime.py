@@ -285,6 +285,9 @@ async def _store_investigation(
     *,
     keep_state_on_failure: bool = False,
 ) -> dict[str, Any]:
+    # Resolved before the write session below, which holds the case row locked: resolving the key
+    # reads the tenant row, and that must not need a second session.
+    kek = await case_excerpts.tenant_key(tenant) if outcome is not None and outcome.excerpts else ""
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         if case.version != started_version:
@@ -317,7 +320,7 @@ async def _store_investigation(
         case.screening_results = outcome.screening_results
         case.parties = outcome.parties
         case.excerpts_encrypted = await case_excerpts.store(
-            tenant, case.excerpts_encrypted, outcome.excerpts, now=runtime.clock().isoformat()
+            kek, case.excerpts_encrypted, outcome.excerpts, now=runtime.clock().isoformat()
         )
         case.screening_dispositions = []
         await transition(
@@ -395,6 +398,7 @@ async def dispose_screening_hits(
             else:
                 proposed.append(outcome.disposition)
 
+    kek = await case_excerpts.tenant_key(tenant) if excerpts else ""
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         if case.version != version:
@@ -402,7 +406,7 @@ async def dispose_screening_hits(
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
         case.excerpts_encrypted = await case_excerpts.store(
-            tenant, case.excerpts_encrypted, excerpts, now=runtime.clock().isoformat()
+            kek, case.excerpts_encrypted, excerpts, now=runtime.clock().isoformat()
         )
         await record_update(session, case, now=runtime.clock())
         version, had_requests = case.version, bool(case.decision_requests)
