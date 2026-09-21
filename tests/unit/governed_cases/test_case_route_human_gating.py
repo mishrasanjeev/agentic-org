@@ -17,10 +17,12 @@ import pytest
 
 from api.v1.governed_cases import (
     DecisionRequest,
+    NewDecisionRequest,
     actor_for,
     approve_information_request,
     decide_governed_case,
     human_actor_for,
+    request_case_decision,
     review_screening_disposition,
     withdraw_case,
 )
@@ -77,6 +79,10 @@ async def _call_route(name: str, request: Any) -> Any:
         return await decide_governed_case(
             CASE_REF, DecisionRequest(outcome="approve"), request, tenant_id=TENANT, runtime=runtime
         )
+    if name == "decision_request":
+        return await request_case_decision(
+            CASE_REF, NewDecisionRequest(outcome="approve"), request, tenant_id=TENANT, runtime=runtime
+        )
     if name == "disposition_review":
         return await review_screening_disposition(
             CASE_REF,
@@ -89,7 +95,13 @@ async def _call_route(name: str, request: Any) -> Any:
     return await approve_information_request(CASE_REF, "a" * 64, request, tenant_id=TENANT, runtime=runtime)
 
 
-HUMAN_ONLY_ROUTES = ["withdraw", "decision", "disposition_review", "information_request_approval"]
+HUMAN_ONLY_ROUTES = [
+    "withdraw",
+    "decision",
+    "decision_request",
+    "disposition_review",
+    "information_request_approval",
+]
 
 
 @pytest.mark.parametrize("route", HUMAN_ONLY_ROUTES)

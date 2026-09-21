@@ -681,7 +681,17 @@ Remove an entry in the pull request that fixes it.
   loop then fails on checkout, exactly as in A-49. Observed while writing
   `tests/integration/test_sync_credential_resolution_pool.py`: the shared pool
   gained a connection from the runner loop.
-- **Fix:** decide the branch by the process's role rather than by whether this
-  thread has a loop — use `run_async` only in a worker process (the Celery
-  bootstrap can set a flag) and `run_db_coroutine_sync` everywhere else — or
-  give `run_async` its own engine bound to the runner loop.
+  It is not live today: every `run_async` caller is a Celery task module or
+  `core/reports/generator.py`, and `ReportGenerator` is reached only through
+  the `generate_report` task, which the API dispatches with `.delay()`. It
+  becomes live the moment any path in the API process reaches `_run_coroutine`
+  — or another `run_async` caller — from a thread with no running loop, and
+  `asyncio.to_thread` already appears in 24 places across seven modules under
+  `api/`, so that is one careless import away.
+- **Fix (near-term, its own pull request):** decide the branch by the process's
+  role rather than by whether this thread has a loop — use `run_async` only in
+  a worker process (the Celery bootstrap can set a flag) and
+  `run_db_coroutine_sync` everywhere else — or give `run_async` its own engine
+  bound to the runner loop. Settle the runner's fork guard in the same change:
+  fork a child, call `run_async` in parent and child, and assert the child
+  built its own loop (no Redis or Celery needed; Linux CI only).

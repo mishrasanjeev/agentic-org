@@ -66,15 +66,50 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
 
 ### Added
+- Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
+  `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
+  `GET .../decision-requests/{request_id}`): AgenticOrg asks the Grantex auth service for a
+  decision on one semantic action, records the request on the case and reports the live status of
+  the approvals; the person approves only on the auth service's own approval page, which handles
+  sign-in, step-up, the four-eyes rule and the authoritative dwell measurement.
+  `POST .../decision` accepts `decision_request_id`, fetches the minted grants server-side (a
+  decision grant never reaches the browser) and consumes them for the exact action and the case's
+  current version through `CaseRuntime.decision_verifier`, so a case that changed after the
+  approval is refused with `case_changed`. `client_dwell_ms` on both routes is advisory telemetry
+  only (`agenticorg_case_console_dwell_seconds{stage}`), never the authoritative dwell. Off by
+  default: without `AGENTICORG_CASE_DECISION_SERVICE=grantex` decision requests answer
+  `decision_service_not_configured` and every decision is still refused with `decision_required`.
+  New metrics `agenticorg_case_decision_requests_total{outcome,result}` and
+  `agenticorg_case_decision_grants_consumed_total{outcome,result}`; new documentation
+  `docs/governance/decision-requests.md`. Migration `v6z27_case_decisions` adds
+  `governed_cases.decision_requests` (additive, forward-only). The issuer's answers are parsed
+  strictly - a field the console states as fact (the action and its hash, the case version, how
+  many approvals are required, each approval's subject, authentication, position and dwell
+  source) is refused when absent rather than defaulted - the semantic action is bound to the
+  tenant as well as the case, `GRANTEX_BASE_URL` must be set explicitly when the service is on,
+  and consumption runs with its own shorter deadline while the case row is locked. A case change
+  registers the new version with the issuer, so it supersedes an open request and revokes unused
+  grants; an issuer answering `404 NOT_FOUND` for a request it no longer holds is reported as
+  `decision_request_not_found` rather than as the service being switched off.
 - Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited
   underwriting memo (every evidence entry naming the provider, upstream record, field and
-  retrieval time, linked to the cited-records index and to attached excerpt references), the
+  retrieval time, linked to the cited-records index; an excerpt reference is linked when the
+  memo carries the excerpt and labelled as not attached when it does not, which today is every
+  case - see FINDINGS A-48), the
   policy score with every fired rule and the evidence values it read, and the case history.
   Sections the provider could not supply are shown as unchecked rather than clear. The
   screens are read-only: no decision, review or state change is made from them. A tenant
   without `governed_cases.enabled` is told so instead of seeing an empty queue.
+- Screening disposition review in the approvals console
+  (`ui/src/components/governed-cases/ScreeningDispositions.tsx`, PRD §3 US-3): each hit shows
+  the list entry it concerns, the proposed outcome, the confidence band as metadata, the
+  rationale, the per-identifier comparison table (name, date of birth, nationality, address,
+  associated entities) and the cited evidence. An analyst accepts the proposal or overrides it
+  with a different outcome and a mandatory written reason; the analyst identity comes from the
+  session, a review is written once, and the form appears only while the case is awaiting a
+  decision. Nothing closes a screening hit.
 - `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
   cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
   provider fixture and runs the reference agents against the stack, writing the new case
@@ -534,19 +569,6 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   task body inside its own loop), the weekly-report pilot-proof writer and the
   CDC store's sync helpers. The LangGraph credential prefetch stays as defence
   in depth and one fewer connection per model build.
-<<<<<<< HEAD
-- Two migrate jobs started together no longer race on an empty database:
-  `migrations/env.py` takes the same transaction-scoped advisory lock
-  `init_db()` uses before deciding whether to build the baseline, and rechecks
-  the recorded revision after acquiring it. A database holding only views,
-  materialised views or sequences counts as occupied (the check reads
-  `pg_class`, not just the tables), so a bare `alembic upgrade` refuses it
-  with `unmanaged_database_not_empty` instead of creating a baseline beside
-  them.
-- Encrypted-column migrations write their audit record to
-  `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
-  rewrites the committed records under `migrations/audit/`.
-=======
 - The example onboarding policies read only evidence the Business Onboarding
   Underwriter produces, and only registry statuses the provider interface can
   return. `business_onboarding_uk` dropped `filings_overdue`: it read
@@ -568,7 +590,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   so before this the observed activity was empty for every fixture and
   `web_presence.activity_mismatch` never resolved. It now resolves for seven of
   the twelve fixtures.
->>>>>>> origin/main
+- Two migrate jobs started together no longer race on an empty database:
+  `migrations/env.py` takes the same transaction-scoped advisory lock
+  `init_db()` uses before deciding whether to build the baseline, and rechecks
+  the recorded revision after acquiring it. A database holding only views,
+  materialised views or sequences counts as occupied (the check reads
+  `pg_class`, not just the tables), so a bare `alembic upgrade` refuses it
+  with `unmanaged_database_not_empty` instead of creating a baseline beside
+  them.
+- Encrypted-column migrations write their audit record to
+  `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
+  rewrites the committed records under `migrations/audit/`.
 - Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
   with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
   connector's Grantex manifest instead of `...:execute:...`, which Grantex's

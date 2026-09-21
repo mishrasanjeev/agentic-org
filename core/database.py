@@ -115,6 +115,10 @@ def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:
         state: dict[str, Any] = {}
 
         def _provider() -> async_sessionmaker[AsyncSession]:
+            # Loop-local: `state` is mutated without a guard, which is safe on
+            # the single private loop. A coroutine that called
+            # `current_session_factory()` from `asyncio.to_thread` could build
+            # two engines here and leave one undisposed.
             if "factory" not in state:
                 private_engine = create_async_engine(
                     engine.url.render_as_string(hide_password=False),
