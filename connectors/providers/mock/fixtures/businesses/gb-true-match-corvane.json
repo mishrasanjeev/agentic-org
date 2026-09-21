@@ -108,7 +108,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "Charter shipping and freight forwarding for bulk cargo."
+        "content": "<!doctype html><html><head><title>Corvane Charter - freight forwarding and shipping</title></head><body><h1>Freight forwarding for bulk cargo</h1><p>Charter shipping and freight forwarding for bulk cargo.</p></body></html>"
       }
     ]
   }

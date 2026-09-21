@@ -57,6 +57,11 @@ applicant declared — for seeding cases.
 | `gb-dissolved-ashcombe` | GB | dissolved company with a `business.dissolved` event |
 | `gb-adversarial-northgate` | GB | instructions in the company name and in a watchlist alias, on a true match |
 
+Website pages are small HTML documents with a title and a heading, as a real
+site has: the extractor reads a page's activity categories from its title,
+meta description and headings only, so a page without them cannot be compared
+with the applicant's declared activity.
+
 Loading fails closed: a malformed fixture, a duplicate identifier or any file
 the loader does not recognise stops the provider from being created. The
 contract suite validates every ownership graph, screening result and sample

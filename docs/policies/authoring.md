@@ -62,6 +62,49 @@ indexing is not supported. The engine does not know the case schema — the
 workflow that builds the evidence mapping decides what each path means — so
 keep paths aligned with the published case schemas.
 
+### The shipped examples' vocabulary
+
+`core/policy/examples/business_onboarding_{uk,us}.yaml` read the evidence
+mapping the Business Onboarding Underwriter builds
+(`core.agents.business_underwriter.facts.policy_evidence`):
+
+| Path | Meaning | Resolves when |
+|---|---|---|
+| `verification.status` | The registry status, a `RegistryStatus` value (`active`, `inactive`, `dissolved`, `in_insolvency`, `unknown`) | a registry record was resolved |
+| `verification.registry_match` | The application matched a registry record | the registry lookup completed |
+| `verification.tax_id_match` | The declared tax identifier is on the registry record | the jurisdiction has a tax-identifier scheme and both sides carry one |
+| `ownership.missing_owners`, `ownership.undeclared_owners` | Declared owners against the ownership graph | the provider returned an ownership graph |
+| `screening.unresolved_true_matches`, `screening.unresolved_possible_matches` | Screening hits by disposition | every party could be screened |
+| `web_presence.activity_mismatch` | Observed activity differs from the declared one | the declared term maps to a category **and** a page states one |
+
+Two rules follow from this:
+
+- Only compare `verification.status` with members of `RegistryStatus`. A value
+  outside it (`liquidation`, `revoked`) can never be returned, so the rule
+  never fires.
+- Only read a path the mapping produces. A rule over a path nothing supplies
+  fires as indeterminate on every case, which adds tier and score without
+  telling anyone anything.
+
+`tests/unit/business_underwriter/test_underwriter_policy_examples.py` holds the
+examples to both rules against the mock fixtures.
+
+#### Declared activity vocabulary
+
+`web_presence.activity_mismatch` compares the application's `declared_activity`
+term with the activity categories the extractor recognises on the business's
+website (`core.extraction._worker.ACTIVITY_KEYWORDS`). The mapping between the
+two is published in
+`core.agents.business_underwriter.facts.DECLARED_ACTIVITY_CATEGORIES`; a term
+that is not listed falls back to the extractor's own keywords. Add a term there
+when a new declared-activity value should be comparable, otherwise the
+comparison is unresolved and the rule fires as indeterminate.
+
+Map a term to the categories it means and to no more than those. The
+comparison intersects the declared set with the categories observed on the
+website, so every category added beyond the term's meaning hides a real
+mismatch.
+
 ## Conditions and operators
 
 A condition is a mapping with **exactly one key**: either a dotted path mapped
