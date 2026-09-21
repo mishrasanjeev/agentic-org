@@ -46,7 +46,10 @@ POST /api/v1/governed-cases/{case_ref}/decision-requests
 - The case must be `awaiting_decision` and have a memo and a policy result.
 - The request is bound to the case's **current version**. A later change to the case (an analyst
   review, a re-investigation) supersedes it: the status then reports `case_changed: true` and
-  consumption is refused with `case_changed`. Ask for a new decision on the new memo.
+  consumption is refused with `case_changed`. Ask for a new decision on the new memo. The new
+  version is also registered with the issuer as the case changes, so it supersedes the open request
+  and revokes grants that were minted but never used, instead of leaving them live until they
+  expire.
 - `override_reason` is for asking for an outcome other than the memo's recommendation. It is shown
   to the approver and recorded on the case.
 - The answer carries `approval_page` (where the approver goes), `approvals_required` (2 when the
@@ -94,6 +97,7 @@ other answer is a refusal:
 | `same_approver`, `four_eyes_incomplete` | four eyes is not satisfied |
 | `decision_service_not_configured` | no issuer is configured here |
 | `decision_service_unavailable`, `decision_service_disabled` | the issuer could not answer, or has decision grants switched off |
+| `decision_request_not_found` | the issuer no longer holds that request (an unknown id, or one past its 24-hour ceiling) |
 
 Passing `decision_grants` directly is still supported for callers that already hold tokens; the
 same consumption and the same refusals apply.
@@ -113,24 +117,34 @@ case API behaves exactly as before: every decision is refused with `decision_req
 The auth service must run with decision grants enabled and with the approver identity providers
 allow-listed by its administrator; AgenticOrg's developer key cannot do either, by design.
 
-## Before turning it on outside a development stack
+## Enablement checklist
 
-- **Set the issuer explicitly.** With `AGENTICORG_CASE_DECISION_SERVICE=grantex` and no
-  `GRANTEX_BASE_URL`, decision requests are refused: nothing should be asked of an issuer nobody
-  chose.
-- **Verify the grants here as well.** Today this platform does not check the decision grants
-  itself: it consumes them at the issuer, which verifies the signature and key, the audience and
-  issuer, the action hash, the dwell source, the memo and policy hashes and the four-eyes
-  structure under its own row locks, and refuses anything that does not match. That is fail-closed
-  but single-sided. Verifying them locally as well (decision-grant profile §6 steps 2 and 3) needs
-  the Grantex Python SDK's `grantex.decisions` verifier, which is not published yet. Wire it into
-  `ServiceDecisionVerifier` when it is, and treat that as a prerequisite for enabling this outside
-  a development stack.
-- **The endpoint shapes are provisional.** Answers are parsed strictly: any field the console
-  states as fact - the action, its hash, the case version, how many approvals are required, and
-  each approval's subject, authentication, position and dwell source - is refused when absent
-  (`decision_service_response_invalid`) rather than defaulted, so a renamed field fails loudly
-  instead of showing one approver where four eyes were required.
+The issuer side is implemented and covered in the Grantex repository (the decision routes, the
+approval page, four eyes and the browser end-to-end suite). What is not yet proven *here* is the
+join between the two, because this stack pins an auth-service image that predates those routes.
+Before turning `AGENTICORG_CASE_DECISION_SERVICE=grantex` on anywhere:
+
+1. **Rebuild the development auth-service image** so `docker-compose.dev.yml` runs a Grantex build
+   that serves `/v1/decisions/...` and the approval page, with `DECISION_GRANTS_ENABLED=true`.
+2. **Allow-list an approver identity provider** for the developer, through the service
+   administrator's API. The platform's own key cannot do this, by design.
+3. **Take one genuine four-eyes approval end to end**: request a decline from the console, approve
+   on the issuer's page as two different people with step-up, record the decision, and check the
+   case's `decision.approvers`, the issuer-measured dwell and the audit chain on both sides.
+4. **Set the issuer explicitly.** With the service on and no `GRANTEX_BASE_URL`, decision requests
+   are refused: nothing should be asked of an issuer nobody chose.
+5. **Consider verifying the grants here as well.** This platform consumes them at the issuer, which
+   verifies the signature and key, the audience and issuer, the action hash, the dwell source, the
+   memo and policy hashes and the four-eyes structure under its own row locks, and refuses anything
+   that does not match. That is fail-closed but single-sided; verifying them locally too
+   (decision-grant profile §6 steps 2 and 3) needs the Grantex Python SDK's `grantex.decisions`
+   verifier once it is published.
+
+Answers from the issuer are parsed strictly: any field the console states as fact - the action, its
+hash, the case version, how many approvals are required, and each approval's subject,
+authentication, position and dwell source - is refused when absent
+(`decision_service_response_invalid`) rather than defaulted, so a renamed field fails loudly
+instead of showing one approver where four eyes were required.
 
 ## What is recorded
 

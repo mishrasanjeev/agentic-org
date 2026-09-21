@@ -229,6 +229,8 @@ async def test_a_request_status_reports_each_approval_and_the_dwell_the_issuer_m
     ("status", "payload", "reason", "detail"),
     [
         (404, {"code": "DECISION_GRANTS_DISABLED"}, "decision_service_disabled", "DECISION_GRANTS_DISABLED"),
+        # An unknown or aged-out request is not the service being switched off.
+        (404, {"code": "NOT_FOUND"}, "decision_request_not_found", "NOT_FOUND"),
         (401, {"code": "UNAUTHORIZED"}, "decision_service_unauthorised", "UNAUTHORIZED"),
         (409, {"reason": "decision_invalid", "subReason": "case_changed"}, "decision_invalid", "case_changed"),
         (500, {"code": "INTERNAL"}, "decision_service_refused", "INTERNAL"),
@@ -461,6 +463,27 @@ async def test_a_consumed_decision_records_grant_ids_and_never_a_token() -> None
     assert recorded == ["jti-dr_00000001-1", "jti-dr_00000001-2"]
     for token in grants:
         assert token not in recorded
+
+
+async def test_a_new_case_version_supersedes_an_open_request_at_the_issuer() -> None:
+    """The issuer's own protection: grants for a case that moved on are revoked, not left live."""
+    fake = FakeDecisionGrantService()
+    case = case_row()
+    view = await fake.create_request(
+        action=case_action(case, "approve"),
+        case_version=str(case.version),
+        memo="memo",
+        policy_score=POLICY,
+        four_eyes_on=(),
+    )
+    fake.approve(view.request_id, "user:9f:alice")
+    assert await fake.grants(view.request_id) != []
+
+    await fake.set_case_version(case.case_ref, str(case.version + 1))
+
+    after = await fake.get_request(view.request_id)
+    assert after.status == "superseded"
+    assert await fake.grants(view.request_id) == []
 
 
 # --- the fake service's own rules --------------------------------------------------------------------

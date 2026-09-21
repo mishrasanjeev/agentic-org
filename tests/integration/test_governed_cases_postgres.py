@@ -814,13 +814,16 @@ async def test_a_case_that_changes_after_the_request_can_no_longer_be_decided_on
             await client.get(f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers)
         ).json()
         assert status["case_changed"] is True
+        # The issuer heard about the new version and superseded its own request as well.
+        assert status["status"] == "superseded" and status["grants_ready"] is False
+        assert status["approval_page"].endswith(f"/decisions/{request_id}")
 
         refused = await client.post(
             f"/api/v1/governed-cases/{case_ref}/decision",
             json={"outcome": "approve", "decision_request_id": request_id},
             headers=auth_headers,
         )
-        assert refused.status_code == 403 and refused.json()["error"]["reason"] == "case_changed"
+        assert refused.status_code == 409 and refused.json()["error"]["reason"] == "case_changed"
         case, _ = await _load(TEST_TENANT_ID, case_ref)
         assert case.state == "awaiting_decision" and case.decision is None
     finally:
