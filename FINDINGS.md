@@ -121,22 +121,19 @@ Remove an entry in the pull request that fixes it.
   the CA names, and extend the check to pack prompts against each pack's
   `tools:` list, treating `composio:` names as declared.
 
-## A-13 — Test runs rewrite tracked files
+## A-13 — A test run rewrites the tracked coverage report
 
 - **Found:** running `make test` and `make test-integration` in a fresh clone
-  (2026-09-15).
-- **What:** two suites write into tracked files, so every local run dirties
-  the working tree and the changes are easy to commit by accident.
-  `tests/integration/test_alembic_e2e.py` runs the real migrations, and
-  `core/crypto/migration_helpers.py` writes each encrypted-column migration's
-  audit record to `migrations/audit/<revision>.json` in the checkout
-  (`v6z12_voice_runtime.json` gets new `started_at`/`completed_at`).
-  `tests/unit/test_check_module_coverage.py` runs
+  (2026-09-15); narrowed 2026-09-20.
+- **What:** `tests/unit/test_check_module_coverage.py` runs
   `scripts/check_module_coverage.py`, which rewrites the tracked
-  `coverage_report.json`.
-- **Fix:** let both output locations be overridden (environment variables the
-  tests point at a temporary directory), or have the tests restore the files;
-  keep the committed records as they are.
+  `coverage_report.json`, so every local run dirties the working tree and the
+  change is easy to commit by accident. The encrypted-migration audit records
+  under `migrations/audit/` had the same problem; the writer now honours
+  `AGENTICORG_MIGRATION_AUDIT_DIR`, which the test session points at a
+  temporary directory.
+- **Fix:** let the report location be overridden the same way (an environment
+  variable the test points at `tmp_path`), or have the test restore the file.
 
 ## A-14 — Shell scripts break on Windows checkouts with `core.autocrlf=true`
 
@@ -520,6 +517,7 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** change the SDK's `update` to `PATCH` (in the Grantex repository),
   publish it, pin it here, and call `agents.update` again from
   `update_agent_scopes`.
+
 ## A-45 — Unique and redundant indexes differ between the models and the migrations
 
 - **Found:** comparing an empty database built by `alembic upgrade head` with
@@ -622,3 +620,23 @@ Remove an entry in the pull request that fixes it.
   count), to `schemas/`, to the mock provider's fixtures and to the provider
   conformance suite, then reinstate the rule in the UK example; until then no
   policy may read a filing field.
+
+## A-52 — Offline `--sql` migration scripts cannot be generated
+
+- **Found:** documenting offline mode for the empty-database bootstrap
+  (2026-09-20).
+- **What:** `alembic upgrade <range> --sql` fails for any range that reaches
+  head. `migrations/versions/v6_z26_case_push.py:120` and
+  `v6_z24_case_pseudonym_maps.py:51` call
+  `op.get_bind().execute(...)` to decide whether their table already exists,
+  and `v6_z5_capability_readiness_ledger.py` inspects the bind; in offline
+  mode there is no connection, so generation dies with
+  `AttributeError: 'NoneType' object has no attribute 'scalar'`. Reproduced
+  from `v6z24_case_pseudonym_maps:head` and from the single-step
+  `v6z25_governed_cases:head`. An empty database cannot be scripted either:
+  the bootstrap needs a connection to inspect. Teams that review SQL before a
+  release therefore cannot get that SQL from Alembic.
+- **Fix:** guard every bind query with `context.is_offline_mode()` and emit the
+  unconditional DDL (or `DO $$ ... $$` blocks that make the same decision in
+  SQL) in offline mode, then add a test that
+  `alembic upgrade <baseline>:head --sql` renders for the whole chain.
