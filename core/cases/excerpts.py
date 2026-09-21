@@ -119,7 +119,7 @@ def read(entry: Mapping[str, Any]) -> str:
         raise ExcerptError("excerpt_not_held", "the case holds no passage for this reference")
     try:
         text = decrypt_for_tenant(ciphertext)
-    # enterprise-gate: broad-except-ok reason=undecryptable-excerpt-is-refused-never-served
+    # enterprise-gate: broad-except-ok reason=undecryptable-passage-refuses-the-read-and-is-never-served
     except Exception as exc:
         excerpt_reads_total.labels(result="unreadable").inc()
         logger.error("case_excerpt_undecryptable", error=type(exc).__name__)

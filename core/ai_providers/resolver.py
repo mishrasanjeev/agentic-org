@@ -220,10 +220,12 @@ async def _tenant_fallback_allowed(tenant_id: _uuid.UUID) -> bool:
     ``settings`` JSONB with key ``ai_fallback_policy``.
     """
     try:
-        from core.database import async_session_factory
+        from core.database import current_session_factory
         from core.models.tenant import Tenant
 
-        async with async_session_factory() as session:
+        # Resolved per call: the synchronous entry point runs this coroutine on
+        # a private engine, and this read must use that engine too.
+        async with current_session_factory()() as session:
             result = await session.execute(
                 select(Tenant.settings).where(Tenant.id == tenant_id)
             )
@@ -387,12 +389,17 @@ def get_provider_credential_sync(
     """Sync wrapper over :func:`get_provider_credential`.
 
     Used by sync call sites (``core/langgraph/llm_factory.py``,
-    legacy voice config readers). Spawns an event loop when not
-    already inside one so the async resolver can complete its DB
-    lookup. Callers that are already async MUST use
+    legacy voice config readers). The lookup runs on a throwaway event
+    loop with a private ``NullPool`` engine
+    (``core.database.run_db_coroutine_sync``), so it never borrows a
+    connection from the shared pool — those belong to the loop that
+    opened them — and never leaves one behind for another request to
+    trip over. Callers that are already async MUST use
     :func:`get_provider_credential` directly.
     """
     import asyncio
+
+    from core.database import run_db_coroutine_sync
 
     try:
         loop = asyncio.get_running_loop()
@@ -408,14 +415,14 @@ def get_provider_credential_sync(
         )
 
     if loop is None:
-        return asyncio.run(_make_coro())
+        return run_db_coroutine_sync(_make_coro)
 
-    # Already inside a running loop — submit to a thread-local loop so
-    # we don't re-enter.
+    # Already inside a running loop — run it in a worker thread, which has a
+    # loop and an engine of its own.
     import concurrent.futures
 
     def _runner() -> ResolvedCredential:
-        return asyncio.run(_make_coro())
+        return run_db_coroutine_sync(_make_coro)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(_runner).result()

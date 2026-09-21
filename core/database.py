@@ -4,12 +4,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from alembic.config import Config
@@ -23,6 +26,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass
+from sqlalchemy.pool import NullPool
 
 from core.config import is_strict_runtime_env, settings
 
@@ -65,6 +69,79 @@ engine: AsyncEngine = create_async_engine(
 
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# Session factory the session helpers use. Normally the shared, pooled one;
+# ``run_db_coroutine_sync`` overrides it for the duration of a coroutine it
+# runs on a throwaway event loop (see that function).
+_session_factory_override: ContextVar[Callable[[], async_sessionmaker[AsyncSession]] | None] = ContextVar(
+    "agenticorg_session_factory_override", default=None
+)
+
+
+def current_session_factory() -> async_sessionmaker[AsyncSession]:
+    """The session factory for this context: the shared one unless overridden."""
+    provider = _session_factory_override.get()
+    return provider() if provider is not None else async_session_factory
+
+
+def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:
+    """Run a database coroutine from a synchronous caller, on its own engine.
+
+    An asyncpg connection belongs to the event loop that opened it. The shared
+    engine pools connections, so a coroutine run on a throwaway loop must not
+    take one from that pool (it fails on the foreign loop) and must not leave
+    one in it (the next request to check it out fails, and ``pool_pre_ping``
+    does not rescue it: a cross-loop ``RuntimeError`` is not a disconnect).
+
+    This runs ``make_coroutine()`` on a new loop with a ``NullPool`` engine of
+    its own, and disposes that engine before returning, so nothing outlives the
+    loop. Callers that are already async must await the coroutine instead; a
+    synchronous caller inside a running loop has to hand this to a worker
+    thread, which is what ``core.ai_providers.resolver`` does.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError(
+            "run_db_coroutine_sync cannot be called from a running event loop: "
+            "await the coroutine, or submit this call to a worker thread."
+        )
+
+    async def _run() -> T:
+        # Built on first use and from the engine in place now, so a coroutine
+        # that opens no session pays for no connection, and a test that
+        # replaced ``engine`` is followed rather than ``settings.db_url``.
+        state: dict[str, Any] = {}
+
+        def _provider() -> async_sessionmaker[AsyncSession]:
+            # Loop-local: `state` is mutated without a guard, which is safe on
+            # the single private loop. A coroutine that called
+            # `current_session_factory()` from `asyncio.to_thread` could build
+            # two engines here and leave one undisposed.
+            if "factory" not in state:
+                private_engine = create_async_engine(
+                    engine.url.render_as_string(hide_password=False),
+                    echo=engine.echo,
+                    poolclass=NullPool,
+                )
+                state["engine"] = private_engine
+                state["factory"] = async_sessionmaker(
+                    private_engine, class_=AsyncSession, expire_on_commit=False
+                )
+            return state["factory"]
+
+        token = _session_factory_override.set(_provider)
+        try:
+            return await make_coroutine()
+        finally:
+            _session_factory_override.reset(token)
+            private = state.get("engine")
+            if private is not None:
+                await private.dispose()
+
+    return asyncio.run(_run())
+
 
 _UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -90,7 +167,7 @@ async def get_tenant_session(
     company_id: UUID | None = None,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session with exact tenant and optional company RLS context."""
-    async with async_session_factory() as session:
+    async with current_session_factory()() as session:
         import re as _re
 
         tid_str = str(tenant_id)
@@ -132,7 +209,7 @@ async def get_tenant_session(
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a raw session (for non-tenant-scoped operations like health checks)."""
-    async with async_session_factory() as session:
+    async with current_session_factory()() as session:
         try:
             yield session
             await session.commit()
