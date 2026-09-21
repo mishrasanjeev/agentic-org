@@ -544,3 +544,39 @@ async def test_a_new_run_re_queries_the_provider_while_a_retry_within_a_run_does
     second = await run("run-2")
     assert second.policy_evidence["verification"]["status"] == "dissolved"
     assert second.memo["recommendation"]["proposed"] == "decline"
+
+
+async def test_the_extractors_own_passages_are_handed_to_the_case(run_case, narrative, monkeypatch) -> None:
+    """A passage the sandboxed extractor kept must reach the case store, not only the memo's index.
+
+    The extractor keeps its excerpts for the run; before this they were attached to the memo by
+    reference and then dropped with the run, so every such citation read "not attached to this
+    memo" for a reviewer (FINDINGS A-48).
+    """
+    from core.agents.business_underwriter import agent as underwriter_agent
+    from core.extraction.excerpts import Excerpt, InMemoryExcerptStore
+
+    store = InMemoryExcerptStore()
+    store.put(Excerpt(excerpt_ref="exc_deadbeef", source_kind="website", field="title", text="Brightwater Lantern"))
+
+    def attach(self: object) -> None:
+        # Stand in for a successful extraction: the memo cites an extractor excerpt.
+        self.inv.excerpts = [  # type: ignore[attr-defined]
+            {
+                "excerpt_ref": "exc_deadbeef",
+                "provider": "mock",
+                "record_id": "mock:web:brightwater.example.com/",
+                "media_type": "text/plain",
+                "sha256": "sha256:" + "0" * 64,
+            }
+        ]
+
+    monkeypatch.setattr(underwriter_agent._Investigator, "_attach_excerpts", attach, raising=True)
+    narrative(1)
+    outcome = await run_case("gb-clean-brightwater", excerpts=store)
+
+    assert outcome.status == "completed"
+    passages = {entry["excerpt_ref"]: entry for entry in outcome.excerpts}
+    assert "exc_deadbeef" in passages, sorted(passages)
+    assert passages["exc_deadbeef"]["text"] == "Brightwater Lantern"
+    assert passages["exc_deadbeef"]["fields"] == ["title"]
