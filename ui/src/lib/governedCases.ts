@@ -148,6 +148,33 @@ export interface CaseSummary {
   updated_at: string | null;
 }
 
+/** One provider call an agent run made, as the case recorded it. */
+export interface CaseToolCall {
+  agent: string;
+  run_id: string;
+  tool: string;
+  outcome: string;
+  reason: string;
+  started_at: string;
+  record_ids: string[];
+  output_sha256: string | null;
+}
+
+/** An excerpt the case holds, by reference. The passage itself has its own route. */
+export interface CaseExcerptReference {
+  excerpt_ref: string;
+  provider: string;
+  record_id: string;
+  media_type: string;
+  sha256: string;
+  fields?: string[];
+}
+
+export interface CaseExcerpt extends CaseExcerptReference {
+  /** The passage as the provider returned it. Untrusted content: rendered as text, never as markup. */
+  text: string;
+}
+
 export interface CaseDetail {
   case: BusinessCase;
   memo: UnderwritingMemo | null;
@@ -158,6 +185,8 @@ export interface CaseDetail {
   screening_dispositions: unknown[];
   parties: unknown[];
   information_requests: unknown[];
+  tool_calls: CaseToolCall[];
+  excerpts: CaseExcerptReference[];
   failure_reason: string | null;
   transitions: CaseTransition[];
 }
@@ -204,6 +233,7 @@ const REASON_MESSAGES: Record<string, string> = {
   request_failed: "The request failed.",
   request_invalid: "The request was not valid.",
   case_state_unknown: "That case state filter is not recognised.",
+  excerpt_not_found: "The case does not hold the passage behind this citation.",
   transition_not_allowed:
     "This action needs the case to be awaiting a decision, and it is in another state now. Reload the case.",
   case_version_conflict: "The case changed while you were working on it. Reload it and try again.",
@@ -235,6 +265,10 @@ export const governedCasesApi = {
   },
   get(caseRef: string): Promise<CaseDetail> {
     return call(() => api.get(casePath(caseRef)));
+  },
+  /** The passage behind one citation. Fetched only when a reviewer asks to read it. */
+  excerpt(caseRef: string, excerptRef: string): Promise<CaseExcerpt> {
+    return call(() => api.get(casePath(caseRef, `/excerpts/${encodeURIComponent(excerptRef)}`)));
   },
 };
 
@@ -304,6 +338,20 @@ export function citationAnchors(memo: UnderwritingMemo): {
     recordId: (provider, recordId) => records.get(key(provider, recordId)) ?? "cited-records",
     excerptId: (ref) => excerpts.get(ref) ?? null,
   };
+}
+
+/**
+ * The upstream records this case's agent runs actually fetched, from their own tool calls.
+ *
+ * A citation naming a record that is not in this set was not verified by the run that wrote the
+ * memo, and the screens say so rather than presenting it as traced.
+ */
+export function retrievedRecordIds(detail: { tool_calls?: CaseToolCall[] }): Set<string> {
+  const ids = new Set<string>();
+  for (const call of detail.tool_calls ?? []) {
+    for (const id of call.record_ids ?? []) ids.add(id);
+  }
+  return ids;
 }
 
 /** Every evidence entry in the memo, section evidence first, then each finding's. */

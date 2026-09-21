@@ -124,6 +124,8 @@ class DispositionOutcome:
     model_confidence: float | None = None
     hit_confirmed: bool | None = None
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    #: The passage behind every excerpt this run's evidence cites.
+    excerpts: list[dict[str, Any]] = field(default_factory=list)
     prompt: dict[str, str] | None = None
     pseudonymised: bool = False
 
@@ -314,6 +316,7 @@ async def run_screening_disposition(
         outcome.failure_reason = "prompt_integrity_failed"
     finally:
         outcome.tool_calls = [record.to_dict() for record in gateway.records]
+        outcome.excerpts = [excerpt.stored() for excerpt in gateway.excerpts.values()]
     logger.info(
         "screening_disposition_run_finished",
         case_id=case_id,

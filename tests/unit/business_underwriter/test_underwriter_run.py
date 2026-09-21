@@ -201,8 +201,15 @@ async def test_every_memo_assertion_traces_to_a_record_the_provider_returned(run
         assert item["provider"] == "mock", where
         assert item["record_id"] in recorded_ids, where
         assert item["retrieved_at"], where
-    excerpt_refs = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
-    assert all(ref.startswith("exc_") for ref in excerpt_refs)
+    # Every excerpt reference the memo's evidence cites is attached to the memo, whether the
+    # sandboxed extractor produced it (exc_...) or the provider cited one on a record it returned.
+    attached = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
+    cited = {item["excerpt_ref"] for _, item in iter_memo_evidence(memo) if item.get("excerpt_ref")}
+    assert cited <= attached, sorted(cited - attached)
+    for excerpt in memo["excerpts"]:
+        assert excerpt["provider"] == "mock"
+        assert excerpt["record_id"]
+        assert excerpt["sha256"].startswith("sha256:")
 
 
 async def test_a_memo_citing_a_record_never_retrieved_fails_the_run_closed(

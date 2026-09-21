@@ -4,6 +4,8 @@ import { formatTimestamp, type Evidence } from "@/lib/governedCases";
 export interface CitationAnchors {
   recordId: (provider: string, recordId: string) => string;
   excerptId: (ref: string) => string | null;
+  /** True when the run's own tool calls returned this record. */
+  retrieved?: (recordId: string) => boolean;
 }
 
 /**
@@ -27,6 +29,8 @@ export default function EvidenceList({
     <ul aria-label={label} className="space-y-1.5" data-testid="evidence-list">
       {evidence.map((entry, index) => {
         const excerptAnchor = entry.excerpt_ref ? anchors.excerptId(entry.excerpt_ref) : null;
+        // A record the run never fetched is not traced evidence, whatever the memo says.
+        const traced = anchors.retrieved ? anchors.retrieved(entry.record_id) : true;
         return (
           <li
             key={`${entry.provider}-${entry.record_id}-${entry.field}-${index}`}
@@ -50,6 +54,14 @@ export default function EvidenceList({
             <span>
               retrieved <time dateTime={entry.retrieved_at}>{formatTimestamp(entry.retrieved_at)}</time>
             </span>
+            {!traced && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <strong className="text-red-800" data-testid="evidence-untraced">
+                  not in this run&apos;s tool calls
+                </strong>
+              </>
+            )}
             {entry.excerpt_ref && (
               <>
                 <span aria-hidden="true"> · </span>

@@ -255,6 +255,7 @@ async def _store_investigation(
         case.ownership_graph = outcome.ownership_graph
         case.screening_results = outcome.screening_results
         case.parties = outcome.parties
+        case.excerpts = _merged_excerpts(case.excerpts, outcome.excerpts)
         case.screening_dispositions = []
         await transition(
             session, case, CaseState.AWAITING_DECISION, actor=actor, reason="memo_ready", now=runtime.clock()
@@ -267,6 +268,16 @@ async def _store_investigation(
             "screening_hits": sum(len(r["hits"]) for r in outcome.screening_results),
             "missing_items": [item["item"] for item in memo["missing_items"]],
         }
+
+
+def _merged_excerpts(existing: list[Any] | None, captured: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One entry per excerpt reference; the first capture of a passage wins."""
+    merged: dict[str, dict[str, Any]] = {}
+    for entry in [*(existing or []), *captured]:
+        ref = str(entry.get("excerpt_ref") or "")
+        if ref:
+            merged.setdefault(ref, dict(entry))
+    return [merged[ref] for ref in sorted(merged)]
 
 
 async def _run_underwriter_safely(**kwargs: Any) -> Any:
@@ -301,6 +312,7 @@ async def dispose_screening_hits(
     provider = runtime.provider_factory(provider_name)
     proposed: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
+    excerpts: list[dict[str, Any]] = []
     failures: list[str] = []
     for result in results:
         party = next((p for p in parties if p.get("name") == result["subject"]["name"]), None)
@@ -324,6 +336,7 @@ async def dispose_screening_hits(
                 run_id=_run_id(tenant, case_ref, "disposition"),
             )
             records.append(outcome.case_record())
+            excerpts.extend(outcome.excerpts)
             if outcome.disposition is None:
                 failures.append(outcome.failure_reason)
             else:
@@ -335,6 +348,7 @@ async def dispose_screening_hits(
             raise CaseError("case_version_conflict", f"expected {version}, found {case.version}")
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
+        case.excerpts = _merged_excerpts(case.excerpts, excerpts)
         await record_update(session, case, now=runtime.clock())
     runtime.push_kick(tenant)
     return {

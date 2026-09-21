@@ -150,6 +150,8 @@ class UnderwritingOutcome:
     screening_results: list[dict[str, Any]] = field(default_factory=list)
     parties: list[dict[str, Any]] = field(default_factory=list)
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    #: The passage behind every excerpt the memo cites, for the case store and the reviewer.
+    excerpts: list[dict[str, Any]] = field(default_factory=list)
     prompt: dict[str, str] | None = None
     model_id: str = ""
     narrative: dict[str, Any] | None = None
@@ -405,9 +407,22 @@ class _Investigator:
                     url=page.url, evidence=page.evidence, content_sha256=page.content_sha256, extraction=extraction
                 )
             )
-        unique: dict[str, dict[str, Any]] = {e["excerpt_ref"]: e for e in self.inv.excerpts}
-        self.inv.excerpts = [unique[ref] for ref in sorted(unique)]
+        self._attach_excerpts()
         self.inv.web = Step("ok")
+
+    def _attach_excerpts(self) -> None:
+        """Every excerpt the memo's evidence cites, attached to the memo (PRD A-6).
+
+        Two kinds reach here: passages the sandboxed extractor kept from page content, and the
+        records the provider cited an ``excerpt_ref`` on, which the tool gateway captured as they
+        arrived. Both are attached by reference (provider, record, media type, digest); the
+        passages themselves go to the case store, never into a prompt.
+        """
+        gathered = [*self.inv.excerpts, *(e.reference() for e in self.gateway.excerpts.values())]
+        unique: dict[str, dict[str, Any]] = {}
+        for entry in gathered:
+            unique.setdefault(str(entry["excerpt_ref"]), entry)
+        self.inv.excerpts = [unique[ref] for ref in sorted(unique)]
 
 
 def _sha256(text: str) -> str:
@@ -597,6 +612,7 @@ async def run_underwriter(
             raise _RunFailedError("memo_evidence_untraced")
 
         outcome.memo = memo
+        outcome.excerpts = [excerpt.stored() for excerpt in gateway.excerpts.values()]
         outcome.ownership_graph = inv.graph.model_dump(mode="json") if inv.graph else None
         outcome.screening_results = [r.model_dump(mode="json") for r in screening_results]
         outcome.parties = [e.party for e in inv.screened]

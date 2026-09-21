@@ -54,8 +54,17 @@ instead of a recommendation.
 - **Citations** — every evidence entry names the provider, the upstream record,
   the field within it and when it was retrieved. The record links to the cited
   records index at the foot of the memo, and an attached excerpt reference links
-  to the excerpt's digest. An excerpt reference the memo does not carry is
-  labelled as such rather than silently dropped.
+  to that excerpt.
+  - **The passage can be read.** The case keeps the record each citation points
+    at, as the provider returned it; "Show the passage" fetches it from
+    `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` and renders it as
+    text with the digest it was captured under. Provider content is never
+    rendered as markup and never goes near a prompt.
+  - **Citations are checked against the run.** The case carries the provider
+    calls its agent runs made, with the record ids each returned. A citation
+    naming a record those calls never returned is marked "not in this run's tool
+    calls", and the record index says the same, instead of presenting it as
+    traced evidence.
 - **Policy score** — the score, the tier, the policy id and version, the inputs
   digest, and every fired rule in evaluation order with the evidence field values
   it read. A shipped example policy is flagged as unreviewed.

@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 262,
+    "source_line": 317,
     "tenant_required": true
   },
   {
@@ -4316,7 +4316,25 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 345,
+    "source_line": 400,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_case_excerpt",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref} api/v1/governed_cases.py:get_case_excerpt",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 291,
     "tenant_required": true
   },
   {
@@ -4334,7 +4352,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 410,
+    "source_line": 465,
     "tenant_required": true
   },
   {
@@ -4352,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 441,
+    "source_line": 496,
     "tenant_required": true
   },
   {
@@ -4370,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 287,
+    "source_line": 342,
     "tenant_required": true
   },
   {
@@ -4424,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 371,
+    "source_line": 426,
     "tenant_required": true
   },
   {
@@ -4442,7 +4460,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 321,
+    "source_line": 376,
     "tenant_required": true
   },
   {

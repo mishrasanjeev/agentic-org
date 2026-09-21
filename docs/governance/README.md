@@ -113,6 +113,7 @@ from the provider. See [Case hand-off](case-hand-off.md).
 | `governed_case_transitions` | every state change with actor, reason and case version |
 | `governed_cases.agent_records` | per agent run: prompt id, version and SHA-256; policy result and inputs; every tool call with outcome, request and response hashes and cited record ids; narrative refusals; whether pseudonymisation was on |
 | `governed_cases.memo` / `policy_result` / `screening_dispositions` | the cited documents and every analyst review |
+| `governed_cases.excerpts` | the passage behind every cited `excerpt_ref`, as the provider returned it, with its digest |
 | `governed_cases.decision` | approvers and decision grant ids |
 | `case_push_outbox` | every hand-off event, its payload digest and delivery history |
 | `provider_webhook_receipts` | every inbound provider event's outcome, never its body |

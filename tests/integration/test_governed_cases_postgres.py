@@ -10,6 +10,7 @@ refusal, decisions refused without a decision grant, row-level security between 
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 import yaml
@@ -46,6 +48,16 @@ _PROBE_ROLE = "governed_case_rls_probe"
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
 pytestmark = pytest.mark.skipif(not _DB_URL, reason="integration tests require AGENTICORG_DB_URL")
+
+
+def _memo_evidence(memo: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Every evidence entry in a memo, with where it was found."""
+    found: list[tuple[str, dict[str, Any]]] = []
+    for section in memo["sections"]:
+        found += [(section["section_id"], item) for item in section["evidence"]]
+        for finding in section["findings"]:
+            found += [(f"{section['section_id']}:{finding['code']}", item) for item in finding["evidence"]]
+    return found
 
 
 def _respond(messages: list[BaseMessage]) -> AIMessage:
@@ -637,5 +649,50 @@ async def test_reviews_and_approvals_need_the_case_awaiting_decision(
         assert late_review.status_code == 409 and late_review.json()["error"]["reason"] == "transition_not_allowed"
         detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
         assert detail["information_requests"][0]["status"] == "awaiting_approval"
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_the_case_holds_the_passage_behind_every_citation_and_serves_it(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    """PRD A-6: a reviewer can read what a citation points at, not only which record it named."""
+    from api.main import app
+    from api.v1 import governed_cases as routes
+
+    scripted_model([_respond])
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _runtime()
+    base = "/api/v1/governed-cases"
+    try:
+        application = MockProvider().fixture("us-false-positive-oakhollow").application
+        case_ref = (await client.post(base, json={"application": application}, headers=auth_headers)).json()["case_ref"]
+        assert (await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)).status_code == 202
+
+        detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
+        memo = detail["memo"]
+        cited = {e["excerpt_ref"] for _, e in _memo_evidence(memo) if e.get("excerpt_ref")}
+        assert cited, "the mock provider cites excerpts on this case"
+        attached = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
+        assert cited <= attached, sorted(cited - attached)
+
+        held = {excerpt["excerpt_ref"] for excerpt in detail["excerpts"]}
+        assert cited <= held, sorted(cited - held)
+        # The list carries references only; the passages have their own route.
+        assert all("text" not in excerpt for excerpt in detail["excerpts"])
+
+        # Every cited record is one this run's own tool calls returned.
+        retrieved = {record_id for call in detail["tool_calls"] for record_id in call["record_ids"]}
+        assert {e["record_id"] for _, e in _memo_evidence(memo)} <= retrieved
+        assert all(call["tool"] for call in detail["tool_calls"])
+
+        reference = sorted(cited)[0]
+        passage = await client.get(f"{base}/{case_ref}/excerpts/{quote(reference, safe='')}", headers=auth_headers)
+        assert passage.status_code == 200, passage.text
+        body = passage.json()
+        assert body["excerpt_ref"] == reference and body["text"]
+        assert body["sha256"] == "sha256:" + hashlib.sha256(body["text"].encode("utf-8")).hexdigest()
+
+        missing = await client.get(f"{base}/{case_ref}/excerpts/excerpt:not-a-reference", headers=auth_headers)
+        assert missing.status_code == 404 and missing.json()["error"]["reason"] == "excerpt_not_found"
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)

@@ -241,6 +241,13 @@ async def get_governed_case(
                 "screening_dispositions": case.screening_dispositions,
                 "parties": case.parties,
                 "information_requests": case.information_requests,
+                # What the run actually fetched, so a citation can be checked against it, and the
+                # excerpts the case holds by reference (the passages have their own route).
+                "tool_calls": _tool_calls(case),
+                "excerpts": [
+                    {key: value for key, value in dict(excerpt).items() if key != "text"}
+                    for excerpt in case.excerpts or []
+                ],
                 "failure_reason": case.failure_reason,
                 "transitions": [
                     {
@@ -253,6 +260,54 @@ async def get_governed_case(
                     for t in history
                 ],  # fmt: skip
             }
+    except CaseError as exc:
+        return _error(exc)
+
+
+def _tool_calls(case: Any) -> list[dict[str, Any]]:
+    """Every provider call the case's agent runs made: the tool, its outcome and the records it returned."""
+    calls: list[dict[str, Any]] = []
+    for record in case.agent_records or []:
+        agent = str(record.get("agent") or "")
+        run_id = str(record.get("run_id") or "")
+        for call in record.get("tool_calls") or []:
+            calls.append(
+                {
+                    "agent": agent,
+                    "run_id": run_id,
+                    "tool": call.get("tool"),
+                    "outcome": call.get("outcome"),
+                    "reason": call.get("reason"),
+                    "started_at": call.get("started_at"),
+                    "record_ids": call.get("record_ids") or [],
+                    "output_sha256": call.get("output_sha256"),
+                }
+            )
+    return calls
+
+
+@router.get("/governed-cases/{case_ref}/excerpts/{excerpt_ref}")
+@route_meta(auth_required=True, tenant_required=True, scope="approvals.governed_cases.read", rate_limit="standard")
+async def get_case_excerpt(
+    case_ref: str,
+    excerpt_ref: str,
+    tenant_id: str = Depends(get_current_tenant),
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """The passage behind one citation, as the provider returned it.
+
+    Untrusted provider content: it is returned as data for a human to read, exactly as it was
+    captured and with the digest it was captured under. Nothing here interprets it, and it never
+    goes near a prompt.
+    """
+    try:
+        await runtime.require_enabled(uuid.UUID(tenant_id))
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref)
+            for excerpt in case.excerpts or []:
+                if str(excerpt.get("excerpt_ref")) == excerpt_ref:
+                    return dict(excerpt)
+        raise CaseError("excerpt_not_found", status=404)
     except CaseError as exc:
         return _error(exc)
 

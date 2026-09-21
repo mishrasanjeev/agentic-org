@@ -66,6 +66,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
 
 ### Added
+- Citations that a reviewer can check end to end (PRD A-6, `core/tool_gateway/provider_gateway.py`,
+  `core/cases/runtime.py`, `api/v1/governed_cases.py`, `ui/src/components/governed-cases/MemoView.tsx`).
+  The tool gateway now captures the record each piece of provider evidence is attached to, exactly
+  as it arrived; the underwriting memo attaches every excerpt reference its evidence cites (before,
+  `memo.excerpts` was empty on every case, so every citation read "not attached to this memo"), and
+  the case keeps the passages in `governed_cases.excerpts`.
+  `GET /governed-cases/{case_ref}` gains `tool_calls` (each provider call with the record ids it
+  returned) and `excerpts` (references only), and
+  `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` serves one passage. The console shows the
+  passage on request and marks a citation whose record the run never returned. Migration
+  `v6z28_case_excerpts` adds the column (additive, forward-only). Closes FINDINGS A-48.
 - Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited

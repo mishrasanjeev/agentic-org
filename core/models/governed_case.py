@@ -24,7 +24,9 @@ class GovernedCase(BaseModel):
     ``state`` follows ``core.cases.states``; ``version`` guards concurrent transitions. The
     documents (``memo``, ``policy_result``, ``screening_results``, ``screening_dispositions``,
     ``ownership_graph``) are the published domain schemas; ``agent_records`` holds each agent run's
-    case record (prompt digests, policy inputs, tool-call hashes) for the evidence package.
+    case record (prompt digests, policy inputs, tool-call hashes) for the evidence package, and
+    ``excerpts`` the passage behind every cited ``excerpt_ref`` so a reviewer can read what a
+    citation points at, not just which record it named.
     """
 
     __tablename__ = "governed_cases"
@@ -53,6 +55,8 @@ class GovernedCase(BaseModel):
     screening_dispositions: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     parties: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     agent_records: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
+    #: The passage behind every excerpt the case's documents cite, as the provider returned it.
+    excerpts: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     information_requests: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     decision: Mapped[dict[str, Any] | None] = mapped_column(CASE_JSON, nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(128), nullable=True)

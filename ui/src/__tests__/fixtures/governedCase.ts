@@ -150,6 +150,33 @@ export function caseDetailFixture(overrides: Partial<CaseDetail> = {}): CaseDeta
     screening_dispositions: [],
     parties: [],
     information_requests: [],
+    tool_calls: [
+      {
+        agent: "business_underwriter",
+        run_id: "run-1",
+        tool: "screen_person",
+        outcome: "ok",
+        reason: "",
+        started_at: "2026-09-01T09:05:00Z",
+        record_ids: [
+          "mock:company:00000001:profile",
+          "mock:company:00000001:owners",
+          "mock:screening:scr-0000000000000001",
+          "mock:watchlist:entry:0007",
+        ],
+        output_sha256: `sha256:${"3".repeat(64)}`,
+      },
+    ],
+    excerpts: [
+      {
+        excerpt_ref: "excerpt:mock-watchlist-0007",
+        provider: "mock",
+        record_id: "mock:watchlist:entry:0007",
+        media_type: "application/json",
+        sha256: `sha256:${"2".repeat(64)}`,
+        fields: ["names[0]"],
+      },
+    ],
     failure_reason: null,
     transitions: [
       { from_state: null, to_state: "submitted", actor: "user:00000000-0000-0000-0000-000000000001", reason: "case_submitted", at: "2026-09-01T08:00:00Z" },
