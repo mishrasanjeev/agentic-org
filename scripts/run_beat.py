@@ -57,6 +57,11 @@ def _serve_health() -> None:
 
 
 def _run_celery_beat() -> int:
+    # Mark the process before any task code runs. ``run_async`` keeps its
+    # persistent loop only in a worker process; the Celery signals do not fire
+    # for ``--pool=solo``, ``threads`` or gevent, so set it here as well.
+    os.environ.setdefault("AGENTICORG_WORKER_PROCESS", "1")
+
     # Eager import to surface task-registration errors in the container
     # log before Celery's own startup, matching run_worker.py.
     from core.tasks import celery_app  # noqa: F401, PLC0415

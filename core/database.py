@@ -7,7 +7,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import AsyncGenerator, Awaitable, Callable
+import weakref
+from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -17,7 +18,8 @@ from uuid import UUID
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
+from prometheus_client import Counter
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncEngine,
@@ -67,7 +69,202 @@ engine: AsyncEngine = create_async_engine(
     pool_recycle=300,
 )
 
-async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+_shared_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
+class _GuardedSessionFactory:
+    """The shared session factory, checked against the pool's owning loop.
+
+    Most code opens sessions through ``get_tenant_session`` / ``get_session``.
+    Thirty modules call this factory directly (FINDINGS A-53); wrapping it
+    means they honour a private-engine override as well, and are checked
+    against the pool's owning loop before any connection work — which the
+    pool's own events cannot do, since ``pool_pre_ping`` runs its ping (and
+    fails on the foreign loop) before the checkout event fires.
+    """
+
+    def __init__(self, factory: async_sessionmaker[AsyncSession], target: AsyncEngine) -> None:
+        self._factory = factory
+        self._target = target
+
+    def __call__(self, **kwargs: Any) -> AsyncSession:
+        # A synchronous caller running on a private engine gets that engine's
+        # session even here, so a module that binds this factory directly is
+        # carried along instead of reaching back into the shared pool.
+        provider = _session_factory_override.get()
+        if provider is not None:
+            return provider()(**kwargs)
+        _refuse_foreign_loop(self._target, "opening a session")
+        return self._factory(**kwargs)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._factory, name)
+
+    def __repr__(self) -> str:
+        return f"<guarded {self._factory!r}>"
+
+
+async_session_factory: Any = _GuardedSessionFactory(_shared_session_factory, engine)
+
+# ── Cross-loop guard on the shared pool ─────────────────────────────────────
+#
+# An asyncpg connection belongs to the event loop that opened it. A pooled
+# connection used from a different loop fails a few frames later with
+# `AttributeError: 'NoneType' object has no attribute 'send'` or "attached to
+# a different loop", and `pool_pre_ping` does not rescue it (a cross-loop
+# error is not a disconnect). The guard names the mistake where it is made:
+# when a session is opened on a foreign loop, when the pool opens a connection
+# there, and when a connection is checked out there — the last one is the
+# warm-pool case, where nothing new is opened and the damage is worst.
+CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
+CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
+_LOOP_KEY = "agenticorg_owning_loop"
+
+_cross_loop_checkouts_total = Counter(
+    "agenticorg_db_cross_loop_checkouts_total",
+    "Uses of a pooled engine from an event loop other than the one that owns it",
+    ["mode"],
+)
+
+
+class CrossLoopConnectionError(RuntimeError):
+    """A pooled engine was used from an event loop other than its own."""
+
+
+# Engines the guard watches: the loop that owns each, and what has been
+# reported for it. Keyed weakly, because an ``id()`` is reused once an engine
+# is collected and would then apply a stale loop binding to a new engine.
+_guarded_engines: MutableMapping[AsyncEngine, dict[str, Any]] = weakref.WeakKeyDictionary()
+
+
+def _initial_guard_mode() -> str:
+    """Read the mode once, at import.
+
+    ``warn`` by default: warning changes no outcome (the request fails exactly
+    as it did) but turns a mystifying downstream failure into a named one,
+    while raising would turn latent pool problems into new 500s in production.
+    CI arms it with ``raise`` and a ratchet (``cross_loop_baseline.txt``).
+    """
+    mode = os.getenv(CROSS_LOOP_GUARD_ENV, "warn").strip().casefold()
+    return mode if mode in CROSS_LOOP_GUARD_MODES else "warn"
+
+
+_guard_mode_value = _initial_guard_mode()
+
+
+def cross_loop_guard_mode() -> str:
+    """The active mode: ``warn``, ``raise`` or ``off``."""
+    return _guard_mode_value
+
+
+def set_cross_loop_guard_mode(mode: str) -> str:
+    """Set the mode at run time (tests, an operator toggle); returns the previous one."""
+    global _guard_mode_value
+    if mode not in CROSS_LOOP_GUARD_MODES:
+        raise ValueError(f"mode must be one of {CROSS_LOOP_GUARD_MODES}, not {mode!r}")
+    previous, _guard_mode_value = _guard_mode_value, mode
+    return previous
+
+
+def cross_loop_message(where: str) -> str:
+    """The diagnostic a cross-loop use produces. One sentence per idea."""
+    return (
+        f"the shared database pool was used from a second event loop ({where}). "
+        "An asyncpg connection belongs to the loop that opened it, so this leaves "
+        "the pool holding connections no request can use. Run database work from "
+        "a synchronous caller through core.database.run_db_coroutine_sync, or "
+        "through core.tasks.async_runner.run_async in a worker process; never "
+        "call asyncio.run against the shared engine. "
+        f"Set {CROSS_LOOP_GUARD_ENV}=raise to make this a failure, or off to "
+        "silence it."
+    )
+
+
+def _running_loop() -> object | None:
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+
+
+def _pool_is_empty(target: AsyncEngine) -> bool:
+    """Whether the pool holds no connection a foreign loop could trip over."""
+    pool = target.pool
+    checked_in = getattr(pool, "checkedin", None)
+    checked_out = getattr(pool, "checkedout", None)
+    if checked_in is None or checked_out is None:
+        return True
+    return checked_in() == 0 and checked_out() == 0
+
+
+def _refuse_foreign_loop(target: AsyncEngine, where: str) -> None:
+    """Raise (or report once) when ``target``'s pool is used from another loop."""
+    state = _guarded_engines.get(target)
+    if state is None:
+        return
+    mode = _guard_mode_value
+    if mode == "off":
+        return
+    current_loop = _running_loop()
+    if current_loop is None:
+        return
+    owning_loop = state.get("loop")
+    if owning_loop is None:
+        state["loop"] = current_loop
+        return
+    if owning_loop is current_loop:
+        return
+    # The loop that owned the pool is gone and left nothing behind (a test that
+    # disposed its engine, a one-shot script): there is no connection for this
+    # loop to trip over, so adopt it.
+    if getattr(owning_loop, "is_closed", lambda: False)() and _pool_is_empty(target):
+        state["loop"] = current_loop
+        return
+    _cross_loop_checkouts_total.labels(mode=("warn" if mode == "warn" else "raise")).inc()
+    message = cross_loop_message(where)
+    if mode == "warn":
+        # One line per foreign loop, not one per session: a single poisoned
+        # process would otherwise drive alerting on volume alone.
+        already_reported: set[int] = state.setdefault("reported", set())
+        if id(current_loop) not in already_reported:
+            already_reported.add(id(current_loop))
+            logger.warning("db_cross_loop_use: %s", message)
+        return
+    raise CrossLoopConnectionError(message)
+
+
+def install_cross_loop_guard(target: AsyncEngine) -> None:
+    """Bind ``target``'s pool to the first event loop that uses it.
+
+    Installed on the shared engine below; a pooled engine built by a test can
+    ask for the same protection. Three places check: opening a session through
+    ``current_session_factory``, the pool opening a connection, and the pool
+    handing an existing connection out. The third is the warm-pool case — a
+    caller that binds ``async_session_factory`` itself (FINDINGS A-53) opens no
+    new connection, and without it the guard would be silent exactly where the
+    failure is most confusing.
+    """
+    _guarded_engines[target] = {"loop": None}
+
+    @event.listens_for(target.sync_engine, "connect")
+    def _record_owning_loop(_dbapi_connection: Any, connection_record: Any) -> None:
+        connection_record.info[_LOOP_KEY] = _running_loop()
+        _refuse_foreign_loop(target, "opening a connection")
+
+    @event.listens_for(target.sync_engine, "checkout")
+    def _check_out_on_the_owning_loop(
+        _dbapi_connection: Any, _connection_record: Any, _connection_proxy: Any
+    ) -> None:
+        _refuse_foreign_loop(target, "checking a pooled connection out")
+
+
+def uninstall_cross_loop_guard(target: AsyncEngine) -> None:
+    """Forget ``target``'s loop binding (used when a test disposes its engine)."""
+    _guarded_engines.pop(target, None)
+
+
+install_cross_loop_guard(engine)
+
 
 # Session factory the session helpers use. Normally the shared, pooled one;
 # ``run_db_coroutine_sync`` overrides it for the duration of a coroutine it
@@ -80,7 +277,11 @@ _session_factory_override: ContextVar[Callable[[], async_sessionmaker[AsyncSessi
 def current_session_factory() -> async_sessionmaker[AsyncSession]:
     """The session factory for this context: the shared one unless overridden."""
     provider = _session_factory_override.get()
-    return provider() if provider is not None else async_session_factory
+    if provider is not None:
+        return provider()
+    # The module-level factory, so a test that replaces it is honoured. In
+    # production that is the guarded wrapper, which does the loop check.
+    return async_session_factory
 
 
 def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:

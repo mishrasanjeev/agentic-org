@@ -103,6 +103,83 @@ def _migration_audit_dir_outside_the_checkout(tmp_path_factory):
             os.environ[AUDIT_DIR_ENV] = previous
 
 
+# ── Cross-loop guard ratchet ────────────────────────────────────────────────
+#
+# The guard reports rather than raises (core/database.py), so a test run would
+# otherwise accumulate cross-loop uses silently. Count them and fail the run
+# when it exceeds the committed baseline: existing debt (FINDINGS A-58) burns
+# down, new violations fail immediately. Update the baseline downwards only.
+CROSS_LOOP_BASELINE_FILE = Path(__file__).resolve().parents[1] / "cross_loop_baseline.txt"
+CROSS_LOOP_BASELINE_ENV = "AGENTICORG_CROSS_LOOP_BASELINE"
+
+
+def _cross_loop_uses() -> int:
+    """How many cross-loop uses of a guarded pool this session has counted."""
+    from core.database import _cross_loop_checkouts_total
+
+    total = 0.0
+    for metric in _cross_loop_checkouts_total.collect():
+        for sample in metric.samples:
+            if sample.name.endswith("_total"):
+                total += sample.value
+    return int(total)
+
+
+def _cross_loop_baseline() -> int:
+    override = os.environ.get(CROSS_LOOP_BASELINE_ENV)
+    if override:
+        return int(override)
+    try:
+        return int(CROSS_LOOP_BASELINE_FILE.read_text(encoding="utf-8").split("#")[0].strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    """Fail the run when it used a guarded pool from more loops than the baseline."""
+    counted, baseline = _cross_loop_uses(), _cross_loop_baseline()
+    session.config._cross_loop_counts = (counted, baseline)  # noqa: SLF001 - read below
+    if counted > baseline and exitstatus == 0:
+        session.exitstatus = 1
+
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
+    counted, baseline = getattr(
+        config, "_cross_loop_counts", (_cross_loop_uses(), _cross_loop_baseline())
+    )
+    terminalreporter.write_line(
+        f"cross-loop uses of a guarded database pool: {counted} (baseline {baseline})"
+    )
+    if counted > baseline:
+        terminalreporter.write_line(
+            f"FAILED: {counted - baseline} new cross-loop database use(s). Run synchronous "
+            "database work through core.database.run_db_coroutine_sync, or "
+            "core.tasks.async_runner.run_async in a worker process. See FINDINGS A-58; "
+            f"the baseline lives in {CROSS_LOOP_BASELINE_FILE.name} and only moves down.",
+            red=True,
+        )
+
+
+@pytest.fixture(autouse=True)
+def _token_pool_never_uses_ambient_redis(request, monkeypatch):
+    """Keep the run-grant token pool off whatever Redis this machine happens to run.
+
+    ``TokenPool`` falls back to a lazily created Redis client when none was
+    set, which is right in production and wrong in a test: on a developer
+    machine (or any runner with Redis on the default URL) one test's minted
+    run grant is cached there and read back by the next, so a test asserting
+    that minting is *refused* is answered from the cache and passes for the
+    wrong reason. Tests that want Redis set ``pool.redis`` themselves; the
+    integration suite and anything marked ``ambient_redis`` are left alone.
+    """
+    node_id = request.node.nodeid.replace("\\", "/")
+    if node_id.startswith("tests/integration/") or request.node.get_closest_marker("ambient_redis"):
+        return
+    from auth.token_pool import TokenPool
+
+    monkeypatch.setattr(TokenPool, "_redis_client", lambda self: self.redis)
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
@@ -114,6 +191,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "ambient_redis: may create the token pool's lazy Redis client (it must not connect)",
     )
 
 

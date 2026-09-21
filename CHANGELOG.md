@@ -637,6 +637,38 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   tenant key was resolved (`excerpt_key_unresolved`) instead of falling back to
   the deployment's legacy key. Callers pass `None` for "not resolved"; `""`
   remains the legacy key and encrypts as before.
+
+- Task code called outside a worker no longer runs on the Celery runner loop.
+  `core.tasks.async_runner.run_async` kept one event loop per process, which is
+  right in a worker — it is the only loop there — but an API process that
+  reached a task body from a thread with no running loop (an `asyncio.to_thread`
+  call, of which `api/` has two dozen) left shared-pool connections bound to a
+  loop no request runs on, and the next request to check one out failed. The
+  choice is now made by the role of the process: a worker or beat process
+  (marked by the Celery signals, or by `AGENTICORG_WORKER_PROCESS=1`) keeps the
+  persistent loop; everywhere else the work runs through
+  `core.database.run_db_coroutine_sync` on a private engine.
+- The shared database pool now reports when it is used from a second event
+  loop: when a session is opened there, when the pool opens a connection there,
+  and when it hands an existing connection out there — the last covers a caller
+  that binds `async_session_factory` itself and is given a warm connection.
+  It binds to the first loop that uses it and logs `db_cross_loop_use` once per
+  foreign loop with the remedy, counting
+  `agenticorg_db_cross_loop_checkouts_total{mode}`, instead of leaving the
+  `'NoneType' object has no attribute 'send'` that used to surface in an
+  unrelated request later. `AGENTICORG_DB_CROSS_LOOP_GUARD=raise` turns it into
+  a `CrossLoopConnectionError` at the point of the mistake and `off` silences
+  it; warn is the default in production, where the call fails either way and
+  raising would turn latent pool problems into new 500s. A test run counts the
+  uses and fails when it exceeds the committed `cross_loop_baseline.txt` (54,
+  measured in CI; the unit job reports 0), so the existing debt (FINDINGS
+  A-58) burns down and a new violation fails immediately.
+- `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
+  entrypoints and in the development stack, so a worker started with
+  `--pool=solo`, `threads` or gevent — which never fires
+  `worker_process_init` — is still recognised as a worker. See `RUNBOOKS.md`. The live feed, workflow state, workflow event-wait and bridge
+  state stores resolve their session factory per call rather than caching the
+  shared one, so a synchronous caller's private engine reaches them too.
 - Storing a governed case's cited passages no longer opens a database session
   per passage while the case row is locked. The tenant's key is resolved once,
   before the write session (`core.cases.excerpts.tenant_key`), and each passage

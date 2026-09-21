@@ -626,30 +626,25 @@ Remove an entry in the pull request that fixes it.
 
 ## A-53 — Direct `async_session_factory` use bypasses the private-engine seam
 
-- **Found:** fixing the synchronous credential resolver (A-49, 2026-09-21).
+- **Found:** fixing the synchronous credential resolver (A-49, 2026-09-21);
+  narrowed 2026-09-22.
 - **What:** `core.database.run_db_coroutine_sync` lets a synchronous caller run
   a database coroutine on a private `NullPool` engine, and
   `get_tenant_session` / `get_session` honour it through
-  `current_session_factory()`. Thirty-four other modules (89 references) bind
-  `core.database.async_session_factory` directly instead. Those are correct on
-  an async request path, but a coroutine reached from a synchronous bridge
-  through one of them still borrows the shared pool, which is the defect A-49
-  described; only the paths the fixed bridges reach were moved to
-  `current_session_factory()`. Four of them are worse than the rest because
-  they capture the factory **by value into a module-level singleton**, so the
-  binding survives every later call and no context override can reach it:
-  `core/live_feed.py:365`, `workflows/state_store.py:309`,
-  `workflows/event_waits.py:377` and `bridge/state.py:1147`. Any new
-  synchronous bridge that `asyncio.run`s a coroutine reaching one of these
-  reopens A-49.
+  `current_session_factory()`. Thirty modules still bind
+  `core.database.async_session_factory` directly. Those are correct on an async
+  request path, but a coroutine reached from a synchronous bridge through one
+  of them borrows the shared pool, which is the defect A-49 described. The four
+  that cached the factory in a module-level singleton — `core/live_feed.py`,
+  `workflows/state_store.py`, `workflows/event_waits.py`, `bridge/state.py` —
+  now resolve it per call, so the remaining uses are all per-call bindings
+  inside a single coroutine. The cross-loop guard catches such a caller only
+  when it opens a *new* connection; one that is handed an idle pooled
+  connection still fails the old way.
 - **Fix:** have the session helpers be the only way to open a session (make
   `async_session_factory` private and route every caller through
-  `current_session_factory()`), starting with the four singletons, which
-  should resolve the factory per call as `core/cdc/receiver.py` now does; or
-  add a check that refuses a direct import of `async_session_factory` outside
-  `core/database.py`.
-
-## A-54 — The Celery runner loop is unsafe in a process that also serves requests
+  `current_session_factory()`), or add a check that refuses a direct import of
+  `async_session_factory` outside `core/database.py`.
 
 - **Found:** testing the report generator's synchronous bridge (2026-09-21).
 - **What:** `core.tasks.async_runner.run_async` keeps one event loop per
@@ -750,7 +745,50 @@ Remove an entry in the pull request that fixes it.
   claims it, so review remains the primary control; the regex only stops an
   empty or absent reason from passing silently.
 
-## A-58 — A scaffold generator still overwrites hand-maintained modules, observability included
+## A-58 — The test suites use the shared engine from many event loops
+
+- **Found:** measuring the cross-loop guard in CI (2026-09-22).
+- **What:** the CI integration job (`pytest tests/integration/ tests/regression/`)
+  reports **54** cross-loop uses of the shared engine; the unit job reports 0.
+  Synchronous test bodies call `asyncio.run`, or spawn a thread that does,
+  against `core.database.engine`, so each one leaves the shared pool holding a
+  connection bound to a loop that has ended — the same shape as A-49, in test
+  code. They pass today because nothing later in the run happens to check that
+  connection out, which is luck, and is a plausible source of the flakiness
+  this suite has shown. Which files contribute depends on ordering and on
+  which fixture bound the engine first, so the count is meaningful and the
+  attribution is not: running a few files alone reports zero, because their
+  own synchronous engines never touch `core.database.engine`.
+- **Fix:** move those bodies onto `core.database.run_db_coroutine_sync` (or an
+  engine the test owns and disposes), lowering `cross_loop_baseline.txt` as
+  they go, until it reaches 0 and the CI jobs can set
+  `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.
+
+## A-59 — Unit tests reached an ambient Redis, and a cached grant hid a refusal
+
+- **Found:** chasing `tests/unit/test_run_grant_resolution.py` failing on its
+  own while passing in the full run (2026-09-22).
+- **What:** `auth/token_pool.py::TokenPool._redis_client` creates a Redis
+  client lazily when none was set — right in production, wrong in a test. On
+  any machine with Redis on `settings.redis_url` (a developer running the
+  development stack; any runner with the service up), a test that mints a run
+  grant wrote it to that **real** Redis, and the next test read it back:
+  `test_pool_refuses_to_mint_without_a_root_grant` and four siblings were
+  answered `source="pool_cache"` with `grant_id="grnt_placeholder"` and never
+  reached the code that raises `GrantMintError("minting_unconfigured")`. They
+  therefore reported DID NOT RAISE on a machine with Redis and passed on one
+  without, which is how a fail-closed assertion on the grant-minting path came
+  to depend on the environment. The cached tokens also outlived the run, so
+  one test run seeded the next.
+- **Fix:** an autouse fixture in `tests/conftest.py` now pins
+  `TokenPool._redis_client` to whatever the test set on `pool.redis` outside
+  `tests/integration/`, so a unit test cannot reach an ambient Redis at all;
+  the one test that is about the lazy client carries `@pytest.mark.ambient_redis`.
+  Fixed here; recorded because the same shape — a product fallback that is
+  correct in production and ambient in a test — is worth looking for elsewhere
+  (`core/cdc/receiver.py` and `core/feature_flags.py` have similar fallbacks).
+
+## A-60 — A scaffold generator still overwrites hand-maintained modules, observability included
 
 - **Found:** removing `agenticorg_agent_budget_pct` and checking nothing would
   put it back (PRD A-9 metrics follow-up, 2026-09-22).
