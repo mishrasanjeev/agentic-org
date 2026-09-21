@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Exact `for` boundaries: silent one side, firing the other.
+#
+# promtool test rules monitoring/prometheus/agenticorg-alerts-windows.test.yml
+#
+# Written during the independent review of the metrics export, and kept because they cover cases
+# the first set did not.
+# A `for` window is easy to write and easy to get wrong by a factor of the range window, which is
+# how the spend-cap alert was wrong at first: its rate window closed before its `for` elapsed, so it
+# never fired at all. These pin both edges to the minute, and pin the cap alert still firing at
+# 170m and clearing once the event leaves its 2h lookback at 200m.
+rule_files:
+  - agenticorg-alerts.yml
+evaluation_interval: 1m
+tests:
+  # Chain failure: for: 5m. The single failure lands at t=60m, so the alert must be
+  # silent at t=64m and firing at t=66m.
+  - interval: 1m
+    name: chain failure honours its five minute for window
+    input_series:
+      - series: 'agenticorg_chain_verifications_total{outcome="failed"}'
+        values: '0+0x60 1+0x60'
+    alert_rule_test:
+      - eval_time: 64m
+        alertname: AgenticOrgChainVerificationFailure
+        exp_alerts: []
+      - eval_time: 67m
+        alertname: AgenticOrgChainVerificationFailure
+        exp_alerts:
+          - exp_labels: {severity: critical, area: evidence}
+            exp_annotations:
+              summary: "Stored evidence failed verification against its recorded digest"
+              description: "A cited passage or a promotion-history chain did not match its digest. The content is refused rather than shown, so nothing unverified reaches a reviewer, but the stored copy needs investigating."
+              runbook: docs/operations/metrics.md#chain-verification-failure
+
+  # Spend cap: for: 10m, increase() over [2h]. Event at t=60m.
+  - interval: 1m
+    name: spend cap honours its ten minute for window and its two hour lookback
+    input_series:
+      - series: 'agenticorg_budget_cap_events_total{outcome="exhausted"}'
+        values: '0+0x60 1+0x200'
+    alert_rule_test:
+      - eval_time: 69m
+        alertname: AgenticOrgSpendCapExhaustion
+        exp_alerts: []
+      - eval_time: 72m
+        alertname: AgenticOrgSpendCapExhaustion
+        exp_alerts:
+          - exp_labels: {severity: warning, area: cost}
+            exp_annotations:
+              summary: "A spend cap has been exhausted and work is being refused"
+              description: "Budget evaluation crossed a cap rather than a warning point. Work under that budget is refused until the cap is raised or the period rolls over."
+              runbook: docs/operations/metrics.md#spend-cap-exhaustion
+      # Still visible well after the for elapsed, because the range window is 2h.
+      - eval_time: 170m
+        alertname: AgenticOrgSpendCapExhaustion
+        exp_alerts:
+          - exp_labels: {severity: warning, area: cost}
+            exp_annotations:
+              summary: "A spend cap has been exhausted and work is being refused"
+              description: "Budget evaluation crossed a cap rather than a warning point. Work under that budget is refused until the cap is raised or the period rolls over."
+              runbook: docs/operations/metrics.md#spend-cap-exhaustion
+      # And gone once the event falls out of the 2h window entirely.
+      - eval_time: 200m
+        alertname: AgenticOrgSpendCapExhaustion
+        exp_alerts: []
+
+  # The warm-up nobody expects. While the series is younger than the six-hour range window,
+  # rate() still divides the increase by the FULL window, so the > 0.002 sample floor is not
+  # cleared until roughly 43 minutes of samples exist - and the one-hour `for` only starts from
+  # there. First fire is at 1h44m, not the ~1h the rule reads like. An operator watching for
+  # rubber-stamping after a release needs to know the window is blind for over an hour and a half.
+  - interval: 1m
+    name: dwell collapse cannot fire for the first 1h44m of a new series
+    input_series:
+      - series: 'agenticorg_case_decision_dwell_seconds_bucket{dwell_source="server",le="15"}'
+        values: '0+1x200'
+      - series: 'agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}'
+        values: '0+1x200'
+    alert_rule_test:
+      - eval_time: 103m
+        alertname: AgenticOrgDecisionDwellCollapse
+        exp_alerts: []
+      - eval_time: 104m
+        alertname: AgenticOrgDecisionDwellCollapse
+        exp_alerts:
+          - exp_labels: { severity: warning, area: governance }
+            exp_annotations:
+              summary: "More than half of approvals are being submitted within 15 seconds"
+              description: >-
+                Measured by the approval page, not the console. A majority of decisions taken in under fifteen seconds means the memo is not being read. The second clause keeps a handful of fast decisions in a quiet period from firing it.
+              runbook: docs/operations/metrics.md#decision-dwell-collapse
