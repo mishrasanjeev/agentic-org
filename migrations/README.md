@@ -78,7 +78,7 @@ the pre-Alembic tables. A range from a later revision fails too: revisions
 that decide what to do by querying the database (`v6z24`, `v6z26`, `v6z5`)
 call `op.get_bind().execute(...)`, which has nothing to execute against in
 offline mode, so script generation raises `AttributeError: 'NoneType' object
-has no attribute 'scalar'` (FINDINGS A-49). Upgrade online, or against a
+has no attribute 'scalar'` (FINDINGS A-52). Upgrade online, or against a
 restored copy of the database, and read the log.
 
 The advisory lock serialises the **bootstrap decision** on an empty database,

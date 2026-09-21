@@ -15,7 +15,7 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: ".",
-  testMatch: ["dev-stack.spec.ts"],
+  testMatch: ["dev-stack.spec.ts", "governed-cases*.spec.ts"],
   timeout: 60_000,
   retries: 0,
   workers: 1,

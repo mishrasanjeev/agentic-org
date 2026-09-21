@@ -2,6 +2,7 @@
 #
 #   make dev     build and start the local stack, wait until it is healthy, smoke-test it
 #   make seed    development tenant, users, agents and sample data (idempotent)
+#   make seed-cases  sample governed cases, investigated against the mock provider
 #   make down   stop the stack (data volumes are kept)
 #   make clean   stop the stack and delete its data volumes
 #   make logs    follow the stack's logs
@@ -78,13 +79,15 @@ INTEGRATION_ENV = $(TEST_ENV) \
 	AGENTICORG_REDIS_URL=redis://$(TEST_REDIS_HOST)/$(TEST_REDIS_DB)
 
 E2E_CONFIG ?= e2e/dev-stack.config.ts
+# Where `make seed-cases` writes the case references the browser suite reads.
+GOVERNED_CASES_SEED ?= ui/test-results/governed-cases-seed.json
 E2E_ARGS ?=
 
 # The stack's own database and the placeholder key from docker-compose.dev.yml.
 DEV_DB_NAME ?= agenticorg
 DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 
-.PHONY: help dev seed down clean logs ps \
+.PHONY: help dev seed seed-cases down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
 	e2e
@@ -92,6 +95,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 help:
 	@echo "make dev     build and start the local stack and smoke-test it"
 	@echo "make seed    development tenant, users, agents and sample data (needs make dev)"
+	@echo "make seed-cases  sample governed cases for the approvals console (needs make seed)"
 	@echo "make down    stop the stack (keeps data)"
 	@echo "make clean   stop the stack and delete its data volumes"
 	@echo "make logs    follow logs"
@@ -127,6 +131,19 @@ seed: tools-image
 	$(SEED_TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
 		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
 		$(PY) -m scripts.seed_dev
+
+# Sample governed cases (scripts/seed_governed_cases.py) for the seeded tenant:
+# turns governed_cases.enabled on, submits new cases from the mock provider's
+# fixtures and runs the reference agents against the stack's mock provider and
+# model stub. The summary names the new cases for the browser suite.
+seed-cases: tools-image
+	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
+		{ echo "make seed-cases: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
+		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
+		AGENTICORG_REDIS_URL=redis://$(TEST_REDIS_HOST)/0 \
+		AGENTICORG_MOCK_PROVIDER_URL=http://mock-provider:8080 VLLM_BASE_URL=http://model-stub:8080 \
+		$(PY) -m scripts.seed_governed_cases --output $(GOVERNED_CASES_SEED)
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
@@ -206,4 +223,5 @@ e2e:
 	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
 		{ echo "make e2e: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
 	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
+		-e AGENTICORG_SEED_PASSWORD -e GOVERNED_CASES_SEED=$(GOVERNED_CASES_SEED) \
 		e2e bash scripts/run_e2e.sh $(E2E_CONFIG) $(E2E_ARGS)

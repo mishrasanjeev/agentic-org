@@ -27,7 +27,7 @@ status=0
 npx playwright test --config="$config" "$@" || status=$?
 
 if [[ -n "${HOST_UID:-}" && "${HOST_UID}" != "0" ]]; then
-  for dir in test-results playwright-report; do
+  for dir in test-results playwright-report ../docs/console/images; do
     if [[ -e "$dir" ]]; then
       chown -R "${HOST_UID}:${HOST_GID:-$HOST_UID}" "$dir"
     fi
