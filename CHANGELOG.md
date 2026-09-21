@@ -564,13 +564,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (marked by the Celery signals, or by `AGENTICORG_WORKER_PROCESS=1`) keeps the
   persistent loop; everywhere else the work runs through
   `core.database.run_db_coroutine_sync` on a private engine.
-- The shared database pool refuses to be used from a second event loop. A
-  `CrossLoopConnectionError` names the mistake — with the remedy — where it is
-  made, instead of the `'NoneType' object has no attribute 'send'` that used to
-  surface in an unrelated request later, and
-  `agenticorg_db_cross_loop_checkouts_total{mode}` counts it.
-  `AGENTICORG_DB_CROSS_LOOP_GUARD=warn` downgrades it to a log line and `off`
-  disables it. The live feed, workflow state, workflow event-wait and bridge
+- The shared database pool now reports when it is used from a second event
+  loop. It binds to the first loop that uses it and logs
+  `db_cross_loop_use` with the remedy, counting
+  `agenticorg_db_cross_loop_checkouts_total{mode}`, instead of leaving the
+  `'NoneType' object has no attribute 'send'` that used to surface in an
+  unrelated request later. `AGENTICORG_DB_CROSS_LOOP_GUARD=raise` turns it into
+  a `CrossLoopConnectionError` at the point of the mistake and `off` silences
+  it; warn is the default because the repository's own suites still do this in
+  162 places (FINDINGS A-55). The live feed, workflow state, workflow event-wait and bridge
   state stores resolve their session factory per call rather than caching the
   shared one, so a synchronous caller's private engine reaches them too.
 - A synchronous credential lookup no longer breaks the next request. An

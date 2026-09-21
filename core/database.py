@@ -100,7 +100,15 @@ _guarded_engines: dict[int, dict[str, Any]] = {}
 
 
 def _guard_mode() -> str:
-    return os.getenv(CROSS_LOOP_GUARD_ENV, "raise").strip().casefold()
+    """``warn`` (default), ``raise`` or ``off``.
+
+    Warn by default: the repository still has 162 cross-loop uses of the
+    shared engine in its own test suites (FINDINGS A-55), so arming the
+    refusal everywhere today would fail runs for a pattern that is latent
+    rather than newly introduced. The metric and the log line make each one
+    visible; `raise` turns them into failures once they are cleaned up.
+    """
+    return os.getenv(CROSS_LOOP_GUARD_ENV, "warn").strip().casefold()
 
 
 def _running_loop() -> object | None:
@@ -150,8 +158,8 @@ def _refuse_foreign_loop(target: AsyncEngine, where: str) -> None:
         "leaves the pool holding connections no request can use. Synchronous "
         "callers must go through core.database.run_db_coroutine_sync (or "
         "core.tasks.async_runner.run_async in a worker process), never "
-        f"asyncio.run on the shared engine. Set {CROSS_LOOP_GUARD_ENV}=warn to "
-        "downgrade this to a log line, or off to disable it."
+        f"Set {CROSS_LOOP_GUARD_ENV}=raise to make this a failure, or off to "
+        "silence it."
     )
     if mode == "warn":
         logger.error("db_cross_loop_use: %s", message)
@@ -171,7 +179,8 @@ def install_cross_loop_guard(target: AsyncEngine) -> None:
 
     It cannot see a caller that binds ``async_session_factory`` itself and
     opens the session directly (FINDINGS A-53); the pool-level check below
-    catches those as soon as they open a connection.
+    catches those as soon as they open a connection. The default mode is
+    ``warn``; see :func:`_guard_mode`.
     """
     _guarded_engines[id(target)] = {"loop": None}
 

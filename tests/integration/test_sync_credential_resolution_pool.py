@@ -202,7 +202,7 @@ async def test_the_report_generator_bridge_does_not_poison_the_pool(
 
 
 async def test_the_guard_refuses_the_shared_pool_on_a_foreign_loop(
-    shared_pool: AsyncEngine,
+    shared_pool: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The structural half: a bridge that reaches the shared pool fails loudly.
 
@@ -213,6 +213,7 @@ async def test_the_guard_refuses_the_shared_pool_on_a_foreign_loop(
     """
     import core.database as db_mod
 
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "raise")
     tenant_id = uuid.uuid4()
     await _unrelated_request(tenant_id)  # binds the pool to this loop
 
@@ -226,21 +227,21 @@ async def test_the_guard_refuses_the_shared_pool_on_a_foreign_loop(
     assert await _unrelated_request(tenant_id) == 1
 
 
-async def test_the_guard_can_be_downgraded_to_a_log_line(
+async def test_the_guard_only_reports_by_default(
     shared_pool: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Operators can turn the refusal into a warning without a code change."""
+    """Warn is the default: the guard reports, and the outcome is unchanged."""
     import core.database as db_mod
 
     tenant_id = uuid.uuid4()
     await _unrelated_request(tenant_id)
-    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "warn")
+    monkeypatch.delenv(db_mod.CROSS_LOOP_GUARD_ENV, raising=False)
 
     def _use_the_shared_engine_on_another_loop() -> None:
         asyncio.run(_unrelated_request(tenant_id))
 
     # Warn mode lets it through, and it then fails the way it always did: the
-    # guard changes the message, never the outcome.
+    # guard adds a log line and a counter, never a different outcome.
     with pytest.raises(Exception) as exc_info:  # noqa: PT011 - asyncpg's own failure
         await asyncio.to_thread(_use_the_shared_engine_on_another_loop)
     assert not isinstance(exc_info.value, db_mod.CrossLoopConnectionError)
