@@ -1,5 +1,10 @@
 # Metrics, alerts and the dashboard
 
+> **Status: not yet carrying data.** The endpoint, the instruments and the alert definitions are
+> in place; the collector that would scrape them is not deployed, so no sample has yet travelled
+> the path from a process to a notification. Every alert described below is defined and tested,
+> and none of them can fire yet. See [What is not here yet](#what-is-not-here-yet).
+
 AgenticOrg defines Prometheus instruments throughout `core/` and `api/`. Until this change
 nothing read them: there was no endpoint, so every counter lived and died inside a container
 (FINDINGS A-56). This page describes the read path and the alerts built on it.

@@ -328,9 +328,10 @@ material, not the default production path.
 curl http://localhost:8000/api/v1/health
 
 # Prometheus metrics. NOT on the application port: the registry is served on METRICS_PORT
-# (default 9090), which Cloud Run does not route, so it is reachable only from inside the
-# instance. Locally that means the port the container publishes for it; in Cloud Run it is
-# scraped by the collector that runs beside the process.
+# (default 9090) and bound to loopback, so it is reachable only from inside the instance.
+# NOTE: nothing scrapes it yet. The collector that is meant to run beside each process is not
+# deployed, so the endpoint is served but unscraped, and the alert policies have no samples to
+# evaluate. See docs/operations/metrics.md#what-is-not-here-yet.
 curl http://localhost:9090/metrics
 
 # The alerts are committed definitions, not console clicks:
