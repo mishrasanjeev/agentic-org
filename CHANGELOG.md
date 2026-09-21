@@ -589,6 +589,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Storing a governed case's cited passages refuses a passage for which no
+  tenant key was resolved (`excerpt_key_unresolved`) instead of falling back to
+  the deployment's legacy key. Callers pass `None` for "not resolved"; `""`
+  remains the legacy key and encrypts as before.
 - Storing a governed case's cited passages no longer opens a database session
   per passage while the case row is locked. The tenant's key is resolved once,
   before the write session (`core.cases.excerpts.tenant_key`), and each passage

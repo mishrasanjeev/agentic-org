@@ -729,4 +729,8 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** require the marker to match `^\s*#\s*ENCRYPTED_MIGRATION_HELPER_EXEMPT:\s*\S.+`
   at the start of a line with a reason of some minimum length, and widen the
   discovery to `--diff-filter=AMR` so an edited migration is scanned on the
-  same terms as a new one.
+  same terms as a new one. Do not over-trust the regex: a line-anchored match
+  still does not parse Python, so a `#` line inside a triple-quoted string
+  would satisfy it. The marker is always in the diff of the migration that
+  claims it, so review remains the primary control; the regex only stops an
+  empty or absent reason from passing silently.
