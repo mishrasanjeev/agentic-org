@@ -82,7 +82,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   whose record the run never returned (provider and record id together), and says plainly when a
   case carries no tool calls to check citations against. Passages are stored encrypted with the
   tenant's key in `governed_cases.excerpts_encrypted` (migration `v6z28_case_excerpts`, additive
-  and forward-only, through the encrypted-column migration helper). Closes FINDINGS A-48.
+  and forward-only). Closes FINDINGS A-48.
 - Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
   `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
   `GET .../decision-requests/{request_id}`): AgenticOrg asks the Grantex auth service for a
