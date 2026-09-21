@@ -85,9 +85,12 @@ You then record your review:
 ![An override with its written reason](images/governed-case-disposition-override.png)
 
 The analyst identity is taken from your session on the server; this page never
-sends an identity. A review is written once - a second review of the same hit is
+sends an identity, and the API refuses an API key or an agent token on this
+route (`human_session_required`). A review is written once - a second review of the same hit is
 refused with `already_reviewed` - and reviews can be recorded only while the case
-is awaiting a decision. Recording a review does not close the hit in any system:
+is awaiting a decision, which is why the form is offered only then. If the case
+moves on while the screen is open, the refusal (`transition_not_allowed`) is
+shown and the case is reloaded rather than leaving a control that cannot work. Recording a review does not close the hit in any system:
 closing it is the analyst's action in the operator's system of record, and
 nothing in this release closes a hit automatically.
 
