@@ -287,7 +287,9 @@ async def _store_investigation(
 ) -> dict[str, Any]:
     # Resolved before the write session below, which holds the case row locked: resolving the key
     # reads the tenant row, and that must not need a second session.
-    kek = await case_excerpts.tenant_key(tenant) if outcome is not None and outcome.excerpts else ""
+    # None, not "": "" is the legacy key and would encrypt silently. store() refuses None the
+    # moment it has a passage, so "resolved no key but stored a passage" cannot happen quietly.
+    kek = await case_excerpts.tenant_key(tenant) if outcome is not None and outcome.excerpts else None
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         if case.version != started_version:
@@ -398,7 +400,7 @@ async def dispose_screening_hits(
             else:
                 proposed.append(outcome.disposition)
 
-    kek = await case_excerpts.tenant_key(tenant) if excerpts else ""
+    kek = await case_excerpts.tenant_key(tenant) if excerpts else None
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
         if case.version != version:

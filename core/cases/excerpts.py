@@ -88,7 +88,7 @@ async def tenant_key(tenant_id: uuid.UUID | str) -> str:
 
 
 async def store(
-    kek: str,
+    kek: str | None,
     existing: Sequence[Mapping[str, Any]] | None,
     captured: Sequence[Mapping[str, Any]],
     *,
@@ -98,7 +98,12 @@ async def store(
     """Merge freshly captured passages into a case's store, encrypted, newest first, bounded.
 
     Takes the key from :func:`tenant_key`, which the caller resolves before opening the write
-    session, and encrypts off the event loop (a customer-managed key is a gRPC call to a key
+    session. ``None`` means the caller resolved no key, which is refused as soon as there is a
+    passage to encrypt; ``""`` is a real key - the legacy one - and encrypts normally. The two are
+    kept apart deliberately: this column holds personal data under a customer-managed key, and a
+    quiet fall back to the legacy key would be the wrong failure.
+
+    It encrypts off the event loop (a customer-managed key is a gRPC call to a key
     manager). Only the passages that survive the bound are encrypted: trimming happens first, so a
     capture larger than the limit does no key work for entries it is about to drop.
     """
@@ -135,8 +140,14 @@ async def store(
     kept = ordered[dropped:]
     for entry in kept:
         text = pending.get(str(entry["excerpt_ref"]))
-        if text is not None:
-            entry[CIPHERTEXT_KEY] = await asyncio.to_thread(encrypt_with_kek, text, kek)
+        if text is None:
+            continue
+        if kek is None:
+            # Unrepresentable rather than merely unreachable: ``encrypt_with_kek("")`` falls back
+            # to the deployment's legacy key, so a caller that had not resolved one would encrypt
+            # a customer-managed tenant's personal data under the wrong key and say nothing.
+            raise ExcerptError("excerpt_key_unresolved", "a passage was captured but no tenant key was resolved")
+        entry[CIPHERTEXT_KEY] = await asyncio.to_thread(encrypt_with_kek, text, kek)
     return kept
 
 
