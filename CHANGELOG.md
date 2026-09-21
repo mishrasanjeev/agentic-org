@@ -22,6 +22,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `scripts/refresh_grantex_scopes.py --apply` before switching their tenant
   to `deny`.
 
+### Security — breaking for machine callers of the governed-case routes
+- Deciding, withdrawing, reviewing a screening disposition and approving an
+  information request on a governed case now need a human session. API keys
+  and Grantex agent tokens are refused with 403 `human_session_required`.
+  Previously any caller with the `approvals:write` scope could take those
+  actions, and agent tokens skipped the RBAC scope family check entirely, so
+  an agent token issued for tool access could withdraw a case or approve an
+  information request — and the action was recorded as `user:<the token's
+  subject>`, which read like a person. The actor written onto a case is now
+  derived from the session and says what acted: `user:<id>`, `api_key:<prefix>`
+  or `agent:<id>`. A disposition review and an information-request approval
+  additionally need the case to be `awaiting_decision`. Identities are still
+  never read from the request body. Submitting a case and starting an
+  investigation stay open to machine callers, recorded under their own labels.
+  Rollback: revert this change; there is no flag, because leaving the routes
+  open is the defect. See `docs/governance/case-lifecycle.md` and FINDINGS
+  A-46 for the separate question of which roles should hold `approvals:write`.
+
 ### Security — breaking for anyone already receiving provider webhooks
 - Inbound provider webhooks for governed cases no longer act on a delivery
   they cannot verify, and are bound to one tenant. Previously an unsigned or
@@ -495,7 +513,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `RegistryStatus` member, so an insolvent business can reach `blocked`.
   `verification.overdue_filings` is gone from the evidence mapping; a
   filings-overdue signal has to reach the provider interface, the mock provider
-  and the conformance suite first (FINDINGS A-47). Dropping a `medium` rule
+  and the conformance suite first (FINDINGS A-48). Dropping a `medium` rule
   can make a case less strict, which `docs/policies/authoring.md` treats as a
   major change: UK example `2.0.0`, US example `1.1.0`.
 - The declared-activity vocabulary is published

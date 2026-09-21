@@ -552,7 +552,23 @@ Remove an entry in the pull request that fixes it.
   the four columns, and delete the corresponding allowlist entries (the drift
   test fails on entries that no longer differ).
 
-## A-46 — No mock fixture exercises an activity mismatch
+## A-46 — `developer` holds `approvals:write` and `analyst` does not
+
+- **Found:** gating the human-only governed-case routes (PRD A-8 review,
+  2026-09-20), reading `core/rbac.py::ROLE_SCOPES`.
+- **What:** the `developer` role carries `approvals:write`, which is the write
+  scope of the `approvals` family that the governed-case routes declare, so a
+  developer session satisfies the RBAC check on decide, withdraw, review and
+  approve. `core/ownership.py` limits developer approval decisions to their own
+  personal agents, but governed cases are not agent-owned, so that limit does
+  not reach them. The `analyst` role, whose job the disposition-review route
+  exists for, carries only `approvals:read` and is refused instead.
+- **Fix:** decide who may act on a governed case as a matter of product policy
+  and either split a `governed_cases` scope family out of `approvals` or move
+  the two roles' scopes; needs a data migration for existing tokens and roles,
+  so it is not a side change to the route gate.
+
+## A-47 — No mock fixture exercises an activity mismatch
 
 - **Found:** aligning the example policies with the evidence mapping (2026-09-20).
 - **What:** `web_presence.activity_mismatch` now resolves for seven of the
@@ -568,7 +584,7 @@ Remove an entry in the pull request that fixes it.
   producing the same policy outcome as the hostile copy minus the injection),
   with a test that the case's policy result fires the rule on a true mismatch.
 
-## A-47 — The provider interface reports no filing status
+## A-48 — The provider interface reports no filing status
 
 - **Found:** removing the example policies' `filings_overdue` rule (2026-09-20).
 - **What:** `connectors/framework/verification_types.py::BusinessVerification`

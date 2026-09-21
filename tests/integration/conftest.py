@@ -82,11 +82,15 @@ TEST_AGENT_ID = str(uuid.uuid4())
 def _make_jwt(
     tenant_id: str = TEST_TENANT_ID,
     scopes: list[str] | None = None,
-    agent_id: str = TEST_AGENT_ID,
+    agent_id: str | None = None,
     sub: str = TEST_USER_SUB,
     expires_in: int = 3600,
 ) -> str:
-    """Mint a signed RS256 JWT for integration tests."""
+    """Mint a signed RS256 JWT for integration tests.
+
+    ``agent_id`` is omitted by default because no session token production mints carries one
+    (``api/v1/auth.py``, ``sso.py``, ``org.py``); tests that need the claim pass it explicitly.
+    """
     now = int(time.time())
     claims = {
         "sub": sub,
@@ -96,9 +100,10 @@ def _make_jwt(
         "exp": now + expires_in,
         "agenticorg:tenant_id": tenant_id,
         "agenticorg:user_id": TEST_USER_ID,
-        "agenticorg:agent_id": agent_id,
         "grantex:scopes": scopes or ["agenticorg:admin"],
     }
+    if agent_id:
+        claims["agenticorg:agent_id"] = agent_id
     return jwt.encode(claims, _private_pem, algorithm="RS256", headers={"kid": TEST_KID})
 
 
@@ -299,7 +304,9 @@ def make_auth_headers():
     """Factory fixture — mint headers with custom claims.
 
     Every minted token is backed by a ``users`` row in its tenant (see
-    ``_ensure_user_row``) so the session-state check honours it.
+    ``_ensure_user_row``) so the session-state check honours it. Unlike the
+    plain ``auth_headers`` fixture this one still carries an agent id by
+    default, for the routes that bind a session to one agent.
     """
 
     def _factory(
