@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -23,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, MappedAsDataclass
+from sqlalchemy.pool import NullPool
 
 from core.config import is_strict_runtime_env, settings
 
@@ -65,6 +67,35 @@ engine: AsyncEngine = create_async_engine(
 
 async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
+# A private engine for code running on an event loop that is not the application's. The shared
+# engine pools connections, and an asyncpg connection belongs to the loop that opened it: hand one
+# back to the pool from a loop that is then closed and the next unrelated request that checks it
+# out fails with "got Future attached to a different loop", which pool_pre_ping does not classify
+# as a disconnect. Sync wrappers that spin up a loop (``asyncio.run``, a worker thread) therefore
+# open their sessions inside :func:`private_engine_scope`, which gives them an unpooled engine of
+# their own and disposes it with the loop.
+_PRIVATE_ENGINE: ContextVar[AsyncEngine | None] = ContextVar("agenticorg_private_engine", default=None)
+
+
+@asynccontextmanager
+async def private_engine_scope() -> AsyncIterator[AsyncEngine]:
+    """Route sessions opened in this scope to a private ``NullPool`` engine, disposed on exit."""
+    private = create_async_engine(settings.db_url, echo=settings.db_echo, poolclass=NullPool)
+    token = _PRIVATE_ENGINE.set(private)
+    try:
+        yield private
+    finally:
+        _PRIVATE_ENGINE.reset(token)
+        await private.dispose()
+
+
+def session_factory() -> async_sessionmaker[AsyncSession]:
+    """The session maker for the current context: the private engine's inside a scope, else the shared one."""
+    private = _PRIVATE_ENGINE.get()
+    if private is None:
+        return async_session_factory
+    return async_sessionmaker(private, class_=AsyncSession, expire_on_commit=False)
+
 
 _UUID_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
@@ -90,7 +121,7 @@ async def get_tenant_session(
     company_id: UUID | None = None,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session with exact tenant and optional company RLS context."""
-    async with async_session_factory() as session:
+    async with session_factory()() as session:
         import re as _re
 
         tid_str = str(tenant_id)
@@ -132,7 +163,7 @@ async def get_tenant_session(
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Yield a raw session (for non-tenant-scoped operations like health checks)."""
-    async with async_session_factory() as session:
+    async with session_factory()() as session:
         try:
             yield session
             await session.commit()

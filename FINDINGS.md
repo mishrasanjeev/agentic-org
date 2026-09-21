@@ -603,24 +603,6 @@ Remove an entry in the pull request that fixes it.
   the case (encrypted, tenant-scoped) so the console and the evidence package
   can show it.
 
-## A-49 — Synchronous credential resolution runs a coroutine on another event loop
-
-- **Found:** running the reference agents for sample cases against the local
-  stack (`scripts/seed_governed_cases.py`, 2026-09-20).
-- **What:** `core/ai_providers/resolver.py::get_provider_credential_sync`
-  submits `get_provider_credential()` to `asyncio.run` inside a worker thread
-  when it is called from a running loop. That coroutine uses the shared async
-  engine, so its asyncpg connection is bound to the thread's loop and then
-  returned to the pool: the call fails with "got Future … attached to a
-  different loop" (logged as `tenant_ai_credential_decrypt_failed`), and the
-  next user of that pooled connection fails the same way. Every model call on
-  the LangGraph path that resolves a tenant credential hits it; the case agents
-  degrade to a memo without prose, and the seeding script fails at its last
-  database call.
-- **Fix:** give the sync path its own engine (or a short-lived
-  `NullPool` engine) for the credential read, or make the callers await the
-  async resolver.
-
 ## A-50 — The console chrome fails the contrast check on every page
 
 - **Found:** running the axe scan for the governed case screens against the

@@ -220,10 +220,10 @@ async def _tenant_fallback_allowed(tenant_id: _uuid.UUID) -> bool:
     ``settings`` JSONB with key ``ai_fallback_policy``.
     """
     try:
-        from core.database import async_session_factory
+        from core.database import session_factory
         from core.models.tenant import Tenant
 
-        async with async_session_factory() as session:
+        async with session_factory()() as session:
             result = await session.execute(
                 select(Tenant.settings).where(Tenant.id == tenant_id)
             )
@@ -386,11 +386,17 @@ def get_provider_credential_sync(
 ) -> ResolvedCredential:
     """Sync wrapper over :func:`get_provider_credential`.
 
-    Used by sync call sites (``core/langgraph/llm_factory.py``,
-    legacy voice config readers). Spawns an event loop when not
-    already inside one so the async resolver can complete its DB
-    lookup. Callers that are already async MUST use
-    :func:`get_provider_credential` directly.
+    Used by sync call sites (``core/langgraph/llm_factory.py``, legacy voice config readers).
+    Spawns an event loop when not already inside one so the async resolver can complete its DB
+    lookup. Callers that are already async MUST use :func:`get_provider_credential` directly.
+
+    The resolver reads the tenant's credential, its fallback policy and stamps ``last_used_at``,
+    all through the application's shared, pooled engine. Those loops are thrown away when this
+    function returns, so every session they open runs inside
+    :func:`core.database.private_engine_scope`: an unpooled engine of their own, disposed with the
+    loop. Without it, an asyncpg connection bound to the throwaway loop goes back into the shared
+    pool and the next unrelated request that checks it out fails with "got Future attached to a
+    different loop" - cross-request damage from a credential read.
     """
     import asyncio
 
@@ -399,23 +405,26 @@ def get_provider_credential_sync(
     except RuntimeError:
         loop = None
 
-    def _make_coro():
-        return get_provider_credential(
-            tenant_id,
-            provider,
-            kind,
-            require_tenant_token=require_tenant_token,
-        )
+    async def _resolve() -> ResolvedCredential:
+        from core.database import private_engine_scope
+
+        async with private_engine_scope():
+            return await get_provider_credential(
+                tenant_id,
+                provider,
+                kind,
+                require_tenant_token=require_tenant_token,
+            )
 
     if loop is None:
-        return asyncio.run(_make_coro())
+        return asyncio.run(_resolve())
 
     # Already inside a running loop — submit to a thread-local loop so
     # we don't re-enter.
     import concurrent.futures
 
     def _runner() -> ResolvedCredential:
-        return asyncio.run(_make_coro())
+        return asyncio.run(_resolve())
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
         return ex.submit(_runner).result()

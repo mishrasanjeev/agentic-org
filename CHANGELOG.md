@@ -65,6 +65,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `AGENTICORG_SECRET_KEY` changes every tenant's path. New counter outcome
   `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
 
+### Fixed
+- A synchronous credential read no longer breaks unrelated requests
+  (`core/ai_providers/resolver.py`, `core/database.py`).
+  `get_provider_credential_sync` runs the async resolver on an event loop it creates and then
+  closes - directly, or in a worker thread when the caller is already inside a loop. Its database
+  sessions came from the application's shared, pooled engine, so an asyncpg connection bound to
+  that throwaway loop went back into the pool and the next unrelated request that checked it out
+  failed with "got Future attached to a different loop"; `pool_pre_ping` does not classify that as
+  a disconnect, so the connection was handed out again. Symptoms were sporadic 500s and tenant
+  credentials reported as not configured (`tenant_ai_credential_decrypt_failed`) on requests that
+  had nothing to do with the read. Such code now runs inside `core.database.private_engine_scope`,
+  an unpooled engine of its own that is disposed with the loop. No configuration change; the
+  prefetch in `core/langgraph/llm_factory.py` that masked it on the agent path stays.
+
 ### Added
 - Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
