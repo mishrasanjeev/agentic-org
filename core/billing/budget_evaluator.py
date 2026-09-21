@@ -274,6 +274,9 @@ async def evaluate_budget_alerts() -> dict:
 # Celery task shim — the app's Celery config auto-discovers tasks under
 # core.tasks.  This stub wraps the async evaluator.
 def evaluate_budget_alerts_task() -> dict:
-    import asyncio
+    # The worker's own loop, not a throwaway one: a fresh loop per task
+    # leaves the shared engine's pooled connections bound to a loop that has
+    # been closed (core/tasks/async_runner.py).
+    from core.tasks.async_runner import run_async
 
-    return asyncio.run(evaluate_budget_alerts())
+    return run_async(evaluate_budget_alerts())
