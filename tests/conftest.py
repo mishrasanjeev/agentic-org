@@ -145,7 +145,7 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
     allowlisted = _ambient_redis_allowlist()
-    if allowlisted:
+    if allowlisted and not os.environ.get("AGENTICORG_REDIS_URL"):
         reached = len(_AMBIENT_REDIS_SEEN & allowlisted)
         terminalreporter.write_line(
             f"test files still reaching an ambient Redis: {reached} of {len(allowlisted)} allowlisted "
@@ -187,7 +187,16 @@ def _ambient_redis_allowlist() -> frozenset[str]:
 
 
 def _uses_ambient_infrastructure(request) -> bool:
-    """Whether this test is allowed to reach whatever this machine is running."""
+    """Whether this test may reach the Redis this run has.
+
+    Three ways to qualify: the test lives in ``tests/integration/``, it carries
+    the ``ambient_redis`` marker, or the run itself declared a Redis by setting
+    ``AGENTICORG_REDIS_URL`` (the integration job does; the unit job does not).
+    A run that declared one has chosen it; the protection is for the run that
+    did not and would otherwise pick up whatever the machine happens to have.
+    """
+    if os.environ.get("AGENTICORG_REDIS_URL"):
+        return True
     node_id = request.node.nodeid.replace("\\", "/")
     return node_id.startswith("tests/integration/") or bool(
         request.node.get_closest_marker("ambient_redis")

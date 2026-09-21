@@ -768,10 +768,12 @@ Remove an entry in the pull request that fixes it.
   `ABTestEngine.__init__` connects during construction, so clearing `_redis`
   afterwards is too late. 22 test files still reach a Redis if one is
   listening (`tests/ambient_redis_allowlist.txt`).
-- **Fix:** an autouse fixture in `tests/conftest.py` refuses the socket for
-  every test outside `tests/integration/`, so the code under test takes the
-  path it takes against an unreachable Redis, and fails any test that is not on
-  the allowlist. The list only shrinks: take a file off it by giving the code
+- **Fix:** an autouse fixture in `tests/conftest.py` refuses the socket unless
+  the run declared a Redis (`AGENTICORG_REDIS_URL`, as the integration job
+  does), the test lives in `tests/integration/`, or it carries the
+  `ambient_redis` marker. The code under test then takes the path it takes
+  against an unreachable Redis, and a test that connects without being on the
+  allowlist fails. The list only shrinks: take a file off it by giving the code
   an explicit client or a fake (`no_auth_state_redis` in
   `tests/unit/test_v490_reqs.py` is the pattern), by moving the test to
   `tests/integration/`, or by marking it `ambient_redis` when it is about the

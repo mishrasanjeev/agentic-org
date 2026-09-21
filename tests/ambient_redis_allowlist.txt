@@ -1,5 +1,6 @@
-# Test files outside tests/integration/ that still reach a Redis when the machine
-# has one. The connection is refused (tests/conftest.py), so a run is hermetic
+# Test files that still reach a Redis when the machine has one and the run did
+# not declare one (no AGENTICORG_REDIS_URL, no tests/integration/, no
+# ambient_redis marker). The connection is refused (tests/conftest.py), so a run is hermetic
 # either way and the machine cannot decide a result; this list exists so a NEW
 # one fails instead of joining them quietly. See FINDINGS A-59.
 #
