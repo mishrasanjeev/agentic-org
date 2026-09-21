@@ -244,11 +244,18 @@ e2e:
 # service-administrator action) and the stack started with decision requests
 # switched on:
 #
+#   AGENTICORG_DEV_DECISION_GRANTS=true AGENTICORG_DEV_GRANTEX_ADMIN_KEY=... \
 #   AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex make dev seed seed-cases e2e-decisions
+#
+# The identity provider approvers sign in with is in the `decisions` compose
+# profile, so `make dev` never starts it; this target does.
 e2e-decisions: E2E_CONFIG = e2e/decision-grants.config.ts
 e2e-decisions:
+	@[ "$(AGENTICORG_DEV_DECISION_GRANTS)" = "true" ] || { echo \
+		"make e2e-decisions: start the stack with AGENTICORG_DEV_DECISION_GRANTS=true" >&2; exit 1; }
 	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
 		{ echo "make e2e-decisions: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(COMPOSE) --profile decisions up -d --wait --wait-timeout 180 oidc-approvers
 	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
 		-e AGENTICORG_SEED_PASSWORD -e GOVERNED_CASES_SEED=$(GOVERNED_CASES_SEED) \
 		e2e-decisions bash scripts/run_e2e.sh $(E2E_CONFIG) $(E2E_ARGS)
