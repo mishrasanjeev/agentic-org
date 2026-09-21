@@ -179,10 +179,9 @@ export interface CaseDetail {
   case: BusinessCase;
   memo: UnderwritingMemo | null;
   policy_result: PolicyResult | null;
-  // Typed by the screens that render them.
   ownership_graph: unknown;
-  screening_results: unknown[];
-  screening_dispositions: unknown[];
+  screening_results: ScreeningResult[];
+  screening_dispositions: ScreeningDisposition[];
   parties: unknown[];
   information_requests: unknown[];
   tool_calls: CaseToolCall[];
@@ -190,6 +189,90 @@ export interface CaseDetail {
   failure_reason: string | null;
   transitions: CaseTransition[];
 }
+
+export type DispositionOutcome = "true_match" | "false_positive" | "insufficient_information";
+export type ComparisonResult = "match" | "partial_match" | "mismatch" | "not_comparable";
+export type ComparisonIdentifier = "name" | "date_of_birth" | "nationality" | "address" | "associated_entities";
+
+export interface DispositionComparison {
+  identifier: ComparisonIdentifier;
+  subject_value: string | null;
+  hit_value: string | null;
+  result: ComparisonResult;
+  note?: string | null;
+  evidence: Evidence[];
+}
+
+export interface DispositionReview {
+  action: "accepted" | "overridden";
+  final_outcome: DispositionOutcome;
+  analyst_id: string;
+  reviewed_at: string;
+  reason?: string | null;
+}
+
+export interface ScreeningDisposition {
+  schema_version: string;
+  disposition_id: string;
+  case_id: string;
+  screening_id: string;
+  hit_id: string;
+  proposed_by: { agent: string; agent_version: string; prompt_version: string };
+  proposed_at: string;
+  comparisons: DispositionComparison[];
+  proposed_outcome: DispositionOutcome;
+  confidence_band: "low" | "medium" | "high";
+  rationale: string;
+  evidence: Evidence[];
+  review: DispositionReview | null;
+}
+
+export interface ScreeningHit {
+  hit_id: string;
+  list_type: string;
+  source: { name: string; authority?: string | null; jurisdiction?: string | null };
+  matched_name: string;
+  aliases: string[];
+  name_similarity?: number | null;
+}
+
+export interface ScreeningResult {
+  screening_id: string;
+  provider: string;
+  subject_kind: string;
+  subject: { name: string };
+  screened_at: string;
+  list_types: string[];
+  hits: ScreeningHit[];
+  evidence: Evidence[];
+}
+
+export interface DispositionReviewRequest {
+  action: "accepted" | "overridden";
+  final_outcome: DispositionOutcome;
+  reason?: string;
+}
+
+export const OUTCOME_LABELS: Record<DispositionOutcome, string> = {
+  true_match: "True match",
+  false_positive: "False positive",
+  insufficient_information: "Insufficient information",
+};
+
+export const COMPARISON_LABELS: Record<ComparisonIdentifier, string> = {
+  name: "Name",
+  date_of_birth: "Date of birth",
+  nationality: "Nationality",
+  address: "Address",
+  associated_entities: "Associated entities",
+};
+
+export const COMPARISON_RESULT_LABELS: Record<ComparisonResult, string> = {
+  match: "Match",
+  partial_match: "Partial match",
+  mismatch: "Mismatch",
+  not_comparable: "Not comparable",
+};
 
 /** A refusal from the governed case API, reduced to its stable reason code. */
 export class CaseApiError extends Error {
@@ -237,6 +320,13 @@ const REASON_MESSAGES: Record<string, string> = {
   transition_not_allowed:
     "This action needs the case to be awaiting a decision, and it is in another state now. Reload the case.",
   case_version_conflict: "The case changed while you were working on it. Reload it and try again.",
+  disposition_not_found: "This screening hit has no proposed disposition on the case.",
+  already_reviewed: "This disposition has already been reviewed. A review is recorded once.",
+  override_reason_required: "An override needs a written reason.",
+  override_outcome_unchanged: "An override must choose a different outcome from the one proposed.",
+  accepted_outcome_differs: "Accepting keeps the proposed outcome; choose override to change it.",
+  analyst_invalid: "The server could not identify you as the analyst. Sign in again and retry.",
+  human_session_required: "This action needs a signed-in person; an API key or agent token is refused.",
 };
 
 /** A sentence for a refusal. Unknown codes are shown as the code, never hidden. */
@@ -269,6 +359,16 @@ export const governedCasesApi = {
   /** The passage behind one citation. Fetched only when a reviewer asks to read it. */
   excerpt(caseRef: string, excerptRef: string): Promise<CaseExcerpt> {
     return call(() => api.get(casePath(caseRef, `/excerpts/${encodeURIComponent(excerptRef)}`)));
+  },
+  /** Record an analyst's review of one proposed disposition. The analyst identity is the session's. */
+  reviewDisposition(
+    caseRef: string,
+    hitId: string,
+    body: DispositionReviewRequest,
+  ): Promise<ScreeningDisposition> {
+    return call(() =>
+      api.post(casePath(caseRef, `/screening-dispositions/${encodeURIComponent(hitId)}/review`), body),
+    );
   },
 };
 
@@ -321,7 +421,7 @@ export const ERROR_REASON_MESSAGES: Record<string, string> = {
 
 /** Stable, attribute-safe element ids for in-page citation links. */
 export function citationAnchors(memo: UnderwritingMemo): {
-  recordId: (provider: string, recordId: string) => string;
+  recordId: (provider: string, recordId: string) => string | null;
   excerptId: (ref: string) => string | null;
 } {
   const records = new Map<string, string>();
@@ -335,7 +435,7 @@ export function citationAnchors(memo: UnderwritingMemo): {
     if (!excerpts.has(excerpt.excerpt_ref)) excerpts.set(excerpt.excerpt_ref, `excerpt-${index + 1}`);
   });
   return {
-    recordId: (provider, recordId) => records.get(key(provider, recordId)) ?? "cited-records",
+    recordId: (provider, recordId) => records.get(key(provider, recordId)) ?? null,
     excerptId: (ref) => excerpts.get(ref) ?? null,
   };
 }

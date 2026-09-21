@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // Synthetic governed case documents shaped like the published schemas (schemas/examples).
 // Every name is invented and every identifier is from a reserved range.
-import type { CaseDetail, CaseSummary, UnderwritingMemo } from "@/lib/governedCases";
+import type {
+  CaseDetail,
+  CaseSummary,
+  ScreeningDisposition,
+  ScreeningResult,
+  UnderwritingMemo,
+} from "@/lib/governedCases";
 
 export const CASE_REF = "case_0000000000000000000000a1";
 
@@ -201,4 +207,75 @@ export const summaryFixture: CaseSummary = {
 
 export function axiosError(status: number, data: unknown): unknown {
   return Object.assign(new Error(`status ${status}`), { response: { status, data } });
+}
+
+const hitEvidence = {
+  provider: "mock",
+  record_id: "mock:watchlist:wl-0001",
+  field: "names[0]",
+  retrieved_at: "2026-09-01T09:05:00Z",
+  excerpt_ref: "excerpt:mock-watchlist-wl-0001",
+};
+
+export const HIT_ID = "hit-000000000000a001";
+
+export function dispositionFixture(overrides: Partial<ScreeningDisposition> = {}): ScreeningDisposition {
+  return {
+    schema_version: "1.0.0",
+    disposition_id: "dsp-000000000000000000000a01",
+    case_id: CASE_REF,
+    screening_id: "scr-000000000000a001",
+    hit_id: HIT_ID,
+    proposed_by: { agent: "screening_disposition", agent_version: "1.0.0", prompt_version: "1.0.0" },
+    proposed_at: "2026-09-01T09:06:00Z",
+    comparisons: [
+      {
+        identifier: "name",
+        subject_value: "Ansel Pikeworth",
+        hit_value: "Ansel Pikworth",
+        result: "partial_match",
+        note: "Normalised names are 0.94 similar.",
+        evidence: [hitEvidence],
+      },
+      { identifier: "date_of_birth", subject_value: "1990-03", hit_value: "1948-07-02", result: "mismatch", note: null, evidence: [] },
+      { identifier: "nationality", subject_value: "GB", hit_value: "ZZ", result: "mismatch", note: null, evidence: [] },
+      { identifier: "address", subject_value: null, hit_value: null, result: "not_comparable", note: "No address on one side.", evidence: [] },
+      {
+        identifier: "associated_entities",
+        subject_value: "Marlpit Orchard Example Ltd",
+        hit_value: "Pikworth Holdings",
+        result: "mismatch",
+        note: null,
+        evidence: [],
+      },
+    ],
+    proposed_outcome: "false_positive",
+    confidence_band: "high",
+    rationale: "The name partly matches; the date of birth and nationality do not. Proposed outcome: false positive.",
+    evidence: [hitEvidence],
+    review: null,
+    ...overrides,
+  };
+}
+
+export function screeningResultFixture(): ScreeningResult {
+  return {
+    screening_id: "scr-000000000000a001",
+    provider: "mock",
+    subject_kind: "person",
+    subject: { name: "Ansel Pikeworth" },
+    screened_at: "2026-09-01T09:05:00Z",
+    list_types: ["sanctions"],
+    hits: [
+      {
+        hit_id: HIT_ID,
+        list_type: "sanctions",
+        source: { name: "Example sanctions list", authority: "Example authority", jurisdiction: "ZZ" },
+        matched_name: "Ansel Pikworth",
+        aliases: [],
+        name_similarity: 0.94,
+      },
+    ],
+    evidence: [hitEvidence],
+  };
 }

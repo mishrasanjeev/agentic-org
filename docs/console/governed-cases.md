@@ -74,6 +74,35 @@ instead of a recommendation.
 Agent-authored text is rendered as text. Nothing from a memo, a provider record
 or an excerpt is ever rendered as markup.
 
+## Screening dispositions
+
+![Screening dispositions with the per-identifier comparison](images/governed-case-dispositions.png)
+
+Each screening hit the Screening Disposition agent analysed appears with the hit
+it concerns (the list entry, its list type and source), the proposed outcome, the
+confidence band (metadata for the reviewer, never a gate), the written rationale,
+the per-identifier comparison of the screened subject against the list entry
+(name, date of birth, nationality, address, associated entities, each with its
+result and any note) and the evidence cited for it.
+
+You then record your review:
+
+- **Accept** keeps the proposed outcome.
+- **Override** requires a different outcome *and* a written reason; the console
+  does not send an override without one, and the API refuses it too.
+
+![An override with its written reason](images/governed-case-disposition-override.png)
+
+The analyst identity is taken from your session on the server; this page never
+sends an identity, and the API refuses an API key or an agent token on this
+route (`human_session_required`). A review is written once - a second review of the same hit is
+refused with `already_reviewed` - and reviews can be recorded only while the case
+is awaiting a decision, which is why the form is offered only then. If the case
+moves on while the screen is open, the refusal (`transition_not_allowed`) is
+shown and the case is reloaded rather than leaving a control that cannot work. Recording a review does not close the hit in any system:
+closing it is the analyst's action in the operator's system of record, and
+nothing in this release closes a hit automatically.
+
 ## At phone width
 
 ![The queue on a phone](images/governed-cases-queue-mobile.png)

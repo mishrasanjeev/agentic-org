@@ -217,7 +217,7 @@ export default function MemoView({
             {records.map((record) => (
               <li
                 key={`${record.provider}-${record.record_id}`}
-                id={anchors.recordId(record.provider, record.record_id)}
+                id={anchors.recordId(record.provider, record.record_id) ?? undefined}
                 tabIndex={-1}
                 className="rounded-md border px-3 py-2 text-sm target:ring-2 target:ring-primary"
                 data-testid="cited-record"

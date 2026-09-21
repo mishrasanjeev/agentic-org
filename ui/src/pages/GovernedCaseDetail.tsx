@@ -6,8 +6,10 @@ import ApprovalsSubnav from "@/components/governed-cases/ApprovalsSubnav";
 import { StateBadge, TierBadge } from "@/components/governed-cases/CaseBadges";
 import MemoView from "@/components/governed-cases/MemoView";
 import PolicyScore from "@/components/governed-cases/PolicyScore";
+import ScreeningDispositions from "@/components/governed-cases/ScreeningDispositions";
 import {
   STATE_LABELS,
+  citationAnchors,
   describeCaseReason,
   formatTimestamp,
   governedCasesApi,
@@ -15,6 +17,8 @@ import {
   type CaseApiError,
   type CaseDetail,
 } from "@/lib/governedCases";
+
+const NO_CITATIONS = { recordId: () => null, excerptId: () => null };
 
 const NO_MEMO_MESSAGES: Record<string, string> = {
   submitted: "The case has been submitted and has not been investigated yet.",
@@ -154,6 +158,16 @@ export default function GovernedCaseDetail() {
             <p className="rounded-lg border border-dashed px-4 py-3 text-sm" data-testid="memo-not-ready">
               {NO_MEMO_MESSAGES[businessCase.state] ?? "There is no memo for this case."}
             </p>
+          )}
+          {(detail.screening_dispositions.length > 0 || detail.screening_results.length > 0) && (
+            <ScreeningDispositions
+              caseRef={businessCase.case_id}
+              caseState={businessCase.state}
+              dispositions={detail.screening_dispositions}
+              screeningResults={detail.screening_results}
+              anchors={memo ? citationAnchors(memo) : NO_CITATIONS}
+              onReviewed={() => void load()}
+            />
           )}
         </div>
         <div className="min-w-0 space-y-6">
