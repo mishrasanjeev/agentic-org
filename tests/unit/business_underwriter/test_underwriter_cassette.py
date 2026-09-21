@@ -73,6 +73,13 @@ async def test_missing_owner_case_replays_its_recorded_narrative(model_cassette:
     ownership = next(s for s in outcome.memo["sections"] if s["section_id"] == "ownership")
     assert [f["code"] for f in ownership["findings"]] == ["missing_owner", "narrative_summary"]
 
+    # The replayed narrative must describe the case the request actually
+    # carried: a stale recording would summarise a different activity finding.
+    activity = next(s for s in outcome.memo["sections"] if s["section_id"] == "activity")
+    assert [f["code"] for f in activity["findings"]] == ["activity_consistent", "narrative_summary"]
+    summary = next(f for f in activity["findings"] if f["code"] == "narrative_summary")
+    assert summary["statement"] == "Activity observed on the website is consistent with the declared activity."
+
 
 async def test_a_different_case_misses_the_cassette_instead_of_replaying_stale_text(model_cassette: Any) -> None:
     if os.getenv("AGENTICORG_MODEL_MODE") == "record":

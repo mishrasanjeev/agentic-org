@@ -20,6 +20,21 @@ from core.agents.business_underwriter import (
 from core.policy import EXAMPLES_DIR, Policy, load_policy
 from core.test_doubles.scripted_model import final
 
+ALL_FIXTURES = (
+    "gb-adversarial-northgate",
+    "gb-clean-brightwater",
+    "gb-dissolved-ashcombe",
+    "gb-missing-owner-marlpit",
+    "gb-true-match-corvane",
+    "us-clean-hollowbrook",
+    "us-clean-quillfeather",
+    "us-false-positive-oakhollow",
+    "us-hostile-web-glintmoor",
+    "us-missing-owner-cinderpath",
+    "us-thin-file-brambleway",
+    "us-undeclared-owner-larkspur",
+)
+
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
 

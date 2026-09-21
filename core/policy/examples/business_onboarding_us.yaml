@@ -11,7 +11,7 @@
 #  See docs/policies/authoring.md.
 # ============================================================================
 policy: business_onboarding_us
-version: 1.0.0
+version: 1.1.0
 status: example
 reviewed_by: null
 description: >-
@@ -28,13 +28,15 @@ rules:
 
   - id: registry_dissolved
     description: >-
-      Fires only on a registry record that says dissolved or revoked. A missing
-      status is handled by registry_active, so this rule guards with exists.
+      Fires only on a registry record that says dissolved or in insolvency.
+      Both values are members of the provider interface's RegistryStatus. A
+      missing status is handled by registry_active, so this rule guards with
+      exists.
     when:
       all:
         - {verification.status: {exists: true}}
-        - {verification.status: {in: [dissolved, revoked]}}
-    effect: {tier: blocked, reason: "Registry record shows the business as dissolved or revoked"}
+        - {verification.status: {in: [dissolved, in_insolvency]}}
+    effect: {tier: blocked, reason: "Registry record shows the business as dissolved or in insolvency"}
 
   - id: registry_record_found
     description: Fires when no registry record matched, or when the match result is missing.
@@ -63,5 +65,9 @@ rules:
     effect: {tier: medium, reason: "Screening hits awaiting disposition"}
 
   - id: web_presence_activity_mismatch
+    description: >-
+      Fires when the observed activity differs from the declared one, and as
+      indeterminate when the two cannot be compared at all (no usable web
+      presence, or a declared term outside the published vocabulary).
     when: {web_presence.activity_mismatch: {eq: true}}
     effect: {tier: medium, reason: "Observed business activity differs from the declared activity", score: 10}
