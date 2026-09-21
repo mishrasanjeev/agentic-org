@@ -281,8 +281,9 @@ services:
       # the local stack can take a real approval end to end.
       DECISION_GRANTS_ENABLED: "true"
       # Approver emails are stored as keyed hashes and names encrypted, so the
-      # service requires a vault key before it will mint a decision grant.
-      VAULT_ENCRYPTION_KEY: YWdlbnRpY29yZy1kZXYtZ3JhbnRleC12YXVsdC1rZXk=
+      # service requires a vault key before it will mint a decision grant. A
+      # visibly fake 32-byte development placeholder; production rejects it.
+      VAULT_ENCRYPTION_KEY: deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
       # CSRF tokens on the approval page; fixed so a restart does not
       # invalidate a page an approver already has open.
       DECISION_PAGE_SECRET: agenticorg-dev-grantex-decision-page-secret
