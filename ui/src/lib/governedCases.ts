@@ -152,6 +152,7 @@ export interface CaseSummary {
 export interface CaseToolCall {
   agent: string;
   run_id: string;
+  provider?: string;
   tool: string;
   outcome: string;
   reason: string;
@@ -173,6 +174,8 @@ export interface CaseExcerptReference {
 export interface CaseExcerpt extends CaseExcerptReference {
   /** The passage as the provider returned it. Untrusted content: rendered as text, never as markup. */
   text: string;
+  /** The server re-hashed the stored passage and it matched the digest below. */
+  verified?: boolean;
 }
 
 export interface CaseDetail {
@@ -317,6 +320,10 @@ const REASON_MESSAGES: Record<string, string> = {
   request_invalid: "The request was not valid.",
   case_state_unknown: "That case state filter is not recognised.",
   excerpt_not_found: "The case does not hold the passage behind this citation.",
+  excerpt_not_held: "The passage behind this citation is no longer held; only its digest remains.",
+  excerpt_integrity_failed:
+    "The stored passage no longer matches the digest the memo cites, so it was not shown. Treat this case as suspect and tell whoever runs the platform.",
+  excerpt_unreadable: "The stored passage could not be read back.",
   transition_not_allowed:
     "This action needs the case to be awaiting a decision, and it is in another state now. Reload the case.",
   case_version_conflict: "The case changed while you were working on it. Reload it and try again.",
@@ -440,16 +447,23 @@ export function citationAnchors(memo: UnderwritingMemo): {
   };
 }
 
+/** Provider and record together: a record id alone could be claimed under another provider. */
+export function citedRecordKey(provider: string, recordId: string): string {
+  return `${provider}\u001f${recordId}`;
+}
+
 /**
  * The upstream records this case's agent runs actually fetched, from their own tool calls.
  *
  * A citation naming a record that is not in this set was not verified by the run that wrote the
- * memo, and the screens say so rather than presenting it as traced.
+ * memo, and the screens say so rather than presenting it as traced. Keys carry the provider as
+ * well as the record id, so a citation cannot borrow a real record id under another provider.
  */
 export function retrievedRecordIds(detail: { tool_calls?: CaseToolCall[] }): Set<string> {
   const ids = new Set<string>();
   for (const call of detail.tool_calls ?? []) {
-    for (const id of call.record_ids ?? []) ids.add(id);
+    const provider = call.provider ?? "";
+    for (const id of call.record_ids ?? []) ids.add(citedRecordKey(provider, id));
   }
   return ids;
 }

@@ -72,11 +72,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   as it arrived; the underwriting memo attaches every excerpt reference its evidence cites (before,
   `memo.excerpts` was empty on every case, so every citation read "not attached to this memo"), and
   the case keeps the passages in `governed_cases.excerpts`.
-  `GET /governed-cases/{case_ref}` gains `tool_calls` (each provider call with the record ids it
-  returned) and `excerpts` (references only), and
-  `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` serves one passage. The console shows the
-  passage on request and marks a citation whose record the run never returned. Migration
-  `v6z28_case_excerpts` adds the column (additive, forward-only). Closes FINDINGS A-48.
+  `GET /governed-cases/{case_ref}` gains `tool_calls` (each provider call with the provider and
+  the record ids it returned) and `excerpts` (references only), and
+  `GET /governed-cases/{case_ref}/excerpts/{excerpt_ref}` serves one passage, decrypted and
+  re-hashed: a passage that no longer matches the digest the memo cites is refused
+  (`excerpt_integrity_failed`), never shown. `DELETE /governed-cases/{case_ref}/excerpts` forgets
+  the passages and keeps the references, and a case keeps at most its 200 most recent passages,
+  newest capture per reference winning. The console shows a passage on request, marks a citation
+  whose record the run never returned (provider and record id together), and says plainly when a
+  case carries no tool calls to check citations against. Passages are stored encrypted with the
+  tenant's key in `governed_cases.excerpts_encrypted` (migration `v6z28_case_excerpts`, additive
+  and forward-only, through the encrypted-column migration helper). Closes FINDINGS A-48.
 - Decision requests for governed cases (PRD G-3, `core/cases/decision_requests.py`,
   `POST /api/v1/governed-cases/{case_ref}/decision-requests`,
   `GET .../decision-requests/{request_id}`): AgenticOrg asks the Grantex auth service for a

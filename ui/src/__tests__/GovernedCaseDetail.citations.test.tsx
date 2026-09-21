@@ -64,11 +64,22 @@ describe("citations are checked against the run's own tool calls", () => {
     expect(records.some((r) => r.textContent?.includes("never returned this record"))).toBe(true);
   });
 
-  it("says nothing about tracing when the case carries no tool calls", async () => {
+  it("says the citations cannot be checked when the case carries no tool calls", async () => {
+    // Failing open here would render a forged citation as an ordinary, legitimate one.
     renderCase(caseDetailFixture({ tool_calls: [] }));
-    await screen.findByTestId("cited-records");
+    expect(await screen.findByTestId("citations-uncheckable")).toHaveTextContent(
+      "cannot be checked against it",
+    );
     expect(screen.queryByTestId("record-traced")).not.toBeInTheDocument();
     expect(screen.queryByTestId("evidence-untraced")).not.toBeInTheDocument();
+  });
+
+  it("does not accept a real record id claimed under another provider", async () => {
+    const detail = caseDetailFixture();
+    detail.tool_calls[0].provider = "another_provider";
+    renderCase(detail);
+    const untraced = await screen.findAllByTestId("evidence-untraced");
+    expect(untraced.length).toBeGreaterThan(0);
   });
 });
 
@@ -93,7 +104,8 @@ describe("the passage behind a citation", () => {
     const passage = await screen.findByTestId("excerpt-passage");
     expect(mockGet).toHaveBeenCalledWith(EXCERPT_PATH);
     expect(passage).toHaveTextContent("Ansel Pikworth");
-    expect(passage).toHaveTextContent("The record as mock returned it (application/json).");
+    expect(passage).toHaveTextContent("The record as mock returned it, captured by the platform as application/json");
+    expect(passage).toHaveTextContent("re-hashed when it was read back");
   });
 
   it("renders provider content as text, never as markup", async () => {
@@ -121,6 +133,18 @@ describe("the passage behind a citation", () => {
     renderCase(caseDetailFixture(), axiosError(404, { error: { reason: "excerpt_not_found", detail: "" } }) as Error);
     fireEvent.click(await screen.findByTestId("show-passage"));
     expect(await screen.findByRole("alert")).toHaveTextContent("does not hold the passage");
+    expect(screen.queryByTestId("excerpt-passage")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing at all when the stored passage no longer matches its digest", async () => {
+    renderCase(
+      caseDetailFixture(),
+      axiosError(409, { error: { reason: "excerpt_integrity_failed", detail: "" } }) as Error,
+    );
+    fireEvent.click(await screen.findByTestId("show-passage"));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("no longer matches the digest");
+    expect(alert).toHaveTextContent("Treat this case as suspect");
     expect(screen.queryByTestId("excerpt-passage")).not.toBeInTheDocument();
   });
 });

@@ -6,6 +6,7 @@ import { SectionStatusBadge, SeverityBadge } from "@/components/governed-cases/C
 import {
   describeCaseReason,
   governedCasesApi,
+  citedRecordKey,
   retrievedRecordIds,
   toCaseApiError,
   type CaseExcerpt,
@@ -117,7 +118,9 @@ function ExcerptPassage({ caseRef, excerptRef }: { caseRef: string; excerptRef: 
     return (
       <div className="mt-2" data-testid="excerpt-passage">
         <p className="text-xs text-muted-foreground">
-          The record as {excerpt.provider} returned it ({excerpt.media_type}).
+          The record as {excerpt.provider} returned it, captured by the platform as{" "}
+          {excerpt.media_type} and re-hashed when it was read back
+          {excerpt.verified === false ? " (the server could not confirm the digest)" : ""}.
         </p>
         <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted/40 p-2 text-xs">
           {excerpt.text}
@@ -155,10 +158,15 @@ export default function MemoView({
 }) {
   const retrieved = retrievedRecordIds({ tool_calls: toolCalls });
   const held = new Set(excerpts.map((excerpt) => excerpt.excerpt_ref));
+  const checkable = toolCalls.length > 0;
   const memoAnchors = citationAnchors(memo);
   const anchors: CitationAnchors = {
     ...memoAnchors,
-    retrieved: toolCalls.length > 0 ? (recordId: string) => retrieved.has(recordId) : undefined,
+    // With no tool calls nothing can be checked; the screen says so once, loudly, instead of
+    // letting every citation default to "traced".
+    retrieved: checkable
+      ? (recordId: string, provider: string) => retrieved.has(citedRecordKey(provider, recordId))
+      : undefined,
   };
   const records = citedRecords(memo);
   const confidence = memo.provenance.model_confidence;
@@ -208,8 +216,19 @@ export default function MemoView({
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Every upstream record the memo cites, checked against the provider calls this case's run actually made. A
-          passage the case holds can be read here; its digest identifies exactly what the provider returned.
+          passage the case holds can be read here; its digest covers the copy the platform captured (a very large
+          record is stored truncated), and the server re-hashes that copy before showing it.
         </p>
+        {!checkable && (
+          <p
+            role="note"
+            className="mt-3 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-900"
+            data-testid="citations-uncheckable"
+          >
+            This case carries no record of the provider calls its run made, so these citations cannot be checked
+            against it. Treat them as unverified.
+          </p>
+        )}
         {records.length === 0 ? (
           <p className="mt-3 text-sm">The memo cites no records.</p>
         ) : (
@@ -231,9 +250,9 @@ export default function MemoView({
                   {record.sections.map((s) => SECTION_LABELS[s] ?? s).join(", ")} · Retrieved:{" "}
                   {record.retrieved_at.map((at) => formatTimestamp(at)).join(", ")}
                 </p>
-                {toolCalls.length > 0 && (
+                {checkable && (
                   <p className="mt-1 text-xs" data-testid="record-traced">
-                    {retrieved.has(record.record_id) ? (
+                    {retrieved.has(citedRecordKey(record.provider, record.record_id)) ? (
                       <span className="text-muted-foreground">This run fetched this record.</span>
                     ) : (
                       <strong className="text-red-800">

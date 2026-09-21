@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from typing import Any
 
-from core.cases.runtime import _merged_excerpts
+import pytest
+
+from core.cases import excerpts as case_excerpts
 from core.tool_gateway.provider_gateway import captured_excerpts
 
 HIT = {
@@ -86,14 +89,80 @@ def test_the_memo_reference_never_carries_the_passage() -> None:
     assert "text" not in reference
 
 
-def test_a_case_keeps_one_passage_per_reference_and_the_first_capture_wins() -> None:
-    merged = _merged_excerpts(
-        [{"excerpt_ref": "e1", "text": "first"}],
-        [{"excerpt_ref": "e1", "text": "second"}, {"excerpt_ref": "e0", "text": "other"}],
+TENANT = uuid.UUID("0c9f2a5e-0000-4000-8000-0000000000a8")
+
+
+@pytest.fixture(autouse=True)
+def _tenant_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Encrypt with the legacy tenant key: these tests are about the store, not the key manager."""
+    from core.crypto import tenant_secrets
+
+    async def no_byok(_tenant_id: uuid.UUID) -> str:
+        return ""
+
+    monkeypatch.setattr(tenant_secrets, "_resolve_kek", no_byok)
+
+
+async def test_a_stored_passage_is_encrypted_and_only_its_reference_is_readable() -> None:
+    """A passage is a provider record about a person, so it is not left in clear text."""
+    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
+    entry = stored[0]
+    assert "text" not in entry
+    assert entry[case_excerpts.CIPHERTEXT_KEY] and "Ansel" not in entry[case_excerpts.CIPHERTEXT_KEY]
+    assert set(case_excerpts.reference(entry)) <= set(case_excerpts.REFERENCE_KEYS)
+    assert case_excerpts.CIPHERTEXT_KEY not in case_excerpts.reference(entry)
+    assert case_excerpts.read(entry) == "Ansel"
+
+
+async def test_the_newest_capture_of_a_reference_wins() -> None:
+    """The memo cites the newest digest, so the passage kept has to be the newest one."""
+    first = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "text": "first"}], now="2026-09-01T09:00:00Z")
+    second = await case_excerpts.store(
+        TENANT, first, [{"excerpt_ref": "e1", "text": "second"}], now="2026-09-02T09:00:00Z"
     )
-    assert [entry["excerpt_ref"] for entry in merged] == ["e0", "e1"]
-    assert merged[1]["text"] == "first"
+    assert len(second) == 1
+    assert case_excerpts.read(second[0]) == "second"
+    assert second[0]["sha256"] == case_excerpts.digest("second")
 
 
-def test_an_entry_without_a_reference_is_dropped_rather_than_stored_unidentified() -> None:
-    assert _merged_excerpts(None, [{"text": "no reference"}]) == []
+async def test_a_case_keeps_only_the_most_recent_passages() -> None:
+    """A case re-investigated over and over must not grow without limit."""
+    captured = [{"excerpt_ref": f"e{n}", "text": f"passage {n}"} for n in range(10)]
+    stored = await case_excerpts.store(TENANT, [], captured, now="2026-09-01T09:00:00Z", limit=4)
+    assert len(stored) == 4
+
+
+async def test_an_entry_without_a_reference_or_a_passage_is_not_stored() -> None:
+    assert await case_excerpts.store(TENANT, None, [{"text": "no reference"}]) == []
+    assert await case_excerpts.store(TENANT, None, [{"excerpt_ref": "e1"}]) == []
+
+
+async def test_a_passage_that_no_longer_matches_its_digest_is_refused() -> None:
+    """The console prints the digest beside the passage: an unverified passage must not reach it."""
+    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "text": "as returned"}])
+    tampered = {**stored[0], "sha256": case_excerpts.digest("something else")}
+    with pytest.raises(case_excerpts.ExcerptError) as refused:
+        case_excerpts.read(tampered)
+    assert refused.value.reason == "excerpt_integrity_failed"
+
+
+def test_a_reference_without_a_passage_reads_as_not_held() -> None:
+    with pytest.raises(case_excerpts.ExcerptError) as refused:
+        case_excerpts.read({"excerpt_ref": "e1", "sha256": case_excerpts.digest("x")})
+    assert refused.value.reason == "excerpt_not_held"
+
+
+def test_an_undecryptable_passage_is_refused_rather_than_shown() -> None:
+    entry = {"excerpt_ref": "e1", "sha256": case_excerpts.digest("x"), case_excerpts.CIPHERTEXT_KEY: "not-ciphertext"}
+    with pytest.raises(case_excerpts.ExcerptError) as refused:
+        case_excerpts.read(entry)
+    assert refused.value.reason in {"excerpt_unreadable", "excerpt_integrity_failed"}
+
+
+async def test_forgetting_keeps_the_references_the_memo_cites() -> None:
+    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
+    forgotten = case_excerpts.forget(stored)
+    assert [entry["excerpt_ref"] for entry in forgotten] == ["e1"]
+    assert all(case_excerpts.CIPHERTEXT_KEY not in entry for entry in forgotten)
+    with pytest.raises(case_excerpts.ExcerptError):
+        case_excerpts.read(forgotten[0])

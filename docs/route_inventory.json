@@ -4226,7 +4226,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 218,
+    "source_line": 219,
     "tenant_required": true
   },
   {
@@ -4244,7 +4244,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 187,
+    "source_line": 188,
     "tenant_required": true
   },
   {
@@ -4262,7 +4262,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 235,
+    "source_line": 236,
     "tenant_required": true
   },
   {
@@ -4280,7 +4280,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 248,
+    "source_line": 249,
     "tenant_required": true
   },
   {
@@ -4298,7 +4298,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 285,
+    "source_line": 381,
     "tenant_required": true
   },
   {
@@ -4316,7 +4316,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 519,
+    "source_line": 615,
     "tenant_required": true
   },
   {
@@ -4334,7 +4334,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 393,
+    "source_line": 489,
     "tenant_required": true
   },
   {
@@ -4352,7 +4352,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.read",
-    "source_line": 480,
+    "source_line": 576,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governed_cases.excerpts_forgotten",
+    "auth_required": true,
+    "function": "forget_case_excerpts",
+    "idempotency": "clearing-twice-changes-nothing",
+    "key": "DELETE /api/v1/governed-cases/{case_ref}/excerpts api/v1/governed_cases.py:forget_case_excerpts",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/excerpts",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.write",
+    "source_line": 350,
+    "tenant_required": true
+  },
+  {
+    "audit_event": null,
+    "auth_required": true,
+    "function": "get_case_excerpt",
+    "idempotency": null,
+    "key": "GET /api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref} api/v1/governed_cases.py:get_case_excerpt",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governed_cases.py",
+    "path": "/api/v1/governed-cases/{case_ref}/excerpts/{excerpt_ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "approvals.governed_cases.read",
+    "source_line": 313,
     "tenant_required": true
   },
   {
@@ -4370,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 606,
+    "source_line": 702,
     "tenant_required": true
   },
   {
@@ -4388,7 +4424,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 637,
+    "source_line": 733,
     "tenant_required": true
   },
   {
@@ -4406,7 +4442,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 310,
+    "source_line": 406,
     "tenant_required": true
   },
   {
@@ -4460,7 +4496,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 565,
+    "source_line": 661,
     "tenant_required": true
   },
   {
@@ -4478,7 +4514,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.governed_cases.write",
-    "source_line": 344,
+    "source_line": 440,
     "tenant_required": true
   },
   {

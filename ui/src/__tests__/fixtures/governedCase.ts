@@ -160,6 +160,7 @@ export function caseDetailFixture(overrides: Partial<CaseDetail> = {}): CaseDeta
       {
         agent: "business_underwriter",
         run_id: "run-1",
+        provider: "mock",
         tool: "screen_person",
         outcome: "ok",
         reason: "",

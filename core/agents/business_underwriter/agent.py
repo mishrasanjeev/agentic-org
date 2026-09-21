@@ -410,6 +410,20 @@ class _Investigator:
         self._attach_excerpts()
         self.inv.web = Step("ok")
 
+    def extracted_excerpts(self, store: ExcerptStore) -> list[dict[str, Any]]:
+        """The sandboxed extractor's passages, with their text, for the case store.
+
+        The extractor keeps them for the run only; without this they were attached to the memo by
+        reference and then lost, so every such citation read "not attached".
+        """
+        passages: list[dict[str, Any]] = []
+        for entry in self.inv.excerpts:
+            ref = str(entry.get("excerpt_ref") or "")
+            excerpt = store.get(ref) if ref else None
+            if excerpt is not None:
+                passages.append({**entry, "fields": [excerpt.field], "text": excerpt.text})
+        return passages
+
     def _attach_excerpts(self) -> None:
         """Every excerpt the memo's evidence cites, attached to the memo (PRD A-6).
 
@@ -612,7 +626,12 @@ async def run_underwriter(
             raise _RunFailedError("memo_evidence_untraced")
 
         outcome.memo = memo
-        outcome.excerpts = [excerpt.stored() for excerpt in gateway.excerpts.values()]
+        # Both kinds of passage are handed to the case: the records the provider cited an excerpt
+        # reference on, and the passages the sandboxed extractor kept from page content.
+        outcome.excerpts = [
+            *(excerpt.stored() for excerpt in gateway.excerpts.values()),
+            *investigator.extracted_excerpts(deps.excerpts),
+        ]
         outcome.ownership_graph = inv.graph.model_dump(mode="json") if inv.graph else None
         outcome.screening_results = [r.model_dump(mode="json") for r in screening_results]
         outcome.parties = [e.party for e in inv.screened]

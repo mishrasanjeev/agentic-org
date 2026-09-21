@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from connectors.framework.verification_provider import VerificationProvider
 from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+from core.cases import excerpts as case_excerpts
 from core.cases.decisions import DecisionVerifier, RequireDecisionGrant, record_decision
 from core.cases.states import CaseError, CaseState
 from core.cases.store import CASE_REF_RE, get_case, record_update, transition
@@ -308,7 +309,9 @@ async def _store_investigation(
         case.ownership_graph = outcome.ownership_graph
         case.screening_results = outcome.screening_results
         case.parties = outcome.parties
-        case.excerpts = _merged_excerpts(case.excerpts, outcome.excerpts)
+        case.excerpts_encrypted = await case_excerpts.store(
+            tenant, case.excerpts_encrypted, outcome.excerpts, now=runtime.clock().isoformat()
+        )
         case.screening_dispositions = []
         await transition(
             session, case, CaseState.AWAITING_DECISION, actor=actor, reason="memo_ready", now=runtime.clock()
@@ -321,16 +324,6 @@ async def _store_investigation(
             "screening_hits": sum(len(r["hits"]) for r in outcome.screening_results),
             "missing_items": [item["item"] for item in memo["missing_items"]],
         }
-
-
-def _merged_excerpts(existing: list[Any] | None, captured: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One entry per excerpt reference; the first capture of a passage wins."""
-    merged: dict[str, dict[str, Any]] = {}
-    for entry in [*(existing or []), *captured]:
-        ref = str(entry.get("excerpt_ref") or "")
-        if ref:
-            merged.setdefault(ref, dict(entry))
-    return [merged[ref] for ref in sorted(merged)]
 
 
 async def _run_underwriter_safely(**kwargs: Any) -> Any:
@@ -401,7 +394,9 @@ async def dispose_screening_hits(
             raise CaseError("case_version_conflict", f"expected {version}, found {case.version}")
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
-        case.excerpts = _merged_excerpts(case.excerpts, excerpts)
+        case.excerpts_encrypted = await case_excerpts.store(
+            tenant, case.excerpts_encrypted, excerpts, now=runtime.clock().isoformat()
+        )
         await record_update(session, case, now=runtime.clock())
         version, had_requests = case.version, bool(case.decision_requests)
     await announce_case_version(runtime, case_ref, version, only_if=had_requests)
