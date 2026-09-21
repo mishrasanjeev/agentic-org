@@ -701,9 +701,9 @@ async def test_the_case_holds_the_passage_behind_every_citation_and_serves_it(
         assert cited <= attached, sorted(cited - attached)
 
         held = {excerpt["excerpt_ref"] for excerpt in detail["excerpts"]}
-        # Every reference the memo attaches has a passage, whichever produced it: the provider's
+        # Every reference the memo attaches has a passage and nothing else is held: the provider's
         # records and the sandboxed extractor's own passages, which used to be attached and lost.
-        assert attached <= held, sorted(attached - held)
+        assert attached == held, sorted(attached ^ held)
         assert cited <= held, sorted(cited - held)
         # The list carries references only; the passages have their own route.
         assert all("text" not in excerpt for excerpt in detail["excerpts"])

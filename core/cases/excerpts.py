@@ -14,7 +14,8 @@ Three rules keep the store honest:
 * **Newest capture wins.** A re-investigation may return a different record under the same
   reference; the memo then cites the new digest, so the passage kept must be the new one.
 * **Bounded.** A case re-investigated repeatedly (a provider webhook can trigger that) would
-  otherwise grow without limit: the most recent :data:`MAX_CASE_EXCERPTS` are kept.
+  otherwise grow without limit: the most recent :data:`MAX_CASE_EXCERPTS` are kept, ordered by when
+  they were captured and, within one capture, by the order they arrived in.
 * **Erasable.** ``forget`` drops every passage while leaving the references, so a case can be
   minimised without losing what it cited.
 
@@ -42,6 +43,10 @@ MAX_CASE_EXCERPTS = 200
 CIPHERTEXT_KEY = "text_encrypted"
 
 REFERENCE_KEYS = ("excerpt_ref", "provider", "record_id", "media_type", "sha256", "fields", "captured_at")
+
+#: Order within one capture, so a batch larger than the limit keeps the passages captured last
+#: rather than the ones whose reference happens to sort last.
+SEQUENCE_KEY = "captured_seq"
 
 excerpt_reads_total = Counter(
     "agenticorg_case_excerpt_reads_total",
@@ -85,7 +90,7 @@ async def store(
         ref = str(entry.get("excerpt_ref") or "")
         if ref:
             merged[ref] = dict(entry)
-    for entry in captured:
+    for sequence, entry in enumerate(captured):
         ref = str(entry.get("excerpt_ref") or "")
         text = entry.get("text")
         if not ref or not isinstance(text, str) or not text:
@@ -93,11 +98,17 @@ async def store(
         stored = {key: value for key, value in entry.items() if key != "text"}
         stored["sha256"] = digest(text)
         stored["captured_at"] = now or stored.get("captured_at") or ""
+        stored[SEQUENCE_KEY] = sequence
         # The newest capture replaces an older passage for the same reference: the memo cites the
         # digest of the newest one.
         stored[CIPHERTEXT_KEY] = await encrypt_for_tenant(text, tenant)
         merged[ref] = stored
-    ordered = sorted(merged.values(), key=lambda e: (str(e.get("captured_at") or ""), str(e["excerpt_ref"])))
+    # Oldest first, and within one capture the order it was captured in, so trimming drops the
+    # oldest passages rather than whichever references sort first.
+    ordered = sorted(
+        merged.values(),
+        key=lambda e: (str(e.get("captured_at") or ""), int(e.get(SEQUENCE_KEY) or 0), str(e["excerpt_ref"])),
+    )
     dropped = max(0, len(ordered) - max(1, limit))
     if dropped:
         logger.info("case_excerpts_trimmed", dropped=dropped, kept=max(1, limit))

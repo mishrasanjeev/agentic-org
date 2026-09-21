@@ -127,9 +127,16 @@ async def test_the_newest_capture_of_a_reference_wins() -> None:
 
 async def test_a_case_keeps_only_the_most_recent_passages() -> None:
     """A case re-investigated over and over must not grow without limit."""
-    captured = [{"excerpt_ref": f"e{n}", "text": f"passage {n}"} for n in range(10)]
-    stored = await case_excerpts.store(TENANT, [], captured, now="2026-09-01T09:00:00Z", limit=4)
+    older = await case_excerpts.store(
+        TENANT, [], [{"excerpt_ref": "e_old", "text": "older"}], now="2026-09-01T09:00:00Z", limit=4
+    )
+    captured = [{"excerpt_ref": f"e{n}", "text": f"passage {n}"} for n in range(6)]
+    stored = await case_excerpts.store(TENANT, older, captured, now="2026-09-02T09:00:00Z", limit=4)
+
     assert len(stored) == 4
+    # The oldest capture goes first, and within one capture the ones that arrived first - not
+    # whichever references happen to sort first.
+    assert [entry["excerpt_ref"] for entry in stored] == ["e2", "e3", "e4", "e5"]
 
 
 async def test_an_entry_without_a_reference_or_a_passage_is_not_stored() -> None:
