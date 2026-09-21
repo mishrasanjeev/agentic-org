@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from alembic.config import Config
@@ -71,14 +72,15 @@ async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_o
 # Session factory the session helpers use. Normally the shared, pooled one;
 # ``run_db_coroutine_sync`` overrides it for the duration of a coroutine it
 # runs on a throwaway event loop (see that function).
-_session_factory_override: ContextVar[async_sessionmaker[AsyncSession] | None] = ContextVar(
+_session_factory_override: ContextVar[Callable[[], async_sessionmaker[AsyncSession]] | None] = ContextVar(
     "agenticorg_session_factory_override", default=None
 )
 
 
 def current_session_factory() -> async_sessionmaker[AsyncSession]:
     """The session factory for this context: the shared one unless overridden."""
-    return _session_factory_override.get() or async_session_factory
+    provider = _session_factory_override.get()
+    return provider() if provider is not None else async_session_factory
 
 
 def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:
@@ -107,14 +109,32 @@ def run_db_coroutine_sync[T](make_coroutine: Callable[[], Awaitable[T]]) -> T:
         )
 
     async def _run() -> T:
-        private_engine = create_async_engine(settings.db_url, poolclass=NullPool)
-        factory = async_sessionmaker(private_engine, class_=AsyncSession, expire_on_commit=False)
-        token = _session_factory_override.set(factory)
+        # Built on first use and from the engine in place now, so a coroutine
+        # that opens no session pays for no connection, and a test that
+        # replaced ``engine`` is followed rather than ``settings.db_url``.
+        state: dict[str, Any] = {}
+
+        def _provider() -> async_sessionmaker[AsyncSession]:
+            if "factory" not in state:
+                private_engine = create_async_engine(
+                    engine.url.render_as_string(hide_password=False),
+                    echo=engine.echo,
+                    poolclass=NullPool,
+                )
+                state["engine"] = private_engine
+                state["factory"] = async_sessionmaker(
+                    private_engine, class_=AsyncSession, expire_on_commit=False
+                )
+            return state["factory"]
+
+        token = _session_factory_override.set(_provider)
         try:
             return await make_coroutine()
         finally:
             _session_factory_override.reset(token)
-            await private_engine.dispose()
+            private = state.get("engine")
+            if private is not None:
+                await private.dispose()
 
     return asyncio.run(_run())
 

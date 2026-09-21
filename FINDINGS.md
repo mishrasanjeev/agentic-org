@@ -648,15 +648,40 @@ Remove an entry in the pull request that fixes it.
 - **Found:** fixing the synchronous credential resolver (A-49, 2026-09-21).
 - **What:** `core.database.run_db_coroutine_sync` lets a synchronous caller run
   a database coroutine on a private `NullPool` engine, and
-  `get_tenant_session` / `get_session` honour it. About twenty modules instead
-  bind `core.database.async_session_factory` directly
-  (`core/auth_state.py`, `core/billing/*`, `core/cases/push.py`,
-  `core/cdc/receiver.py`'s store construction before this change, and others).
-  Those are correct on an async request path, but a coroutine reached from a
-  synchronous bridge through one of them still borrows the shared pool, which
-  is the defect A-49 described. Only the paths the bridges actually reach have
-  been moved to `current_session_factory()`.
+  `get_tenant_session` / `get_session` honour it through
+  `current_session_factory()`. Thirty-four other modules (89 references) bind
+  `core.database.async_session_factory` directly instead. Those are correct on
+  an async request path, but a coroutine reached from a synchronous bridge
+  through one of them still borrows the shared pool, which is the defect A-49
+  described; only the paths the fixed bridges reach were moved to
+  `current_session_factory()`. Four of them are worse than the rest because
+  they capture the factory **by value into a module-level singleton**, so the
+  binding survives every later call and no context override can reach it:
+  `core/live_feed.py:365`, `workflows/state_store.py:309`,
+  `workflows/event_waits.py:377` and `bridge/state.py:1147`. Any new
+  synchronous bridge that `asyncio.run`s a coroutine reaching one of these
+  reopens A-49.
 - **Fix:** have the session helpers be the only way to open a session (make
   `async_session_factory` private and route every caller through
-  `current_session_factory()`), or add a check that refuses a direct import of
-  `async_session_factory` outside `core/database.py`.
+  `current_session_factory()`), starting with the four singletons, which
+  should resolve the factory per call as `core/cdc/receiver.py` now does; or
+  add a check that refuses a direct import of `async_session_factory` outside
+  `core/database.py`.
+
+## A-54 — The Celery runner loop is unsafe in a process that also serves requests
+
+- **Found:** testing the report generator's synchronous bridge (2026-09-21).
+- **What:** `core.tasks.async_runner.run_async` keeps one event loop per
+  process, which is right for a Celery worker: every task shares the loop, so
+  the shared engine's pooled connections stay on it. A synchronous caller in a
+  process that *also* runs an API loop takes the same branch
+  (`core/reports/generator.py::_run_coroutine` when no loop is running in the
+  calling thread, for example from `asyncio.to_thread`), and its connections
+  go into the shared pool bound to the runner loop; a later request on the API
+  loop then fails on checkout, exactly as in A-49. Observed while writing
+  `tests/integration/test_sync_credential_resolution_pool.py`: the shared pool
+  gained a connection from the runner loop.
+- **Fix:** decide the branch by the process's role rather than by whether this
+  thread has a loop — use `run_async` only in a worker process (the Celery
+  bootstrap can set a flag) and `run_db_coroutine_sync` everywhere else — or
+  give `run_async` its own engine bound to the runner loop.

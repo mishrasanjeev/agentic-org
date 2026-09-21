@@ -56,7 +56,10 @@ def test_the_coroutine_sees_a_private_null_pool_factory(monkeypatch: pytest.Monk
     assert db_mod.run_db_coroutine_sync(_work) == "done"
 
     assert len(created) == 1
-    assert created[0]["url"] == db_mod.settings.db_url
+    # Built from the engine in place, not from settings, so a replaced engine
+    # (a test fixture, a second database) is followed.
+    assert created[0]["url"] == db_mod.engine.url.render_as_string(hide_password=False)
+    assert created[0]["echo"] == db_mod.engine.echo
     assert created[0]["poolclass"] is NullPool
     # The coroutine used the private factory, not the shared one.
     assert seen and seen[0] != db_mod.async_session_factory
@@ -76,6 +79,7 @@ def test_the_override_is_cleared_and_the_engine_disposed_after_a_failure(
     monkeypatch.setattr(db_mod, "async_sessionmaker", lambda *a, **k: "private-factory")
 
     async def _boom() -> None:
+        db_mod.current_session_factory()  # builds the private engine
         raise ValueError("the caller's error, not ours")
 
     with pytest.raises(ValueError, match="the caller's error"):
@@ -87,3 +91,22 @@ def test_the_override_is_cleared_and_the_engine_disposed_after_a_failure(
 
 def test_outside_a_sync_call_the_shared_factory_is_used() -> None:
     assert db_mod.current_session_factory() is db_mod.async_session_factory
+
+
+def test_no_engine_is_built_for_a_coroutine_that_opens_no_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A thunk that never touches the database must not pay for a connection."""
+    created: list[Any] = []
+
+    def _create_async_engine(*args: Any, **kwargs: Any) -> Any:
+        created.append(kwargs)
+        raise AssertionError("no engine should be built for this coroutine")
+
+    monkeypatch.setattr(db_mod, "create_async_engine", _create_async_engine)
+
+    async def _no_database() -> str:
+        return "nothing to do"
+
+    assert db_mod.run_db_coroutine_sync(_no_database) == "nothing to do"
+    assert created == []

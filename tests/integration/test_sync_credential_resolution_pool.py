@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""A synchronous credential lookup must not poison the shared connection pool.
+"""A synchronous database bridge must not poison the shared connection pool.
 
 `get_provider_credential_sync` runs the async resolver on a fresh event loop
 (in a worker thread when the caller is already async). Pooled asyncpg
@@ -166,3 +166,35 @@ async def test_a_sync_lookup_gives_the_shared_pool_slot_back(
     # sync path left the slot alone.
     async with shared_pool.connect() as connection:
         assert int((await connection.execute(text("SELECT 1"))).scalar_one()) == 1
+
+
+async def test_the_report_generator_bridge_does_not_poison_the_pool(
+    shared_pool: AsyncEngine,
+) -> None:
+    """The same bridge in `core/reports/generator.py`.
+
+    `_run_coroutine` takes its helper-thread branch when the caller already
+    has a running loop, which is what happens when the sandbox pilot runs the
+    report task body inside its own loop
+    (`core/marketing/weekly_report_sandbox_pilot.py` -> `generate_report.run`),
+    and the coroutine it runs (`api.v1.kpis._build_kpi_response`) opens tenant
+    sessions. Before the fix that branch submitted `asyncio.run` to the
+    thread, which borrowed from and returned to the shared pool with no
+    context propagation.
+    """
+    from core.database import get_tenant_session
+    from core.reports.generator import _run_coroutine
+
+    tenant_id = uuid.uuid4()
+    assert shared_pool.pool.checkedin() == 0, "the pool must be cold for this test"
+
+    async def _reads_the_database() -> int:
+        async with get_tenant_session(tenant_id) as session:
+            return int((await session.execute(text("SELECT 1"))).scalar_one())
+
+    # Called straight from this coroutine: the bridge sees a running loop in
+    # its own thread, exactly as the sandbox pilot leaves it.
+    assert _run_coroutine(_reads_the_database) == 1
+
+    assert shared_pool.pool.checkedin() == 0
+    assert await _unrelated_request(tenant_id) == 1
