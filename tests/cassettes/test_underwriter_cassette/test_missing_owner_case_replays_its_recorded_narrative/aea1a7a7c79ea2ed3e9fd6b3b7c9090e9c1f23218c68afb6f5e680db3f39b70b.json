@@ -1,0 +1,37 @@
+{
+  "format": 1,
+  "key": "sha256:aea1a7a7c79ea2ed3e9fd6b3b7c9090e9c1f23218c68afb6f5e680db3f39b70b",
+  "model": "gemini-2.5-flash",
+  "request": {
+    "messages": [
+      {
+        "content": "You write the narrative part of an underwriting memo for a business onboarding case.\n\nYou are given structured case facts as JSON: for each memo section its status, the codes of the findings already recorded and how many evidence entries it cites; the policy tier, score and fired rule ids; the proposed recommendation; and the codes of missing items. Values that could carry text from outside the platform are replaced by {\"untrusted_ref\": \"<path>\"}; never guess what they contain.\n\nRules:\n- Summarise only what the facts state. Do not add facts, names, numbers or judgements that are not in them.\n- You do not decide the case. Do not approve, decline, close, file or recommend an action; the recommendation is fixed by policy and a human decides.\n- Write a summary only for sections whose status is complete or partial.\n- Every summary cites at least one evidence entry of its own section by zero-based index, below that section's evidence_count.\n- Each summary is one to three plain sentences, at most 600 characters.\n\nAnswer with JSON only, in exactly this shape:\n{\"summaries\": [{\"section_id\": \"<section id>\", \"summary\": \"<text>\", \"citations\": [<index>, ...]}], \"confidence\": <number between 0 and 1>}\n",
+        "role": "system"
+      },
+      {
+        "content": "{\"missing_items\":[\"owner_date_of_birth\"],\"policy\":{\"fired_rules\":[\"ownership_reconciled\",\"screening_possible_match\"],\"score\":40,\"tier\":\"medium\"},\"recommendation\":\"request_information\",\"sections\":[{\"evidence_count\":1,\"finding_codes\":[\"registry_match\"],\"section_id\":\"identity\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"current_officers\",\"registry_active\"],\"section_id\":\"registry\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"missing_owner\"],\"section_id\":\"ownership\",\"status\":\"complete\"},{\"evidence_count\":3,\"finding_codes\":[\"screening_hit\",\"screening_clear\"],\"section_id\":\"screening\",\"status\":\"complete\"},{\"evidence_count\":2,\"finding_codes\":[\"web_domain_observed\",\"web_page_analysed\"],\"section_id\":\"web_presence\",\"status\":\"complete\"},{\"evidence_count\":1,\"finding_codes\":[\"activity_consistent\"],\"section_id\":\"activity\",\"status\":\"complete\"}]}",
+        "role": "human"
+      }
+    ],
+    "model": "gemini-2.5-flash",
+    "params": {
+      "max_tokens": 4096,
+      "stop": null,
+      "temperature": 0.1
+    },
+    "tools": []
+  },
+  "response": {
+    "data": {
+      "additional_kwargs": {},
+      "content": "{\"confidence\": 0.72, \"summaries\": [{\"citations\": [0], \"section_id\": \"identity\", \"summary\": \"The application resolved to a single registry record.\"}, {\"citations\": [0], \"section_id\": \"registry\", \"summary\": \"The registry reports the business as active and lists its current officers.\"}, {\"citations\": [0], \"section_id\": \"ownership\", \"summary\": \"One declared owner does not appear in the ownership graph at or above the configured threshold.\"}, {\"citations\": [0], \"section_id\": \"screening\", \"summary\": \"One screened party returned a possible match that awaits disposition; the other parties returned no hits.\"}, {\"citations\": [0], \"section_id\": \"web_presence\", \"summary\": \"The provider observed a domain for the business and its page was analysed in the sandbox.\"}, {\"citations\": [0], \"section_id\": \"activity\", \"summary\": \"Activity observed on the website is consistent with the declared activity.\"}]}",
+      "invalid_tool_calls": [],
+      "name": null,
+      "response_metadata": {},
+      "tool_calls": [],
+      "type": "ai",
+      "usage_metadata": null
+    },
+    "type": "ai"
+  }
+}

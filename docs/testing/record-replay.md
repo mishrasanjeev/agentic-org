@@ -92,6 +92,26 @@ Before committing:
 - Read the diff. A cassette is expected output; review it as such.
 - Delete cassettes for tests you removed or renamed.
 
+## Re-keying a cassette without a model
+
+A cassette's key covers the **request**, so a deliberate change to the data
+the model is shown (a policy rule, a prompt, a fixture) invalidates it even
+when the model's answer would not change. Re-recording against a live model is
+the default; when that is not possible, a cassette may be re-keyed by hand:
+
+1. Run the test with `AGENTICORG_MODEL_MODE=record` against a stub model that
+   returns the recorded response, so `core.model_replay` writes a cassette
+   under the new key with the request as it is now.
+2. Delete the cassette under the old key.
+3. Edit the recorded response wherever the new request makes it untrue — a
+   summary of a finding that is no longer produced, for example.
+4. Say in the commit message that the cassette was re-keyed and what was
+   edited, and pin the edited part in the test so a stale recording fails
+   rather than passing unnoticed.
+
+A re-keyed cassette is the maintainer's words, not a model's. The nightly job
+below reports when a live model's answer differs from it.
+
 ## Nightly re-record
 
 `.github/workflows/cassette-rerecord.yml` runs every night (and on demand). It
