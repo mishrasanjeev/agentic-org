@@ -124,3 +124,64 @@ tests:
               description: >-
                 Budget evaluation crossed a cap rather than a warning point. Work under that budget is refused until the cap is raised or the period rolls over.
               runbook: docs/operations/metrics.md#spend-cap-exhaustion
+
+  # A step change in denials, on top of four hours of a low steady baseline. The offset window in
+  # the expression is what makes this alert about a change rather than a level, so the fixture has
+  # to carry enough history for that window to sit entirely in the baseline.
+  - interval: 1m
+    name: a step change in denials fires the spike alert
+    input_series:
+      - series: 'agenticorg_grant_enforcement_denials_total{mode="deny",reason="grant_missing"}'
+        values: "0+1x240 240+720x30"
+    alert_rule_test:
+      - eval_time: 4h30m
+        alertname: AgenticOrgDenialRateSpike
+        exp_alerts:
+          - exp_labels: { severity: warning, area: authorization }
+            exp_annotations:
+              summary: "Tool-call denials are running well above their recent baseline"
+              description: >-
+                Denials in deny mode are more than three times the previous two hours' rate. Check what changed in grants, scopes or policy before assuming a caller is misbehaving.
+              runbook: docs/operations/metrics.md#denial-rate-spike
+
+  # A high but steady denial rate is a policy that refuses a lot, not an incident.
+  - interval: 1m
+    name: a steady high denial rate does not fire it
+    input_series:
+      - series: 'agenticorg_grant_enforcement_denials_total{mode="deny",reason="grant_missing"}'
+        values: "0+720x270"
+    alert_rule_test:
+      - eval_time: 4h30m
+        alertname: AgenticOrgDenialRateSpike
+        exp_alerts: []
+
+  - interval: 1m
+    name: a quarter of provider calls failing fires the provider alert
+    input_series:
+      - series: 'agenticorg_provider_calls_total{capability="registry_lookup",outcome="ok"}'
+        values: "0+9x90"
+      - series: 'agenticorg_provider_calls_total{capability="registry_lookup",outcome="error"}'
+        values: "0+3x90"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: AgenticOrgProviderErrorRate
+        exp_alerts:
+          - exp_labels: { severity: warning, area: providers }
+            exp_annotations:
+              summary: "More than one call in ten to a verification provider is failing"
+              description: >-
+                Cases stall on failed provider calls. The second clause stops a single failure in an idle period from firing it.
+              runbook: docs/operations/metrics.md#provider-error-rate
+
+  # One failure an hour against a healthy stream is not an incident.
+  - interval: 1m
+    name: an occasional provider failure does not fire it
+    input_series:
+      - series: 'agenticorg_provider_calls_total{capability="registry_lookup",outcome="ok"}'
+        values: "0+9x90"
+      - series: 'agenticorg_provider_calls_total{capability="registry_lookup",outcome="error"}'
+        values: "0 1x89"
+    alert_rule_test:
+      - eval_time: 1h
+        alertname: AgenticOrgProviderErrorRate
+        exp_alerts: []

@@ -35,6 +35,11 @@ TERRAFORM = ROOT / "infra" / "terraform" / "monitoring" / "alerts.tf"
 
 METRIC = re.compile(r"\bagenticorg_[a-z0-9_]+")
 RANGE_FUNCTION = re.compile(r"\b(rate|irate|increase|delta|idelta)\s*\(")
+#: Prometheus durations the Terraform conversion knows how to turn into protobuf seconds.
+PROMETHEUS_DURATION = re.compile(r"^([0-9]+)(s|m|h|d)$")
+#: What Cloud Monitoring's ``duration`` field accepts: a protobuf Duration.
+PROTOBUF_DURATION = re.compile(r"^[0-9]+(\.[0-9]+)?s$")
+DURATION_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 
 
 def _families(expr: str) -> set[str]:
@@ -90,8 +95,21 @@ def main() -> int:
                 "counter's value is an accident of which instances are alive - wrap it in "
                 "rate() or increase()."
             )
-        if not str(rule.get("for", "")).strip():
+        window = str(rule.get("for", "")).strip()
+        matched = PROMETHEUS_DURATION.match(window) if window else None
+        if not window:
             failures.append(f"{name}: has no `for`, so a single evaluation - or a deploy - fires it")
+        elif matched is None:
+            failures.append(
+                f"{name}: `for: {window}` is not a duration alerts.tf can convert. Cloud "
+                "Monitoring takes a protobuf Duration (seconds, ending in `s`), so every `for` "
+                "here has to be a plain number followed by one of s/m/h/d."
+            )
+        else:
+            count, unit = matched.groups()
+            converted = f"{int(count) * DURATION_UNITS[unit]}s"
+            if not PROTOBUF_DURATION.match(converted):
+                failures.append(f"{name}: `for: {window}` converts to {converted}, which the API rejects")
         annotations = rule.get("annotations") or {}
         for required in ("summary", "description", "runbook"):
             if not str(annotations.get(required, "")).strip():
@@ -103,9 +121,14 @@ def main() -> int:
     for case in (yaml.safe_load(TESTS.read_text(encoding="utf-8")) or {}).get("tests", []):
         for check in case.get("alert_rule_test", []):
             tested.add(str(check.get("alertname", "")))
-    # Not every alert needs a fixture, but an alert nobody has ever seen fire is a guess.
-    if not tested:
-        failures.append(f"{TESTS.name}: contains no alert_rule_test cases")
+    # An alert nobody has ever seen fire is a guess. Two expressions in this file were wrong when
+    # first written and the fixtures are what showed it, so every alert needs at least one.
+    for name in names:
+        if name not in tested:
+            failures.append(
+                f"{name}: has no promtool fixture in {TESTS.name}. Write one that makes it fire; "
+                "an expression that has never been evaluated against a series is a guess."
+            )
 
     dashboard = json.loads(DASHBOARD.read_text(encoding="utf-8"))
     every_instrument = {name for names in ALERT_INSTRUMENTS.values() for name in names}
@@ -122,6 +145,17 @@ def main() -> int:
             f"{TERRAFORM.name}: must build its policies from {RULES.name}. Inlining PromQL there "
             "creates a second definition that drifts from the tested one."
         )
+    # `duration = each.value.for` would hand Cloud Monitoring "15m", which it rejects at create
+    # time. `terraform validate` cannot see it - the field is a string and the format is enforced
+    # server-side - so only an apply, or this check, catches it.
+    if re.search(r"duration\s*=\s*each\.value\.for", terraform):
+        failures.append(
+            f"{TERRAFORM.name}: passes a Prometheus duration straight to Cloud Monitoring. That "
+            "field is a protobuf Duration (seconds, ending in `s`), so every policy would fail to "
+            "create. Convert it in the locals block."
+        )
+    if "duration_seconds" not in terraform:
+        failures.append(f"{TERRAFORM.name}: does not convert `for` into the protobuf seconds form")
 
     if failures:
         print("::error::Alert definitions are not safe to deploy.", file=sys.stderr)
