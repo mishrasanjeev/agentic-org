@@ -278,9 +278,12 @@ services:
       JWT_ISSUER: http://grantex:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
       SEED_API_KEY: agenticorg-dev-grantex-api-key
       LOG_PRETTY: "false"
-      # Decision grants (PRD G-3). Off by default in the service; on here so
-      # the local stack can take a real approval end to end.
-      DECISION_GRANTS_ENABLED: "true"
+      # Decision grants (PRD G-3). Off unless a run opts in, here as in the
+      # service itself: with these unset the decision routes and the approval
+      # page answer 404 and the administrator API is not configured, so a
+      # developer who never asked for decision grants runs without any of it.
+      # `make e2e-decisions` sets them; see docs/governance/decision-requests.md.
+      DECISION_GRANTS_ENABLED: "${AGENTICORG_DEV_DECISION_GRANTS:-false}"
       # Approver emails are stored as keyed hashes and names encrypted, so the
       # service requires a vault key before it will mint a decision grant. A
       # visibly fake 32-byte development placeholder; production rejects it.
@@ -289,12 +292,14 @@ services:
       # invalidate a page an approver already has open.
       DECISION_PAGE_SECRET: agenticorg-dev-grantex-decision-page-secret
       # Allow-listing an approver identity provider is a service-administrator
-      # action; the developer key above cannot do it, by design.
-      ADMIN_API_KEY: agenticorg-dev-grantex-admin-key
+      # action; the developer key above cannot do it, by design. Empty unless
+      # decision grants are on, and the admin API then answers 503.
+      ADMIN_API_KEY: "${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-}"
       # The development identity provider (oidc-approvers below) is reached
-      # over http on a loopback address.
-      SSO_ALLOW_INSECURE_URLS: "true"
-      SSO_ALLOW_PRIVATE_HOSTS: "true"
+      # over http on a loopback address. Only relaxed when decision grants are
+      # on: nothing else in this stack needs it.
+      SSO_ALLOW_INSECURE_URLS: "${AGENTICORG_DEV_DECISION_GRANTS:-false}"
+      SSO_ALLOW_PRIVATE_HOSTS: "${AGENTICORG_DEV_DECISION_GRANTS:-false}"
       # Step-up: the stub's step-up acr, or a second factor in `amr`.
       DECISION_STEP_UP_ACR: urn:agenticorg:acr:step-up
       DECISION_STEP_UP_AMR: mfa,hwk
@@ -324,6 +329,8 @@ services:
   # same string, and the auth service will not take an approval on an origin
   # that is neither https nor loopback.
   oidc-approvers:
+    # Only for decision grants: `make dev` does not start it.
+    profiles: [decisions]
     build:
       context: ./tools
       dockerfile: oidc_stub/Dockerfile

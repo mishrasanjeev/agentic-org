@@ -754,13 +754,13 @@ def test_a_chunked_body_with_trailers_is_read(running: str) -> None:
 
 def test_the_logged_detail_of_a_refusal_ignores_anything_it_cannot_read() -> None:
     refusal = Response.json(HTTPStatus.BAD_REQUEST, {"error": "invalid_grant", "error_description": "no", "x": 1})
-    assert oidc.oauth_error_detail(refusal) == {"error": "invalid_grant"}
-    assert oidc.oauth_error_detail(Response.json(HTTPStatus.OK, {"error": "invalid_grant"})) == {}
+    assert oidc.refusal_code_for_log(refusal) == {"error": "invalid_grant"}
+    assert oidc.refusal_code_for_log(Response.json(HTTPStatus.OK, {"error": "invalid_grant"})) == {}
     # Anything that is not a known OAuth error code is not logged.
-    assert oidc.oauth_error_detail(Response.json(HTTPStatus.BAD_REQUEST, {"error": "secret=hunter2"})) == {}
-    assert oidc.oauth_error_detail(Response.html(HTTPStatus.BAD_REQUEST, "<p>error</p>")) == {}
-    assert oidc.oauth_error_detail(oidc.Response(400, b"\xff\xfe", "application/json")) == {}
-    assert oidc.oauth_error_detail(oidc.Response(400, b"[1, 2]", "application/json")) == {}
+    assert oidc.refusal_code_for_log(Response.json(HTTPStatus.BAD_REQUEST, {"error": "secret=hunter2"})) == {}
+    assert oidc.refusal_code_for_log(Response.html(HTTPStatus.BAD_REQUEST, "<p>error</p>")) == {}
+    assert oidc.refusal_code_for_log(oidc.Response(400, b"\xff\xfe", "application/json")) == {}
+    assert oidc.refusal_code_for_log(oidc.Response(400, b"[1, 2]", "application/json")) == {}
 
 
 def test_extra_redirect_uris_from_the_environment_reach_the_clients(

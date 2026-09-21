@@ -14,6 +14,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   console's development SSO). The auth service now listens on the port it
   publishes, because its approval page has to be reached on the same origin it
   checks form posts against, and that origin must be https or loopback.
+- **A stack that does not ask for decision grants runs without any of it.**
+  `AGENTICORG_DEV_DECISION_GRANTS=true` turns on `DECISION_GRANTS_ENABLED` and
+  the relaxed outbound rules the development identity provider needs, and the
+  provider itself is in the `decisions` compose profile, so `make dev` does not
+  start it. Without the opt-in the decision routes and the approval page answer
+  404 and no administrator key is configured.
 - **`AGENTICORG_CASE_DECISION_SERVICE` still defaults to off**, in the
   development stack included; a run opts in with
   `AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex`. Nothing changes for a stack

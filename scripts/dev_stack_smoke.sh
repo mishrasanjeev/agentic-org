@@ -64,11 +64,15 @@ check "oidc stub discovery"           "$oidc/.well-known/openid-configuration" '
 check "model stub scripted models"    "$model/v1/models"            '"scripted/final-only"'
 check "grantex health (db + redis)"   "$grantex/health"             '"status": *"healthy"'
 check "grantex signing keys"          "$grantex/.well-known/jwks.json" '"keys": *\[{'
-# Decision grants (PRD G-3): the approval page, and the identity provider
-# approvers sign in with. With DECISION_GRANTS_ENABLED unset the page answers
-# "Decision grants are not enabled", so this check proves the routes are live.
-check_body "grantex approval page"    "$grantex/decisions/dreq_00000000000000000000000000" "This decision does not exist"
-check "approver idp discovery"        "$approver_idp/.well-known/openid-configuration" "\"issuer\": *\"$approver_idp\""
+# Decision grants (PRD G-3), only when the stack was started with them. With
+# them off the approval page answers "Decision grants are not enabled" and the
+# approver identity provider is not started at all, both on purpose.
+if [[ "${AGENTICORG_DEV_DECISION_GRANTS:-false}" == "true" ]]; then
+  check_body "grantex approval page"  "$grantex/decisions/dreq_00000000000000000000000000" "This decision does not exist"
+  check "approver idp discovery"      "$approver_idp/.well-known/openid-configuration" "\"issuer\": *\"$approver_idp\""
+else
+  check_body "grantex decisions off"  "$grantex/decisions/dreq_00000000000000000000000000" "not enabled"
+fi
 
 # From inside the api container, with the API's own GRANTEX_BASE_URL and
 # GRANTEX_API_KEY: the keys are reachable and the developer key is accepted.

@@ -120,13 +120,18 @@ allow-listed by its administrator; AgenticOrg's developer key cannot do either, 
 ### Trying it on the local stack
 
 ```
-AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex make dev
+export AGENTICORG_DEV_DECISION_GRANTS=true
+export AGENTICORG_DEV_GRANTEX_ADMIN_KEY=<a development administrator key you choose>
+export AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex
+make dev
 AGENTICORG_SEED_PASSWORD=… make seed seed-cases
 ```
 
-`make dev` starts the auth service with `DECISION_GRANTS_ENABLED=true` and an identity provider for
-approvers (`oidc-approvers`, two fixture people). Allow-listing that provider is a
-service-administrator action, with the stack's `ADMIN_API_KEY`:
+Without `AGENTICORG_DEV_DECISION_GRANTS=true` the auth service runs with decision grants off, no
+administrator key and no relaxed outbound rules, and the identity provider approvers sign in with
+(`oidc-approvers`, two fixture people, in the `decisions` compose profile) is not started at all —
+so a stack that never asks for any of this does not get it. Allow-listing that provider is a
+service-administrator action, with the administrator key above:
 
 ```
 DEV=$(curl -fsS -H "Authorization: Bearer $GRANTEX_API_KEY" "$GRANTEX/v1/me" | jq -r .developerId)
