@@ -65,6 +65,13 @@ A `case_agent` step takes `action` (`investigate`, `dispose_screening_hits`, `re
 
 All routes need an authenticated tenant user; reads need `approvals:read`, writes `approvals:write`.
 
+Four of them additionally need a **human session** and answer 403 `human_session_required` to an
+API key or an agent token: withdraw, decision, disposition review and information-request approval
+(marked *human* below). Agent tokens are exempt from the RBAC scope families by design - their tool
+scopes are enforced at the tool gateway - so the route itself refuses them. Whatever acts is
+recorded as `user:<id>`, `api_key:<prefix>` or `agent:<id>`, derived from the session and never from
+the request body.
+
 | Method and path | What it does |
 |---|---|
 | `POST /api/v1/governed-cases` | Submit `{application, purpose?, policy_id?}`; the policy defaults by jurisdiction (US, GB). |
@@ -73,11 +80,11 @@ All routes need an authenticated tenant user; reads need `approvals:read`, write
 | `GET /api/v1/governed-cases/{case_ref}` | The `business_case` document, memo, policy result, ownership graph, screening results and dispositions, parties, information requests and the transition history. |
 | `GET /api/v1/governed-cases/{case_ref}/case-record` | Agent case records for the evidence package: prompt id, version and digest, policy inputs, every tool call with request and response hashes and cited record ids. |
 | `POST /api/v1/governed-cases/{case_ref}/investigate` | Start (or retry) the investigation in the background; 202. |
-| `POST /api/v1/governed-cases/{case_ref}/withdraw` | Withdraw. |
-| `POST /api/v1/governed-cases/{case_ref}/decision` | `{outcome: approve|decline, decision_grants: [...]}`; 403 `decision_required` unless the grants verify. |
-| `POST /api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review` | `{action: accepted|overridden, final_outcome, reason?}`; the analyst is the authenticated user; an override needs a reason; write-once (409). |
+| `POST /api/v1/governed-cases/{case_ref}/withdraw` | Withdraw (*human*). |
+| `POST /api/v1/governed-cases/{case_ref}/decision` | `{outcome: approve|decline, decision_grants: [...]}`; 403 `decision_required` unless the grants verify (*human*). |
+| `POST /api/v1/governed-cases/{case_ref}/screening-dispositions/{hit_id}/review` | `{action: accepted|overridden, final_outcome, reason?}`; the analyst is the signed-in person; needs the case `awaiting_decision`; an override needs a reason; write-once (409) (*human*). |
 | `POST /api/v1/governed-cases/{case_ref}/information-requests` | Propose a request for more information from an approved template and the memo's missing items. |
-| `POST /api/v1/governed-cases/{case_ref}/information-requests/{proposal_sha256}/approve` | The authenticated user approves that exact proposal; only then is the text rendered from the template. |
+| `POST /api/v1/governed-cases/{case_ref}/information-requests/{proposal_sha256}/approve` | The signed-in person approves that exact proposal, with the case `awaiting_decision`; only then is the text rendered from the template (*human*). |
 
 Errors are `{"error": {"reason": "<code>", "detail": "..."}}`.
 
