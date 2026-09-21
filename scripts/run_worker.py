@@ -33,6 +33,17 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 DEFAULT_QUEUES = "celery,reports,maintenance,workflows,delivery,rpa"
 
 
+# Celery's default pool is prefork: tasks run in forked children, and a counter a child
+# increments is invisible to this process, which is the one the collector scrapes. In
+# multiprocess mode every process writes its samples to PROMETHEUS_MULTIPROC_DIR and the exporter
+# merges them, so the directory has to exist before any instrument is imported. Cloud Run gives
+# the service an in-memory volume for it; locally it falls back to a temporary directory.
+def _enable_multiprocess_metrics() -> None:
+    from observability.metrics_export import enable_multiprocess  # noqa: PLC0415
+
+    enable_multiprocess()
+
+
 class _HealthHandler(BaseHTTPRequestHandler):
     """Minimal health probe — only ever returns 200 once the process is
     up. The worker's actual readiness (broker connection, task imports)
@@ -62,11 +73,6 @@ def _serve_health() -> None:
 
 def _run_celery_worker() -> int:
     queues = os.environ.get("CELERY_QUEUES", DEFAULT_QUEUES)
-    # Mark the process before any task code runs. ``run_async`` keeps its
-    # persistent loop only in a worker process; the Celery signals do not fire
-    # for ``--pool=solo``, ``threads`` or gevent, so set it here as well.
-    os.environ.setdefault("AGENTICORG_WORKER_PROCESS", "1")
-
 
     # Importing the celery_app first makes any task-import error visible
     # in the container logs immediately, instead of after Celery's own
@@ -90,6 +96,17 @@ def _run_celery_worker() -> int:
     return celery_main()
 
 
+def _register_child_cleanup() -> None:
+    """Drop a forked child's gauges when Celery retires it, so a dead child stops being reported."""
+    from celery.signals import worker_process_shutdown  # noqa: PLC0415
+
+    from observability.metrics_export import mark_process_dead  # noqa: PLC0415
+
+    @worker_process_shutdown.connect
+    def _on_child_exit(**_kwargs: object) -> None:
+        mark_process_dead(os.getpid())
+
+
 def main() -> int:
     # Health server runs as a daemon thread so it dies cleanly when the
     # main worker process exits. Celery worker runs in the foreground so
@@ -97,6 +114,13 @@ def main() -> int:
     # and it shuts down gracefully — partially-processed tasks are NACK'd
     # back to the broker.
     threading.Thread(target=_serve_health, daemon=True).start()
+
+    # Metrics on their own port, scraped inside the instance and routed from nowhere.
+    _enable_multiprocess_metrics()
+    from observability.metrics_export import start_metrics_server  # noqa: PLC0415
+
+    start_metrics_server()
+    _register_child_cleanup()
 
     # Be explicit about signal handling so a misconfigured signal handler
     # in some imported module doesn't swallow SIGTERM. Default is fine

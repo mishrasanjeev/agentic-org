@@ -327,16 +327,17 @@ material, not the default production path.
 # API health
 curl http://localhost:8000/api/v1/health
 
-# Prometheus metrics
-curl http://localhost:8000/metrics
+# Prometheus metrics. NOT on the application port: the registry is served on METRICS_PORT
+# (default 9090) and bound to loopback, so it is reachable only from inside the instance.
+# NOTE: nothing scrapes it yet. The collector that is meant to run beside each process is not
+# deployed, so the endpoint is served but unscraped, and the alert policies have no samples to
+# evaluate. See docs/operations/metrics.md#what-is-not-here-yet.
+curl http://localhost:9090/metrics
 
-# Example alert targets; verify the deployed rules and retained firing tests:
-# - P95 latency > 5s
-# - HITL rate > 5%
-# - Agent confidence avg < 0.80
-# - Tool error rate > 1%
-# - STP rate < 90%
-# - Daily LLM cost > $100
-# - Circuit breaker open
-# - Agent budget > 80%
+# The alerts are committed definitions, not console clicks:
+#   monitoring/prometheus/agenticorg-alerts.yml   the six PRD §10 alerts and one companion
+#   monitoring/prometheus/agenticorg-alerts.test.yml   promtool fixtures, run in CI
+#   infra/terraform/monitoring/                   Cloud Monitoring policies built from that file
+#   monitoring/dashboards/agenticorg-governance.json   the dashboard beside them
+# See docs/operations/metrics.md.
 ```

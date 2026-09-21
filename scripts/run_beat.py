@@ -75,7 +75,8 @@ def _run_celery_beat() -> int:
     # at /tmp (writable tmpfs on Cloud Run) so the scheduler can
     # persist its last-run state for the lifetime of the revision.
     schedule_path = os.environ.get(
-        "AGENTICORG_BEAT_SCHEDULE_PATH", "/tmp/celerybeat-schedule"  # noqa: S108  # nosec B108
+        "AGENTICORG_BEAT_SCHEDULE_PATH",
+        "/tmp/celerybeat-schedule",  # noqa: S108  # nosec B108
     )
     sys.argv = [
         "celery",
@@ -95,6 +96,11 @@ def _run_celery_beat() -> int:
 
 def main() -> int:
     threading.Thread(target=_serve_health, daemon=True).start()
+
+    # Beat is a singleton scheduler, one process, no fork: the default registry is complete.
+    from observability.metrics_export import start_metrics_server  # noqa: PLC0415
+
+    start_metrics_server()
     signal.signal(signal.SIGTERM, signal.SIG_DFL)
     return _run_celery_beat() or 0
 

@@ -45,37 +45,51 @@ class TestREQ03RLSSessionFix:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@pytest.fixture
+def no_auth_state_redis(monkeypatch):
+    """Make `core.auth_state` take its in-memory path.
+
+    Setting `auth_state._redis = None` does not do that: `None` means "not
+    created yet", so the next call builds a client and reaches whatever Redis
+    the machine runs (FINDINGS A-59). Patching the accessor is the only way to
+    say "there is no Redis".
+    """
+    from unittest.mock import AsyncMock
+
+    from core import auth_state
+
+    monkeypatch.setattr(auth_state, "_redis", None)
+    monkeypatch.setattr(auth_state, "_get_redis", AsyncMock(return_value=None))
+
+
 class TestREQ04AuthStateRedis:
     """Verify core.auth_state module works correctly."""
 
     @pytest.mark.asyncio
-    async def test_record_auth_failure_returns_false_under_limit(self):
+    async def test_record_auth_failure_returns_false_under_limit(self, no_auth_state_redis):
         # Reset in-memory state
         from core import auth_state
         from core.auth_state import record_auth_failure
         auth_state._mem_failures.clear()
         auth_state._mem_blocked.clear()
-        auth_state._redis = None  # force in-memory
 
-        result = await record_auth_failure("192.168.1.1")
+        result = await record_auth_failure("192.0.2.10")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_ip_not_blocked_initially(self):
+    async def test_ip_not_blocked_initially(self, no_auth_state_redis):
         from core import auth_state
         from core.auth_state import is_ip_blocked
         auth_state._mem_blocked.clear()
-        auth_state._redis = None
 
-        result = await is_ip_blocked("10.0.0.1")
+        result = await is_ip_blocked("192.0.2.11")
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_token_blacklist_roundtrip(self):
+    async def test_token_blacklist_roundtrip(self, no_auth_state_redis):
         from core import auth_state
         from core.auth_state import blacklist_token, is_token_blacklisted
         auth_state._mem_blacklist.clear()
-        auth_state._redis = None
 
         token = "test-jwt-token-12345"
         await blacklist_token(token)
@@ -83,13 +97,12 @@ class TestREQ04AuthStateRedis:
         assert await is_token_blacklisted("other-token") is False
 
     @pytest.mark.asyncio
-    async def test_signup_rate_not_blocked_initially(self):
+    async def test_signup_rate_not_blocked_initially(self, no_auth_state_redis):
         from core import auth_state
         from core.auth_state import check_signup_rate
         auth_state._mem_signup.clear()
-        auth_state._redis = None
 
-        result = await check_signup_rate("172.16.0.1")
+        result = await check_signup_rate("192.0.2.12")
         assert result is False
 
     def test_middleware_imports_auth_state(self):

@@ -695,13 +695,28 @@ Remove an entry in the pull request that fixes it.
   case transitions, decision requests and grants, provider calls, the new
   excerpt reads) but serves no `/metrics` endpoint: there is no
   `prometheus_client.make_asgi_app()` mount and no metrics route in `api/`.
-  Every counter is therefore process-local and unobservable, so an alert on a
-  denial-rate spike or on dwell collapsing towards zero (PRD §10) cannot be
-  built from them, and each new metric adds an instrument nobody can read.
-- **Fix:** mount the Prometheus ASGI app behind the platform's own
-  authentication (or export through the existing observability pipeline),
-  document the endpoint, and make one alert from an existing counter to prove
-  the path end to end.
+  Every counter is therefore process-local: nothing outside the process that
+  incremented it can read it, and each new metric adds an instrument nobody
+  can see.
+
+  To be accurate about what does exist: `observability/alerting.py` is an
+  in-process alerter that reads the default `REGISTRY` directly and dispatches
+  to Slack or email, so it is not true that no alert can be built at all. Its
+  limits are the ones an exported registry fixes - it sees only the process it
+  runs in, so on Cloud Run with several API instances plus a worker and beat it
+  alerts on a fraction of the traffic and cannot know which fraction; it
+  compares raw counter values rather than rates, which on autoscaled instances
+  is a number without a meaning; and most of its rules have no sustain window.
+  The PRD §10 alerts cannot be built on that foundation.
+- **Fix:** export the registry (see `docs/operations/metrics.md`), and prove
+  the whole path - process, endpoint, collector, managed Prometheus, policy,
+  notification - by driving one alert end to end from a real metric to a real
+  notification.
+- **Status (2026-09-21):** partly addressed. The endpoint, the instruments and
+  the committed alert definitions are on main. PRD §10 is **achievable, not
+  met**: no sample has yet travelled the full path. What remains is the
+  collector sidecar with the worker's volume, one real `terraform apply`, and
+  one alert driven end to end.
 
 ## A-57 — The encrypted-migration gate waves through an empty exemption and never reads an edited migration
 
@@ -749,9 +764,41 @@ Remove an entry in the pull request that fixes it.
   they go, until it reaches 0 and the CI jobs can set
   `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.
 
-## A-59 — Unit tests reached an ambient Redis, and a cached grant hid a refusal
+## A-59 — Tests reach whatever Redis the machine runs, including security controls
 
 - **Found:** chasing `tests/unit/test_run_grant_resolution.py` failing on its
+  own while passing in the full run (2026-09-22); extent measured 2026-09-22.
+- **What:** every lazy Redis client in the platform degrades quietly when Redis
+  is unreachable, which is right in production and wrong in a test: the machine
+  then decides the result, and the state outlives the run. The run-grant token
+  pool was the instance that surfaced (fixed in #1389), but a broad unit slice
+  writes these keys to a real Redis when one is listening:
+  `auth:blacklist:<token hash>`, `auth:failures:<ip>`, `auth:signup:<ip>`,
+  `auth:rl:<route>:t:<tenant>` and `tenant:<id>:stripe_customer_id`. Three are
+  security controls — token blacklist, login-failure lockout, signup rate
+  limiting — so a test asserting "this token is revoked" or "the sixth attempt
+  is locked out" can be answered by what an earlier run left behind. Two
+  test-side habits make it worse: `auth_state._redis = None` reads as "no
+  Redis" but means "not created yet", so the next call connects; and
+  `ABTestEngine.__init__` connects during construction, so clearing `_redis`
+  afterwards is too late. 22 test files still reach a Redis if one is
+  listening (`tests/ambient_redis_allowlist.txt`).
+- **Fix:** an autouse fixture in `tests/conftest.py` refuses the socket unless
+  the run declared a Redis (`AGENTICORG_REDIS_URL`, as the integration job
+  does), the test lives in `tests/integration/`, or it carries the
+  `ambient_redis` marker. The code under test then takes the path it takes
+  against an unreachable Redis, and a test that connects without being on the
+  allowlist fails. The list only shrinks: take a file off it by giving the code
+  an explicit client or a fake (`no_auth_state_redis` in
+  `tests/unit/test_v490_reqs.py` is the pattern), by moving the test to
+  `tests/integration/`, or by marking it `ambient_redis` when it is about the
+  lazy client itself.
+- **Not this entry, but found while checking it:** `core/feature_flags.py` has
+  no Redis at all — its fallback swallows exceptions on a flag path, which is a
+  different defect worth its own look. `core/cdc/receiver.py` falls back to an
+  in-memory store in relaxed environments, i.e. away from real infrastructure,
+  which is the safe direction.
+
   own while passing in the full run (2026-09-22).
 - **What:** `auth/token_pool.py::TokenPool._redis_client` creates a Redis
   client lazily when none was set — right in production, wrong in a test. On

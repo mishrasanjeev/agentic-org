@@ -327,9 +327,7 @@ async def get_case_excerpt(
         await runtime.require_enabled(uuid.UUID(tenant_id))
         async with _session(tenant_id) as session:
             case = await get_case(session, tenant_id, case_ref)
-            entry = next(
-                (e for e in case.excerpts_encrypted or [] if str(e.get("excerpt_ref")) == excerpt_ref), None
-            )
+            entry = next((e for e in case.excerpts_encrypted or [] if str(e.get("excerpt_ref")) == excerpt_ref), None)
         if entry is None:
             raise CaseError("excerpt_not_found", status=404)
         try:
@@ -469,6 +467,31 @@ def _decision_service(runtime: CaseRuntime) -> Any:
     if service is None:
         raise CaseError("decision_service_not_configured", "no decision-grant issuer is configured", status=503)
     return service
+
+
+async def _record_authoritative_dwell(runtime: CaseRuntime, request_id: str, case_ref: str) -> None:
+    """Record the dwell the approval page measured, once, after the decision is recorded.
+
+    Telemetry, after the fact: the decision is already recorded and the grants already consumed, so
+    an issuer that cannot answer here costs a data point and nothing else. It is never allowed to
+    turn a recorded decision into an error.
+    """
+    from core.cases.decision_requests import record_decision_dwell
+
+    try:
+        service = _decision_service(runtime)
+        record_decision_dwell(await service.get_request(request_id), case_ref)
+    # enterprise-gate: broad-except-ok reason=post-decision-telemetry-never-fails-a-recorded-decision
+    except Exception as exc:
+        # The decision is already recorded and the grants already consumed. Anything that happens
+        # here - a refusal, a timeout, a response shape nobody expected - costs a data point. A
+        # narrower except would let the next unexpected error turn a decision that succeeded into
+        # a 500 for the analyst who took it.
+        logger.warning(
+            "case_decision_dwell_unavailable",
+            case_ref=case_ref,
+            reason=getattr(exc, "reason", "") or type(exc).__name__,
+        )
 
 
 def _record_console_dwell(stage: str, dwell_ms: int | None, case_ref: str) -> None:
@@ -648,6 +671,8 @@ async def decide_governed_case(
             tenant_id, case_ref, runtime=runtime, actor=actor, outcome=body.outcome, grants=grants,
         )  # fmt: skip
         _record_console_dwell("record", body.client_dwell_ms, case_ref)
+        if body.decision_request_id:
+            await _record_authoritative_dwell(runtime, body.decision_request_id, case_ref)
         return result
     except CaseError as exc:
         return _error(exc)

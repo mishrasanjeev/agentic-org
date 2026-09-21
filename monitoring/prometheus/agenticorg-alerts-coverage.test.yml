@@ -1,0 +1,251 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Fire and no-fire cases for all seven alerts.
+#
+# promtool test rules monitoring/prometheus/agenticorg-alerts-coverage.test.yml
+#
+# Written during the independent review of the metrics export, and kept because they cover cases
+# the first set did not.
+# The no-fire half matters more than the fire half here: an alert that fires on everything is as
+# useless as one that never fires. The case worth reading twice is
+# "dwell collapse cannot be driven by the advisory console dwell" - it is the mechanical proof that
+# the browser-measured number cannot reach the rubber-stamping alert, which is the property the
+# whole dwell design rests on.
+rule_files:
+- agenticorg-alerts.yml
+evaluation_interval: 1m
+tests:
+- interval: 1m
+  name: denial spike fires when deny-mode denials step above 3x baseline
+  input_series:
+  - series: agenticorg_grant_enforcement_denials_total{mode="deny",instance="a"}
+    values: 0+3x240 720+60x200
+  alert_rule_test:
+  - eval_time: 5h30m
+    alertname: AgenticOrgDenialRateSpike
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: authorization
+      exp_annotations:
+        summary: Tool-call denials are running well above their recent baseline
+        description: Denials in deny mode are more than three times the previous two hours' rate. Check
+          what changed in grants, scopes or policy before assuming a caller is misbehaving.
+        runbook: docs/operations/metrics.md#denial-rate-spike
+- interval: 1m
+  name: denial spike stays silent at a steady high rate
+  input_series:
+  - series: agenticorg_grant_enforcement_denials_total{mode="deny",instance="a"}
+    values: 0+60x440
+  alert_rule_test:
+  - eval_time: 5h30m
+    alertname: AgenticOrgDenialRateSpike
+    exp_alerts: []
+- interval: 1m
+  name: denial spike ignores warn mode
+  input_series:
+  - series: agenticorg_grant_enforcement_denials_total{mode="warn",instance="a"}
+    values: 0+3x240 720+60x200
+  alert_rule_test:
+  - eval_time: 5h30m
+    alertname: AgenticOrgDenialRateSpike
+    exp_alerts: []
+- interval: 1m
+  name: dwell collapse waits out its one hour for window
+  input_series:
+  - series: agenticorg_case_decision_dwell_seconds_bucket{dwell_source="server",le="15"}
+    values: 0+1x500
+  - series: agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}
+    values: 0+1x500
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: AgenticOrgDecisionDwellCollapse
+    exp_alerts: []
+  - eval_time: 7h30m
+    alertname: AgenticOrgDecisionDwellCollapse
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: governance
+      exp_annotations:
+        summary: More than half of approvals are being submitted within 15 seconds
+        description: Measured by the approval page, not the console. A majority of decisions taken in
+          under fifteen seconds means the memo is not being read. The second clause keeps a handful of
+          fast decisions in a quiet period from firing it.
+        runbook: docs/operations/metrics.md#decision-dwell-collapse
+- interval: 1m
+  name: dwell collapse stays silent when approvals are slow
+  input_series:
+  - series: agenticorg_case_decision_dwell_seconds_bucket{dwell_source="server",le="15"}
+    values: 0+0x500
+  - series: agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}
+    values: 0+1x500
+  alert_rule_test:
+  - eval_time: 7h30m
+    alertname: AgenticOrgDecisionDwellCollapse
+    exp_alerts: []
+- interval: 1m
+  name: dwell collapse cannot be driven by the advisory console dwell
+  input_series:
+  - series: agenticorg_case_decision_dwell_seconds_bucket{dwell_source="console",le="15"}
+    values: 0+1x500
+  - series: agenticorg_case_decision_dwell_seconds_count{dwell_source="console"}
+    values: 0+1x500
+  alert_rule_test:
+  - eval_time: 7h30m
+    alertname: AgenticOrgDecisionDwellCollapse
+    exp_alerts: []
+- interval: 1m
+  name: missing dwell fires when the dwell series does not exist at all
+  input_series:
+  - series: agenticorg_governed_case_transitions_total{to_state="decided"}
+    values: 0+1x400
+  alert_rule_test:
+  - eval_time: 3h
+    alertname: AgenticOrgAuthoritativeDwellMissing
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        area: governance
+      exp_annotations:
+        summary: Decisions are being recorded with no issuer-measured dwell behind them
+        description: 'Either the issuer stopped reporting dwell, or decisions are being recorded without
+          going through an approval page. Both make the rubber-stamping alert unable to fire. The `or
+          vector(0)` is load-bearing: in the worst case the dwell series does not exist at all, and an
+          empty selector would make this alert silently evaluate to nothing.'
+        runbook: docs/operations/metrics.md#authoritative-dwell-missing
+- interval: 1m
+  name: missing dwell stays silent when no decisions are being taken
+  input_series:
+  - series: agenticorg_governed_case_transitions_total{to_state="decided"}
+    values: 0+0x400
+  alert_rule_test:
+  - eval_time: 3h
+    alertname: AgenticOrgAuthoritativeDwellMissing
+    exp_alerts: []
+- interval: 1m
+  name: cap exhaustion still firing 100m after the single event
+  input_series:
+  - series: agenticorg_budget_cap_events_total{outcome="exhausted"}
+    values: 0 1 1+0x200
+  alert_rule_test:
+  - eval_time: 20m
+    alertname: AgenticOrgSpendCapExhaustion
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: cost
+      exp_annotations:
+        summary: A spend cap has been exhausted and work is being refused
+        description: Budget evaluation crossed a cap rather than a warning point. Work under that budget
+          is refused until the cap is raised or the period rolls over.
+        runbook: docs/operations/metrics.md#spend-cap-exhaustion
+  - eval_time: 100m
+    alertname: AgenticOrgSpendCapExhaustion
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: cost
+      exp_annotations:
+        summary: A spend cap has been exhausted and work is being refused
+        description: Budget evaluation crossed a cap rather than a warning point. Work under that budget
+          is refused until the cap is raised or the period rolls over.
+        runbook: docs/operations/metrics.md#spend-cap-exhaustion
+- interval: 1m
+  name: cap exhaustion silent for a warning point event
+  input_series:
+  - series: agenticorg_budget_cap_events_total{outcome="warned"}
+    values: 0 1 1+0x200
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: AgenticOrgSpendCapExhaustion
+    exp_alerts: []
+- interval: 1m
+  name: provider error rate fires above one in ten
+  input_series:
+  - series: agenticorg_provider_calls_total{outcome="verified",capability="verify"}
+    values: 0+5x200
+  - series: agenticorg_provider_calls_total{outcome="provider_timeout",capability="verify"}
+    values: 0+3x200
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: AgenticOrgProviderErrorRate
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: providers
+      exp_annotations:
+        summary: More than one call in ten to a verification provider is failing
+        description: Cases stall on failed provider calls. The second clause stops a single failure in
+          an idle period from firing it.
+        runbook: docs/operations/metrics.md#provider-error-rate
+- interval: 1m
+  name: provider error rate silent for one failure in an idle period
+  input_series:
+  - series: agenticorg_provider_calls_total{outcome="verified",capability="verify"}
+    values: 0+0x200
+  - series: agenticorg_provider_calls_total{outcome="provider_timeout",capability="verify"}
+    values: 0 1 1+0x200
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: AgenticOrgProviderErrorRate
+    exp_alerts: []
+- interval: 1m
+  name: dead letter fires on a stuck backlog with no new failures
+  input_series:
+  - series: agenticorg_case_push_dead_letters_total
+    values: 5+0x200
+  - series: agenticorg_case_push_dead_letter_backlog
+    values: 25+0x200
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: AgenticOrgPushDeadLetterGrowth
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+        area: integrations
+      exp_annotations:
+        summary: Case hand-offs are dead-lettering or a backlog is not being replayed
+        description: A downstream system is not accepting case events. They are kept for replay, but nobody
+          downstream is seeing the case until they are replayed.
+        runbook: docs/operations/metrics.md#dead-letter-growth
+- interval: 1m
+  name: dead letter silent with a small backlog and no new failures
+  input_series:
+  - series: agenticorg_case_push_dead_letters_total
+    values: 5+0x200
+  - series: agenticorg_case_push_dead_letter_backlog
+    values: 3+0x200
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: AgenticOrgPushDeadLetterGrowth
+    exp_alerts: []
+- interval: 1m
+  name: chain failure fires and survives an instance restarting to zero
+  input_series:
+  - series: agenticorg_chain_verifications_total{outcome="failed",instance="a"}
+    values: 0 1 1 1 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+  - series: agenticorg_chain_verifications_total{outcome="failed",instance="b"}
+    values: _ _ _ _ 0+0x16
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: AgenticOrgChainVerificationFailure
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        area: evidence
+      exp_annotations:
+        summary: Stored evidence failed verification against its recorded digest
+        description: A cited passage or a promotion-history chain did not match its digest. The content
+          is refused rather than shown, so nothing unverified reaches a reviewer, but the stored copy
+          needs investigating.
+        runbook: docs/operations/metrics.md#chain-verification-failure
+- interval: 1m
+  name: chain verification silent when everything verifies
+  input_series:
+  - series: agenticorg_chain_verifications_total{outcome="verified"}
+    values: 0+10x200
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: AgenticOrgChainVerificationFailure
+    exp_alerts: []

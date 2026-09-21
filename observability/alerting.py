@@ -151,14 +151,6 @@ PRD_THRESHOLDS: list[ThresholdRule] = [
         severity=Severity.WARNING,
         description="Agent replicas at max ceiling",
     ),
-    ThresholdRule(
-        name="budget_pct_high",
-        metric_name="agenticorg_agent_budget_pct",
-        operator="gt",
-        threshold=80.0,
-        severity=Severity.WARNING,
-        description="Agent budget usage exceeds 80 %",
-    ),
 ]
 
 

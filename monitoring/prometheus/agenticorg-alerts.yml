@@ -1,0 +1,164 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# The alerts PRD §10 asks for, as definitions rather than console clicks.
+#
+# Two rules apply to everything in this file and are enforced by
+# scripts/check_alert_rules.py, not by convention:
+#
+#   1. **Rate-based, never a raw counter.** Every instance of every service exports its own
+#      counters and instances scale to zero, so a counter's value is an accident of which
+#      instances happen to be alive. Only rate()/increase() over a window, summed across
+#      instances, means anything. A gauge may be read directly - it is a level, not a total.
+#   2. **Every alert has a `for:`.** A single scrape can miss an instance that was shutting down,
+#      and an instance that has just started has no history. An alert that fires on one evaluation
+#      is an alert that fires on a deploy.
+#
+# Each alert reads only the instruments declared for it in observability/alert_contract.py; a test
+# exercises those code paths and fails if one stops being emitted.
+#
+# infra/terraform/monitoring/alerts.tf reads THIS file to create the Cloud Monitoring policies, so
+# there is one definition, not two that can drift.
+
+groups:
+  - name: agenticorg-governance
+    interval: 1m
+    rules:
+      - alert: AgenticOrgDenialRateSpike
+        # Authorization is meant to fail closed, so denials are normal. A step change in them is
+        # not: it usually means a grant, a scope or a policy changed and work is now being refused
+        # that used to be allowed.
+        expr: |
+          sum(rate(agenticorg_grant_enforcement_denials_total{mode="deny"}[10m])) > 0.2
+          and
+          sum(rate(agenticorg_grant_enforcement_denials_total{mode="deny"}[10m]))
+            > 3 * sum(rate(agenticorg_grant_enforcement_denials_total{mode="deny"}[2h] offset 2h))
+        for: 15m
+        labels:
+          severity: warning
+          area: authorization
+        annotations:
+          summary: "Tool-call denials are running well above their recent baseline"
+          description: >-
+            Denials in deny mode are more than three times the previous two hours' rate. Check what
+            changed in grants, scopes or policy before assuming a caller is misbehaving.
+          runbook: docs/operations/metrics.md#denial-rate-spike
+
+      - alert: AgenticOrgDecisionDwellCollapse
+        # Rubber-stamping. The number read here is the dwell the ISSUER measured on its own
+        # approval page (dwell_source="server"); the console's render-to-submit figure measures
+        # how fast a browser posted a form and is never admissible here.
+        #
+        # WARM-UP: this cannot fire for 1h44m after the series first appears - after a deploy, or
+        # the first decision a deployment ever records - not the ~1h the `for` suggests. While the
+        # series is younger than the 6h range, rate() still divides by the full 6h window, so the
+        # sample floor below is not cleared for about 43 minutes, and the `for` only starts from
+        # there. Measured, and pinned in agenticorg-alerts-windows.test.yml.
+        expr: |
+          (
+            sum(rate(agenticorg_case_decision_dwell_seconds_bucket{dwell_source="server",le="15"}[6h]))
+            /
+            sum(rate(agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}[6h]))
+          ) > 0.5
+          and
+          sum(rate(agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}[6h])) > 0.002
+        for: 1h
+        labels:
+          severity: warning
+          area: governance
+        annotations:
+          summary: "More than half of approvals are being submitted within 15 seconds"
+          description: >-
+            Measured by the approval page, not the console. A majority of decisions taken in under
+            fifteen seconds means the memo is not being read. The second clause keeps a handful of
+            fast decisions in a quiet period from firing it.
+          runbook: docs/operations/metrics.md#decision-dwell-collapse
+
+      - alert: AgenticOrgAuthoritativeDwellMissing
+        # Cases are being decided and no issuer-measured dwell is arriving: the rubber-stamping
+        # alert above has gone blind. It cannot detect this itself - no samples means no ratio.
+        expr: |
+          sum(rate(agenticorg_governed_case_transitions_total{to_state="decided"}[1h])) > 0
+          and
+          (
+            sum(rate(agenticorg_case_decision_dwell_seconds_count{dwell_source="server"}[1h]))
+            or vector(0)
+          ) == 0
+        for: 2h
+        labels:
+          severity: critical
+          area: governance
+        annotations:
+          summary: "Decisions are being recorded with no issuer-measured dwell behind them"
+          description: >-
+            Either the issuer stopped reporting dwell, or decisions are being recorded without
+            going through an approval page. Both make the rubber-stamping alert unable to fire.
+            The `or vector(0)` is load-bearing: in the worst case the dwell series does not exist
+            at all, and an empty selector would make this alert silently evaluate to nothing.
+          runbook: docs/operations/metrics.md#authoritative-dwell-missing
+
+      - alert: AgenticOrgSpendCapExhaustion
+        # increase() over a long window, not rate() over a short one: a cap is crossed once, and a
+        # rate whose window has passed is zero again. The window has to outlive the `for`.
+        expr: sum(increase(agenticorg_budget_cap_events_total{outcome="exhausted"}[2h])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          area: cost
+        annotations:
+          summary: "A spend cap has been exhausted and work is being refused"
+          description: >-
+            Budget evaluation crossed a cap rather than a warning point. Work under that budget is
+            refused until the cap is raised or the period rolls over.
+          runbook: docs/operations/metrics.md#spend-cap-exhaustion
+
+      - alert: AgenticOrgProviderErrorRate
+        expr: |
+          (
+            sum(rate(agenticorg_provider_calls_total{outcome!="ok"}[15m]))
+            / sum(rate(agenticorg_provider_calls_total[15m]))
+          ) > 0.1
+          and sum(rate(agenticorg_provider_calls_total[15m])) > 0.01
+        for: 20m
+        labels:
+          severity: warning
+          area: providers
+        annotations:
+          summary: "More than one call in ten to a verification provider is failing"
+          description: >-
+            Cases stall on failed provider calls. The second clause stops a single failure in an
+            idle period from firing it.
+          runbook: docs/operations/metrics.md#provider-error-rate
+
+      - alert: AgenticOrgPushDeadLetterGrowth
+        # Both halves matter: the rate says events are being dead-lettered now, the gauge says a
+        # backlog is sitting there unreplayed even if nothing new has failed.
+        expr: |
+          sum(rate(agenticorg_case_push_dead_letters_total[1h])) > 0
+          or max(agenticorg_case_push_dead_letter_backlog) > 10
+        for: 30m
+        labels:
+          severity: warning
+          area: integrations
+        annotations:
+          summary: "Case hand-offs are dead-lettering or a backlog is not being replayed"
+          description: >-
+            A downstream system is not accepting case events. They are kept for replay, but nobody
+            downstream is seeing the case until they are replayed.
+          runbook: docs/operations/metrics.md#dead-letter-growth
+
+      - alert: AgenticOrgChainVerificationFailure
+        # Stored evidence no longer matching the digest recorded for it is never transient: one
+        # occurrence is the incident, so the window is long enough that a single failure is still
+        # visible when the `for` elapses.
+        expr: sum(increase(agenticorg_chain_verifications_total{outcome="failed"}[1h])) > 0
+        for: 5m
+        labels:
+          severity: critical
+          area: evidence
+        annotations:
+          summary: "Stored evidence failed verification against its recorded digest"
+          description: >-
+            A cited passage or a promotion-history chain did not match its digest. The content is
+            refused rather than shown, so nothing unverified reaches a reviewer, but the stored
+            copy needs investigating.
+          runbook: docs/operations/metrics.md#chain-verification-failure
