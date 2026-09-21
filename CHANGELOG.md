@@ -28,7 +28,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   with an OAuth error about the wrong thing. It also logs the error it returns,
   and its health check honours `OIDC_STUB_PORT`.
 - `.gitattributes` keeps shell scripts LF, so the stack's Linux containers can
-  run them from a Windows checkout (FINDINGS A-57).
+  run them from a Windows checkout (FINDINGS A-58).
 
 ### Changed — breaking for tenants that turn it on
 - `grants.enforce_closed` can now be set to `deny` (tenant flag
@@ -615,6 +615,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Storing a governed case's cited passages refuses a passage for which no
+  tenant key was resolved (`excerpt_key_unresolved`) instead of falling back to
+  the deployment's legacy key. Callers pass `None` for "not resolved"; `""`
+  remains the legacy key and encrypts as before.
+- Storing a governed case's cited passages no longer opens a database session
+  per passage while the case row is locked. The tenant's key is resolved once,
+  before the write session (`core.cases.excerpts.tenant_key`), and each passage
+  is encrypted with it off the event loop; the retention bound is applied
+  first, so a capture larger than the bound does no key work for the passages
+  it is about to drop.
 - Two migrate jobs started together no longer race on an empty database:
   `migrations/env.py` takes the same transaction-scoped advisory lock
   `init_db()` uses before deciding whether to build the baseline, and rechecks
