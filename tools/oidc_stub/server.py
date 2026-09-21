@@ -779,9 +779,15 @@ METHODS = ("GET", "HEAD", "POST")
 
 
 def request_label(method: str, path: str) -> tuple[str, str]:
-    """The method and route to log, each from a fixed set."""
-    route = urlsplit(path).path
-    return (method if method in METHODS else "other", route if route in ROUTES else "other")
+    """The method and route to log, each *selected from* a fixed set.
+
+    The values returned are the constants themselves, not the caller's strings, so nothing the
+    caller chose can reach the log even when it happens to match.
+    """
+    requested = urlsplit(path).path
+    known_method = next((m for m in METHODS if m == method), "other")
+    known_route = next((r for r in ROUTES if r == requested), "other")
+    return known_method, known_route
 
 
 def _log(event: str, **fields: Any) -> None:
