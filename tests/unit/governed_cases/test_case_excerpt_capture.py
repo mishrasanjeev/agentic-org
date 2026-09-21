@@ -13,6 +13,7 @@ import hashlib
 import json
 import uuid
 from typing import Any
+from unittest import mock
 
 import pytest
 
@@ -103,9 +104,14 @@ def _tenant_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tenant_secrets, "_resolve_kek", no_byok)
 
 
+async def _kek() -> str:
+    """The key the caller resolves before it opens the case's write session."""
+    return await case_excerpts.tenant_key(TENANT)
+
+
 async def test_a_stored_passage_is_encrypted_and_only_its_reference_is_readable() -> None:
     """A passage is a provider record about a person, so it is not left in clear text."""
-    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
+    stored = await case_excerpts.store(await _kek(), [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
     entry = stored[0]
     assert "text" not in entry
     assert entry[case_excerpts.CIPHERTEXT_KEY] and "Ansel" not in entry[case_excerpts.CIPHERTEXT_KEY]
@@ -116,22 +122,57 @@ async def test_a_stored_passage_is_encrypted_and_only_its_reference_is_readable(
 
 async def test_the_newest_capture_of_a_reference_wins() -> None:
     """The memo cites the newest digest, so the passage kept has to be the newest one."""
-    first = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "text": "first"}], now="2026-09-01T09:00:00Z")
+    first = await case_excerpts.store(
+        await _kek(), [], [{"excerpt_ref": "e1", "text": "first"}], now="2026-09-01T09:00:00Z"
+    )
     second = await case_excerpts.store(
-        TENANT, first, [{"excerpt_ref": "e1", "text": "second"}], now="2026-09-02T09:00:00Z"
+        await _kek(), first, [{"excerpt_ref": "e1", "text": "second"}], now="2026-09-02T09:00:00Z"
     )
     assert len(second) == 1
     assert case_excerpts.read(second[0]) == "second"
     assert second[0]["sha256"] == case_excerpts.digest("second")
 
 
+async def test_storing_resolves_no_key_of_its_own() -> None:
+    """``store`` runs under the case row lock: resolving a key there opens a second session."""
+    from core.crypto import tenant_secrets
+
+    kek = await case_excerpts.tenant_key(TENANT)
+
+    async def refuse(_tenant_id: uuid.UUID) -> str:
+        raise AssertionError("store must not resolve a key while the case row is locked")
+
+    with mock.patch.object(tenant_secrets, "_resolve_kek", refuse):
+        stored = await case_excerpts.store(kek, [], [{"excerpt_ref": "e1", "text": "Ansel"}])
+    assert case_excerpts.read(stored[0]) == "Ansel"
+
+
+async def test_passages_that_fall_outside_the_bound_are_never_encrypted() -> None:
+    """Encryption is a call to a key manager: the bound has to limit the work, not just the rows."""
+    encrypted: list[str] = []
+    captured = [{"excerpt_ref": f"e{n}", "text": f"passage {n}"} for n in range(6)]
+    from core.crypto import tenant_secrets
+
+    original = tenant_secrets.encrypt_with_kek
+
+    def counting(plaintext: str, kek: str) -> str:
+        encrypted.append(plaintext)
+        return original(plaintext, kek)
+
+    with mock.patch.object(tenant_secrets, "encrypt_with_kek", counting):
+        stored = await case_excerpts.store(await _kek(), [], captured, limit=2)
+
+    assert [entry["excerpt_ref"] for entry in stored] == ["e4", "e5"]
+    assert encrypted == ["passage 4", "passage 5"]
+
+
 async def test_a_case_keeps_only_the_most_recent_passages() -> None:
     """A case re-investigated over and over must not grow without limit."""
     older = await case_excerpts.store(
-        TENANT, [], [{"excerpt_ref": "e_old", "text": "older"}], now="2026-09-01T09:00:00Z", limit=4
+        await _kek(), [], [{"excerpt_ref": "e_old", "text": "older"}], now="2026-09-01T09:00:00Z", limit=4
     )
     captured = [{"excerpt_ref": f"e{n}", "text": f"passage {n}"} for n in range(6)]
-    stored = await case_excerpts.store(TENANT, older, captured, now="2026-09-02T09:00:00Z", limit=4)
+    stored = await case_excerpts.store(await _kek(), older, captured, now="2026-09-02T09:00:00Z", limit=4)
 
     assert len(stored) == 4
     # The oldest capture goes first, and within one capture the ones that arrived first - not
@@ -140,13 +181,13 @@ async def test_a_case_keeps_only_the_most_recent_passages() -> None:
 
 
 async def test_an_entry_without_a_reference_or_a_passage_is_not_stored() -> None:
-    assert await case_excerpts.store(TENANT, None, [{"text": "no reference"}]) == []
-    assert await case_excerpts.store(TENANT, None, [{"excerpt_ref": "e1"}]) == []
+    assert await case_excerpts.store(await _kek(), None, [{"text": "no reference"}]) == []
+    assert await case_excerpts.store(await _kek(), None, [{"excerpt_ref": "e1"}]) == []
 
 
 async def test_a_passage_that_no_longer_matches_its_digest_is_refused() -> None:
     """The console prints the digest beside the passage: an unverified passage must not reach it."""
-    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "text": "as returned"}])
+    stored = await case_excerpts.store(await _kek(), [], [{"excerpt_ref": "e1", "text": "as returned"}])
     tampered = {**stored[0], "sha256": case_excerpts.digest("something else")}
     with pytest.raises(case_excerpts.ExcerptError) as refused:
         case_excerpts.read(tampered)
@@ -167,7 +208,7 @@ def test_an_undecryptable_passage_is_refused_rather_than_shown() -> None:
 
 
 async def test_forgetting_keeps_the_references_the_memo_cites() -> None:
-    stored = await case_excerpts.store(TENANT, [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
+    stored = await case_excerpts.store(await _kek(), [], [{"excerpt_ref": "e1", "provider": "mock", "text": "Ansel"}])
     forgotten = case_excerpts.forget(stored)
     assert [entry["excerpt_ref"] for entry in forgotten] == ["e1"]
     assert all(case_excerpts.CIPHERTEXT_KEY not in entry for entry in forgotten)
