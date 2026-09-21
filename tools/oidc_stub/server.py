@@ -743,13 +743,13 @@ def _page(title: str, body: str) -> str:
 #: OAuth 2.0 error codes (RFC 6749 and RFC 6750), which are the only values a
 #: refusal contributes to the request log. The accompanying description is not
 #: logged: it is written per call site and could quote a request parameter.
-OAUTH_ERROR_CODES = frozenset({
+OAUTH_ERROR_CODES = (
     "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client",
     "unsupported_grant_type", "unsupported_response_type", "invalid_scope",
     "access_denied", "server_error", "temporarily_unavailable", "invalid_token",
     "login_required", "interaction_required", "consent_required", "account_selection_required",
     "not_found",
-})
+)
 
 
 def oauth_error_detail(response: Response) -> dict[str, str]:
@@ -769,7 +769,9 @@ def oauth_error_detail(response: Response) -> dict[str, str]:
     if not isinstance(body, dict):
         return {}
     code = body.get("error")
-    return {"error": code} if isinstance(code, str) and code in OAUTH_ERROR_CODES else {}
+    # Selected from the constant set, not taken from the body: the value logged is one of ours.
+    known = next((c for c in OAUTH_ERROR_CODES if c == code), None)
+    return {"error": known} if known is not None else {}
 
 
 #: The routes this stub serves. Anything else is logged as "other", so nothing
