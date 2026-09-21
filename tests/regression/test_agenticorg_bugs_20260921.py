@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression coverage for the 2026-09-21 AgenticOrg bug sheet.
 
 These tests pin the producer contracts behind the two reported failures:
