@@ -491,16 +491,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
 
-## A-41 — The integration `client` fixture cannot run twice against one database
-
-- **Found:** re-running governed case API tests against a reused local
-  PostgreSQL container (2026-09-15).
-- **What:** `tests/integration/conftest.py::client` seeds the test tenant with a
-  fresh random id but the fixed slug `test-tenant` and
-  `ON CONFLICT (id) DO NOTHING`, so a second session against the same database
-  fails at setup with a unique violation on `tenants_slug_key`. CI is unaffected
-  because it starts from an empty database.
-- **Fix:** derive the slug from the tenant id, or conflict on the slug.
 
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 

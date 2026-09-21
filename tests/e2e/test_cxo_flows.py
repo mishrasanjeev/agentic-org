@@ -68,8 +68,8 @@ def app():
                 ),
                 {
                     "id": _TEST_TENANT_ID,
-                    "name": f"E2E Tenant {_TEST_TENANT_ID[:8]}",
-                    "slug": f"e2e-{_TEST_TENANT_ID[:8]}",
+                    "name": f"E2E Tenant {_TEST_TENANT_ID}",
+                    "slug": f"e2e-{uuid.UUID(_TEST_TENANT_ID).hex}",
                 },
             )
 
