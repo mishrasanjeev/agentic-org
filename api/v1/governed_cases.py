@@ -399,12 +399,12 @@ async def request_case_decision(
     """
     from core.cases.decision_requests import (
         DecisionServiceError,
+        case_action,
         decision_requests_total,
         four_eyes_on,
         policy_score_for_approval,
         render_memo_for_approval,
     )
-    from core.cases.decisions import semantic_action
 
     try:
         actor = human_actor_for(request)
@@ -416,7 +416,7 @@ async def request_case_decision(
                 raise CaseError("transition_not_allowed", f"a decision needs awaiting_decision, case is {case.state}")
             if not case.memo or not case.policy_result:
                 raise CaseError("memo_not_ready", "the case has no memo and policy result to approve against")
-            action = semantic_action(case, body.outcome)
+            action = case_action(case, body.outcome)
             case_version = str(case.version)
             memo_id = str((case.memo or {}).get("memo_id", ""))
             memo_text = render_memo_for_approval(case, body.outcome, body.override_reason.strip())

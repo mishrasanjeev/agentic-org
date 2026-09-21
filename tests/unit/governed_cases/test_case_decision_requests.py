@@ -20,6 +20,7 @@ from core.cases.decision_requests import (
     DecisionServiceError,
     GrantexDecisionGrantService,
     ServiceDecisionVerifier,
+    case_action,
     policy_score_for_approval,
     render_memo_for_approval,
 )
@@ -197,7 +198,7 @@ async def test_a_request_status_reports_each_approval_and_the_dwell_the_issuer_m
             json={
                 "requestId": "dr_1",
                 "status": "pending",
-                "action": {},
+                "action": {"case_id": "case_1", "action": "case_decision", "decision": "approve", "subject": "mock:x"},
                 "actionHash": "sha256:" + "1" * 64,
                 "caseVersion": "3",
                 "approvalsRequired": 2,
@@ -239,6 +240,93 @@ async def test_every_issuer_refusal_becomes_a_reason_code(
     with pytest.raises(DecisionServiceError) as refused:
         await service(lambda _r: httpx.Response(status, json=payload)).get_request("dr_1")
     assert (refused.value.reason, refused.value.detail) == (reason, detail)
+
+
+def _status_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "requestId": "dr_1",
+        "status": "pending",
+        "action": {"case_id": "case_1", "action": "case_decision", "decision": "decline", "subject": "mock:x"},
+        "actionHash": "sha256:" + "1" * 64,
+        "caseVersion": "3",
+        "approvalsRequired": 2,
+        "approvals": [],
+        "expiresAt": "2026-09-21T10:00:00Z",
+    }
+    payload.update(overrides)
+    return {k: v for k, v in payload.items() if v is not _ABSENT}
+
+
+_ABSENT = object()
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"approvalsRequired": _ABSENT}, id="approvals_required_missing"),
+        pytest.param({"approvalsRequired": 0}, id="approvals_required_zero"),
+        pytest.param({"approvalsRequired": "2"}, id="approvals_required_not_a_number"),
+        pytest.param({"actionHash": _ABSENT}, id="action_hash_missing"),
+        pytest.param({"action": _ABSENT}, id="action_missing"),
+        pytest.param({"caseVersion": _ABSENT}, id="case_version_missing"),
+        pytest.param({"status": _ABSENT}, id="status_missing"),
+        pytest.param({"requestId": ""}, id="request_id_empty"),
+        pytest.param({"expiresAt": _ABSENT}, id="expires_at_missing"),
+    ],
+)
+async def test_a_status_answer_missing_a_field_the_screen_states_is_refused(overrides: dict[str, Any]) -> None:
+    """A renamed or absent field must not become a default: four eyes would read as one approver."""
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(lambda _r: httpx.Response(200, json=_status_payload(**overrides))).get_request("dr_1")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
+@pytest.mark.parametrize(
+    "approval",
+    [
+        pytest.param(
+            {"approverAuth": "sso+webauthn", "dwellSource": "server", "position": 1, "issuedAt": "x"}, id="no_sub"
+        ),
+        pytest.param({"sub": "user:a", "dwellSource": "server", "position": 1, "issuedAt": "x"}, id="no_auth"),
+        pytest.param({"sub": "user:a", "approverAuth": "sso", "position": 1, "issuedAt": "x"}, id="no_dwell_source"),
+        pytest.param(
+            {"sub": "user:a", "approverAuth": "sso", "dwellSource": "server", "issuedAt": "x"}, id="no_position"
+        ),
+        pytest.param(
+            {
+                "sub": "user:a",
+                "approverAuth": "sso",
+                "dwellSource": "server",
+                "position": 1,
+                "issuedAt": "x",
+                "dwellMs": "61250",
+            },
+            id="dwell_not_a_duration",
+        ),
+        pytest.param("not-an-object", id="not_an_object"),
+    ],
+)
+async def test_an_approval_missing_what_the_screen_asserts_is_refused(approval: Any) -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(lambda _r: httpx.Response(200, json=_status_payload(approvals=[approval]))).get_request("dr_1")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
+async def test_a_created_request_without_an_approval_page_is_refused() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            return httpx.Response(200, json={"caseVersion": "3"})
+        return httpx.Response(201, json=_status_payload())
+
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(handler).create_request(
+            action={"case_id": "case_1", "action": "case_decision", "decision": "decline", "subject": "mock:x"},
+            case_version="3",
+            memo="memo",
+            policy_score=POLICY,
+            four_eyes_on=("decline",),
+        )
+    assert refused.value.reason == "decision_service_response_invalid"
 
 
 async def test_an_unreachable_issuer_fails_closed() -> None:
@@ -284,9 +372,8 @@ async def test_a_decision_without_grants_is_refused_with_decision_required() -> 
 async def test_the_verifier_consumes_the_grants_for_the_exact_action_and_case_version() -> None:
     fake = FakeDecisionGrantService()
     case = case_row()
-    from core.cases.decisions import semantic_action
-
-    action = semantic_action(case, "approve")
+    action = case_action(case, "approve")
+    assert action["extra"] == {"tenant": str(case.tenant_id)}
     view = await fake.create_request(
         action=action, case_version=str(case.version), memo="memo", policy_score=POLICY, four_eyes_on=()
     )
@@ -294,16 +381,16 @@ async def test_the_verifier_consumes_the_grants_for_the_exact_action_and_case_ve
     grants = await fake.grants(view.request_id)
 
     check = await ServiceDecisionVerifier(fake).verify(tenant_id="t", case=case, outcome="approve", grants=grants)
-    assert check.allowed is True and check.approvers == (("user:9f:alice", grants[0]),)
+    # The grant id is recorded, never the token.
+    assert check.allowed is True and check.approvers == (("user:9f:alice", "jti-dr_00000001-1"),)
+    assert grants[0] not in [grant_id for _, grant_id in check.approvers]
 
 
 async def test_a_case_that_changed_since_the_approval_is_refused() -> None:
     fake = FakeDecisionGrantService()
     case = case_row()
-    from core.cases.decisions import semantic_action
-
     view = await fake.create_request(
-        action=semantic_action(case, "approve"),
+        action=case_action(case, "approve"),
         case_version=str(case.version),
         memo="memo",
         policy_score=POLICY,
@@ -320,10 +407,8 @@ async def test_a_case_that_changed_since_the_approval_is_refused() -> None:
 async def test_grants_approved_for_another_outcome_do_not_decide_this_one() -> None:
     fake = FakeDecisionGrantService()
     case = case_row()
-    from core.cases.decisions import semantic_action
-
     view = await fake.create_request(
-        action=semantic_action(case, "approve"),
+        action=case_action(case, "approve"),
         case_version=str(case.version),
         memo="memo",
         policy_score=POLICY,
@@ -334,6 +419,48 @@ async def test_grants_approved_for_another_outcome_do_not_decide_this_one() -> N
 
     check = await ServiceDecisionVerifier(fake).verify(tenant_id="t", case=case, outcome="decline", grants=grants)
     assert (check.allowed, check.reason) == (False, "action_mismatch")
+
+
+async def test_a_grant_for_another_tenants_case_of_the_same_reference_is_refused() -> None:
+    fake = FakeDecisionGrantService()
+    case = case_row()
+    other_tenant = case_row(case_ref=case.case_ref, tenant_id=uuid.uuid4())
+    view = await fake.create_request(
+        action=case_action(case, "approve"),
+        case_version=str(case.version),
+        memo="memo",
+        policy_score=POLICY,
+        four_eyes_on=(),
+    )
+    fake.approve(view.request_id, "user:9f:alice")
+    grants = await fake.grants(view.request_id)
+
+    check = await ServiceDecisionVerifier(fake).verify(
+        tenant_id="t", case=other_tenant, outcome="approve", grants=grants
+    )
+    assert (check.allowed, check.reason) == (False, "action_mismatch")
+
+
+async def test_a_consumed_decision_records_grant_ids_and_never_a_token() -> None:
+    fake = FakeDecisionGrantService()
+    case = case_row()
+    view = await fake.create_request(
+        action=case_action(case, "decline"),
+        case_version=str(case.version),
+        memo="memo",
+        policy_score=POLICY,
+        four_eyes_on=("decline",),
+    )
+    fake.approve(view.request_id, "user:9f:alice")
+    fake.approve(view.request_id, "user:9f:bob")
+    grants = await fake.grants(view.request_id)
+
+    check = await ServiceDecisionVerifier(fake).verify(tenant_id="t", case=case, outcome="decline", grants=grants)
+    assert check.allowed is True
+    recorded = [grant_id for _, grant_id in check.approvers]
+    assert recorded == ["jti-dr_00000001-1", "jti-dr_00000001-2"]
+    for token in grants:
+        assert token not in recorded
 
 
 # --- the fake service's own rules --------------------------------------------------------------------
