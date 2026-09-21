@@ -749,3 +749,32 @@ Remove an entry in the pull request that fixes it.
   would satisfy it. The marker is always in the diff of the migration that
   claims it, so review remains the primary control; the regex only stops an
   empty or absent reason from passing silently.
+
+## A-58 — A scaffold generator still overwrites hand-maintained modules, observability included
+
+- **Found:** removing `agenticorg_agent_budget_pct` and checking nothing would
+  put it back (PRD A-9 metrics follow-up, 2026-09-22).
+- **What:** `scripts/generate_batch4.py` writes twenty-odd modules out of
+  string literals - `api/main.py`, `api/deps.py`, `observability/metrics.py`,
+  `observability/alerting.py`, `audit/*`, `scaling/*` - with a plain
+  `open(full, "w")` and no check on what is already there. It is the original
+  scaffold for those files and has been superseded by a year of hand editing,
+  but it is still executable and `git grep` finds no caller anywhere: no
+  Makefile target, no workflow, no other script. Nothing marks it as a
+  historical artefact either; it reads as a tool.
+
+  Running it would silently replace the live FastAPI application module and the
+  observability package with their day-one versions. For metrics specifically
+  it would reintroduce `agent_budget_pct` with the labels
+  `["tenant", "agent_id"]`, along with `["tenant", "shadow_agent_id",
+  "reference_agent_id"]` and `["tenant", "tool_name", "error_code"]` - per
+  tenant, per agent, per tool cardinality, which `observability/metrics.py`'s
+  own header forbids in the first paragraph, and which the same commit that
+  removed that gauge called out as the reason not to restore it as it was.
+
+  `generate_batch2.py`, `generate_batch3.py` and `generate_batch5.py` are the
+  same shape and carry the same hazard.
+- **Fix:** delete them. They generated code that now has years of history in
+  git, which is a better record of the starting point than a script that can
+  overwrite the present. If one is kept for reference, make it refuse to write
+  a file that already exists, and say in its docstring that it is historical.
