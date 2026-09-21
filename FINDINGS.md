@@ -727,18 +727,20 @@ Remove an entry in the pull request that fixes it.
   same terms as a new one.
 
 ## A-58 — The test suites use the shared engine from many event loops
-- **Found:** arming the cross-loop guard in CI (2026-09-22).
-- **What:** with `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`, the integration run
-  reports 162 cross-loop uses of the shared engine, across
-  `tests/integration/test_case_pseudonym_map_store_postgres.py`,
-  `test_case_push_postgres.py` and others: synchronous test bodies call
-  `asyncio.run` (or spawn a thread that does) against
-  `core.database.engine`, so each one leaves the shared pool holding a
+
+- **Found:** measuring the cross-loop guard in CI (2026-09-22).
+- **What:** the CI integration job (`pytest tests/integration/ tests/regression/`)
+  reports **54** cross-loop uses of the shared engine; the unit job reports 0.
+  Synchronous test bodies call `asyncio.run`, or spawn a thread that does,
+  against `core.database.engine`, so each one leaves the shared pool holding a
   connection bound to a loop that has ended — the same shape as A-49, in test
   code. They pass today because nothing later in the run happens to check that
   connection out, which is luck, and is a plausible source of the flakiness
-  this suite has shown.
+  this suite has shown. Which files contribute depends on ordering and on
+  which fixture bound the engine first, so the count is meaningful and the
+  attribution is not: running a few files alone reports zero, because their
+  own synchronous engines never touch `core.database.engine`.
 - **Fix:** move those bodies onto `core.database.run_db_coroutine_sync` (or an
-  engine the test owns and disposes), then set
-  `AGENTICORG_DB_CROSS_LOOP_GUARD=raise` in the CI integration and local-stack
-  jobs so the next one fails the run rather than being counted.
+  engine the test owns and disposes), lowering `cross_loop_baseline.txt` as
+  they go, until it reaches 0 and the CI jobs can set
+  `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.

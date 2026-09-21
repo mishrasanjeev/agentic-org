@@ -1,3 +1,6 @@
-100000  # cross-loop uses of a guarded database pool tolerated in a test run;
-# see FINDINGS A-58. Provisional: replaced with the count a CI integration run
-# reports. It only moves down.
+54  # cross-loop uses of a guarded database pool tolerated in a test run.
+#
+# Measured by the CI integration job (pytest tests/integration tests/regression)
+# on 2026-09-22; the unit job reports 0. See FINDINGS A-58. This number only
+# moves down: a run that exceeds it fails, so a new cross-loop use is caught
+# where it is introduced.
