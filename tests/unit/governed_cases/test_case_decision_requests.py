@@ -74,6 +74,10 @@ MEMO = {
 }
 
 
+async def _always_enabled(_tenant_id: Any) -> bool:
+    return True
+
+
 def case_row(**overrides: Any) -> GovernedCase:
     values: dict[str, Any] = {
         "id": uuid.uuid4(),
@@ -538,3 +542,31 @@ async def test_a_second_request_for_the_same_action_and_version_reuses_the_open_
         action=action, case_version="4", memo="m", policy_score=POLICY, four_eyes_on=()
     )
     assert other_version.request_id != first.request_id
+
+
+async def test_an_unreachable_issuer_is_counted_when_a_case_version_is_announced() -> None:
+    """A persistently unreachable issuer leaves stale requests live at its end; that has to show."""
+    from prometheus_client import REGISTRY
+
+    from core.cases.runtime import CaseRuntime, announce_case_version
+
+    fake = FakeDecisionGrantService()
+    fake.fail_with = DecisionServiceError("decision_service_unavailable", "ConnectError")
+    runtime = CaseRuntime(decision_service=lambda: fake, flag=_always_enabled)
+
+    def counter(result: str) -> float:
+        value = REGISTRY.get_sample_value(
+            "agenticorg_case_version_announcements_total", {"result": result}
+        )
+        return float(value or 0.0)
+
+    failed_before, ok_before = counter("failed"), counter("registered")
+    await announce_case_version(runtime, "case_" + "a" * 24, 4, only_if=True)
+    assert counter("failed") == failed_before + 1
+
+    await announce_case_version(runtime, "case_" + "a" * 24, 4, only_if=True)
+    assert counter("registered") == ok_before + 1
+
+    # A case nobody asked a decision about never calls the issuer at all.
+    await announce_case_version(runtime, "case_" + "a" * 24, 5, only_if=False)
+    assert counter("registered") == ok_before + 1

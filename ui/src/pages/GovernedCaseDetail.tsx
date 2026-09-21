@@ -6,6 +6,7 @@ import ApprovalsSubnav from "@/components/governed-cases/ApprovalsSubnav";
 import { StateBadge, TierBadge } from "@/components/governed-cases/CaseBadges";
 import MemoView from "@/components/governed-cases/MemoView";
 import PolicyScore from "@/components/governed-cases/PolicyScore";
+import DecisionPanel from "@/components/governed-cases/DecisionPanel";
 import ScreeningDispositions from "@/components/governed-cases/ScreeningDispositions";
 import {
   STATE_LABELS,
@@ -17,6 +18,7 @@ import {
   type CaseApiError,
   type CaseDetail,
 } from "@/lib/governedCases";
+import { useDwellTimer } from "@/lib/useDwellTimer";
 
 const NO_CITATIONS = { recordId: () => null, excerptId: () => null };
 
@@ -60,6 +62,8 @@ export default function GovernedCaseDetail() {
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<CaseApiError | null>(null);
+  // Render-to-submit dwell for the decision action; advisory telemetry only.
+  const dwellMs = useDwellTimer();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -171,6 +175,15 @@ export default function GovernedCaseDetail() {
           )}
         </div>
         <div className="min-w-0 space-y-6">
+          <DecisionPanel
+            caseRef={businessCase.case_id}
+            caseState={businessCase.state}
+            recommendation={memo?.recommendation.proposed ?? null}
+            decision={businessCase.decision}
+            storedRequests={detail.decision_requests ?? []}
+            dwellMs={dwellMs}
+            onDecided={() => void load()}
+          />
           {policy ? (
             <PolicyScore result={policy} />
           ) : (

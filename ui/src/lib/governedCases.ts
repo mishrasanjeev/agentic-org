@@ -189,6 +189,8 @@ export interface CaseDetail {
   information_requests: unknown[];
   tool_calls: CaseToolCall[];
   excerpts: CaseExcerptReference[];
+  decision_requests: StoredDecisionRequest[];
+  decision: CaseDecision | null;
   failure_reason: string | null;
   transitions: CaseTransition[];
 }
@@ -277,6 +279,53 @@ export const COMPARISON_RESULT_LABELS: Record<ComparisonResult, string> = {
   not_comparable: "Not comparable",
 };
 
+export interface DecisionApproval {
+  approver: string;
+  approver_auth: string;
+  /** Milliseconds the approval page measured between rendering and submitting. */
+  dwell_ms: number | null;
+  /** "server" for the issuer's own measurement. Never "console". */
+  dwell_source: string;
+  position: number;
+  issued_at: string;
+  consumed_at: string | null;
+}
+
+export interface DecisionRequestView {
+  request_id: string;
+  status: string;
+  approval_page: string;
+  action: { case_id?: string; action?: string; decision?: string; subject?: string };
+  action_hash: string;
+  case_version: string;
+  approvals_required: number;
+  approvals_received: number;
+  grants_ready: boolean;
+  expires_at: string;
+  approvals: DecisionApproval[];
+  /** From the case's own record of the request. */
+  outcome?: "approve" | "decline";
+  override_reason?: string | null;
+  requested_by?: string;
+  requested_at?: string;
+  case_version_now?: string;
+  case_changed?: boolean;
+}
+
+/** The case's record of a decision request, as the case document carries it. */
+export interface StoredDecisionRequest {
+  request_id: string;
+  outcome: "approve" | "decline";
+  case_version: string;
+  approval_page: string;
+  approvals_required: number;
+  action_hash: string;
+  override_reason: string | null;
+  requested_by: string;
+  requested_at: string;
+  console_dwell_ms: number | null;
+}
+
 /** A refusal from the governed case API, reduced to its stable reason code. */
 export class CaseApiError extends Error {
   readonly reason: string;
@@ -334,7 +383,64 @@ const REASON_MESSAGES: Record<string, string> = {
   accepted_outcome_differs: "Accepting keeps the proposed outcome; choose override to change it.",
   analyst_invalid: "The server could not identify you as the analyst. Sign in again and retry.",
   human_session_required: "This action needs a signed-in person; an API key or agent token is refused.",
+  decision_required:
+    "No decision grant proves a person decided this. Ask for a decision and approve it on the approval page.",
+  decision_not_approved: "The decision request has not been approved yet, so there is nothing to record.",
+  decision_outcome_mismatch: "That request asked for the other outcome. Make a new request.",
+  decision_request_not_found: "This case has no such decision request.",
+  decision_service_not_configured:
+    "No decision-grant issuer is configured for this deployment, so a decision cannot be requested or recorded.",
+  decision_service_disabled: "The decision-grant issuer has decision grants switched off.",
+  decision_service_unavailable: "The decision-grant issuer could not be reached. Nothing was decided.",
+  decision_service_unauthorised: "The decision-grant issuer refused this platform's credentials.",
+  decision_service_refused: "The decision-grant issuer refused the request.",
+  decision_invalid: "The decision grants were refused.",
+  same_approver: "The second approval must come from a different person than the first.",
+  four_eyes_incomplete: "This outcome needs two approvals from two different people.",
+  action_mismatch: "Those grants approved a different action.",
+  wrong_case: "Those grants approved a different case.",
+  case_changed: "The case changed after the approval, so the decision grants no longer apply. Ask again.",
+  consumed: "Those decision grants have already been used.",
+  expired: "The decision grants have expired. Ask for a decision again.",
+  revoked: "The decision grants were revoked.",
+  memo_not_ready: "The case has no memo and policy result to approve against yet.",
+  decision_outcome_invalid: "That is not a decision this case can take.",
 };
+
+export const DECISION_STATUS_LABELS: Record<string, string> = {
+  pending: "Waiting for approval",
+  approved: "Approved — ready to record",
+  consumed: "Recorded",
+  superseded: "Superseded by a change to the case",
+  cancelled: "Cancelled",
+};
+
+/** A human-readable dwell, always saying who measured it. */
+export function formatDwell(ms: number | null | undefined): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) return "not measured";
+  if (ms < 1000) return `${ms} ms`;
+  const seconds = ms / 1000;
+  if (seconds < 90) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} min ${Math.round(seconds - minutes * 60)} s`;
+}
+
+/**
+ * Only an https approval page may be opened - never a javascript:, data: or file: URL, and never
+ * a plain-http issuer, because the approval session's cookies and the grants depend on it. A
+ * console served over http is a development stack, and only there is http accepted.
+ */
+export function isSafeApprovalPage(url: string, consoleOrigin?: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:") return true;
+    if (parsed.protocol !== "http:") return false;
+    const origin = consoleOrigin ?? (typeof window === "undefined" ? "" : window.location.protocol);
+    return origin.startsWith("http:");
+  } catch {
+    return false;
+  }
+}
 
 /** A sentence for a refusal. Unknown codes are shown as the code, never hidden. */
 export function describeCaseReason(reason: string): string {
@@ -366,6 +472,27 @@ export const governedCasesApi = {
   /** The passage behind one citation. Fetched only when a reviewer asks to read it. */
   excerpt(caseRef: string, excerptRef: string): Promise<CaseExcerpt> {
     return call(() => api.get(casePath(caseRef, `/excerpts/${encodeURIComponent(excerptRef)}`)));
+  },
+  /** Ask a named person to decide this case on the issuer's approval page. */
+  requestDecision(
+    caseRef: string,
+    body: { outcome: "approve" | "decline"; override_reason?: string; client_dwell_ms?: number },
+  ): Promise<DecisionRequestView> {
+    return call(() => api.post(casePath(caseRef, "/decision-requests"), body));
+  },
+  /** Live status of one decision request: approvals, the dwell the issuer measured, what is left. */
+  decisionRequest(caseRef: string, requestId: string): Promise<DecisionRequestView> {
+    return call(() => api.get(casePath(caseRef, `/decision-requests/${encodeURIComponent(requestId)}`)));
+  },
+  /**
+   * Record the decision with the grants of an approved request. The tokens stay on the server;
+   * `client_dwell_ms` is advisory telemetry, never the authoritative dwell.
+   */
+  recordDecision(
+    caseRef: string,
+    body: { outcome: "approve" | "decline"; decision_request_id: string; client_dwell_ms?: number },
+  ): Promise<{ case_ref: string; state: CaseState }> {
+    return call(() => api.post(casePath(caseRef, "/decision"), body));
   },
   /** Record an analyst's review of one proposed disposition. The analyst identity is the session's. */
   reviewDisposition(

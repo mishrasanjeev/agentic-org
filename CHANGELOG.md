@@ -107,7 +107,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   and consumption runs with its own shorter deadline while the case row is locked. A case change
   registers the new version with the issuer, so it supersedes an open request and revokes unused
   grants; an issuer answering `404 NOT_FOUND` for a request it no longer holds is reported as
-  `decision_request_not_found` rather than as the service being switched off.
+  `decision_request_not_found` rather than as the service being switched off. Registering a case
+  version is counted in `agenticorg_case_version_announcements_total{result}`, so an issuer that is
+  persistently unreachable is visible rather than only logged.
 - Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited
@@ -127,6 +129,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   with a different outcome and a mandatory written reason; the analyst identity comes from the
   session, a review is written once, and the form appears only while the case is awaiting a
   decision. Nothing closes a screening hit.
+- The decision action in the approvals console
+  (`ui/src/components/governed-cases/DecisionPanel.tsx`, PRD A-9): request a decision, open the
+  decision-grant issuer's own approval page in a new window, watch the approvals arrive and record
+  the decision once the grants exist. The console has no approve control at all - step-up, the
+  dwell measurement and four eyes happen on the issuer's page - and "Record decision" stays
+  disabled until the approvals are complete. The four-eyes state names the first approver and says
+  the same person will be refused; a case that changed after the approval, a missing issuer and
+  every refusal reason (`decision_required`, `decision_not_approved`, `same_approver`,
+  `case_changed`) are surfaced with their code. An outcome that differs from the memo's
+  recommendation needs a written reason, which is shown to the approver. The console's own dwell
+  (case screen render to submit) is sent as advisory telemetry only; the authoritative dwell is the
+  one the approval page measured, and it is shown per approval. A request that can never be
+  approved (the case changed under it, or the issuer reports it superseded, cancelled or expired)
+  stops the polling, drops the Record control and puts the request form back, so asking for a new
+  decision is always possible; the approval page is opened only over https, except on a console
+  served over http (a development stack).
 - `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
   cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
   provider fixture and runs the reference agents against the stack, writing the new case
@@ -571,6 +589,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   stored, never the token.
 
 ### Fixed
+- Two migrate jobs started together no longer race on an empty database:
+  `migrations/env.py` takes the same transaction-scoped advisory lock
+  `init_db()` uses before deciding whether to build the baseline, and rechecks
+  the recorded revision after acquiring it. A database holding only views,
+  materialised views or sequences counts as occupied (the check reads
+  `pg_class`, not just the tables), so a bare `alembic upgrade` refuses it
+  with `unmanaged_database_not_empty` instead of creating a baseline beside
+  them.
+- Encrypted-column migrations write their audit record to
+  `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
+  rewrites the committed records under `migrations/audit/`.
 - A synchronous credential lookup no longer breaks the next request. An
   asyncpg connection belongs to the event loop that opened it, and
   `get_provider_credential_sync` ran the resolver on a throwaway loop while
@@ -607,17 +636,6 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   so before this the observed activity was empty for every fixture and
   `web_presence.activity_mismatch` never resolved. It now resolves for seven of
   the twelve fixtures.
-- Two migrate jobs started together no longer race on an empty database:
-  `migrations/env.py` takes the same transaction-scoped advisory lock
-  `init_db()` uses before deciding whether to build the baseline, and rechecks
-  the recorded revision after acquiring it. A database holding only views,
-  materialised views or sequences counts as occupied (the check reads
-  `pg_class`, not just the tables), so a bare `alembic upgrade` refuses it
-  with `unmanaged_database_not_empty` instead of creating a baseline beside
-  them.
-- Encrypted-column migrations write their audit record to
-  `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
-  rewrites the committed records under `migrations/audit/`.
 - Agents are registered on Grantex (and re-scoped on `PATCH /agents/{id}`)
   with `tool:{connector}:{read|write|delete|admin}:{tool}` scopes from the
   connector's Grantex manifest instead of `...:execute:...`, which Grantex's

@@ -184,6 +184,8 @@ export function caseDetailFixture(overrides: Partial<CaseDetail> = {}): CaseDeta
         fields: ["names[0]"],
       },
     ],
+    decision_requests: [],
+    decision: null,
     failure_reason: null,
     transitions: [
       { from_state: null, to_state: "submitted", actor: "user:00000000-0000-0000-0000-000000000001", reason: "case_submitted", at: "2026-09-01T08:00:00Z" },

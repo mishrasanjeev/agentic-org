@@ -154,6 +154,8 @@ instead of showing one approver where four eyes were required.
 - `governed_cases.decision` — the outcome, each approver and the decision grant id consumed.
 - `governed_case_transitions` — the move to `decided`, with the actor who recorded it.
 - Metrics: `agenticorg_case_decision_requests_total{outcome,result}`,
+  `agenticorg_case_version_announcements_total{result}` (a rising `failed` count means the issuer
+  is not superseding stale requests, which AgenticOrg still refuses locally),
   `agenticorg_case_decision_grants_consumed_total{outcome,result}`,
   `agenticorg_case_console_dwell_seconds{stage}`.
 
