@@ -114,12 +114,6 @@ agent_replicas = Gauge(
     "Agent replicas running",
     ["agent_type"],
 )
-agent_budget_pct = Gauge(
-    "agenticorg_agent_budget_pct",
-    "Agent budget utilization percentage",
-    ["agent_type"],
-)
-
 # ── Tamper-evident chains and spend caps (PRD §10 alerts) ───────────
 
 chain_verifications_total = Counter(
