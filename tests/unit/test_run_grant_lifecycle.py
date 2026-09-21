@@ -163,6 +163,7 @@ def test_the_in_process_cache_is_bounded(root_grant, monkeypatch):
     assert len(pool._local_grants) == 3
 
 
+@pytest.mark.ambient_redis
 async def test_lazy_redis_client_is_created_once_per_event_loop_without_connecting():
     pool = TokenPool()
     created: list[object] = []

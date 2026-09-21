@@ -172,6 +172,26 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
         )
 
 
+@pytest.fixture(autouse=True)
+def _token_pool_never_uses_ambient_redis(request, monkeypatch):
+    """Keep the run-grant token pool off whatever Redis this machine happens to run.
+
+    ``TokenPool`` falls back to a lazily created Redis client when none was
+    set, which is right in production and wrong in a test: on a developer
+    machine (or any runner with Redis on the default URL) one test's minted
+    run grant is cached there and read back by the next, so a test asserting
+    that minting is *refused* is answered from the cache and passes for the
+    wrong reason. Tests that want Redis set ``pool.redis`` themselves; the
+    integration suite and anything marked ``ambient_redis`` are left alone.
+    """
+    node_id = request.node.nodeid.replace("\\", "/")
+    if node_id.startswith("tests/integration/") or request.node.get_closest_marker("ambient_redis"):
+        return
+    from auth.token_pool import TokenPool
+
+    monkeypatch.setattr(TokenPool, "_redis_client", lambda self: self.redis)
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
@@ -183,6 +203,10 @@ def pytest_configure(config):
     )
     config.addinivalue_line(
         "markers", "model_cassette: uses recorded model calls (added automatically; selected by the nightly re-record)"
+    )
+    config.addinivalue_line(
+        "markers",
+        "ambient_redis: may create the token pool's lazy Redis client (it must not connect)",
     )
 
 
