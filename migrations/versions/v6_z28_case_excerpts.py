@@ -35,6 +35,10 @@ the development database) - no deployed environment is in that state, because th
 never been released.
 """
 
+# ENCRYPTED_MIGRATION_HELPER_EXEMPT: adds an empty column, transforms no ciphertext, and the
+# helper's resumable batching reads alembic_migration_progress, which does not exist on the
+# create_all + stamp path this repository supports (see the docstring above).
+
 from alembic import op
 from sqlalchemy import text
 
