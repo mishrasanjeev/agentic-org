@@ -152,7 +152,7 @@
         "path": "/",
         "http_status": 200,
         "media_type": "text/html",
-        "content": "Hand-finished brass lanterns, made in our workshop since 2019."
+        "content": "<!doctype html><html><head><title>Brightwater Lanterns - brass lantern manufacturing</title></head><body><h1>Lantern manufacturing in Exampleton</h1><p>Hand-finished brass lanterns, made in our workshop since 2019.</p></body></html>"
       }
     ]
   }

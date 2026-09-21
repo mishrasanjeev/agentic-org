@@ -148,6 +148,17 @@ def test_upgrade_command_function_is_still_named_upgrade() -> None:
     assert "fn=upgrade" in source
 
 
+def test_env_py_takes_the_advisory_lock_before_deciding_a_database_is_empty() -> None:
+    source = (REPO_ROOT / "migrations" / "env.py").read_text(encoding="utf-8")
+    lock = source.index("pg_advisory_xact_lock")
+    assert source.index("MIGRATION_ADVISORY_LOCK = 4815162342") < lock
+    # The emptiness check and the bootstrap both happen after the lock.
+    assert lock < source.index("existing_relations(connection)")
+    assert lock < source.index("create_orm_baseline(connection)")
+    # And the revision is read again once the lock is held.
+    assert source.count("get_current_heads()") >= 2
+
+
 def test_env_py_bootstraps_inside_the_upgrade_transaction() -> None:
     source = (REPO_ROOT / "migrations" / "env.py").read_text(encoding="utf-8")
     bootstrap_call = source.index("_bootstrap_empty_database(connection)")

@@ -9,7 +9,8 @@ Alembic cutover therefore starts from the ORM schema stamped at
 ``v480_baseline``; the revisions after the baseline are written to be
 idempotent against that shape (``migrations/README.md``).
 
-``migrations/env.py`` calls :func:`plan_empty_database_bootstrap` before an
+``migrations/env.py`` takes the migration advisory lock, then calls
+:func:`plan_empty_database_bootstrap` before an
 upgrade and, when it returns ``True``, :func:`create_orm_baseline` and a stamp
 at :data:`BASELINE_REVISION`, so a bare ``alembic upgrade head`` on an empty
 database follows the same path as ``scripts/alembic_migrate.py``. Anything it
@@ -66,6 +67,26 @@ def target_reaches_baseline(script: ScriptDirectory, destination: object) -> boo
     return BASELINE_REVISION in revisions
 
 
+RELATION_NAMES_SQL = """
+    SELECT c.relname
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = current_schema()
+      AND c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
+"""
+
+
+def existing_relations(connection: Connection) -> list[str]:
+    """Every relation in the target schema, not only the ordinary tables.
+
+    A database holding a view, a materialised view, a sequence or a foreign
+    table is not empty: creating the ORM baseline in it can collide with what
+    is already there, so the bootstrap must refuse it rather than treat it as
+    a clean database.
+    """
+    return list(connection.execute(text(RELATION_NAMES_SQL)).scalars())
+
+
 def plan_empty_database_bootstrap(
     *,
     command: str | None,
@@ -87,7 +108,7 @@ def plan_empty_database_bootstrap(
     if existing:
         raise EmptyDatabaseBootstrapError(
             REASON_UNMANAGED_DATABASE,
-            "the database has tables but no Alembic revision (for example "
+            "the database holds relations but no Alembic revision (for example "
             f"{', '.join(existing[:5])}). Run `python scripts/alembic_migrate.py`, "
             f"which stamps a legacy schema at {BASELINE_REVISION} before upgrading.",
         )

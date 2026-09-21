@@ -74,9 +74,19 @@ class EncryptedMigrationError(RuntimeError):
 # ─────────────────────────────────────────────────────────────────
 
 
+AUDIT_DIR_ENV = "AGENTICORG_MIGRATION_AUDIT_DIR"
+
+
 def _audit_dir() -> Path:
-    """Return the migrations/audit directory; create if missing."""
-    p = Path(__file__).resolve().parents[2] / "migrations" / "audit"
+    """Return the audit directory; create if missing.
+
+    ``migrations/audit`` in a checkout, which is where the committed records
+    live. A test that re-runs a migration points ``AGENTICORG_MIGRATION_AUDIT_DIR``
+    at a temporary directory instead, so a test run leaves the tracked records
+    alone.
+    """
+    override = os.getenv(AUDIT_DIR_ENV)
+    p = Path(override) if override else Path(__file__).resolve().parents[2] / "migrations" / "audit"
     p.mkdir(parents=True, exist_ok=True)
     return p
 
