@@ -1,6 +1,11 @@
-54  # cross-loop uses of a guarded database pool tolerated in a test run.
+54  # cross-loop guard trips tolerated in a test run.
+#
+# Trips, not distinct violations: one logical cross-loop use trips the guard
+# once on the shared engine (the session wrapper) and twice on an engine
+# without pool_pre_ping (the wrapper and the checkout hook), so 54 trips is
+# roughly 27 distinct uses. What matters for a ratchet is that the number is
+# monotonic and reproducible.
 #
 # Measured by the CI integration job (pytest tests/integration tests/regression)
 # on 2026-09-22; the unit job reports 0. See FINDINGS A-58. This number only
-# moves down: a run that exceeds it fails, so a new cross-loop use is caught
-# where it is introduced.
+# moves down, which scripts/check_cross_loop_baseline.py enforces against main.

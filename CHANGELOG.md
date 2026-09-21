@@ -605,9 +605,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   persistent loop; everywhere else the work runs through
   `core.database.run_db_coroutine_sync` on a private engine.
 - The shared database pool now reports when it is used from a second event
-  loop: when a session is opened there, when the pool opens a connection there,
-  and when it hands an existing connection out there — the last covers a caller
-  that binds `async_session_factory` itself and is given a warm connection.
+  loop: when a session is opened there (which covers a caller that binds
+  `async_session_factory` itself and is handed a warm connection) and when the
+  pool opens a connection there. A third check on connection checkout only
+  fires on an engine without `pool_pre_ping`, because the ping runs on the
+  foreign loop and fails first.
   It binds to the first loop that uses it and logs `db_cross_loop_use` once per
   foreign loop with the remedy, counting
   `agenticorg_db_cross_loop_checkouts_total{mode}`, instead of leaving the
@@ -616,8 +618,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   a `CrossLoopConnectionError` at the point of the mistake and `off` silences
   it; warn is the default in production, where the call fails either way and
   raising would turn latent pool problems into new 500s. A test run counts the
-  uses and fails when it exceeds the committed `cross_loop_baseline.txt` (54,
-  measured in CI; the unit job reports 0), so the existing debt (FINDINGS
+  guard's trips and fails when they exceed the committed
+  `cross_loop_baseline.txt` (54 trips, measured in CI, roughly 27 distinct
+  uses; the unit job trips it 0 times), and `scripts/check_cross_loop_baseline.py`
+  refuses a raised baseline, so the existing debt (FINDINGS
   A-58) burns down and a new violation fails immediately.
 - `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
   entrypoints and in the development stack, so a worker started with

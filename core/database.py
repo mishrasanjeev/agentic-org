@@ -120,9 +120,14 @@ CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
 CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
 _LOOP_KEY = "agenticorg_owning_loop"
 
+# One logical cross-loop use trips the guard more than once: the wrapper sees
+# the session and, where ``pool_pre_ping`` is off, the ``checkout`` hook sees
+# the connection too. The metric therefore counts *trips*, not distinct
+# mistakes — fine for a ratchet, which needs only to be monotonic and
+# reproducible, but do not read it as a count of violations.
 _cross_loop_checkouts_total = Counter(
     "agenticorg_db_cross_loop_checkouts_total",
-    "Uses of a pooled engine from an event loop other than the one that owns it",
+    "Guard trips: a pooled engine used from an event loop other than the one that owns it",
     ["mode"],
 )
 
@@ -143,7 +148,10 @@ def _initial_guard_mode() -> str:
     ``warn`` by default: warning changes no outcome (the request fails exactly
     as it did) but turns a mystifying downstream failure into a named one,
     while raising would turn latent pool problems into new 500s in production.
-    CI arms it with ``raise`` and a ratchet (``cross_loop_baseline.txt``).
+    Nothing in CI sets this variable, so CI runs on the same default and holds
+    the line with the ratchet instead (``cross_loop_baseline.txt``, counted in
+    ``tests/conftest.py``). ``raise`` is for a developer chasing one of these,
+    and for the tests that pin the refusal.
     """
     mode = os.getenv(CROSS_LOOP_GUARD_ENV, "warn").strip().casefold()
     return mode if mode in CROSS_LOOP_GUARD_MODES else "warn"
@@ -237,12 +245,16 @@ def install_cross_loop_guard(target: AsyncEngine) -> None:
     """Bind ``target``'s pool to the first event loop that uses it.
 
     Installed on the shared engine below; a pooled engine built by a test can
-    ask for the same protection. Three places check: opening a session through
-    ``current_session_factory``, the pool opening a connection, and the pool
-    handing an existing connection out. The third is the warm-pool case — a
-    caller that binds ``async_session_factory`` itself (FINDINGS A-53) opens no
-    new connection, and without it the guard would be silent exactly where the
-    failure is most confusing.
+    ask for the same protection.
+
+    Two hooks are added here — the pool opening a connection, and the pool
+    handing an existing one out — and :class:`_GuardedSessionFactory` checks
+    when a session is opened. On the production configuration
+    (``pool_pre_ping=True``) only two of the three ever fire: the ping runs on
+    the foreign loop and fails before the ``checkout`` listener is reached, so
+    a warm-pool reuse is caught by the factory wrapper, and a cold pool by the
+    ``connect`` hook. The ``checkout`` hook earns its place on an engine
+    without pre-ping, where it is the only one that sees a reuse.
     """
     _guarded_engines[target] = {"loop": None}
 
