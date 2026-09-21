@@ -70,11 +70,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited
   underwriting memo (every evidence entry naming the provider, upstream record, field and
-  retrieval time, linked to the cited-records index and to attached excerpt references), the
+  retrieval time, linked to the cited-records index; an excerpt reference is linked when the
+  memo carries the excerpt and labelled as not attached when it does not, which today is every
+  case - see FINDINGS A-48), the
   policy score with every fired rule and the evidence values it read, and the case history.
   Sections the provider could not supply are shown as unchecked rather than clear. The
   screens are read-only: no decision, review or state change is made from them. A tenant
   without `governed_cases.enabled` is told so instead of seeing an empty queue.
+- Screening disposition review in the approvals console
+  (`ui/src/components/governed-cases/ScreeningDispositions.tsx`, PRD §3 US-3): each hit shows
+  the list entry it concerns, the proposed outcome, the confidence band as metadata, the
+  rationale, the per-identifier comparison table (name, date of birth, nationality, address,
+  associated entities) and the cited evidence. An analyst accepts the proposal or overrides it
+  with a different outcome and a mandatory written reason; the analyst identity comes from the
+  session, a review is written once, and the form appears only while the case is awaiting a
+  decision. Nothing closes a screening hit.
 - `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
   cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
   provider fixture and runs the reference agents against the stack, writing the new case
