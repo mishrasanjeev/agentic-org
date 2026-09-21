@@ -63,6 +63,43 @@ def _example(schema_name: str) -> dict[str, Any]:
 _FIXTURES = discover_example_fixtures(EXAMPLES_DIR)
 
 
+def _policy_references(document: Any) -> list[dict[str, Any]]:
+    """Every ``{policy_id, version, ...}`` object anywhere in a document."""
+    found: list[dict[str, Any]] = []
+    if isinstance(document, dict):
+        if "policy_id" in document and "version" in document:
+            found.append(document)
+        for value in document.values():
+            found.extend(_policy_references(value))
+    elif isinstance(document, list):
+        for item in document:
+            found.extend(_policy_references(item))
+    return found
+
+
+@pytest.mark.parametrize(("schema_name", "path"), _FIXTURES, ids=[f"{n}/{p.stem}" for n, p in _FIXTURES])
+def test_example_documents_name_a_policy_version_that_exists(schema_name: str, path: Path) -> None:
+    """A shipped example must not pin a policy version the repository no longer has.
+
+    Examples are copied into documentation and used as fixtures, so a version
+    that went up in a policy file and not here is drift nobody notices.
+    """
+    from core.policy import EXAMPLES_DIR as POLICY_EXAMPLES_DIR
+    from core.policy import load_policy
+
+    for reference in _policy_references(_load_json(path)):
+        policy_file = POLICY_EXAMPLES_DIR / f"{reference['policy_id']}.yaml"
+        assert policy_file.is_file(), (
+            f"{path.name} names policy {reference['policy_id']!r}, which is not shipped in "
+            f"{POLICY_EXAMPLES_DIR}"
+        )
+        policy = load_policy(policy_file)
+        assert reference["version"] == policy.version, (
+            f"{path.name} pins {reference['policy_id']} {reference['version']}, but the shipped "
+            f"policy is {policy.version}"
+        )
+
+
 # --- schemas ------------------------------------------------------------------------------------
 
 

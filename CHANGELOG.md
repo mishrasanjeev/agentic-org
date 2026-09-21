@@ -66,6 +66,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg_provider_webhook_receipts_total{outcome="unbound"}`.
 
 ### Added
+- Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
+  `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
+  state counts, policy tier and proposed recommendation, and a case screen with the cited
+  underwriting memo (every evidence entry naming the provider, upstream record, field and
+  retrieval time, linked to the cited-records index and to attached excerpt references), the
+  policy score with every fired rule and the evidence values it read, and the case history.
+  Sections the provider could not supply are shown as unchecked rather than clear. The
+  screens are read-only: no decision, review or state change is made from them. A tenant
+  without `governed_cases.enabled` is told so instead of seeing an empty queue.
+- `make seed-cases` (`scripts/seed_governed_cases.py`): development-only sample governed
+  cases - turns `governed_cases.enabled` on for the seeded tenant, submits one case per mock
+  provider fixture and runs the reference agents against the stack, writing the new case
+  references for the browser suite. It refuses any runtime that is not development or test.
+- Browser end-to-end coverage for the console screens (`ui/e2e/governed-cases.spec.ts`), with
+  an axe accessibility scan (WCAG 2.1 A and AA) and a phone-width pass; the run regenerates
+  the screenshots in `docs/console/governed-cases.md`.
 - Governance documentation (`docs/governance/README.md`): how grants, policy
   scores and human decisions interact for governed cases - read-only tool sets
   and the grant check at the tool gateway, deterministic policy tiers that
@@ -513,7 +529,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `RegistryStatus` member, so an insolvent business can reach `blocked`.
   `verification.overdue_filings` is gone from the evidence mapping; a
   filings-overdue signal has to reach the provider interface, the mock provider
-  and the conformance suite first (FINDINGS A-48). Dropping a `medium` rule
+  and the conformance suite first (FINDINGS A-51). Dropping a `medium` rule
   can make a case less strict, which `docs/policies/authoring.md` treats as a
   major change: UK example `2.0.0`, US example `1.1.0`.
 - The declared-activity vocabulary is published
