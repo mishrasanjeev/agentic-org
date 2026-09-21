@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from connectors.framework.verification_provider import VerificationProvider
 from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+from core.cases import excerpts as case_excerpts
 from core.cases.decisions import DecisionVerifier, RequireDecisionGrant, record_decision
 from core.cases.states import CaseError, CaseState
 from core.cases.store import CASE_REF_RE, get_case, record_update, transition
@@ -315,6 +316,9 @@ async def _store_investigation(
         case.ownership_graph = outcome.ownership_graph
         case.screening_results = outcome.screening_results
         case.parties = outcome.parties
+        case.excerpts_encrypted = await case_excerpts.store(
+            tenant, case.excerpts_encrypted, outcome.excerpts, now=runtime.clock().isoformat()
+        )
         case.screening_dispositions = []
         await transition(
             session, case, CaseState.AWAITING_DECISION, actor=actor, reason="memo_ready", now=runtime.clock()
@@ -361,6 +365,7 @@ async def dispose_screening_hits(
     provider = runtime.provider_factory(provider_name)
     proposed: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
+    excerpts: list[dict[str, Any]] = []
     failures: list[str] = []
     for result in results:
         party = next((p for p in parties if p.get("name") == result["subject"]["name"]), None)
@@ -384,6 +389,7 @@ async def dispose_screening_hits(
                 run_id=_run_id(tenant, case_ref, "disposition"),
             )
             records.append(outcome.case_record())
+            excerpts.extend(outcome.excerpts)
             if outcome.disposition is None:
                 failures.append(outcome.failure_reason)
             else:
@@ -395,6 +401,9 @@ async def dispose_screening_hits(
             raise CaseError("case_version_conflict", f"expected {version}, found {case.version}")
         case.screening_dispositions = [*(case.screening_dispositions or []), *proposed]
         case.agent_records = [*(case.agent_records or []), *records]
+        case.excerpts_encrypted = await case_excerpts.store(
+            tenant, case.excerpts_encrypted, excerpts, now=runtime.clock().isoformat()
+        )
         await record_update(session, case, now=runtime.clock())
         version, had_requests = case.version, bool(case.decision_requests)
     await announce_case_version(runtime, case_ref, version, only_if=had_requests)

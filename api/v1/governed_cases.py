@@ -33,6 +33,7 @@ from api.deps import get_current_tenant, get_current_user
 from api.route_metadata import route_meta
 from core.agents.business_underwriter.information_request import InformationRequestError, propose, render
 from core.agents.screening_disposition import DispositionReviewError, DispositionReviewRequest, apply_review
+from core.cases import excerpts as case_excerpts
 from core.cases.runtime import (
     CaseRuntime,
     announce_case_version,
@@ -262,6 +263,10 @@ async def get_governed_case(
                 "screening_dispositions": case.screening_dispositions,
                 "parties": case.parties,
                 "information_requests": case.information_requests,
+                # What the run actually fetched, so a citation can be checked against it, and the
+                # excerpts the case holds by reference (the passages have their own route).
+                "tool_calls": _tool_calls(case),
+                "excerpts": [case_excerpts.reference(excerpt) for excerpt in case.excerpts_encrypted or []],
                 "decision_requests": case.decision_requests,
                 "decision": case.decision,
                 "failure_reason": case.failure_reason,
@@ -276,6 +281,97 @@ async def get_governed_case(
                     for t in history
                 ],  # fmt: skip
             }
+    except CaseError as exc:
+        return _error(exc)
+
+
+def _tool_calls(case: Any) -> list[dict[str, Any]]:
+    """Every provider call the case's agent runs made: the tool, its outcome and the records it returned."""
+    calls: list[dict[str, Any]] = []
+    for record in case.agent_records or []:
+        agent = str(record.get("agent") or "")
+        run_id = str(record.get("run_id") or "")
+        for call in record.get("tool_calls") or []:
+            calls.append(
+                {
+                    "agent": agent,
+                    "run_id": run_id,
+                    "provider": call.get("provider"),
+                    "tool": call.get("tool"),
+                    "outcome": call.get("outcome"),
+                    "reason": call.get("reason"),
+                    "started_at": call.get("started_at"),
+                    "record_ids": call.get("record_ids") or [],
+                    "output_sha256": call.get("output_sha256"),
+                }
+            )
+    return calls
+
+
+@router.get("/governed-cases/{case_ref}/excerpts/{excerpt_ref}")
+@route_meta(auth_required=True, tenant_required=True, scope="approvals.governed_cases.read", rate_limit="standard")
+async def get_case_excerpt(
+    case_ref: str,
+    excerpt_ref: str,
+    tenant_id: str = Depends(get_current_tenant),
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """The passage behind one citation, decrypted and re-hashed before it is returned.
+
+    Untrusted provider content: returned as data for a human to read, never interpreted here and
+    never near a prompt. The console prints the digest beside the passage, so the passage has to
+    match it: one that does not is refused (``excerpt_integrity_failed``), not shown with a digest
+    that would make it look verified.
+    """
+    try:
+        await runtime.require_enabled(uuid.UUID(tenant_id))
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref)
+            entry = next(
+                (e for e in case.excerpts_encrypted or [] if str(e.get("excerpt_ref")) == excerpt_ref), None
+            )
+        if entry is None:
+            raise CaseError("excerpt_not_found", status=404)
+        try:
+            text = case_excerpts.read(entry)
+        except case_excerpts.ExcerptError as exc:
+            status = 404 if exc.reason == "excerpt_not_held" else 409
+            raise CaseError(exc.reason, exc.detail, status=status) from exc
+        return {**case_excerpts.reference(entry), "text": text, "verified": True}
+    except CaseError as exc:
+        return _error(exc)
+
+
+@router.delete("/governed-cases/{case_ref}/excerpts")
+@route_meta(
+    auth_required=True, tenant_required=True, scope="approvals.governed_cases.write", rate_limit="standard",
+    idempotency="clearing-twice-changes-nothing", audit_event="governed_cases.excerpts_forgotten",
+)  # fmt: skip
+async def forget_case_excerpts(
+    case_ref: str,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    runtime: CaseRuntime = Depends(get_case_runtime),
+) -> Any:
+    """Drop the stored passages, keeping what the memo cites.
+
+    Data minimisation: the passages are provider records about people. Forgetting them leaves the
+    references, digests and the memo untouched - the case still says what it cited - and the
+    console then says the passage is no longer held.
+    """
+    try:
+        actor = human_actor_for(request)
+        await runtime.require_enabled(uuid.UUID(tenant_id))
+        async with _session(tenant_id) as session:
+            case = await get_case(session, tenant_id, case_ref, for_update=True)
+            held = sum(1 for e in case.excerpts_encrypted or [] if case_excerpts.CIPHERTEXT_KEY in e)
+            case.excerpts_encrypted = case_excerpts.forget(case.excerpts_encrypted)
+            await record_update(session, case, now=runtime.clock())
+            version, had_requests = case.version, bool(case.decision_requests)
+        await announce_case_version(runtime, case_ref, version, only_if=had_requests)
+        logger.info("case_excerpts_forgotten", case_ref=case_ref, actor=actor, forgotten=held)
+        runtime.push_kick(uuid.UUID(tenant_id))
+        return {"case_ref": case_ref, "forgotten": held}
     except CaseError as exc:
         return _error(exc)
 

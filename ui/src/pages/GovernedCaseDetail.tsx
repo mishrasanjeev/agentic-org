@@ -152,7 +152,12 @@ export default function GovernedCaseDetail() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           {memo ? (
-            <MemoView memo={memo} />
+            <MemoView
+              memo={memo}
+              caseRef={businessCase.case_id}
+              toolCalls={detail.tool_calls ?? []}
+              excerpts={detail.excerpts ?? []}
+            />
           ) : (
             <p className="rounded-lg border border-dashed px-4 py-3 text-sm" data-testid="memo-not-ready">
               {NO_MEMO_MESSAGES[businessCase.state] ?? "There is no memo for this case."}

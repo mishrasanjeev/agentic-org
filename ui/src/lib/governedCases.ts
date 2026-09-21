@@ -148,6 +148,36 @@ export interface CaseSummary {
   updated_at: string | null;
 }
 
+/** One provider call an agent run made, as the case recorded it. */
+export interface CaseToolCall {
+  agent: string;
+  run_id: string;
+  provider?: string;
+  tool: string;
+  outcome: string;
+  reason: string;
+  started_at: string;
+  record_ids: string[];
+  output_sha256: string | null;
+}
+
+/** An excerpt the case holds, by reference. The passage itself has its own route. */
+export interface CaseExcerptReference {
+  excerpt_ref: string;
+  provider: string;
+  record_id: string;
+  media_type: string;
+  sha256: string;
+  fields?: string[];
+}
+
+export interface CaseExcerpt extends CaseExcerptReference {
+  /** The passage as the provider returned it. Untrusted content: rendered as text, never as markup. */
+  text: string;
+  /** The server re-hashed the stored passage and it matched the digest below. */
+  verified?: boolean;
+}
+
 export interface CaseDetail {
   case: BusinessCase;
   memo: UnderwritingMemo | null;
@@ -157,6 +187,8 @@ export interface CaseDetail {
   screening_dispositions: ScreeningDisposition[];
   parties: unknown[];
   information_requests: unknown[];
+  tool_calls: CaseToolCall[];
+  excerpts: CaseExcerptReference[];
   decision_requests: StoredDecisionRequest[];
   decision: CaseDecision | null;
   failure_reason: string | null;
@@ -336,6 +368,11 @@ const REASON_MESSAGES: Record<string, string> = {
   request_failed: "The request failed.",
   request_invalid: "The request was not valid.",
   case_state_unknown: "That case state filter is not recognised.",
+  excerpt_not_found: "The case does not hold the passage behind this citation.",
+  excerpt_not_held: "The passage behind this citation is no longer held; only its digest remains.",
+  excerpt_integrity_failed:
+    "The stored passage no longer matches the digest the memo cites, so it was not shown. Treat this case as suspect and tell whoever runs the platform.",
+  excerpt_unreadable: "The stored passage could not be read back.",
   transition_not_allowed:
     "This action needs the case to be awaiting a decision, and it is in another state now. Reload the case.",
   case_version_conflict: "The case changed while you were working on it. Reload it and try again.",
@@ -431,6 +468,10 @@ export const governedCasesApi = {
   },
   get(caseRef: string): Promise<CaseDetail> {
     return call(() => api.get(casePath(caseRef)));
+  },
+  /** The passage behind one citation. Fetched only when a reviewer asks to read it. */
+  excerpt(caseRef: string, excerptRef: string): Promise<CaseExcerpt> {
+    return call(() => api.get(casePath(caseRef, `/excerpts/${encodeURIComponent(excerptRef)}`)));
   },
   /** Ask a named person to decide this case on the issuer's approval page. */
   requestDecision(
@@ -531,6 +572,27 @@ export function citationAnchors(memo: UnderwritingMemo): {
     recordId: (provider, recordId) => records.get(key(provider, recordId)) ?? null,
     excerptId: (ref) => excerpts.get(ref) ?? null,
   };
+}
+
+/** Provider and record together: a record id alone could be claimed under another provider. */
+export function citedRecordKey(provider: string, recordId: string): string {
+  return `${provider}\u001f${recordId}`;
+}
+
+/**
+ * The upstream records this case's agent runs actually fetched, from their own tool calls.
+ *
+ * A citation naming a record that is not in this set was not verified by the run that wrote the
+ * memo, and the screens say so rather than presenting it as traced. Keys carry the provider as
+ * well as the record id, so a citation cannot borrow a real record id under another provider.
+ */
+export function retrievedRecordIds(detail: { tool_calls?: CaseToolCall[] }): Set<string> {
+  const ids = new Set<string>();
+  for (const call of detail.tool_calls ?? []) {
+    const provider = call.provider ?? "";
+    for (const id of call.record_ids ?? []) ids.add(citedRecordKey(provider, id));
+  }
+  return ids;
 }
 
 /** Every evidence entry in the memo, section evidence first, then each finding's. */

@@ -188,6 +188,83 @@ def cited_record_ids(value: Any) -> tuple[str, ...]:
     return tuple(sorted({record_id for _, record_id, _ in cited_evidence(value)}))
 
 
+MAX_EXCERPT_CHARS = 8_000
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedExcerpt:
+    """The passage a citation points at, as the provider returned it.
+
+    A provider cites an ``excerpt_ref`` on its evidence; without the passage itself a reviewer can
+    only confirm that a record was cited, not what it said (PRD A-6). The gateway keeps the record
+    the evidence is attached to, exactly as it arrived, so the console and the evidence package can
+    show it and anyone can re-hash it.
+    """
+
+    excerpt_ref: str
+    provider: str
+    record_id: str
+    media_type: str
+    sha256: str
+    text: str
+    fields: tuple[str, ...] = ()
+
+    def reference(self) -> dict[str, Any]:
+        """The memo's ``excerpts[]`` entry: what it is and its digest, never the passage."""
+        return {
+            "excerpt_ref": self.excerpt_ref,
+            "provider": self.provider,
+            "record_id": self.record_id,
+            "media_type": self.media_type,
+            "sha256": self.sha256,
+        }
+
+    def stored(self) -> dict[str, Any]:
+        """The case's own copy, which carries the passage."""
+        return {**self.reference(), "fields": list(self.fields), "text": self.text}
+
+
+def _excerpt_text(node: Mapping[str, Any]) -> str:
+    """The record as it arrived, without its evidence wrapper, as canonical JSON."""
+    body = {key: value for key, value in node.items() if key != "evidence"}
+    text = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+    return text[:MAX_EXCERPT_CHARS]
+
+
+def captured_excerpts(value: Any) -> tuple[CapturedExcerpt, ...]:
+    """Every excerpt a response's evidence cites, with the record it is attached to."""
+    found: dict[str, CapturedExcerpt] = {}
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            evidence = node.get("evidence")
+            if isinstance(evidence, list):
+                for entry in evidence:
+                    if not isinstance(entry, dict) or not entry.get("excerpt_ref"):
+                        continue
+                    ref = str(entry["excerpt_ref"])
+                    text = _excerpt_text(node)
+                    existing = found.get(ref)
+                    fields = tuple(sorted({*(existing.fields if existing else ()), str(entry.get("field") or "")}))
+                    found[ref] = CapturedExcerpt(
+                        excerpt_ref=ref,
+                        provider=str(entry.get("provider") or ""),
+                        record_id=str(entry.get("record_id") or ""),
+                        media_type="application/json",
+                        sha256="sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                        text=text,
+                        fields=tuple(f for f in fields if f),
+                    )
+            for item in node.values():
+                walk(item)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(_plain(value))
+    return tuple(found[ref] for ref in sorted(found))
+
+
 def _utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -204,6 +281,8 @@ class ProviderToolGateway:
     records: list[ToolCallRecord] = field(default_factory=list)
     #: ``(provider, record_id, field)`` of every evidence entry in every response received.
     retrieved_evidence: set[tuple[str, str, str]] = field(default_factory=set)
+    #: The passage behind every ``excerpt_ref`` any response cited, keyed by that reference.
+    excerpts: dict[str, CapturedExcerpt] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         unknown = sorted(set(self.tool_set) - set(READ_TOOLS))
@@ -276,6 +355,8 @@ class ProviderToolGateway:
             return result
         _provider_call_seconds.labels(capability=capability.value).observe(time.monotonic() - begun)
         self.retrieved_evidence.update(cited_evidence(result))
+        for excerpt in captured_excerpts(result):
+            self.excerpts.setdefault(excerpt.excerpt_ref, excerpt)
         outcome = "pending" if isinstance(result, Pending) else "ok"
         _provider_calls_total.labels(capability=capability.value, outcome=outcome).inc()
         self._record(tool, outcome, "", request, result, started)
@@ -333,5 +414,7 @@ __all__ = [
     "ToolSetError",
     "canonical_sha256",
     "cited_evidence",
+    "CapturedExcerpt",
+    "captured_excerpts",
     "cited_record_ids",
 ]

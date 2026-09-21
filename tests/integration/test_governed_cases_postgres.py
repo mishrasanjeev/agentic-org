@@ -10,6 +10,7 @@ refusal, decisions refused without a decision grant, row-level security between 
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -18,6 +19,7 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 import yaml
@@ -46,6 +48,40 @@ _PROBE_ROLE = "governed_case_rls_probe"
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
 pytestmark = pytest.mark.skipif(not _DB_URL, reason="integration tests require AGENTICORG_DB_URL")
+
+
+async def _stored_excerpts(tenant_id: str, case_ref: str) -> list[dict[str, Any]]:
+    from core.database import get_tenant_session
+
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        case = await get_case(session, tenant_id, case_ref)
+        return [dict(entry) for entry in case.excerpts_encrypted or []]
+
+
+async def _tamper_with_excerpt(tenant_id: str, case_ref: str, excerpt_ref: str) -> None:
+    """Rewrite one stored passage, leaving its digest: exactly what an integrity check is for."""
+    from core.crypto.tenant_secrets import encrypt_for_tenant
+    from core.database import get_tenant_session
+
+    async with get_tenant_session(uuid.UUID(tenant_id)) as session:
+        case = await get_case(session, tenant_id, case_ref, for_update=True)
+        entries = [dict(entry) for entry in case.excerpts_encrypted or []]
+        for entry in entries:
+            if entry["excerpt_ref"] == excerpt_ref:
+                entry["text_encrypted"] = await encrypt_for_tenant(
+                    "TAMPERED - not what the provider returned", uuid.UUID(tenant_id)
+                )
+        case.excerpts_encrypted = entries
+
+
+def _memo_evidence(memo: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Every evidence entry in a memo, with where it was found."""
+    found: list[tuple[str, dict[str, Any]]] = []
+    for section in memo["sections"]:
+        found += [(section["section_id"], item) for item in section["evidence"]]
+        for finding in section["findings"]:
+            found += [(f"{section['section_id']}:{finding['code']}", item) for item in finding["evidence"]]
+    return found
 
 
 def _respond(messages: list[BaseMessage]) -> AIMessage:
@@ -637,6 +673,76 @@ async def test_reviews_and_approvals_need_the_case_awaiting_decision(
         assert late_review.status_code == 409 and late_review.json()["error"]["reason"] == "transition_not_allowed"
         detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
         assert detail["information_requests"][0]["status"] == "awaiting_approval"
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+async def test_the_case_holds_the_passage_behind_every_citation_and_serves_it(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any
+) -> None:
+    """PRD A-6: a reviewer can read what a citation points at, not only which record it named."""
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from tests.integration.conftest import TEST_TENANT_ID
+
+    scripted_model([_respond])
+    app.dependency_overrides[routes.get_case_runtime] = lambda: _runtime()
+    base = "/api/v1/governed-cases"
+    try:
+        application = MockProvider().fixture("us-hostile-web-glintmoor").application
+        case_ref = (await client.post(base, json={"application": application}, headers=auth_headers)).json()["case_ref"]
+        assert (await client.post(f"{base}/{case_ref}/investigate", headers=auth_headers)).status_code == 202
+
+        detail = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
+        memo = detail["memo"]
+        cited = {e["excerpt_ref"] for _, e in _memo_evidence(memo) if e.get("excerpt_ref")}
+        assert cited, "the mock provider cites excerpts on this case"
+        attached = {excerpt["excerpt_ref"] for excerpt in memo["excerpts"]}
+        assert cited <= attached, sorted(cited - attached)
+
+        held = {excerpt["excerpt_ref"] for excerpt in detail["excerpts"]}
+        # Every reference the memo attaches has a passage and nothing else is held: the provider's
+        # records and the sandboxed extractor's own passages, which used to be attached and lost.
+        assert attached == held, sorted(attached ^ held)
+        assert cited <= held, sorted(cited - held)
+        # The list carries references only; the passages have their own route.
+        assert all("text" not in excerpt for excerpt in detail["excerpts"])
+
+        # Every cited record is one this run's own tool calls returned.
+        retrieved = {record_id for call in detail["tool_calls"] for record_id in call["record_ids"]}
+        assert {e["record_id"] for _, e in _memo_evidence(memo)} <= retrieved
+        assert all(call["tool"] for call in detail["tool_calls"])
+
+        reference = sorted(cited)[0]
+        passage = await client.get(f"{base}/{case_ref}/excerpts/{quote(reference, safe='')}", headers=auth_headers)
+        assert passage.status_code == 200, passage.text
+        body = passage.json()
+        assert body["excerpt_ref"] == reference and body["text"] and body["verified"] is True
+        assert body["sha256"] == "sha256:" + hashlib.sha256(body["text"].encode("utf-8")).hexdigest()
+
+        missing = await client.get(f"{base}/{case_ref}/excerpts/excerpt:not-a-reference", headers=auth_headers)
+        assert missing.status_code == 404 and missing.json()["error"]["reason"] == "excerpt_not_found"
+
+        # At rest the passage is ciphertext, not the provider's record in clear text.
+        stored = await _stored_excerpts(TEST_TENANT_ID, case_ref)
+        entry = next(e for e in stored if e["excerpt_ref"] == reference)
+        assert "text" not in entry and entry["text_encrypted"]
+        assert body["text"][:40] not in json.dumps(stored)
+
+        # A passage that no longer matches its digest is refused, never shown beside that digest.
+        await _tamper_with_excerpt(TEST_TENANT_ID, case_ref, reference)
+        tampered = await client.get(f"{base}/{case_ref}/excerpts/{quote(reference, safe='')}", headers=auth_headers)
+        assert tampered.status_code == 409
+        assert tampered.json()["error"]["reason"] == "excerpt_integrity_failed"
+        assert "TAMPERED" not in tampered.text
+
+        # Forgetting the passages keeps every reference the memo cites.
+        forgotten = await client.delete(f"{base}/{case_ref}/excerpts", headers=auth_headers)
+        assert forgotten.status_code == 200 and forgotten.json()["forgotten"] >= 1
+        after = (await client.get(f"{base}/{case_ref}", headers=auth_headers)).json()
+        assert {e["excerpt_ref"] for e in after["excerpts"]} == held
+        gone = await client.get(f"{base}/{case_ref}/excerpts/{quote(reference, safe='')}", headers=auth_headers)
+        assert gone.status_code == 404 and gone.json()["error"]["reason"] == "excerpt_not_held"
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
 

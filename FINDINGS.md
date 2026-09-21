@@ -572,25 +572,6 @@ Remove an entry in the pull request that fixes it.
   producing the same policy outcome as the hostile copy minus the injection),
   with a test that the case's policy result fires the rule on a true mismatch.
 
-## A-48 — Memo evidence cites excerpts the memo never carries, and no excerpt text is stored
-
-- **Found:** rendering memo citations in the approvals console against the
-  local stack (PRD A-9, 2026-09-20).
-- **What:** provider evidence carries `excerpt_ref` values (for example
-  `excerpt:mock-watchlist-wl-0001` from a screening hit and
-  `excerpt:mock-web-…` from web content), but `underwriting_memo.excerpts` is
-  empty on every case the reference agents produce: only excerpts the
-  untrusted-content extractor registered during the run are attached, and even
-  those are kept in a per-process `InMemoryExcerptStore` that nothing persists.
-  A reviewer therefore cannot see the passage a citation points at, and PRD
-  A-6's "cited excerpts are attached to the memo for the human reviewer" does
-  not hold. The console shows such a reference as "not attached to this memo"
-  rather than pretending it resolves.
-- **Fix:** attach every `excerpt_ref` the agent cited to `memo.excerpts` with
-  its provider, record, media type and digest, and persist excerpt content with
-  the case (encrypted, tenant-scoped) so the console and the evidence package
-  can show it.
-
 ## A-50 — The console chrome fails the contrast check on every page
 
 - **Found:** running the axe scan for the governed case screens against the
@@ -695,3 +676,34 @@ Remove an entry in the pull request that fixes it.
   bound to the runner loop. Settle the runner's fork guard in the same change:
   fork a child, call `run_async` in parent and child, and assert the child
   built its own loop (no Redis or Celery needed; Linux CI only).
+
+## A-55 — The enterprise stability gate cannot see a file that is not in the index
+
+- **Found:** an unannotated broad exception in a new module passed the gate
+  locally and failed in CI (PRD A-9 review follow-up, 2026-09-21).
+- **What:** `scripts/check_enterprise_stability_gates.py:263` discovers what to
+  scan with `git ls-files '*.py'`, which lists the index only. A module that is
+  written but not yet staged is invisible to the gate, so `total_blocked: 0`
+  locally while CI - which scans the committed tree - blocks it. The `rglob`
+  fallback runs only when git is unavailable, so the blind spot is the normal
+  path, and it is widest for new modules, which are exactly the files most
+  likely to need an annotation.
+- **Fix:** discover with `git ls-files --cached --others --exclude-standard`
+  (and keep ignoring what `.gitignore` excludes), so a file the developer is
+  about to commit is scanned before it is committed.
+
+## A-56 — Prometheus counters are incremented but never exported
+
+- **Found:** adding `agenticorg_case_excerpt_reads_total` and looking for where
+  it could be read (2026-09-21).
+- **What:** the API defines Prometheus metrics all over `core/` (the governed
+  case transitions, decision requests and grants, provider calls, the new
+  excerpt reads) but serves no `/metrics` endpoint: there is no
+  `prometheus_client.make_asgi_app()` mount and no metrics route in `api/`.
+  Every counter is therefore process-local and unobservable, so an alert on a
+  denial-rate spike or on dwell collapsing towards zero (PRD §10) cannot be
+  built from them, and each new metric adds an instrument nobody can read.
+- **Fix:** mount the Prometheus ASGI app behind the platform's own
+  authentication (or export through the existing observability pipeline),
+  document the endpoint, and make one alert from an existing counter to prove
+  the path end to end.

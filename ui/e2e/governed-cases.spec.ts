@@ -80,6 +80,30 @@ test.describe("governed cases in the approvals console @dev-stack", () => {
     await expectNoAccessibilityViolations(page, testInfo);
   });
 
+  test("a citation can be read back and is checked against the run's own calls", async ({ page }) => {
+    const hit = seededCase("us-false-positive-oakhollow");
+    await openCase(page, hit.case_ref);
+
+    // Every cited record on a real case was returned by this run's provider calls.
+    const records = page.getByTestId("record-traced");
+    await expect(records.first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("citations-uncheckable")).toHaveCount(0);
+    await expect(page.getByTestId("evidence-untraced")).toHaveCount(0);
+    for (const note of await records.all()) {
+      await expect(note).toContainText("This run fetched this record.");
+    }
+
+    // The passage behind a citation is fetched on request, re-hashed by the server, and shown as text.
+    const show = page.getByTestId("show-passage").first();
+    await expect(show).toBeVisible();
+    await show.click();
+    const passage = page.getByTestId("excerpt-passage").first();
+    await expect(passage).toBeVisible({ timeout: 20_000 });
+    await expect(passage).toContainText("re-hashed when it was read back");
+    await expect(passage).not.toBeEmpty();
+    await documentationScreenshot(page, "governed-case-citations");
+  });
+
   test("a section the provider could not supply is shown as unchecked, not as a clear result", async ({ page }) => {
     const thin = seededCase("us-thin-file-brambleway");
     await openCase(page, thin.case_ref);

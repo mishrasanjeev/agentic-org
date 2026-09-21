@@ -24,7 +24,10 @@ class GovernedCase(BaseModel):
     ``state`` follows ``core.cases.states``; ``version`` guards concurrent transitions. The
     documents (``memo``, ``policy_result``, ``screening_results``, ``screening_dispositions``,
     ``ownership_graph``) are the published domain schemas; ``agent_records`` holds each agent run's
-    case record (prompt digests, policy inputs, tool-call hashes) for the evidence package.
+    case record (prompt digests, policy inputs, tool-call hashes) for the evidence package, and
+    ``excerpts_encrypted`` the passage behind every cited ``excerpt_ref`` - reference and digest
+    in clear, the passage itself encrypted with the tenant's key - so a reviewer can read what a
+    citation points at, not just which record it named.
     """
 
     __tablename__ = "governed_cases"
@@ -53,6 +56,9 @@ class GovernedCase(BaseModel):
     screening_dispositions: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     parties: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     agent_records: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
+    #: Every excerpt the case's documents cite: reference and digest in clear, passage encrypted
+    #: with the tenant's key (``core.cases.excerpts``).
+    excerpts_encrypted: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     information_requests: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
     #: Decision requests made for this case at the decision-grant issuer (never a grant token).
     decision_requests: Mapped[list[Any]] = mapped_column(CASE_JSON, nullable=False, default=list)
