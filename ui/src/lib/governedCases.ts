@@ -204,7 +204,8 @@ const REASON_MESSAGES: Record<string, string> = {
   request_failed: "The request failed.",
   request_invalid: "The request was not valid.",
   case_state_unknown: "That case state filter is not recognised.",
-  transition_not_allowed: "The case is not in a state that allows this action.",
+  transition_not_allowed:
+    "This action needs the case to be awaiting a decision, and it is in another state now. Reload the case.",
   case_version_conflict: "The case changed while you were working on it. Reload it and try again.",
 };
 
