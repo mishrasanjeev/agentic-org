@@ -20,7 +20,7 @@ grants; see [governance](../governance/README.md).
 | Screen | Path | Shows |
 | --- | --- | --- |
 | Queue | `/dashboard/approvals/cases` | cases by state with the policy tier and the memo's recommendation |
-| Case | `/dashboard/approvals/cases/{case_ref}` | the cited memo, the policy score with every fired rule, the case history |
+| Case | `/dashboard/approvals/cases/{case_ref}` | the cited memo, the policy score with every fired rule, the screening dispositions, the decision action, the case history |
 
 Both need a signed-in user with the approvals scopes, and the tenant's
 `governed_cases.enabled` flag. A tenant without the flag sees "Governed cases are
@@ -93,6 +93,67 @@ moves on while the screen is open, the refusal (`transition_not_allowed`) is
 shown and the case is reloaded rather than leaving a control that cannot work. Recording a review does not close the hit in any system:
 closing it is the analyst's action in the operator's system of record, and
 nothing in this release closes a hit automatically.
+
+## The decision
+
+![The decision action before a request is made](images/governed-case-decision-request.png)
+
+**The console cannot approve anything.** The panel says so, and there is no
+approve control in it. A decision is taken in four steps:
+
+1. **Request decision.** Choose the outcome to ask for. When it differs from the
+   memo's recommendation the console requires a written reason, which is shown to
+   the approver and recorded on the case. The request is created at the
+   decision-grant issuer, bound to the case's current version and to the exact
+   semantic action (`{case_id, action, decision, subject}`).
+2. **Open approval page.** The button opens the issuer's own approval page in a
+   new window (`noopener`, and only an `http(s)` address is ever opened). The
+   approver signs in there with an allow-listed identity provider, steps up,
+   reads the memo and the policy score and approves. Step-up, the dwell
+   measurement and the four-eyes rule all live on that page, not here.
+3. **Watch the approvals.** The panel polls the request and shows each approval:
+   who approved, how they authenticated, their position, and how long they looked
+   at it — always labelled as measured by the approval page. While a second
+   approval is outstanding it names the first approver and says that the same
+   person will be refused.
+
+   ![Four eyes: waiting for a second, different approver](images/governed-case-decision-four-eyes.png)
+
+4. **Record decision.** Enabled only once the grants exist. The server fetches
+   them from the issuer and consumes them; a decision grant never reaches the
+   browser. The recorded decision then shows each approver and the decision grant
+   that was consumed.
+
+Refusals are shown with their reason code, never swallowed: `decision_required`
+(nothing proves a person decided), `decision_not_approved`, `same_approver`,
+`case_changed`, `decision_service_not_configured` (no issuer in this
+deployment).
+
+A request that can never be approved — the case changed under it, or the issuer
+reports it `superseded`, `cancelled` or `expired` — is not a dead end: the panel
+says why, stops polling, drops the Record control and puts the request form back
+so the reviewer can ask for a new decision on the memo as it stands. "Ask for a
+new decision" does the same for a request that is still open.
+
+The approval page is opened only when its address is `https`; a plain-`http`
+issuer is accepted only by a console that is itself served over `http`, which
+means a development stack.
+
+### Dwell time
+
+Two dwell numbers exist and only one is authoritative:
+
+| Dwell | Measured by | Used for |
+| --- | --- | --- |
+| `dwell_source: "server"` | the approval page, from its own timestamps | bound into the decision grant; the audit answer to "how long did they look at it?" |
+| console dwell (`client_dwell_ms`) | this console, from the case screen rendering to the submission | advisory telemetry only (`agenticorg_case_console_dwell_seconds{stage}`) |
+
+The console sends its own measurement with the request and with the recording,
+and it is recorded as advisory. It never gates anything and never reaches a
+decision grant.
+
+See [decision requests](../governance/decision-requests.md) for the API, the
+configuration and everything the issuer is responsible for.
 
 ## At phone width
 

@@ -51,6 +51,12 @@ decision_requests_total = Counter(
     "Decision requests created through the case API, by outcome and result",
     ["outcome", "result"],
 )
+case_version_announcements_total = Counter(
+    "agenticorg_case_version_announcements_total",
+    "Case versions registered with the decision-grant issuer, by result. A rising failure count "
+    "means the issuer is not superseding stale requests, which AgenticOrg still refuses locally.",
+    ["result"],
+)
 console_dwell_seconds = Histogram(
     "agenticorg_case_console_dwell_seconds",
     "Advisory console dwell (case screen render to submit) by stage. Never the authoritative dwell: "

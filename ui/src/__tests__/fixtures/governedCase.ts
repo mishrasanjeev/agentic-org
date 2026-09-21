@@ -156,6 +156,8 @@ export function caseDetailFixture(overrides: Partial<CaseDetail> = {}): CaseDeta
     screening_dispositions: [],
     parties: [],
     information_requests: [],
+    decision_requests: [],
+    decision: null,
     failure_reason: null,
     transitions: [
       { from_state: null, to_state: "submitted", actor: "user:00000000-0000-0000-0000-000000000001", reason: "case_submitted", at: "2026-09-01T08:00:00Z" },
