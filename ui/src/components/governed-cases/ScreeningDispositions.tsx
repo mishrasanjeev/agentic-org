@@ -98,6 +98,12 @@ function ReviewForm({
     } catch (e) {
       const refusal = toCaseApiError(e);
       setError(`${describeCaseReason(refusal.reason)} (${refusal.reason})`);
+      // The case moved on (decided, withdrawn, re-investigated) or someone else
+      // reviewed this hit: reload so the screen stops offering a review the API
+      // will refuse.
+      if (["transition_not_allowed", "already_reviewed", "case_version_conflict"].includes(refusal.reason)) {
+        onReviewed();
+      }
     } finally {
       setSubmitting(false);
     }

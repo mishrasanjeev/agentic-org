@@ -145,6 +145,18 @@ describe("screening dispositions: accepting and overriding", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Record review" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("already been reviewed");
     expect(await screen.findByRole("alert")).toHaveTextContent("already_reviewed");
+    // The case is reloaded, so a screen that has fallen behind stops offering the review.
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+  });
+
+  it("reloads the case when the API says the review window has closed", async () => {
+    renderCase(detailWith(dispositionFixture()));
+    mockPost.mockRejectedValue(
+      axiosError(409, { error: { reason: "transition_not_allowed", detail: "a review needs awaiting_decision" } }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Record review" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("needs the case to be awaiting a decision");
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
   });
 });
 
