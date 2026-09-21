@@ -583,6 +583,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Encrypted-column migrations write their audit record to
   `AGENTICORG_MIGRATION_AUDIT_DIR` when it is set, so a test run no longer
   rewrites the committed records under `migrations/audit/`.
+- A synchronous credential lookup no longer breaks the next request. An
+  asyncpg connection belongs to the event loop that opened it, and
+  `get_provider_credential_sync` ran the resolver on a throwaway loop while
+  using the shared pooled engine: the lookup itself failed with "got Future …
+  attached to a different loop" — reported as a credential that "could not be
+  decrypted", which also refuses the platform fallback — and the connection it
+  left in the pool made an unrelated later request fail, which `pool_pre_ping`
+  does not catch (a cross-loop error is not a disconnect). Synchronous entry
+  points now run their coroutine through `core.database.run_db_coroutine_sync`,
+  on a private `NullPool` engine (built on first use and disposed with the
+  loop): the credential resolver, the report generator's KPI bridge
+  (`core/reports/generator.py`, reached when the sandbox pilot runs the report
+  task body inside its own loop), the weekly-report pilot-proof writer and the
+  CDC store's sync helpers. The LangGraph credential prefetch stays as defence
+  in depth and one fewer connection per model build.
 - The example onboarding policies read only evidence the Business Onboarding
   Underwriter produces, and only registry statuses the provider interface can
   return. `business_onboarding_uk` dropped `filings_overdue`: it read

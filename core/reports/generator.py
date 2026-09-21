@@ -9,6 +9,7 @@ PDF rendering.
 from __future__ import annotations
 
 import html
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -32,12 +33,15 @@ class ReportOutput:
     generated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
 
-def _run_coroutine(coro: Any) -> Any:
-    """Run ``coro`` from synchronous generator code.
+def _run_coroutine(make_coroutine: Callable[[], Any]) -> Any:
+    """Run a database coroutine from synchronous generator code.
 
-    Celery workers use the process-local runner loop; if a loop is already
-    running in this thread (e.g. an async API caller), run on a fresh loop
-    in a helper thread instead of blocking/nesting the caller's loop.
+    Celery workers use the process-local runner loop, which keeps the shared
+    engine's pooled connections on one loop. If a loop is already running in
+    this thread (an async caller, e.g. the sandbox pilot calling the report
+    task body), the work goes to a helper thread with an engine of its own
+    (``run_db_coroutine_sync``) rather than a bare ``asyncio.run``: a
+    throwaway loop must not take a pooled connection or leave one behind.
     """
     import asyncio
     import concurrent.futures
@@ -47,9 +51,12 @@ def _run_coroutine(coro: Any) -> Any:
     except RuntimeError:
         from core.tasks.async_runner import run_async
 
-        return run_async(coro)
+        return run_async(make_coroutine())
+
+    from core.database import run_db_coroutine_sync
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+        return pool.submit(run_db_coroutine_sync, make_coroutine).result()
 
 
 class ReportEvidenceUnavailableError(RuntimeError):
@@ -551,7 +558,9 @@ class ReportGenerator:
         try:
             from api.v1.kpis import _build_kpi_response
 
-            data = _run_coroutine(_build_kpi_response(str(tenant_id), role, company_id or "default"))
+            data = _run_coroutine(
+                lambda: _build_kpi_response(str(tenant_id), role, company_id or "default")
+            )
         # enterprise-gate: broad-except-ok reason=report-kpi-compute-failure-returns-explicit-fallback-source
         except Exception as exc:
             log.warning("report_kpi_compute_failed", role=role, error=str(exc))

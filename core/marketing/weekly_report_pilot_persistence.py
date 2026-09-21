@@ -18,7 +18,6 @@ for what counts as production-claim-allowed.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from collections.abc import Iterable, Mapping
@@ -289,9 +288,11 @@ def persist_weekly_report_pilot_proof_from_report_output_sync(
         company_uuid = _coerce_uuid(company_id, allow_none=True)
     except ValueError:
         company_uuid = None
+    from core.database import run_db_coroutine_sync
+
     try:
-        return asyncio.run(
-            evaluate_and_persist_weekly_report_pilot_proof_from_report_output(
+        return run_db_coroutine_sync(
+            lambda: evaluate_and_persist_weekly_report_pilot_proof_from_report_output(
                 tenant_id=tenant_id,
                 company_id=str(company_uuid) if company_uuid else None,
                 report_id=report_id,
