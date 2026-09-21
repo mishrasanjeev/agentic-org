@@ -63,14 +63,18 @@ def main() -> int:
         print("skipped: this probe is about fork, and this platform does not fork")
         return 0
 
-    os.environ.setdefault("PROMETHEUS_MULTIPROC_DIR", tempfile.mkdtemp(prefix="agenticorg-mp-"))
-    directory = os.environ["PROMETHEUS_MULTIPROC_DIR"]
-    os.makedirs(directory, exist_ok=True)
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     from prometheus_client import Counter, Gauge
 
     from observability import metrics_export
+
+    # Works whether or not prometheus_client was already imported - which is the point: if it was,
+    # and nothing reselected the value class, this probe would report zeroes and so would the
+    # worker.
+    directory = metrics_export.enable_multiprocess(
+        os.environ.get("PROMETHEUS_MULTIPROC_DIR") or tempfile.mkdtemp(prefix="agenticorg-mp-")
+    )
 
     global _COUNTER, _GAUGE
     _COUNTER = Counter("agenticorg_mp_probe_total", "probe", ["who"])

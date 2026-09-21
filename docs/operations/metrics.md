@@ -27,7 +27,14 @@ from serving.
 The Celery worker runs Celery's prefork pool: tasks execute in forked children, and a counter a
 child increments is invisible to the parent that serves the endpoint. The worker therefore sets
 `PROMETHEUS_MULTIPROC_DIR`, every process writes its samples there, the exporter merges them, and
-a child's gauges are dropped when Celery retires it. The API runs one uvicorn process per
+a child's gauges are dropped when Celery retires it.
+
+There is a trap in that, and it is silent: `prometheus_client` chooses its value class when it is
+first imported, from that environment variable. If anything imports it before the directory is
+set - one import high up a module chain is enough - instruments keep writing to process memory and
+the endpoint reports nothing from the children, with no error anywhere.
+`observability.metrics_export.enable_multiprocess()` reselects the value class for exactly that
+case, and `scripts/probe_metrics_multiprocess.py` is what would notice if it stopped working. The API runs one uvicorn process per
 container today and does not need this, but the same switch is wired in, so adding `--workers`
 later cannot silently start under-reporting instead.
 

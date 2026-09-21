@@ -28,7 +28,6 @@ import os
 import signal
 import sys
 import threading
-import tempfile
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 DEFAULT_QUEUES = "celery,reports,maintenance,workflows,delivery,rpa"
@@ -40,11 +39,9 @@ DEFAULT_QUEUES = "celery,reports,maintenance,workflows,delivery,rpa"
 # merges them, so the directory has to exist before any instrument is imported. Cloud Run gives
 # the service an in-memory volume for it; locally it falls back to a temporary directory.
 def _enable_multiprocess_metrics() -> None:
-    directory = os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
-    if not directory:
-        directory = os.path.join(tempfile.gettempdir(), "agenticorg-metrics")
-        os.environ["PROMETHEUS_MULTIPROC_DIR"] = directory
-    os.makedirs(directory, exist_ok=True)
+    from observability.metrics_export import enable_multiprocess  # noqa: PLC0415
+
+    enable_multiprocess()
 
 
 class _HealthHandler(BaseHTTPRequestHandler):

@@ -31,6 +31,8 @@ under-reporting instead.
 from __future__ import annotations
 
 import os
+import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Final
@@ -58,6 +60,27 @@ class MetricsExportError(RuntimeError):
 def multiprocess_dir() -> str:
     """The directory sibling processes write their samples to, or ``""`` for single-process mode."""
     return os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+
+
+def enable_multiprocess(directory: str = "") -> str:
+    """Point this process, and the children it forks, at a shared samples directory.
+
+    Call it *before* creating any instrument. ``prometheus_client`` chooses its value class when
+    it is first imported, from this environment variable, and an instrument created under the
+    in-process class keeps writing to process memory whatever is set afterwards. If the module is
+    already imported by the time we get here - one import high up in a module chain is enough -
+    the class is reselected, because the alternative is an exporter that reports nothing at all
+    and says nothing about it.
+    """
+    directory = directory or os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+    if not directory:
+        directory = os.path.join(tempfile.gettempdir(), "agenticorg-metrics")
+    os.environ["PROMETHEUS_MULTIPROC_DIR"] = directory
+    os.makedirs(directory, exist_ok=True)
+    values = sys.modules.get("prometheus_client.values")
+    if values is not None:
+        values.ValueClass = values.MultiProcessValue()
+    return directory
 
 
 def registry() -> CollectorRegistry:
