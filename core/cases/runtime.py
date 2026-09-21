@@ -160,6 +160,8 @@ async def announce_case_version(runtime: CaseRuntime, case_ref: str, version: in
     """
     if not only_if:
         return
+    from core.cases.decision_requests import case_version_announcements_total
+
     try:
         service = runtime.decision_service()
         if service is None:
@@ -167,7 +169,12 @@ async def announce_case_version(runtime: CaseRuntime, case_ref: str, version: in
         await service.set_case_version(case_ref, str(version))
     # enterprise-gate: broad-except-ok reason=issuer-bookkeeping-never-fails-a-case-change
     except Exception as exc:
+        # Counted as well as logged: an issuer that is persistently unreachable leaves stale
+        # requests live at its end, and nothing else would show that.
+        case_version_announcements_total.labels(result="failed").inc()
         logger.warning("case_version_announce_failed", case_ref=case_ref, error=type(exc).__name__)
+    else:
+        case_version_announcements_total.labels(result="registered").inc()
 
 
 async def _cap_idle_in_transaction(session: AsyncSession, seconds: int = 15) -> None:

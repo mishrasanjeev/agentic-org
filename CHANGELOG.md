@@ -90,7 +90,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   and consumption runs with its own shorter deadline while the case row is locked. A case change
   registers the new version with the issuer, so it supersedes an open request and revokes unused
   grants; an issuer answering `404 NOT_FOUND` for a request it no longer holds is reported as
-  `decision_request_not_found` rather than as the service being switched off.
+  `decision_request_not_found` rather than as the service being switched off. Registering a case
+  version is counted in `agenticorg_case_version_announcements_total{result}`, so an issuer that is
+  persistently unreachable is visible rather than only logged.
 - Approvals console screens for governed cases (PRD A-9, `ui/src/pages/GovernedCases.tsx`,
   `ui/src/pages/GovernedCaseDetail.tsx`): a queue at `/dashboard/approvals/cases` with the
   state counts, policy tier and proposed recommendation, and a case screen with the cited
