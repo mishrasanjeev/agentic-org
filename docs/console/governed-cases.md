@@ -86,6 +86,8 @@ instead of a recommendation.
 Agent-authored text is rendered as text. Nothing from a memo, a provider record
 or an excerpt is ever rendered as markup.
 
+![A citation read back, with the passage behind it](images/governed-case-citations.png)
+
 ## Screening dispositions
 
 ![Screening dispositions with the per-identifier comparison](images/governed-case-dispositions.png)
