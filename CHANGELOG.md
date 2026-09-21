@@ -4,6 +4,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - the governed-case decision is proven end to end
+- `make e2e-decisions` (`ui/e2e/decision-grants.spec.ts`) takes a real
+  four-eyes decline across both systems in a browser, with nothing stubbed:
+  the console asks for the decision, two different people sign in on the auth
+  service's own approval page with a second factor and approve there, the same
+  person is refused the second approval, and the console records the decision
+  with both approvers and both grant ids. It also proves a single approval with
+  step-up, and that a case which changed after the approval is refused with
+  `case_changed`. No decision grant reaches the console's browser, and the
+  suite fails if one does.
+
+### Fixed
+- A consumed decision is recorded with the decision grant each approver spent.
+  The issuer lists the approvers and the grant ids it consumed; where it does
+  not name the grant on the approver, the client now pairs them by position
+  when the counts match and refuses the answer
+  (`decision_service_response_invalid`) when they do not, instead of recording
+  an approver with an empty grant id - which the case document schema rejects,
+  so the first real four-eyes decision could not be recorded at all.
+
 ### Added - the development stack serves decision grants
 - The pinned Grantex auth-service image moves to a build of Grantex `main`
   (`5b867f68`, `ghcr.io/mishrasanjeev/grantex-auth-service@sha256:b73668a3...`),

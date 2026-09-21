@@ -11,11 +11,12 @@ The calls are behind :class:`DecisionGrantService` so the console and the case r
 to the auth service directly, and so tests can run against
 ``core.test_doubles.fake_decision_grants.FakeDecisionGrantService``.
 
-**The endpoint shapes below are provisional.** They follow the Grantex decision-grant API as
-published (``/v1/decisions/...``, ``spec/decision-grant.md``), which is still changing; the Python
-SDK's ``Grantex(...).decisions`` client covers the same endpoints from grantex 0.6, which is not
-released yet. When it is, replace :class:`GrantexDecisionGrantService`'s request building with the
-SDK client (called off the event loop with ``asyncio.to_thread``) and keep this interface.
+The endpoint shapes below follow the Grantex decision-grant API as published (``/v1/decisions/...``,
+``spec/decision-grant.md``). They are exercised against a real auth service by
+``ui/e2e/decision-grants.spec.ts`` (``make e2e-decisions``); the Python SDK's
+``Grantex(...).decisions`` client covers the same endpoints from grantex 0.6, which is not released
+yet. When it is, replace :class:`GrantexDecisionGrantService`'s request building with the SDK
+client (called off the event loop with ``asyncio.to_thread``) and keep this interface.
 
 Everything here is inert unless a tenant has ``governed_cases.enabled`` *and* the deployment sets
 ``AGENTICORG_CASE_DECISION_SERVICE=grantex``. Without it, decision requests are refused with
@@ -529,14 +530,26 @@ class GrantexDecisionGrantService:
             timeout=self.consume_timeout_seconds,
         )
         approvers = payload.get("approvers") or []
-        jtis = payload.get("jtis") or []
+        jtis = [str(j) for j in payload.get("jtis") or [] if str(j)]
+        entries = [a for a in approvers if isinstance(a, Mapping)]
+        if len(entries) != len(approvers):
+            raise DecisionServiceError("decision_service_response_invalid", "an approver is not an object")
         pairs = tuple(
-            (str(a.get("sub") or a.get("approver") or ""), str(a.get("jti") or ""))
-            for a in approvers
-            if isinstance(a, Mapping)
+            (
+                _required_text("consumption sub", entry.get("sub")),
+                # The issuer names the grant on each approver. Older issuers
+                # answered with a separate `jtis` array in the same order; pair
+                # positionally only when the counts match, and never record an
+                # approver without the grant they approved with - the case's
+                # `decision.approvers[].decision_grant_id` is what proves which
+                # single-use credential was spent.
+                _required_text(
+                    "consumption jti",
+                    entry.get("jti") or (jtis[index] if len(jtis) == len(entries) else None),
+                ),
+            )
+            for index, entry in enumerate(entries)
         )
-        if not pairs and jtis:
-            pairs = tuple(("", str(jti)) for jti in jtis)
         if not pairs:
             raise DecisionServiceError("decision_service_response_invalid", "no approver was returned")
         return ConsumedDecision(

@@ -366,6 +366,49 @@ async def test_consumption_returns_the_approvers_and_refuses_an_answer_without_o
     assert refused.value.reason == "decision_service_response_invalid"
 
 
+async def test_a_consumption_without_a_grant_id_per_approver_is_refused() -> None:
+    """The case records which single-use grant was spent; an approver without one is not a record."""
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200,
+                json={
+                    "consumed": True,
+                    "requestId": "dr_1",
+                    # Two approvers and one grant id: nothing says which grant
+                    # the second approver spent, so neither is recorded.
+                    "jtis": ["j1"],
+                    "approvers": [{"sub": "user:a"}, {"sub": "user:b"}],
+                },
+            )
+        ).consume(grants=["g1", "g2"], action={"case_id": "case_1"}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+    with pytest.raises(DecisionServiceError) as no_sub:
+        await service(
+            lambda _r: httpx.Response(
+                200, json={"consumed": True, "requestId": "dr_1", "jtis": ["j1"], "approvers": [{"jti": "j1"}]}
+            )
+        ).consume(grants=["g1"], action={"case_id": "case_1"}, case_version="3")
+    assert no_sub.value.reason == "decision_service_response_invalid"
+
+
+async def test_an_approver_takes_its_grant_id_from_a_matching_jtis_list() -> None:
+    """An issuer that lists the grant ids separately, in the same order, is still usable."""
+    consumed = await service(
+        lambda _r: httpx.Response(
+            200,
+            json={
+                "consumed": True,
+                "requestId": "dr_1",
+                "jtis": ["j1", "j2"],
+                "approvers": [{"sub": "user:a"}, {"sub": "user:b"}],
+            },
+        )
+    ).consume(grants=["g1", "g2"], action={"case_id": "case_1"}, case_version="3")
+    assert consumed.approvers == (("user:a", "j1"), ("user:b", "j2"))
+
+
 # --- the verifier ----------------------------------------------------------------------------------
 
 
