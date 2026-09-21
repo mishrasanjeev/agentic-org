@@ -393,6 +393,16 @@ async def test_a_consumption_without_a_grant_id_per_approver_is_refused() -> Non
     assert no_sub.value.reason == "decision_service_response_invalid"
 
 
+async def test_a_consumption_whose_approvers_are_not_objects_is_refused() -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200, json={"consumed": True, "requestId": "dr_1", "jtis": ["j1"], "approvers": ["user:a"]}
+            )
+        ).consume(grants=["g1"], action={"case_id": "case_1"}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
 async def test_an_approver_takes_its_grant_id_from_a_matching_jtis_list() -> None:
     """An issuer that lists the grant ids separately, in the same order, is still usable."""
     consumed = await service(
