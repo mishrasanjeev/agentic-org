@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -77,6 +79,56 @@ class TestREQ04AuthStateRedis:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_the_limit_blocks_and_earlier_attempts_do_not(self, no_auth_state_redis):
+        """The control fires: attempt AUTH_MAX_FAILURES blocks, the ones before it do not.
+
+        Without this the suite only asserted the permissive answer, which a
+        deleted control returns just as happily.
+        """
+        from core import auth_state
+        from core.auth_state import AUTH_MAX_FAILURES, is_ip_blocked, record_auth_failure
+        auth_state._mem_failures.clear()
+        auth_state._mem_blocked.clear()
+        ip = "192.0.2.13"
+
+        for attempt in range(1, AUTH_MAX_FAILURES):
+            assert await record_auth_failure(ip) is False, f"blocked early at attempt {attempt}"
+            assert await is_ip_blocked(ip) is False
+
+        assert await record_auth_failure(ip) is True, "the limit did not block"
+        assert await is_ip_blocked(ip) is True
+
+    @pytest.mark.asyncio
+    async def test_a_block_is_bound_to_its_own_ip(self, no_auth_state_redis):
+        from core import auth_state
+        from core.auth_state import AUTH_MAX_FAILURES, is_ip_blocked, record_auth_failure
+        auth_state._mem_failures.clear()
+        auth_state._mem_blocked.clear()
+
+        for _ in range(AUTH_MAX_FAILURES):
+            await record_auth_failure("192.0.2.14")
+
+        assert await is_ip_blocked("192.0.2.14") is True
+        assert await is_ip_blocked("192.0.2.15") is False
+
+    @pytest.mark.asyncio
+    async def test_a_block_expires_and_the_ip_is_allowed_again(self, no_auth_state_redis):
+        """The block is a lockout, not a ban: it lifts when its window passes."""
+        from core import auth_state
+        from core.auth_state import AUTH_MAX_FAILURES, is_ip_blocked, record_auth_failure
+        auth_state._mem_failures.clear()
+        auth_state._mem_blocked.clear()
+        ip = "192.0.2.16"
+
+        for _ in range(AUTH_MAX_FAILURES):
+            await record_auth_failure(ip)
+        assert await is_ip_blocked(ip) is True
+
+        # Expire the block rather than waiting 15 minutes for it.
+        auth_state._mem_blocked[ip] = time.time() - 1
+        assert await is_ip_blocked(ip) is False
+
+    @pytest.mark.asyncio
     async def test_ip_not_blocked_initially(self, no_auth_state_redis):
         from core import auth_state
         from core.auth_state import is_ip_blocked
@@ -104,6 +156,34 @@ class TestREQ04AuthStateRedis:
 
         result = await check_signup_rate("192.0.2.12")
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_signup_rate_blocks_past_the_hourly_limit(self, no_auth_state_redis):
+        """The control fires: signup SIGNUP_MAX_PER_HOUR + 1 is refused."""
+        from core import auth_state
+        from core.auth_state import SIGNUP_MAX_PER_HOUR, check_signup_rate
+        auth_state._mem_signup.clear()
+        ip = "192.0.2.17"
+
+        for attempt in range(1, SIGNUP_MAX_PER_HOUR + 1):
+            assert await check_signup_rate(ip) is False, f"refused early at signup {attempt}"
+
+        assert await check_signup_rate(ip) is True, "the hourly limit did not refuse"
+        assert await check_signup_rate("192.0.2.18") is False, "another address was refused too"
+
+    @pytest.mark.asyncio
+    async def test_a_blacklisted_token_stays_blacklisted_and_others_do_not(
+        self, no_auth_state_redis
+    ):
+        """The blacklist is per token, and repeated checks keep saying so."""
+        from core import auth_state
+        from core.auth_state import blacklist_token, is_token_blacklisted
+        auth_state._mem_blacklist.clear()
+
+        await blacklist_token("placeholder-revoked-token")  # noqa: S106 - not a credential
+        for _ in range(3):
+            assert await is_token_blacklisted("placeholder-revoked-token") is True
+        assert await is_token_blacklisted("placeholder-other-token") is False
 
     def test_middleware_imports_auth_state(self):
         """auth/middleware.py imports from core.auth_state, not in-memory dicts."""
