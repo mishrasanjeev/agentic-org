@@ -17,12 +17,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ### Fixed
 - A consumed decision is recorded with the decision grant each approver spent.
-  The issuer lists the approvers and the grant ids it consumed; where it does
-  not name the grant on the approver, the client now pairs them by position
-  when the counts match and refuses the answer
-  (`decision_service_response_invalid`) when they do not, instead of recording
-  an approver with an empty grant id - which the case document schema rejects,
-  so the first real four-eyes decision could not be recorded at all.
+  The issuer lists the approvers and, separately, the grant ids it consumed,
+  and those two arrays cannot be paired by position: `jtis` is in the order the
+  grants were presented and `approvers` is in approval order, so for a
+  four-eyes decision they can disagree and index pairing would put one person's
+  approval against the other's credential. The pairing is now taken from the
+  issuer's own record of the request, where the grant and the approver are
+  stated together, and any approver that does not match exactly one approval -
+  or that resolves to a grant the issuer did not say it consumed - is refused
+  with `decision_service_response_invalid`. Before this the client read a grant
+  id the issuer does not send, recorded an empty one, and the case document
+  schema rejected it: the first real four-eyes decision could not be recorded
+  at all.
 
 ### Added - the development stack serves decision grants
 - The pinned Grantex auth-service image moves to a build of Grantex `main`

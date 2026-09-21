@@ -238,8 +238,15 @@ against `core/test_doubles/fake_decision_grants.py`, which enforces the same rul
 same approver refused, single-use grants, action and case-version binding.
 
 One shape the first real run corrected: the issuer's consumption answer lists the approvers and the
-grant ids it spent, and named the grant on each approver only in its audit entry, not in the
-response. A decision is recorded here with the grant id each approver spent, so the client pairs
-them by position when the counts match and refuses the answer outright when they do not — an
-approver without the credential they spent is not a record of anything. Grantex now returns
-`approvers[].jti` as well.
+grant ids it spent, and names the grant on each approver only in its audit entry, not in the
+response. The two arrays cannot be paired by position — `jtis` is in the order the grants were
+presented, `approvers` is in approval order — so for a four-eyes decision they can disagree, and a
+client pairing them by index would record one person's approval against the other's credential.
+When the answer does not name the grant on each approver, the pairing is taken from the issuer's
+own record of the request (`GET /v1/decisions/requests/{id}`, whose `approvals[]` state the grant
+and the approver together): each approver must match exactly one approval, and the grants that
+resolves to must be exactly the ones the issuer said it consumed. Anything else is refused, because
+an approver recorded against the wrong credential is worse than a decision not recorded. Grantex
+will also return `approvers[].jti`
+([grantex#1339](https://github.com/mishrasanjeev/grantex/pull/1339)); this prefers it when it is
+there, which removes the second call.

@@ -27,13 +27,23 @@
  * Run with `make e2e-decisions` (the runner shares the auth service's network
  * namespace, see docker-compose.dev.yml).
  */
-import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { missingPrerequisite, openCase, seededCase, signIn } from "./helpers/governed-cases";
 
-const ISSUER_ORIGIN = process.env.GRANTEX_APPROVAL_ORIGIN ?? "";
-const ADMIN_API_KEY = process.env.GRANTEX_ADMIN_API_KEY ?? "";
-const API_KEY = process.env.GRANTEX_API_KEY ?? "";
-const APPROVER_ISSUER = process.env.GRANTEX_APPROVER_ISSUER ?? "";
+/**
+ * Required, with no default: a missing one is a broken run, not a reason to pass quietly. The
+ * config requires BASE_URL the same way.
+ */
+function required(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required: run this suite with \`make e2e-decisions\``);
+  return value;
+}
+
+const ISSUER_ORIGIN = required("GRANTEX_APPROVAL_ORIGIN");
+const ADMIN_API_KEY = required("GRANTEX_ADMIN_API_KEY");
+const API_KEY = required("GRANTEX_API_KEY");
+const APPROVER_ISSUER = required("GRANTEX_APPROVER_ISSUER");
 const APPROVER_CLIENT_ID = "grantex-decision-approvers-dev";
 const APPROVER_CLIENT_SECRET = "agenticorg-dev-only-decision-approver-secret";
 const STEP_UP_ACR = "urn:agenticorg:acr:step-up";
@@ -59,20 +69,38 @@ function looksLikeADecisionGrant(body: string): boolean {
   return false;
 }
 
-/** Fails the test the moment a decision grant appears in anything the console is served. */
-function refuseDecisionGrantsInTheBrowser(page: Page, seen: string[]): void {
-  page.on("response", (response) => {
-    const type = response.headers()["content-type"] ?? "";
-    if (!type.includes("json") && !type.includes("text")) return;
-    void response
-      .text()
-      .then((body) => {
-        if (looksLikeADecisionGrant(body)) seen.push(response.url());
-      })
-      .catch(() => {
-        // A response whose body is gone (a redirect, an aborted request) carried nothing.
-      });
+/**
+ * Watches everything this browser context is served - the console's own requests and the test's
+ * `page.request` calls alike - for a decision grant. Bodies are read asynchronously, so the caller
+ * awaits `settled()` before asserting, otherwise a response that arrived late would be inspected
+ * after the assertion had already passed.
+ */
+function decisionGrantWatcher(
+  context: BrowserContext,
+): { settled: () => Promise<{ seen: string[]; inspected: number }> } {
+  const seen: string[] = [];
+  const reads: Promise<void>[] = [];
+  context.on("response", (response) => {
+    reads.push(
+      response
+        .text()
+        .then((body) => {
+          if (looksLikeADecisionGrant(body)) seen.push(response.url());
+        })
+        .catch(() => {
+          // A body that is gone - a redirect, an aborted request - carried nothing.
+        }),
+    );
   });
+  return {
+    settled: async () => {
+      await Promise.all(reads);
+      // `inspected` is the watcher's own positive control: a listener that is
+      // not attached, or attached to the wrong thing, reads nothing and would
+      // otherwise report "no decision grant seen" for the happiest of reasons.
+      return { seen, inspected: reads.length };
+    },
+  };
 }
 
 /**
@@ -232,10 +260,6 @@ async function refreshStatus(page: Page): Promise<void> {
 
 test.describe("governed case decisions with real decision grants", () => {
   test.skip(() => missingPrerequisite() !== "", missingPrerequisite());
-  test.skip(
-    !ISSUER_ORIGIN || !ADMIN_API_KEY || !API_KEY || !APPROVER_ISSUER,
-    "the decision-grant suite needs GRANTEX_APPROVAL_ORIGIN, GRANTEX_ADMIN_API_KEY, GRANTEX_API_KEY and GRANTEX_APPROVER_ISSUER",
-  );
 
   test.beforeAll(async ({ playwright }) => {
     const request = await playwright.request.newContext();
@@ -251,8 +275,7 @@ test.describe("governed case decisions with real decision grants", () => {
     page,
     request,
   }) => {
-    const seen: string[] = [];
-    refuseDecisionGrantsInTheBrowser(page, seen);
+    const watcher = decisionGrantWatcher(page.context());
     const governed = seededCase("gb-clean-brightwater");
 
     await signIn(page);
@@ -328,7 +351,9 @@ test.describe("governed case decisions with real decision grants", () => {
     await expect(page.getByTestId("case-state")).toContainText("Decided");
     await expect(page.getByTestId("case-decision")).toContainText(grantIds[0]!);
 
-    expect(seen, "a decision grant reached the console's browser").toEqual([]);
+    const watched = await watcher.settled();
+    expect(watched.inspected, "the decision-grant watcher saw no traffic at all").toBeGreaterThan(5);
+    expect(watched.seen, "a decision grant reached the console's browser").toEqual([]);
   });
 
   test("a case that changed after the approval cannot be decided on it (case_changed)", async ({
@@ -336,8 +361,7 @@ test.describe("governed case decisions with real decision grants", () => {
     page,
     request,
   }) => {
-    const seen: string[] = [];
-    refuseDecisionGrantsInTheBrowser(page, seen);
+    const watcher = decisionGrantWatcher(page.context());
     // This fixture has a screening disposition a human can review, which is a
     // material change to the case and bumps its version.
     const governed = seededCase("us-false-positive-oakhollow");
@@ -394,6 +418,8 @@ test.describe("governed case decisions with real decision grants", () => {
     expect(body.case.state).toBe("awaiting_decision");
     expect(body.decision).toBeFalsy();
 
-    expect(seen, "a decision grant reached the console's browser").toEqual([]);
+    const watched = await watcher.settled();
+    expect(watched.inspected, "the decision-grant watcher saw no traffic at all").toBeGreaterThan(5);
+    expect(watched.seen, "a decision grant reached the console's browser").toEqual([]);
   });
 });

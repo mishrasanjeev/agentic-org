@@ -189,6 +189,44 @@ class DecisionGrantService(Protocol):
         """The minted decision grants, or an empty list while the request is not fully approved."""
         ...
 
+    async def _grant_ids_by_approver(
+        self, request_id: str, subjects: Sequence[str], consumed: set[str]
+    ) -> list[str]:
+        """Which grant each approver spent, from the issuer's record of the request.
+
+        Used only when the consumption answer did not name the grant on each approver. Every step
+        fails closed: the request has to be readable, each approver has to match exactly one
+        approval on it, and the grants that resolves to have to be exactly the ones the issuer said
+        it consumed. Anything else is refused rather than guessed, because a decision recorded
+        against the wrong approver's credential is worse than a decision not recorded.
+
+        The caller holds the case row locked across the consumption, so this second call gets the
+        same tighter deadline.
+        """
+        payload = await self._call(
+            "GET", f"/v1/decisions/requests/{request_id}", timeout=self.consume_timeout_seconds
+        )
+        approvals = payload.get("approvals")
+        if not isinstance(approvals, list):
+            raise DecisionServiceError("decision_service_response_invalid", "the request has no approvals")
+        resolved: list[str] = []
+        for subject in subjects:
+            matches = {
+                str(a.get("jti") or "")
+                for a in approvals
+                if isinstance(a, Mapping) and a.get("sub") == subject and a.get("jti")
+            }
+            if len(matches) != 1:
+                raise DecisionServiceError(
+                    "decision_service_response_invalid", "the approver's decision grant is ambiguous"
+                )
+            resolved.append(matches.pop())
+        if len(set(resolved)) != len(resolved) or set(resolved) != consumed:
+            raise DecisionServiceError(
+                "decision_service_response_invalid", "the resolved decision grants are not the consumed ones"
+            )
+        return resolved
+
     async def consume(
         self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str
     ) -> ConsumedDecision: ...
@@ -521,7 +559,47 @@ class GrantexDecisionGrantService:
         grants = payload.get("decisionGrants")
         return [str(g) for g in grants] if isinstance(grants, list) else []
 
-    async def consume(self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str) -> ConsumedDecision:
+    async def _grant_ids_by_approver(
+        self, request_id: str, subjects: Sequence[str], consumed: set[str]
+    ) -> list[str]:
+        """Which grant each approver spent, from the issuer's record of the request.
+
+        Used only when the consumption answer did not name the grant on each approver. Every step
+        fails closed: the request has to be readable, each approver has to match exactly one
+        approval on it, and the grants that resolves to have to be exactly the ones the issuer said
+        it consumed. Anything else is refused rather than guessed, because a decision recorded
+        against the wrong approver's credential is worse than a decision not recorded.
+
+        The caller holds the case row locked across the consumption, so this second call gets the
+        same tighter deadline.
+        """
+        payload = await self._call(
+            "GET", f"/v1/decisions/requests/{request_id}", timeout=self.consume_timeout_seconds
+        )
+        approvals = payload.get("approvals")
+        if not isinstance(approvals, list):
+            raise DecisionServiceError("decision_service_response_invalid", "the request has no approvals")
+        resolved: list[str] = []
+        for subject in subjects:
+            matches = {
+                str(a.get("jti") or "")
+                for a in approvals
+                if isinstance(a, Mapping) and a.get("sub") == subject and a.get("jti")
+            }
+            if len(matches) != 1:
+                raise DecisionServiceError(
+                    "decision_service_response_invalid", "the approver's decision grant is ambiguous"
+                )
+            resolved.append(matches.pop())
+        if len(set(resolved)) != len(resolved) or set(resolved) != consumed:
+            raise DecisionServiceError(
+                "decision_service_response_invalid", "the resolved decision grants are not the consumed ones"
+            )
+        return resolved
+
+    async def consume(
+        self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str
+    ) -> ConsumedDecision:
         payload = await self._call(
             "POST",
             "/v1/decisions/consume",
@@ -530,28 +608,27 @@ class GrantexDecisionGrantService:
             timeout=self.consume_timeout_seconds,
         )
         approvers = payload.get("approvers") or []
-        jtis = [str(j) for j in payload.get("jtis") or [] if str(j)]
+        jtis = {str(j) for j in payload.get("jtis") or [] if str(j)}
         entries = [a for a in approvers if isinstance(a, Mapping)]
         if len(entries) != len(approvers):
             raise DecisionServiceError("decision_service_response_invalid", "an approver is not an object")
-        pairs = tuple(
-            (
-                _required_text("consumption sub", entry.get("sub")),
-                # The issuer names the grant on each approver. Older issuers
-                # answered with a separate `jtis` array in the same order; pair
-                # positionally only when the counts match, and never record an
-                # approver without the grant they approved with - the case's
-                # `decision.approvers[].decision_grant_id` is what proves which
-                # single-use credential was spent.
-                _required_text(
-                    "consumption jti",
-                    entry.get("jti") or (jtis[index] if len(jtis) == len(entries) else None),
-                ),
-            )
-            for index, entry in enumerate(entries)
-        )
-        if not pairs:
+        if not entries:
             raise DecisionServiceError("decision_service_response_invalid", "no approver was returned")
+        request_id = str(payload.get("requestId") or "")
+        subjects = [_required_text("consumption sub", entry.get("sub")) for entry in entries]
+        grant_ids = [str(entry.get("jti") or "") for entry in entries]
+        if not all(grant_ids):
+            # An issuer that does not name the grant on each approver. The
+            # answer also carries `jtis`, but pairing the two arrays by
+            # position is not safe: `jtis` is in the order the grants were
+            # presented and `approvers` is in approval order, so for a
+            # four-eyes decision they can disagree and the case would record
+            # one person's approval against the other's credential. Take the
+            # pairing from the issuer's own record of the request instead,
+            # which states the grant and the approver together.
+            logger.warning("case_decision_consumption_without_grant_ids", request_id=request_id)
+            grant_ids = await self._grant_ids_by_approver(request_id, subjects, jtis)
+        pairs = tuple(zip(subjects, grant_ids, strict=True))
         return ConsumedDecision(
             request_id=str(payload.get("requestId") or ""),
             approvers=pairs,
