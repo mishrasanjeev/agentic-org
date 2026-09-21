@@ -89,7 +89,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 
 .PHONY: help dev seed seed-cases down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
-	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
+	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-ambient-redis-allowlist \
 	e2e
 
 help:
@@ -183,8 +183,11 @@ coverage-gate: tools-image
 
 # ── Checks ───────────────────────────────────────────────────────────────────
 
-check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit
+check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-ambient-redis-allowlist
 	@echo "make check: all checks passed"
+
+check-ambient-redis-allowlist: tools-image
+	$(TOOLS) $(PY) scripts/check_ambient_redis_allowlist.py --base "$(BASE_REF)"
 
 check-ruff: tools-image
 	$(TOOLS) $(PY) -m ruff check .

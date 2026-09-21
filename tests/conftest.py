@@ -145,7 +145,13 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
     allowlisted = _ambient_redis_allowlist()
-    if allowlisted and not os.environ.get("AGENTICORG_REDIS_URL"):
+    declared_redis = os.environ.get("AGENTICORG_REDIS_URL")
+    if declared_redis is not None:
+        terminalreporter.write_line(
+            "ambient-Redis guard: OFF for this run — AGENTICORG_REDIS_URL is set "
+            f"({declared_redis or 'empty'}), so tests may reach that Redis and leave state in it"
+        )
+    elif allowlisted:
         reached = len(_AMBIENT_REDIS_SEEN & allowlisted)
         terminalreporter.write_line(
             f"test files still reaching an ambient Redis: {reached} of {len(allowlisted)} allowlisted "
@@ -195,7 +201,10 @@ def _uses_ambient_infrastructure(request) -> bool:
     A run that declared one has chosen it; the protection is for the run that
     did not and would otherwise pick up whatever the machine happens to have.
     """
-    if os.environ.get("AGENTICORG_REDIS_URL"):
+    # ``is not None``, not truthiness: an empty value is still a declaration,
+    # and the product's ``from_url("")`` raises rather than falling back to a
+    # default, so the gate and the product agree about what empty means.
+    if os.environ.get("AGENTICORG_REDIS_URL") is not None:
         return True
     node_id = request.node.nodeid.replace("\\", "/")
     return node_id.startswith("tests/integration/") or bool(
@@ -245,6 +254,7 @@ def _no_test_connects_to_an_ambient_redis(request, monkeypatch):
         yield
         return
 
+    import redis
     import redis.asyncio.connection as async_connection
     import redis.connection as sync_connection
 
@@ -265,13 +275,21 @@ def _no_test_connects_to_an_ambient_redis(request, monkeypatch):
         _record(self)
         raise OSError(refused)
 
-    # The concrete classes, not ``AbstractConnection``: each one defines
-    # ``_connect`` itself, so patching the base would do nothing.
+    # Every class in the module that defines its own ``_connect``, discovered
+    # rather than listed: patching ``AbstractConnection`` would do nothing
+    # (each concrete class overrides it), and a named list goes silently
+    # out of date when a redis release adds a class.
+    patched = 0
     for module, refuse in ((async_connection, _refuse_async), (sync_connection, _refuse_sync)):
-        for name in ("Connection", "SSLConnection", "UnixDomainSocketConnection"):
-            connection_class = getattr(module, name, None)
-            if connection_class is not None and "_connect" in vars(connection_class):
-                monkeypatch.setattr(connection_class, "_connect", refuse)
+        for candidate in vars(module).values():
+            if isinstance(candidate, type) and "_connect" in vars(candidate):
+                monkeypatch.setattr(candidate, "_connect", refuse)
+                patched += 1
+    assert patched >= 2, (
+        f"the ambient-Redis guard patched {patched} connection classes; redis "
+        f"{getattr(redis, '__version__', '?')} must have moved _connect, so tests "
+        "would reach a real Redis unnoticed"
+    )
 
     yield
 
