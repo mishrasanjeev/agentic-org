@@ -304,9 +304,10 @@ class WorkflowStateStore:
     async def init(self) -> None:
         self.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
         if not self._repository_explicit:
-            from core.database import async_session_factory
+            from core.database import current_session_factory
 
-            self.repository = SqlAlchemyWorkflowStateRepository(async_session_factory)
+            # Resolved per call, not captured (FINDINGS A-53).
+            self.repository = SqlAlchemyWorkflowStateRepository(lambda: current_session_factory()())
 
     async def save(
         self,

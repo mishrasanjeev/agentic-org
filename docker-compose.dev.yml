@@ -129,6 +129,7 @@ services:
     pull_policy: never
     environment: *backend-env
     command: >-
+      env AGENTICORG_WORKER_PROCESS=1
       celery -A core.tasks.celery_app worker --loglevel=info --concurrency=2
       -Q celery,reports,maintenance,workflows,delivery,rpa
     healthcheck:

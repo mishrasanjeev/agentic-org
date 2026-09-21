@@ -360,9 +360,12 @@ def get_feed_event_repository() -> FeedEventRepository:
     if _repository_override is not None:
         return _repository_override
     if _default_repository is None:
-        from core.database import async_session_factory
+        from core.database import current_session_factory
 
-        _default_repository = SqlAlchemyFeedEventRepository(async_session_factory)
+        # Resolved per call, not captured: a synchronous caller runs on a
+        # private engine (``run_db_coroutine_sync``) and its sessions must
+        # come from that engine, not from the shared pool (FINDINGS A-53).
+        _default_repository = SqlAlchemyFeedEventRepository(lambda: current_session_factory()())
     return _default_repository
 
 
