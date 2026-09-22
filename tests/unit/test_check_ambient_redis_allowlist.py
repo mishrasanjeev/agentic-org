@@ -39,6 +39,7 @@ def test_comments_and_blank_lines_are_ignored() -> None:
 
 def test_an_added_entry_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(checker, "allowlist_here", lambda: frozenset({"a.py", "b.py"}))
+    monkeypatch.setattr(checker, "merge_base", lambda ref: "0" * 40)  # noqa: ARG005
     monkeypatch.setattr(checker, "allowlist_at", lambda ref: frozenset({"a.py"}))  # noqa: ARG005
     assert checker.main(["--base", "origin/main"]) == 1
 
@@ -55,12 +56,14 @@ def test_an_unchanged_or_shrunken_allowlist_passes(
     monkeypatch: pytest.MonkeyPatch, here: frozenset[str], there: frozenset[str]
 ) -> None:
     monkeypatch.setattr(checker, "allowlist_here", lambda: here)
+    monkeypatch.setattr(checker, "merge_base", lambda ref: "0" * 40)  # noqa: ARG005
     monkeypatch.setattr(checker, "allowlist_at", lambda ref: there)  # noqa: ARG005
     assert checker.main(["--base", "origin/main"]) == 0
 
 
 def test_a_base_without_the_file_is_no_constraint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(checker, "allowlist_here", lambda: frozenset({"a.py"}))
+    monkeypatch.setattr(checker, "merge_base", lambda ref: "0" * 40)  # noqa: ARG005
     monkeypatch.setattr(checker, "allowlist_at", lambda ref: None)  # noqa: ARG005
     assert checker.main(["--base", "origin/main"]) == 0
 
@@ -73,11 +76,32 @@ def test_an_unreadable_allowlist_fails_closed(monkeypatch: pytest.MonkeyPatch) -
     assert checker.main(["--base", "origin/main"]) == 2
 
 
-def test_an_unresolvable_base_ref_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(checker, "allowlist_here", lambda: frozenset({"a.py"}))
+def test_an_unresolvable_base_ref_fails_closed() -> None:
+    """Resolution is by exit code, not by matching git's prose."""
+    assert checker.main(["--base", "nope-not-a-ref"]) == 2
 
-    def _boom(ref: str) -> frozenset[str]:
-        raise checker.AllowlistError(f"{ref} is not a ref")
 
-    monkeypatch.setattr(checker, "allowlist_at", _boom)
-    assert checker.main(["--base", "nope"]) == 2
+def test_an_empty_base_is_refused() -> None:
+    """`git show ":path"` reads the index, so an empty base would pass vacuously."""
+    assert checker.main(["--base", ""]) == 2
+
+
+def test_the_comparison_is_against_the_merge_base_not_the_tip() -> None:
+    """Another branch removing an entry must not read as this branch adding it."""
+    import inspect
+
+    source = inspect.getsource(checker.main)
+    assert "merge_base(args.base)" in source
+    assert "allowlist_at(base)" in source
+
+
+def test_an_entry_removed_on_the_base_branch_does_not_accuse_this_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The branch carries what the merge base carried; the base branch has since
+    # dropped one. Comparing with the tip would call that an addition.
+    merge_base_entries = frozenset({"a.py", "b.py"})
+    monkeypatch.setattr(checker, "allowlist_here", lambda: merge_base_entries)
+    monkeypatch.setattr(checker, "merge_base", lambda ref: "0" * 40)  # noqa: ARG005
+    monkeypatch.setattr(checker, "allowlist_at", lambda ref: merge_base_entries)  # noqa: ARG005
+    assert checker.main(["--base", "origin/main"]) == 0

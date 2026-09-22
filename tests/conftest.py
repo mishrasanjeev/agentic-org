@@ -146,10 +146,13 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
     allowlisted = _ambient_redis_allowlist()
     declared_redis = os.environ.get("AGENTICORG_REDIS_URL")
+    if declared_redis is None and os.environ.get("REDIS_URL"):
+        declared_redis = os.environ["REDIS_URL"]
     if declared_redis is not None:
         terminalreporter.write_line(
-            "ambient-Redis guard: OFF for this run — AGENTICORG_REDIS_URL is set "
-            f"({declared_redis or 'empty'}), so tests may reach that Redis and leave state in it"
+            "ambient-Redis guard: OFF for this run — a Redis URL is set "
+            f"({declared_redis or 'empty'}), so tests may reach that Redis and leave state in it",
+            red=True,
         )
     elif allowlisted:
         reached = len(_AMBIENT_REDIS_SEEN & allowlisted)
@@ -192,6 +195,72 @@ def _ambient_redis_allowlist() -> frozenset[str]:
     )
 
 
+# Every class in the redis package that defines its own ``_connect``, by
+# fully qualified name. Discovered rather than listed, because patching
+# ``AbstractConnection`` alone protects nothing (each concrete class overrides
+# it) — and pinned, because a release that adds, moves or drops one must be a
+# deliberate update here rather than a class that quietly goes unpatched.
+REDIS_CONNECT_OWNERS = frozenset(
+    {
+        "redis.asyncio.connection.AbstractConnection",
+        "redis.asyncio.connection.Connection",
+        "redis.asyncio.connection.UnixDomainSocketConnection",
+        "redis.connection.AbstractConnection",
+        "redis.connection.CacheProxyConnection",
+        "redis.connection.Connection",
+        "redis.connection.SSLConnection",
+        "redis.connection.UnixDomainSocketConnection",
+    }
+)
+
+
+class AmbientRedisGuardError(RuntimeError):
+    """The guard cannot prove it covers every way redis opens a socket."""
+
+
+def _redis_connect_owners() -> list[type]:
+    """Walk ``redis.*`` for the classes that own a ``_connect``.
+
+    A class is counted where it is defined (``__module__``), so a re-export
+    into another module is not patched twice — and, more importantly, an async
+    class re-exported into ``redis.connection`` cannot be given the
+    synchronous refuser, which would raise ``OSError`` where a coroutine is
+    awaited.
+    """
+    import importlib
+    import pkgutil
+
+    import redis
+
+    owners: dict[str, type] = {}
+    for found in pkgutil.walk_packages(redis.__path__, f"{redis.__name__}."):
+        try:
+            module = importlib.import_module(found.name)
+        except Exception:  # noqa: BLE001, S112 - an optional backend that will not import
+            continue
+        for candidate in vars(module).values():
+            if (
+                isinstance(candidate, type)
+                and "_connect" in vars(candidate)
+                and candidate.__module__ == module.__name__
+            ):
+                owners[f"{candidate.__module__}.{candidate.__qualname__}"] = candidate
+
+    # A real check, not an ``assert``: ``python -O`` strips assertions, and
+    # this one is the difference between a hermetic run and a silent one.
+    if owners.keys() != REDIS_CONNECT_OWNERS:
+        missing = sorted(REDIS_CONNECT_OWNERS - owners.keys())
+        extra = sorted(owners.keys() - REDIS_CONNECT_OWNERS)
+        raise AmbientRedisGuardError(
+            f"redis {getattr(__import__('redis'), '__version__', '?')} defines a different set "
+            "of connection classes than the ambient-Redis guard expects "
+            f"(missing: {missing or 'none'}; new: {extra or 'none'}). Update "
+            "REDIS_CONNECT_OWNERS in tests/conftest.py deliberately — a class that is not "
+            "patched opens a real socket, and the run looks clean. See FINDINGS A-59."
+        )
+    return list(owners.values())
+
+
 def _uses_ambient_infrastructure(request) -> bool:
     """Whether this test may reach the Redis this run has.
 
@@ -201,10 +270,13 @@ def _uses_ambient_infrastructure(request) -> bool:
     A run that declared one has chosen it; the protection is for the run that
     did not and would otherwise pick up whatever the machine happens to have.
     """
-    # ``is not None``, not truthiness: an empty value is still a declaration,
-    # and the product's ``from_url("")`` raises rather than falling back to a
-    # default, so the gate and the product agree about what empty means.
-    if os.environ.get("AGENTICORG_REDIS_URL") is not None:
+    # Both names, because ``core/config.py`` reads
+    # ``AGENTICORG_REDIS_URL or REDIS_URL``: with the first set empty and the
+    # second set, the product connects happily, so the run has declared a
+    # Redis. ``is not None`` rather than truthiness for the same reason — an
+    # empty value is still a declaration, and the product's ``from_url("")``
+    # raises rather than silently defaulting.
+    if os.environ.get("AGENTICORG_REDIS_URL") is not None or os.environ.get("REDIS_URL"):
         return True
     node_id = request.node.nodeid.replace("\\", "/")
     return node_id.startswith("tests/integration/") or bool(
@@ -254,10 +326,6 @@ def _no_test_connects_to_an_ambient_redis(request, monkeypatch):
         yield
         return
 
-    import redis
-    import redis.asyncio.connection as async_connection
-    import redis.connection as sync_connection
-
     attempts: list[str] = []
     refused = "a test outside tests/integration/ tried to reach Redis (FINDINGS A-59)"
 
@@ -275,21 +343,9 @@ def _no_test_connects_to_an_ambient_redis(request, monkeypatch):
         _record(self)
         raise OSError(refused)
 
-    # Every class in the module that defines its own ``_connect``, discovered
-    # rather than listed: patching ``AbstractConnection`` would do nothing
-    # (each concrete class overrides it), and a named list goes silently
-    # out of date when a redis release adds a class.
-    patched = 0
-    for module, refuse in ((async_connection, _refuse_async), (sync_connection, _refuse_sync)):
-        for candidate in vars(module).values():
-            if isinstance(candidate, type) and "_connect" in vars(candidate):
-                monkeypatch.setattr(candidate, "_connect", refuse)
-                patched += 1
-    assert patched >= 2, (
-        f"the ambient-Redis guard patched {patched} connection classes; redis "
-        f"{getattr(redis, '__version__', '?')} must have moved _connect, so tests "
-        "would reach a real Redis unnoticed"
-    )
+    for owner in _redis_connect_owners():
+        refuse = _refuse_async if owner.__module__.startswith("redis.asyncio") else _refuse_sync
+        monkeypatch.setattr(owner, "_connect", refuse)
 
     yield
 

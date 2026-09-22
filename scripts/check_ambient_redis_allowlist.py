@@ -7,8 +7,10 @@ Redis when the machine has one (FINDINGS A-59). The connection is refused
 either way, so a run stays hermetic; the list is there so a *new* file fails
 instead of joining them quietly, which only works while the list does not grow.
 
-This compares the list on this branch with the one on the base ref and fails
-when an entry was added. Removing entries, or leaving the list alone, passes.
+The comparison is against the **merge base**, not the tip of the base branch.
+Comparing with the tip accuses an innocent branch as soon as someone else's
+pull request removes an entry: every branch cut before that still carries it,
+and the removed entry then looks like an addition.
 
     python scripts/check_ambient_redis_allowlist.py --base origin/main
 
@@ -30,12 +32,20 @@ class AllowlistError(RuntimeError):
     """The allowlist could not be read on one side of the comparison."""
 
 
+def _git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603
+        ["git", *args],  # noqa: S607 - git is on PATH in CI and in the tools image
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def parse_allowlist(text: str) -> frozenset[str]:
     """Entries, ignoring blank lines and `#` commentary."""
     return frozenset(
-        entry
-        for line in text.splitlines()
-        if (entry := line.split("#", 1)[0].strip())
+        entry for line in text.splitlines() if (entry := line.split("#", 1)[0].strip())
     )
 
 
@@ -47,21 +57,38 @@ def allowlist_here() -> frozenset[str]:
         raise AllowlistError(f"{path} cannot be read: {exc}") from exc
 
 
+def merge_base(ref: str) -> str:
+    """Where this branch diverged, so another branch's removal is not read as ours.
+
+    An empty ref is refused rather than passed to git: ``git show ":path"``
+    reads the index, so an empty ``--base`` would compare the branch with
+    itself and pass vacuously.
+    """
+    if not ref.strip():
+        raise AllowlistError("--base is empty; pass a ref such as origin/main")
+    if _git("cat-file", "-e", f"{ref}^{{commit}}").returncode != 0:
+        raise AllowlistError(f"{ref} does not name a commit")
+    found = _git("merge-base", ref, "HEAD")
+    if found.returncode != 0 or not found.stdout.strip():
+        raise AllowlistError(f"no merge base between {ref} and HEAD")
+    return found.stdout.strip()
+
+
 def allowlist_at(ref: str) -> frozenset[str] | None:
-    """The base ref's entries, or ``None`` when it predates the file."""
-    result = subprocess.run(  # noqa: S603
-        ["git", "show", f"{ref}:{ALLOWLIST_FILE}"],  # noqa: S607 - git is on PATH in CI
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        message = result.stderr.strip()
-        if "does not exist" in message or "exists on disk" in message:
-            return None
-        raise AllowlistError(f"{ref}:{ALLOWLIST_FILE} cannot be read: {message}")
-    return parse_allowlist(result.stdout)
+    """The entries at ``ref``, or ``None`` when the file does not exist there.
+
+    Decisions come from exit codes, never from git's prose, which is localised
+    and changes between versions.
+    """
+    listed = _git("ls-tree", "--name-only", ref, "--", ALLOWLIST_FILE)
+    if listed.returncode != 0:
+        raise AllowlistError(f"{ref} cannot be read: git ls-tree exited {listed.returncode}")
+    if not listed.stdout.strip():
+        return None
+    shown = _git("show", f"{ref}:{ALLOWLIST_FILE}")
+    if shown.returncode != 0:
+        raise AllowlistError(f"{ref}:{ALLOWLIST_FILE} cannot be read")
+    return parse_allowlist(shown.stdout)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -71,13 +98,17 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         here = allowlist_here()
-        there = allowlist_at(args.base)
+        base = merge_base(args.base)
+        there = allowlist_at(base)
     except AllowlistError as exc:
         print(f"check_ambient_redis_allowlist: {exc}", file=sys.stderr)
         return 2
 
     if there is None:
-        print(f"check_ambient_redis_allowlist: {len(here)} entries ({args.base} has no list yet)")
+        print(
+            f"check_ambient_redis_allowlist: {len(here)} entries "
+            f"(the merge base {base[:8]} has no list yet)"
+        )
         return 0
 
     added = sorted(here - there)
@@ -95,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
 
     removed = len(there - here)
     moved = f"{removed} removed" if removed else "unchanged"
-    print(f"check_ambient_redis_allowlist: {len(here)} entries ({moved})")
+    print(f"check_ambient_redis_allowlist: {len(here)} entries ({moved} since {base[:8]})")
     return 0
 
 
