@@ -93,7 +93,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 
 .PHONY: help dev seed seed-cases down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
-	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit \
+	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline \
 	e2e
 
 help:
@@ -187,8 +187,11 @@ coverage-gate: tools-image
 
 # ── Checks ───────────────────────────────────────────────────────────────────
 
-check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit
+check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline
 	@echo "make check: all checks passed"
+
+check-cross-loop-baseline: tools-image
+	$(TOOLS) $(PY) scripts/check_cross_loop_baseline.py --base "$(BASE_REF)"
 
 check-ruff: tools-image
 	$(TOOLS) $(PY) -m ruff check .

@@ -749,20 +749,32 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** measuring the cross-loop guard in CI (2026-09-22).
 - **What:** the CI integration job (`pytest tests/integration/ tests/regression/`)
-  reports **54** cross-loop uses of the shared engine; the unit job reports 0.
+  trips the cross-loop guard **54** times; the unit job trips it 0 times.
   Synchronous test bodies call `asyncio.run`, or spawn a thread that does,
   against `core.database.engine`, so each one leaves the shared pool holding a
   connection bound to a loop that has ended — the same shape as A-49, in test
   code. They pass today because nothing later in the run happens to check that
   connection out, which is luck, and is a plausible source of the flakiness
-  this suite has shown. Which files contribute depends on ordering and on
-  which fixture bound the engine first, so the count is meaningful and the
-  attribution is not: running a few files alone reports zero, because their
-  own synchronous engines never touch `core.database.engine`.
+  this suite has shown. Two cautions about the number: it counts **trips, not
+  distinct violations** — one cross-loop use trips the guard once or three
+  times, averaging about two, so 54 trips is roughly 27 uses. A violation
+  against a warm pool trips once: the session wrapper sees it, and
+  `pool_pre_ping` fails on the foreign loop before `checkout` is reached. That
+  kills the pooled connection, so the next violation finds an empty pool and
+  trips three times — the wrapper, then `connect` and `checkout` together for
+  the replacement. The two pool hooks therefore always fire together, on about
+  half the violations. Measured against this engine from a warm start: 1
+  violation gives 1 trip, 2 give 4, 3 give 5, 5 give 9, 10 give 20, 20 give 40
+  (a cold start adds 2 at small n and washes out by 10). And which files
+  contribute depends on ordering and on which fixture
+  bound the engine first — running a few files alone trips nothing, because
+  their own synchronous engines never touch `core.database.engine`.
 - **Fix:** move those bodies onto `core.database.run_db_coroutine_sync` (or an
   engine the test owns and disposes), lowering `cross_loop_baseline.txt` as
-  they go, until it reaches 0 and the CI jobs can set
-  `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.
+  they go — `scripts/check_cross_loop_baseline.py` refuses a rise — until it
+  reaches 0 and the CI jobs can set `AGENTICORG_DB_CROSS_LOOP_GUARD=raise`.
+  Nothing sets that variable today: CI runs on the `warn` default and relies on
+  the ratchet.
 
 ## A-59 — Tests reach whatever Redis the machine runs, including security controls
 
