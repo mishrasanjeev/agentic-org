@@ -114,6 +114,8 @@ help:
 dev:
 	$(COMPOSE) $(DECISIONS_PROFILE) build
 	$(COMPOSE) $(DECISIONS_PROFILE) up -d --wait --wait-timeout 600
+# Nginx resolves the API service name at startup; refresh it after API recreation.
+	$(COMPOSE) $(DECISIONS_PROFILE) up -d --wait --wait-timeout 600 --force-recreate ui
 	bash scripts/dev_stack_smoke.sh
 
 down:

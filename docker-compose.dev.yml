@@ -393,7 +393,7 @@ services:
     environment:
       BASE_URL: http://ui
       GRANTEX_APPROVAL_ORIGIN: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
-      GRANTEX_ADMIN_API_KEY: agenticorg-dev-grantex-admin-key
+      GRANTEX_ADMIN_API_KEY: "${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-agenticorg-dev-grantex-admin-key}"
       GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
       GRANTEX_APPROVER_ISSUER: http://127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}
       CI: "true"
