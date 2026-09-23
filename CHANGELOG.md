@@ -4,6 +4,32 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - the governed-case decision is proven end to end
+- `make e2e-decisions` (`ui/e2e/decision-grants.spec.ts`) takes a real
+  four-eyes decline across both systems in a browser, with nothing stubbed:
+  the console asks for the decision, two different people sign in on the auth
+  service's own approval page with a second factor and approve there, the same
+  person is refused the second approval, and the console records the decision
+  with both approvers and both grant ids. It also proves a single approval with
+  step-up, and that a case which changed after the approval is refused with
+  `case_changed`. No decision grant reaches the console's browser, and the
+  suite fails if one does.
+
+### Fixed
+- A consumed decision is recorded with the decision grant each approver spent.
+  The issuer lists the approvers and, separately, the grant ids it consumed,
+  and those two arrays cannot be paired by position: `jtis` is in the order the
+  grants were presented and `approvers` is in approval order, so for a
+  four-eyes decision they can disagree and index pairing would put one person's
+  approval against the other's credential. The pairing is now taken from the
+  issuer's own record of the request, where the grant and the approver are
+  stated together, and any approver that does not match exactly one approval -
+  or that resolves to a grant the issuer did not say it consumed - is refused
+  with `decision_service_response_invalid`. Before this the client read a grant
+  id the issuer does not send, recorded an empty one, and the case document
+  schema rejected it: the first real four-eyes decision could not be recorded
+  at all.
+
 ### Added - the development stack serves decision grants
 - The pinned Grantex auth-service image moves to a build of Grantex `main`
   (`5b867f68`, `ghcr.io/mishrasanjeev/grantex-auth-service@sha256:b73668a3...`),

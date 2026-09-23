@@ -366,6 +366,145 @@ async def test_consumption_returns_the_approvers_and_refuses_an_answer_without_o
     assert refused.value.reason == "decision_service_response_invalid"
 
 
+async def test_a_consumption_without_a_grant_id_per_approver_resolves_it_from_the_request() -> None:
+    """An issuer that lists the grant ids separately is not paired by position.
+
+    ``jtis`` is in the order the grants were presented and ``approvers`` is in approval order, so
+    for a four-eyes decision the two can disagree and pairing by index records one person's
+    approval against the other's credential. The issuer's own record of the request states the
+    grant and the approver together; that is what is used.
+    """
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url.path}")
+        if request.method == "GET":
+            return httpx.Response(
+                200,
+                json={
+                    "requestId": "dr_1",
+                    "approvals": [
+                        {"jti": "j1", "sub": "user:a", "position": 1},
+                        {"jti": "j2", "sub": "user:b", "position": 2},
+                    ],
+                },
+            )
+        return httpx.Response(
+            200,
+            json={
+                "consumed": True,
+                "requestId": "dr_1",
+                # Presented in the other order, as the issuer answers it.
+                "jtis": ["j2", "j1"],
+                "approvers": [{"sub": "user:a"}, {"sub": "user:b"}],
+            },
+        )
+
+    consumed = await service(handler).consume(
+        grants=["g2", "g1"], action={"case_id": "case_1"}, case_version="3"
+    )
+    # Each approver with their own grant, not the one that happened to share an index.
+    assert consumed.approvers == (("user:a", "j1"), ("user:b", "j2"))
+    assert seen == ["POST /v1/decisions/consume", "GET /v1/decisions/requests/dr_1"]
+
+
+async def test_the_grant_the_issuer_names_on_the_approver_is_used_without_a_second_call() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        return httpx.Response(
+            200,
+            json={
+                "consumed": True,
+                "requestId": "dr_1",
+                "jtis": ["j2", "j1"],
+                "approvers": [{"sub": "user:a", "jti": "j1"}, {"sub": "user:b", "jti": "j2"}],
+            },
+        )
+
+    consumed = await service(handler).consume(
+        grants=["g2", "g1"], action={"case_id": "case_1"}, case_version="3"
+    )
+    assert consumed.approvers == (("user:a", "j1"), ("user:b", "j2"))
+    assert seen == ["POST"]
+
+
+@pytest.mark.parametrize(
+    ("approvals", "why"),
+    [
+        # The approver is not on the request at all.
+        ([{"jti": "j1", "sub": "user:x"}, {"jti": "j2", "sub": "user:b"}], "unknown approver"),
+        # Two approvals for one approver: which grant did they spend?
+        ([{"jti": "j1", "sub": "user:a"}, {"jti": "j9", "sub": "user:a"}], "ambiguous approver"),
+        # An approval with no grant id.
+        ([{"sub": "user:a"}, {"jti": "j2", "sub": "user:b"}], "approval without a grant"),
+        # Resolves to grants the issuer did not say it consumed.
+        ([{"jti": "j7", "sub": "user:a"}, {"jti": "j8", "sub": "user:b"}], "not the consumed grants"),
+    ],
+)
+async def test_a_pairing_that_cannot_be_resolved_is_refused(approvals: Any, why: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"requestId": "dr_1", "approvals": approvals})
+        return httpx.Response(
+            200,
+            json={
+                "consumed": True,
+                "requestId": "dr_1",
+                "jtis": ["j1", "j2"],
+                "approvers": [{"sub": "user:a"}, {"sub": "user:b"}],
+            },
+        )
+
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(handler).consume(grants=["g1", "g2"], action={"case_id": "case_1"}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid", why
+
+
+async def test_a_consumption_whose_approvers_are_not_objects_is_refused() -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200, json={"consumed": True, "requestId": "dr_1", "jtis": ["j1"], "approvers": ["user:a"]}
+            )
+        ).consume(grants=["g1"], action={"case_id": "case_1"}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
+@pytest.mark.parametrize("malformed_jti", [None, 17, {"id": "j1"}, ["j1"]])
+async def test_a_non_string_consumed_grant_id_is_refused(malformed_jti: Any) -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200,
+                json={
+                    "consumed": True,
+                    "requestId": "dr_1",
+                    "jtis": [malformed_jti],
+                    "approvers": [{"sub": "user:a"}],
+                },
+            )
+        ).consume(grants=["g1"], action={}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
+async def test_a_non_string_approver_grant_id_is_refused() -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200,
+                json={
+                    "consumed": True,
+                    "requestId": "dr_1",
+                    "jtis": ["j1"],
+                    "approvers": [{"sub": "user:a", "jti": {"id": "j1"}}],
+                },
+            )
+        ).consume(grants=["g1"], action={}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
 # --- the verifier ----------------------------------------------------------------------------------
 
 

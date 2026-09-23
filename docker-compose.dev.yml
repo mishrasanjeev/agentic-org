@@ -380,6 +380,30 @@ services:
     healthcheck:
       disable: true
 
+  # Playwright runner for `make e2e-decisions`: the decision-grant suite, which
+  # drives the console *and* the auth service's own approval page. It shares
+  # the auth service's network namespace so the approval page and the identity
+  # provider answer on exactly the loopback URLs the auth service publishes,
+  # while the console is still reached by service name on the stack's network.
+  e2e-decisions:
+    profiles: [e2e]
+    image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+    working_dir: /src
+    network_mode: "service:grantex"
+    environment:
+      BASE_URL: http://ui
+      GRANTEX_APPROVAL_ORIGIN: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
+      GRANTEX_ADMIN_API_KEY: "${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-agenticorg-dev-grantex-admin-key}"
+      GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
+      GRANTEX_APPROVER_ISSUER: http://127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}
+      CI: "true"
+    volumes:
+      - .:/src
+      - e2e-node-modules:/src/ui/node_modules
+    ipc: host
+    healthcheck:
+      disable: true
+
 volumes:
   pgdata:
   redisdata:

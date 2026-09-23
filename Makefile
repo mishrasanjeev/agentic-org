@@ -10,6 +10,7 @@
 #   make test    unit + contract + integration tests (the same suites as CI)
 #   make check   lint, types, security scans, schema validation, vendor denylist, licence headers
 #   make e2e     browser end-to-end suite against the running stack
+#   make e2e-decisions  the decision-grant end-to-end suite (needs the flag on)
 #
 # `make test` and `make check` run in the agenticorg-tools image (Python 3.12,
 # as in CI), so Docker and make are all they need. RUNNER=local runs them with
@@ -94,7 +95,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 .PHONY: help dev seed seed-cases down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline check-ambient-redis-allowlist \
-	e2e
+	e2e e2e-decisions
 
 help:
 	@echo "make dev     build and start the local stack and smoke-test it"
@@ -108,10 +109,13 @@ help:
 	@echo "make coverage-gate  after make test: 75% of changed lines and of each new module"
 	@echo "make check   ruff, mypy, bandit, gitleaks, licence headers, schemas, vendor denylist, pip-audit"
 	@echo "make e2e     Playwright suite against the running stack (needs make dev)"
+	@echo "make e2e-decisions  decision-grant suite: a real approval on the issuer's approval page"
 
 dev:
 	$(COMPOSE) $(DECISIONS_PROFILE) build
 	$(COMPOSE) $(DECISIONS_PROFILE) up -d --wait --wait-timeout 600
+# Nginx resolves the API service name at startup; refresh it after API recreation.
+	$(COMPOSE) $(DECISIONS_PROFILE) up -d --wait --wait-timeout 600 --force-recreate ui
 	bash scripts/dev_stack_smoke.sh
 
 down:
@@ -235,3 +239,28 @@ e2e:
 	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
 		-e AGENTICORG_SEED_PASSWORD -e GOVERNED_CASES_SEED=$(GOVERNED_CASES_SEED) \
 		e2e bash scripts/run_e2e.sh $(E2E_CONFIG) $(E2E_ARGS)
+
+# The decision-grant suite (PRD G-3 / PRD 8.4 steps 5 and 6): the console, the
+# API and a real approval taken in a browser on the Grantex auth service's own
+# approval page. It needs the approver identity provider allow-listed (a
+# service-administrator action) and the stack started with decision requests
+# switched on:
+#
+#   AGENTICORG_DEV_DECISION_GRANTS=true AGENTICORG_DEV_GRANTEX_ADMIN_KEY=... \
+#   AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex AGENTICORG_SEED_PASSWORD=... \
+#   make dev seed seed-cases e2e-decisions
+#
+# The identity provider approvers sign in with is in the `decisions` compose
+# profile, so `make dev` never starts it; this target does.
+e2e-decisions: E2E_CONFIG = e2e/decision-grants.config.ts
+e2e-decisions:
+	@[ "$(AGENTICORG_DEV_DECISION_GRANTS)" = "true" ] || { echo \
+		"make e2e-decisions: start the stack with AGENTICORG_DEV_DECISION_GRANTS=true" >&2; exit 1; }
+	@[ -n "$(AGENTICORG_SEED_PASSWORD)" ] || { echo \
+		"make e2e-decisions: set AGENTICORG_SEED_PASSWORD for the seeded approver login" >&2; exit 1; }
+	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
+		{ echo "make e2e-decisions: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(COMPOSE) --profile decisions up -d --wait --wait-timeout 180 oidc-approvers
+	$(COMPOSE) --profile e2e run --rm --no-deps -e HOST_UID=$(HOST_UID) -e HOST_GID=$(HOST_GID) \
+		-e AGENTICORG_SEED_PASSWORD -e GOVERNED_CASES_SEED=$(GOVERNED_CASES_SEED) \
+		e2e-decisions bash scripts/run_e2e.sh $(E2E_CONFIG) $(E2E_ARGS)

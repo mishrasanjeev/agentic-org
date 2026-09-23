@@ -123,15 +123,19 @@ allow-listed by its administrator; AgenticOrg's developer key cannot do either, 
 export AGENTICORG_DEV_DECISION_GRANTS=true
 export AGENTICORG_DEV_GRANTEX_ADMIN_KEY=<a development administrator key you choose>
 export AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex
+export AGENTICORG_SEED_PASSWORD=<a local-only passphrase of at least 12 characters>
 make dev
-AGENTICORG_SEED_PASSWORD=… make seed seed-cases
+make seed seed-cases
+make e2e-decisions
 ```
 
 Without `AGENTICORG_DEV_DECISION_GRANTS=true` the auth service runs with decision grants off, no
 administrator key and no relaxed outbound rules, and the identity provider approvers sign in with
 (`oidc-approvers`, two fixture people, in the `decisions` compose profile) is not started at all —
-so a stack that never asks for any of this does not get it. Allow-listing that provider is a
-service-administrator action, with the administrator key above:
+so a stack that never asks for any of this does not get it. The decision E2E target requires the
+seed password up front and starts the local approver identity provider; it never skips silently when
+credentials are missing. Allow-listing that provider is a service-administrator action, with the
+administrator key above:
 
 ```
 DEV=$(curl -fsS -H "Authorization: Bearer $GRANTEX_API_KEY" "$GRANTEX/v1/me" | jq -r .developerId)
@@ -142,33 +146,68 @@ curl -fsS -X POST -H "Authorization: Bearer $GRANTEX_ADMIN_API_KEY" -H 'Content-
 ```
 
 The auth service's approval page only runs on an https origin or a loopback one, so in the local
-stack it publishes `http://127.0.0.1:<port>` and listens on that same port inside its container:
-the URL in an approver's address bar, the `Origin` its form post carries and the origin the service
-checks it against are then all the same string.
-
+stack it publishes `http://127.0.0.1:<port>` and listens on that same port inside its container.
+The decision-grant browser suite therefore runs in the auth service's network namespace; the
+console is still reached by service name.
 
 ## Enablement checklist
 
-The issuer side is implemented and covered in the Grantex repository (the decision routes, the
-approval page, four eyes and the browser end-to-end suite). What is not yet proven *here* is the
-join between the two, because this stack pins an auth-service image that predates those routes.
-Before turning `AGENTICORG_CASE_DECISION_SERVICE=grantex` on anywhere:
+### Proven
 
-1. **Rebuild the development auth-service image** so `docker-compose.dev.yml` runs a Grantex build
-   that serves `/v1/decisions/...` and the approval page, with `DECISION_GRANTS_ENABLED=true`.
-2. **Allow-list an approver identity provider** for the developer, through the service
-   administrator's API. The platform's own key cannot do this, by design.
-3. **Take one genuine four-eyes approval end to end**: request a decline from the console, approve
-   on the issuer's page as two different people with step-up, record the decision, and check the
-   case's `decision.approvers`, the issuer-measured dwell and the audit chain on both sides.
-4. **Set the issuer explicitly.** With the service on and no `GRANTEX_BASE_URL`, decision requests
-   are refused: nothing should be asked of an issuer nobody chose.
-5. **Consider verifying the grants here as well.** This platform consumes them at the issuer, which
-   verifies the signature and key, the audience and issuer, the action hash, the dwell source, the
-   memo and policy hashes and the four-eyes structure under its own row locks, and refuses anything
-   that does not match. That is fail-closed but single-sided; verifying them locally too
-   (decision-grant profile §6 steps 2 and 3) needs the Grantex Python SDK's `grantex.decisions`
-   verifier once it is published.
+The join between the two systems runs, and is kept running by
+`ui/e2e/decision-grants.spec.ts` (`make e2e-decisions`) against the local stack. Nothing in that
+suite is stubbed: the console, the API and the database are this stack's; the decision request, the
+approval page, the sign-in, the step-up, the dwell measurement, the four-eyes rule and the decision
+grants are the auth service's.
+
+1. **The development auth-service image serves the decision routes.** `docker-compose.dev.yml` pins
+   `ghcr.io/mishrasanjeev/grantex-auth-service` by digest to a build of Grantex `main`
+   (`5b867f68`), with `DECISION_GRANTS_ENABLED=true`, a vault key, an `ADMIN_API_KEY` and a
+   step-up policy. `scripts/dev_stack_smoke.sh` checks that the approval page answers.
+2. **An approver identity provider is allow-listed by the service administrator.** The suite does
+   it with `ADMIN_API_KEY` and asserts that the platform's own developer key is refused (`401`)
+   for the same call. The stack runs one for approvers only (`oidc-approvers`,
+   `tools/oidc_stub/config.approvers.dev.json`), separate from the console's development SSO.
+3. **A genuine four-eyes decline, end to end** (PRD §8.4 step 6). The console asks for a decline on
+   a case in `awaiting_decision`; two different people sign in on the auth service's own page with
+   a second factor and approve there; the console records the decision. The case carries two
+   approvers with distinct namespaced subjects and two distinct `dgnt_…` grant ids, and the issuer
+   carries the dwell it measured itself (`dwell_source: server`) and an audit chain entry for each
+   sign-in, approval and consumption.
+4. **A single approval with step-up** (PRD §8.4 step 5), on the same machinery with
+   `approvals_required: 1`.
+5. **The same approver is refused the second approval.** Signing in again as the first approver, in
+   a clean browser, gets "You have already approved this decision"; the request stays at one of two.
+6. **A case that changed after the approval cannot be decided on it.** Reviewing a screening
+   disposition bumps the case version, which AgenticOrg registers with the issuer; the issuer
+   supersedes the request and revokes the unconsumed grant with `case_changed`, and recording the
+   decision is refused `409 case_changed` with the case still `awaiting_decision`.
+7. **No decision grant reaches the browser.** The suite inspects every response the console is
+   served for a `typ: "decision+jwt"` token and fails if one appears. The server fetches the grants
+   from the issuer and consumes them itself.
+8. **The issuer is named explicitly.** With the service on and no `GRANTEX_BASE_URL`, decision
+   requests are refused (`decision_service_not_configured`): nothing is asked of an issuer nobody
+   chose. Covered by `tests/unit/governed_cases/test_case_decision_requests.py`.
+
+`AGENTICORG_CASE_DECISION_SERVICE` still defaults to off, in the development stack too. The local
+stack serves decision grants only when a run sets `AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex`.
+
+### Not yet proven
+
+- **The grants are verified only at the issuer, not here as well.** This platform consumes them at
+  the issuer, which verifies the signature and key, the audience and issuer, the action hash, the
+  dwell source, the memo and policy hashes and the four-eyes structure under its own row locks, and
+  refuses anything that does not match. That is fail-closed but single-sided; verifying them here
+  too (decision-grant profile §6 steps 2 and 3) needs the Grantex Python SDK's `grantex.decisions`
+  verifier once it is published. **Enabling this outside a development stack should wait for it.**
+- **Only the development identity provider has been through the sign-in flow.** `tools/oidc_stub`
+  implements discovery, PKCE, `nonce`, `max_age`, `acr_values`, `amr` and `auth_time`, but a real
+  provider has not been tried, and neither has a rotation of the issuer's signing key while a grant
+  is outstanding.
+- **Expiry and cancellation have not been taken end to end** from the console: the issuer's own
+  suites cover them, but the console's `expired` and `revoked` paths have only unit coverage here.
+- **Nothing has been run at scale or against a hosted issuer.** The dwell floor, the rate limits and
+  the 24-hour ceiling have only been exercised with the development defaults.
 
 Answers from the issuer are parsed strictly: any field the console states as fact - the action, its
 hash, the case version, how many approvals are required, and each approval's subject,
@@ -194,8 +233,23 @@ The issuer keeps its own audit chain of every sign-in, approval, consumption and
 ## Implementation notes
 
 `core/cases/decision_requests.py` holds the service interface, the Grantex client and the verifier
-that plugs into `CaseRuntime.decision_verifier`. **The endpoint shapes are provisional**: they
-follow the published decision-grant API, which is still changing, and the Grantex Python SDK's
-`decisions` client (grantex 0.6) will replace the hand-written request building once it is
-released. Tests run against `core/test_doubles/fake_decision_grants.py`, which enforces the same
-rules — four eyes, the same approver refused, single-use grants, action and case-version binding.
+that plugs into `CaseRuntime.decision_verifier`. The endpoint shapes were written against the
+published decision-grant API before either side had talked to the other; they are now exercised
+against the real issuer by `make e2e-decisions`, and the Grantex Python SDK's `decisions` client
+(grantex 0.6) will replace the hand-written request building once it is released. Unit tests run
+against `core/test_doubles/fake_decision_grants.py`, which enforces the same rules — four eyes, the
+same approver refused, single-use grants, action and case-version binding.
+
+One shape the first real run corrected: the issuer's consumption answer lists the approvers and the
+grant ids it spent, and names the grant on each approver only in its audit entry, not in the
+response. The two arrays cannot be paired by position — `jtis` is in the order the grants were
+presented, `approvers` is in approval order — so for a four-eyes decision they can disagree, and a
+client pairing them by index would record one person's approval against the other's credential.
+When the answer does not name the grant on each approver, the pairing is taken from the issuer's
+own record of the request (`GET /v1/decisions/requests/{id}`, whose `approvals[]` state the grant
+and the approver together): each approver must match exactly one approval, and the grants that
+resolves to must be exactly the ones the issuer said it consumed. Anything else is refused, because
+an approver recorded against the wrong credential is worse than a decision not recorded. Grantex
+will also return `approvers[].jti`
+([grantex#1339](https://github.com/mishrasanjeev/grantex/pull/1339)); this prefers it when it is
+there, which removes the second call.
