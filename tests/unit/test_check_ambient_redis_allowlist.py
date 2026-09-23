@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import importlib.util
+import runpy
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +87,80 @@ def test_an_unresolvable_base_ref_fails_closed() -> None:
 def test_an_empty_base_is_refused() -> None:
     """`git show ":path"` reads the index, so an empty base would pass vacuously."""
     assert checker.main(["--base", ""]) == 2
+
+
+def test_allowlist_here_reports_a_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(checker, "REPO_ROOT", tmp_path)
+    with pytest.raises(checker.AllowlistError, match="cannot be read"):
+        checker.allowlist_here()
+
+
+def test_merge_base_reports_git_ref_and_merge_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    def missing_ref(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, "", "missing ref")
+
+    monkeypatch.setattr(checker, "_git", missing_ref)
+    with pytest.raises(checker.AllowlistError, match="does not name a commit"):
+        checker.merge_base("missing")
+
+    def no_common_base(*args: str) -> subprocess.CompletedProcess[str]:
+        if args[0] == "cat-file":
+            return subprocess.CompletedProcess(args, 0, "", "")
+        return subprocess.CompletedProcess(args, 1, "", "unrelated history")
+
+    monkeypatch.setattr(checker, "_git", no_common_base)
+    with pytest.raises(checker.AllowlistError, match="no merge base"):
+        checker.merge_base("unrelated")
+
+
+def test_allowlist_at_handles_missing_and_unreadable_tree_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unreadable_tree(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 128, "", "bad object")
+
+    monkeypatch.setattr(checker, "_git", unreadable_tree)
+    with pytest.raises(checker.AllowlistError, match="cannot be read"):
+        checker.allowlist_at("missing")
+
+    monkeypatch.setattr(
+        checker,
+        "_git",
+        lambda *args: subprocess.CompletedProcess(args, 0, "", ""),
+    )
+    assert checker.allowlist_at("without-file") is None
+
+
+def test_allowlist_at_fails_if_git_cannot_read_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    def unreadable_file(*args: str) -> subprocess.CompletedProcess[str]:
+        if args[0] == "ls-tree":
+            return subprocess.CompletedProcess(args, 0, f"{checker.ALLOWLIST_FILE}\n", "")
+        return subprocess.CompletedProcess(args, 128, "", "bad object")
+
+    monkeypatch.setattr(checker, "_git", unreadable_file)
+    with pytest.raises(checker.AllowlistError, match="cannot be read"):
+        checker.allowlist_at("broken")
+
+
+def test_allowlist_at_parses_the_committed_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    def readable_file(*args: str) -> subprocess.CompletedProcess[str]:
+        if args[0] == "ls-tree":
+            return subprocess.CompletedProcess(args, 0, f"{checker.ALLOWLIST_FILE}\n", "")
+        return subprocess.CompletedProcess(args, 0, "tests/unit/test_a.py\n", "")
+
+    monkeypatch.setattr(checker, "_git", readable_file)
+    assert checker.allowlist_at("commit") == frozenset({"tests/unit/test_a.py"})
+
+
+def test_cli_entrypoint_runs_against_the_current_commit() -> None:
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--base", "HEAD"])
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            runpy.run_path(str(SCRIPT), run_name="__main__")
+        assert exc_info.value.code == 0
+    finally:
+        monkeypatch.undo()
 
 
 def test_the_comparison_is_against_the_merge_base_not_the_tip() -> None:
