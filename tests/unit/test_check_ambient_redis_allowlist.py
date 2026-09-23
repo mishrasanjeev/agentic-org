@@ -27,6 +27,39 @@ def _load() -> Any:
 checker = _load()
 
 
+def test_empty_redis_url_does_not_disable_ambient_socket_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.test_doubles.ambient_redis_policy import declared_redis_url
+
+    monkeypatch.setenv("AGENTICORG_REDIS_URL", "")
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    assert declared_redis_url() is None
+
+
+def test_empty_primary_redis_url_still_honors_legacy_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from core.test_doubles.ambient_redis_policy import declared_redis_url
+
+    monkeypatch.setenv("AGENTICORG_REDIS_URL", "")
+    monkeypatch.setenv("REDIS_URL", "redis://legacy.test:6379/0")
+
+    assert declared_redis_url() == "redis://legacy.test:6379/0"
+
+
+@pytest.mark.parametrize("redis_env", ["AGENTICORG_REDIS_URL", "REDIS_URL"])
+def test_nonempty_redis_url_declares_ambient_infrastructure(
+    monkeypatch: pytest.MonkeyPatch, redis_env: str
+) -> None:
+    from core.test_doubles.ambient_redis_policy import declared_redis_url
+
+    monkeypatch.delenv("AGENTICORG_REDIS_URL", raising=False)
+    monkeypatch.delenv("REDIS_URL", raising=False)
+    monkeypatch.setenv(redis_env, "redis://explicit.test:6379/0")
+    assert declared_redis_url() == "redis://explicit.test:6379/0"
+
+
 def test_the_committed_allowlist_parses_and_names_test_files() -> None:
     entries = checker.allowlist_here()
     assert entries, "the committed allowlist is empty; update this test if that is deliberate"
@@ -153,6 +186,8 @@ def test_allowlist_at_parses_the_committed_file(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_cli_entrypoint_runs_against_the_current_commit() -> None:
+    if checker._git("rev-parse", "--verify", "HEAD").returncode != 0:
+        pytest.skip("this tools container has no Git metadata; CI checks the entrypoint")
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(sys, "argv", [str(SCRIPT), "--base", "HEAD"])
     try:
@@ -170,6 +205,17 @@ def test_the_comparison_is_against_the_merge_base_not_the_tip() -> None:
     source = inspect.getsource(checker.main)
     assert "merge_base(args.base)" in source
     assert "allowlist_at(base)" in source
+
+
+def test_push_baseline_guards_use_the_pre_push_commit() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    assert workflow.count('PUSH_BEFORE: ${{ github.event.before }}') == 2
+    assert workflow.count('base="$PUSH_BEFORE"') == 2
+    assert workflow.count(
+        'if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "branch" ]]; then'
+    ) == 2
 
 
 def test_an_entry_removed_on_the_base_branch_does_not_accuse_this_one(
