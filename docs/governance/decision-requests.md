@@ -132,8 +132,10 @@ make e2e-decisions
 Without `AGENTICORG_DEV_DECISION_GRANTS=true` the auth service runs with decision grants off, no
 administrator key and no relaxed outbound rules, and the identity provider approvers sign in with
 (`oidc-approvers`, two fixture people, in the `decisions` compose profile) is not started at all —
-so a stack that never asks for any of this does not get it. Allow-listing that provider is a
-service-administrator action, with the administrator key above:
+so a stack that never asks for any of this does not get it. The decision E2E target requires the
+seed password up front and starts the local approver identity provider; it never skips silently when
+credentials are missing. Allow-listing that provider is a service-administrator action, with the
+administrator key above:
 
 ```
 DEV=$(curl -fsS -H "Authorization: Bearer $GRANTEX_API_KEY" "$GRANTEX/v1/me" | jq -r .developerId)

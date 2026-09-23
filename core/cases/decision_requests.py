@@ -189,44 +189,6 @@ class DecisionGrantService(Protocol):
         """The minted decision grants, or an empty list while the request is not fully approved."""
         ...
 
-    async def _grant_ids_by_approver(
-        self, request_id: str, subjects: Sequence[str], consumed: set[str]
-    ) -> list[str]:
-        """Which grant each approver spent, from the issuer's record of the request.
-
-        Used only when the consumption answer did not name the grant on each approver. Every step
-        fails closed: the request has to be readable, each approver has to match exactly one
-        approval on it, and the grants that resolves to have to be exactly the ones the issuer said
-        it consumed. Anything else is refused rather than guessed, because a decision recorded
-        against the wrong approver's credential is worse than a decision not recorded.
-
-        The caller holds the case row locked across the consumption, so this second call gets the
-        same tighter deadline.
-        """
-        payload = await self._call(
-            "GET", f"/v1/decisions/requests/{request_id}", timeout=self.consume_timeout_seconds
-        )
-        approvals = payload.get("approvals")
-        if not isinstance(approvals, list):
-            raise DecisionServiceError("decision_service_response_invalid", "the request has no approvals")
-        resolved: list[str] = []
-        for subject in subjects:
-            matches = {
-                str(a.get("jti") or "")
-                for a in approvals
-                if isinstance(a, Mapping) and a.get("sub") == subject and a.get("jti")
-            }
-            if len(matches) != 1:
-                raise DecisionServiceError(
-                    "decision_service_response_invalid", "the approver's decision grant is ambiguous"
-                )
-            resolved.append(matches.pop())
-        if len(set(resolved)) != len(resolved) or set(resolved) != consumed:
-            raise DecisionServiceError(
-                "decision_service_response_invalid", "the resolved decision grants are not the consumed ones"
-            )
-        return resolved
-
     async def consume(
         self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str
     ) -> ConsumedDecision: ...
