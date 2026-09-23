@@ -96,6 +96,8 @@ jobs:
     permissions:
       contents: read
     steps:
+      # Full history: the allowlist check compares against the merge base, and
+      # a shallow clone has no common ancestor to find.
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v7
@@ -103,6 +105,17 @@ jobs:
       - run: pip install ruff mypy pydantic
       - run: ruff check .
       - run: mypy --ignore-missing-imports .
+      # The ambient-Redis allowlist only shrinks (FINDINGS A-59): a growing
+      # list licenses exactly what it exists to catch. Comparing against the
+      # merge base rather than the tip means another branch removing an entry
+      # does not look like this one adding it.
+      - name: Ambient-Redis allowlist does not grow
+        run: |
+          git fetch --no-tags origin "${BASE_REF}"
+          python scripts/check_ambient_redis_allowlist.py --base FETCH_HEAD
+        env:
+          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+
       # The cross-loop ratchet only moves down: a raised baseline would license
       # the violation it exists to catch (FINDINGS A-58).
       - name: Cross-loop baseline does not rise
