@@ -1,6 +1,20 @@
-54  # cross-loop uses of a guarded database pool tolerated in a test run.
+54  # cross-loop guard trips tolerated in a test run.
+#
+# Trips, not distinct violations: one cross-loop use trips the guard once or
+# three times, averaging about two, so 54 trips is roughly 27 uses. A
+# violation against a warm pool trips once - the session wrapper sees it, and
+# pool_pre_ping fails on the foreign loop before checkout is reached - which
+# kills the pooled connection, so the next violation finds an empty pool and
+# trips three times: the wrapper, then connect and checkout together for the
+# replacement. The two pool hooks always fire together, on about half the
+# violations. Measured against this engine from a warm start: 1 violation ->
+# 1 trip, 2 -> 4, 3 -> 5, 5 -> 9, 10 -> 20, 20 -> 40 (a cold start adds 2 at
+# small n and washes out by 10). What matters for a ratchet is that the
+# number is monotonic and reproducible.
 #
 # Measured by the CI integration job (pytest tests/integration tests/regression)
 # on 2026-09-22; the unit job reports 0. See FINDINGS A-58. This number only
-# moves down: a run that exceeds it fails, so a new cross-loop use is caught
-# where it is introduced.
+# moves down, which scripts/check_cross_loop_baseline.py enforces against main.
+# A maintainer can still override deliberately: AGENTICORG_CROSS_LOOP_BASELINE
+# replaces this number for one run, and AGENTICORG_DB_CROSS_LOOP_GUARD=off
+# stops the counting altogether (the run then says so on its summary line).

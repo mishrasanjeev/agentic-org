@@ -106,15 +106,20 @@ def _migration_audit_dir_outside_the_checkout(tmp_path_factory):
 # ── Cross-loop guard ratchet ────────────────────────────────────────────────
 #
 # The guard reports rather than raises (core/database.py), so a test run would
-# otherwise accumulate cross-loop uses silently. Count them and fail the run
-# when it exceeds the committed baseline: existing debt (FINDINGS A-58) burns
-# down, new violations fail immediately. Update the baseline downwards only.
+# otherwise accumulate cross-loop uses silently. Count the guard's trips and
+# fail the run when they exceed the committed baseline: existing debt (FINDINGS
+# A-58) burns down, a new violation fails immediately. One cross-loop use trips
+# the guard once or three times, averaging about two: the session wrapper sees
+# every violation, and the two pool hooks fire together on about half of them.
+# It is a reproducible number rather than a count of mistakes.
+# Update the baseline downwards only; `scripts/check_cross_loop_baseline.py`
+# enforces that against main.
 CROSS_LOOP_BASELINE_FILE = Path(__file__).resolve().parents[1] / "cross_loop_baseline.txt"
 CROSS_LOOP_BASELINE_ENV = "AGENTICORG_CROSS_LOOP_BASELINE"
 
 
-def _cross_loop_uses() -> int:
-    """How many cross-loop uses of a guarded pool this session has counted."""
+def _cross_loop_trips() -> int:
+    """How many times a guarded pool's cross-loop check tripped this session."""
     from core.database import _cross_loop_checkouts_total
 
     total = 0.0
@@ -137,7 +142,7 @@ def _cross_loop_baseline() -> int:
 
 def pytest_sessionfinish(session, exitstatus) -> None:
     """Fail the run when it used a guarded pool from more loops than the baseline."""
-    counted, baseline = _cross_loop_uses(), _cross_loop_baseline()
+    counted, baseline = _cross_loop_trips(), _cross_loop_baseline()
     session.config._cross_loop_counts = (counted, baseline)  # noqa: SLF001 - read below
     if counted > baseline and exitstatus == 0:
         session.exitstatus = 1
@@ -152,14 +157,21 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # no
             f"({AMBIENT_REDIS_ALLOWLIST_FILE.name}; the connection is refused either way)"
         )
     counted, baseline = getattr(
-        config, "_cross_loop_counts", (_cross_loop_uses(), _cross_loop_baseline())
+        config, "_cross_loop_counts", (_cross_loop_trips(), _cross_loop_baseline())
     )
+    from core.database import cross_loop_guard_mode
+
+    mode = cross_loop_guard_mode()
+    # The mode is on the line because `off` makes the count 0, which would
+    # otherwise read exactly like a clean run.
     terminalreporter.write_line(
-        f"cross-loop uses of a guarded database pool: {counted} (baseline {baseline})"
+        f"cross-loop guard trips: {counted} (baseline {baseline}, guard mode {mode}"
+        + (", NOT COUNTING — the guard is off" if mode == "off" else "")
+        + ")"
     )
     if counted > baseline:
         terminalreporter.write_line(
-            f"FAILED: {counted - baseline} new cross-loop database use(s). Run synchronous "
+            f"FAILED: {counted - baseline} new cross-loop guard trip(s). Run synchronous "
             "database work through core.database.run_db_coroutine_sync, or "
             "core.tasks.async_runner.run_async in a worker process. See FINDINGS A-58; "
             f"the baseline lives in {CROSS_LOOP_BASELINE_FILE.name} and only moves down.",

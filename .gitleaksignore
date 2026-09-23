@@ -33,3 +33,10 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 # Non-production test keys retained on purpose for testing (triaged
 # 2026-09-15). Baselined by fingerprint only; the values are not repeated here.
 39a25f24bbc3fccdcb41674a0664f861316edadc:docs/V4_9_0_REQUIREMENTS.md:generic-api-key:19
+
+# The development vault key in docker-compose.dev.yml, as it was first
+# committed on this branch: a base64 placeholder whose entropy tripped the
+# generic rule. Replaced on the branch with a visibly fake hex value; this
+# fingerprint keeps the earlier commit from failing the history scan. Not a
+# credential, and it never was one.
+1e2b256cb0d78486b6d4f562a50dace6669613a2:docker-compose.dev.yml:generic-api-key:285

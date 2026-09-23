@@ -117,6 +117,36 @@ case API behaves exactly as before: every decision is refused with `decision_req
 The auth service must run with decision grants enabled and with the approver identity providers
 allow-listed by its administrator; AgenticOrg's developer key cannot do either, by design.
 
+### Trying it on the local stack
+
+```
+export AGENTICORG_DEV_DECISION_GRANTS=true
+export AGENTICORG_DEV_GRANTEX_ADMIN_KEY=<a development administrator key you choose>
+export AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex
+make dev
+AGENTICORG_SEED_PASSWORD=… make seed seed-cases
+```
+
+Without `AGENTICORG_DEV_DECISION_GRANTS=true` the auth service runs with decision grants off, no
+administrator key and no relaxed outbound rules, and the identity provider approvers sign in with
+(`oidc-approvers`, two fixture people, in the `decisions` compose profile) is not started at all —
+so a stack that never asks for any of this does not get it. Allow-listing that provider is a
+service-administrator action, with the administrator key above:
+
+```
+DEV=$(curl -fsS -H "Authorization: Bearer $GRANTEX_API_KEY" "$GRANTEX/v1/me" | jq -r .developerId)
+curl -fsS -X POST -H "Authorization: Bearer $GRANTEX_ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  "$GRANTEX/v1/admin/developers/$DEV/decision-approver-idps" \
+  -d '{"issuer":"…","clientId":"…","clientSecret":"…","acrValues":["urn:agenticorg:acr:step-up"],
+       "requireVerifiedEmail":true,"displayName":"Development approvers","actor":"your name"}'
+```
+
+The auth service's approval page only runs on an https origin or a loopback one, so in the local
+stack it publishes `http://127.0.0.1:<port>` and listens on that same port inside its container:
+the URL in an approver's address bar, the `Origin` its form post carries and the origin the service
+checks it against are then all the same string.
+
+
 ## Enablement checklist
 
 The issuer side is implemented and covered in the Grantex repository (the decision routes, the

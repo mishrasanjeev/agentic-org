@@ -1,0 +1,25 @@
+{
+  "users": [
+    {
+      "sub": "case-approver-a",
+      "email": "case.approver.a@example.com",
+      "name": "Case Approver A",
+      "roles": ["approver"]
+    },
+    {
+      "sub": "case-approver-b",
+      "email": "case.approver.b@example.com",
+      "name": "Case Approver B",
+      "roles": ["approver"]
+    }
+  ],
+  "clients": [
+    {
+      "client_id": "grantex-decision-approvers-dev",
+      "client_secret": "agenticorg-dev-only-decision-approver-secret",
+      "redirect_uris": [
+        "http://127.0.0.1:3001/decisions/callback"
+      ]
+    }
+  ]
+}

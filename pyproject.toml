@@ -66,7 +66,7 @@ dependencies = [
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
     # extra bundles libpq.
-    "psycopg[binary]>=3.3.5",
+    "psycopg[binary]>=3.3.6",
     "psycopg-pool>=3.3.1",
     "alembic>=1.20.0",
     "redis[hiredis]>=5.2.0",
@@ -100,7 +100,7 @@ dependencies = [
     "wrapt>=1.17.3",
     "prometheus-client>=0.26.0",
     "langgraph>=1.2.11",
-    "langchain>=1.4.0",
+    "langchain>=1.4.2",
     "langchain-google-genai>=4.4.0",
     "langchain-anthropic>=1.7.2",
     "langchain-openai>=1.6.2",
@@ -109,7 +109,7 @@ dependencies = [
     "langgraph-checkpoint-postgres==3.1.2",
     "langgraph-checkpoint==4.2.0",
     "grantex>=0.5.1",
-    "langsmith>=0.12.6",
+    "langsmith>=0.13.0",
     "pypdf>=6.18.1",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.
@@ -155,7 +155,7 @@ v4 = [
     "presidio-analyzer>=2.2.362; python_version < '3.14'",
     # Browser RPA is a shipped runtime. Keep the Python driver in the
     # production extra; Dockerfile installs the matching Chromium binary.
-    "playwright>=1.62.0,<2",
+    "playwright>=1.63.0,<2",
 ]
 bge-m3 = [
     # Heavy in-process BGE-M3 loader. This pulls PyTorch, so it stays out
@@ -173,7 +173,7 @@ dev = [
     # supported redis transport requires redis<6.5.
     "testcontainers[postgres]>=4.15.0,<4.16.0",
     "factory-boy>=3.3.3",
-    "ruff>=0.16.7",
+    "ruff>=0.16.8",
     "mypy>=1.20.2",
     "bandit>=1.9.4",
     "pre-commit>=4.6.2",

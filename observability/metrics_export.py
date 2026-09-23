@@ -31,6 +31,8 @@ under-reporting instead.
 from __future__ import annotations
 
 import os
+import sys
+import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Final
@@ -58,6 +60,83 @@ class MetricsExportError(RuntimeError):
 def multiprocess_dir() -> str:
     """The directory sibling processes write their samples to, or ``""`` for single-process mode."""
     return os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+
+
+def enable_multiprocess(directory: str = "", *, allow_existing: bool = False) -> str:
+    """Point this process, and the children it forks, at a shared samples directory.
+
+    Call it *before* creating any instrument. ``prometheus_client`` chooses its value class when
+    it is first imported, from this environment variable, and an instrument created under the
+    in-process class keeps writing to process memory whatever is set afterwards. If the module is
+    already imported by the time we get here - one import high up in a module chain is enough -
+    the class is reselected.
+
+    Reselecting is not a full repair, and the difference is worth knowing. A *labelled*
+    instrument creates each child's value lazily on ``.labels()``, so it picks up the new class
+    and aggregates correctly. An *unlabelled* one binds its value when it is constructed: it
+    keeps the old class for ever, reads zero in the merged registry, and a bare gauge disappears
+    from the exposition entirely - silently, which is the failure mode this module exists to
+    avoid. ``agenticorg_case_push_dead_letter_backlog`` is such a gauge, and an alert reads it.
+
+    So when instruments already exist, this says so loudly: it raises outside production, where a
+    test or a developer run should fail on it, and logs an error in production, where refusing to
+    start a worker over a metrics problem would be the worse trade. ``allow_existing`` is for the
+    one caller that knows better - the probe, which creates its own instruments afterwards.
+    """
+    directory = directory or os.environ.get("PROMETHEUS_MULTIPROC_DIR", "").strip()
+    if not directory:
+        directory = os.path.join(tempfile.gettempdir(), "agenticorg-metrics")
+    os.environ["PROMETHEUS_MULTIPROC_DIR"] = directory
+    os.makedirs(directory, exist_ok=True)
+    values = sys.modules.get("prometheus_client.values")
+    if values is not None:
+        if not allow_existing:
+            _refuse_late_switch(_instruments_already_registered())
+        values.ValueClass = values.MultiProcessValue()
+    return directory
+
+
+def _instruments_already_registered() -> list[str]:
+    """Names of instruments *this codebase* built before multiprocess mode was switched on.
+
+    ``prometheus_client`` registers its own process, platform and GC collectors on import. They
+    are collectors rather than value-backed instruments, so they are not at risk and are not
+    counted; if they were, this check would fire every single time and mean nothing.
+    """
+    builtin = {
+        "prometheus_client.process_collector",
+        "prometheus_client.platform_collector",
+        "prometheus_client.gc_collector",
+    }
+    collectors = getattr(_DEFAULT_REGISTRY, "_collector_to_names", {})
+    return sorted(
+        {
+            name
+            for collector, names in collectors.items()
+            if type(collector).__module__ not in builtin
+            for name in names
+        }
+    )
+
+
+def _refuse_late_switch(existing: list[str]) -> None:
+    from core.config import settings
+
+    if not existing:
+        return
+    detail = (
+        "multiprocess metrics were switched on after instruments were created: an unlabelled "
+        "instrument keeps the value class it was built with, so it will read zero in the merged "
+        f"registry or vanish from the exposition. Built too early: {', '.join(existing[:10])}"
+        f"{'...' if len(existing) > 10 else ''}. Call enable_multiprocess() before importing the "
+        "modules that define instruments."
+    )
+    if str(getattr(settings, "env", "")).lower() in ("production", "prod", "staging"):
+        # A worker that refuses to start over a metrics problem is worse than one that reports
+        # some of its metrics, so production gets the message and keeps running.
+        logger.error("metrics_multiprocess_enabled_late", detail=detail)
+        return
+    raise MetricsExportError(detail)
 
 
 def registry() -> CollectorRegistry:

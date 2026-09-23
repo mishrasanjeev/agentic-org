@@ -133,9 +133,10 @@ def test_the_cross_loop_message_reads_as_one_instruction() -> None:
 def test_the_guard_mode_is_read_once_and_can_be_overridden(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "raise")
+    at_import = db_mod.cross_loop_guard_mode()
     # The environment is read at import, so setting it later changes nothing.
-    assert db_mod.cross_loop_guard_mode() == "warn"
+    monkeypatch.setenv(db_mod.CROSS_LOOP_GUARD_ENV, "off" if at_import != "off" else "raise")
+    assert db_mod.cross_loop_guard_mode() == at_import
 
     previous = db_mod.set_cross_loop_guard_mode("raise")
     try:
