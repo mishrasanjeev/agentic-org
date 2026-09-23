@@ -107,22 +107,25 @@ jobs:
       - run: mypy --ignore-missing-imports .
       # The ambient-Redis allowlist only shrinks (FINDINGS A-59): a growing
       # list licenses exactly what it exists to catch. Comparing against the
-      # merge base rather than the tip means another branch removing an entry
-      # does not look like this one adding it.
+      # merge base for PRs means another branch removing an entry does not look
+      # like this one adding it; pushes compare to the exact before-SHA.
       - name: Ambient-Redis allowlist does not grow
         run: |
           set -euo pipefail
           if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "branch" ]]; then
             base="$PUSH_BEFORE"
+            git fetch --no-tags origin "$base"
+            mode=(--exact-base)
           else
             git fetch --no-tags origin "$BASE_BRANCH"
             base=FETCH_HEAD
+            mode=()
           fi
           if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
             echo "Cannot identify the pre-change allowlist baseline" >&2
             exit 1
           fi
-          python scripts/check_ambient_redis_allowlist.py --base "$base"
+          python scripts/check_ambient_redis_allowlist.py --base "$base" "${mode[@]}"
         env:
           BASE_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
           PUSH_BEFORE: ${{ github.event.before }}

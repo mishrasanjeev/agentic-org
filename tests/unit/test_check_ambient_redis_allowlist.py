@@ -207,6 +207,29 @@ def test_the_comparison_is_against_the_merge_base_not_the_tip() -> None:
     assert "allowlist_at(base)" in source
 
 
+def test_push_check_uses_exact_pre_push_commit() -> None:
+    import inspect
+
+    workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'mode=(--exact-base)' in workflow
+    assert 'python scripts/check_ambient_redis_allowlist.py --base "$base" "${mode[@]}"' in workflow
+    assert "exact_commit(args.base) if args.exact_base else merge_base(args.base)" in inspect.getsource(checker.main)
+
+
+def test_exact_base_does_not_use_merge_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    entries = frozenset({"tests/a.py"})
+    seen: list[str] = []
+    monkeypatch.setattr(checker, "allowlist_here", lambda: entries)
+    monkeypatch.setattr(checker, "exact_commit", lambda ref: "pre-push-sha")
+    monkeypatch.setattr(checker, "merge_base", lambda _ref: pytest.fail("must use exact base"))
+    monkeypatch.setattr(checker, "allowlist_at", lambda ref: seen.append(ref) or entries)
+
+    assert checker.main(["--base", "pre-push-sha", "--exact-base"]) == 0
+    assert seen == ["pre-push-sha"]
+
+
 def test_push_baseline_guards_use_the_pre_push_commit() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
