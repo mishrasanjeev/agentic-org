@@ -799,3 +799,39 @@ Remove an entry in the pull request that fixes it.
   in-memory store in relaxed environments, i.e. away from real infrastructure,
   which is the safe direction.
 
+  own while passing in the full run (2026-09-22).
+- **What:** `auth/token_pool.py::TokenPool._redis_client` creates a Redis
+  client lazily when none was set — right in production, wrong in a test. On
+  any machine with Redis on `settings.redis_url` (a developer running the
+  development stack; any runner with the service up), a test that mints a run
+  grant wrote it to that **real** Redis, and the next test read it back:
+  `test_pool_refuses_to_mint_without_a_root_grant` and four siblings were
+  answered `source="pool_cache"` with `grant_id="grnt_placeholder"` and never
+  reached the code that raises `GrantMintError("minting_unconfigured")`. They
+  therefore reported DID NOT RAISE on a machine with Redis and passed on one
+  without, which is how a fail-closed assertion on the grant-minting path came
+  to depend on the environment. The cached tokens also outlived the run, so
+  one test run seeded the next.
+- **Fix:** an autouse fixture in `tests/conftest.py` now pins
+  `TokenPool._redis_client` to whatever the test set on `pool.redis` outside
+  `tests/integration/`, so a unit test cannot reach an ambient Redis at all;
+  the one test that is about the lazy client carries `@pytest.mark.ambient_redis`.
+  Fixed here; recorded because the same shape — a product fallback that is
+  correct in production and ambient in a test — is worth looking for elsewhere
+  (`core/cdc/receiver.py` and `core/feature_flags.py` have similar fallbacks).
+
+## A-60 — `core.autocrlf` makes the stack's shell scripts unrunnable in its containers
+
+- **Found:** running the new decision-grant browser suite on a Windows checkout
+  (2026-09-21).
+- **What:** `scripts/run_e2e.sh` runs inside the Playwright container of
+  `docker-compose.dev.yml`. Git's `core.autocrlf=true`, the default on a
+  Windows install, checks it out with CRLF line endings, and bash in the Linux
+  container then fails on line 12 with `set: pipefail: invalid option name`.
+  The committed blobs are LF; only the checkout is wrong. `make e2e` is
+  therefore broken on a Windows workstation, silently and confusingly.
+- **Fix:** this branch adds `*.sh text eol=lf` to `.gitattributes`, which
+  covers every shell script. The same trap applies to any other file a Linux
+  container reads verbatim and no attribute covers - the Dockerfiles and the
+  compose entrypoint scripts among them - and a sweep for those would be worth
+  a look.

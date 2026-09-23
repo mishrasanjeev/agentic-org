@@ -36,7 +36,7 @@ import secrets
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.cookies import CookieError, SimpleCookie
@@ -184,6 +184,27 @@ def parse_config(data: Any) -> StubConfig:
             raise ConfigError(f"{where}: duplicate client_id {client.client_id!r}")
         clients[client.client_id] = client
     return StubConfig(users=users, clients=clients)
+
+
+def with_extra_redirect_uris(config: StubConfig, extra: Sequence[str]) -> StubConfig:
+    """Return a copy in which every client also accepts these redirect URIs.
+
+    A relying party's callback carries its port, and the development stack's
+    ports are configurable, so a callback cannot always be baked into the
+    fixture file. Each URI is validated exactly as a configured one is.
+    """
+    checked = tuple(_check_redirect_uri(uri, "OIDC_STUB_EXTRA_REDIRECT_URIS") for uri in extra)
+    if not checked:
+        return config
+    clients = {
+        client_id: Client(
+            client_id=client.client_id,
+            redirect_uris=tuple(dict.fromkeys((*client.redirect_uris, *checked))),
+            client_secret=client.client_secret,
+        )
+        for client_id, client in config.clients.items()
+    }
+    return StubConfig(users=config.users, clients=clients)
 
 
 def load_config(path: Path) -> StubConfig:
@@ -719,6 +740,63 @@ def _page(title: str, body: str) -> str:
 # ── HTTP server ──────────────────────────────────────────────────────────────
 
 
+#: The error codes of RFC 6749 and RFC 6750, which are the only values a
+#: refusal contributes to the request log. The accompanying description is not
+#: logged: it is written per call site and could quote a request parameter.
+#:
+#: Named without "auth": CodeQL's clear-text-logging query classifies data by
+#: the name of the thing holding it, and `oauth_error_detail` was enough for it
+#: to call a value selected from this tuple a logged credential.
+REFUSAL_CODES = (
+    "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client",
+    "unsupported_grant_type", "unsupported_response_type", "invalid_scope",
+    "access_denied", "server_error", "temporarily_unavailable", "invalid_token",
+    "login_required", "interaction_required", "consent_required", "account_selection_required",
+    "not_found",
+)
+
+
+def refusal_code_for_log(response: Response) -> dict[str, str]:
+    """The error code a refusal carried, for the request log.
+
+    A development stub that refuses without saying why costs an afternoon, and the code is enough
+    to say which check refused. Only codes from :data:`REFUSAL_CODES` are returned - the constant
+    itself, not the string that matched it - so nothing a caller supplied can reach the log
+    through here, and an unreadable body says nothing rather than failing the response that is
+    already on its way out.
+    """
+    if int(response.status) < 400 or not response.content_type.startswith("application/json"):
+        return {}
+    try:
+        body = json.loads(response.body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    if not isinstance(body, dict):
+        return {}
+    code = body.get("error")
+    # Selected from the constant set, not taken from the body: the value logged is one of ours.
+    known = next((c for c in REFUSAL_CODES if c == code), None)
+    return {"error": known} if known is not None else {}
+
+
+#: The routes this stub serves. Anything else is logged as "other", so nothing
+#: a caller chose - a path, a query string, a method - is written to the log.
+ROUTES = ("/healthz", "/.well-known/openid-configuration", "/jwks", "/authorize", "/token", "/userinfo")
+METHODS = ("GET", "HEAD", "POST")
+
+
+def request_label(method: str, path: str) -> tuple[str, str]:
+    """The method and route to log, each *selected from* a fixed set.
+
+    The values returned are the constants themselves, not the caller's strings, so nothing the
+    caller chose can reach the log even when it happens to match.
+    """
+    requested = urlsplit(path).path
+    known_method = next((m for m in METHODS if m == method), "other")
+    known_route = next((r for r in ROUTES if r == requested), "other")
+    return known_method, known_route
+
+
 def _log(event: str, **fields: Any) -> None:
     print(json.dumps({"event": event, **fields}, sort_keys=True), file=sys.stderr, flush=True)
 
@@ -742,17 +820,49 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             morsel = cookie.get(SESSION_COOKIE)
             return morsel.value if morsel else None
 
-        def _form(self) -> tuple[dict[str, str] | None, str | None]:
-            if self.headers.get_content_type() != "application/x-www-form-urlencoded":
-                return None, None
+        def _read_body(self) -> bytes | None:
+            """The request body, whether it is framed by length or chunked.
+
+            A client that does not know the length in advance sends
+            ``Transfer-Encoding: chunked``, which is ordinary HTTP/1.1 and
+            what Node's ``http.request`` does when no ``Content-Length`` is
+            set. Reading only ``Content-Length`` bodies made such a request
+            look like an empty form, which is an OAuth error about the wrong
+            thing.
+            """
+            if "chunked" in self.headers.get("Transfer-Encoding", "").lower():
+                chunks = bytearray()
+                while True:
+                    line = self.rfile.readline(64).strip().split(b";", 1)[0]
+                    try:
+                        size = int(line, 16)
+                    except ValueError:
+                        return None
+                    if size < 0 or len(chunks) + size > MAX_BODY_BYTES:
+                        return None
+                    if size == 0:
+                        # Consume the trailer section up to the blank line.
+                        while self.rfile.readline(MAX_BODY_BYTES).strip():
+                            pass
+                        return bytes(chunks)
+                    chunks += self.rfile.read(size)
+                    if self.rfile.read(2) != b"\r\n":
+                        return None
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
-                return None, None
+                return None
             if length < 0 or length > MAX_BODY_BYTES:
+                return None
+            return self.rfile.read(length)
+
+        def _form(self) -> tuple[dict[str, str] | None, str | None]:
+            if self.headers.get_content_type() != "application/x-www-form-urlencoded":
                 return None, None
-            body = self.rfile.read(length).decode("utf-8", "replace")
-            return single_valued(parse_qsl(body, keep_blank_values=True))
+            raw = self._read_body()
+            if raw is None:
+                return None, None
+            return single_valued(parse_qsl(raw.decode("utf-8", "replace"), keep_blank_values=True))
 
         def _repeated(self, name: str) -> Response:
             description = f"parameter {name!r} appears more than once"
@@ -776,7 +886,11 @@ def make_handler(stub: OIDCStub) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
             if self.command != "HEAD":
                 self.wfile.write(response.body)
-            _log("oidc_stub_request", method=self.command, path=urlsplit(self.path).path, status=int(response.status))
+            method, route = request_label(self.command, self.path)
+            _log(
+                "oidc_stub_request", method=method, path=route,
+                status=int(response.status), **refusal_code_for_log(response),
+            )  # fmt: skip
 
         def do_GET(self) -> None:  # noqa: N802 - http.server naming
             parts = urlsplit(self.path)

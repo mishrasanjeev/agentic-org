@@ -11,6 +11,9 @@ Environment:
   userinfo and JWKS endpoints (default: the public URL).
 * ``OIDC_STUB_CONFIG`` - users and clients JSON (default: ``config.dev.json``
   next to this file).
+* ``OIDC_STUB_EXTRA_REDIRECT_URIS`` - comma-separated redirect URIs added to
+  every configured client, for relying parties whose callback carries a port
+  the stack chooses at run time.
 * ``OIDC_STUB_SIGNING_KEY_FILE`` - optional RSA private key (PEM); without it a
   new key is generated at start, so tokens do not survive a restart.
 * ``OIDC_STUB_HOST`` / ``OIDC_STUB_PORT`` - listen address (``0.0.0.0:9400``).
@@ -31,6 +34,7 @@ from tools.oidc_stub.server import (
     assert_development_runtime,
     load_config,
     make_server,
+    with_extra_redirect_uris,
 )
 
 DEFAULT_CONFIG = Path(__file__).with_name("config.dev.json")
@@ -59,6 +63,9 @@ def main() -> int:
         public_url = _base_url(os.environ.get("OIDC_STUB_PUBLIC_URL", public_default), "OIDC_STUB_PUBLIC_URL")
         internal_url = _base_url(os.environ.get("OIDC_STUB_INTERNAL_URL", public_url), "OIDC_STUB_INTERNAL_URL")
         config = load_config(Path(os.environ.get("OIDC_STUB_CONFIG", str(DEFAULT_CONFIG))))
+        raw_redirects = os.environ.get("OIDC_STUB_EXTRA_REDIRECT_URIS", "")
+        extra_redirects = [u.strip() for u in raw_redirects.split(",") if u.strip()]
+        config = with_extra_redirect_uris(config, extra_redirects)
         key_file = os.environ.get("OIDC_STUB_SIGNING_KEY_FILE", "")
         key = SigningKey.from_pem_file(Path(key_file)) if key_file else SigningKey.generate()
     except (ConfigError, ValueError) as exc:
