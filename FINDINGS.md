@@ -811,6 +811,30 @@ Remove an entry in the pull request that fixes it.
   in-memory store in relaxed environments, i.e. away from real infrastructure,
   which is the safe direction.
 
+## A-60 — The auth controls' Redis path has no test at all
+
+- **Found:** adding positive cases to the REQ-04 security tests (2026-09-22).
+- **What:** `tests/unit/test_v490_reqs.py` covers the five controls in
+  `core/auth_state.py` through their **in-memory fallback** only, because the
+  suite must not reach a Redis (A-59). Nothing asserts the Redis path: not the
+  key shapes (`auth:failures:{ip}`, `auth:blocked:{ip}`, `auth:signup:{ip}`,
+  `auth:blacklist:{h}`), not the `setex` TTLs that make a lockout expire, and
+  not the `_raise_if_strict` branches that are supposed to fail closed in a
+  strict runtime rather than degrade to memory. In production every one of
+  these runs on Redis, so the tested path is the one production does not use.
+  `blacklist_token` narrows it further: it writes `_mem_blacklist`
+  unconditionally before consulting Redis, so the blacklist test exercises the
+  in-process cache and would pass even if the Redis write were removed.
+- **Fix:** test the Redis path against a fake client — `fakeredis` injected
+  through `_get_redis`, asserting the key, the value and the TTL of each
+  write — or in `tests/integration/` against the real service, where
+  `_raise_if_strict` can be exercised by pointing the client at an unreachable
+  address in a strict runtime. Until then read "the token blacklist is tested"
+  as "the in-process cache is tested".
+
+## A-61 — Run-grant token tests can inherit real Redis state
+
+- **Found:** chasing `tests/unit/test_run_grant_resolution.py` failing on its
   own while passing in the full run (2026-09-22).
 - **What:** `auth/token_pool.py::TokenPool._redis_client` creates a Redis
   client lazily when none was set — right in production, wrong in a test. On
@@ -832,7 +856,7 @@ Remove an entry in the pull request that fixes it.
   correct in production and ambient in a test — is worth looking for elsewhere
   (`core/cdc/receiver.py` and `core/feature_flags.py` have similar fallbacks).
 
-## A-60 — `core.autocrlf` makes the stack's shell scripts unrunnable in its containers
+## A-62 — `core.autocrlf` makes the stack's shell scripts unrunnable in its containers
 
 - **Found:** running the new decision-grant browser suite on a Windows checkout
   (2026-09-21).
