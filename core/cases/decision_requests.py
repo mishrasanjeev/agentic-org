@@ -633,7 +633,10 @@ class GrantexDecisionGrantService:
                 grant_ids.append("")
                 continue
             if not isinstance(grant_id, str):
-                raise DecisionServiceError("decision_service_response_invalid", "an approver decision grant id is invalid")
+                raise DecisionServiceError(
+                    "decision_service_response_invalid",
+                    "an approver decision grant id is invalid",
+                )
             grant_ids.append(grant_id)
         if not all(grant_ids):
             # An issuer that does not name the grant on each approver. The
