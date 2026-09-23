@@ -128,7 +128,7 @@ def test_production_image_packages_playwright_and_chromium() -> None:
     pyproject = (REPO / "pyproject.toml").read_text(encoding="utf-8")
     dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
 
-    assert '"playwright>=1.62.0,<2"' in pyproject
+    assert '"playwright>=1.63.0,<2"' in pyproject
     assert '"rpa",' in pyproject
     assert "python -m playwright install chromium" in dockerfile
     assert "python -m playwright install-deps chromium" in dockerfile
