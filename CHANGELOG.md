@@ -4,6 +4,38 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - the development stack serves decision grants
+- The pinned Grantex auth-service image moves to a build of Grantex `main`
+  (`5b867f68`, `ghcr.io/mishrasanjeev/grantex-auth-service@sha256:b73668a3...`),
+  the first one that serves `/v1/decisions/...` and the approval page (PRD
+  G-3). `docker-compose.dev.yml` configures it: `DECISION_GRANTS_ENABLED`, a
+  vault key, an `ADMIN_API_KEY` and a step-up policy, plus an identity provider
+  for approvers only (`oidc-approvers`, two fixture people, separate from the
+  console's development SSO). The auth service now listens on the port it
+  publishes, because its approval page has to be reached on the same origin it
+  checks form posts against, and that origin must be https or loopback.
+- **A stack that does not ask for decision grants runs without any of it.**
+  `AGENTICORG_DEV_DECISION_GRANTS=true` turns on `DECISION_GRANTS_ENABLED` and
+  the relaxed outbound rules the development identity provider needs, and the
+  provider itself is in the `decisions` compose profile, so `make dev` does not
+  start it. Without the opt-in the decision routes and the approval page answer
+  404 and no administrator key is configured.
+- **`AGENTICORG_CASE_DECISION_SERVICE` still defaults to off**, in the
+  development stack included; a run opts in with
+  `AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex`. Nothing changes for a stack
+  that does not.
+- `scripts/dev_stack_smoke.sh` checks the approval page and the approver
+  identity provider's discovery document.
+
+### Fixed
+- The development OpenID Connect stub reads a chunked request body. Node's HTTP
+  client sends a POST body with `Transfer-Encoding: chunked` when no
+  `Content-Length` is set, which the stub read as an empty form and answered
+  with an OAuth error about the wrong thing. It also logs the error it returns,
+  and its health check honours `OIDC_STUB_PORT`.
+- `.gitattributes` keeps shell scripts LF, so the stack's Linux containers can
+  run them from a Windows checkout (FINDINGS A-60).
+
 ### Changed — breaking for tenants that turn it on
 - `grants.enforce_closed` can now be set to `deny` (tenant flag
   `grants.enforce_closed.deny` or `AGENTICORG_GRANTS_ENFORCE_CLOSED=deny`).
@@ -48,8 +80,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - `agenticorg_chain_verifications_total` (cited passages and promotion-history
   chains verified against their digests) and
   `agenticorg_budget_cap_events_total` (spend caps warned and exhausted).
+- Two more promtool fixture files (fire and no-fire for all seven alerts, and
+  the exact `for` boundaries), and two probes:
+  `scripts/probe_metrics_multiprocess.py`, which proves a forked child's
+  metrics reach the exporter and runs in CI, and `scripts/probe_alert_gate.py`,
+  which mutates the alert definitions and checks the gate catches each one.
 
 ### Removed
+- `scripts/generate_batch2.py`, `generate_batch3.py`, `generate_batch4.py` and
+  `generate_batch5.py`. They were the original scaffold for 107 paths, 85 of
+  which exist today and have years of hand editing behind them - `api/main.py`,
+  `api/deps.py`, `auth/jwt.py`, `auth/grantex.py`, `auth/scopes.py`,
+  `observability/metrics.py`, `observability/alerting.py`, `core/agents/*`,
+  `audit/*`, `scaling/*`. Each was written with a bare `open(path, "w")` and no
+  guard, nothing referenced them, and the metrics they would restore carry
+  per-tenant, per-agent labels that `observability/metrics.py` forbids. Git
+  holds the day-one version of every generated file, and how it changed since,
+  which the scripts cannot.
 - The `budget_pct_high` threshold rule and the Grafana "Budget Utilization"
   panel, with the `agenticorg_agent_budget_pct` gauge behind them. The gauge
   has never been given a value by anything, so the rule could not fire and the
@@ -644,9 +691,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   persistent loop; everywhere else the work runs through
   `core.database.run_db_coroutine_sync` on a private engine.
 - The shared database pool now reports when it is used from a second event
-  loop: when a session is opened there, when the pool opens a connection there,
-  and when it hands an existing connection out there — the last covers a caller
-  that binds `async_session_factory` itself and is given a warm connection.
+  loop: when a session is opened there (which covers a caller that binds
+  `async_session_factory` itself and is handed a warm connection), when the
+  pool opens a connection there, and when it hands an existing one out.
   It binds to the first loop that uses it and logs `db_cross_loop_use` once per
   foreign loop with the remedy, counting
   `agenticorg_db_cross_loop_checkouts_total{mode}`, instead of leaving the
@@ -655,8 +702,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   a `CrossLoopConnectionError` at the point of the mistake and `off` silences
   it; warn is the default in production, where the call fails either way and
   raising would turn latent pool problems into new 500s. A test run counts the
-  uses and fails when it exceeds the committed `cross_loop_baseline.txt` (54,
-  measured in CI; the unit job reports 0), so the existing debt (FINDINGS
+  guard's trips and fails when they exceed the committed
+  `cross_loop_baseline.txt` (54 trips, measured in CI, roughly 27 distinct
+  uses — one use trips the guard once or three times, averaging about two: the
+  session check sees every violation and the two pool hooks fire together on
+  about half of them; the unit job trips it 0 times), and `scripts/check_cross_loop_baseline.py` refuses a raised baseline.
+  Both overrides remain deliberate and silent-free: `AGENTICORG_CROSS_LOOP_BASELINE`
+  replaces the number for one run and `AGENTICORG_DB_CROSS_LOOP_GUARD=off`
+  stops the counting, and a run with the guard off says so on its summary line, so the existing debt (FINDINGS
   A-58) burns down and a new violation fails immediately.
 - `AGENTICORG_WORKER_PROCESS=1` is set on the Celery worker and beat
   entrypoints and in the development stack, so a worker started with

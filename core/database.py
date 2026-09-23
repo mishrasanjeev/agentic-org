@@ -112,17 +112,33 @@ async_session_factory: Any = _GuardedSessionFactory(_shared_session_factory, eng
 # connection used from a different loop fails a few frames later with
 # `AttributeError: 'NoneType' object has no attribute 'send'` or "attached to
 # a different loop", and `pool_pre_ping` does not rescue it (a cross-loop
-# error is not a disconnect). The guard names the mistake where it is made:
-# when a session is opened on a foreign loop, when the pool opens a connection
-# there, and when a connection is checked out there — the last one is the
-# warm-pool case, where nothing new is opened and the damage is worst.
+# error is not a disconnect). The guard checks in three places: when a session
+# is opened on a foreign loop (the wrapper below, which sees every one), when
+# the pool opens a connection there, and when it hands an existing connection
+# out there. Against a warm pool only the wrapper fires, because
+# ``pool_pre_ping`` sends its ping on the foreign loop and dies before the
+# checkout listener is reached; that kills the pooled connection, so the next
+# violation finds an empty pool and trips all three — the wrapper, then
+# ``connect`` and ``checkout`` together for the replacement.
 CROSS_LOOP_GUARD_ENV = "AGENTICORG_DB_CROSS_LOOP_GUARD"
 CROSS_LOOP_GUARD_MODES = ("warn", "raise", "off")
 _LOOP_KEY = "agenticorg_owning_loop"
 
+# One cross-loop use trips the guard once or three times, averaging about two.
+# A violation against a warm pool trips once: the session wrapper sees it, and
+# ``pool_pre_ping`` fails on the foreign loop before ``checkout`` is reached.
+# That kills the pooled connection, so the next violation finds an empty pool
+# and trips three times — the wrapper, then ``connect`` and ``checkout``
+# together for the replacement. The two pool hooks therefore always fire
+# together, on about half the violations. Measured against this engine by
+# counting trips per call site, from a warm start: 1 -> 1, 2 -> 4, 3 -> 5,
+# 5 -> 9, 10 -> 20, 20 -> 40 (a cold start adds 2 at small n and washes out by
+# 10). The metric therefore counts *trips*, not distinct mistakes — fine for a
+# ratchet, which needs only to be monotonic and reproducible, but do not read
+# it as a count of violations.
 _cross_loop_checkouts_total = Counter(
     "agenticorg_db_cross_loop_checkouts_total",
-    "Uses of a pooled engine from an event loop other than the one that owns it",
+    "Guard trips: a pooled engine used from an event loop other than the one that owns it",
     ["mode"],
 )
 
@@ -143,7 +159,10 @@ def _initial_guard_mode() -> str:
     ``warn`` by default: warning changes no outcome (the request fails exactly
     as it did) but turns a mystifying downstream failure into a named one,
     while raising would turn latent pool problems into new 500s in production.
-    CI arms it with ``raise`` and a ratchet (``cross_loop_baseline.txt``).
+    Nothing in CI sets this variable, so CI runs on the same default and holds
+    the line with the ratchet instead (``cross_loop_baseline.txt``, counted in
+    ``tests/conftest.py``). ``raise`` is for a developer chasing one of these,
+    and for the tests that pin the refusal.
     """
     mode = os.getenv(CROSS_LOOP_GUARD_ENV, "warn").strip().casefold()
     return mode if mode in CROSS_LOOP_GUARD_MODES else "warn"
@@ -237,12 +256,18 @@ def install_cross_loop_guard(target: AsyncEngine) -> None:
     """Bind ``target``'s pool to the first event loop that uses it.
 
     Installed on the shared engine below; a pooled engine built by a test can
-    ask for the same protection. Three places check: opening a session through
-    ``current_session_factory``, the pool opening a connection, and the pool
-    handing an existing connection out. The third is the warm-pool case — a
-    caller that binds ``async_session_factory`` itself (FINDINGS A-53) opens no
-    new connection, and without it the guard would be silent exactly where the
-    failure is most confusing.
+    ask for the same protection.
+
+    Two hooks are added here — the pool opening a connection, and the pool
+    handing an existing one out — and :class:`_GuardedSessionFactory` checks
+    when a session is opened. All three fire on this engine, but not together
+    on every violation: against a warm pool the wrapper fires alone, because
+    ``pool_pre_ping`` fails on the foreign loop before ``checkout`` is reached,
+    and that kills the pooled connection; the next violation then finds an
+    empty pool and trips all three, ``connect`` and ``checkout`` together for
+    the replacement. The wrapper is therefore what makes a warm-pool reuse
+    visible to a caller that binds ``async_session_factory`` itself
+    (FINDINGS A-53).
     """
     _guarded_engines[target] = {"loop": None}
 

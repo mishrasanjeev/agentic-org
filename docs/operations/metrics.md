@@ -27,7 +27,14 @@ from serving.
 The Celery worker runs Celery's prefork pool: tasks execute in forked children, and a counter a
 child increments is invisible to the parent that serves the endpoint. The worker therefore sets
 `PROMETHEUS_MULTIPROC_DIR`, every process writes its samples there, the exporter merges them, and
-a child's gauges are dropped when Celery retires it. The API runs one uvicorn process per
+a child's gauges are dropped when Celery retires it.
+
+There is a trap in that, and it is silent: `prometheus_client` chooses its value class when it is
+first imported, from that environment variable. If anything imports it before the directory is
+set - one import high up a module chain is enough - instruments keep writing to process memory and
+the endpoint reports nothing from the children, with no error anywhere.
+`observability.metrics_export.enable_multiprocess()` reselects the value class for exactly that
+case, and `scripts/probe_metrics_multiprocess.py` is what would notice if it stopped working. The API runs one uvicorn process per
 container today and does not need this, but the same switch is wired in, so adding `--workers`
 later cannot silently start under-reporting instead.
 
@@ -54,6 +61,21 @@ are what showed it - a single cap exhaustion whose `rate()` window had closed be
 elapsed, so it never fired, and an alert whose selector matched nothing in exactly the case it
 existed to detect (see below).
 
+There are three fixture files, all run together:
+
+| File | Covers |
+| --- | --- |
+| `agenticorg-alerts.test.yml` | one firing case per alert |
+| `agenticorg-alerts-coverage.test.yml` | fire *and* no-fire for all seven, including the proof that the advisory console dwell cannot drive the rubber-stamping alert, and a chain failure surviving an instance dying and its replacement starting from zero |
+| `agenticorg-alerts-windows.test.yml` | the exact `for` boundaries, to the minute, and a cap exhaustion clearing once its event leaves the two-hour lookback |
+
+Two probes sit beside them. `scripts/probe_metrics_multiprocess.py` forks two children and checks
+that their work reaches the endpoint - the Celery worker's prefork pool depends on that, and a
+broken multiprocess export reports the parent's own activity perfectly happily rather than
+failing. It runs in CI. `scripts/probe_alert_gate.py` breaks the definitions in each of the ways
+they have actually been broken and checks that `check_alert_rules.py` notices; it writes to the
+working tree, so it is a tool to run deliberately rather than a CI step.
+
 ### denial-rate spike
 
 `agenticorg_grant_enforcement_denials_total`. Authorization fails closed, so denials are normal; a
@@ -71,6 +93,18 @@ is recorded and the grants are consumed. The issuer is never polled for it.
 
 If more than half of approvals are being submitted inside fifteen seconds, over six hours, with
 enough decisions for that to mean something, the memo is not being read.
+
+**It is blind for the first 1h44m**, and that is longer than the rule reads. The `for` is one
+hour, so an hour is the natural guess; the real figure is measured and pinned in
+`agenticorg-alerts-windows.test.yml`. While the series is younger than the six-hour range window,
+`rate()` still divides the increase by the *full* six hours, so the sample-rate floor
+(`> 0.002`) is not cleared until roughly 43 minutes of samples exist - and the one-hour `for`
+only starts counting from there.
+
+This matters after a release. If you have just deployed and are watching for rubber-stamping, the
+alert cannot help you for the first hour and three-quarters; look at the dwell panel on the
+dashboard instead, which has no such delay. The same applies the first time a deployment ever
+records a decision, because that is when the series first appears.
 
 ### authoritative dwell missing
 

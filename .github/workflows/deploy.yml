@@ -116,6 +116,15 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
 
+      # The cross-loop ratchet only moves down: a raised baseline would license
+      # the violation it exists to catch (FINDINGS A-58).
+      - name: Cross-loop baseline does not rise
+        run: |
+          git fetch --no-tags --depth=1 origin "${BASE_REF}"
+          python scripts/check_cross_loop_baseline.py --base FETCH_HEAD
+        env:
+          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+
   frontend-validation:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -231,13 +240,29 @@ jobs:
         run: python scripts/check_enterprise_stability_gates.py
       - name: Enforce alert-definition conventions
         run: python scripts/check_alert_rules.py
+      - name: Prove a forked child's metrics reach the exporter
+        # The Celery worker's prefork pool depends on this, and a broken multiprocess export
+        # reports the parent's own activity perfectly happily rather than failing.
+        run: python scripts/probe_metrics_multiprocess.py
+      - name: Prove the alert gate catches a broken definition
+        # Mutates the definitions in each of the ways they have actually been broken, restores
+        # them, and fails if the gate missed one. The git check is belt and braces: the probe
+        # restores what it touched, and this proves it.
+        run: |
+          set -euo pipefail
+          python scripts/probe_alert_gate.py
+          git diff --exit-code
       - name: Check and unit-test the alert rules with promtool
         run: |
           set -euo pipefail
-          # Pinned by digest: the rules are a deploy artefact and the tool that validates them
+          # Pinned by digest: the rules are a deploy artefact, and the tool that validates them
           # should not change underneath them.
-          docker run --rm -v "$PWD/monitoring/prometheus:/rules" -w /rules             --entrypoint promtool             prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218             check rules agenticorg-alerts.yml
-          docker run --rm -v "$PWD/monitoring/prometheus:/rules" -w /rules             --entrypoint promtool             prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218             test rules agenticorg-alerts.test.yml
+          PROMTOOL="prom/prometheus:v3.1.0@sha256:6559acbd5d770b15bb3c954629ce190ac3cbbdb2b7f1c30f0385c4e05104e218"
+          run_promtool() {
+            docker run --rm -v "$PWD/monitoring/prometheus:/rules" -w /rules --entrypoint promtool "$PROMTOOL" "$@"
+          }
+          run_promtool check rules agenticorg-alerts.yml
+          run_promtool test rules agenticorg-alerts.test.yml agenticorg-alerts-coverage.test.yml agenticorg-alerts-windows.test.yml
       - name: Enforce evidence-backed public claims
         run: python scripts/lint_public_claims.py
       - name: Enforce billing catalog consistency

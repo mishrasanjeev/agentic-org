@@ -21,6 +21,10 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 COMPOSE ?= docker compose -f docker-compose.dev.yml
+# Decision grants (PRD G-3) are opt-in: AGENTICORG_DEV_DECISION_GRANTS=true
+# configures the auth service for them and starts the identity provider
+# approvers sign in with, which is otherwise not started at all.
+DECISIONS_PROFILE = $(if $(filter true,$(AGENTICORG_DEV_DECISION_GRANTS)),--profile decisions,)
 # scripts/dev_stack_smoke.sh runs one check inside the api container through it.
 export COMPOSE
 RUNNER ?= docker
@@ -89,7 +93,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 
 .PHONY: help dev seed seed-cases down clean logs ps \
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
-	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-ambient-redis-allowlist \
+	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline check-ambient-redis-allowlist \
 	e2e
 
 help:
@@ -106,8 +110,8 @@ help:
 	@echo "make e2e     Playwright suite against the running stack (needs make dev)"
 
 dev:
-	$(COMPOSE) build
-	$(COMPOSE) up -d --wait --wait-timeout 600
+	$(COMPOSE) $(DECISIONS_PROFILE) build
+	$(COMPOSE) $(DECISIONS_PROFILE) up -d --wait --wait-timeout 600
 	bash scripts/dev_stack_smoke.sh
 
 down:
@@ -183,8 +187,11 @@ coverage-gate: tools-image
 
 # ── Checks ───────────────────────────────────────────────────────────────────
 
-check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-ambient-redis-allowlist
+check: check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline check-ambient-redis-allowlist
 	@echo "make check: all checks passed"
+
+check-cross-loop-baseline: tools-image
+	$(TOOLS) $(PY) scripts/check_cross_loop_baseline.py --base "$(BASE_REF)"
 
 check-ambient-redis-allowlist: tools-image
 	$(TOOLS) $(PY) scripts/check_ambient_redis_allowlist.py --base "$(BASE_REF)"

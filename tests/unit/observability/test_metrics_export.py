@@ -83,3 +83,39 @@ def test_multiprocess_mode_follows_the_directory(monkeypatch: pytest.MonkeyPatch
     assert merged is not metrics_export._DEFAULT_REGISTRY
     # Dropping a child's samples must not raise when the child left nothing behind.
     metrics_export.mark_process_dead(999_999)
+
+
+def test_switching_to_multiprocess_after_an_instrument_exists_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Silence is the failure mode here, so the late switch has to be loud.
+
+    Reselecting the value class repairs a labelled instrument, whose per-child value is created
+    on ``.labels()``. An unlabelled one binds its value at construction: it reads zero in the
+    merged registry and a bare gauge vanishes from the exposition altogether.
+    ``agenticorg_case_push_dead_letter_backlog`` is exactly that, and an alert reads it.
+    """
+    from prometheus_client import Gauge
+
+    Gauge("agenticorg_metrics_export_late_probe", "Exercised by the export test")
+
+    with pytest.raises(metrics_export.MetricsExportError) as refused:
+        metrics_export.enable_multiprocess(str(tmp_path))
+    assert "before importing the modules that define instruments" in str(refused.value)
+
+    # The probe knows better: it creates its instruments after the switch.
+    assert metrics_export.enable_multiprocess(str(tmp_path), allow_existing=True) == str(tmp_path)
+
+
+def test_production_is_told_rather_than_stopped(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A worker that refuses to start over a metrics problem is the worse trade."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "env", "production", raising=False)
+    assert metrics_export.enable_multiprocess(str(tmp_path)) == str(tmp_path)
+
+
+def test_the_client_s_own_collectors_do_not_count_as_instruments() -> None:
+    """process, platform and GC collectors are registered on import and are never at risk."""
+    names = metrics_export._instruments_already_registered()
+    assert not [name for name in names if name.startswith(("python_", "process_"))]

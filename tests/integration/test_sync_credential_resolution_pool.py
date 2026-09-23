@@ -254,13 +254,14 @@ async def test_the_guard_only_reports_by_default(
 async def test_the_guard_sees_a_warm_pooled_connection_reused_on_another_loop(
     shared_pool: AsyncEngine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The masked failure: nothing new is opened, so only checkout can see it.
+    """The masked failure: a warm connection, handed out with nothing opened.
 
     A caller that binds `async_session_factory` itself — as the modules in
     FINDINGS A-53 do — is handed the connection this loop left in the pool, so
-    no `connect` event fires. The factory is wrapped for exactly this: the
-    pool's own checkout event is too late, because `pool_pre_ping` runs its
-    ping on the foreign loop first and fails there.
+    no `connect` event fires. The pool's own `checkout` event does see this
+    case, but not always: `pool_pre_ping` sends its ping on the foreign loop
+    and can fail before the listener is reached. The factory is wrapped for
+    exactly that, and it is the wrapper that raises here.
     """
     import core.database as db_mod
 
