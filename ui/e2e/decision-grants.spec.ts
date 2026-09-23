@@ -28,7 +28,7 @@
  * namespace, see docker-compose.dev.yml).
  */
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { missingPrerequisite, openCase, seededCase, signIn } from "./helpers/governed-cases";
+import { openCase, seededCase, signIn } from "./helpers/governed-cases";
 
 /**
  * Required, with no default: a missing one is a broken run, not a reason to pass quietly. The
@@ -259,8 +259,6 @@ async function refreshStatus(page: Page): Promise<void> {
 }
 
 test.describe("governed case decisions with real decision grants", () => {
-  test.skip(() => missingPrerequisite() !== "", missingPrerequisite());
-
   test.beforeAll(async ({ playwright }) => {
     const request = await playwright.request.newContext();
     try {

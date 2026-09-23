@@ -581,11 +581,16 @@ class GrantexDecisionGrantService:
             raise DecisionServiceError("decision_service_response_invalid", "the request has no approvals")
         resolved: list[str] = []
         for subject in subjects:
-            matches = {
-                str(a.get("jti") or "")
-                for a in approvals
-                if isinstance(a, Mapping) and a.get("sub") == subject and a.get("jti")
-            }
+            matches: set[str] = set()
+            for approval in approvals:
+                if not isinstance(approval, Mapping) or approval.get("sub") != subject:
+                    continue
+                grant_id = approval.get("jti")
+                if not isinstance(grant_id, str) or not grant_id.strip():
+                    raise DecisionServiceError(
+                        "decision_service_response_invalid", "the approver's decision grant is invalid"
+                    )
+                matches.add(grant_id)
             if len(matches) != 1:
                 raise DecisionServiceError(
                     "decision_service_response_invalid", "the approver's decision grant is ambiguous"
@@ -608,7 +613,12 @@ class GrantexDecisionGrantService:
             timeout=self.consume_timeout_seconds,
         )
         approvers = payload.get("approvers") or []
-        jtis = {str(j) for j in payload.get("jtis") or [] if str(j)}
+        raw_jtis = payload.get("jtis") or []
+        if not isinstance(raw_jtis, list) or any(
+            not isinstance(grant_id, str) or not grant_id.strip() for grant_id in raw_jtis
+        ):
+            raise DecisionServiceError("decision_service_response_invalid", "decision grant ids are invalid")
+        jtis = set(raw_jtis)
         entries = [a for a in approvers if isinstance(a, Mapping)]
         if len(entries) != len(approvers):
             raise DecisionServiceError("decision_service_response_invalid", "an approver is not an object")
@@ -616,7 +626,15 @@ class GrantexDecisionGrantService:
             raise DecisionServiceError("decision_service_response_invalid", "no approver was returned")
         request_id = str(payload.get("requestId") or "")
         subjects = [_required_text("consumption sub", entry.get("sub")) for entry in entries]
-        grant_ids = [str(entry.get("jti") or "") for entry in entries]
+        grant_ids: list[str] = []
+        for entry in entries:
+            grant_id = entry.get("jti")
+            if grant_id is None or (isinstance(grant_id, str) and not grant_id.strip()):
+                grant_ids.append("")
+                continue
+            if not isinstance(grant_id, str):
+                raise DecisionServiceError("decision_service_response_invalid", "an approver decision grant id is invalid")
+            grant_ids.append(grant_id)
         if not all(grant_ids):
             # An issuer that does not name the grant on each approver. The
             # answer also carries `jtis`, but pairing the two arrays by

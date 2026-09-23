@@ -472,6 +472,39 @@ async def test_a_consumption_whose_approvers_are_not_objects_is_refused() -> Non
     assert refused.value.reason == "decision_service_response_invalid"
 
 
+@pytest.mark.parametrize("malformed_jti", [None, 17, {"id": "j1"}, ["j1"]])
+async def test_a_non_string_consumed_grant_id_is_refused(malformed_jti: Any) -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200,
+                json={
+                    "consumed": True,
+                    "requestId": "dr_1",
+                    "jtis": [malformed_jti],
+                    "approvers": [{"sub": "user:a"}],
+                },
+            )
+        ).consume(grants=["g1"], action={}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
+async def test_a_non_string_approver_grant_id_is_refused() -> None:
+    with pytest.raises(DecisionServiceError) as refused:
+        await service(
+            lambda _r: httpx.Response(
+                200,
+                json={
+                    "consumed": True,
+                    "requestId": "dr_1",
+                    "jtis": ["j1"],
+                    "approvers": [{"sub": "user:a", "jti": {"id": "j1"}}],
+                },
+            )
+        ).consume(grants=["g1"], action={}, case_version="3")
+    assert refused.value.reason == "decision_service_response_invalid"
+
+
 # --- the verifier ----------------------------------------------------------------------------------
 
 

@@ -18,6 +18,9 @@ if (!baseURL) {
 if (!process.env.GRANTEX_APPROVAL_ORIGIN) {
   throw new Error("GRANTEX_APPROVAL_ORIGIN is required: the auth service's own origin, where approvals happen");
 }
+if (!process.env.AGENTICORG_SEED_PASSWORD) {
+  throw new Error("AGENTICORG_SEED_PASSWORD is required: seed and run the local decision-grant suite with the same password");
+}
 
 export default defineConfig({
   testDir: ".",

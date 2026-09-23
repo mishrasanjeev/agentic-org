@@ -123,8 +123,9 @@ allow-listed by its administrator; AgenticOrg's developer key cannot do either, 
 export AGENTICORG_DEV_DECISION_GRANTS=true
 export AGENTICORG_DEV_GRANTEX_ADMIN_KEY=<a development administrator key you choose>
 export AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex
+export AGENTICORG_SEED_PASSWORD=<a local-only passphrase of at least 12 characters>
 make dev
-AGENTICORG_SEED_PASSWORD=… make seed seed-cases
+make seed seed-cases
 make e2e-decisions
 ```
 
