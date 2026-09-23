@@ -230,6 +230,34 @@ def test_exact_base_does_not_use_merge_base(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen == ["pre-push-sha"]
 
 
+def test_exact_commit_refuses_an_empty_ref() -> None:
+    with pytest.raises(checker.AllowlistError, match="--base is empty"):
+        checker.exact_commit("")
+
+
+def test_exact_commit_fails_closed_when_git_cannot_resolve_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        checker,
+        "_git",
+        lambda *args: subprocess.CompletedProcess(args, 1, "", "missing ref"),
+    )
+
+    with pytest.raises(checker.AllowlistError, match="does not name a commit"):
+        checker.exact_commit("missing")
+
+
+def test_exact_commit_returns_the_verified_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    def verified_ref(*args: str) -> subprocess.CompletedProcess[str]:
+        assert args == ("rev-parse", "--verify", "before-sha^{commit}")
+        return subprocess.CompletedProcess(args, 0, "resolved-before-sha\n", "")
+
+    monkeypatch.setattr(checker, "_git", verified_ref)
+
+    assert checker.exact_commit("before-sha") == "resolved-before-sha"
+
+
 def test_push_baseline_guards_use_the_pre_push_commit() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
         encoding="utf-8"
