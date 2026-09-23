@@ -7,10 +7,10 @@ Redis when the machine has one (FINDINGS A-59). The connection is refused
 either way, so a run stays hermetic; the list is there so a *new* file fails
 instead of joining them quietly, which only works while the list does not grow.
 
-The comparison is against the **merge base**, not the tip of the base branch.
-Comparing with the tip accuses an innocent branch as soon as someone else's
-pull request removes an entry: every branch cut before that still carries it,
-and the removed entry then looks like an addition.
+Pull requests compare against the **merge base**, not the tip of the base
+branch. Comparing a PR with the tip accuses it as soon as another PR removes
+an entry. Push events may pass ``--exact-base`` with the before-SHA so a
+non-fast-forward update cannot hide growth behind an older common ancestor.
 
     python scripts/check_ambient_redis_allowlist.py --base origin/main
 
@@ -74,6 +74,16 @@ def merge_base(ref: str) -> str:
     return found.stdout.strip()
 
 
+def exact_commit(ref: str) -> str:
+    """Validate and use an exact commit rather than finding its merge base."""
+    if not ref.strip():
+        raise AllowlistError("--base is empty; pass the exact pre-change commit")
+    found = _git("rev-parse", "--verify", f"{ref}^{{commit}}")
+    if found.returncode != 0 or not found.stdout.strip():
+        raise AllowlistError(f"{ref} does not name a commit")
+    return found.stdout.strip()
+
+
 def allowlist_at(ref: str) -> frozenset[str] | None:
     """The entries at ``ref``, or ``None`` when the file does not exist there.
 
@@ -94,11 +104,16 @@ def allowlist_at(ref: str) -> frozenset[str] | None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", default="origin/main", help="ref to compare against")
+    parser.add_argument(
+        "--exact-base",
+        action="store_true",
+        help="compare against this exact commit (for push-event before SHAs)",
+    )
     args = parser.parse_args(argv)
 
     try:
         here = allowlist_here()
-        base = merge_base(args.base)
+        base = exact_commit(args.base) if args.exact_base else merge_base(args.base)
         there = allowlist_at(base)
     except AllowlistError as exc:
         print(f"check_ambient_redis_allowlist: {exc}", file=sys.stderr)

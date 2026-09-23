@@ -107,23 +107,48 @@ jobs:
       - run: mypy --ignore-missing-imports .
       # The ambient-Redis allowlist only shrinks (FINDINGS A-59): a growing
       # list licenses exactly what it exists to catch. Comparing against the
-      # merge base rather than the tip means another branch removing an entry
-      # does not look like this one adding it.
+      # merge base for PRs means another branch removing an entry does not look
+      # like this one adding it; pushes compare to the exact before-SHA.
       - name: Ambient-Redis allowlist does not grow
         run: |
-          git fetch --no-tags origin "${BASE_REF}"
-          python scripts/check_ambient_redis_allowlist.py --base FETCH_HEAD
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "branch" ]]; then
+            base="$PUSH_BEFORE"
+            git fetch --no-tags origin "$base"
+            mode=(--exact-base)
+          else
+            git fetch --no-tags origin "$BASE_BRANCH"
+            base=FETCH_HEAD
+            mode=()
+          fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "Cannot identify the pre-change allowlist baseline" >&2
+            exit 1
+          fi
+          python scripts/check_ambient_redis_allowlist.py --base "$base" "${mode[@]}"
         env:
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+          BASE_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
+          PUSH_BEFORE: ${{ github.event.before }}
 
       # The cross-loop ratchet only moves down: a raised baseline would license
       # the violation it exists to catch (FINDINGS A-58).
       - name: Cross-loop baseline does not rise
         run: |
-          git fetch --no-tags --depth=1 origin "${BASE_REF}"
-          python scripts/check_cross_loop_baseline.py --base FETCH_HEAD
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_TYPE" == "branch" ]]; then
+            base="$PUSH_BEFORE"
+          else
+            git fetch --no-tags origin "$BASE_BRANCH"
+            base=FETCH_HEAD
+          fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo "Cannot identify the pre-change cross-loop baseline" >&2
+            exit 1
+          fi
+          python scripts/check_cross_loop_baseline.py --base "$base"
         env:
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+          BASE_BRANCH: ${{ github.base_ref || github.event.repository.default_branch }}
+          PUSH_BEFORE: ${{ github.event.before }}
 
   frontend-validation:
     runs-on: ubuntu-latest

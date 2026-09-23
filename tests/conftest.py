@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from core.crypto.migration_helpers import AUDIT_DIR_ENV
+from core.test_doubles.ambient_redis_policy import declared_redis_url
 
 _TEST_TMPDIR = Path.cwd() / "codex-pytest-temp"
 _TEST_TMPDIR.mkdir(parents=True, exist_ok=True)
@@ -150,13 +151,11 @@ def pytest_sessionfinish(session, exitstatus) -> None:
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config) -> None:  # noqa: ARG001
     allowlisted = _ambient_redis_allowlist()
-    declared_redis = os.environ.get("AGENTICORG_REDIS_URL")
-    if declared_redis is None and os.environ.get("REDIS_URL"):
-        declared_redis = os.environ["REDIS_URL"]
-    if declared_redis is not None:
+    declared_redis = declared_redis_url()
+    if declared_redis:
         terminalreporter.write_line(
             "ambient-Redis guard: OFF for this run — a Redis URL is set "
-            f"({declared_redis or 'empty'}), so tests may reach that Redis and leave state in it",
+            f"({declared_redis}), so tests may reach that Redis and leave state in it",
             red=True,
         )
     elif allowlisted:
@@ -282,13 +281,10 @@ def _uses_ambient_infrastructure(request) -> bool:
     A run that declared one has chosen it; the protection is for the run that
     did not and would otherwise pick up whatever the machine happens to have.
     """
-    # Both names, because ``core/config.py`` reads
-    # ``AGENTICORG_REDIS_URL or REDIS_URL``: with the first set empty and the
-    # second set, the product connects happily, so the run has declared a
-    # Redis. ``is not None`` rather than truthiness for the same reason — an
-    # empty value is still a declaration, and the product's ``from_url("")``
-    # raises rather than silently defaulting.
-    if os.environ.get("AGENTICORG_REDIS_URL") is not None or os.environ.get("REDIS_URL"):
+    # Match the product's ``AGENTICORG_REDIS_URL or REDIS_URL or default``
+    # resolution: an empty value is not an explicit Redis declaration and must
+    # not disable the guard when product code falls back to localhost.
+    if declared_redis_url():
         return True
     node_id = request.node.nodeid.replace("\\", "/")
     return node_id.startswith("tests/integration/") or bool(
