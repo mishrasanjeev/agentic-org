@@ -1,5 +1,11 @@
 # agenticorg-sdk changelog
 
+## Unreleased
+
+- Add `client.cases` for machine-safe submit, list, read and investigation
+  scheduling. Human-only case decisions and reviews remain unavailable to
+  API-key and agent-token clients.
+
 ## 0.4.0 - 2026-08-29
 
 Runtime surface release.
