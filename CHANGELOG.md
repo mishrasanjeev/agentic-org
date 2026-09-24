@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - governed-case provider authorization
+- The reference underwriter and screening agent now refuse every provider call
+  without an authorizer and a positive delegated-grant check. This applies even
+  when general grant enforcement is off or in warn mode. Tenants must register
+  one active, shared agent for each role before enabling governed cases; cases
+  without that configuration fail closed rather than making unchecked calls.
+
 ### Added - the governed-case decision is proven end to end
 - `make e2e-decisions` (`ui/e2e/decision-grants.spec.ts`) takes a real
   four-eyes decline across both systems in a browser, with nothing stubbed:

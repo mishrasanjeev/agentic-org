@@ -10,7 +10,9 @@ When an agent is created in AgenticOrg, this module:
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Any, Final
 from urllib.parse import quote
 
@@ -98,9 +100,14 @@ def register_agent(
         logger.info("grantex_registration_skipped", reason="no API key configured")
         return None
 
-    scopes = _tools_to_scopes(authorized_tools, domain, connector_names=connector_names)
-
     try:
+        from core.cases.grant_authorizer import CASE_AGENT_ROLES
+
+        scopes = (
+            _case_provider_scopes(authorized_tools)
+            if agent_type in CASE_AGENT_ROLES
+            else _tools_to_scopes(authorized_tools, domain, connector_names=connector_names)
+        )
         agent = client.agents.register(
             name=f"{name} ({agent_type})",
             scopes=scopes,
@@ -122,6 +129,26 @@ def register_agent(
     except Exception:
         logger.exception("grantex_registration_failed", agent_type=agent_type)
         return None
+
+
+def _case_provider_scopes(authorized_tools: list[str]) -> list[str]:
+    """Read scopes for the configured case provider, backed by its local manifest."""
+    from grantex import ToolManifest
+
+    from core.config import settings
+    from core.tool_gateway.provider_gateway import READ_TOOLS
+
+    provider = settings.case_provider
+    if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", provider):
+        raise ValueError("invalid case provider name")
+    directory = Path(os.getenv("GRANTEX_MANIFESTS_DIR", "./manifests"))
+    manifest = ToolManifest.from_file(str(directory / f"{provider}.json"))
+    if manifest.connector != provider:
+        raise ValueError("case provider manifest does not match the configured provider")
+    tools = list(dict.fromkeys(authorized_tools))
+    if not tools or any(tool not in READ_TOOLS or manifest.tools.get(tool) != "read" for tool in tools):
+        raise ValueError("case agent tools must be declared as read tools in the provider manifest")
+    return [f"tool:{provider}:read:{tool}" for tool in tools]
 
 
 def setup_delegation(

@@ -40,6 +40,7 @@ from core.cases.store import transitions_for as case_transitions
 from core.domain_schemas import validate
 from core.models.case_push import CasePushOutbox, ProviderWebhookReceipt
 from core.test_doubles.scripted_model import final
+from core.tool_gateway.provider_gateway import ToolDecision
 
 _DB_URL = os.getenv("AGENTICORG_DB_URL", "")
 _SYNC_URL = _DB_URL.replace("postgresql+asyncpg", "postgresql")
@@ -141,11 +142,16 @@ def tenant(engine: Engine) -> str:
 def _runtime(clock: Clock, provider: MockProvider | None = None, **overrides: Any) -> CaseRuntime:
     backend = provider or MockProvider(MockConfig(clock=clock))
 
+    class Allow:
+        async def authorize(self, *, connector: str, tool: str) -> ToolDecision:
+            return ToolDecision(allowed=True)
+
     async def enabled(tenant_id: uuid.UUID) -> bool:
         return True
 
     values: dict[str, Any] = {
         "provider_factory": lambda name: backend,
+        "authorizer_factory": lambda tenant, case_ref, role, purpose: Allow(),
         "flag": enabled,
         "clock": clock,
         "llm_model": "scripted",

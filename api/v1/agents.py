@@ -2841,6 +2841,41 @@ async def update_agent(
         require_agent_mutable(agent, effective_caller)
 
         update_data = body.model_dump(exclude_unset=True)
+        if "case_purposes" in update_data:
+            from core.cases.grant_authorizer import CASE_AGENT_ROLES, validate_case_purposes
+
+            if (
+                not effective_caller.is_admin
+                or not effective_caller.is_human
+                or agent.agent_type not in CASE_AGENT_ROLES
+                or agent.visibility != AGENT_VISIBILITY_TENANT
+                or agent.owner_user_id is not None
+                or agent.company_id is not None
+            ):
+                raise HTTPException(403, "Only a human tenant admin may configure a shared governed-case agent")
+            try:
+                purposes = validate_case_purposes(update_data.pop("case_purposes"))
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            config = dict(agent.config or {})
+            grantex_config = dict(config.get("grantex") or {})
+            before = grantex_config.get("case_purposes")
+            grantex_config["case_purposes"] = purposes
+            agent.config = {**config, "grantex": grantex_config}
+            session.add(
+                AuditLog(
+                    tenant_id=tid,
+                    event_type="agent.case_purposes.updated",
+                    actor_type="user",
+                    actor_id=str(effective_caller.user_id),
+                    agent_id=agent.id,
+                    resource_type="agent",
+                    resource_id=str(agent.id),
+                    action="Updated governed-case purposes",
+                    outcome="success",
+                    details={"before": before, "after": purposes},
+                )
+            )
         if isinstance(update_data.get("hitl_policy"), dict):
             _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
         if "domain" in update_data:

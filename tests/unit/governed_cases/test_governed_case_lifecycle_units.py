@@ -16,6 +16,7 @@ from core.cases import decisions as case_decisions
 from core.cases.decisions import DecisionCheck, RequireDecisionGrant, record_decision, semantic_action
 from core.cases.runtime import CaseRuntime, default_policy_id, load_case_policies, run_case_step
 from core.policy import PolicyLoadError
+from core.tool_gateway.provider_gateway import ToolDecision
 
 ROOT = Path(__file__).resolve().parents[3]
 CASE_REF = "case_" + "0" * 24
@@ -157,6 +158,15 @@ def _runtime(enabled: bool = True) -> CaseRuntime:
         return enabled
 
     return CaseRuntime(flag=flag, policies=lambda: {}, llm_model="scripted")
+
+
+async def test_bare_case_runtime_refuses_when_no_grant_is_available() -> None:
+    authorizer = CaseRuntime().authorizer_factory(
+        str(uuid.uuid4()), CASE_REF, "business_underwriter", "aml.cdd.onboarding"
+    )
+    decision = await authorizer.authorize(connector="mock", tool="resolve_business")
+    assert isinstance(decision, ToolDecision)
+    assert not decision.allowed
 
 
 @pytest.mark.parametrize(

@@ -18,6 +18,7 @@ from core.agents.business_underwriter import (
     run_underwriter,
 )
 from core.policy import EXAMPLES_DIR, Policy, load_policy
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 from core.test_doubles.scripted_model import final
 
 ALL_FIXTURES = (
@@ -79,7 +80,13 @@ async def underwrite(
     async def no_wait(seconds: float) -> None:
         return None
 
-    deps = UnderwriterDependencies(provider=provider or backend, clock=frozen, sleep=no_wait, **dependency_overrides)
+    deps = UnderwriterDependencies(
+        provider=provider or backend,
+        clock=frozen,
+        sleep=no_wait,
+        authorizer=dependency_overrides.pop("authorizer", ALLOW_PROVIDER_CALLS),
+        **dependency_overrides,
+    )
     return await run_underwriter(
         tenant_id=tenant_id,
         case_id=case_id or f"case-{key}",

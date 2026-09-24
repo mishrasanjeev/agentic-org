@@ -16,6 +16,7 @@ from core.agents.screening_disposition import DispositionConfig, DispositionDepe
 from core.domain_schemas import validate
 from core.langgraph import llm_factory
 from core.model_replay import CassetteMissError
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 MODEL = "gemini-2.5-flash"
@@ -49,7 +50,7 @@ async def _dispose(name: str, date_of_birth: str) -> Any:
         subject={"kind": "person", "name": name, "date_of_birth": date_of_birth, "nationalities": ["US"]},
         associated_entities=["Oakhollow Bakery Cooperative"],
         config=DispositionConfig(llm_model=MODEL),
-        deps=DispositionDependencies(provider=provider, clock=lambda: FROZEN),
+        deps=DispositionDependencies(provider=provider, clock=lambda: FROZEN, authorizer=ALLOW_PROVIDER_CALLS),
         run_id="run-cassette-2",
     )
 

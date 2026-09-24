@@ -13,8 +13,8 @@ Every provider call a reference agent makes goes through :class:`ProviderToolGat
    and the upstream record identifiers the response cites - for the case record and evidence
    package, and counts it in low-cardinality metrics (provider latency and outcome by capability).
 
-Grant enforcement (PRD F-1) plugs in as the authorizer. With no authorizer configured the gateway
-behaves like ``grants.enforce_closed=off``: calls are not grant-checked.
+Grant enforcement (PRD F-1) plugs in as the authorizer. A missing authorizer
+refuses calls rather than dispatching without a grant check.
 """
 
 from __future__ import annotations
@@ -320,7 +320,9 @@ class ProviderToolGateway:
             raise ToolRefusedError(tool, TOOL_NOT_IN_TOOL_SET)
         capability = READ_TOOLS[tool]
 
-        if self.authorizer is not None:
+        if self.authorizer is None:
+            decision = ToolDecision(allowed=False, reason=AUTHORIZATION_UNAVAILABLE)
+        else:
             try:
                 decision = await self.authorizer.authorize(connector=self.connector, tool=tool)
             except asyncio.CancelledError:
@@ -331,15 +333,15 @@ class ProviderToolGateway:
                     "provider_tool_authorization_failed", agent=self.agent, tool=tool, error=type(exc).__name__
                 )
                 decision = ToolDecision(allowed=False, reason=AUTHORIZATION_UNAVAILABLE)
-            if not isinstance(decision, ToolDecision) or not decision.allowed:
-                reason = decision.reason if isinstance(decision, ToolDecision) and decision.reason else "grant_denied"
-                sub_reason = decision.sub_reason if isinstance(decision, ToolDecision) else ""
-                self._record(tool, "denied", reason, request, None, started)
-                _provider_calls_total.labels(capability=capability.value, outcome="denied").inc()
-                logger.warning(
-                    "provider_tool_refused", agent=self.agent, tool=tool, reason=reason, sub_reason=sub_reason
-                )
-                raise ToolRefusedError(tool, reason, sub_reason)
+        if not isinstance(decision, ToolDecision) or not decision.allowed:
+            reason = decision.reason if isinstance(decision, ToolDecision) and decision.reason else "grant_denied"
+            sub_reason = decision.sub_reason if isinstance(decision, ToolDecision) else ""
+            self._record(tool, "denied", reason, request, None, started)
+            _provider_calls_total.labels(capability=capability.value, outcome="denied").inc()
+            logger.warning(
+                "provider_tool_refused", agent=self.agent, tool=tool, reason=reason, sub_reason=sub_reason
+            )
+            raise ToolRefusedError(tool, reason, sub_reason)
 
         begun = time.monotonic()
         try:

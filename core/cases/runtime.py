@@ -31,6 +31,7 @@ from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDepen
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
 from core.cases import excerpts as case_excerpts
 from core.cases.decisions import DecisionVerifier, RequireDecisionGrant, record_decision
+from core.cases.grant_authorizer import case_authorizer
 from core.cases.states import CaseError, CaseState
 from core.cases.store import CASE_REF_RE, get_case, record_update, transition
 from core.policy import EXAMPLES_DIR, Policy, PolicyLoadError, load_policies
@@ -111,7 +112,7 @@ class CaseRuntime:
     )
     session_factory: SessionFactory = _default_session_factory
     flag: Callable[[uuid.UUID], Awaitable[bool]] = _default_flag
-    authorizer_factory: Callable[[str, str], ToolAuthorizer | None] = lambda tenant_id, case_ref: None
+    authorizer_factory: Callable[[str, str, str, str], ToolAuthorizer] = case_authorizer
     decision_verifier: DecisionVerifier = field(default_factory=_default_decision_verifier)
     #: Returns the decision-grant service the decision-request routes use, or ``None``.
     decision_service: Callable[[], Any] = _default_decision_service
@@ -220,7 +221,9 @@ async def investigate_case(
         started_state = case.state
         await transition(session, case, CaseState.IN_PROGRESS, actor=actor, reason=reason, now=runtime.clock())
         started_version = case.version
-        application, provider_name, policy_id = dict(case.application), case.provider, case.policy_id
+        application, provider_name, policy_id, purpose = (
+            dict(case.application), case.provider, case.policy_id, case.purpose
+        )
 
     outcome = None
     failure = ""
@@ -249,7 +252,9 @@ async def investigate_case(
                 ),
                 deps=UnderwriterDependencies(
                     provider=provider,
-                    authorizer=runtime.authorizer_factory(str(tenant), case_ref),
+                    authorizer=runtime.authorizer_factory(
+                        str(tenant), case_ref, "business_underwriter", purpose
+                    ),
                     clock=runtime.clock,
                     pseudonym_store=runtime.pseudonym_store,
                 ),
@@ -365,7 +370,7 @@ async def dispose_screening_hits(
         version = case.version
         results, parties, application = list(case.screening_results), list(case.parties), dict(case.application)
         existing = {d["hit_id"] for d in case.screening_dispositions or []}
-        provider_name = case.provider
+        provider_name, purpose = case.provider, case.purpose
 
     provider = runtime.provider_factory(provider_name)
     proposed: list[dict[str, Any]] = []
@@ -387,7 +392,9 @@ async def dispose_screening_hits(
                 config=DispositionConfig(llm_model=runtime.llm_model),
                 deps=DispositionDependencies(
                     provider=provider,
-                    authorizer=runtime.authorizer_factory(str(tenant), case_ref),
+                    authorizer=runtime.authorizer_factory(
+                        str(tenant), case_ref, "screening_disposition", purpose
+                    ),
                     clock=runtime.clock,
                     pseudonym_store=runtime.pseudonym_store,
                 ),
@@ -477,7 +484,7 @@ async def run_case_step(
     step: Mapping[str, Any], state: Mapping[str, Any], *, runtime: CaseRuntime | None = None
 ) -> dict[str, Any]:
     """Execute a ``case_agent`` workflow step. Refusals are failed step results with a reason code."""
-    runtime = runtime or CaseRuntime()
+    runtime = runtime or CaseRuntime(authorizer_factory=case_authorizer)
     step_id = str(step.get("id", ""))
     action = step.get("action")
     tenant_id = str(state.get("tenant_id") or "")
