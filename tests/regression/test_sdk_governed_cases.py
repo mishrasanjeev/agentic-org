@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """The client exposes machine-safe case calls without a human-decision shortcut."""
 
 from __future__ import annotations
