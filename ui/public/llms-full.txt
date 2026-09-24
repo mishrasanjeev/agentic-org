@@ -79,7 +79,7 @@ production controls.
 | Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
 
-A source definition is not evidence that a specific tenant has connected the provider or enabled write access. Connector actions still require approved credentials, scopes, policies, and provider availability.
+A source definition is not evidence that a specific tenant has connected the provider or enabled write access. The Connectors page now separates registration from configured credentials and a recent, stale, failed, or missing health check. That evidence does not verify provider scopes, API contract coverage, sustained sync, or an error budget. Connector actions still require approved credentials, scopes, policies, and provider availability.
 
 ## Capability status
 
