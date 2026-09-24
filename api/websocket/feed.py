@@ -33,10 +33,12 @@ from core.models.api_key import APIKey
 router = APIRouter()
 logger = structlog.get_logger()
 FEED_SOCKET_SEND_TIMEOUT_SECONDS = 2.0
+FEED_SUBSCRIBE_TIMEOUT_SECONDS = 5.0
 
 # Local socket registry only. PostgreSQL feed events and broker fanout are authoritative.
 _connections: dict[str, set[WebSocket]] = {}  # enterprise-gate: process-local-ok reason=local-socket-registry-only
 _subscriptions: dict[str, BrokerSubscription] = {}
+_subscription_tasks: dict[str, asyncio.Task[BrokerSubscription]] = {}
 _connections_lock = asyncio.Lock()
 
 
@@ -196,16 +198,47 @@ async def _fanout_local(message: dict[str, Any]) -> int:
     return sent
 
 
-async def _ensure_subscription_locked(tenant_id: str) -> None:
-    if tenant_id in _subscriptions:
-        return
-    _subscriptions[tenant_id] = await get_feed_event_broker().subscribe(tenant_id, _fanout_local)
-
-
 async def _add_connection(tenant_id: str, websocket: WebSocket) -> None:
+    # Only registry bookkeeping uses the shared lock. A stalled broker must
+    # not serialize connections for every tenant in the process.
     async with _connections_lock:
         _connections.setdefault(tenant_id, set()).add(websocket)
-        await _ensure_subscription_locked(tenant_id)
+        if tenant_id in _subscriptions:
+            return
+        task = _subscription_tasks.get(tenant_id)
+        if task is None:
+            task = asyncio.create_task(
+                asyncio.wait_for(
+                    get_feed_event_broker().subscribe(tenant_id, _fanout_local),
+                    timeout=FEED_SUBSCRIBE_TIMEOUT_SECONDS,
+                )
+            )
+            _subscription_tasks[tenant_id] = task
+
+    try:
+        subscription = await task
+    # enterprise-gate: broad-except-ok reason=subscription-failure-must-clear-tenant-socket-registration
+    except (Exception, asyncio.CancelledError):
+        async with _connections_lock:
+            if _subscription_tasks.get(tenant_id) is task:
+                _subscription_tasks.pop(tenant_id, None)
+            bucket = _connections.get(tenant_id)
+            if bucket is not None:
+                bucket.discard(websocket)
+                if not bucket:
+                    _connections.pop(tenant_id, None)
+        raise
+
+    close_orphan = False
+    async with _connections_lock:
+        if _subscription_tasks.get(tenant_id) is task:
+            _subscription_tasks.pop(tenant_id, None)
+            if _connections.get(tenant_id):
+                _subscriptions[tenant_id] = subscription
+            else:
+                close_orphan = True
+    if close_orphan:
+        await subscription.close()
 
 
 async def _remove_connection(tenant_id: str, websocket: WebSocket) -> None:

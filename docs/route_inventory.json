@@ -4172,7 +4172,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "feed.events.read",
-    "source_line": 262,
+    "source_line": 295,
     "tenant_required": true
   },
   {
@@ -7106,7 +7106,7 @@
     "public_exempt_reason": null,
     "rate_limit": "websocket-connect",
     "scope": "feed.websocket.connect",
-    "source_line": 288,
+    "source_line": 321,
     "tenant_required": true
   }
 ]

@@ -83,10 +83,12 @@ These are prioritized by failure impact, not by how easy they are to document.
    `max(sequence)+1` in `core/live_feed.py`. This serializes a hot tenant and
    can become a DB bottleneck. Benchmark 1/10/100 hot tenants; consider a
    per-tenant sequence row or DB sequence allocator while preserving order.
-7. **P0, open:** `_add_connection` holds the global `_connections_lock`
-   across Redis subscription setup in `api/websocket/feed.py`. An unhealthy
-   broker can stall unrelated tenants' connection management. Move network
-   setup outside the global lock with a per-tenant single-flight state.
+7. **P0, fixed in this change:** `_add_connection` held the global
+   `_connections_lock` across Redis subscription setup. Subscription setup is
+   now outside that lock, single-flight per tenant, and time-bounded. Tests
+   prove a stalled tenant does not block another tenant, concurrent same-tenant
+   joins use one subscription, and failure clears local state. Production
+   connection-scale and broker-outage behavior still require load evidence.
 8. **P0, open:** existing WebSocket sessions authenticate at handshake, not
    periodically (`api/websocket/feed.py`). A revoked session may remain on an
    established feed until disconnect. Add bounded periodic revalidation or
@@ -112,8 +114,8 @@ These are prioritized by failure impact, not by how easy they are to document.
 
 1. Land the feed fixes and browser/server regression tests here. No production
    rollout is implied by this report.
-2. Resolve P0 connection single-flight and session revocation in separate
-   small runtime PRs; use Redis-offline and cross-tenant fault injection.
+2. Resolve P0 session revocation and subscriber connection fanout in separate
+   runtime PRs; use Redis-offline and cross-tenant fault injection.
 3. Build a reproducible workload covering hot tenants, 10k concurrent idle
    sockets, burst events, 100+ tenants, 24-hour soak, DB/Redis restarts,
    OCR/RPA saturation and LLM 429/timeout. Record p50/p95/p99, delivery gaps,

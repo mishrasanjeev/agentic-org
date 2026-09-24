@@ -29,11 +29,13 @@ def feed_runtime() -> Generator[tuple[InMemoryFeedEventRepository, InMemoryFeedE
     configure_live_feed_for_tests(repository=repository, broker=broker)
     feed._connections.clear()
     feed._subscriptions.clear()
+    feed._subscription_tasks.clear()
     try:
         yield repository, broker
     finally:
         feed._connections.clear()
         feed._subscriptions.clear()
+        feed._subscription_tasks.clear()
         reset_live_feed_for_tests()
 
 
@@ -237,6 +239,78 @@ async def test_fanout_closes_subscription_after_last_socket_fails(feed_runtime, 
     assert tenant_id not in feed._connections
     assert tenant_id not in feed._subscriptions
     subscription.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_stalled_subscription_does_not_block_other_tenants(feed_runtime, monkeypatch) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    original = feed.get_feed_event_broker().subscribe
+
+    async def subscribe(tenant_id: str, handler):
+        if tenant_id == "stalled":
+            entered.set()
+            await release.wait()
+        return await original(tenant_id, handler)
+
+    monkeypatch.setattr(feed.get_feed_event_broker(), "subscribe", subscribe)
+    stalled = AsyncMock()
+    healthy = AsyncMock()
+    stalled_task = asyncio.create_task(feed._add_connection("stalled", stalled))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=0.2)
+        await asyncio.wait_for(feed._add_connection("healthy", healthy), timeout=0.2)
+        assert healthy in feed._connections["healthy"]
+        assert "healthy" in feed._subscriptions
+    finally:
+        release.set()
+        await stalled_task
+        await feed._remove_connection("stalled", stalled)
+        await feed._remove_connection("healthy", healthy)
+
+
+@pytest.mark.asyncio
+async def test_same_tenant_subscription_is_single_flight(feed_runtime, monkeypatch) -> None:
+    entered = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+    original = feed.get_feed_event_broker().subscribe
+
+    async def subscribe(tenant_id: str, handler):
+        nonlocal calls
+        calls += 1
+        entered.set()
+        await release.wait()
+        return await original(tenant_id, handler)
+
+    monkeypatch.setattr(feed.get_feed_event_broker(), "subscribe", subscribe)
+    first, second = AsyncMock(), AsyncMock()
+    one = asyncio.create_task(feed._add_connection("same", first))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=0.2)
+        two = asyncio.create_task(feed._add_connection("same", second))
+        await asyncio.sleep(0)
+        release.set()
+        await asyncio.gather(one, two)
+        assert calls == 1
+        assert feed._connections["same"] == {first, second}
+    finally:
+        release.set()
+        await feed._remove_connection("same", first)
+        await feed._remove_connection("same", second)
+
+
+@pytest.mark.asyncio
+async def test_failed_subscription_does_not_leave_socket_or_task(feed_runtime, monkeypatch) -> None:
+    async def fail(_tenant_id: str, _handler):
+        raise ConnectionError("broker unavailable")
+
+    monkeypatch.setattr(feed.get_feed_event_broker(), "subscribe", fail)
+    socket = AsyncMock()
+    with pytest.raises(ConnectionError):
+        await feed._add_connection("failed", socket)
+    assert "failed" not in feed._connections
+    assert "failed" not in feed._subscription_tasks
 
 
 @pytest.mark.asyncio

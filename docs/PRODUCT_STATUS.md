@@ -1,6 +1,7 @@
 # Current Product Status
 
-Last verified: 2026-09-20
+Last source-verified: 2026-09-24. Production deployment and SLOs require
+separate operational evidence.
 
 This page is the concise capability truth for AgenticOrg. It distinguishes
 shipped runtime behavior from tenant configuration and external-provider
@@ -38,6 +39,7 @@ records product behavior and availability, not deployment state.
 | Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
 | Billing and operations | Hosted plan catalog, billing routes, health, migrations, observability hooks, security checks, and reviewed Cloud Run rollout helper | Payment-provider configuration and operational ownership | Billing integration is separate from OACP buyer-payment execution |
+| Live feed continuity | Tenant-scoped persisted events, sequence catch-up, bounded socket fanout, and Redis subscriber reconnect | Redis, PostgreSQL, authenticated browser session, and an operator-owned scale budget | Source-level resilience is not a measured production delivery, latency, or recovery guarantee |
 
 ## OACP Runtime Truth
 
@@ -89,3 +91,5 @@ their outcomes.
 - [OACP truth inventory](oacp/truth-inventory.md)
 - [OACP operations](oacp/runtime-operations-runbook.md)
 - [Deployment guide](deployment.md)
+- [Scale and resilience assessment](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+- [Backup and recovery evidence boundary](BACKUP_AND_DR.md)

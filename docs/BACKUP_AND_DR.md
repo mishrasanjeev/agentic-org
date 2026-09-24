@@ -7,8 +7,8 @@ test. Do not quote an RTO or RPO as achieved without measured drill evidence.
 
 ## Current evidence boundary
 
-- The repository deploys API/UI services and a migration job to Cloud Run.
-  See `scripts/deploy_cloud_run.sh` for the current deployment path.
+- The current deployment uses Cloud Run services `agenticorg-api` and `agenticorg-ui`,
+  plus a migration job. See `scripts/deploy_cloud_run.sh` for the deployment path.
 - `infra/terraform/multi_region/README.md` explicitly describes a **scaffold**
   whose standby resources are commented out. It is not an active failover
   environment, and its GKE diagram is not the current Cloud Run topology.

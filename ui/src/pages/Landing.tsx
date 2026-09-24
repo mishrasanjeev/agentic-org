@@ -914,6 +914,23 @@ export default function Landing() {
             </FadeIn>
           </div>
 
+          <div className="mt-16 border-y border-slate-200 py-8" aria-label="Runtime continuity">
+            <div className="grid gap-8 md:grid-cols-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Events you can catch up on</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">Tenant-scoped feed events are stored with sequence numbers. A reconnecting browser can request missed events instead of relying on a live socket alone.</p>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Failures stay visible</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">Health checks expose database and Redis status. Human review and scoped permissions remain part of external-action workflows.</p>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Recovery needs proof</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">Deployment and rollback tooling is documented. Availability targets and disaster-recovery times require a verified restore drill, not a marketing promise.</p>
+              </div>
+            </div>
+          </div>
+
           {/* Org Chart Hierarchy â€” 3-card row */}
           <div className="grid md:grid-cols-3 gap-8 mt-16">
             <FadeIn delay={0}>

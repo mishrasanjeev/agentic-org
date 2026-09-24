@@ -45,6 +45,14 @@ with the Docker-backed [local multichannel simulation](docs/local-multichannel-s
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
 real Playwright Chromium while keeping paid calls and production mutations off.
 
+Live feed events are persisted per tenant and can be replayed by sequence after
+a WebSocket interruption. Broker reconnection and bounded socket fanout are
+covered by local fault-injection tests; production latency, throughput, and
+availability remain unmeasured. The [scale and resilience assessment](docs/reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+tracks remaining connection, revocation, load, and restore work; the
+[recovery guide](docs/BACKUP_AND_DR.md) separates planned targets from proven
+production controls.
+
 ## What is in this repository
 
 | Area | Current implementation |
