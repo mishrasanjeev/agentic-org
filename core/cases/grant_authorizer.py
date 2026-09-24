@@ -91,13 +91,11 @@ class CaseGrantAuthorizer:
             grant = RunGrant(mode=EnforcementMode.DENY, source="none", missing_sub_reason=missing_reason)
         else:
             agent_id, config = agent
-            allowed_purposes = config.get("case_purposes")
-            if (
-                not isinstance(allowed_purposes, list)
-                or not allowed_purposes
-                or any(not isinstance(purpose, str) or not purpose for purpose in allowed_purposes)
-                or self.purpose not in allowed_purposes
-            ):
+            try:
+                allowed_purposes = validate_case_purposes(config.get("case_purposes"))
+            except ValueError:
+                allowed_purposes = []
+            if self.purpose not in allowed_purposes:
                 return ToolDecision(
                     allowed=False,
                     reason="purpose_not_allowed",

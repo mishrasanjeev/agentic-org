@@ -104,7 +104,14 @@ async def test_registered_role_uses_a_strict_run_grant(monkeypatch: pytest.Monke
 
 @pytest.mark.parametrize(
     "registered_purposes",
-    [None, [], ["payments.payout"], ["aml.cdd.onboarding", 7]],
+    [
+        None,
+        [],
+        ["payments.payout"],
+        ["aml.cdd.onboarding", 7],
+        ["aml.cdd.onboarding", "Bad.Value"],
+        ["aml.cdd.onboarding", "aml.cdd.onboarding"],
+    ],
 )
 async def test_case_purpose_not_registered_for_role_refuses_before_grant_resolution(
     monkeypatch: pytest.MonkeyPatch,
