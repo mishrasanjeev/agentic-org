@@ -18,6 +18,7 @@ RUN npm run build
 
 # nginx:alpine @ 2026-05-01
 FROM nginx:alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
+RUN apk add --no-cache 'libexpat>=2.8.5-r0'
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'

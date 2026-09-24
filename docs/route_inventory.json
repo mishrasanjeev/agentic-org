@@ -3416,7 +3416,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 951,
+    "source_line": 966,
     "tenant_required": true
   },
   {
@@ -3434,7 +3434,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.create",
-    "source_line": 1036,
+    "source_line": 1057,
     "tenant_required": true
   },
   {
@@ -3452,7 +3452,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1225,
+    "source_line": 1246,
     "tenant_required": true
   },
   {
@@ -3470,7 +3470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.cmo_vendor_sandbox.write",
-    "source_line": 1298,
+    "source_line": 1319,
     "tenant_required": true
   },
   {
@@ -3488,7 +3488,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.contracts.read",
-    "source_line": 811,
+    "source_line": 826,
     "tenant_required": true
   },
   {
@@ -3578,7 +3578,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.registry.read",
-    "source_line": 751,
+    "source_line": 766,
     "tenant_required": false
   },
   {
@@ -3614,7 +3614,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1818,
+    "source_line": 1845,
     "tenant_required": true
   },
   {
@@ -3632,7 +3632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1492,
+    "source_line": 1513,
     "tenant_required": true
   },
   {
@@ -3650,7 +3650,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 1542,
+    "source_line": 1569,
     "tenant_required": true
   },
   {
@@ -3668,7 +3668,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1853,
+    "source_line": 1880,
     "tenant_required": true
   },
   {
@@ -3686,7 +3686,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1912,
+    "source_line": 1939,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
-    "source_line": 874,
+    "source_line": 889,
     "tenant_required": false
   },
   {
