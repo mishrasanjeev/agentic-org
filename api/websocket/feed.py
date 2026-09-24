@@ -178,11 +178,21 @@ async def _fanout_local(message: dict[str, Any]) -> int:
         failed.extend(socket for socket, delivered in zip(batch, outcomes, strict=True) if not delivered)
 
     if failed:
+        subscription: BrokerSubscription | None = None
         async with _connections_lock:
             bucket = _connections.get(tenant_id)
             if bucket is not None:
                 for socket in failed:
                     bucket.discard(socket)
+                if not bucket:
+                    _connections.pop(tenant_id, None)
+                    subscription = _subscriptions.pop(tenant_id, None)
+        if subscription is not None:
+            try:
+                await subscription.close()
+            # enterprise-gate: broad-except-ok reason=stale-feed-cleanup-failure-must-not-block-broker-delivery
+            except Exception as exc:  # noqa: BLE001 - subscription is already detached.
+                logger.warning("live_feed_subscription_close_failed", tenant_id=tenant_id, error=str(exc))
     return sent
 
 

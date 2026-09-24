@@ -220,6 +220,26 @@ async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime, monkeyp
 
 
 @pytest.mark.asyncio
+async def test_fanout_closes_subscription_after_last_socket_fails(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    socket = AsyncMock()
+
+    async def never_send(_message: dict) -> None:
+        await asyncio.Event().wait()
+
+    socket.send_json.side_effect = never_send
+    subscription = AsyncMock()
+    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.01)
+    feed._connections[tenant_id] = {socket}
+    feed._subscriptions[tenant_id] = subscription
+
+    assert await feed._fanout_local({"tenant_id": tenant_id, "type": "update"}) == 0
+    assert tenant_id not in feed._connections
+    assert tenant_id not in feed._subscriptions
+    subscription.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_redis_feed_subscription_recovers_after_listener_disconnect(monkeypatch) -> None:
     delivered = asyncio.Event()
     calls: list[dict] = []
@@ -311,5 +331,24 @@ async def test_cancelled_redis_cleanup_can_be_retried() -> None:
     await subscription.close()
 
     assert attempts == 2
+    pubsub.close.assert_awaited_once()
+    redis.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_subscription_can_close_from_its_own_handler() -> None:
+    pubsub = MagicMock()
+    pubsub.unsubscribe = AsyncMock()
+    pubsub.close = AsyncMock()
+    redis = MagicMock()
+    redis.aclose = AsyncMock()
+    subscription = _RedisFeedSubscription("redis://test", "tenant-1", AsyncMock())
+    subscription._task = asyncio.current_task()
+    subscription._pubsub = pubsub
+    subscription._redis = redis
+
+    await subscription.close()
+
+    assert subscription._closed is True
     pubsub.close.assert_awaited_once()
     redis.aclose.assert_awaited_once()

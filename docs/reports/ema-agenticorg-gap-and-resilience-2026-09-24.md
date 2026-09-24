@@ -56,7 +56,8 @@ These are prioritized by failure impact, not by how easy they are to document.
 1. **P0, fixed in this change:** `api/websocket/feed.py` sent to tenant sockets
    sequentially without a deadline. One stalled client could block peers and
    a Redis listener. Bounded parallel batches and a per-socket deadline now
-   isolate it; tests cover slow and 100-client fanout. This is not a production
+   limit that delay; eviction of the final failed socket also closes its
+   subscription. Tests cover slow and 100-client fanout. This is not a production
    throughput benchmark.
 2. **P0, fixed in this change:** `core/live_feed.py` ended its Redis Pub/Sub
    listener permanently after a transient exception. It now reconnects with

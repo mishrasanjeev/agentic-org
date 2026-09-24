@@ -262,6 +262,7 @@ class _RedisFeedSubscription:
         self._redis: aioredis.Redis | None = None
         self._pubsub: Any = None
         self._task: asyncio.Task[None] | None = None
+        self._closed = False
 
     async def start(self) -> None:
         try:
@@ -282,7 +283,7 @@ class _RedisFeedSubscription:
 
     async def _run(self) -> None:
         delay = 0.25
-        while True:
+        while not self._closed:
             try:
                 if self._pubsub is None:
                     await self._open()
@@ -296,6 +297,8 @@ class _RedisFeedSubscription:
                         logger.warning("live_feed_broker_invalid_json", tenant_id=self._tenant_id)
                         continue
                     await self._handler(payload)
+                    if self._closed:
+                        return
                     delay = 0.25
             except asyncio.CancelledError:
                 raise
@@ -306,6 +309,8 @@ class _RedisFeedSubscription:
                     tenant_id=self._tenant_id,
                     error=str(exc),
                 )
+            if self._closed:
+                return
             await self._close_current()
             await asyncio.sleep(delay)
             delay = min(delay * 2, 30.0)
@@ -326,12 +331,14 @@ class _RedisFeedSubscription:
                 self._redis = None
 
     async def close(self) -> None:
+        self._closed = True
         if self._task is not None:
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass
+            if self._task is not asyncio.current_task():
+                self._task.cancel()
+                try:
+                    await self._task
+                except asyncio.CancelledError:
+                    pass
         await self._close_current()
 
 
