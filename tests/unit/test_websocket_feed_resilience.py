@@ -4,6 +4,7 @@ import asyncio
 import json
 import uuid
 from collections.abc import Generator
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -85,6 +86,80 @@ def test_authenticated_matching_tenant_connects(feed_runtime) -> None:
                 message = websocket.receive_json()
 
     assert message == {"type": "heartbeat", "tenant_id": tenant_id, "sequence": None}
+
+
+def test_open_socket_closes_after_session_revocation(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    claims = {"sub": "user-1", "agenticorg:tenant_id": tenant_id, "grantex:scopes": []}
+    monkeypatch.setattr(feed, "FEED_AUTH_REVALIDATE_SECONDS", 0.02)
+    client = TestClient(_test_app())
+
+    with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
+        with patch(
+            "api.websocket.feed.check_user_session_state",
+            new_callable=AsyncMock,
+            side_effect=[None, "revoked"],
+        ) as check:
+            with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
+                assert websocket.receive_json()["type"] == "heartbeat"
+                with pytest.raises(WebSocketDisconnect) as exc:
+                    for _ in range(3):
+                        assert websocket.receive_json()["type"] == "heartbeat"
+
+    assert exc.value.code == 1008
+    assert check.await_count == 2
+    assert tenant_id not in feed._connections
+
+
+def test_auth_backend_unavailable_during_handshake_is_retryable(feed_runtime) -> None:
+    tenant_id = str(uuid.uuid4())
+    client = TestClient(_test_app())
+    with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, side_effect=RuntimeError("redis down")):
+        with pytest.raises(WebSocketDisconnect) as exc:
+            with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH):
+                pass
+    assert exc.value.code == 1013
+
+
+@pytest.mark.asyncio
+async def test_api_key_recheck_uses_verified_record_without_bcrypt(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    key_id = str(uuid.uuid4())
+    key = SimpleNamespace(status="active", tenant_id=tenant_id, expires_at=None, scopes=["feed.read"])
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _query):
+            return SimpleNamespace(scalar_one_or_none=lambda: key)
+
+    monkeypatch.setattr(feed, "async_session_factory", Session)
+    original = {
+        "credential_kind": "api_key",
+        "claims": {"agenticorg:api_key_id": key_id},
+        "scopes": ["feed.read"],
+    }
+    await feed.revalidate_websocket(AsyncMock(), tenant_id, original)
+    key.status = "revoked"
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), tenant_id, original)
+    assert exc.value.code == "invalid_api_key"
+
+
+@pytest.mark.asyncio
+async def test_session_recheck_fails_closed_when_auth_store_is_unavailable(feed_runtime, monkeypatch) -> None:
+    async def unavailable(_socket, _tenant_id):
+        raise ConnectionError("auth store unavailable")
+
+    monkeypatch.setattr(feed, "authenticate_websocket", unavailable)
+    original = {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": ["feed.read"]}
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), "tenant-1", original)
+    assert exc.value.code == "auth_unavailable"
 
 
 def test_authenticated_tenant_mismatch_is_rejected(feed_runtime) -> None:

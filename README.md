@@ -45,11 +45,17 @@ with the Docker-backed [local multichannel simulation](docs/local-multichannel-s
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
 real Playwright Chromium while keeping paid calls and production mutations off.
 
-Live feed events are persisted per tenant and can be replayed by sequence after
-a WebSocket interruption. Broker reconnection and bounded socket fanout are
-covered by local fault-injection tests; production latency, throughput, and
-availability remain unmeasured. The [scale and resilience assessment](docs/reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
-tracks remaining connection, revocation, load, and restore work; the
+The dashboard's Recent Activity queries audit records. The separate internal
+live-feed pipeline persists events per tenant *when published* and can replay
+them by sequence after a WebSocket interruption, but operational event writers
+are not yet wired to that pipeline. Its browser component exposes
+connection/catch-up status without raw payload display; it is not mounted as
+the dashboard's live stream. Broker reconnection, bounded socket fanout, and
+periodic credential revalidation are covered by local tests. Production
+latency, throughput, and availability remain unmeasured. The
+[activity delivery guide](https://agenticorg.ai/resources/agent-activity-audit-and-live-feed)
+explains the boundary. The [scale and resilience assessment](docs/reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+tracks remaining connection-scale, load, and restore work; the
 [recovery guide](docs/BACKUP_AND_DR.md) separates planned targets from proven
 production controls.
 

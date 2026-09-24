@@ -34,6 +34,27 @@ export const CLUSTERS = [
 
 export const CONTENT_PAGES: ContentPage[] = [
   {
+    slug: "agent-activity-audit-and-live-feed",
+    cluster: "governance",
+    title: "Agent Activity: Audit History and Live Feed Boundaries",
+    metaTitle: "Agent Activity Audit and Live Feed | AgenticOrg",
+    metaDescription: "What AgenticOrg's dashboard audit history shows today, how the internal feed handles missed events, and what remains before live delivery is wired end to end.",
+    keywords: ["AI agent activity audit", "agent event delivery", "tenant-scoped activity feed", "agent session revocation"],
+    sections: [
+      { heading: "What users see today", body: "The dashboard's Recent Activity section reads tenant-scoped audit records. It is a query view, not a guaranteed live stream. An internal WebSocket feed and safe activity component exist, but operational event writers are not yet connected to that feed." },
+      { heading: "When a feed connection is interrupted", body: "For published feed events, a reconnecting browser uses its last event sequence to request missed events. If a sequence gap remains, its activity component labels updates as delayed while catch-up retries. This does not turn an unwired event source into a live dashboard." },
+      { heading: "When feed access changes", body: "The feed server periodically rechecks an active credential. Invalid or revoked access ends the connection. A temporary authentication-store outage is retryable; revoked browser sessions require signing in again." },
+      { heading: "What still needs operational proof", body: "Source tests cover delivery and recovery behavior. Production throughput, long-duration soak, and restore objectives require separate measured evidence before an availability or recovery guarantee can be made." },
+    ],
+    faqs: [
+      { q: "Does the dashboard stream operational events today?", a: "No. Recent Activity queries audit records. The internal feed has replay and connection handling, but no production operational writer publishes into it yet." },
+      { q: "What happens after a brief feed interruption?", a: "For events that were published, the browser requests missed records from the durable sequence API. A delayed status means catch-up is still incomplete." },
+      { q: "Does this page prove a production availability target?", a: "No. An availability or recovery target needs measured load, outage, and restore evidence." },
+    ],
+    relatedSlugs: ["buyer-agents-shop-safely-oacp", "build-against-oacp-artifacts-bridges"],
+    cta: { text: "Explore the platform", link: "/platform" },
+  },
+  {
     slug: "move-shopify-store-to-agentic-commerce",
     cluster: "platform",
     title: "Move Your Shopify Store to Agentic Commerce",

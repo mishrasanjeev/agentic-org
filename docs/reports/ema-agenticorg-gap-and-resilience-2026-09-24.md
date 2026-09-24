@@ -66,8 +66,11 @@ These are prioritized by failure impact, not by how easy they are to document.
 3. **P0, fixed in this change:** `ui/src/lib/websocket.ts` fetched only one
    catch-up page and could deliver a newer live sequence before missed events.
    It now buffers gaps and paginates, resets the cursor on tenant switches,
-   and caps pending memory. Browser tests cover these paths. If durable event
-   history is missing/pruned, an explicit gap/reload UX is still needed.
+   and caps pending memory. Browser tests cover these paths. The internal
+   activity component labels delayed catch-up and session termination and
+   avoids rendering raw event payloads. It is not mounted as a live dashboard
+   because there is no production event publisher. A permanent history gap or pruned sequence still needs a
+   dedicated operator recovery path; retry alone cannot reconstruct deleted data.
 4. **P0, corrected documentation:** `docs/BACKUP_AND_DR.md` previously
    described a live cross-region replica, verified RPO/RTO and quarterly drills
    not supported by checked-in evidence. The multi-region Terraform README
@@ -89,10 +92,13 @@ These are prioritized by failure impact, not by how easy they are to document.
    prove a stalled tenant does not block another tenant, concurrent same-tenant
    joins use one subscription, and failure clears local state. Production
    connection-scale and broker-outage behavior still require load evidence.
-8. **P0, open:** existing WebSocket sessions authenticate at handshake, not
-   periodically (`api/websocket/feed.py`). A revoked session may remain on an
-   established feed until disconnect. Add bounded periodic revalidation or
-   centrally distributed revocation and test kill-switch latency.
+8. **P0, partially fixed in this change:** established WebSocket sessions now
+   revalidate credentials periodically and close on revoked/expired sessions,
+   API keys, or unavailable auth storage. Tests cover a revoked session and
+   API-key status. The 60-second interval bounds local detection only; it is
+   not a measured production revocation SLA. Grantex/provider-side revocation
+   cannot be inferred before signed-token expiry without an introspection or
+   revocation feed. At high socket count, periodic DB reads need load tests.
 9. **P1, open:** the Sep 1 Docker report shows 9,500 local HTTP requests
    without errors but burst p95 around 2.9 s and p99 around 4.9 s, on a shared
    workstation. It does not exercise production Cloud Run autoscaling, real
@@ -109,21 +115,34 @@ These are prioritized by failure impact, not by how easy they are to document.
     reaches local sockets but not other pods until catch-up. Add a durable
     publish outbox or scheduled replay if live cross-pod latency has an SLO;
     test broker outage/recovery and duplicate suppression.
+13. **P0, newly confirmed:** no production call site publishes operational
+    events through `broadcast_to_tenant`. The dashboard's Recent Activity is
+    the separate audit query, not a live feed. Connecting only the UI would
+    create an empty feature. Design a post-commit, bounded, privacy-safe
+    producer and durable outbox (or equivalent) before mounting the live
+    component; test delivery, duplicate suppression, tenant isolation, broker
+    outage, and hot-tenant write load. Do not put synchronous feed append on
+    a high-volume audit path without measuring the DB cost.
 
 ## Execution order and gates
 
 1. Land the feed fixes and browser/server regression tests here. No production
    rollout is implied by this report.
-2. Resolve P0 session revocation and subscriber connection fanout in separate
-   runtime PRs; use Redis-offline and cross-tenant fault injection.
-3. Build a reproducible workload covering hot tenants, 10k concurrent idle
+2. Wire a post-commit feed producer with durable publication and prove it under
+   DB/Redis fault injection before exposing the internal live component as a
+   dashboard stream.
+3. Resolve provider-side revocation propagation and subscriber connection
+   fanout in separate runtime PRs; use Redis-offline and cross-tenant fault
+   injection. Measure the cost of periodic credential checks at target socket
+   counts before changing the interval.
+4. Build a reproducible workload covering hot tenants, 10k concurrent idle
    sockets, burst events, 100+ tenants, 24-hour soak, DB/Redis restarts,
    OCR/RPA saturation and LLM 429/timeout. Record p50/p95/p99, delivery gaps,
    connection counts, lag, DB pool wait, cost and data loss. Use approved test
    systems only; no paid calls or merchant/provider load without approval.
-4. Verify actual backup/PITR/replica configuration and run an isolated restore
+5. Verify actual backup/PITR/replica configuration and run an isolated restore
    drill. Change external RTO/RPO claims only after measured evidence.
-5. Select three buyer-valued workflows and run a blinded AgenticOrg/Ema trial
+6. Select three buyer-valued workflows and run a blinded AgenticOrg/Ema trial
    with identical tasks, datasets, models where possible, human reviewers,
    acceptance criteria and full cost. Do not publish a superiority claim from
    vendor marketing or source inspection alone.

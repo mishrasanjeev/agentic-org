@@ -167,6 +167,14 @@ function parseFaqs(block) {
   }));
 }
 
+function parseSections(block) {
+  const pattern = /\{\s*heading:\s*"((?:\\.|[^"\\])*)"\s*,\s*body:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+  return [...block.matchAll(pattern)].map((match) => ({
+    heading: decodeQuoted(match[1]),
+    body: decodeQuoted(match[2]),
+  }));
+}
+
 export function loadRouteDescriptors(root = UI_ROOT) {
   const manifest = readPublicSite(root);
   const repoRoot = resolve(root, "..");
@@ -221,6 +229,7 @@ export function loadRouteDescriptors(root = UI_ROOT) {
     author: manifest.site.name,
     keywords: stringArrayField(block, "keywords"),
     faqs: parseFaqs(block),
+    sections: parseSections(block),
   }));
 
   const routes = [...staticRoutes, ...blogs, ...resources];
@@ -462,12 +471,19 @@ export function renderStaticHtml(baseHtml, route, manifest) {
   );
 
   const crumbs = breadcrumbs(route, site);
-  const faqHtml = route.path === "/" && Array.isArray(manifest.landingFaqs)
+  const faqs = route.path === "/" ? manifest.landingFaqs : route.kind === "resource" ? route.faqs : [];
+  const faqHtml = Array.isArray(faqs) && faqs.length > 0
     ? "<section><h2>Frequently asked questions</h2>" +
-      manifest.landingFaqs.map((faq) =>
+      faqs.map((faq) =>
         "<h3>" + escapeHtml(faq.question) + "</h3><p>" +
         escapeHtml(faq.answer) + "</p>",
       ).join("") + "</section>"
+    : "";
+  const sectionHtml = route.kind === "resource" && Array.isArray(route.sections)
+    ? route.sections.map((section) =>
+      "<section><h2>" + escapeHtml(section.heading) + "</h2><p>" +
+      escapeHtml(section.body) + "</p></section>",
+    ).join("")
     : "";
   const crumbHtml = crumbs.map((crumb) =>
     '<a href="' + escapeHtml(crumb.url) + '">' + escapeHtml(crumb.name) + "</a>",
@@ -476,7 +492,7 @@ export function renderStaticHtml(baseHtml, route, manifest) {
     '<noscript><main data-static-seo="true"><nav aria-label="Breadcrumb">' +
     crumbHtml + "</nav><h1>" + escapeHtml(route.name || route.title) +
     "</h1><p>" + escapeHtml(route.summary || route.description) + "</p>" +
-    faqHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
+    sectionHtml + faqHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
     escapeHtml(site.name) + "</a></p></main></noscript>";
   return html.replace(
     '<div id="root"></div>',

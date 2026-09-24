@@ -127,12 +127,12 @@ export default function ResourcePage() {
 
       {/* Minimal nav */}
       <nav className="bg-white border-b px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
+        <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link to="/" className="flex items-center gap-2 self-start">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-teal-500 flex items-center justify-center text-white font-bold text-xs">AO</div>
             <span className="font-semibold text-slate-900">AgenticOrg</span>
           </Link>
-          <div className="flex gap-4 text-sm">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
             <Link to="/resources" className="text-slate-600 hover:text-slate-900">All Resources</Link>
             <Link to="/blog" className="text-slate-600 hover:text-slate-900">Blog</Link>
             <Link to="/playground" className="text-blue-600 font-medium">Try Playground</Link>

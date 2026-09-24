@@ -918,7 +918,8 @@ export default function Landing() {
             <div className="grid gap-8 md:grid-cols-3">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Events you can catch up on</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">Tenant-scoped feed events are stored with sequence numbers. A reconnecting browser can request missed events instead of relying on a live socket alone.</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">Tenant-scoped feed events can be stored with sequence numbers and replayed after a socket interruption. The dashboard currently shows audit history; operational event publishing into the live feed is still pending.</p>
+                <a href="/resources/agent-activity-audit-and-live-feed" className="mt-2 inline-block text-sm font-medium text-blue-700 underline underline-offset-4 hover:text-blue-900">Activity delivery guide</a>
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">Failures stay visible</h3>
