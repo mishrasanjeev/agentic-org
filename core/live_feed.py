@@ -267,6 +267,7 @@ class _RedisFeedSubscription:
     async def start(self) -> None:
         try:
             await self._open()
+        # enterprise-gate: broad-except-ok reason=redis-feed-subscribe-failure-closes-connection-before-reraise
         except Exception:
             await self._close_current()
             raise
