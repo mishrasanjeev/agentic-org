@@ -166,17 +166,15 @@ def test_tc_exec_002_shadow_accuracy_updates_on_hitl_runs_too() -> None:
 
 
 def test_tc_exec_003_router_falls_back_on_primary_failure() -> None:
-    """LLMRouter.complete catches the primary-model exception,
-    logs llm_falling_back, and re-tries on the fallback model
-    exactly once. Without this, transient Gemini outages turn
-    every agent run into a 5xx."""
+    """Only transient primary failures may use the fallback model."""
     src = (REPO / "core" / "llm" / "router.py").read_text(encoding="utf-8")
     complete_block = src.split("async def complete(", 1)[1].split(
         "\n    async def ", 1
     )[0]
     assert "llm_primary_failed" in complete_block
     assert "llm_falling_back" in complete_block
-    assert "if model != self.fallback_model:" in complete_block
+    assert "_is_transient_llm_failure(exc)" in complete_block
+    assert "model_override is not None" in complete_block
 
 
 def test_tc_exec_003_fallback_model_loaded_from_settings() -> None:

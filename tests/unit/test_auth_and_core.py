@@ -1077,7 +1077,7 @@ class TestLLMRouter:
 
         async def side_effect(model, msgs, temp, max_tok):
             if model == router.primary_model:
-                raise Exception("primary down")
+                raise TimeoutError("primary timed out")
             return fallback_resp
 
         with patch.object(router, "_call_model", new_callable=AsyncMock, side_effect=side_effect):

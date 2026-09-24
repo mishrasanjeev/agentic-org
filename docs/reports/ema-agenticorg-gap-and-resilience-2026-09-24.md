@@ -107,10 +107,13 @@ These are prioritized by failure impact, not by how easy they are to document.
     concurrency rises with Uvicorn workers and Cloud Run instances; add a
     distributed admission budget if paid/browser-intensive load grows. Size
     Cloud SQL pool from instances x workers x (pool+overflow), with headroom.
-11. **P1, open:** model fallback in `core/llm/router.py` catches broad
-    exceptions and has no visible end-to-end request deadline at this layer.
-    Separate transient transport failures from bad credentials/policy/budget,
-    avoid runaway latency, and prove fallback via fault injection.
+11. **P1, partially fixed in this change:** `LLMRouter.complete` now has a
+    bounded total deadline and reserves a fraction for fallback. It falls back
+    on transient transport, timeout, 429, or server errors only, and preserves
+    explicit model selection and policy/configuration/budget failures. Focused
+    fault-injection tests cover those classes and a stuck fallback. Other
+    LangGraph, connector, and model-call paths still need a deadline inventory
+    and production-like fault injection before an end-to-end latency claim.
 12. **P1, open:** a persisted feed event followed by Redis publish failure
     reaches local sockets but not other pods until catch-up. Add a durable
     publish outbox or scheduled replay if live cross-pod latency has an SLO;
