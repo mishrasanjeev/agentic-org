@@ -32,6 +32,7 @@ from core.models.api_key import APIKey
 
 router = APIRouter()
 logger = structlog.get_logger()
+FEED_SOCKET_SEND_TIMEOUT_SECONDS = 2.0
 
 # Local socket registry only. PostgreSQL feed events and broker fanout are authoritative.
 _connections: dict[str, set[WebSocket]] = {}  # enterprise-gate: process-local-ok reason=local-socket-registry-only
@@ -155,16 +156,26 @@ async def _fanout_local(message: dict[str, Any]) -> int:
     async with _connections_lock:
         sockets = list(_connections.get(tenant_id, set()))
 
-    failed: list[WebSocket] = []
-    sent = 0
-    for socket in sockets:
+    async def send_one(socket: WebSocket) -> bool:
         try:
-            await socket.send_json(message)
-            sent += 1
+            await asyncio.wait_for(
+                socket.send_json(message), timeout=FEED_SOCKET_SEND_TIMEOUT_SECONDS
+            )
+            return True
         # enterprise-gate: broad-except-ok reason=live-feed-stale-socket-send-failure-removes-local-socket
         except Exception as exc:  # noqa: BLE001 - stale sockets are removed below.
             logger.debug("live_feed_socket_send_failed", tenant_id=tenant_id, error=str(exc))
-            failed.append(socket)
+            return False
+
+    failed: list[WebSocket] = []
+    sent = 0
+    # Bound concurrent sends so a slow client cannot stall peers or spawn
+    # unbounded send tasks for a tenant with many connected clients.
+    for offset in range(0, len(sockets), 32):
+        batch = sockets[offset : offset + 32]
+        outcomes = await asyncio.gather(*(send_one(socket) for socket in batch))
+        sent += sum(outcomes)
+        failed.extend(socket for socket, delivered in zip(batch, outcomes, strict=True) if not delivered)
 
     if failed:
         async with _connections_lock:

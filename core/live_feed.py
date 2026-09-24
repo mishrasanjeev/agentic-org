@@ -264,6 +264,14 @@ class _RedisFeedSubscription:
         self._task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
+        try:
+            await self._open()
+        except Exception:
+            await self._close_current()
+            raise
+        self._task = asyncio.create_task(self._run())
+
+    async def _open(self) -> None:
         self._redis = aioredis.from_url(
             self._redis_url,
             decode_responses=True,
@@ -271,29 +279,47 @@ class _RedisFeedSubscription:
         )
         self._pubsub = self._redis.pubsub()
         await self._pubsub.subscribe(_channel(self._tenant_id))
-        self._task = asyncio.create_task(self._run())
 
     async def _run(self) -> None:
-        assert self._pubsub is not None
-        try:
-            async for message in self._pubsub.listen():
-                if message.get("type") != "message":
-                    continue
-                try:
-                    payload = json.loads(message.get("data") or "{}")
-                except json.JSONDecodeError:
-                    logger.warning("live_feed_broker_invalid_json", tenant_id=self._tenant_id)
-                    continue
-                await self._handler(payload)
-        except asyncio.CancelledError:
-            raise
-        # enterprise-gate: broad-except-ok reason=live-feed-broker-subscription-failure-is-current-subscriber-only
-        except Exception as exc:  # noqa: BLE001 - subscription failure should not crash the app.
-            logger.warning(
-                "live_feed_broker_subscription_failed",
-                tenant_id=self._tenant_id,
-                error=str(exc),
-            )
+        delay = 0.25
+        while True:
+            try:
+                if self._pubsub is None:
+                    await self._open()
+                assert self._pubsub is not None
+                async for message in self._pubsub.listen():
+                    if message.get("type") != "message":
+                        continue
+                    try:
+                        payload = json.loads(message.get("data") or "{}")
+                    except json.JSONDecodeError:
+                        logger.warning("live_feed_broker_invalid_json", tenant_id=self._tenant_id)
+                        continue
+                    await self._handler(payload)
+                    delay = 0.25
+            except asyncio.CancelledError:
+                raise
+            # enterprise-gate: broad-except-ok reason=redis-feed-listener-reconnects-after-transient-failure
+            except Exception as exc:  # noqa: BLE001 - retry the subscription on disconnect.
+                logger.warning(
+                    "live_feed_broker_subscription_failed",
+                    tenant_id=self._tenant_id,
+                    error=str(exc),
+                )
+            await self._close_current()
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 30.0)
+
+    async def _close_current(self) -> None:
+        pubsub, redis = self._pubsub, self._redis
+        self._pubsub, self._redis = None, None
+        if pubsub is not None:
+            with suppress(Exception):
+                await pubsub.unsubscribe(_channel(self._tenant_id))
+                await pubsub.close()
+        if redis is not None:
+            with suppress(Exception):
+                await _close_redis(redis)
 
     async def close(self) -> None:
         if self._task is not None:
@@ -302,12 +328,7 @@ class _RedisFeedSubscription:
                 await self._task
             except asyncio.CancelledError:
                 pass
-        if self._pubsub is not None:
-            with suppress(Exception):
-                await self._pubsub.unsubscribe(_channel(self._tenant_id))
-                await self._pubsub.close()
-        if self._redis is not None:
-            await _close_redis(self._redis)
+        await self._close_current()
 
 
 class RedisFeedEventBroker:

@@ -76,6 +76,7 @@ ready.
 
 - [Readiness program](readiness/README.md)
 - [Gap analysis](readiness/GAP_ANALYSIS.md)
+- [Ema comparison and scale/resilience gaps (2026-09-24)](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
 - [Domain readiness standard](readiness/DOMAIN_READINESS_STANDARD.md)
 - [Capability readiness register](readiness/CAPABILITY_READINESS_REGISTER.md)
 - [Build roadmap](readiness/BUILD_ROADMAP.md)

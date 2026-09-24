@@ -13,6 +13,9 @@ The latest checked-in workstation run is:
 That report measures one Docker Desktop host. It is useful for regression and
 resource-safety decisions, but it is not a Cloud Run SLA or a claim about
 tenant, LLM, telephony, payment-provider, or third-party connector capacity.
+The [September 2026 scale and resilience gap review](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+tracks the additional broker, tenant-skew, failover, and recovery work needed
+before a production-scale claim.
 
 ## Runtime protections
 

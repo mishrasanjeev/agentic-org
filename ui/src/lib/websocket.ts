@@ -26,6 +26,9 @@ export class AgenticOrgWS {
   private terminal = false;
   private retryCount = 0;
   private lastSequence = 0;
+  private readonly pending = new Map<number, FeedMessage>();
+  private generation = 0;
+  private catchUpGeneration = -1;
   private readonly maxRetries: number;
   private readonly baseDelayMs: number;
   private readonly maxDelayMs: number;
@@ -52,6 +55,11 @@ export class AgenticOrgWS {
       this.ws.close();
       this.ws = null;
     }
+    if (this.tenantId !== tenantId) {
+      this.generation += 1;
+      this.lastSequence = 0;
+      this.pending.clear();
+    }
     this.tenantId = tenantId;
     this.intentionalClose = false;
     this.terminal = false;
@@ -64,6 +72,8 @@ export class AgenticOrgWS {
   }
 
   disconnect() {
+    this.generation += 1;
+    this.pending.clear();
     this.intentionalClose = true;
     this.terminal = true;
     this.clearReconnectTimer();
@@ -118,17 +128,38 @@ export class AgenticOrgWS {
     } catch {
       return;
     }
-    this.emit(data);
+    this.accept(data);
   }
 
-  private emit(data: FeedMessage) {
+  private accept(data: FeedMessage) {
     const sequence = typeof data.sequence === "number" ? data.sequence : null;
-    if (sequence !== null) {
-      if (sequence <= this.lastSequence) {
+    if (sequence === null) {
+      this.notify(data);
+      return;
+    }
+    if (sequence <= this.lastSequence) return;
+    if (this.lastSequence !== 0 && sequence !== this.lastSequence + 1) {
+      if (this.pending.size >= 500) {
+        this.pending.clear();
+        this.ws?.close();
         return;
       }
-      this.lastSequence = sequence;
+      this.pending.set(sequence, data);
+      void this.catchUp();
+      return;
     }
+    this.pending.delete(sequence);
+    this.lastSequence = sequence;
+    this.notify(data);
+    while (this.pending.has(this.lastSequence + 1)) {
+      const next = this.pending.get(this.lastSequence + 1)!;
+      this.pending.delete(this.lastSequence + 1);
+      this.lastSequence += 1;
+      this.notify(next);
+    }
+  }
+
+  private notify(data: FeedMessage) {
     this.listeners.forEach((fn) => fn(data));
   }
 
@@ -147,31 +178,39 @@ export class AgenticOrgWS {
   }
 
   private async catchUp() {
-    if (!this.tenantId || this.lastSequence <= 0) {
-      return;
-    }
-    const params = new URLSearchParams({
-      after: String(this.lastSequence),
-      limit: String(this.catchUpLimit),
-    });
-    let response: Response;
+    if (!this.tenantId || this.lastSequence <= 0) return;
+    const generation = this.generation;
+    if (this.catchUpGeneration === generation) return;
+    this.catchUpGeneration = generation;
     try {
-      response = await this.fetchImpl(`/api/v1/feed/events?${params.toString()}`, {
-        credentials: "include",
-      });
+      for (let page = 0; page < 100 && this.generation === generation; page += 1) {
+        const before = this.lastSequence;
+        const params = new URLSearchParams({
+          after: String(before),
+          limit: String(this.catchUpLimit),
+        });
+        const response = await this.fetchImpl(`/api/v1/feed/events?${params.toString()}`, {
+          credentials: "include",
+        });
+        if (this.generation !== generation) return;
+        if (response.status === 401 || response.status === 403) {
+          this.terminal = true;
+          this.ws?.close();
+          return;
+        }
+        if (!response.ok) return;
+        const body = (await response.json()) as { items?: FeedMessage[] };
+        if (this.generation !== generation) return;
+        const items = body.items ?? [];
+        items.forEach((item) => this.accept(item));
+        if (items.length < this.catchUpLimit || this.lastSequence === before) return;
+        if (page === 99) window.setTimeout(() => void this.catchUp(), 0);
+      }
     } catch {
       return;
+    } finally {
+      if (this.catchUpGeneration === generation) this.catchUpGeneration = -1;
     }
-    if (response.status === 401 || response.status === 403) {
-      this.terminal = true;
-      this.ws?.close();
-      return;
-    }
-    if (!response.ok) {
-      return;
-    }
-    const body = (await response.json()) as { items?: FeedMessage[] };
-    (body.items ?? []).forEach((item) => this.emit(item));
   }
 
   private clearReconnectTimer() {

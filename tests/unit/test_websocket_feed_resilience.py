@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import uuid
 from collections.abc import Generator
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -14,6 +16,7 @@ from api.websocket import feed
 from core.live_feed import (
     InMemoryFeedEventBroker,
     InMemoryFeedEventRepository,
+    _RedisFeedSubscription,
     configure_live_feed_for_tests,
     reset_live_feed_for_tests,
 )
@@ -75,8 +78,9 @@ def test_authenticated_matching_tenant_connects(feed_runtime) -> None:
     client = TestClient(_test_app())
 
     with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
-        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
-            message = websocket.receive_json()
+        with patch("api.websocket.feed.check_user_session_state", new_callable=AsyncMock, return_value=None):
+            with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
+                message = websocket.receive_json()
 
     assert message == {"type": "heartbeat", "tenant_id": tenant_id, "sequence": None}
 
@@ -159,9 +163,119 @@ def test_bad_json_socket_message_is_isolated(feed_runtime) -> None:
     client = TestClient(_test_app())
 
     with patch("api.websocket.feed.validate_token", new_callable=AsyncMock, return_value=claims):
-        with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
-            assert websocket.receive_json()["type"] == "heartbeat"
-            websocket.send_text("{bad-json")
-            assert websocket.receive_json()["code"] == "invalid_json"
-            websocket.send_json({"type": "ping"})
-            assert websocket.receive_json()["type"] == "pong"
+        with patch("api.websocket.feed.check_user_session_state", new_callable=AsyncMock, return_value=None):
+            with client.websocket_connect(f"/api/v1/ws/feed/{tenant_id}", headers=_AUTH) as websocket:
+                assert websocket.receive_json()["type"] == "heartbeat"
+                websocket.send_text("{bad-json")
+                assert websocket.receive_json()["code"] == "invalid_json"
+                websocket.send_json({"type": "ping"})
+                assert websocket.receive_json()["type"] == "pong"
+
+
+@pytest.mark.asyncio
+async def test_slow_socket_does_not_block_peer_and_is_removed(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    slow = AsyncMock()
+    fast = AsyncMock()
+    async def never_send(_message: dict) -> None:
+        await asyncio.Event().wait()
+
+    slow.send_json.side_effect = never_send
+    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.01)
+    feed._connections[tenant_id] = {slow, fast}
+
+    delivered = await asyncio.wait_for(
+        feed._fanout_local({"tenant_id": tenant_id, "type": "update"}), timeout=0.2
+    )
+
+    assert delivered == 1
+    fast.send_json.assert_awaited_once()
+    assert slow not in feed._connections[tenant_id]
+    assert fast in feed._connections[tenant_id]
+
+
+@pytest.mark.asyncio
+async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    active = 0
+    peak = 0
+
+    async def send(_message: dict) -> None:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(0.01)
+        finally:
+            active -= 1
+
+    sockets = {AsyncMock() for _ in range(100)}
+    for socket in sockets:
+        socket.send_json.side_effect = send
+    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.2)
+    feed._connections[tenant_id] = sockets
+
+    assert await feed._fanout_local({"tenant_id": tenant_id, "type": "update"}) == 100
+    assert 1 < peak <= 32
+
+
+@pytest.mark.asyncio
+async def test_redis_feed_subscription_recovers_after_listener_disconnect(monkeypatch) -> None:
+    delivered = asyncio.Event()
+    calls: list[dict] = []
+
+    async def handler(message: dict) -> None:
+        calls.append(message)
+        delivered.set()
+
+    class FakePubSub:
+        def __init__(self, fail: bool) -> None:
+            self.fail = fail
+            self.subscribe = AsyncMock()
+            self.unsubscribe = AsyncMock()
+            self.close = AsyncMock()
+
+        async def listen(self):
+            if self.fail:
+                raise ConnectionError("temporary disconnect")
+            yield {"type": "message", "data": json.dumps({"sequence": 1})}
+            await asyncio.Event().wait()
+
+    class FakeRedis:
+        def __init__(self, fail: bool) -> None:
+            self.stream = FakePubSub(fail)
+            self.aclose = AsyncMock()
+
+        def pubsub(self) -> FakePubSub:
+            return self.stream
+
+    instances = [FakeRedis(True), FakeRedis(False)]
+    with patch("core.live_feed.aioredis.from_url", side_effect=instances) as from_url:
+        subscription = _RedisFeedSubscription("redis://test", "tenant-1", handler)
+        try:
+            await subscription.start()
+            await asyncio.wait_for(delivered.wait(), timeout=1.0)
+        finally:
+            await subscription.close()
+
+    assert from_url.call_count == 2
+    assert calls == [{"sequence": 1}]
+    assert instances[0].aclose.await_count == 1
+    assert instances[1].aclose.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_redis_feed_start_releases_connection_after_subscribe_failure() -> None:
+    redis = MagicMock()
+    redis.aclose = AsyncMock()
+    pubsub = AsyncMock()
+    pubsub.subscribe.side_effect = ConnectionError("unavailable")
+    redis.pubsub.return_value = pubsub
+
+    with patch("core.live_feed.aioredis.from_url", return_value=redis):
+        subscription = _RedisFeedSubscription("redis://test", "tenant-1", AsyncMock())
+        with pytest.raises(ConnectionError):
+            await subscription.start()
+
+    pubsub.close.assert_awaited_once()
+    redis.aclose.assert_awaited_once()
