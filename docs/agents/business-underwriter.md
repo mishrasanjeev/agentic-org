@@ -9,6 +9,7 @@ closes or files anything: it holds no tool that could.
 ```python
 from connectors.providers.mock import MockProvider
 from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
+from core.cases.grant_authorizer import case_authorizer
 from core.policy import EXAMPLES_DIR, load_policy
 
 provider = MockProvider()
@@ -18,12 +19,19 @@ outcome = await run_underwriter(
     case_id="case-0001",
     application=application,
     config=UnderwriterConfig(policy=load_policy(EXAMPLES_DIR / "business_onboarding_us.yaml")),
-    deps=UnderwriterDependencies(provider=provider),
+    deps=UnderwriterDependencies(
+        provider=provider,
+        authorizer=case_authorizer("", "case-0001", "business_underwriter", "aml.cdd.onboarding"),
+    ),
 )
 assert outcome.status == "completed"
 memo = outcome.memo  # schema: underwriting_memo, every section cites evidence
 record = outcome.case_record()  # prompt digest, policy result, every tool call with hashes
 ```
+
+The empty tenant ID is a placeholder. A real run needs a tenant UUID, one active shared
+`business_underwriter` registration, an allowed case purpose and a valid delegated grant;
+otherwise the provider call is refused.
 
 ## What a run does
 

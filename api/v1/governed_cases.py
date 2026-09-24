@@ -34,6 +34,7 @@ from api.route_metadata import route_meta
 from core.agents.business_underwriter.information_request import InformationRequestError, propose, render
 from core.agents.screening_disposition import DispositionReviewError, DispositionReviewRequest, apply_review
 from core.cases import excerpts as case_excerpts
+from core.cases.grant_authorizer import case_authorizer
 from core.cases.runtime import (
     CaseRuntime,
     announce_case_version,
@@ -62,7 +63,7 @@ DEFAULT_PURPOSE = "aml.cdd.onboarding"
 
 def get_case_runtime() -> CaseRuntime:
     """Overridden in tests; production builds the default runtime per request."""
-    return CaseRuntime()
+    return CaseRuntime(authorizer_factory=case_authorizer)
 
 
 #: The only authentication mode that carries a person: a user session verified by

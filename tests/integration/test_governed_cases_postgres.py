@@ -18,25 +18,35 @@ import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
 import pytest
 import yaml
 from langchain_core.messages import AIMessage, BaseMessage
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from api.v1.agents import update_agent
+from auth.grant_enforcement import EnforcementMode
+from auth.run_grants import RunGrant
 from connectors.framework.verification_provider import Capability
 from connectors.providers.mock import MockConfig, MockProvider
+from core.cases import grant_authorizer as case_grants
 from core.cases.decisions import DecisionCheck
+from core.cases.grant_authorizer import _active_agent, case_authorizer
 from core.cases.runtime import CaseRuntime, decide_case, dispose_screening_hits, investigate_case, run_case_step
 from core.cases.states import CaseError, CaseState
 from core.cases.store import counts_by_state, create_case, get_case, transition, transitions_for
 from core.domain_schemas import validate
+from core.models.agent import Agent
+from core.models.audit import AuditLog
+from core.ownership import Caller
+from core.schemas.api import AgentUpdate
 from core.test_doubles.scripted_model import final
 from core.tool_gateway.provider_gateway import ToolDecision
 
@@ -145,11 +155,16 @@ def tenants(engine: Engine) -> tuple[str, str]:
 def _runtime(provider: MockProvider | None = None, **overrides: Any) -> CaseRuntime:
     backend = provider or MockProvider(MockConfig(clock=lambda: FROZEN))
 
+    class Allow:
+        async def authorize(self, *, connector: str, tool: str) -> ToolDecision:
+            return ToolDecision(allowed=True)
+
     async def enabled(tenant_id: uuid.UUID) -> bool:
         return True
 
     values: dict[str, Any] = {
         "provider_factory": lambda name: backend,
+        "authorizer_factory": lambda tenant, case_ref, role, purpose: Allow(),
         "flag": enabled,
         "clock": lambda: FROZEN,
         "llm_model": "scripted",
@@ -279,12 +294,184 @@ async def test_a_refused_grant_fails_the_case_closed(
 
     case_ref = await _submit(tenant, "gb-clean-brightwater")
     output = await investigate_case(
-        tenant, case_ref, runtime=_runtime(authorizer_factory=lambda t, c: Deny()), actor="workflow:test"
+        tenant, case_ref,
+        runtime=_runtime(authorizer_factory=lambda t, c, role, purpose: Deny()),
+        actor="workflow:test"
     )
     assert output == {"case_ref": case_ref, "state": "failed", "failure_reason": "tool_refused:grant_missing"}
     case, history = await _load(tenant, case_ref)
     assert history[-1] == ("in_progress", "failed", "tool_refused:grant_missing")
     assert case.memo is None and case.agent_records[0]["tool_calls"][0]["outcome"] == "denied"
+
+
+async def test_default_case_runtime_never_calls_provider_without_a_registered_role_grant(
+    engine: Engine, tenants: tuple[str, str], scripted_model: Any
+) -> None:
+    tenant, _ = tenants
+    scripted_model([])
+    provider = MockProvider(MockConfig(clock=lambda: FROZEN))
+    case_ref = await _submit(tenant, "gb-clean-brightwater")
+    output = await investigate_case(
+        tenant,
+        case_ref,
+        runtime=_runtime(provider, authorizer_factory=case_authorizer),
+        actor="workflow:test",
+    )
+    assert output["state"] == "failed" and output["failure_reason"] == "tool_refused:grant_missing"
+    assert provider._state.attempts == {}
+
+
+async def test_registered_case_agent_checks_grant_before_provider_calls(
+    engine: Engine, tenants: tuple[str, str], scripted_model: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from core.database import get_tenant_session
+
+    tenant, _ = tenants
+    role_id = uuid.uuid4()
+    async with get_tenant_session(uuid.UUID(tenant)) as session:
+        session.add(
+            Agent(
+                id=role_id,
+                tenant_id=uuid.UUID(tenant),
+                name="Underwriter",
+                employee_name="Underwriter",
+                agent_type="business_underwriter",
+                domain="compliance",
+                system_prompt_ref="inline://case-test",
+                hitl_condition="always",
+                authorized_tools=["resolve_business"],
+                status="active",
+                visibility="tenant",
+                owner_user_id=None,
+                company_id=None,
+                config={"grantex": {
+                    "grantex_agent_id": "ag_test",
+                    "grantex_scopes": ["tool:mock:read"],
+                    "case_purposes": ["aml.cdd.onboarding"],
+                }},
+            )
+        )
+
+    checked: list[str] = []
+
+    async def resolved(**kwargs: Any) -> RunGrant:
+        assert kwargs["agent_id"] == str(role_id)
+        assert kwargs["mode"] is EnforcementMode.DENY
+        assert kwargs["grantex_config"]["grantex_agent_id"] == "ag_test"
+        return RunGrant(mode=EnforcementMode.DENY, token="signed-token", source="minted")
+
+    class Client:
+        def enforce(self, **kwargs: Any) -> Any:
+            assert kwargs["grant_token"] == "signed-token"
+            checked.append(kwargs["tool"])
+            return SimpleNamespace(allowed=True)
+
+    monkeypatch.setattr(case_grants, "resolve_run_grant", resolved)
+    monkeypatch.setattr("core.langgraph.grantex_auth.get_grantex_client", lambda: Client())
+    scripted_model([_respond])
+    provider = MockProvider(MockConfig(clock=lambda: FROZEN))
+    case_ref = await _submit(tenant, "gb-clean-brightwater")
+    result = await investigate_case(
+        tenant, case_ref, runtime=_runtime(provider, authorizer_factory=case_authorizer), actor="workflow:test"
+    )
+    assert result["state"] == "awaiting_decision"
+    assert checked and "resolve_business" in checked
+    assert provider._state.attempts
+
+
+async def test_case_role_agent_selection_is_tenant_scoped_and_unambiguous(
+    engine: Engine, tenants: tuple[str, str]
+) -> None:
+    from core.database import get_tenant_session
+
+    first, second = tenants
+
+    async def add_role(agent_id: uuid.UUID) -> None:
+        async with get_tenant_session(uuid.UUID(first)) as session:
+            session.add(
+                Agent(
+                    id=agent_id,
+                    tenant_id=uuid.UUID(first),
+                    company_id=None,
+                    name="Underwriter",
+                    agent_type="business_underwriter",
+                    domain="compliance",
+                    system_prompt_ref="inline://case-test",
+                    hitl_condition="always",
+                    authorized_tools=["resolve_business"],
+                    status="active",
+                    visibility="tenant",
+                    owner_user_id=None,
+                    config={"grantex": {
+                        "grantex_agent_id": "ag_test",
+                        "grantex_scopes": ["tool:mock:read"],
+                        "case_purposes": ["aml.cdd.onboarding"],
+                    }},
+                    employee_name=str(agent_id),
+                )
+            )
+
+    agent_id = uuid.uuid4()
+    await add_role(agent_id)
+    assert (await _active_agent(first, "business_underwriter"))[0] == str(agent_id)
+    assert await _active_agent(second, "business_underwriter") is None
+    await add_role(uuid.uuid4())
+    assert await _active_agent(first, "business_underwriter") is None
+
+
+async def test_human_admin_can_persist_case_purposes_with_audit(
+    engine: Engine, tenants: tuple[str, str]
+) -> None:
+    from core.database import get_tenant_session
+
+    tenant, _ = tenants
+    tenant_uuid = uuid.UUID(tenant)
+    role_id = uuid.uuid4()
+    admin_id = uuid.uuid4()
+    async with get_tenant_session(tenant_uuid) as session:
+        session.add(
+            Agent(
+                id=role_id,
+                tenant_id=tenant_uuid,
+                name="Underwriter",
+                employee_name="Underwriter",
+                agent_type="business_underwriter",
+                domain="compliance",
+                system_prompt_ref="inline://case-test",
+                hitl_condition="always",
+                authorized_tools=["resolve_business"],
+                status="active",
+                visibility="tenant",
+                owner_user_id=None,
+                company_id=None,
+                config={"grantex": {"grantex_agent_id": "ag_test"}},
+            )
+        )
+
+    admin = Caller(user_id=admin_id, role="admin", domains=None, is_admin=True, is_machine=False)
+    result = await update_agent(
+        agent_id=role_id,
+        body=AgentUpdate(case_purposes=["aml.cdd.onboarding"]),
+        tenant_id=tenant,
+        user_domains=None,
+        user={},
+        caller=admin,
+    )
+    assert result["updated"] is True
+    async with get_tenant_session(tenant_uuid) as session:
+        agent = (await session.execute(select(Agent).where(Agent.id == role_id))).scalar_one()
+        audit = (
+            await session.execute(
+                select(AuditLog).where(
+                    AuditLog.tenant_id == tenant_uuid,
+                    AuditLog.agent_id == role_id,
+                    AuditLog.event_type == "agent.case_purposes.updated",
+                )
+            )
+        ).scalar_one()
+    assert agent.config["grantex"]["case_purposes"] == ["aml.cdd.onboarding"]
+    assert audit.actor_id == str(admin_id)
+    assert audit.details == {"before": None, "after": ["aml.cdd.onboarding"]}
 
 
 async def test_lifecycle_refuses_illegal_transitions_and_stale_versions(

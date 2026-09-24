@@ -30,11 +30,17 @@ from core.tool_gateway.provider_gateway import (
 AT = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
 
+class Allow:
+    async def authorize(self, *, connector: str, tool: str) -> ToolDecision:
+        return ToolDecision(allowed=True)
+
+
 def _gateway(provider: MockProvider | None = None, **kwargs) -> ProviderToolGateway:
     return ProviderToolGateway(
         provider=provider or MockProvider(MockConfig(clock=lambda: AT)),
         agent="test_agent",
         tool_set=kwargs.pop("tool_set", frozenset(READ_TOOLS)),
+        authorizer=kwargs.pop("authorizer", Allow()),
         clock=lambda: AT,
         **kwargs,
     )
@@ -78,6 +84,30 @@ async def test_authorized_call_is_recorded_with_hashes_and_cited_records() -> No
     assert ("mock", "mock:company:mock-gb-00000001:profile", "legal_name") in gateway.retrieved_evidence
     assert record.to_dict()["started_at"] == AT.isoformat()
     assert _count("resolve", "ok") == before + 1
+
+
+async def test_missing_authorizer_refuses_before_provider_dispatch() -> None:
+    provider = MockProvider(MockConfig(clock=lambda: AT))
+    gateway = ProviderToolGateway(
+        provider=provider,
+        agent="test_agent",
+        tool_set=frozenset({"resolve_business"}),
+    )
+    with pytest.raises(ToolRefusedError, match="authorization_unavailable"):
+        await gateway.resolve_business(BusinessQuery(name="Brightwater"), deadline=Deadline.after(5))
+    assert provider._state.attempts == {}
+
+
+async def test_authorizer_failure_refuses_before_provider_dispatch() -> None:
+    class Broken:
+        async def authorize(self, *, connector: str, tool: str) -> ToolDecision:
+            raise TimeoutError("unavailable")
+
+    provider = MockProvider(MockConfig(clock=lambda: AT))
+    gateway = _gateway(provider, authorizer=Broken())
+    with pytest.raises(ToolRefusedError, match="authorization_unavailable"):
+        await gateway.resolve_business(BusinessQuery(name="Brightwater"), deadline=Deadline.after(5))
+    assert provider._state.attempts == {}
 
 
 async def test_denied_grant_never_reaches_the_provider() -> None:

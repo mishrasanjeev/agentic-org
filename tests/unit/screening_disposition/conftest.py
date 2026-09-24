@@ -12,6 +12,7 @@ import pytest
 from connectors.framework.verification_provider import BusinessSubject, Deadline, PersonSubject, ScreenOptions
 from connectors.providers.mock import MockConfig, MockProvider
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 
@@ -83,7 +84,12 @@ async def dispose(
         subject=subject,
         associated_entities=associated,
         config=config or DispositionConfig(llm_model="scripted"),
-        deps=DispositionDependencies(provider=provider or backend, clock=lambda: FROZEN, **deps),
+        deps=DispositionDependencies(
+            provider=provider or backend,
+            clock=lambda: FROZEN,
+            authorizer=deps.pop("authorizer", ALLOW_PROVIDER_CALLS),
+            **deps,
+        ),
         run_id=f"run-{key}",
     )
 

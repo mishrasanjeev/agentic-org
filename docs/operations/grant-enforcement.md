@@ -7,6 +7,11 @@ when an agent happened to have a token in `config.grantex.grant_token`, which
 registration never set, so on the common path it did not run at all. This page
 covers how the check is switched on, what it records and how to read it.
 
+Governed-case provider calls are stricter than the general mode described below:
+they always require a positive grant check, including while the general mode is
+`off` or `warn`. See [the case lifecycle](../governance/case-lifecycle.md#turning-it-on)
+for the required role registrations and the current SDK limitations.
+
 ## Modes
 
 | Mode | A call the grant does not cover | Recorded as |

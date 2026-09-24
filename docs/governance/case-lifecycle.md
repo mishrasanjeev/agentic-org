@@ -33,6 +33,35 @@ Everything here is off unless the tenant's **`governed_cases.enabled`** flag is 
 (`POST /api/v1/feature-flags`). While it is off, or if the flag cannot be read, every route answers
 404 `governed_cases_disabled` and every `case_agent` workflow step fails with that reason.
 
+Before enabling the flag, create exactly one active, shared, tenant-wide agent of each
+`agent_type`: `business_underwriter` and `screening_disposition`. Supply only the
+provider read-tool names in each agent's `authorized_tools`. Registration derives
+`grantex_scopes` from the configured case provider's manifest and stores its own
+`grantex_agent_id`; a missing manifest or undeclared tool leaves the role unregistered
+and its case calls denied. Each role also needs an exact `case_purposes` list such as
+`["aml.cdd.onboarding"]`; a missing or unmatched purpose refuses the call before
+grant resolution. After creating and registering each shared role agent, a human
+tenant admin sets its list with `PATCH /api/v1/agents/{id}` using the
+`case_purposes` field; the update is audited. Provision `GRANTEX_ROOT_GRANT_TOKEN`
+and `GRANTEX_API_KEY` from a
+secret manager; the root grant must cover both agents' registered scopes. The platform
+delegates a short-lived grant for the selected role. A legacy
+`config.grantex.grant_token` is deliberately ignored on this path because it could
+belong to another agent. Zero or multiple active agents for a role, a missing
+registration, an unavailable issuer, or a denied tool all refuse the provider call.
+Do not enable the flag until the role registrations and provider manifest have been
+verified. The shipped `manifests/mock.json` lists exactly the mock provider's read
+tools; other providers need their own manifest in `GRANTEX_MANIFESTS_DIR`.
+
+Provider calls in governed cases always use strict grant checking, even when general
+`grants.enforce_closed` is `off` or `warn`. A denied call is recorded in the case's
+tool-call record and the investigation fails with `tool_refused:<reason>`; no provider
+request is sent. The current published Python SDK checks the grant signature, connector,
+tool and permission. AgenticOrg checks the stored case purpose against the selected
+role's local `case_purposes`; the SDK does **not** yet enforce token-level purpose or per-case caps,
+and the pooled token is not bound to a single case. Do not treat these as active
+controls until the newer SDK is published and the case context is passed to it.
+
 | Setting | Default | Purpose |
 |---|---|---|
 | `AGENTICORG_CASE_PROVIDER` | `mock` | Registered verification provider for new cases. The mock refuses to run outside local and test environments. |

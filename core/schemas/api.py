@@ -119,6 +119,7 @@ class AgentUpdate(BaseModel):
     system_prompt_text: str | None = None
     prompt_variables: dict[str, str] | None = None
     authorized_tools: list[str] | None = None
+    case_purposes: list[str] | None = None
     hitl_policy: HITLPolicyConfig | None = None
     confidence_floor: float | None = Field(None, ge=0.0, le=1.0)
     llm: LLMConfig | None = None
