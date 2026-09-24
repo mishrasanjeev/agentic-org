@@ -321,8 +321,14 @@ async def test_runs_with_pseudonymisation_before_the_model_switched_on(
     assert outcome.rationale_source == "model"
 
 
-async def test_documented_example_runs(scripted_model) -> None:
+async def test_documented_example_runs(scripted_model, monkeypatch: pytest.MonkeyPatch) -> None:
     scripted_model([final(GOOD_RATIONALE)])
+    from core.cases.grant_authorizer import CaseGrantAuthorizer
+
+    async def permitted(self: CaseGrantAuthorizer, *, connector: str, tool: str) -> ToolDecision:
+        return ToolDecision(allowed=True)
+
+    monkeypatch.setattr(CaseGrantAuthorizer, "authorize", permitted)
     from connectors.framework.verification_provider import Deadline, PersonSubject, ScreenOptions
 
     provider = MockProvider()
@@ -334,6 +340,7 @@ async def test_documented_example_runs(scripted_model) -> None:
     party = {"kind": "person", "name": "Jorund Halvessen", "date_of_birth": "1990-03", "nationalities": ["US"]}
     # docs-snippet: start run-disposition
     from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+    from core.cases.grant_authorizer import case_authorizer
 
     outcome = await run_screening_disposition(
         tenant_id="",
@@ -343,7 +350,10 @@ async def test_documented_example_runs(scripted_model) -> None:
         subject=party,  # the screened party from the underwriter's hand-off
         associated_entities=["Oakhollow Bakery Cooperative"],
         config=DispositionConfig(),
-        deps=DispositionDependencies(provider=provider, authorizer=ALLOW_PROVIDER_CALLS),
+        deps=DispositionDependencies(
+            provider=provider,
+            authorizer=case_authorizer("", "case-0001", "screening_disposition", "aml.cdd.onboarding"),
+        ),
     )
     disposition = outcome.disposition  # schema: screening_disposition, review is null
     # docs-snippet: end run-disposition

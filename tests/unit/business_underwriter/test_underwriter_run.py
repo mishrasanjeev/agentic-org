@@ -500,11 +500,18 @@ def test_frozen_clock_is_the_fixture_snapshot() -> None:
     assert FROZEN.isoformat() == "2026-09-01T09:00:00+00:00"
 
 
-async def test_documented_example_runs(narrative) -> None:
+async def test_documented_example_runs(narrative, monkeypatch: pytest.MonkeyPatch) -> None:
     narrative()
+    from core.cases.grant_authorizer import CaseGrantAuthorizer
+
+    async def permitted(self: CaseGrantAuthorizer, *, connector: str, tool: str) -> ToolDecision:
+        return ToolDecision(allowed=True)
+
+    monkeypatch.setattr(CaseGrantAuthorizer, "authorize", permitted)
     # docs-snippet: start run-underwriter
     from connectors.providers.mock import MockProvider
     from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
+    from core.cases.grant_authorizer import case_authorizer
     from core.policy import EXAMPLES_DIR, load_policy
 
     provider = MockProvider()
@@ -514,7 +521,10 @@ async def test_documented_example_runs(narrative) -> None:
         case_id="case-0001",
         application=application,
         config=UnderwriterConfig(policy=load_policy(EXAMPLES_DIR / "business_onboarding_us.yaml")),
-        deps=UnderwriterDependencies(provider=provider, authorizer=ALLOW_PROVIDER_CALLS),
+        deps=UnderwriterDependencies(
+            provider=provider,
+            authorizer=case_authorizer("", "case-0001", "business_underwriter", "aml.cdd.onboarding"),
+        ),
     )
     assert outcome.status == "completed"
     memo = outcome.memo  # schema: underwriting_memo, every section cites evidence

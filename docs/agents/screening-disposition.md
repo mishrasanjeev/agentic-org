@@ -8,6 +8,7 @@ confidence band. **It never closes a hit, in any configuration.**
 <!-- snippet: tests/unit/screening_disposition/test_disposition_agent.py#run-disposition -->
 ```python
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+from core.cases.grant_authorizer import case_authorizer
 
 outcome = await run_screening_disposition(
     tenant_id="",
@@ -17,10 +18,17 @@ outcome = await run_screening_disposition(
     subject=party,  # the screened party from the underwriter's hand-off
     associated_entities=["Oakhollow Bakery Cooperative"],
     config=DispositionConfig(),
-    deps=DispositionDependencies(provider=provider),
+    deps=DispositionDependencies(
+        provider=provider,
+        authorizer=case_authorizer("", "case-0001", "screening_disposition", "aml.cdd.onboarding"),
+    ),
 )
 disposition = outcome.disposition  # schema: screening_disposition, review is null
 ```
+
+The empty tenant ID is a placeholder. A real run needs a tenant UUID, one active shared
+`screening_disposition` registration, an allowed case purpose and a valid delegated grant;
+otherwise the provider call is refused.
 
 ## What a run does
 
