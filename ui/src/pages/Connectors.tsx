@@ -50,6 +50,8 @@ export default function Connectors() {
   const { user } = useAuth();
   const isAdmin = isAdminUser(user);
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [connectorPage, setConnectorPage] = useState(1);
+  const [connectorTotal, setConnectorTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [connectorsError, setConnectorsError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -94,11 +96,11 @@ export default function Connectors() {
     }
   }
 
-  async function fetchConnectors() {
+  async function fetchConnectors(page = connectorPage) {
     setLoading(true);
     setConnectorsError(null);
     try {
-      const { data } = await api.get("/connectors");
+      const { data } = await api.get("/connectors", { params: { page, per_page: 50 } });
       const raw = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
       // API returns connector_id, map to id for consistency
       const items = raw.map((c: any) => ({ ...c, id: c.id || c.connector_id }));
@@ -107,8 +109,11 @@ export default function Connectors() {
       // connectors fabricated stats and produced Edit/Archive buttons that
       // pointed at non-existent instances.
       setConnectors(items);
+      setConnectorTotal(typeof data?.total === "number" ? data.total : items.length);
+      setConnectorPage(page);
     } catch (err: unknown) {
       setConnectors([]);
+      setConnectorTotal(0);
       setConnectorsError(extractApiError(err, "Failed to load connectors"));
     } finally {
       setLoading(false);
@@ -122,6 +127,7 @@ export default function Connectors() {
       const { data } = await api.get(`/connectors/${id}/health`);
       const status = data.healthy ? "Healthy" : "Unhealthy";
       setHealthResult({ id, msg: `${data.name || "Connector"}: ${status} | Last check: ${data.health_check_at || "Never"}`, ok: !!data.healthy });
+      await fetchConnectors();
     } catch (err: any) {
       const detail = err.response?.data?.detail || err.message || "Unknown error";
       setHealthResult({ id, msg: `Health check failed: ${detail}`, ok: false });
@@ -154,9 +160,8 @@ export default function Connectors() {
   );
 
   const stats = {
-    total: connectors.length,
-    active: connectors.filter((c) => c.status === "active").length,
-    unhealthy: connectors.filter((c) => c.status !== "active").length,
+    recentlyChecked: connectors.filter((c) => c.readiness?.state === "recent_health").length,
+    needsAttention: connectors.filter((c) => c.readiness?.state !== "recent_health").length,
   };
 
   // Fetch marketplace apps from Composio API
@@ -204,7 +209,7 @@ export default function Connectors() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <h2 className="text-2xl font-bold">Connectors</h2>
         <div className="flex flex-wrap gap-2">
           {isAdmin && (
@@ -237,11 +242,12 @@ export default function Connectors() {
       {/* â”€â”€ Native Connectors Tab â”€â”€ */}
       {activeTab === "native" && (
         <>
-          <div className="grid grid-cols-3 gap-4">
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Total</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{stats.total}</p></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Active</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-green-600 tabular-nums">{stats.active}</p></CardContent></Card>
-            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Unhealthy</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-red-600 tabular-nums">{stats.unhealthy}</p></CardContent></Card>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Registered</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{connectorTotal}</p></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Recently checked on page</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold text-green-600 tabular-nums">{stats.recentlyChecked}</p></CardContent></Card>
+            <Card><CardHeader><CardTitle className="text-sm text-muted-foreground">Needs attention on page</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold tabular-nums">{stats.needsAttention}</p></CardContent></Card>
           </div>
+          <p className="text-xs text-muted-foreground">A recent health check is not proof of provider scopes, contract access, or production readiness.</p>
 
           {healthResult && (
             <div className={`rounded-lg px-4 py-3 text-sm flex items-center justify-between ${healthResult.ok ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"}`}>
@@ -317,6 +323,14 @@ export default function Connectors() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {!loading && !connectorsError && connectorTotal > 50 && (
+            <div className="flex items-center justify-end gap-3 text-sm" aria-label="Connector pages">
+              <Button variant="outline" size="sm" disabled={connectorPage === 1} onClick={() => fetchConnectors(connectorPage - 1)}>Previous</Button>
+              <span>Page {connectorPage} of {Math.ceil(connectorTotal / 50)}</span>
+              <Button variant="outline" size="sm" disabled={connectorPage * 50 >= connectorTotal} onClick={() => fetchConnectors(connectorPage + 1)}>Next</Button>
             </div>
           )}
 

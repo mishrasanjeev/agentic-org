@@ -54,7 +54,18 @@ export interface PromptEditHistoryEntry {
 export interface Workflow { id: string; name: string; version: string; is_active: boolean; trigger_type: string | null; created_at: string; }
 export interface WorkflowRun { id: string; workflow_def_id: string; status: string; steps_total: number; steps_completed: number; started_at: string; }
 export interface HITLItem { id: string; title: string; trigger_type: string; priority: string; status: string; assignee_role: string; context: any; expires_at: string; decision?: string; decision_at?: string; decision_notes?: string; requested_by_user_id?: string | null; }
-export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; base_url?: string; description?: string; secret_ref?: string; tool_functions?: any[]; timeout_ms?: number; created_at?: string; owner_user_id?: string | null; visibility?: "shared" | "personal"; }
+export interface ConnectorReadiness {
+  state: "disabled" | "needs_credentials" | "health_failed" | "stale_health" | "recent_health" | "needs_health_check";
+  credential_state: "configured" | "missing" | "not_required";
+  health_state: "recent" | "stale" | "failed" | "unverified";
+  last_health_check: string | null;
+  last_sync_at: string | null;
+  scope_verification: "unverified";
+  contract_verification: "unverified";
+  error_budget: "unmeasured";
+}
+
+export interface Connector { id: string; name: string; category: string; status: string; auth_type: string; rate_limit_rpm: number; base_url?: string; description?: string; secret_ref?: string; tool_functions?: any[]; timeout_ms?: number; created_at?: string; owner_user_id?: string | null; visibility?: "shared" | "personal"; readiness?: ConnectorReadiness; }
 export interface AuditEntry { id: string; event_type: string; actor_type: string; action: string; outcome: string; created_at: string; }
 
 // CFO Dashboard KPIs

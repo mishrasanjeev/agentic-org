@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import get_current_tenant, require_scope
 from api.route_metadata import route_meta
+from core.connectors.readiness import project_connector_readiness
 from core.database import get_tenant_session
 from core.marketing.connector_contracts import evaluate_hubspot_crm_read_contract
 from core.models.connector import Connector
@@ -698,7 +699,11 @@ async def _validated_company_scope(
     return company_uuid
 
 
-def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None = None) -> dict:
+def _connector_to_dict(
+    conn: Connector,
+    has_encrypted_credentials: bool | None = None,
+    readiness_row: Any | None = None,
+) -> dict:
     # Return a boolean flag for whether credentials are configured —
     # NEVER return the actual auth_config (secrets) in the API response.
     auth_config = getattr(conn, "auth_config", None)
@@ -706,6 +711,7 @@ def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None =
         bool(auth_config)
         or bool(getattr(conn, "secret_ref", None))
         or bool(has_encrypted_credentials)
+        or bool(getattr(readiness_row, "has_encrypted_credentials", False))
     )
     health_check_at = getattr(conn, "health_check_at", None)
     created_at = getattr(conn, "created_at", None)
@@ -718,6 +724,15 @@ def _connector_to_dict(conn: Connector, has_encrypted_credentials: bool | None =
         "base_url": _normalise_connector_base_url(conn.name, conn.base_url) or "",
         "auth_type": str(conn.auth_type or ""),
         "has_credentials": has_creds,
+        "readiness": project_connector_readiness(
+            registration_status=str(conn.status or "active"),
+            configuration_status=getattr(readiness_row, "status", None),
+            auth_type=str(conn.auth_type or ""),
+            has_credentials=has_creds,
+            health_status=getattr(readiness_row, "health_status", None),
+            last_health_check=getattr(readiness_row, "last_health_check", None),
+            last_sync_at=getattr(readiness_row, "last_sync_at", None),
+        ),
         "tool_functions": _connector_tool_functions(conn),
         "data_schema_ref": conn.data_schema_ref or "",
         "rate_limit_rpm": int(conn.rate_limit_rpm or 0),
@@ -993,13 +1008,20 @@ async def list_connectors(
         query = query.order_by(Connector.name).offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         connectors = result.scalars().all()
-        encrypted_names: set[str] = set()
+        config_by_name: dict[str, Any] = {}
         if connectors:
             from core.models.connector_config import ConnectorConfig
 
             names = [str(c.name) for c in connectors if c.name]
             cc_result = await session.execute(
-                select(ConnectorConfig.connector_name).where(
+                select(
+                    ConnectorConfig.connector_name,
+                    (ConnectorConfig.credentials_encrypted != {}).label("has_encrypted_credentials"),
+                    ConnectorConfig.status,
+                    ConnectorConfig.health_status,
+                    ConnectorConfig.last_health_check,
+                    ConnectorConfig.last_sync_at,
+                ).where(
                     ConnectorConfig.tenant_id == tid,
                     (
                         ConnectorConfig.company_id == company_uuid
@@ -1007,12 +1029,11 @@ async def list_connectors(
                         else ConnectorConfig.company_id.is_(None)
                     ),
                     ConnectorConfig.connector_name.in_(names),
-                    ConnectorConfig.credentials_encrypted != {},
                 )
             )
-            encrypted_names = {str(name) for name in cc_result.scalars().all()}
+            config_by_name = {str(row.connector_name): row for row in cc_result.all()}
     return {
-        "items": [_connector_to_dict(c, c.name in encrypted_names) for c in connectors],
+        "items": [_connector_to_dict(c, readiness_row=config_by_name.get(c.name)) for c in connectors],
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -1507,12 +1528,19 @@ async def get_connector(
         connector = result.scalar_one_or_none()
         # Bug sheet 2026-09-14 rows 17/18: another user's connector is a 404.
         require_connector_visible(connector, caller)
-        has_encrypted_credentials = False
+        readiness_row = None
         if connector is not None:
             from core.models.connector_config import ConnectorConfig
 
             cc_result = await session.execute(
-                select(ConnectorConfig.id).where(
+                select(
+                    ConnectorConfig.connector_name,
+                    (ConnectorConfig.credentials_encrypted != {}).label("has_encrypted_credentials"),
+                    ConnectorConfig.status,
+                    ConnectorConfig.health_status,
+                    ConnectorConfig.last_health_check,
+                    ConnectorConfig.last_sync_at,
+                ).where(
                     ConnectorConfig.tenant_id == tid,
                     (
                         ConnectorConfig.company_id == company_uuid
@@ -1520,13 +1548,12 @@ async def get_connector(
                         else ConnectorConfig.company_id.is_(None)
                     ),
                     ConnectorConfig.connector_name == connector.name,
-                    ConnectorConfig.credentials_encrypted != {},
                 )
             )
-            has_encrypted_credentials = cc_result.scalar_one_or_none() is not None
+            readiness_row = cc_result.one_or_none()
     if not connector:
         raise HTTPException(404, "Connector not found")
-    return _connector_to_dict(connector, has_encrypted_credentials)
+    return _connector_to_dict(connector, readiness_row=readiness_row)
 
 
 # ── PUT /connectors/{conn_id} ──────────────────────────────────────────────

@@ -501,6 +501,7 @@ class TestConnectorsEndpoints:
             "id", "connector_id", "name", "category", "description", "base_url",
             "auth_type", "has_credentials", "tool_functions", "data_schema_ref",
             "rate_limit_rpm", "timeout_ms", "status", "health_check_at", "created_at",
+            "readiness",
             # bug sheet 2026-09-14 rows 17/18: shared vs personal ownership fields.
             "owner_user_id", "visibility",
         }
@@ -511,11 +512,18 @@ class TestConnectorsEndpoints:
         from api.v1.connectors import list_connectors
 
         connectors = [_make_connector(name="Slack"), _make_connector(name="Jira")]
-        # Count, connector page, then encrypted credential names.
+        # Count, connector page, then scoped safe configuration evidence.
+        config = SimpleNamespace(
+            connector_name="Slack", has_encrypted_credentials=True,
+            status="configured", health_status="healthy",
+            last_health_check=datetime.now(UTC), last_sync_at=None,
+        )
+        config_result = _make_result()
+        config_result.all.return_value = [config]
         mock_session.execute.side_effect = [
             _make_result(scalar_value=2),
             _make_result(scalars_list=connectors),
-            _make_result(scalars_list=["Slack"]),
+            config_result,
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)
@@ -530,6 +538,43 @@ class TestConnectorsEndpoints:
         assert resp["page"] == 1
         assert resp["items"][0]["has_credentials"] is True
         assert resp["items"][1]["has_credentials"] is False
+        assert resp["items"][0]["readiness"]["state"] == "recent_health"
+        assert resp["items"][1]["readiness"]["state"] == "needs_credentials"
+        assert "credentials_encrypted" not in str(resp)
+        config_query = str(mock_session.execute.call_args_list[2].args[0])
+        assert "connector_configs.tenant_id" in config_query
+        assert "connector_configs.company_id IS NULL" in config_query
+
+    @pytest.mark.asyncio
+    async def test_get_connector_readiness_does_not_return_config_payload(self, tenant_id, mock_session):
+        from api.v1.connectors import get_connector
+
+        connector = _make_connector()
+        config = SimpleNamespace(
+            connector_name="Slack", has_encrypted_credentials=True,
+            status="configured", health_status="unhealthy",
+            last_health_check=datetime.now(UTC), last_sync_at=None,
+        )
+        config_result = _make_result()
+        config_result.one_or_none.return_value = config
+        mock_session.execute.side_effect = [
+            _make_result(scalar_one=connector), config_result,
+        ]
+
+        ctx = _patch_tenant_session("connectors", mock_session)
+        try:
+            response = await get_connector(
+                connector.id, request=_connector_admin_request(), tenant_id=tenant_id
+            )
+        finally:
+            ctx.stop()
+
+        assert response["readiness"]["state"] == "health_failed"
+        assert response["has_credentials"] is True
+        assert "credentials_encrypted" not in str(response)
+        config_query = str(mock_session.execute.call_args_list[1].args[0])
+        assert "connector_configs.tenant_id" in config_query
+        assert "connector_configs.company_id IS NULL" in config_query
 
     @pytest.mark.asyncio
     async def test_list_connectors_empty(self, tenant_id, mock_session):
@@ -555,10 +600,12 @@ class TestConnectorsEndpoints:
         from api.v1.connectors import list_connectors
 
         connectors = [_make_connector(category="crm")]
+        config_result = _make_result()
+        config_result.all.return_value = []
         mock_session.execute.side_effect = [
             _make_result(scalar_value=1),
             _make_result(scalars_list=connectors),
-            _make_result(scalars_list=[]),
+            config_result,
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)
@@ -575,10 +622,12 @@ class TestConnectorsEndpoints:
     async def test_list_connectors_pagination(self, tenant_id, mock_session):
         from api.v1.connectors import list_connectors
 
+        config_result = _make_result()
+        config_result.all.return_value = []
         mock_session.execute.side_effect = [
             _make_result(scalar_value=100),
             _make_result(scalars_list=[_make_connector()]),
-            _make_result(scalars_list=[]),
+            config_result,
         ]
 
         ctx = _patch_tenant_session("connectors", mock_session)
