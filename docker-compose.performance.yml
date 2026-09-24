@@ -11,7 +11,7 @@ services:
       AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
       AGENTICORG_REDIS_URL: redis://redis:6379/0
       AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
-      AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
+      AGENTICORG_STORAGE_ENDPOINT: http://s3mock:9090
       AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
       AGENTICORG_PII_MASKING: "true"
       AGENTICORG_LOG_LEVEL: WARNING

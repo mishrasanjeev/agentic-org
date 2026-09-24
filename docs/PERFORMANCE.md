@@ -69,7 +69,7 @@ docker compose -p agenticorg_perf `
   -f docker-compose.local-e2e.yml `
   -f docker-compose.simulation.yml `
   -f docker-compose.performance.yml `
-  up -d --wait postgres redis minio mailpit api
+  up -d --wait postgres redis s3mock mailpit api
 docker compose -p agenticorg_perf `
   -f docker-compose.yml `
   -f docker-compose.local-e2e.yml `

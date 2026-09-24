@@ -33,7 +33,6 @@ services:
   redis:
     ports: !override
       - "6379"
-  minio:
+  s3mock:
     ports: !override
-      - "9000"
-      - "9001"
+      - "9090"

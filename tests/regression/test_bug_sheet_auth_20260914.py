@@ -14,13 +14,12 @@ open in this codebase by static + runtime verification:
  #29      connector rename onto an existing name surfaced as a 500.
  #48      upload marked ``indexed`` before/despite pgvector ingestion and
           the content_text search fallback matched non-indexed rows.
- #1       docker-compose pulled ``minio/minio`` from Docker Hub (removed).
+ #1       the development stack must use a pullable, pinned S3 emulator.
 """
 
 from __future__ import annotations
 
 import inspect
-import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -246,14 +245,15 @@ class TestKnowledgeIndexStatus:
 
 
 # ---------------------------------------------------------------------------
-# #1 — local docker stack boots (MinIO image lives on quay.io now)
+# #1 — local docker stack boots with a pinned S3 emulator
 # ---------------------------------------------------------------------------
 
 
-def test_compose_minio_image_is_pullable() -> None:
+def test_compose_s3mock_image_is_pinned() -> None:
     compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: quay.io/minio/minio:latest" in compose
-    assert re.search(r"^\s*image: minio/minio", compose, re.M) is None
+    assert "image: adobe/s3mock@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92" in compose
+    assert "COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: agenticorg-docs-dev" in compose
+    assert "AGENTICORG_STORAGE_ENDPOINT: http://s3mock:9090" in compose
 
 
 def test_claim_values_are_uuid_strings() -> None:

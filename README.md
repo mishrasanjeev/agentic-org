@@ -178,7 +178,7 @@ Install the platform and development extras:
 
 Start local dependencies:
 
-    docker compose up -d postgres redis minio
+    docker compose up -d postgres redis s3mock
 
 Run migrations and the API:
 
