@@ -279,3 +279,37 @@ async def test_redis_feed_start_releases_connection_after_subscribe_failure() ->
 
     pubsub.close.assert_awaited_once()
     redis.aclose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_redis_cleanup_can_be_retried() -> None:
+    started = asyncio.Event()
+    attempts = 0
+
+    async def unsubscribe(_channel: str) -> None:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            started.set()
+            await asyncio.Event().wait()
+
+    pubsub = MagicMock()
+    pubsub.unsubscribe = AsyncMock(side_effect=unsubscribe)
+    pubsub.close = AsyncMock()
+    redis = MagicMock()
+    redis.aclose = AsyncMock()
+    subscription = _RedisFeedSubscription("redis://test", "tenant-1", AsyncMock())
+    subscription._pubsub = pubsub
+    subscription._redis = redis
+
+    cleanup = asyncio.create_task(subscription._close_current())
+    await started.wait()
+    cleanup.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await cleanup
+    assert subscription._pubsub is pubsub
+    await subscription.close()
+
+    assert attempts == 2
+    pubsub.close.assert_awaited_once()
+    redis.aclose.assert_awaited_once()

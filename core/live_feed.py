@@ -312,14 +312,18 @@ class _RedisFeedSubscription:
 
     async def _close_current(self) -> None:
         pubsub, redis = self._pubsub, self._redis
-        self._pubsub, self._redis = None, None
         if pubsub is not None:
             with suppress(Exception):
                 await pubsub.unsubscribe(_channel(self._tenant_id))
+            with suppress(Exception):
                 await pubsub.close()
+            if self._pubsub is pubsub:
+                self._pubsub = None
         if redis is not None:
             with suppress(Exception):
                 await _close_redis(redis)
+            if self._redis is redis:
+                self._redis = None
 
     async def close(self) -> None:
         if self._task is not None:
