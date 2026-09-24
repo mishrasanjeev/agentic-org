@@ -1,5 +1,11 @@
 # Enterprise Stability Status - 2026-05-16
 
+Historical snapshot only. The P0-4 status below records the scope closed by
+that release, not an end-to-end live activity product. As of 2026-09-24, no
+production operational writer publishes to the feed; the Dashboard and
+Observatory use `/audit`. See [current product status](PRODUCT_STATUS.md) and
+the [resilience gap report](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md).
+
 ## P0 Implementation Status
 
 The P0 enterprise stability hardening stack has landed on `main`.

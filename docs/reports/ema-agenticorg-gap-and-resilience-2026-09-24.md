@@ -117,7 +117,10 @@ These are prioritized by failure impact, not by how easy they are to document.
     test broker outage/recovery and duplicate suppression.
 13. **P0, newly confirmed:** no production call site publishes operational
     events through `broadcast_to_tenant`. The dashboard's Recent Activity is
-    the separate audit query, not a live feed. Connecting only the UI would
+    the separate audit query, not a live feed. The Observatory also polls the
+    newest 20 audit rows every 5 seconds; its labels and counters now describe
+    this bounded observation rather than claiming live delivery or full-day
+    totals. Connecting only the UI would
     create an empty feature. Design a post-commit, bounded, privacy-safe
     producer and durable outbox (or equivalent) before mounting the live
     component; test delivery, duplicate suppression, tenant isolation, broker
