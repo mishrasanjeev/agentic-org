@@ -19,7 +19,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg:admin:full` is no longer an administrator. Nothing in this
   repository issues such a scope, but API-key scopes are free-form. To find
   any in use:
-  `SELECT tenant_id, id, name FROM api_keys WHERE EXISTS (SELECT 1 FROM unnest(scopes) s WHERE s LIKE 'agenticorg:admin%' AND s <> 'agenticorg:admin');`
+  `SELECT tenant_id, id, name FROM api_keys WHERE EXISTS (SELECT 1 FROM unnest(scopes) s WHERE (s LIKE 'agenticorg:admin%' OR s LIKE 'agenticorg.admin%') AND s <> 'agenticorg:admin');`
   Replace such a scope with `agenticorg:admin` if the key should be an
   administrator.
 
