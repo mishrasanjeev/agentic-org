@@ -11,6 +11,11 @@ authentication, tenant/company access, grants, and backend deployment. Examples
 below are integration candidates, not evidence of production availability or a
 successful provider action.
 
+The registry currently publishes `agenticorg==0.3.0`; the `0.4.0` source in
+this repository has additional resource methods, including `client.cases`.
+Build from this checkout to evaluate those methods until a newer wheel is
+published. The server also needs the matching governed-case routes deployed.
+
 ## Install
 
 When the package is available from the configured Python package registry:
@@ -106,6 +111,7 @@ or external actions.
 | `client.sop` | `parse_text`, `upload`, `deploy` | Parsed output requires review; deploy creates a candidate per backend policy. |
 | `client.a2a` | `agent_card`, `agents` | Public discovery data can differ from authenticated runtime access. |
 | `client.mcp` | `tools`, `call` | Tool records do not create execution authority. |
+| `client.cases` | `submit`, `list`, `get`, `investigate` | Source-only machine-safe governed-case calls; requires tenant enablement and server-side grants. |
 | `client.workflows` | generation, CRUD, run methods | Availability depends on the configured backend. |
 | `client.knowledge` | search, supported types, upload, documents, delete, health, stats | Uploads can invoke OCR and indexing; inspect returned status. |
 | `client.voice` | status, config, provider test, runtime health, calls, outbound call | Outbound calls are explicit and can incur provider charges. |
@@ -138,6 +144,32 @@ tenant authorization and real external-action intent.
 Inspect actual responses and errors instead of relying on illustrative output.
 Authorization denials should remain denials; do not automatically broaden
 credentials, scopes, or company context.
+
+## Governed cases
+
+Source clients can submit an application for review and start a read-only
+investigation. Supply the purpose explicitly rather than relying on the API
+default:
+
+```python
+case = client.cases.submit(
+    {"legal_name": "Example Ltd", "jurisdiction": "GB"},
+    purpose="aml.cdd.onboarding",
+)
+scheduled = client.cases.investigate(case["case_ref"])
+record = client.cases.get(case["case_ref"])
+```
+
+The backend validates the tenant flag, actor, role registration, local purpose
+allowlist, and delegated tool grant. A `202` response means investigation was
+scheduled, not that it succeeded; inspect the later case state and failure
+reason. This SDK intentionally has no decision, withdrawal, screening-review,
+or information-request approval helper: those actions require a signed-in
+human, which an API key or agent token does not represent. MCP discovery does
+not expose the governed-case roles as agent tools. The currently published
+`grantex==0.5.1` does not enforce purpose in the token or per-case caps. See
+[case lifecycle](../docs/governance/case-lifecycle.md) and the
+[tested client contract](../tests/regression/test_sdk_governed_cases.py).
 
 ## CLI
 

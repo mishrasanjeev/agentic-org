@@ -121,6 +121,14 @@ class TestMCPTools:
             assert "description" in tool
 
     @pytest.mark.asyncio
+    async def test_governed_case_roles_are_not_mcp_agent_tools(self):
+        from api.v1.mcp import list_tools
+
+        names = {tool["name"] for tool in (await list_tools())["tools"]}
+        assert "agenticorg_business_underwriter" not in names
+        assert "agenticorg_screening_disposition" not in names
+
+    @pytest.mark.asyncio
     async def test_list_tools_exposes_commerce_when_public_discovery_enabled(self, monkeypatch):
         from api.v1.mcp import list_tools
 

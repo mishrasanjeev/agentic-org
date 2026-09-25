@@ -102,6 +102,15 @@ Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,
 permissions, or live accounts are configured.
 
+Governed business cases use separate `/api/v1/governed-cases` routes. The
+`business_underwriter` and `screening_disposition` case roles are not MCP
+agent tools, and `list_mcp_tools` must not be interpreted as a case-execution
+or human-approval catalog. Creating a case or scheduling an investigation via
+the repository SDKs requires tenant enablement and server-side grant checks.
+Review, withdrawal, information-request approval and case decisions require a
+signed-in human; this MCP adapter accepts machine credentials and provides no
+shortcut for those operations. See the [case lifecycle](../docs/governance/case-lifecycle.md).
+
 ## Company-scoped execution example
 
 ```json

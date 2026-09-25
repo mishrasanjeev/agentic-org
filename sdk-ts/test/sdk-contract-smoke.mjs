@@ -69,6 +69,28 @@ globalThis.fetch = async (url, init = {}) => {
   if (parsed.pathname === "/api/v1/mcp/call") {
     return json({ content: [{ type: "text", text: "Status: completed" }], isError: false });
   }
+  const caseRef = "case_" + "a".repeat(24);
+  if (parsed.pathname === "/api/v1/governed-cases" && init.method === "POST") {
+    assert.deepEqual(body, {
+      application: { legal_name: "Example Ltd", jurisdiction: "GB" },
+      purpose: "aml.cdd.onboarding",
+      policy_id: "uk_onboarding",
+    });
+    return json({ case_ref: caseRef, state: "submitted" }, 201);
+  }
+  if (parsed.pathname === "/api/v1/governed-cases" && !init.method) {
+    if (parsed.searchParams.get("state") === "denied") {
+      return json({ error: { reason: "governed_cases_disabled" } }, 403);
+    }
+    assert.deepEqual(Object.fromEntries(parsed.searchParams), { limit: "10", state: "submitted" });
+    return json({ cases: [{ case_ref: caseRef }] });
+  }
+  if (parsed.pathname === `/api/v1/governed-cases/${caseRef}`) {
+    return json({ case: { case_id: caseRef } });
+  }
+  if (parsed.pathname === `/api/v1/governed-cases/${caseRef}/investigate`) {
+    return json({ status: "investigation_scheduled" }, 202);
+  }
   if (parsed.pathname === "/api/v1/knowledge/search") {
     return json({
       results: [{ chunk_text: "KB result", score: 0.91, document_name: "contract-kb.md" }],
@@ -184,6 +206,19 @@ assert.equal(commerceRun.output.commerce_response.status, "preview_only");
 assert.equal(commerceRun.tool_calls[0].tool, "grantex_commerce:buyer_discovery_preview");
 
 assert.equal((await client.mcp.call("agenticorg_commerce_sales_agent", { inputs: {} })).isError, false);
+const caseRef = "case_" + "a".repeat(24);
+assert.equal((await client.cases.submit(
+  { legal_name: "Example Ltd", jurisdiction: "GB" },
+  "aml.cdd.onboarding",
+  "uk_onboarding",
+)).case_ref, caseRef);
+assert.equal((await client.cases.list({ state: "submitted", limit: 10 }))[0].case_ref, caseRef);
+assert.equal((await client.cases.get(caseRef)).case.case_id, caseRef);
+assert.equal((await client.cases.investigate(caseRef)).status, "investigation_scheduled");
+await assert.rejects(client.cases.get("../decision"), /caseRef must be/);
+await assert.rejects(client.cases.list({ limit: 201 }), /limit must be/);
+await assert.rejects(client.cases.list({ state: "denied" }), /HTTP 403/);
+assert.equal("decide" in client.cases, false);
 assert.equal((await client.knowledge.search("renewal policy", { topK: 1 }))[0].document_name, "contract-kb.md");
 assert.equal((await client.knowledge.supportedTypes()).ocr, true);
 const uploaded = await client.knowledge.upload(new Blob(["scanned invoice"]), "invoice.png");
@@ -265,6 +300,7 @@ for (const expected of [
   "/api/v1/agents/generate",
   "/api/v1/a2a/tasks",
   "/api/v1/mcp/call",
+  "/api/v1/governed-cases",
   "/api/v1/knowledge/search",
   "/api/v1/workflows/templates",
   "/api/v1/workflows/generate",
