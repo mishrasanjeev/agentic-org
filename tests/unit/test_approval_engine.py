@@ -47,13 +47,13 @@ class TestConditionMatches:
         ):
             assert _condition_matches("amount > 1000", {"amount": 100}) is False
 
-    def test_condition_evaluator_failure_returns_false(self):
-        """A broken expression should fail closed (deny)."""
+    def test_condition_evaluator_failure_applies_the_step(self):
+        """A broken expression must not skip the step: skipping removes approvals."""
         with patch(
-            "workflows.condition_evaluator.evaluate_condition",
+            "workflows.condition_evaluator.evaluate_condition_strict",
             side_effect=Exception("bad expression"),
         ):
-            assert _condition_matches("garbage", {}) is False
+            assert _condition_matches("amount > 1", {"amount": 5}) is True
 
 
 # ── apply_decision ──────────────────────────────────────────────────

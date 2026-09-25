@@ -35,26 +35,31 @@ class PolicyDecision:
 
 
 def _condition_matches(condition: str | None, context: dict[str, Any]) -> bool:
-    """Evaluate a simple condition expression against a context dict.
+    """Whether a step applies to an item. Empty condition = applies.
 
-    Supported grammar (extended gradually):
+    Supported grammar (that of ``workflows.condition_evaluator``):
       amount > 100000
       amount >= 50000 and domain == "finance"
       plan in ["enterprise", "pro"]
 
-    We delegate to the existing workflows.condition_evaluator which
-    already has a tested expression parser. Empty condition = match.
+    Skipping a step removes approvals, so a condition that cannot be
+    evaluated - a field the item does not carry, an unparseable expression,
+    an evaluator error - makes the step apply rather than skipping it.
     """
     if not condition:
         return True
     try:
-        from workflows.condition_evaluator import evaluate_condition
+        from workflows.condition_evaluator import evaluate_condition_strict
 
-        return bool(evaluate_condition(condition, context))
-    # enterprise-gate: broad-except-ok reason=approval-policy-condition-failure-defaults-safe-false
+        result = evaluate_condition_strict(condition, context)
+    # enterprise-gate: broad-except-ok reason=approval-policy-condition-failure-applies-the-step-fail-closed
     except Exception:
         logger.warning("approval_policy_condition_eval_failed", condition=condition)
-        return False
+        return True
+    if result is None:
+        logger.warning("approval_policy_condition_unevaluable", condition=condition)
+        return True
+    return result
 
 
 async def resolve_policy(
