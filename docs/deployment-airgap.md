@@ -93,10 +93,17 @@ curl -X POST http://localhost:8000/api/v1/chat \
 # Tag and push all images to your internal registry
 REGISTRY=registry.internal.local
 
-for img in agenticorg/api agenticorg/ui ollama/ollama pgvector/pgvector:pg16 redis:7-alpine quay.io/minio/minio; do
+for img in agenticorg/api agenticorg/ui ollama/ollama pgvector/pgvector:pg16 redis:7-alpine; do
   docker tag $img $REGISTRY/$img
   docker push $REGISTRY/$img
 done
+
+# MinIO is pinned by digest, and Docker will not tag to a digest: give the
+# mirrored copy a plain tag instead.
+MINIO=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+docker pull $MINIO
+docker tag $MINIO $REGISTRY/chainguard/minio:2026-09-24
+docker push $REGISTRY/chainguard/minio:2026-09-24
 ```
 
 ### 2. Pre-load Ollama models
