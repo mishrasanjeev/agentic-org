@@ -30,6 +30,13 @@ The supported MCP product model is **agents-as-tools**. Rationale:
 - **Discovery**: `GET /api/v1/mcp/tools` returns `{"tools": [{name, description, inputSchema}]}` where every `name` starts with `agenticorg_`.
 - **Invocation**: `POST /api/v1/mcp/call` with `{name, arguments}`; backend strips the `agenticorg_` prefix, validates the agent_type exists, and runs it via the standard agent execution path. Response follows the canonical `AgentRunResult` shape documented in `docs/api/agent-run-contract.md`.
 
+Governed-case roles (`business_underwriter`, `screening_disposition`) are
+separate case-runtime identities, not entries in the general MCP agent catalog.
+Do not route a case investigation or a human case decision through `mcp/call`.
+The case API checks its own tenant flag, local exact-purpose allowlist and
+delegated grant for every provider call. Case decisions and reviews require a
+signed-in human; an MCP token is not a human session.
+
 ## Unsupported-tool error contract
 
 Clients sending a tool name that isn't in the discovered catalog get an explicit error, not a generic 500:
