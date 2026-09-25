@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - three external changes that broke CI on every pull request
+- `make check`: SQLAlchemy 2.1.0 was released, and the tools image installs
+  `pyproject.toml`'s ranges rather than `requirements.txt`'s pins, so mypy ran
+  against 2.1.0 and failed on five unchanged files. The range is capped below
+  2.1, matching the runtime pin (FINDINGS A-70).
+- `make dev`: quay.io removed the MinIO server image the stack pinned, and
+  Docker Hub's `minio/minio` now needs credentials. Both compose files use
+  `cgr.dev/chainguard/minio`, pinned by digest and run as root (it otherwise
+  runs as uid 65532 and cannot write a new named volume); the air-gap image
+  list follows.
+- UI container scan: CVE-2026-93990 in `libexpat` 2.8.4-r0, which every
+  current `nginx:alpine` digest still ships. `Dockerfile.ui` upgrades it to
+  2.8.5-r0 and fails the build if that version is unavailable.
+
 ### Fixed - governed-case provider authorization
 - The reference underwriter and screening agent now refuse every provider call
   without an authorizer and a positive delegated-grant check. This applies even

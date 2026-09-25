@@ -871,3 +871,23 @@ Remove an entry in the pull request that fixes it.
   container reads verbatim and no attribute covers - the Dockerfiles and the
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
+
+## A-70 — The tools image resolves dependency ranges, not the runtime pins
+
+- **Found:** SQLAlchemy 2.1.0 failing `make check` on every pull request
+  (2026-09-25).
+- **What:** `Dockerfile.tools` installs `pyproject.toml`'s dependency ranges
+  (`requirements-project.txt` is generated from them), while the runtime image
+  installs `requirements.txt`'s exact pins. Lint, type checks and the tools
+  that run in that image therefore see whatever the newest release in each
+  range is, not what production runs; SQLAlchemy 2.1.0 changed its typing and
+  five unchanged files failed mypy. The fix in this change caps SQLAlchemy
+  only; any other dependency can drift the same way.
+- **Fix:** install the tools image with `-c requirements.txt` as constraints,
+  so every package shared with the runtime resolves to its pinned version, and
+  let dependency updates move the pins deliberately.
+- **Related, from the same fix:** the MinIO image now comes from Chainguard's
+  free tier, which also does not promise to keep old digests; a digest that
+  disappears will break `make dev` the way quay.io's removal did. And
+  `Dockerfile.ui`'s in-place `libexpat` upgrade should be removed once an
+  `nginx:alpine` digest ships 2.8.5-r0.
