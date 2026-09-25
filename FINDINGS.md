@@ -888,3 +888,44 @@ Remove an entry in the pull request that fixes it.
   (validated against the mapped families, kept across the tool-scope
   recomputation, recorded in audit), so a grant can carry exactly the routes an
   agent needs.
+
+## A-68 — Unmapped route families are not scope-checked for any credential
+
+- **Found:** review of the H-1 fix (2026-09-25).
+- **What:** route scope checks cover only the families in
+  `api/route_enforcement.py::SCOPE_FAMILIES`. The other families have around
+  a hundred authenticated routes with no scope or admin dependency, so any
+  authenticated credential - a tool-only agent token, a scope-less API key, a
+  viewer session - reaches them. Among them are routes that run agents
+  (`/a2a/tasks`, `/mcp/call`, `/sales/pipeline/process-lead`,
+  `/sales/run-followups`, `/sales/process-inbox`), routes that return
+  tenant-wide data (`/kpis/*`, `/costs/*`, `/sales/pipeline`,
+  `/sales/metrics`, `/knowledge/search`, `/companies*`, `/abm/*`,
+  `/prompt-templates`), and filing approvals
+  (`/companies/{id}/approvals/{approval_id}/approve` and `/reject`, checked
+  only against per-company roles). A-43 covers A2A and MCP; this is the wider
+  gap. Not caused by H-1, which made agent tokens subject to the mapped
+  families only.
+- **Fix:** map every authenticated family to a read and a write scope, or
+  refuse by default a family with no mapping, and add each to the unit test
+  that pins the unmapped set.
+
+## A-69 — Admin scope is matched by prefix, so an agent domain can grant admin
+
+- **Found:** review of the H-1 fix (2026-09-25).
+- **What:** registration gives every agent `agenticorg:{domain}:read`
+  (`auth/grantex_registration.py:219`), and an agent's `domain` is free text.
+  Six admin checks match `startswith("agenticorg:admin")`:
+  `api/deps.py:50` (`require_scope`, and so `require_tenant_admin`),
+  `api/deps.py:125`, `core/ownership.py:102` (`Caller.is_admin`),
+  `api/v1/report_schedules.py:123`, `api/v1/rpa.py:277` and
+  `api/v1/commerce_runtime.py:98`. An agent in a domain such as
+  `administration` therefore carries `agenticorg:administration:read`, and a
+  grant token for it is treated as a tenant administrator by those checks
+  (verified: `caller_from_request(...).is_admin` is `True`). The route scope
+  check matches `agenticorg:admin` exactly and still refuses it. A tenant
+  admin can create such an agent, and so can a developer creating a personal
+  agent. The admin-gated routes include API-key creation.
+- **Fix:** match `agenticorg:admin` exactly everywhere, and validate agent
+  domains against the known list at every write path, not only the CSV
+  import. High priority.

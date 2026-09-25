@@ -64,6 +64,11 @@ Set one authentication value:
 - `AGENTICORG_API_KEY` for an API key accepted by the configured endpoint; or
 - `AGENTICORG_GRANTEX_TOKEN` for a delegated grant accepted by that endpoint.
 
+A delegated grant is checked against each API route's scope exactly as an API
+key is. `list_agents` and `get_agent_details` need `agents:read` in the grant,
+and `list_connectors` needs `connectors.read`; a grant with only tool scopes
+gets `403` from them. `run_agent` goes through A2A and is unaffected.
+
 `AGENTICORG_BASE_URL` selects the API endpoint. Endpoint trust and readiness
 require separate verification.
 
