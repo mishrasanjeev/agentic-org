@@ -909,23 +909,3 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** map every authenticated family to a read and a write scope, or
   refuse by default a family with no mapping, and add each to the unit test
   that pins the unmapped set.
-
-## A-69 — Admin scope is matched by prefix, so an agent domain can grant admin
-
-- **Found:** review of the H-1 fix (2026-09-25).
-- **What:** registration gives every agent `agenticorg:{domain}:read`
-  (`auth/grantex_registration.py:219`), and an agent's `domain` is free text.
-  Six admin checks match `startswith("agenticorg:admin")`:
-  `api/deps.py:50` (`require_scope`, and so `require_tenant_admin`),
-  `api/deps.py:125`, `core/ownership.py:102` (`Caller.is_admin`),
-  `api/v1/report_schedules.py:123`, `api/v1/rpa.py:277` and
-  `api/v1/commerce_runtime.py:98`. An agent in a domain such as
-  `administration` therefore carries `agenticorg:administration:read`, and a
-  grant token for it is treated as a tenant administrator by those checks
-  (verified: `caller_from_request(...).is_admin` is `True`). The route scope
-  check matches `agenticorg:admin` exactly and still refuses it. A tenant
-  admin can create such an agent, and so can a developer creating a personal
-  agent. The admin-gated routes include API-key creation.
-- **Fix:** match `agenticorg:admin` exactly everywhere, and validate agent
-  domains against the known list at every write path, not only the CSV
-  import. High priority.
