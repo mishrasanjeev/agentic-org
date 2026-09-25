@@ -28,6 +28,9 @@ jobs:
             dockerfile: Dockerfile
           - name: ui
             dockerfile: Dockerfile.ui
+          # What Cloud Run serves; it has its own nginx stage, so scan it too.
+          - name: ui-cloudrun
+            dockerfile: Dockerfile.ui.cloudrun
     env:
       TRIVY_VERSION: 0.74.0
       TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
