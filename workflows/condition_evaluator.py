@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 import operator
 import re
+from datetime import datetime
 from typing import Any
 
 OPS = {
@@ -131,13 +132,26 @@ def _compare(op_str: str, left: Any, right_token: str, context: dict[str, Any]) 
         pass
     if op_str not in _ORDERING:
         return bool(op_func(str(left), str(right)))
-    # Ordering two strings is meaningful only against an explicit string - a
-    # quoted value or a field that holds one, as with ISO dates. An unquoted word
-    # that names no field (``amount > high``) is more likely a missing field.
-    explicit = _is_quoted(right_token) or _resolve(right_token, context) is not MISSING
-    if explicit and isinstance(left, str) and isinstance(right, str):
-        return bool(op_func(left, right))
-    return None
+    # Strings order only as ISO dates, compared as dates. Character order gives
+    # confident wrong answers - "1,50,000" < "100000", "1.9.2" > "1.10",
+    # differing time zones - and a wrong "no" skips a step. A naive date against
+    # an aware one cannot be ordered either.
+    left_at, right_at = _as_datetime(left), _as_datetime(right)
+    if left_at is None or right_at is None:
+        return None
+    try:
+        return bool(op_func(left_at, right_at))
+    except TypeError:
+        return None
+
+
+def _as_datetime(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip()[:1].isdigit():
+        return None
+    try:
+        return datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
 
 
 def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool | None:

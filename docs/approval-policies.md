@@ -65,10 +65,11 @@ step apply.
 Each operand is a quoted string or a single token with no spaces, quotes or comparison characters:
 `risk-level == high`, `owner == a@b.com` and `'admin' in roles` are all fine. Values with spaces
 must be quoted (`status == 'two words'`), and an apostrophe inside double quotes is fine
-(`name == "O'Brien"`). `<`, `>`, `<=` and `>=` compare numbers, or strings when the value is quoted
-or is another field (`created_at > '2026-01-01'`); against an unquoted word that names no field
-(`tier >= b`) they are unknown. A boolean field compares with `true` and `false`
-(`flag == true`).
+(`name == "O'Brien"`). `<`, `>`, `<=` and `>=` compare numbers, or ISO dates when both sides are
+dates (`created_at > '2026-01-01'`), with time zones taken into account; a date with a time zone
+cannot be ordered against one without. Anything else - `tier >= 'b'`, `version < '1.10'`, an amount
+written as `1,50,000` - is unknown, because comparing it character by character would give a
+confident wrong answer. A boolean field compares with `true` and `false` (`flag == true`).
 
 Name fields exactly as the item's context carries them. A condition on `output.amount` for an item
 that carries `amount` is unknown, and its step always applies.

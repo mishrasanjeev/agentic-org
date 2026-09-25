@@ -86,7 +86,17 @@ from workflows.condition_evaluator import evaluate_condition, evaluate_condition
         ("delta > +5", {"delta": 7}, True),
         ("created_at > '2026-01-01'", {"created_at": "2026-03-02"}, True),
         ("created_at < '2026-01-01'", {"created_at": "2026-03-02"}, False),
+        ("created_at > start", {"created_at": "2026-03-02", "start": "2026-01-01"}, True),
         ("tier >= b", {"tier": "c"}, None),
+        # Strings order only as dates; anything else is unknown, never a wrong "no".
+        ("amount > '100000'", {"amount": "1,50,000"}, None),
+        ("amount > limit", {"amount": "1,500", "limit": "1000"}, None),
+        ("version < '1.10'", {"version": "1.9.2"}, None),
+        ("tier >= 'b'", {"tier": "c"}, None),
+        ("at > '2026-01-01T10:00:00+05:30'", {"at": "2026-01-01T06:00:00Z"}, True),
+        ("at > '2026-01-01T10:00:00+05:30'", {"at": "2026-01-01T06:00:00"}, None),
+        ("status ===ok", {"status": "ok"}, None),
+        ("flag > true", {"flag": True}, None),
         # A boolean field compared with true/false decides, rather than never matching.
         ("flag == true", {"flag": True}, True),
         ("flag == false", {"flag": True}, False),

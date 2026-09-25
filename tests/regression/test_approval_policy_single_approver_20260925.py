@@ -200,6 +200,30 @@ async def test_one_person_cannot_vote_again_under_another_identifier() -> None:
 
 
 @pytest.mark.asyncio
+async def test_one_person_cannot_vote_again_after_signing_in_the_other_way_first() -> None:
+    """The reverse order: a login session votes first, then an email-only session."""
+    agent = _agent()
+    item = _item(agent, {})
+    policy = _policy()
+    first, second = _step(1), _step(2)
+    with_user_id = {"sub": "cfo.one@example.com", "role": "cfo", "agenticorg:user_id": str(USER_A),
+                    "agenticorg:domains": ["finance"]}  # fmt: skip
+    email_only = {"sub": " CFO.one@example.com", "role": "cfo", "agenticorg:domains": ["finance"]}
+
+    with (
+        patch("core.approvals.first_applicable_step", AsyncMock(return_value=first)),
+        patch("core.approvals.next_step_after", AsyncMock(return_value=second)),
+    ):
+        await _decide(USER_A, item, agent, policy=policy, claims=with_user_id)
+        recorded = item.context["policy_state"]["approvals"][0]["identities"]
+        assert "cfo.one@example.com" in recorded
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, second, policy=policy, claims=email_only)
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+
+
+@pytest.mark.asyncio
 async def test_a_second_person_completes_the_second_step() -> None:
     agent = _agent()
     item = _item(agent, {})
