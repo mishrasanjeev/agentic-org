@@ -9,10 +9,10 @@ module relies on.
 
 Pinned contracts:
 
-- ``require_scope("agenticorg:admin")`` admin-bypass: every
-  scope check accepts the actor when scopes contain anything
-  starting with ``agenticorg:admin``. The auditor role gets
-  read scopes only — no write scope is derivable.
+- ``require_scope`` admin-bypass: every scope check accepts
+  the actor when scopes contain exactly ``agenticorg:admin``
+  (never a prefix). The auditor role gets read scopes only —
+  no write scope is derivable.
 - Tenant isolation = parameterized set_config('agenticorg.tenant_id', ...)
   with transaction-local scope at session open + RLS policies on every
   tenant-scoped table.
@@ -60,13 +60,27 @@ def test_tc_cc_001_get_user_domains_returns_jwt_claim() -> None:
 
 
 def test_tc_cc_002_admin_scope_bypass_is_pinned() -> None:
-    """``require_scope`` must accept any scope starting with
-    ``agenticorg:admin`` so the global-admin role doesn't need
-    every per-resource scope listed individually. Removing
-    this widens privilege gaps because admins suddenly fail
-    routes they previously had access to."""
-    src = (REPO / "api" / "deps.py").read_text(encoding="utf-8")
-    assert 'any(s.startswith("agenticorg:admin") for s in scopes)' in src
+    """``require_scope`` accepts the admin scope for every scope check,
+    so the global-admin role doesn't need every per-resource scope
+    listed individually. It is the exact scope ``agenticorg:admin``,
+    never a prefix: a prefix let an agent in a domain such as
+    ``administration`` pass as admin (FINDINGS A-69)."""
+    from unittest.mock import MagicMock
+
+    import pytest
+    from fastapi import HTTPException
+
+    from api.deps import require_scope
+    from core.rbac import get_scopes_for_role
+
+    checker = require_scope("workflows:write").dependency
+    request = MagicMock()
+    request.state.scopes = get_scopes_for_role("admin")
+    checker(request)  # the admin role passes a scope it does not list
+
+    request.state.scopes = ["agenticorg:administration:read"]
+    with pytest.raises(HTTPException):
+        checker(request)
 
 
 # ─────────────────────────────────────────────────────────────────
