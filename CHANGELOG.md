@@ -4,6 +4,32 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the credential vault no longer falls back to a published key
+- Outside a local, development, test or CI runtime, the credential vault now
+  refuses to use its code default (`dev-only-vault-key`), a key equal to a code
+  default, or a blank key. It needs `AGENTICORG_VAULT_KEYRING`, or
+  `AGENTICORG_VAULT_KEY`, or as before `AGENTICORG_SECRET_KEY`, in the process
+  environment. Before, a production runtime whose secrets were only in `.env`
+  (loaded into settings, but not into the environment the vault reads) sealed
+  every connector credential and LangGraph checkpoint under the default, which
+  anyone with this repository can derive.
+- An unset or unrecognised `AGENTICORG_ENV` counts as production here.
+- The API refuses to start, and a worker process refuses to initialise,
+  without a usable key. The error names the setting and never quotes key
+  material; the checkpointer reports `checkpoint_encryption_key_missing`.
+- A keyring that is set but has no entries, or an entry with no key material
+  (`v1:`), is refused in every runtime instead of falling back silently.
+- **Breaking for operators:** a strict runtime without a vault key in its
+  process environment no longer starts; set `AGENTICORG_VAULT_KEYRING` (see
+  `docs/deployment.md`). A runtime that ran that way has credentials sealed
+  under the public default. Strict runtimes refuse the default even as a
+  keyring entry, so rewrap those rows from a trusted machine with
+  `AGENTICORG_ENV=local` and `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:dev-only-vault-key`,
+  then rotate every affected provider credential, because the old ciphertext
+  was readable by anyone.
+- The `AGENTICORG_SECRET_KEY` fallback is unchanged; FINDINGS A-71 tracks
+  giving every deployment a dedicated vault key.
+
 ### Fixed - approval policies cannot be satisfied by one person
 - A reviewer may vote once per approval item, across every step of its
   policy. Before, the duplicate-vote check covered only the current step, and

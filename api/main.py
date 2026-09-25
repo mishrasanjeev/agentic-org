@@ -98,9 +98,13 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from connectors.plugins import load_configured_plugins
+    from core.crypto.credential_vault import assert_vault_key_configured
     from core.database import init_db
     from core.langgraph.checkpointer import close_checkpointer, open_checkpointer
 
+    # No credential-vault key outside local and test runtimes stops startup
+    # here instead of sealing credentials under a key published in this repo.
+    assert_vault_key_configured()
     await init_db()
     # A configured Postgres checkpoint store that cannot be reached, or whose
     # schema is not migrated, stops startup here instead of degrading to

@@ -989,3 +989,20 @@ Remove an entry in the pull request that fixes it.
     drop root.
   - The in-place `libexpat` upgrade in both UI Dockerfiles should be removed
     once an `nginx:alpine` digest ships 2.8.5-r0.
+
+## A-71 — Strict runtimes may still derive the vault key from the JWT secret
+
+- **Found:** closing the published-default vault key fallback (2026-09-25).
+- **What:** with no `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY`, the
+  credential vault derives its key from `AGENTICORG_SECRET_KEY`, which also
+  signs tokens. The fix for the published default kept this fallback so
+  deployments that sealed credentials under it (`infra/gcp-setup-lean.sh`
+  provisions only the secret key) keep decrypting them. One secret therefore
+  protects two unrelated things, and rotating the signing key without first
+  rewrapping silently breaks every stored credential. In production the Cloud
+  Run beat service has only `AGENTICORG_SECRET_KEY`, so if it ever seals or
+  opens a credential it uses a different key from the API and workers.
+- **Fix:** give every deployment path a dedicated `AGENTICORG_VAULT_KEYRING`
+  (with `legacy:<secret key>` as a decrypt-only entry where rows were sealed
+  under it), rewrap, then refuse the secret-key fallback outside local and
+  test runtimes.

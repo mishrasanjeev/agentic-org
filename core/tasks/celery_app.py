@@ -215,6 +215,14 @@ def _mark_beat_process(**_kwargs: Any) -> None:
 
 
 @worker_process_init.connect
+def _refuse_worker_without_vault_key(**_kwargs: Any) -> None:
+    """A worker process never runs a task without a usable credential-vault key."""
+    from core.crypto.credential_vault import assert_vault_key_configured
+
+    assert_vault_key_configured()
+
+
+@worker_process_init.connect
 def _load_plugins_in_worker(**_kwargs: Any) -> None:
     """Workers run agents and connectors too, so they load the same plugins as the API."""
     from connectors.plugins import load_configured_plugins

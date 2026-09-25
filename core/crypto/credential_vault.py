@@ -18,10 +18,23 @@ without trial-and-error.
 
 Backwards compatibility:
 - If ``AGENTICORG_VAULT_KEYRING`` is unset, the keyring is a single
-  ``"legacy"`` entry derived from ``AGENTICORG_VAULT_KEY`` (or
-  ``AGENTICORG_SECRET_KEY`` in dev) — exactly the pre-Foundation-#4
-  behaviour. Old un-prefixed ciphertext continues to decrypt because
-  the legacy keyring contains the same key.
+  ``"legacy"`` entry derived from ``AGENTICORG_VAULT_KEY``, else
+  ``AGENTICORG_SECRET_KEY``. Old un-prefixed ciphertext continues to
+  decrypt because the legacy keyring contains the same key.
+
+Fail closed:
+- Only an explicitly local or test runtime (``AGENTICORG_ENV`` in
+  ``core.config.RELAXED_ENVS``) may fall back to the code default
+  ``"dev-only-vault-key"`` or use a key that equals a code default. An
+  unset or unknown ``AGENTICORG_ENV`` is strict. Keys are read from the
+  process environment only; ``.env`` values loaded into ``Settings``
+  are not seen here, so a strict runtime configured only through
+  ``.env`` is refused rather than silently using the default.
+- A keyring that is set but yields no entry, or an entry with blank key
+  material, is refused in every runtime.
+- Refusals raise ``VaultKeyNotConfiguredError`` and never quote key
+  material. ``assert_vault_key_configured`` runs at API startup and in
+  every worker process.
 - A new keyring entry can be added (rotation) without removing the old
   one. Both keys decrypt; new encrypts use the active (first) key.
 - A migration that re-encrypts every row under the active key is the
@@ -42,6 +55,34 @@ from cryptography.fernet import Fernet, InvalidToken
 
 # Stamp prefix on all NEW ciphertext: agko_v{id}$<base64-fernet-token>
 _PREFIX_RE = re.compile(r"^agko_v([^$]+)\$(.*)$", re.DOTALL)
+
+# Defaults written in this repository. Anyone can derive keys from them.
+_DEVELOPMENT_VAULT_KEY = "dev-only-vault-key"
+_PUBLISHED_DEFAULT_KEYS = frozenset({_DEVELOPMENT_VAULT_KEY, "dev-only-secret-key"})
+
+
+class VaultKeyNotConfiguredError(ValueError):
+    """No usable vault key. The message names the setting, never key material."""
+
+
+def _runtime_env() -> str:
+    return os.environ.get("AGENTICORG_ENV", "")
+
+
+def _relaxed_runtime() -> bool:
+    from core.config import is_relaxed_env
+
+    return is_relaxed_env(_runtime_env())
+
+
+def _refuse_published_default(raw: str, where: str, relaxed: bool) -> None:
+    if not relaxed and raw.strip() in _PUBLISHED_DEFAULT_KEYS:
+        raise VaultKeyNotConfiguredError(
+            f"{where} is a default published in the source code, which is only "
+            f"allowed in a local, development, test or CI runtime "
+            f"(AGENTICORG_ENV={_runtime_env()!r}). Set AGENTICORG_VAULT_KEYRING "
+            "to a real key."
+        )
 
 
 def _derive_fernet_key(raw: str) -> bytes:
@@ -65,7 +106,12 @@ def _load_keyring() -> list[tuple[str, bytes]]:
       2. fallback to single-key keyring derived from
          ``AGENTICORG_VAULT_KEY`` or ``AGENTICORG_SECRET_KEY`` with id
          ``"legacy"``.
+      3. the development default, in local and test runtimes only.
+
+    Raises ``VaultKeyNotConfiguredError`` when none of these yields a
+    usable key (see the module docstring).
     """
+    relaxed = _relaxed_runtime()
     spec = os.environ.get("AGENTICORG_VAULT_KEYRING", "").strip()
     if spec:
         out: list[tuple[str, bytes]] = []
@@ -81,19 +127,41 @@ def _load_keyring() -> list[tuple[str, bytes]]:
             kid, raw = entry.split(":", 1)
             kid = kid.strip()
             if not kid:
-                raise ValueError(
-                    f"AGENTICORG_VAULT_KEYRING entry has empty id: {entry!r}"
-                )
+                raise ValueError(f"AGENTICORG_VAULT_KEYRING entry has empty id: {entry!r}")
+            if not raw.strip():
+                raise VaultKeyNotConfiguredError(f"AGENTICORG_VAULT_KEYRING entry {kid!r} has no key material")
+            _refuse_published_default(raw, f"AGENTICORG_VAULT_KEYRING entry {kid!r}", relaxed)
             out.append((kid, _derive_fernet_key(raw)))
-        if out:
-            return out
+        if not out:
+            raise VaultKeyNotConfiguredError(
+                "AGENTICORG_VAULT_KEYRING is set but has no usable entry. Expected format: id1:raw1,id2:raw2,…"
+            )
+        return out
 
-    # Legacy fallback — exactly the pre-keyring single-key behaviour.
-    raw = os.environ.get(
-        "AGENTICORG_VAULT_KEY",
-        os.environ.get("AGENTICORG_SECRET_KEY", "dev-only-vault-key"),
+    # Single-key fallback — the pre-keyring behaviour, minus the published default
+    # outside local and test runtimes. A blank variable counts as unset.
+    for name in ("AGENTICORG_VAULT_KEY", "AGENTICORG_SECRET_KEY"):
+        raw = os.environ.get(name, "")
+        if raw.strip():
+            _refuse_published_default(raw, name, relaxed)
+            return [("legacy", _derive_fernet_key(raw))]
+    if relaxed:
+        return [("legacy", _derive_fernet_key(_DEVELOPMENT_VAULT_KEY))]
+    raise VaultKeyNotConfiguredError(
+        "No credential-vault key is configured: set AGENTICORG_VAULT_KEYRING "
+        "(or AGENTICORG_VAULT_KEY) in the process environment. The development "
+        "default is only used in a local, development, test or CI runtime "
+        f"(AGENTICORG_ENV={_runtime_env()!r})."
     )
-    return [("legacy", _derive_fernet_key(raw))]
+
+
+def assert_vault_key_configured() -> None:
+    """Raise ``VaultKeyNotConfiguredError`` unless the vault has a usable key.
+
+    Called at API startup and when a worker process initialises, so a
+    misconfigured runtime stops before it reads or writes a credential.
+    """
+    _load_keyring()
 
 
 def _get_vault_key() -> bytes:
@@ -169,8 +237,7 @@ def decrypt_credential(ciphertext: str) -> str:
         except InvalidToken:
             continue
     raise InvalidToken(
-        "No keyring entry decrypted legacy unprefixed ciphertext. "
-        f"Keyring tried: {[k for k, _ in keyring]}"
+        f"No keyring entry decrypted legacy unprefixed ciphertext. Keyring tried: {[k for k, _ in keyring]}"
     )
 
 
