@@ -80,6 +80,83 @@ def evaluate_condition(expression: str, context: dict[str, Any]) -> bool:
     return bool(val)
 
 
+_TRUE_WORDS = frozenset({"true", "1", "yes"})
+_FALSE_WORDS = frozenset({"false", "0", "no"})
+_ORDERING = frozenset({">", "<", ">=", "<="})
+
+
+def _unbalanced_quotes(part: str) -> bool:
+    return part.count("'") % 2 == 1 or part.count('"') % 2 == 1
+
+
+def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool | None:
+    """Evaluate the same grammar as :func:`evaluate_condition`, answering ``None`` when it cannot decide.
+
+    For authority decisions, where "no match" must not stand in for "unknown".
+    ``None`` means a field the expression names is absent, a list does not
+    parse, an ordering comparison is not numeric, or the expression is not in
+    the grammar. ``AND``/``OR``/``NOT`` combine by Kleene logic, so
+    ``NOT <missing>`` stays unknown instead of becoming a match, while
+    ``True OR <unknown>`` is still ``True`` and ``False AND <unknown>`` still
+    ``False``.
+    """
+    expression = expression.strip()
+    if not expression:
+        return None
+    parts = _split_keyword(expression, "or")
+    if parts is not None:
+        if any(_unbalanced_quotes(p) for p in parts):
+            return None  # the keyword was inside a quoted string (FINDINGS A-63)
+        values = [evaluate_condition_strict(p, context) for p in parts]
+        if True in values:
+            return True
+        return None if None in values else False
+    parts = _split_keyword(expression, "and")
+    if parts is not None:
+        if any(_unbalanced_quotes(p) for p in parts):
+            return None
+        values = [evaluate_condition_strict(p, context) for p in parts]
+        if False in values:
+            return False
+        return None if None in values else True
+    if expression.startswith(("NOT ", "not ")):
+        inner = evaluate_condition_strict(expression[4:], context)
+        return None if inner is None else not inner
+
+    for membership, negate in ((" not in ", True), (" in ", False)):
+        if membership in expression:
+            left, right = expression.split(membership, 1)
+            left_val = _resolve(left.strip(), context)
+            members = _parse_list(right.strip(), context)
+            if left_val is MISSING or members is MISSING:
+                return None
+            found = any(_values_equal(left_val, m) for m in members)
+            return (not found) if negate else found
+
+    for op_str, op_func in sorted(OPS.items(), key=lambda x: -len(x[0])):
+        if op_str in expression:
+            left, right = expression.split(op_str, 1)
+            left_val = _resolve(left.strip(), context)
+            if left_val is MISSING:
+                return None
+            right_val = _resolve(right.strip(), context, literal_fallback=True)
+            try:
+                return bool(op_func(float(left_val), float(right_val)))
+            except (ValueError, TypeError):
+                if op_str in _ORDERING:
+                    return None
+                return bool(op_func(str(left_val), str(right_val)))
+
+    val = _resolve(expression, context)
+    if val is MISSING:
+        word = expression.lower()
+        return True if word in _TRUE_WORDS else False if word in _FALSE_WORDS else None
+    if isinstance(val, str):
+        word = val.strip().lower()
+        return True if word in _TRUE_WORDS else False if word in _FALSE_WORDS else None
+    return bool(val)
+
+
 def _values_equal(a: Any, b: Any) -> bool:
     try:
         return float(a) == float(b)

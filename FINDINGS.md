@@ -871,3 +871,19 @@ Remove an entry in the pull request that fixes it.
   container reads verbatim and no attribute covers - the Dockerfiles and the
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
+
+## A-63 — Condition keywords split inside quoted strings
+
+- **Found:** fixing the approval-policy bypass (review H-6, 2026-09-25).
+- **What:** `workflows/condition_evaluator.py::_split_keyword` splits an
+  expression on ` OR ` and ` AND ` wherever they appear, including inside a
+  quoted string, so `region == 'NORTH OR SOUTH'` is evaluated as two broken
+  halves. One half can be definitely false (`x == 'A AND B'` becomes
+  `x == 'A` and `B'`), so the whole condition can come out false. Workflow
+  conditions and approval-policy step conditions both use this grammar. For
+  approval policies the strict evaluator added with H-6 treats a split that
+  leaves unbalanced quotes as "unknown" and applies the step; workflow
+  branching (`evaluate_condition`) still takes the wrong branch.
+- **Fix:** tokenise the expression, skipping quoted spans, before splitting
+  on keywords - the same fix `core/langgraph/hitl_condition.py` needs for the
+  identical problem the review reported there.

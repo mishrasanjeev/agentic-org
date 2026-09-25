@@ -4,6 +4,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - approval policies cannot be satisfied by one person
+- A reviewer may vote once per approval item, across every step of its
+  policy. Before, the duplicate-vote check covered only the current step, and
+  a step's count resets when the item advances, so one senior user could
+  approve each step in turn and decide a multi-person policy alone. A second
+  vote now gets `409`.
+- A policy step whose condition cannot be evaluated - a field the item does
+  not carry, a non-numeric ordering comparison, an unparseable expression -
+  now applies instead of being skipped, so the item needs that step's
+  approvals. `NOT` over a missing field no longer counts as a match.
+- If the step an item is waiting on is removed from its policy, decisions on
+  the item get `409` and it stays pending, instead of being decided on the
+  next single vote with no policy applied.
+- **Breaking for operators:** items whose policy conditions name fields their
+  context lacks now need those steps' approvals; see
+  `docs/approval-policies.md`.
+
 ### Fixed - governed-case provider authorization
 - The reference underwriter and screening agent now refuse every provider call
   without an authorizer and a positive delegated-grant check. This applies even

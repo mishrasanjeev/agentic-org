@@ -545,18 +545,34 @@ async def decide(
                     )
                 )
                 step = step_res.scalar_one_or_none()
+                if step is None:
+                    # The policy changed mid-approval. Deciding on one vote here
+                    # would apply no policy at all; leave the item for an admin.
+                    _log.warning(
+                        "hitl_policy_step_missing",
+                        hitl_id=str(hitl_id),
+                        policy_id=str(policy.id),
+                        sequence=current_seq,
+                    )
+                    raise HTTPException(
+                        409,
+                        "The approval policy changed while this item was in progress; "
+                        "its current step no longer exists",
+                    )
 
             if step is not None:
+                # One vote per person per item, across every step: the per-step
+                # count resets when the item advances, so a per-step check let
+                # one reviewer satisfy each step of a multi-person policy in turn.
                 duplicate_vote = any(
                     str(vote.get("user_id") or "") == user_id_str
-                    and int(vote.get("sequence") or current_seq) == int(step.sequence)
                     for vote in approvals_history
                     if isinstance(vote, dict)
                 )
                 if duplicate_vote:
                     raise HTTPException(
                         409,
-                        "This reviewer has already voted on the current approval step",
+                        "This reviewer has already voted on this approval",
                     )
                 pdec = apply_decision(step, approvals_collected, body.decision or "approve")
                 policy_action = pdec.action
