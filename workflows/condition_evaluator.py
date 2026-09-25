@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import operator
+import re
 from typing import Any
 
 OPS = {
@@ -85,8 +86,29 @@ _FALSE_WORDS = frozenset({"false", "0", "no"})
 _ORDERING = frozenset({">", "<", ">=", "<="})
 
 
+# A field is a dotted path; a value is a quoted string with no inner quote of
+# its own kind, or one bare token (a word, a number or a dotted path).
+_PATH_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*")
+_BARE_RE = re.compile(r"[A-Za-z0-9_.\-]+")
+
+
 def _unbalanced_quotes(part: str) -> bool:
-    return part.count("'") % 2 == 1 or part.count('"') % 2 == 1
+    """True when a quote opened in ``part`` is never closed (an apostrophe inside "..." is fine)."""
+    open_quote = ""
+    for ch in part:
+        if open_quote:
+            if ch == open_quote:
+                open_quote = ""
+        elif ch in "'\"":
+            open_quote = ch
+    return bool(open_quote)
+
+
+def _well_formed_value(token: str) -> bool:
+    token = token.strip()
+    if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"":
+        return token[0] not in token[1:-1]
+    return bool(_BARE_RE.fullmatch(token))
 
 
 def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool | None:
@@ -126,6 +148,8 @@ def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool 
     for membership, negate in ((" not in ", True), (" in ", False)):
         if membership in expression:
             left, right = expression.split(membership, 1)
+            if not _PATH_RE.fullmatch(left.strip()):
+                return None
             left_val = _resolve(left.strip(), context)
             members = _parse_list(right.strip(), context)
             if left_val is MISSING or members is MISSING:
@@ -136,6 +160,10 @@ def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool 
     for op_str, op_func in sorted(OPS.items(), key=lambda x: -len(x[0])):
         if op_str in expression:
             left, right = expression.split(op_str, 1)
+            # A malformed operand (``status ==``, ``status === ok``, an
+            # unterminated quote) is not a comparison the author could mean.
+            if not _PATH_RE.fullmatch(left.strip()) or not _well_formed_value(right):
+                return None
             left_val = _resolve(left.strip(), context)
             if left_val is MISSING:
                 return None

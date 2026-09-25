@@ -13,10 +13,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - A policy step whose condition cannot be evaluated - a field the item does
   not carry, a non-numeric ordering comparison, an unparseable expression -
   now applies instead of being skipped, so the item needs that step's
-  approvals. `NOT` over a missing field no longer counts as a match.
-- If the step an item is waiting on is removed from its policy, decisions on
-  the item get `409` and it stays pending, instead of being decided on the
-  next single vote with no policy applied.
+  approvals. So does a malformed operand (`status ==`, an unterminated
+  quote). `NOT` over a missing field no longer counts as a match.
+- If an item's policy is deleted mid-approval, another policy now resolves
+  for it, or the step it is waiting on is removed, decisions on the item get
+  `409` and it stays pending, instead of being decided on the next single
+  vote with no policy applied.
 - **Breaking for operators:** items whose policy conditions name fields their
   context lacks now need those steps' approvals; see
   `docs/approval-policies.md`.

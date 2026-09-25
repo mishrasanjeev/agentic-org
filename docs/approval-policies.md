@@ -14,12 +14,14 @@ decided only when no step remains. A rejection at any step rejects the item.
   multi-person policy alone. A second vote gets `409` and the item is unchanged.
 - **A step whose condition cannot be evaluated applies.** Skipping a step removes approvals, so
   "cannot tell" never skips one. A condition cannot be evaluated when it names a field the item does
-  not carry, compares a non-number with `<`, `>`, `<=` or `>=`, uses a list that does not parse, or
-  is not in the grammar. The step applies and a warning is logged
+  not carry, compares a non-number with `<`, `>`, `<=` or `>=`, uses a list that does not parse,
+  has a malformed operand (`status ==`, `status === ok`, an unterminated quote, an unquoted value
+  with spaces), or is not in the grammar. The step applies and a warning is logged
   (`approval_policy_condition_unevaluable`).
-- **A step that disappears mid-approval stops the item.** If the policy is edited and the step an
-  item is waiting on no longer exists, decisions on that item get `409` and it stays pending for an
-  administrator. It is never decided on the next vote with no policy applied.
+- **A policy that changes mid-approval stops the item.** An item part-way through a policy stays
+  bound to it. If that policy is deleted, another policy now resolves for the item, or the step it
+  is waiting on no longer exists, decisions on the item get `409` and it stays pending for an
+  administrator. It is never decided on the next vote with no policy, or the wrong one, applied.
 
 ## Conditions
 
@@ -37,6 +39,9 @@ unknown. `AND`, `OR` and `NOT` combine the answers by Kleene logic, so `a > 1 OR
 `a` is 5 even if `b` is missing, `a > 1 AND b > 1` is false when `a` is 0 even if `b` is missing, and
 `NOT amount > 100` is unknown - not true - when `amount` is missing. An unknown answer makes the
 step apply.
+
+Values with spaces must be quoted (`status == 'two words'`); an apostrophe inside double quotes is
+fine (`name == "O'Brien"`).
 
 Name fields exactly as the item's context carries them. A condition on `output.amount` for an item
 that carries `amount` is unknown, and its step always applies.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """An approval step whose condition cannot be evaluated applies (review H-6).
 
 Skipping a step removes approvals, so an unevaluatable condition must never
@@ -51,6 +52,24 @@ from workflows.condition_evaluator import evaluate_condition, evaluate_condition
         # which is definitely false (FINDINGS A-63).
         ("region == 'NORTH AND SOUTH'", {"region": "EAST"}, None),
         ("region == 'NORTH OR SOUTH'", {"region": "NORTH OR SOUTH"}, None),
+        # A malformed operand is unknown, never a definite "no match".
+        ("status ==", {"status": "ok"}, None),
+        ("status === ok", {"status": "ok"}, None),
+        ("status == 'ok", {"status": "ok"}, None),
+        ("status == ok'", {"status": "ok"}, None),
+        ("status == 'o'k'", {"status": "ok"}, None),
+        ("amount > ", {"amount": 5}, None),
+        ("amount >> 1", {"amount": 5}, None),
+        ("== ok", {"status": "ok"}, None),
+        ("status == two words", {"status": "ok"}, None),
+        ("amount in ", {"amount": 5}, None),
+        # Well-formed operands still decide.
+        ("status == 'two words'", {"status": "two words"}, True),
+        ('name == "O\'Brien"', {"name": "O'Brien"}, True),
+        ('name == "A OR B"', {"name": "A OR B"}, None),
+        ("status == ok", {"status": "ok"}, True),
+        ("amount >= 1.5", {"amount": 2}, True),
+        ("amount >= limit", {"amount": 2, "limit": 3}, False),
     ],
 )
 def test_strict_evaluator_answers_none_when_it_cannot_decide(

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """One person cannot satisfy a multi-person approval policy (review H-6).
 
 The duplicate-vote guard compared a reviewer's past votes with the current
@@ -200,6 +201,41 @@ async def test_a_step_missing_from_the_policy_refuses_the_decision() -> None:
 
     with pytest.raises(HTTPException) as exc:
         await _decide(USER_A, item, agent, None, policy=_policy())
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+
+
+def _in_flight(policy_id: str) -> dict[str, Any]:
+    return {
+        "policy_state": {
+            "policy_id": policy_id,
+            "current_sequence": 1,
+            "approvals_collected": 1,
+            "approvals": [{"user_id": str(USER_A), "decision": "approve", "sequence": 1}],
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_policy_refuses_the_decision() -> None:
+    """The item's policy was deleted mid-approval, so no policy resolves for it any more."""
+    agent = _agent()
+    item = _item(agent, _in_flight(str(uuid.uuid4())))
+
+    with pytest.raises(HTTPException) as exc:
+        await _decide(USER_B, item, agent, policy=None)
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_a_different_policy_resolving_refuses_the_decision() -> None:
+    """A fallback policy now resolves for the item; its in-flight state belongs to another one."""
+    agent = _agent()
+    item = _item(agent, _in_flight(str(uuid.uuid4())))
+
+    with pytest.raises(HTTPException) as exc:
+        await _decide(USER_B, item, agent, _step(1), policy=_policy())
     assert exc.value.status_code == 409
     assert item.status == "pending"
 

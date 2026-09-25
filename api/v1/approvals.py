@@ -524,6 +524,22 @@ async def decide(
             agent_id=item.agent_id,
         )
 
+        # An item part-way through a policy stays bound to that policy. If it was
+        # deleted, or another one now resolves, deciding on this vote would apply
+        # no policy (or the wrong one) to approvals already collected.
+        in_flight_policy = str(policy_state.get("policy_id") or "")
+        if in_flight_policy and (policy is None or str(policy.id) != in_flight_policy):
+            _log.warning(
+                "hitl_policy_changed_in_flight",
+                hitl_id=str(hitl_id),
+                policy_id=in_flight_policy,
+                resolved_policy_id=str(policy.id) if policy is not None else None,
+            )
+            raise HTTPException(
+                409,
+                "The approval policy for this item changed while it was in progress",
+            )
+
         if policy is not None:
             # Hydrate the engine's view of the current step
             current_seq = int(policy_state.get("current_sequence") or 0)
