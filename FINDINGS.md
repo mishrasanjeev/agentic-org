@@ -890,6 +890,23 @@ Remove an entry in the pull request that fixes it.
   rather than splitting on them. The same applies to ` in ` and to the
   comparison operators inside a quoted value.
 
+## A-64 — Agent registration gives an agent no way to hold a route scope
+
+- **Found:** closing review H-1 (2026-09-25).
+- **What:** route scope checks now apply to Grantex agent tokens, as they do
+  to API keys. Registration (`auth/grantex_registration.py`) puts only
+  `tool:...` scopes and `agenticorg:{domain}:read` in an agent's Grantex
+  registration, and `PATCH /agents/{id}` recomputes them from the agent's
+  tools, so an agent's grant can never carry `agents:read`, `agents:run`,
+  `workflows:write` or `audit:read`. An agent token is therefore refused on
+  every route in a mapped scope family - including starting an agent or
+  workflow run, which the run-caller binding supports - and SDK users who
+  authenticate with a grant token must use an API key for those routes.
+- **Fix:** let an operator add named route scopes to an agent's registration
+  (validated against the mapped families, kept across the tool-scope
+  recomputation, recorded in audit), so a grant can carry exactly the routes an
+  agent needs.
+
 ## A-65 — An admin can vote once per API key on a personal-agent approval
 
 - **Found:** review of the H-6 fix (2026-09-25).
@@ -924,6 +941,27 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** an admin-only, audited action that restarts an item under the
   policy that now resolves, carrying over who has already voted so they still
   cannot vote twice, or cancels it with a reason.
+
+## A-68 — Unmapped route families are not scope-checked for any credential
+
+- **Found:** review of the H-1 fix (2026-09-25).
+- **What:** route scope checks cover only the families in
+  `api/route_enforcement.py::SCOPE_FAMILIES`. The other families have around
+  a hundred authenticated routes with no scope or admin dependency, so any
+  authenticated credential - a tool-only agent token, a scope-less API key, a
+  viewer session - reaches them. Among them are routes that run agents
+  (`/a2a/tasks`, `/mcp/call`, `/sales/pipeline/process-lead`,
+  `/sales/run-followups`, `/sales/process-inbox`), routes that return
+  tenant-wide data (`/kpis/*`, `/costs/*`, `/sales/pipeline`,
+  `/sales/metrics`, `/knowledge/search`, `/companies*`, `/abm/*`,
+  `/prompt-templates`), and filing approvals
+  (`/companies/{id}/approvals/{approval_id}/approve` and `/reject`, checked
+  only against per-company roles). A-43 covers A2A and MCP; this is the wider
+  gap. Not caused by H-1, which made agent tokens subject to the mapped
+  families only.
+- **Fix:** map every authenticated family to a read and a write scope, or
+  refuse by default a family with no mapping, and add each to the unit test
+  that pins the unmapped set.
 
 ## A-70 — The tools and API images resolve dependency ranges, not pins
 

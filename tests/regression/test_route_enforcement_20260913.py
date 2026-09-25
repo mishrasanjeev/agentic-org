@@ -95,9 +95,12 @@ class TestScopeEnforcement:
             client = TestClient(_app(scopes=["agenticorg:admin"]))
             assert client.post("/agents/a1/run").status_code == 200
 
-    def test_grantex_agent_tokens_skip_rbac_families(self):
+    def test_grantex_agent_tokens_need_the_route_scope(self):
+        """A tool scope satisfies no route family; an agent token is checked like an API key."""
         with patch("core.auth_state.check_window_rate", AsyncMock(return_value=False)):
             client = TestClient(_app(auth_mode="grantex", scopes=["tool:hubspot:read:contacts"]))
+            assert client.get("/agents").status_code == 403
+            client = TestClient(_app(auth_mode="grantex", scopes=["tool:hubspot:read:contacts", "agents:read"]))
             assert client.get("/agents").status_code == 200
 
     def test_routes_without_metadata_are_untouched(self):

@@ -13,9 +13,13 @@ fields into real checks, applied as a global FastAPI dependency:
   hands to roles. GET/HEAD/OPTIONS require the family's read scope, everything
   else the write scope. ``agenticorg:admin`` satisfies every family.
 
-Scope enforcement applies only to user sessions and API keys (``auth_mode``
-``legacy``/``api_key``). Grantex agent tokens carry tool scopes, which the
-tool gateway enforces; RBAC families do not apply to them.
+Scope enforcement applies to every credential: user sessions, API keys and
+Grantex agent tokens alike. An agent token's tool scopes
+(``tool:<connector>:<permission>``) are checked separately by the tool
+gateway and satisfy no route family, so an agent that calls the API needs the
+route scope in its grant, exactly as an API key does (review H-1). An
+authenticated request with an unrecognised ``auth_mode`` is checked the same
+way and, carrying no route scope, is refused.
 
 Families that are not mapped are NOT enforced — they are reported by
 :func:`unmapped_scope_families` and pinned by a unit test so the gap is
@@ -223,8 +227,6 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
 def _check_scope(request: Request, meta: dict[str, Any]) -> None:
     if not meta.get("auth_required"):
         return
-    if getattr(request.state, "auth_mode", None) not in ("legacy", "api_key"):
-        return  # Grantex agent tokens: tool scopes enforced by the tool gateway
     required = required_scopes_for(meta.get("scope"), request.method)
     if not required:
         return

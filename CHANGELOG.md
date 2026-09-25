@@ -30,6 +30,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   one refusing every decision until they expire; there is no override yet
   (FINDINGS A-67). See `docs/approval-policies.md`.
 
+### Fixed - agent tokens need a route's scope, like API keys
+- **Breaking:** route scope checks now apply to Grantex agent tokens. Before,
+  any credential other than a user session or an API key skipped them, so an
+  agent token granted only `tool:mock:read` could read the whole tenant audit
+  trail and run any agent. An agent token must now carry the route family's
+  scope (`agents:read`, `agents:run`, `audit:read`, ...) or `agenticorg:admin`,
+  or it gets `403`. An authenticated request with an unrecognised
+  authentication mode is refused the same way.
+- Agent registration does not yet put route scopes in a grant (FINDINGS
+  A-64), so agents calling scoped routes with a grant token are refused until
+  it does; use an API key meanwhile. A2A and MCP routes are unaffected.
+  See `docs/operations/grant-enforcement.md`.
+
 ### Fixed - three external changes that broke CI on every pull request
 - `make check`: SQLAlchemy 2.1.0 was released. The tools image and the
   production API image both install `pyproject.toml`'s ranges, so mypy ran
