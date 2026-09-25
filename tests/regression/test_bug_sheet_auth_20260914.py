@@ -14,7 +14,7 @@ open in this codebase by static + runtime verification:
  #29      connector rename onto an existing name surfaced as a 500.
  #48      upload marked ``indexed`` before/despite pgvector ingestion and
           the content_text search fallback matched non-indexed rows.
- #1       docker-compose pulled ``minio/minio`` from Docker Hub (removed).
+ #1       docker-compose pulled a MinIO image its registry no longer serves.
 """
 
 from __future__ import annotations
@@ -246,7 +246,7 @@ class TestKnowledgeIndexStatus:
 
 
 # ---------------------------------------------------------------------------
-# #1 — local docker stack boots (MinIO image lives on quay.io now)
+# #1 — local docker stack boots (the MinIO image must still be pullable)
 # ---------------------------------------------------------------------------
 
 

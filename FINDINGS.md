@@ -872,22 +872,29 @@ Remove an entry in the pull request that fixes it.
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
 
-## A-70 — The tools image resolves dependency ranges, not the runtime pins
+## A-70 — The tools and API images resolve dependency ranges, not pins
 
 - **Found:** SQLAlchemy 2.1.0 failing `make check` on every pull request
   (2026-09-25).
 - **What:** `Dockerfile.tools` installs `pyproject.toml`'s dependency ranges
-  (`requirements-project.txt` is generated from them), while the runtime image
-  installs `requirements.txt`'s exact pins. Lint, type checks and the tools
-  that run in that image therefore see whatever the newest release in each
-  range is, not what production runs; SQLAlchemy 2.1.0 changed its typing and
-  five unchanged files failed mypy. The fix in this change caps SQLAlchemy
-  only; any other dependency can drift the same way.
-- **Fix:** install the tools image with `-c requirements.txt` as constraints,
-  so every package shared with the runtime resolves to its pinned version, and
-  let dependency updates move the pins deliberately.
-- **Related, from the same fix:** the MinIO image now comes from Chainguard's
-  free tier, which also does not promise to keep old digests; a digest that
-  disappears will break `make dev` the way quay.io's removal did. And
-  `Dockerfile.ui`'s in-place `libexpat` upgrade should be removed once an
-  `nginx:alpine` digest ships 2.8.5-r0.
+  (it generates `requirements-project.txt` from them), and the production API
+  image does the same (`Dockerfile` runs `pip install ".[v4]"`).
+  `requirements.txt`'s exact pins are installed by neither. Every build
+  therefore takes the newest release in each range: SQLAlchemy 2.1.0 changed
+  its typing, failed mypy on five unchanged files, and the next API image
+  would have shipped it untested. The cap in this change covers SQLAlchemy
+  only; any other dependency can move the same way.
+- **Fix:** install both images with `-c requirements.txt` as constraints (or
+  from a hashed lock), so every build resolves to reviewed versions, and let
+  dependency updates move the pins deliberately.
+- **Related, from the same fix:**
+  - The MinIO image comes from Chainguard's free tier, which serves only
+    `:latest` and does not promise to keep old digests; a vanished digest
+    breaks `make dev` as quay.io's removal did. A scheduled pull check would
+    catch it early.
+  - MinIO runs as root only so volumes the old root image wrote keep working;
+    on a fresh volume the image's own uid 65532 works. A one-off
+    `chown -R 65532:65532` of existing volumes (or `make clean`) would let it
+    drop root.
+  - The in-place `libexpat` upgrade in both UI Dockerfiles should be removed
+    once an `nginx:alpine` digest ships 2.8.5-r0.

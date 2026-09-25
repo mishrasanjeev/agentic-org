@@ -37,8 +37,9 @@ services:
 
   minio:
     # MinIO no longer publishes a public server image (quay.io removed it;
-    # Docker Hub needs credentials). This build runs as uid 65532 and cannot
-    # write a fresh named volume, so it runs as root, as the old image did.
+    # Docker Hub needs credentials). This build defaults to uid 65532, which
+    # cannot open a miniodata volume the old image wrote as root, so it runs
+    # as root as that image did and existing volumes keep working.
     image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
     user: "0:0"
     environment:
