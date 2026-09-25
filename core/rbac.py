@@ -1,6 +1,20 @@
 """Role-Based Access Control — central policy for domain segregation."""
 from __future__ import annotations
 
+from collections.abc import Iterable
+
+ADMIN_SCOPE = "agenticorg:admin"
+
+
+def has_admin_scope(scopes: Iterable[object]) -> bool:
+    """True only for the exact admin scope.
+
+    Never a prefix match: every agent registers ``agenticorg:{domain}:read``
+    and a domain is free text, so ``agenticorg:administration:read`` would
+    otherwise read as admin (FINDINGS A-69).
+    """
+    return any(scope == ADMIN_SCOPE for scope in scopes)
+
 # enterprise-gate: process-local-ok reason=static-role-domain-policy-map
 ROLE_DOMAIN_MAP: dict[str, list[str] | None] = {
     "cfo": ["finance"],

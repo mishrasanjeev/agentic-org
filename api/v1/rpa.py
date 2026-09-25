@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
+from core.rbac import has_admin_scope
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/rpa", tags=["RPA"])
@@ -273,8 +274,7 @@ async def run_script(
         scopes = getattr(request.state, "scopes", []) or []
         claims = getattr(request.state, "claims", {}) or {}
         is_admin = (
-            "agenticorg:admin" in scopes
-            or any(s.startswith("agenticorg:admin") for s in scopes)
+            has_admin_scope(scopes)
             or claims.get("role") == "admin"
         )
         if not is_admin:
