@@ -61,7 +61,9 @@ classifiers = [
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.53.0",
-    "sqlalchemy[asyncio]>=2.0.54",
+    # Capped below 2.1 to match requirements.txt: 2.1.0 changed its typing and
+    # the tools image, which installs these ranges, failed mypy (FINDINGS A-70).
+    "sqlalchemy[asyncio]>=2.0.54,<2.1",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary

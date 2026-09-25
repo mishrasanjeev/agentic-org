@@ -871,3 +871,121 @@ Remove an entry in the pull request that fixes it.
   container reads verbatim and no attribute covers - the Dockerfiles and the
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
+
+## A-63 — Condition keywords split inside quoted strings
+
+- **Found:** fixing the approval-policy bypass (review H-6, 2026-09-25).
+- **What:** `workflows/condition_evaluator.py::_split_keyword` splits an
+  expression on ` OR ` and ` AND ` wherever they appear, including inside a
+  quoted string, so `region == 'NORTH OR SOUTH'` is evaluated as two broken
+  halves. One half can be definitely false (`x == 'A AND B'` becomes
+  `x == 'A` and `B'`), so the whole condition can come out false. Workflow
+  conditions and approval-policy step conditions both use this grammar. For
+  approval policies the strict evaluator added with H-6 treats a split that
+  leaves unbalanced quotes as "unknown" and applies the step; workflow
+  branching (`evaluate_condition`) still takes the wrong branch.
+- **Fix:** tokenise the expression, skipping quoted spans, before splitting
+  on keywords - the same fix `core/langgraph/hitl_condition.py` needs for the
+  problem the review reported there, which rewrites keywords inside quotes
+  rather than splitting on them. The same applies to ` in ` and to the
+  comparison operators inside a quoted value.
+
+## A-64 — Agent registration gives an agent no way to hold a route scope
+
+- **Found:** closing review H-1 (2026-09-25).
+- **What:** route scope checks now apply to Grantex agent tokens, as they do
+  to API keys. Registration (`auth/grantex_registration.py`) puts only
+  `tool:...` scopes and `agenticorg:{domain}:read` in an agent's Grantex
+  registration, and `PATCH /agents/{id}` recomputes them from the agent's
+  tools, so an agent's grant can never carry `agents:read`, `agents:run`,
+  `workflows:write` or `audit:read`. An agent token is therefore refused on
+  every route in a mapped scope family - including starting an agent or
+  workflow run, which the run-caller binding supports - and SDK users who
+  authenticate with a grant token must use an API key for those routes.
+- **Fix:** let an operator add named route scopes to an agent's registration
+  (validated against the mapped families, kept across the tool-scope
+  recomputation, recorded in audit), so a grant can carry exactly the routes an
+  agent needs.
+
+## A-65 — An admin can vote once per API key on a personal-agent approval
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** on an approval item for a personal agent, admin API keys pass the
+  ownership check, and each key's session subject is `apikey:<prefix>`. The
+  one-vote-per-person rule matches on the identifiers a session carries, so an
+  administrator who holds several keys can cast one vote per key and satisfy a
+  multi-person step alone. Admin-only, and present before H-6.
+- **Fix:** refuse machine credentials on multi-person policy steps, or record
+  the key's owning user and match on that.
+
+## A-66 — The shared condition evaluator never matches a boolean field against `true`
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** `workflows/condition_evaluator.py::evaluate_condition` compares
+  `flag == true` against a real boolean `True` as the strings `"True"` and
+  `"true"`, which differ, so the condition is always false. Workflow branches
+  on boolean output fields take the wrong path. Approval policies use the
+  strict evaluator, which compares booleans correctly since H-6.
+- **Fix:** give `evaluate_condition` the same boolean comparison as
+  `evaluate_condition_strict`, with a test per operator.
+
+## A-67 — A stranded approval item can only wait to expire
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** since H-6, an item whose policy was deleted or replaced mid-
+  approval, or whose remaining steps need people who have already voted,
+  refuses every decision. `POST /approvals/{id}/decide` is the only write on an
+  item; nothing lets an administrator reset it, re-bind it to the current
+  policy or cancel it, so it stays pending until `expires_at` (four hours for
+  agent and chat approvals, the workflow timeout for workflow approvals).
+- **Fix:** an admin-only, audited action that restarts an item under the
+  policy that now resolves, carrying over who has already voted so they still
+  cannot vote twice, or cancels it with a reason.
+
+## A-68 — Unmapped route families are not scope-checked for any credential
+
+- **Found:** review of the H-1 fix (2026-09-25).
+- **What:** route scope checks cover only the families in
+  `api/route_enforcement.py::SCOPE_FAMILIES`. The other families have around
+  a hundred authenticated routes with no scope or admin dependency, so any
+  authenticated credential - a tool-only agent token, a scope-less API key, a
+  viewer session - reaches them. Among them are routes that run agents
+  (`/a2a/tasks`, `/mcp/call`, `/sales/pipeline/process-lead`,
+  `/sales/run-followups`, `/sales/process-inbox`), routes that return
+  tenant-wide data (`/kpis/*`, `/costs/*`, `/sales/pipeline`,
+  `/sales/metrics`, `/knowledge/search`, `/companies*`, `/abm/*`,
+  `/prompt-templates`), and filing approvals
+  (`/companies/{id}/approvals/{approval_id}/approve` and `/reject`, checked
+  only against per-company roles). A-43 covers A2A and MCP; this is the wider
+  gap. Not caused by H-1, which made agent tokens subject to the mapped
+  families only.
+- **Fix:** map every authenticated family to a read and a write scope, or
+  refuse by default a family with no mapping, and add each to the unit test
+  that pins the unmapped set.
+
+## A-70 — The tools and API images resolve dependency ranges, not pins
+
+- **Found:** SQLAlchemy 2.1.0 failing `make check` on every pull request
+  (2026-09-25).
+- **What:** `Dockerfile.tools` installs `pyproject.toml`'s dependency ranges
+  (it generates `requirements-project.txt` from them), and the production API
+  image does the same (`Dockerfile` runs `pip install ".[v4]"`).
+  `requirements.txt`'s exact pins are installed by neither. Every build
+  therefore takes the newest release in each range: SQLAlchemy 2.1.0 changed
+  its typing, failed mypy on five unchanged files, and the next API image
+  would have shipped it untested. The cap in this change covers SQLAlchemy
+  only; any other dependency can move the same way.
+- **Fix:** install both images with `-c requirements.txt` as constraints (or
+  from a hashed lock), so every build resolves to reviewed versions, and let
+  dependency updates move the pins deliberately.
+- **Related, from the same fix:**
+  - The MinIO image comes from Chainguard's free tier, which serves only
+    `:latest` and does not promise to keep old digests; a vanished digest
+    breaks `make dev` as quay.io's removal did. A scheduled pull check would
+    catch it early.
+  - MinIO runs as root only so volumes the old root image wrote keep working;
+    on a fresh volume the image's own uid 65532 works. A one-off
+    `chown -R 65532:65532` of existing volumes (or `make clean`) would let it
+    drop root.
+  - The in-place `libexpat` upgrade in both UI Dockerfiles should be removed
+    once an `nginx:alpine` digest ships 2.8.5-r0.

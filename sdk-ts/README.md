@@ -86,7 +86,8 @@ const run = await client.workflows.run(workflow.id as string, {
 // API Key (dashboard users)
 new AgenticOrg({ apiKey: "your-key" });
 
-// Grantex Grant Token (external agents)
+// Grantex Grant Token (external agents). A route needs its scope in the
+// grant (e.g. agents:read), exactly as for an API key; tool scopes alone get 403.
 new AgenticOrg({ grantexToken: "eyJ..." });
 
 // Environment variable

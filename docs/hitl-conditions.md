@@ -100,3 +100,6 @@ Choices made where the output cannot express the prompt's rule exactly:
 
 Agents installed from a pack keep their stored condition until the pack is
 re-synced.
+
+Once a condition raises an approval item, an [approval policy](approval-policies.md)
+can require several people and steps to decide it.

@@ -38,6 +38,11 @@ client = AgenticOrg(
 Credentials identify a caller; they do not replace tenant/company authorization
 or tool grants. Keep secrets outside source control.
 
+A delegated grant (`grantex_token=`) is checked against each route's scope
+exactly as an API key is: the grant must carry, for example, `agents:read` to
+list agents or `agents:run` to start a run. A grant with only tool scopes is
+refused with `403`.
+
 ## Company-scoped shadow candidate
 
 Use an explicit company identifier when creating or generating a candidate.

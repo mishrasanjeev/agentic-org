@@ -4,6 +4,63 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - approval policies cannot be satisfied by one person
+- A reviewer may vote once per approval item, across every step of its
+  policy. Before, the duplicate-vote check covered only the current step, and
+  a step's count resets when the item advances, so one senior user could
+  approve each step in turn and decide a multi-person policy alone. A second
+  vote now gets `409`.
+- A policy step whose condition cannot be evaluated - a field the item does
+  not carry, a non-numeric ordering comparison, an unparseable expression -
+  now applies instead of being skipped, so the item needs that step's
+  approvals. So does a malformed operand (`status ==`, an unterminated
+  quote). `NOT` over a missing field no longer counts as a match.
+- If an item's policy is deleted mid-approval, another policy now resolves
+  for it, or the step it is waiting on is removed, decisions on the item get
+  `409` and it stays pending, instead of being decided on the next single
+  vote with no policy applied.
+- A reviewer is matched on every identifier their session carries (user id,
+  subject and email), so an invite-acceptance session and a login session for
+  the same person count as one reviewer.
+- **Breaking for operators:** items whose policy conditions name fields their
+  context lacks now need those steps' approvals. Someone who voted at one step
+  cannot approve or reject at a later one, so a policy that needs the same
+  person twice cannot complete. Editing (deleting and recreating) a policy, or
+  adding one that now resolves instead, leaves items in flight under the old
+  one refusing every decision until they expire; there is no override yet
+  (FINDINGS A-67). See `docs/approval-policies.md`.
+
+### Fixed - agent tokens need a route's scope, like API keys
+- **Breaking:** route scope checks now apply to Grantex agent tokens. Before,
+  any credential other than a user session or an API key skipped them, so an
+  agent token granted only `tool:mock:read` could read the whole tenant audit
+  trail and run any agent. An agent token must now carry the route family's
+  scope (`agents:read`, `agents:run`, `audit:read`, ...) or `agenticorg:admin`,
+  or it gets `403`. An authenticated request with an unrecognised
+  authentication mode is refused the same way.
+- Agent registration does not yet put route scopes in a grant (FINDINGS
+  A-64), so agents calling scoped routes with a grant token are refused until
+  it does; use an API key meanwhile. A2A and MCP routes are unaffected.
+  See `docs/operations/grant-enforcement.md`.
+
+### Fixed - three external changes that broke CI on every pull request
+- `make check`: SQLAlchemy 2.1.0 was released. The tools image and the
+  production API image both install `pyproject.toml`'s ranges, so mypy ran
+  against 2.1.0 and failed on five unchanged files, and the next API image
+  would have shipped 2.1.0 untested. The range is capped below 2.1, which
+  keeps both on the 2.0 line `requirements.txt` pins (FINDINGS A-70).
+- `make dev`: quay.io removed the MinIO server image the stack pinned, and
+  Docker Hub's `minio/minio` now needs credentials. Both compose files use
+  `cgr.dev/chainguard/minio`, pinned by digest. It defaults to uid 65532,
+  which cannot open a `miniodata` volume the old image wrote as root, so it
+  runs as root as that image did and existing volumes keep working. The
+  air-gap image list follows.
+- UI container scan: CVE-2026-93990 in `libexpat` 2.8.4-r0, which every
+  current `nginx:alpine` digest still ships. `Dockerfile.ui` and
+  `Dockerfile.ui.cloudrun` - the image Cloud Run serves, which CI did not
+  scan - upgrade it to 2.8.5-r0 and fail the build if that version is
+  unavailable. The container scan now covers `Dockerfile.ui.cloudrun` too.
+
 ### Security - admin is the exact `agenticorg:admin` scope, never a prefix
 - Six admin checks accepted any scope *starting with* `agenticorg:admin`.
   Every agent is registered with `agenticorg:{domain}:read` and its domain is
