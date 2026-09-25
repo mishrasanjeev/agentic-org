@@ -121,7 +121,8 @@ async def test_an_admin_only_rpa_script_refuses_a_lookalike(scope: str) -> None:
 
     from api.v1.rpa import RPARunRequest, run_script
 
-    with pytest.raises(HTTPException) as denied:
+    # A broken gate must fail here, not go on to run the script.
+    with patch("api.v1.rpa.uuid.uuid4", side_effect=_PastTheAdminGateError), pytest.raises(HTTPException) as denied:
         await run_script("generic_portal", RPARunRequest(), _request([scope]), tenant_id="t-1")
     assert denied.value.status_code == 403
 
