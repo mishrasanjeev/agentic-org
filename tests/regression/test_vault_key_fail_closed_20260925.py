@@ -11,10 +11,11 @@ literal.
 
 Outside an explicitly local or test runtime the vault now needs
 ``AGENTICORG_VAULT_KEYRING`` or a non-blank key in the process environment that
-is not one of the code defaults. An unset or unknown ``AGENTICORG_ENV`` counts as
-strict. A keyring that is set but yields no usable entry is refused everywhere.
-The API refuses to start and a worker process refuses to initialise without a
-usable key.
+is not a placeholder published in this repository. An unset or unknown
+``AGENTICORG_ENV`` counts as strict. A keyring that is set but yields no usable
+entry is refused everywhere. The API refuses to start, and so does a worker,
+through Celery's real ``worker_init`` dispatch and the Cloud Run entrypoint.
+Refusals and keyring parse errors never quote key material.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import textwrap
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
+from core.config import PUBLISHED_PLACEHOLDER_SECRETS, Settings
 from core.crypto import credential_vault as vault
 from core.crypto.credential_vault import (
     VaultKeyNotConfiguredError,
@@ -251,13 +253,7 @@ def test_checkpointer_reports_the_key_as_missing(clean_vault_env):
     assert info.value.reason == "checkpoint_encryption_key_missing"
 
 
-def _worker_vault_check():
-    from core.tasks import celery_app
-
-    return celery_app._refuse_worker_without_vault_key
-
-
-def test_worker_vault_check_is_connected_to_worker_process_init():
+def test_worker_vault_check_is_connected_to_worker_init():
     from core.tasks import celery_app
 
     tree = ast.parse(inspect.getsource(celery_app))
@@ -265,21 +261,149 @@ def test_worker_vault_check_is_connected_to_worker_process_init():
         node.name
         for node in ast.walk(tree)
         if isinstance(node, ast.FunctionDef)
-        and any(ast.unparse(d) == "worker_process_init.connect" for d in node.decorator_list)
+        and any(ast.unparse(d) == "worker_init.connect" for d in node.decorator_list)
     ]
-    assert "_refuse_worker_without_vault_key" in handlers
+    assert handlers == ["_refuse_worker_without_vault_key"]
 
 
-def test_worker_process_init_refuses_without_a_key(clean_vault_env):
+def test_celery_dispatch_of_worker_init_stops_a_worker_without_a_key(clean_vault_env):
+    """Celery's Signal.send swallows Exception; the refusal must survive a real dispatch."""
+    from celery.signals import worker_init
+
+    import core.tasks.celery_app  # noqa: F401  registers the handler
+
     _runtime(clean_vault_env, None)
-    with pytest.raises(VaultKeyNotConfiguredError):
-        _worker_vault_check()()
+    with pytest.raises(SystemExit) as info:
+        worker_init.send(sender=None)
+    assert "AGENTICORG_VAULT_KEYRING" in str(info.value.code)
 
 
-def test_worker_process_init_accepts_a_configured_key(clean_vault_env):
+def test_celery_dispatch_of_worker_init_does_not_leak_a_malformed_keyring(clean_vault_env):
+    from celery.signals import worker_init
+
+    import core.tasks.celery_app  # noqa: F401
+
+    _runtime(clean_vault_env, "production")
+    clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", "example-material-with-no-id")
+    with pytest.raises(SystemExit) as info:
+        worker_init.send(sender=None)
+    assert "example-material-with-no-id" not in str(info.value.code)
+    assert "entry 1" in str(info.value.code)
+
+
+def test_celery_dispatch_of_worker_init_accepts_a_configured_key(clean_vault_env):
+    from celery.signals import worker_init
+
+    import core.tasks.celery_app  # noqa: F401
+
     _runtime(clean_vault_env, "production")
     clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", f"v1:{_REAL_VAULT_KEY}")
-    _worker_vault_check()()
+    for _receiver, response in worker_init.send(sender=None):
+        assert not isinstance(response, BaseException)
+
+
+def _load_run_worker():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "run_worker.py"
+    spec = importlib.util.spec_from_file_location("run_worker_under_test", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_cloud_run_worker_entrypoint_exits_before_its_health_server(clean_vault_env, monkeypatch, capsys):
+    """A healthy probe on a worker that cannot open the vault would hide the failure."""
+    run_worker = _load_run_worker()
+
+    def _no_threads(*_args, **_kwargs):
+        raise AssertionError("the health server must not start without a vault key")
+
+    monkeypatch.setattr(run_worker.threading, "Thread", _no_threads)
+    _runtime(clean_vault_env, None)
+    clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", "example-material-with-no-id")
+    assert run_worker.main() == 1
+    err = capsys.readouterr().err
+    assert "Refusing to start the worker" in err
+    assert "example-material-with-no-id" not in err
+
+
+def test_cloud_run_worker_entrypoint_reports_no_problem_with_a_key(clean_vault_env):
+    run_worker = _load_run_worker()
+    _runtime(clean_vault_env, "production")
+    clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", f"v1:{_REAL_VAULT_KEY}")
+    assert run_worker._vault_key_problem() is None
+
+
+# ---------------------------------------------------------------------------
+# Every placeholder published in the repository is refused, however padded
+# ---------------------------------------------------------------------------
+
+
+def _variants(value: str) -> list[str]:
+    return [value, f" {value}", f"{value}\n", f"\t{value} ", value.upper()]
+
+
+@pytest.mark.parametrize("placeholder", sorted(PUBLISHED_PLACEHOLDER_SECRETS))
+@pytest.mark.parametrize("name", ["AGENTICORG_VAULT_KEY", "AGENTICORG_SECRET_KEY", "AGENTICORG_VAULT_KEYRING"])
+def test_strict_runtime_refuses_every_published_placeholder(clean_vault_env, placeholder, name):
+    _runtime(clean_vault_env, "production")
+    for value in _variants(placeholder):
+        clean_vault_env.setenv(name, f"v1:{value}" if name == "AGENTICORG_VAULT_KEYRING" else value)
+        with pytest.raises(VaultKeyNotConfiguredError) as info:
+            assert_vault_key_configured()
+        assert placeholder not in str(info.value).lower()
+
+
+def test_the_placeholder_list_covers_the_values_written_in_the_repository():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    written = {
+        ".env.example": "change-me-to-32-char-random-string",
+        "docker-compose.yml": "agenticorg-dev-only-do-not-use-in-production",
+        "Makefile": "ci-test-secret-key-minimum-16",
+        "scripts/local_e2e.sh": "dev-secret-key-change-in-production-32chars",
+    }
+    for relative, value in written.items():
+        assert value in (root / relative).read_text(encoding="utf-8"), relative
+        assert value in PUBLISHED_PLACEHOLDER_SECRETS
+
+
+@pytest.mark.parametrize("placeholder", sorted(PUBLISHED_PLACEHOLDER_SECRETS))
+def test_strict_settings_refuse_every_published_placeholder_as_the_secret_key(placeholder):
+    with pytest.raises(ValueError, match="AGENTICORG_SECRET_KEY"):
+        Settings(
+            env="production",
+            secret_key=f" {placeholder.upper()} ",
+            db_url="postgresql+asyncpg://u:p@db.example.com:5432/db",
+            redis_url="redis://cache.example.com:6379/0",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Keyring parse errors never quote the entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [
+        ("example-material-with-no-id", "entry 1 has no 'id:' prefix"),
+        (f"v2:{_REAL_VAULT_KEY},example-material-with-no-id", "entry 2 has no 'id:' prefix"),
+        (":example-material-with-no-id", "entry 1 has an empty id"),
+    ],
+)
+@pytest.mark.parametrize("env", ["production", "test"])
+def test_keyring_parse_errors_never_quote_the_entry(clean_vault_env, env, spec, expected):
+    _runtime(clean_vault_env, env)
+    clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", spec)
+    with pytest.raises(ValueError) as info:
+        assert_vault_key_configured()
+    assert expected in str(info.value)
+    assert "example-material-with-no-id" not in str(info.value)
+    assert _REAL_VAULT_KEY not in str(info.value)
 
 
 def test_api_lifespan_checks_the_vault_key_before_touching_the_database():

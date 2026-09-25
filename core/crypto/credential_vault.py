@@ -25,7 +25,8 @@ Backwards compatibility:
 Fail closed:
 - Only an explicitly local or test runtime (``AGENTICORG_ENV`` in
   ``core.config.RELAXED_ENVS``) may fall back to the code default
-  ``"dev-only-vault-key"`` or use a key that equals a code default. An
+  ``"dev-only-vault-key"`` or use a key that is a placeholder published
+  in this repository (``core.config.PUBLISHED_PLACEHOLDER_SECRETS``). An
   unset or unknown ``AGENTICORG_ENV`` is strict. Keys are read from the
   process environment only; ``.env`` values loaded into ``Settings``
   are not seen here, so a strict runtime configured only through
@@ -56,9 +57,8 @@ from cryptography.fernet import Fernet, InvalidToken
 # Stamp prefix on all NEW ciphertext: agko_v{id}$<base64-fernet-token>
 _PREFIX_RE = re.compile(r"^agko_v([^$]+)\$(.*)$", re.DOTALL)
 
-# Defaults written in this repository. Anyone can derive keys from them.
+# Written in this repository, so anyone can derive keys from it.
 _DEVELOPMENT_VAULT_KEY = "dev-only-vault-key"
-_PUBLISHED_DEFAULT_KEYS = frozenset({_DEVELOPMENT_VAULT_KEY, "dev-only-secret-key"})
 
 
 class VaultKeyNotConfiguredError(ValueError):
@@ -76,10 +76,12 @@ def _relaxed_runtime() -> bool:
 
 
 def _refuse_published_default(raw: str, where: str, relaxed: bool) -> None:
-    if not relaxed and raw.strip() in _PUBLISHED_DEFAULT_KEYS:
+    from core.config import is_published_placeholder_secret
+
+    if not relaxed and is_published_placeholder_secret(raw):
         raise VaultKeyNotConfiguredError(
-            f"{where} is a default published in the source code, which is only "
-            f"allowed in a local, development, test or CI runtime "
+            f"{where} is a placeholder published in this repository, which is only "
+            f"allowed in a local, dev, development, test or CI runtime "
             f"(AGENTICORG_ENV={_runtime_env()!r}). Set AGENTICORG_VAULT_KEYRING "
             "to a real key."
         )
@@ -115,19 +117,21 @@ def _load_keyring() -> list[tuple[str, bytes]]:
     spec = os.environ.get("AGENTICORG_VAULT_KEYRING", "").strip()
     if spec:
         out: list[tuple[str, bytes]] = []
-        for entry in spec.split(","):
+        # Errors name an entry by position or id and never quote it: an entry
+        # without its "id:" prefix is the raw key itself.
+        for position, entry in enumerate(spec.split(","), start=1):
             entry = entry.strip()
             if not entry:
                 continue
             if ":" not in entry:
                 raise ValueError(
-                    "AGENTICORG_VAULT_KEYRING entry missing 'id:' prefix: "
-                    f"{entry!r}. Expected format: id1:raw1,id2:raw2,…"
+                    f"AGENTICORG_VAULT_KEYRING entry {position} has no 'id:' prefix. "
+                    "Expected format: id1:raw1,id2:raw2,…"
                 )
             kid, raw = entry.split(":", 1)
             kid = kid.strip()
             if not kid:
-                raise ValueError(f"AGENTICORG_VAULT_KEYRING entry has empty id: {entry!r}")
+                raise ValueError(f"AGENTICORG_VAULT_KEYRING entry {position} has an empty id")
             if not raw.strip():
                 raise VaultKeyNotConfiguredError(f"AGENTICORG_VAULT_KEYRING entry {kid!r} has no key material")
             _refuse_published_default(raw, f"AGENTICORG_VAULT_KEYRING entry {kid!r}", relaxed)
@@ -150,7 +154,7 @@ def _load_keyring() -> list[tuple[str, bytes]]:
     raise VaultKeyNotConfiguredError(
         "No credential-vault key is configured: set AGENTICORG_VAULT_KEYRING "
         "(or AGENTICORG_VAULT_KEY) in the process environment. The development "
-        "default is only used in a local, development, test or CI runtime "
+        "default is only used in a local, dev, development, test or CI runtime "
         f"(AGENTICORG_ENV={_runtime_env()!r})."
     )
 

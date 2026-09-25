@@ -293,12 +293,14 @@ See [`.env.example`](../.env.example) for the complete reference.
 - `AGENTICORG_VAULT_KEYRING` — credential-vault keys, `id:secret,...`, active key
   first. It must be in the process environment of the API and every worker, not
   only in `.env`. Without it (or `AGENTICORG_VAULT_KEY`, or as a legacy fallback
-  `AGENTICORG_SECRET_KEY`) the API refuses to start and workers refuse to
-  initialise unless `AGENTICORG_ENV` is `local`, `development`, `test` or `ci`.
-  An unset `AGENTICORG_ENV` counts as production. A deployment that has been
-  sealing credentials under `AGENTICORG_SECRET_KEY` keeps working; to move off
-  it, set `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:<current secret key>` and
-  rewrap (`docs/SECRETS_ROTATION.md`).
+  `AGENTICORG_SECRET_KEY`) the API and the worker refuse to start unless
+  `AGENTICORG_ENV` is `local`, `dev`, `development`, `test` or `ci`. An unset
+  `AGENTICORG_ENV` counts as production, and so does any placeholder value
+  written in this repository (`core.config.PUBLISHED_PLACEHOLDER_SECRETS`). A
+  deployment that has been sealing credentials under `AGENTICORG_SECRET_KEY`
+  keeps working; to move off it, set
+  `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:<current secret key>` and rewrap
+  (`docs/SECRETS_ROTATION.md`).
 - `GRANTEX_CLIENT_ID` / `GRANTEX_CLIENT_SECRET` — OAuth2 credentials
 - `AGENTICORG_JWT_PUBLIC_KEY_URL` — JWKS endpoint for token validation
 

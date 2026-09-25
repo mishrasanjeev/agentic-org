@@ -19,6 +19,7 @@ from celery.signals import (
     setup_logging,
     task_postrun,
     task_prerun,
+    worker_init,
     worker_process_init,
     worker_process_shutdown,
 )
@@ -214,12 +215,21 @@ def _mark_beat_process(**_kwargs: Any) -> None:
     mark_worker_process()
 
 
-@worker_process_init.connect
+@worker_init.connect
 def _refuse_worker_without_vault_key(**_kwargs: Any) -> None:
-    """A worker process never runs a task without a usable credential-vault key."""
-    from core.crypto.credential_vault import assert_vault_key_configured
+    """A worker never starts without a usable credential-vault key.
 
-    assert_vault_key_configured()
+    Runs in the main worker process before the pool starts. Celery's
+    ``Signal.send`` logs and swallows any ``Exception`` a receiver raises,
+    so the refusal is raised as ``SystemExit``, which it does not catch.
+    """
+    from core.crypto.credential_vault import VaultKeyNotConfiguredError, assert_vault_key_configured
+
+    try:
+        assert_vault_key_configured()
+    except ValueError as exc:
+        reason = str(exc) if isinstance(exc, VaultKeyNotConfiguredError) else f"{type(exc).__name__}: {exc}"
+        raise SystemExit(f"Refusing to start the worker: {reason}") from exc
 
 
 @worker_process_init.connect

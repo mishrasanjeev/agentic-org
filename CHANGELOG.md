@@ -5,28 +5,44 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Fixed - the credential vault no longer falls back to a published key
-- Outside a local, development, test or CI runtime, the credential vault now
-  refuses to use its code default (`dev-only-vault-key`), a key equal to a code
-  default, or a blank key. It needs `AGENTICORG_VAULT_KEYRING`, or
+- Outside a local, dev, development, test or CI runtime, the credential vault
+  now refuses its code default (`dev-only-vault-key`), any secret value
+  published in this repository (the code defaults, `.env.example`, the compose
+  files, the `Makefile`, CI and scripts; compared ignoring case and surrounding
+  whitespace), and a blank key. It needs `AGENTICORG_VAULT_KEYRING`, or
   `AGENTICORG_VAULT_KEY`, or as before `AGENTICORG_SECRET_KEY`, in the process
   environment. Before, a production runtime whose secrets were only in `.env`
   (loaded into settings, but not into the environment the vault reads) sealed
   every connector credential and LangGraph checkpoint under the default, which
   anyone with this repository can derive.
 - An unset or unrecognised `AGENTICORG_ENV` counts as production here.
-- The API refuses to start, and a worker process refuses to initialise,
-  without a usable key. The error names the setting and never quotes key
-  material; the checkpointer reports `checkpoint_encryption_key_missing`.
-- A keyring that is set but has no entries, or an entry with no key material
-  (`v1:`), is refused in every runtime instead of falling back silently.
-- **Breaking for operators:** a strict runtime without a vault key in its
-  process environment no longer starts; set `AGENTICORG_VAULT_KEYRING` (see
-  `docs/deployment.md`). A runtime that ran that way has credentials sealed
-  under the public default. Strict runtimes refuse the default even as a
-  keyring entry, so rewrap those rows from a trusted machine with
-  `AGENTICORG_ENV=local` and `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:dev-only-vault-key`,
-  then rotate every affected provider credential, because the old ciphertext
-  was readable by anyone.
+- The API refuses to start without a usable key. So does a worker: the check
+  runs on Celery's `worker_init` in the main worker process and exits, and the
+  Cloud Run entrypoint (`scripts/run_worker.py`) checks before it starts its
+  health server. The checkpointer reports `checkpoint_encryption_key_missing`.
+- Refusals and keyring parse errors name the setting and the entry's position
+  or id, never key material. Before, an entry missing its `id:` prefix (which
+  is the raw key) was quoted in the error.
+- `Settings` in a strict runtime now refuses every published placeholder as
+  `AGENTICORG_SECRET_KEY`, not only `dev-only-secret-key`.
+- A keyring that is set but has no entries is refused in every runtime
+  instead of falling through to the single-key path. A blank
+  `AGENTICORG_VAULT_KEY` now counts as unset (the next fallback applies), and
+  a keyring entry with no key material (`v1:`) is refused. Before, both
+  derived the key from the empty string, which is public.
+- **Breaking for operators:**
+  - A strict runtime without a vault key in its process environment no longer
+    starts; set `AGENTICORG_VAULT_KEYRING` (see `docs/deployment.md`). CI's
+    background Celery worker now sets `AGENTICORG_ENV=ci`, and local
+    development must export `AGENTICORG_ENV=development` (see the README).
+  - A runtime that ran on the default has credentials sealed under a public
+    key. Strict runtimes refuse the default even as a keyring entry, so rewrap
+    those rows from a trusted machine with `AGENTICORG_ENV=local` and
+    `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:dev-only-vault-key`, then rotate
+    every affected provider credential.
+  - Rows sealed under an empty-string key (a blank `AGENTICORG_VAULT_KEY`, or
+    a `v1:` entry) can no longer be decrypted in any runtime. Treat those
+    provider credentials as exposed and re-enter them.
 - The `AGENTICORG_SECRET_KEY` fallback is unchanged; FINDINGS A-71 tracks
   giving every deployment a dedicated vault key.
 

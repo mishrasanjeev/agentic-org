@@ -107,7 +107,25 @@ def _register_child_cleanup() -> None:
         mark_process_dead(os.getpid())
 
 
+def _vault_key_problem() -> str | None:
+    """Why the credential vault has no usable key, or None when it has one."""
+    from core.crypto.credential_vault import assert_vault_key_configured  # noqa: PLC0415
+
+    try:
+        assert_vault_key_configured()
+    except ValueError as exc:  # parse errors never quote key material
+        return f"{type(exc).__name__}: {exc}"
+    return None
+
+
 def main() -> int:
+    # Before the health server, so Cloud Run sees a failed start rather than
+    # a healthy container whose tasks all fail on the vault.
+    problem = _vault_key_problem()
+    if problem is not None:
+        print(f"Refusing to start the worker: {problem}", file=sys.stderr)
+        return 1
+
     # Health server runs as a daemon thread so it dies cleanly when the
     # main worker process exits. Celery worker runs in the foreground so
     # signals (SIGTERM from Cloud Run scale-down) reach Celery directly
