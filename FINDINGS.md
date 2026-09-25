@@ -871,30 +871,3 @@ Remove an entry in the pull request that fixes it.
   container reads verbatim and no attribute covers - the Dockerfiles and the
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
-
-## A-69 — Admin scope is matched by prefix, so an agent domain can grant admin (fixed)
-
-- **Found:** review of the H-1 fix (2026-09-25). `docs/CODE_AUDIT_2026-04-01.md`
-  had noted the prefix bypass in `require_scope` in April.
-- **What:** registration gives every agent `agenticorg:{domain}:read`
-  (`auth/grantex_registration.py:219`), and an agent's `domain` is free text.
-  Six admin checks matched `startswith("agenticorg:admin")`: `require_scope`
-  (and so `require_tenant_admin`) and `get_user_domains` in `api/deps.py`,
-  `Caller.is_admin` in `core/ownership.py`, and the admin checks in
-  `api/v1/report_schedules.py`, `api/v1/rpa.py` and
-  `api/v1/commerce_runtime.py`. An agent in a domain such as `administration`
-  carried `agenticorg:administration:read`, and a grant token for it was
-  treated as a tenant administrator by all six, including the gate on API-key
-  creation. A tenant admin could create such an agent, and so could a
-  developer creating a personal agent. Free-form API-key scopes such as
-  `agenticorg:admin:full` were admin the same way.
-- **Fixed:** `core.rbac.has_admin_scope` matches the exact scope, and all six
-  checks use it. `tests/regression/test_admin_scope_exact_match_20260925.py`
-  drives each callable check with five lookalike scopes (26 cases, all of
-  which failed before the change), shows that registering an agent in the
-  `administration` domain yields no admin scope, and fails if any module
-  under `api/`, `auth/`, `core/`, `connectors/`, `workflows/` or `rpa/`
-  matches the admin scope by prefix again - which also covers the RPA gate
-  inside its route handler. Agent domains are still free text; with the exact
-  match no domain can produce the admin scope, since registration always
-  appends `:read`.

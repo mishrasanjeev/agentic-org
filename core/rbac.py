@@ -11,7 +11,7 @@ def has_admin_scope(scopes: Iterable[object]) -> bool:
 
     Never a prefix match: every agent registers ``agenticorg:{domain}:read``
     and a domain is free text, so ``agenticorg:administration:read`` would
-    otherwise read as admin (FINDINGS A-69).
+    otherwise read as admin.
     """
     return any(scope == ADMIN_SCOPE for scope in scopes)
 

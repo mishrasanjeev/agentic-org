@@ -14,7 +14,7 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   scripts and merchant commerce configuration. Free-form API-key scopes had
   the same effect. All six now use `core.rbac.has_admin_scope`, an exact
   match, and a test fails if any production module matches the admin scope
-  by prefix again. FINDINGS A-69.
+  by prefix again.
 - **Breaking:** an API key or grant holding a scope such as
   `agenticorg:admin:full` is no longer an administrator. Nothing in this
   repository issues such a scope, but API-key scopes are free-form. To find

@@ -64,7 +64,7 @@ def test_tc_cc_002_admin_scope_bypass_is_pinned() -> None:
     so the global-admin role doesn't need every per-resource scope
     listed individually. It is the exact scope ``agenticorg:admin``,
     never a prefix: a prefix let an agent in a domain such as
-    ``administration`` pass as admin (FINDINGS A-69)."""
+    ``administration`` pass as admin."""
     from unittest.mock import MagicMock
 
     import pytest

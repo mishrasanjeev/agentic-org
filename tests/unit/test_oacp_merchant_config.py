@@ -132,7 +132,7 @@ def test_merchant_config_permission_accepts_merchant_scope_without_admin() -> No
     commerce_runtime_api.require_merchant_commerce_config_write(
         SimpleNamespace(state=SimpleNamespace(scopes=["agenticorg:admin"]))
     )
-    # Admin is the exact scope, never a prefix (FINDINGS A-69).
+    # Admin is the exact scope, never a prefix.
     with pytest.raises(HTTPException):
         commerce_runtime_api.require_merchant_commerce_config_write(
             SimpleNamespace(state=SimpleNamespace(scopes=["agenticorg:admin:platform"]))

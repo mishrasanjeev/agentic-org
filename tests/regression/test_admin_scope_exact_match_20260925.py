@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Only the exact ``agenticorg:admin`` scope is admin (FINDINGS A-69).
+"""Only the exact ``agenticorg:admin`` scope is admin.
 
 Six admin checks matched ``startswith("agenticorg:admin")``. Registration gives
 every agent ``agenticorg:{domain}:read`` and an agent's domain is free text, so
@@ -107,6 +107,26 @@ def test_merchant_config_write_refuses_a_lookalike(scope: str) -> None:
     with pytest.raises(HTTPException):
         require_merchant_commerce_config_write(_request([scope]))
     require_merchant_commerce_config_write(_request([ADMIN_SCOPE]))
+
+
+class _PastTheAdminGateError(Exception):
+    """Raised by the first call after the RPA admin gate, so no script runs."""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scope", LOOKALIKES)
+async def test_an_admin_only_rpa_script_refuses_a_lookalike(scope: str) -> None:
+    """Exercises the RPA gate itself, which the source guard only reads."""
+    from unittest.mock import patch
+
+    from api.v1.rpa import RPARunRequest, run_script
+
+    with pytest.raises(HTTPException) as denied:
+        await run_script("generic_portal", RPARunRequest(), _request([scope]), tenant_id="t-1")
+    assert denied.value.status_code == 403
+
+    with patch("api.v1.rpa.uuid.uuid4", side_effect=_PastTheAdminGateError), pytest.raises(_PastTheAdminGateError):
+        await run_script("generic_portal", RPARunRequest(), _request([ADMIN_SCOPE]), tenant_id="t-1")
 
 
 def _prefix_admin_checks(path: Path) -> list[int]:

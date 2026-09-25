@@ -136,8 +136,7 @@ class TestApiKeyAdminScope:
         """Only ``agenticorg:admin`` itself passes; a scope that merely starts with it does not.
 
         A prefix match let an agent in a domain such as ``administration``
-        (registered with ``agenticorg:administration:read``) create API keys
-        (FINDINGS A-69).
+        (registered with ``agenticorg:administration:read``) create API keys.
         """
         from fastapi import HTTPException
 
