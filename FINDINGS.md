@@ -871,3 +871,20 @@ Remove an entry in the pull request that fixes it.
   container reads verbatim and no attribute covers - the Dockerfiles and the
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
+
+## A-64 — Agent registration gives an agent no way to hold a route scope
+
+- **Found:** closing review H-1 (2026-09-25).
+- **What:** route scope checks now apply to Grantex agent tokens, as they do
+  to API keys. Registration (`auth/grantex_registration.py`) puts only
+  `tool:...` scopes and `agenticorg:{domain}:read` in an agent's Grantex
+  registration, and `PATCH /agents/{id}` recomputes them from the agent's
+  tools, so an agent's grant can never carry `agents:read`, `agents:run`,
+  `workflows:write` or `audit:read`. An agent token is therefore refused on
+  every route in a mapped scope family - including starting an agent or
+  workflow run, which the run-caller binding supports - and SDK users who
+  authenticate with a grant token must use an API key for those routes.
+- **Fix:** let an operator add named route scopes to an agent's registration
+  (validated against the mapped families, kept across the tool-scope
+  recomputation, recorded in audit), so a grant can carry exactly the routes an
+  agent needs.
