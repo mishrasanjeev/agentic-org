@@ -4,6 +4,32 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - approval policies cannot be satisfied by one person
+- A reviewer may vote once per approval item, across every step of its
+  policy. Before, the duplicate-vote check covered only the current step, and
+  a step's count resets when the item advances, so one senior user could
+  approve each step in turn and decide a multi-person policy alone. A second
+  vote now gets `409`.
+- A policy step whose condition cannot be evaluated - a field the item does
+  not carry, a non-numeric ordering comparison, an unparseable expression -
+  now applies instead of being skipped, so the item needs that step's
+  approvals. So does a malformed operand (`status ==`, an unterminated
+  quote). `NOT` over a missing field no longer counts as a match.
+- If an item's policy is deleted mid-approval, another policy now resolves
+  for it, or the step it is waiting on is removed, decisions on the item get
+  `409` and it stays pending, instead of being decided on the next single
+  vote with no policy applied.
+- A reviewer is matched on every identifier their session carries (user id,
+  subject and email), so an invite-acceptance session and a login session for
+  the same person count as one reviewer.
+- **Breaking for operators:** items whose policy conditions name fields their
+  context lacks now need those steps' approvals. Someone who voted at one step
+  cannot approve or reject at a later one, so a policy that needs the same
+  person twice cannot complete. Editing (deleting and recreating) a policy, or
+  adding one that now resolves instead, leaves items in flight under the old
+  one refusing every decision until they expire; there is no override yet
+  (FINDINGS A-67). See `docs/approval-policies.md`.
+
 ### Fixed - agent tokens need a route's scope, like API keys
 - **Breaking:** route scope checks now apply to Grantex agent tokens. Before,
   any credential other than a user session or an API key skipped them, so an

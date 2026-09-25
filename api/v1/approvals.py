@@ -335,6 +335,15 @@ async def _resume_workflow_bg(
         await state_store.close()
 
 
+def _voter_identities(claims: dict) -> set[str]:
+    """Every identifier a session (or a recorded vote) carries for one person, normalised."""
+    values = [claims.get("agenticorg:user_id"), claims.get("sub"), claims.get("email")]
+    recorded = claims.get("identities")
+    if isinstance(recorded, list):
+        values.extend(recorded)
+    return {str(v).strip().lower() for v in values if isinstance(v, str) and v.strip()}
+
+
 # ── POST /approvals/{id}/decide ─────────────────────────────────────────────
 @router.post("/approvals/{hitl_id}/decide")
 @route_meta(
@@ -524,6 +533,22 @@ async def decide(
             agent_id=item.agent_id,
         )
 
+        # An item part-way through a policy stays bound to that policy. If it was
+        # deleted, or another one now resolves, deciding on this vote would apply
+        # no policy (or the wrong one) to approvals already collected.
+        in_flight_policy = str(policy_state.get("policy_id") or "")
+        if in_flight_policy and (policy is None or str(policy.id) != in_flight_policy):
+            _log.warning(
+                "hitl_policy_changed_in_flight",
+                hitl_id=str(hitl_id),
+                policy_id=in_flight_policy,
+                resolved_policy_id=str(policy.id) if policy is not None else None,
+            )
+            raise HTTPException(
+                409,
+                "The approval policy for this item changed while it was in progress",
+            )
+
         if policy is not None:
             # Hydrate the engine's view of the current step
             current_seq = int(policy_state.get("current_sequence") or 0)
@@ -545,24 +570,47 @@ async def decide(
                     )
                 )
                 step = step_res.scalar_one_or_none()
+                if step is None:
+                    # The policy changed mid-approval. Deciding on one vote here
+                    # would apply no policy at all; leave the item for an admin.
+                    _log.warning(
+                        "hitl_policy_step_missing",
+                        hitl_id=str(hitl_id),
+                        policy_id=str(policy.id),
+                        sequence=current_seq,
+                    )
+                    raise HTTPException(
+                        409,
+                        "The approval policy changed while this item was in progress; "
+                        "its current step no longer exists",
+                    )
 
             if step is not None:
+                # One vote per person per item, across every step: the per-step
+                # count resets when the item advances, so a per-step check let
+                # one reviewer satisfy each step of a multi-person policy in turn.
+                # A person is matched on every identifier their session carries -
+                # an invite-acceptance session has only the email, a login
+                # session the user id as well - so they cannot vote once as each.
+                voter = _voter_identities(user_claims)
                 duplicate_vote = any(
-                    str(vote.get("user_id") or "") == user_id_str
-                    and int(vote.get("sequence") or current_seq) == int(step.sequence)
+                    voter & _voter_identities(
+                        {"agenticorg:user_id": vote.get("user_id"), "identities": vote.get("identities")}
+                    )
                     for vote in approvals_history
                     if isinstance(vote, dict)
                 )
                 if duplicate_vote:
                     raise HTTPException(
                         409,
-                        "This reviewer has already voted on the current approval step",
+                        "This reviewer has already voted on this approval",
                     )
                 pdec = apply_decision(step, approvals_collected, body.decision or "approve")
                 policy_action = pdec.action
                 approvals_history.append(
                     {
                         "user_id": user_id_str,
+                        "identities": sorted(voter),
                         "decision": body.decision,
                         "sequence": step.sequence,
                         "at": datetime.now(UTC).isoformat(),

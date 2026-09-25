@@ -872,6 +872,24 @@ Remove an entry in the pull request that fixes it.
   compose entrypoint scripts among them - and a sweep for those would be worth
   a look.
 
+## A-63 — Condition keywords split inside quoted strings
+
+- **Found:** fixing the approval-policy bypass (review H-6, 2026-09-25).
+- **What:** `workflows/condition_evaluator.py::_split_keyword` splits an
+  expression on ` OR ` and ` AND ` wherever they appear, including inside a
+  quoted string, so `region == 'NORTH OR SOUTH'` is evaluated as two broken
+  halves. One half can be definitely false (`x == 'A AND B'` becomes
+  `x == 'A` and `B'`), so the whole condition can come out false. Workflow
+  conditions and approval-policy step conditions both use this grammar. For
+  approval policies the strict evaluator added with H-6 treats a split that
+  leaves unbalanced quotes as "unknown" and applies the step; workflow
+  branching (`evaluate_condition`) still takes the wrong branch.
+- **Fix:** tokenise the expression, skipping quoted spans, before splitting
+  on keywords - the same fix `core/langgraph/hitl_condition.py` needs for the
+  problem the review reported there, which rewrites keywords inside quotes
+  rather than splitting on them. The same applies to ` in ` and to the
+  comparison operators inside a quoted value.
+
 ## A-64 — Agent registration gives an agent no way to hold a route scope
 
 - **Found:** closing review H-1 (2026-09-25).
@@ -888,6 +906,41 @@ Remove an entry in the pull request that fixes it.
   (validated against the mapped families, kept across the tool-scope
   recomputation, recorded in audit), so a grant can carry exactly the routes an
   agent needs.
+
+## A-65 — An admin can vote once per API key on a personal-agent approval
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** on an approval item for a personal agent, admin API keys pass the
+  ownership check, and each key's session subject is `apikey:<prefix>`. The
+  one-vote-per-person rule matches on the identifiers a session carries, so an
+  administrator who holds several keys can cast one vote per key and satisfy a
+  multi-person step alone. Admin-only, and present before H-6.
+- **Fix:** refuse machine credentials on multi-person policy steps, or record
+  the key's owning user and match on that.
+
+## A-66 — The shared condition evaluator never matches a boolean field against `true`
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** `workflows/condition_evaluator.py::evaluate_condition` compares
+  `flag == true` against a real boolean `True` as the strings `"True"` and
+  `"true"`, which differ, so the condition is always false. Workflow branches
+  on boolean output fields take the wrong path. Approval policies use the
+  strict evaluator, which compares booleans correctly since H-6.
+- **Fix:** give `evaluate_condition` the same boolean comparison as
+  `evaluate_condition_strict`, with a test per operator.
+
+## A-67 — A stranded approval item can only wait to expire
+
+- **Found:** review of the H-6 fix (2026-09-25).
+- **What:** since H-6, an item whose policy was deleted or replaced mid-
+  approval, or whose remaining steps need people who have already voted,
+  refuses every decision. `POST /approvals/{id}/decide` is the only write on an
+  item; nothing lets an administrator reset it, re-bind it to the current
+  policy or cancel it, so it stays pending until `expires_at` (four hours for
+  agent and chat approvals, the workflow timeout for workflow approvals).
+- **Fix:** an admin-only, audited action that restarts an item under the
+  policy that now resolves, carrying over who has already voted so they still
+  cannot vote twice, or cancels it with a reason.
 
 ## A-68 — Unmapped route families are not scope-checked for any credential
 
