@@ -44,6 +44,8 @@ from typing import Any
 from fastapi import HTTPException, Request
 from sqlalchemy import ColumnElement, and_, false, or_, true
 
+from core.rbac import has_admin_scope
+
 AGENT_VISIBILITY_TENANT = "tenant"
 AGENT_VISIBILITY_PERSONAL = "personal"
 AGENT_VISIBILITIES = (AGENT_VISIBILITY_TENANT, AGENT_VISIBILITY_PERSONAL)
@@ -99,7 +101,7 @@ def caller_from_request(request: Request) -> Caller:
         user_id=user_id,
         role=str(claims.get("role") or "").lower(),
         domains=get_user_domains(request),
-        is_admin=any(str(s).startswith("agenticorg:admin") for s in scopes),
+        is_admin=has_admin_scope(scopes),
         is_machine=is_machine,
     )
 

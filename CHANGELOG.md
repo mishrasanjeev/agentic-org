@@ -61,6 +61,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   scan - upgrade it to 2.8.5-r0 and fail the build if that version is
   unavailable. The container scan now covers `Dockerfile.ui.cloudrun` too.
 
+### Security - admin is the exact `agenticorg:admin` scope, never a prefix
+- Six admin checks accepted any scope *starting with* `agenticorg:admin`.
+  Every agent is registered with `agenticorg:{domain}:read` and its domain is
+  free text, so a grant token for an agent in a domain such as
+  `administration` passed `require_scope` - including the tenant-admin gate
+  on API-key creation - and was treated as an administrator for agent,
+  connector and approval visibility, report schedules, admin-only RPA
+  scripts and merchant commerce configuration. Free-form API-key scopes had
+  the same effect. All six now use `core.rbac.has_admin_scope`, an exact
+  match, and a test fails if any production module matches the admin scope
+  by prefix again.
+- **Breaking:** an API key or grant holding a scope such as
+  `agenticorg:admin:full` is no longer an administrator. Nothing in this
+  repository issues such a scope, but API-key scopes are free-form. To find
+  any in use:
+  `SELECT tenant_id, id, name FROM api_keys WHERE EXISTS (SELECT 1 FROM unnest(scopes) s WHERE (s LIKE 'agenticorg:admin%' OR s LIKE 'agenticorg.admin%') AND s <> 'agenticorg:admin');`
+  Replace such a scope with `agenticorg:admin` if the key should be an
+  administrator.
+
 ### Fixed - governed-case provider authorization
 - The reference underwriter and screening agent now refuse every provider call
   without an authorizer and a positive delegated-grant check. This applies even

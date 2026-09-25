@@ -19,6 +19,7 @@ from api.deps import get_current_tenant, get_current_user, require_scope
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.report_schedule import ReportSchedule
+from core.rbac import has_admin_scope
 
 # Presets understood by both the API layer and the scheduler worker.
 # Real cron strings (5 fields) are also accepted — see _is_valid_cron().
@@ -120,7 +121,7 @@ _REPORT_TYPES_BY_ROLE: dict[str, set[str]] = {
 
 def _is_admin_claims(claims: dict[str, Any]) -> bool:
     scopes = claims.get("grantex:scopes") or []
-    return any(str(scope).startswith("agenticorg:admin") for scope in scopes)
+    return has_admin_scope(scopes)
 
 
 def _allowed_report_types(claims: dict[str, Any]) -> set[str] | None:
