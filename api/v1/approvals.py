@@ -335,6 +335,15 @@ async def _resume_workflow_bg(
         await state_store.close()
 
 
+def _voter_identities(claims: dict) -> set[str]:
+    """Every identifier a session (or a recorded vote) carries for one person, normalised."""
+    values = [claims.get("agenticorg:user_id"), claims.get("sub"), claims.get("email")]
+    recorded = claims.get("identities")
+    if isinstance(recorded, list):
+        values.extend(recorded)
+    return {str(v).strip().lower() for v in values if isinstance(v, str) and v.strip()}
+
+
 # ── POST /approvals/{id}/decide ─────────────────────────────────────────────
 @router.post("/approvals/{hitl_id}/decide")
 @route_meta(
@@ -580,8 +589,14 @@ async def decide(
                 # One vote per person per item, across every step: the per-step
                 # count resets when the item advances, so a per-step check let
                 # one reviewer satisfy each step of a multi-person policy in turn.
+                # A person is matched on every identifier their session carries -
+                # an invite-acceptance session has only the email, a login
+                # session the user id as well - so they cannot vote once as each.
+                voter = _voter_identities(user_claims)
                 duplicate_vote = any(
-                    str(vote.get("user_id") or "") == user_id_str
+                    voter & _voter_identities(
+                        {"agenticorg:user_id": vote.get("user_id"), "identities": vote.get("identities")}
+                    )
                     for vote in approvals_history
                     if isinstance(vote, dict)
                 )
@@ -595,6 +610,7 @@ async def decide(
                 approvals_history.append(
                     {
                         "user_id": user_id_str,
+                        "identities": sorted(voter),
                         "decision": body.decision,
                         "sequence": step.sequence,
                         "at": datetime.now(UTC).isoformat(),

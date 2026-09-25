@@ -86,10 +86,12 @@ _FALSE_WORDS = frozenset({"false", "0", "no"})
 _ORDERING = frozenset({">", "<", ">=", "<="})
 
 
-# A field is a dotted path; a value is a quoted string with no inner quote of
-# its own kind, or one bare token (a word, a number or a dotted path).
-_PATH_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*")
-_BARE_RE = re.compile(r"[A-Za-z0-9_.\-]+")
+# An operand is a quoted string with no inner quote of its own kind, or one
+# bare token: no whitespace, quotes, comparison or grouping characters. A field
+# is a bare token read as a dotted path; ``risk-level``, ``région`` and ``$type``
+# are all fields, and ``a@b.com``, ``/api/v1`` and ``+5`` are all values.
+_BARE_CHARS = r"[^\s'\"=<>!()\[\],]"
+_BARE_RE = re.compile(rf"{_BARE_CHARS}+")
 
 
 def _unbalanced_quotes(part: str) -> bool:
@@ -104,11 +106,38 @@ def _unbalanced_quotes(part: str) -> bool:
     return bool(open_quote)
 
 
-def _well_formed_value(token: str) -> bool:
+def _is_quoted(token: str) -> bool:
+    return len(token) >= 2 and token[0] == token[-1] and token[0] in "'\""
+
+
+def _well_formed_operand(token: str) -> bool:
     token = token.strip()
-    if len(token) >= 2 and token[0] == token[-1] and token[0] in "'\"":
+    if _is_quoted(token):
         return token[0] not in token[1:-1]
     return bool(_BARE_RE.fullmatch(token))
+
+
+def _compare(op_str: str, left: Any, right_token: str, context: dict[str, Any]) -> bool | None:
+    """One comparison, or ``None`` when its operands do not make it decidable."""
+    op_func = OPS[op_str]
+    right_token = right_token.strip()
+    right = _resolve(right_token, context, literal_fallback=True)
+    if isinstance(left, bool) and isinstance(right, str) and right.lower() in _TRUE_WORDS | _FALSE_WORDS:
+        right = right.lower() in _TRUE_WORDS
+        return bool(op_func(left, right)) if op_str in ("==", "!=") else None
+    try:
+        return bool(op_func(float(left), float(right)))
+    except (ValueError, TypeError):
+        pass
+    if op_str not in _ORDERING:
+        return bool(op_func(str(left), str(right)))
+    # Ordering two strings is meaningful only against an explicit string - a
+    # quoted value or a field that holds one, as with ISO dates. An unquoted word
+    # that names no field (``amount > high``) is more likely a missing field.
+    explicit = _is_quoted(right_token) or _resolve(right_token, context) is not MISSING
+    if explicit and isinstance(left, str) and isinstance(right, str):
+        return bool(op_func(left, right))
+    return None
 
 
 def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool | None:
@@ -148,7 +177,7 @@ def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool 
     for membership, negate in ((" not in ", True), (" in ", False)):
         if membership in expression:
             left, right = expression.split(membership, 1)
-            if not _PATH_RE.fullmatch(left.strip()):
+            if not _well_formed_operand(left):
                 return None
             left_val = _resolve(left.strip(), context)
             members = _parse_list(right.strip(), context)
@@ -157,23 +186,17 @@ def evaluate_condition_strict(expression: str, context: dict[str, Any]) -> bool 
             found = any(_values_equal(left_val, m) for m in members)
             return (not found) if negate else found
 
-    for op_str, op_func in sorted(OPS.items(), key=lambda x: -len(x[0])):
+    for op_str in sorted(OPS, key=lambda op: -len(op)):
         if op_str in expression:
             left, right = expression.split(op_str, 1)
             # A malformed operand (``status ==``, ``status === ok``, an
             # unterminated quote) is not a comparison the author could mean.
-            if not _PATH_RE.fullmatch(left.strip()) or not _well_formed_value(right):
+            if not _well_formed_operand(left) or not _well_formed_operand(right):
                 return None
             left_val = _resolve(left.strip(), context)
             if left_val is MISSING:
                 return None
-            right_val = _resolve(right.strip(), context, literal_fallback=True)
-            try:
-                return bool(op_func(float(left_val), float(right_val)))
-            except (ValueError, TypeError):
-                if op_str in _ORDERING:
-                    return None
-                return bool(op_func(str(left_val), str(right_val)))
+            return _compare(op_str, left_val, right, context)
 
     val = _resolve(expression, context)
     if val is MISSING:

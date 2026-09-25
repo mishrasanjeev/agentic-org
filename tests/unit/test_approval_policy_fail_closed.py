@@ -70,6 +70,27 @@ from workflows.condition_evaluator import evaluate_condition, evaluate_condition
         ("status == ok", {"status": "ok"}, True),
         ("amount >= 1.5", {"amount": 2}, True),
         ("amount >= limit", {"amount": 2, "limit": 3}, False),
+        # Malformed quoted operands on either side are unknown.
+        ("'st'atus' == ok", {}, None),
+        ("'ad'min' in roles", {"roles": ["x"]}, None),
+        # Quote-aware splitting: an apostrophe in a double-quoted value is not a split point.
+        ('name == "O\'Brien" OR x > 1', {"name": "O'Brien"}, True),
+        ('name == "O\'Brien" AND x > 1', {"name": "O'Brien", "x": 0}, False),
+        # Valid forms the grammar has always accepted still decide.
+        ("'admin' in roles", {"roles": ["admin"]}, True),
+        ('"admin" not in roles', {"roles": ["admin"]}, False),
+        ("risk-level == high", {"risk-level": "high"}, True),
+        ("région == nord", {"région": "nord"}, True),
+        ("owner == a@b.com", {"owner": "a@b.com"}, True),
+        ("path == /api/v1", {"path": "/api/v1"}, True),
+        ("delta > +5", {"delta": 7}, True),
+        ("created_at > '2026-01-01'", {"created_at": "2026-03-02"}, True),
+        ("created_at < '2026-01-01'", {"created_at": "2026-03-02"}, False),
+        ("tier >= b", {"tier": "c"}, None),
+        # A boolean field compared with true/false decides, rather than never matching.
+        ("flag == true", {"flag": True}, True),
+        ("flag == false", {"flag": True}, False),
+        ("flag != true", {"flag": False}, True),
     ],
 )
 def test_strict_evaluator_answers_none_when_it_cannot_decide(

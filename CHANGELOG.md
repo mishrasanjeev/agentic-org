@@ -19,9 +19,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   for it, or the step it is waiting on is removed, decisions on the item get
   `409` and it stays pending, instead of being decided on the next single
   vote with no policy applied.
+- A reviewer is matched on every identifier their session carries (user id,
+  subject and email), so an invite-acceptance session and a login session for
+  the same person count as one reviewer.
 - **Breaking for operators:** items whose policy conditions name fields their
-  context lacks now need those steps' approvals; see
-  `docs/approval-policies.md`.
+  context lacks now need those steps' approvals. Someone who voted at one step
+  cannot approve or reject at a later one, so a policy that needs the same
+  person twice cannot complete. Editing (deleting and recreating) a policy, or
+  adding one that now resolves instead, leaves items in flight under the old
+  one refusing every decision until they expire; there is no override yet
+  (FINDINGS A-67). See `docs/approval-policies.md`.
 
 ### Fixed - governed-case provider authorization
 - The reference underwriter and screening agent now refuse every provider call

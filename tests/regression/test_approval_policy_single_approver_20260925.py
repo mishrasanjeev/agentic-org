@@ -135,7 +135,7 @@ async def _decide(user: uuid.UUID, item: SimpleNamespace, agent: SimpleNamespace
     from api.v1.approvals import decide
     from core.schemas.api import HITLDecision
 
-    claims = _claims(user)
+    claims = patches.get("claims") or _claims(user)
     request = SimpleNamespace(
         state=SimpleNamespace(claims=claims, scopes=["approvals:read", "approvals:write"], auth_mode="legacy")
     )
@@ -174,6 +174,27 @@ async def test_one_person_cannot_approve_two_steps_of_the_same_item() -> None:
 
         with pytest.raises(HTTPException) as exc:
             await _decide(USER_A, item, agent, second, policy=policy)
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+
+
+@pytest.mark.asyncio
+async def test_one_person_cannot_vote_again_under_another_identifier() -> None:
+    """An invite-acceptance session carries only the email; a login session adds the user id."""
+    agent = _agent()
+    item = _item(agent, {})
+    policy = _policy()
+    first, second = _step(1), _step(2)
+    email_only = {"sub": "Cfo.One@example.com", "role": "cfo", "agenticorg:domains": ["finance"]}
+    with_user_id = {**email_only, "sub": "cfo.one@example.com", "agenticorg:user_id": str(USER_A)}
+
+    with (
+        patch("core.approvals.first_applicable_step", AsyncMock(return_value=first)),
+        patch("core.approvals.next_step_after", AsyncMock(return_value=second)),
+    ):
+        await _decide(USER_A, item, agent, policy=policy, claims=email_only)
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, second, policy=policy, claims=with_user_id)
     assert exc.value.status_code == 409
     assert item.status == "pending"
 
