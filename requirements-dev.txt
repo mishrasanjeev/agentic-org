@@ -14,7 +14,7 @@ respx>=0.22.0
 testcontainers[postgres]>=4.15.0
 factory-boy>=3.3.0
 # Coverage gate on changed lines (make coverage-gate)
-diff-cover>=10.5.1
+diff-cover>=10.6.0
 
 # ─── Linting & Type Checking ────────────────────────────────────────────────
 ruff>=0.16.8
