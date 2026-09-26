@@ -12,6 +12,21 @@ from pydantic_settings import BaseSettings
 STRICT_ENVS = frozenset({"production", "prod", "staging", "stage", "preview"})
 RELAXED_ENVS = frozenset({"local", "dev", "development", "test", "ci"})
 
+# Secret values written in this repository (code defaults, .env.example,
+# compose files, Makefile, CI and scripts). Anyone can read them, so a strict
+# runtime refuses them as signing or vault keys. Compared case-insensitively
+# after trimming whitespace.
+PUBLISHED_PLACEHOLDER_SECRETS = frozenset(
+    {
+        "dev-only-vault-key",
+        "dev-only-secret-key",
+        "change-me-to-32-char-random-string",
+        "agenticorg-dev-only-do-not-use-in-production",
+        "ci-test-secret-key-minimum-16",
+        "dev-secret-key-change-in-production-32chars",
+    }
+)
+
 
 def normalize_env(env: str | None) -> str:
     """Return the canonical lowercase runtime environment label."""
@@ -26,6 +41,11 @@ def is_relaxed_env(env: str | None) -> bool:
 def is_strict_runtime_env(env: str | None) -> bool:
     """Return True for every non-local runtime, including unknown labels."""
     return not is_relaxed_env(env)
+
+
+def is_published_placeholder_secret(value: str) -> bool:
+    """Return True when *value* is a secret written in this repository."""
+    return value.strip().casefold() in PUBLISHED_PLACEHOLDER_SECRETS
 
 
 def _redis_url_with_default_db(url: str, default_db: int) -> str:
@@ -68,9 +88,7 @@ def redis_socket_timeout_kwargs() -> dict[str, float]:
     """
     configured_settings = globals().get("settings")
     return {
-        "socket_connect_timeout": getattr(
-            configured_settings, "redis_socket_connect_timeout_seconds", 2.0
-        ),
+        "socket_connect_timeout": getattr(configured_settings, "redis_socket_connect_timeout_seconds", 2.0),
         "socket_timeout": getattr(configured_settings, "redis_socket_timeout_seconds", 2.0),
     }
 
@@ -262,10 +280,11 @@ class Settings(BaseSettings):
             return self
 
         env_label = self.env  # preserve original casing in error msg
-        if self.secret_key == "dev-only-secret-key":
+        if is_published_placeholder_secret(self.secret_key):
             raise ValueError(
                 f"AGENTICORG_SECRET_KEY must be explicitly set in env={env_label!r} "
-                "(default 'dev-only-secret-key' is rejected outside local/dev/test)"
+                "(placeholders published in this repository, including the default "
+                "'dev-only-secret-key', are rejected outside local/dev/test)"
             )
         if len(self.secret_key) < 32:
             raise ValueError(
@@ -281,8 +300,7 @@ class Settings(BaseSettings):
             )
         if "localhost" in self.redis_url or "127.0.0.1" in self.redis_url:
             raise ValueError(
-                f"AGENTICORG_REDIS_URL must be explicitly set in env={env_label!r} "
-                "(detected localhost fallback)"
+                f"AGENTICORG_REDIS_URL must be explicitly set in env={env_label!r} (detected localhost fallback)"
             )
         # Uday CA-Firms 2026-05-14: OAuth redirect_uri was being computed
         # from ``request.url_for`` which returns ``http://`` on Cloud Run

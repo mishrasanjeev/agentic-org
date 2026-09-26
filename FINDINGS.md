@@ -989,3 +989,48 @@ Remove an entry in the pull request that fixes it.
     drop root.
   - The in-place `libexpat` upgrade in both UI Dockerfiles should be removed
     once an `nginx:alpine` digest ships 2.8.5-r0.
+
+## A-71 — Strict runtimes may still derive the vault key from the JWT secret
+
+- **Found:** closing the published-default vault key fallback (2026-09-25).
+- **What:** with no `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY`, the
+  credential vault derives its key from `AGENTICORG_SECRET_KEY`, which also
+  signs tokens. The fix for the published default kept this fallback so
+  deployments that sealed credentials under it (`infra/gcp-setup-lean.sh`
+  provisions only the secret key) keep decrypting them. One secret therefore
+  protects two unrelated things, and rotating the signing key without first
+  rewrapping silently breaks every stored credential. In production the Cloud
+  Run beat service has only `AGENTICORG_SECRET_KEY`, so if it ever seals or
+  opens a credential it uses a different key from the API and workers.
+- **Fix:** give every deployment path a dedicated `AGENTICORG_VAULT_KEYRING`
+  (with `legacy:<secret key>` as a decrypt-only entry where rows were sealed
+  under it), rewrap, then refuse the secret-key fallback outside local and
+  test runtimes.
+
+## A-72 — Other runtime-default fallbacks treat an unset `AGENTICORG_ENV` as development
+
+- **Found:** review of the vault key fallback fix (2026-09-25).
+- **What:** `Settings.env` defaults to `"development"` (`core/config.py`), so
+  `validate_production_secret` is skipped when `AGENTICORG_ENV` is unset. The
+  same default lets two literal fallbacks through:
+  - `core/auth_state.py` hashes blacklisted tokens with a fixed literal when
+    `AGENTICORG_SECRET_KEY` is missing from the process environment, and
+    refuses only when the env is exactly `production` or `staging`. An unset
+    env, `prod` or ` Production` gets the literal.
+  - `api/v1/cron.py` accepts the literal `dev-cron-key` whenever
+    `settings.env` is dev or test, including an unset `AGENTICORG_ENV`.
+  The production worker on Cloud Run has no `AGENTICORG_ENV`.
+- **Fix:** default `Settings.env` to strict (or require it), use
+  `core.config.is_relaxed_env` in both places, and set `AGENTICORG_ENV` on every
+  deployed service.
+
+## A-73 — Vault keys have no minimum strength
+
+- **Found:** review of the vault key fallback fix (2026-09-25).
+- **What:** in a strict runtime `AGENTICORG_SECRET_KEY` must be 32+ characters,
+  but `AGENTICORG_VAULT_KEY` and keyring entries accept anything non-blank that
+  is not a published placeholder, including a single character. The production
+  keyring's key lengths were not checked (its values were not read).
+- **Fix:** confirm the deployed keyring entries are long enough, then refuse
+  entries under 32 characters in strict runtimes, with a keyring rotation note
+  for any deployment that fails the check.

@@ -185,8 +185,12 @@ Start local dependencies:
 
     docker compose up -d postgres redis minio
 
-Run migrations and the API:
+Run migrations and the API. `AGENTICORG_ENV` must be in the shell environment,
+not only in `.env`: the credential vault reads the process environment, and
+outside a local, dev, development, test or CI runtime it refuses to start
+without a real vault key.
 
+    export AGENTICORG_ENV=development
     python scripts/alembic_migrate.py
     uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
