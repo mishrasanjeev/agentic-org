@@ -11,8 +11,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `PATCH /agents/{id}` `{"route_scopes": [...]}`; they are added to the agent's
   Grantex registration so a grant issued to it can carry them.
 - Only canonical route-family scopes are accepted (never `agenticorg:admin` or
-  an alias; `422`), only a human tenant admin may set them (`403`), Grantex is
-  updated before anything is stored, and every change is audited.
+  an alias; `422`); only an active human tenant admin, checked against the user
+  row at request time, may set them (`403`); only on a shared agent registered
+  on Grantex (`403` for a personal agent, `409` for an unregistered one).
+  Grantex is updated before anything is stored, an explicit `route_scopes`
+  PATCH always rewrites the registration so drift can be repaired, and every
+  change is audited.
 - Route scopes are stored apart from tool scopes, so run grants and delegated
   grants never carry them. A tools PATCH and the scope backfill keep them on
   the registration.

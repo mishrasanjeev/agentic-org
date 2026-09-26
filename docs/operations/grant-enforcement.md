@@ -298,16 +298,24 @@ A human tenant admin grants an agent the route families its token may call:
   `agents:write`, `workflows:read`, `workflows:write`, `approvals:read`,
   `approvals:write`, `audit:read`, `connectors.read`, `report_schedules.read`,
   `report_schedules.write`). `agenticorg:admin`, legacy aliases and anything
-  else get `422`. A non-admin, or an admin API key, gets `403`.
-- For a registered agent the scopes are added to its Grantex registration
-  first and stored after; if Grantex refuses, nothing changes. Send `[]` to
-  remove them. Each change writes an `agent.route_scopes.updated` audit event
-  with the before and after lists.
+  else get `422`. The caller must be an active tenant administrator in a human
+  session, checked against the user row when the request runs, so a demoted
+  user's older session and admin API keys get `403`.
+- Only a shared agent (tenant visibility, no personal owner) that is registered
+  on Grantex can hold route scopes: a personal agent gets `403` and an
+  unregistered one `409`.
+- The scopes are added to the agent's Grantex registration first and stored
+  after; if Grantex refuses, nothing changes. Send `[]` to remove them. A
+  `route_scopes` PATCH always rewrites the registration, so re-sending the
+  current list repairs a registration that drifted from storage. Each change
+  writes an `agent.route_scopes.updated` audit event with the before and after
+  lists.
 - They are stored in `config.grantex.route_scopes`, apart from the tool scopes
   in `grantex_scopes`. Run grants and delegated child grants are minted from
   the tool scopes only, so they never carry a route scope. A tools PATCH and
   `scripts/refresh_grantex_scopes.py` keep the route scopes on the
-  registration.
+  registration; scope changes lock the agent row, and the backfill re-reads the
+  route scopes just before it pushes.
 - The registration only allows them: a grant issued to the agent must still
   request the route scopes it needs. Tool and route scopes together are capped
   at 100.
