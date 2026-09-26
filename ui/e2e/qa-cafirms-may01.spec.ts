@@ -18,14 +18,16 @@
  *
  * Per Rule 6 of docs/bug_triage_skill.md and Rule 7 of
  * feedback_28apr_reopen_autopsy.md: this spec must run against the
- * DEPLOYED app, not localhost. Without `E2E_TOKEN`, the spec skips —
- * the verification is post-deploy, not part of every PR run.
+ * DEPLOYED app, not localhost. The agent and connector ids belong to the
+ * tester's tenant, so the spec authenticates only as that tester: without
+ * `RU_TESTER_PASSWORD` it skips. The shared suite token belongs to another
+ * tenant and can never see those ids.
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
-const AGENT_ID = "02ca34a7-2835-43e5-992d-cda4817c1497";
+const AGENT_ID = process.env.RU_AGENT_ID || "02ca34a7-2835-43e5-992d-cda4817c1497";
+const CONNECTOR_ID = process.env.RU_CONNECTOR_ID || "a7e25e67-0133-44cf-882d-5e561656feba";
 const IS_LOCAL_APP = /(^http:\/\/localhost[:/])|(^http:\/\/127\.0\.0\.1[:/])/.test(APP);
 
 // We log in directly via the API to keep the spec deterministic — UI
@@ -38,11 +40,9 @@ const TESTER_PASSWORD = process.env.RU_TESTER_PASSWORD || "";
 async function getTesterToken(
   request: APIRequestContext,
 ): Promise<string> {
-  if (E2E_TOKEN) return E2E_TOKEN;
   if (!TESTER_PASSWORD) {
     throw new Error(
-      "Set E2E_TOKEN or RU_TESTER_PASSWORD env var so the spec can " +
-        "authenticate as qa.uday@example.com.",
+      "Set RU_TESTER_PASSWORD so the spec can authenticate as the tester.",
     );
   }
   const resp = await request.post(`${APP}/api/v1/auth/login`, {
@@ -56,10 +56,10 @@ async function getTesterToken(
 
 test.describe("CA Firms — RU-May01 agent runtime", () => {
   test.skip(
-    IS_LOCAL_APP || (!E2E_TOKEN && !process.env.RU_TESTER_PASSWORD),
+    IS_LOCAL_APP || !TESTER_PASSWORD,
     IS_LOCAL_APP
       ? "Production CA runtime probe uses hardcoded deployed agent/connector IDs; skipped for local Docker runs."
-      : "Set E2E_TOKEN or RU_TESTER_PASSWORD to run the post-deploy verification spec.",
+      : "Set RU_TESTER_PASSWORD to run this probe of the tester's tenant.",
   );
 
   test("agent run produces non-empty tool_calls + confidence > 0.5", async ({
@@ -117,13 +117,12 @@ test.describe("CA Firms — RU-May01 agent runtime", () => {
     // builds a fresh connector and bypasses the cache. Pin that the
     // BUG-01 fix didn't accidentally break this path.
     const token = await getTesterToken(request);
-    const connId = "a7e25e67-0133-44cf-882d-5e561656feba";
     const resp = await request.post(
-      `${APP}/api/v1/connectors/${connId}/test`,
+      `${APP}/api/v1/connectors/${CONNECTOR_ID}/test`,
       { headers: { Authorization: `Bearer ${token}` }, timeout: 30_000 },
     );
     // 200 ok, body indicates healthy. Don't assert on exact body shape —
     // /test endpoints carry connector-specific health detail.
-    expect(resp.ok()).toBeTruthy();
+    expect(resp.ok(), `connector test returned ${resp.status()} ${await resp.text()}`).toBeTruthy();
   });
 });

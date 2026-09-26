@@ -151,18 +151,19 @@ test.describe("D2: Promote & Rollback Buttons", () => {
     requireAuth();
     await ensureAuth(page, baseURL!);
 
-    await page.goto(`${baseURL}/dashboard/agents`, {
+    // The fleet page lists only the selected company's agents (since
+    // 2026-06-02) and the E2E tenant's agents have no company, so the list
+    // can be empty. Open an agent the API returns instead of a fleet card.
+    const listResp = await page.request.get(`${baseURL}/api/v1/agents?per_page=1`, {
+      headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+    });
+    expect(listResp.ok(), `GET /agents returned ${listResp.status()}`).toBeTruthy();
+    const agentId = (await listResp.json()).items?.[0]?.id;
+    expect(agentId, "the E2E tenant has no agents").toBeTruthy();
+
+    await page.goto(`${baseURL}/dashboard/agents/${agentId}`, {
       waitUntil: "domcontentloaded",
     });
-    await page.waitForLoadState("networkidle");
-
-    // Click first agent card -- try multiple selectors
-    const agentCard = page
-      .locator('[class*="cursor-pointer"], [class*="card"], [class*="Card"]')
-      .first();
-    await expect(agentCard).toBeVisible({ timeout: 10000 });
-    await agentCard.click();
-    await page.waitForURL("**/agents/**", { timeout: 15000 });
     await page.waitForLoadState("networkidle");
 
     const promoteBtn = page.getByRole("button", { name: /Promote/i });
@@ -702,18 +703,35 @@ test.describe("AGENT-CONFIG-003: Agent Tools Auto-populate", () => {
           employee_name: `UIToolBot ${ts}`,
           system_prompt_text: "Test agent for UI tools display",
           hitl_policy: { condition: "confidence < 0.88" },
+          // Tools come only from linked connectors (bug sheet #46,
+          // 2026-09-14); Zendesk offers the support_triage defaults.
+          connector_ids: ["zendesk"],
         },
       },
     );
+    expect(createResp.ok(), `POST /agents returned ${createResp.status()}`).toBeTruthy();
     const agentId = (await createResp.json()).agent_id;
 
-    await page.goto(`${baseURL}/dashboard/agents/${agentId}`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForLoadState("networkidle");
+    try {
+      await page.goto(`${baseURL}/dashboard/agents/${agentId}`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page.waitForLoadState("networkidle");
 
-    const bodyText = await page.textContent("body");
-    expect(bodyText).not.toContain("No tools configured");
+      await expect(page.getByText("create_ticket", { exact: true }).first()).toBeVisible({
+        timeout: 15000,
+      });
+      const bodyText = await page.textContent("body");
+      expect(bodyText).not.toContain("No tools configured");
+    } finally {
+      // This runs against production: do not leave a shared agent behind on
+      // every attempt.
+      const cleanup = await page.request.delete(`${baseURL}/api/v1/agents/${agentId}`, {
+        headers: { Authorization: `Bearer ${E2E_TOKEN}` },
+        failOnStatusCode: false,
+      });
+      expect.soft([200, 204, 404], `cleanup delete of ${agentId}`).toContain(cleanup.status());
+    }
   });
 });
 
