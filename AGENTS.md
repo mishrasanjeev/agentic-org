@@ -107,14 +107,14 @@ skills together: `agenticorg-bug-fix-fail-closed` and `agenticorg-enterprise`.
 
 - Backend: FastAPI, async SQLAlchemy, Alembic, Redis, Celery, LangGraph.
 - Frontend: React 19, TypeScript, Vite, Vitest, Playwright.
-- Infra: Docker, Docker Compose, Helm, GitHub Actions.
+- Infra: Docker, Docker Compose, Cloud Run, GitHub Actions.
 - Core directories:
   - `api/` request handlers and FastAPI app wiring
   - `auth/` authn/authz and middleware
   - `core/` business logic, models, tool gateway, billing, tasks
   - `migrations/` schema migrations
   - `ui/` frontend app
-  - `helm/`, `docker-compose.yml`, `.github/workflows/` deployment and delivery
+  - `docker-compose.yml`, `scripts/deploy_cloud_run.sh`, `.github/workflows/` deployment and delivery
 
 ## Operating principles
 
@@ -199,7 +199,7 @@ skills together: `agenticorg-bug-fix-fail-closed` and `agenticorg-enterprise`.
 
 - For changes in auth, billing, secrets, migrations, infra, workers, or deployment logic, verification is mandatory.
 - Do not treat "degraded but maybe okay" as good enough without explicit reasoning.
-- Keep deployment changes internally consistent across Docker, Helm, and CI if they touch the same runtime path.
+- Keep deployment changes internally consistent across Docker, the Cloud Run deploy script, and CI if they touch the same runtime path.
 
 ## Default workflow
 
@@ -224,10 +224,10 @@ Fast backend-only iteration (set `SKIP_UI=1` only for a backend-only change):
 SKIP_UI=1 bash scripts/preflight.sh
 ```
 
-The gate mirrors CI exactly: branch safety (never main), `ruff check .` (whole tree),
+The gate runs the same checks as CI: branch safety (never main), `ruff check .` (whole tree),
 `bandit -ll` on core/connectors/api/auth, alembic revision IDs ≤ 32 chars, `verify=False`
 scan in production code,
-`pytest tests/regression/ tests/unit/ tests/security/ tests/connector_harness/ --cov-fail-under=55`,
+`pytest tests/unit/ tests/contract/ tests/connector_harness/ tests/security/ tests/regression/` (CI adds `--cov-fail-under=55`),
 `tsc --noEmit`, `npm run lint`, `vitest`, and `npm run build`.
 
 Git hooks enforce this automatically — run once per clone:
@@ -267,7 +267,7 @@ Run `make check` and `make test` before claiming a release-ready result.
 ### Infra and worker changes
 
 - Verify commands point to real modules, scripts, or binaries in the repo.
-- Keep Compose, Helm, and CI aligned if the same entrypoint or environment contract is affected.
+- Keep Compose, the Cloud Run deploy script, and CI aligned if the same entrypoint or environment contract is affected.
 
 ## Practical commands
 
@@ -311,7 +311,7 @@ These patterns caused CI failures during the April 2026 enterprise program. Chec
 
 1. **TypeScript strict mode**: `noUnusedLocals` is enabled. Unused `const` declarations fail the build (TS6133).
 2. **Regression tests that grep source code**: Some tests in `test_bugs_april06_2026.py` check that `Depends` appears on the `def` line. Multi-line signatures hide it. Keep `Depends` on the same line for short signatures.
-3. **Integration tests with hardcoded versions**: `test_api_integration.py` asserts the version from `/health`. When bumping version, update: `pyproject.toml`, `api/main.py`, `api/v1/health.py`, and the integration test.
+3. **Integration tests with hardcoded versions**: `tests/integration/test_api_integration.py` asserts the version from `/health`. The API reads its version from `pyproject.toml` (`api/v1/product_facts.py`), so a version bump changes `pyproject.toml` and that test's expected value.
 4. **Pydantic env prefix**: `core/config.py` uses `env_prefix = "AGENTICORG_"`. Field `foo_bar` maps to `AGENTICORG_FOO_BAR`, not `FOO_BAR`.
 5. **Route collisions**: FastAPI silently registers both handlers for the same path — the first registered wins. Check for duplicates before adding routes.
 6. **Health gate strictness**: Production health gate accepts only `"healthy"`. If you change the gate, update the regression test that asserts the expected value.
