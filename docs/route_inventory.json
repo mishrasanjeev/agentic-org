@@ -4946,7 +4946,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "api_keys.security.sensitive.list",
-    "source_line": 199,
+    "source_line": 203,
     "tenant_required": true
   },
   {
@@ -4982,7 +4982,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "api_keys.security.revoke",
-    "source_line": 239,
+    "source_line": 243,
     "tenant_required": true
   },
   {

@@ -5,17 +5,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 ## [Unreleased] - 2026-08-29
 
 ### Fixed - API keys that were administrators stay administrators
-- Revision `v6z29_admin_scope_compat` gives every API key holding a
-  colon-delimited admin sub-scope such as `agenticorg:admin:full` the exact
-  `agenticorg:admin` scope, the access it had before admin became an exact
-  match. Look-alikes such as `agenticorg:administration:read` or
-  `agenticorg:adminx` were never meant as admin and stay non-admin; key status
-  and every other scope are unchanged, and a second run changes nothing. This
-  removes the breaking change noted for the exact-match fix below; the audit
-  query there is no longer needed.
-- Creating an API key with an ambiguous admin scope (anything starting with
-  `agenticorg:admin` other than exactly that) is refused with `422`, naming the
-  scopes and the exact one to use.
+- Revision `v6z29_admin_scope_compat` gives an API key the exact
+  `agenticorg:admin` scope - the access it had before admin became an exact
+  match - when it holds a colon-delimited admin sub-scope such as
+  `agenticorg:admin:full`, was created before the exact-match fix was merged
+  (2026-09-25 05:58:53 UTC), and its owner is still an administrator. Keys
+  issued later, keys whose owner is not an admin, and look-alikes such as
+  `agenticorg:administration:read`, `agenticorg:adminx` or the dot form are not
+  changed: those still lose admin as described for the exact-match fix below,
+  and its audit query still finds them. Status and other scopes are unchanged;
+  a second run changes nothing; the ids of the keys changed are logged.
+- The revision runs under a migration role without BYPASSRLS and refuses to run
+  with a tenant context set, which would hide other tenants' keys.
+- Creating an API key with a scope that looks like admin but is not exactly
+  `agenticorg:admin` (a sub-scope, the dot form, another case or surrounding
+  space) is refused with `422`, naming the scopes and the exact one to use.
 - Deploy with `--with-migrations` so the revision runs before the new code
   serves traffic.
 
@@ -161,7 +165,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   any in use:
   `SELECT tenant_id, id, name FROM api_keys WHERE EXISTS (SELECT 1 FROM unnest(scopes) s WHERE (s LIKE 'agenticorg:admin%' OR s LIKE 'agenticorg.admin%') AND s <> 'agenticorg:admin');`
   Replace such a scope with `agenticorg:admin` if the key should be an
-  administrator.
+  administrator. Revision `v6z29_admin_scope_compat` does this for keys with a
+  colon-delimited sub-scope that predate the fix and belong to an
+  administrator; the query still finds the rest.
 
 ### Fixed - governed-case provider authorization
 - The reference underwriter and screening agent now refuse every provider call

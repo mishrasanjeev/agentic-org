@@ -1622,27 +1622,20 @@ def test_a_waiting_migrate_job_does_not_bootstrap_after_the_holder_stamped_it():
     _reset_schema()
 
 
-def test_admin_scope_compat_migration_keeps_admin_only_for_colon_sub_scopes():
-    """``v6z29_admin_scope_compat`` gives keys holding ``agenticorg:admin:<sub>`` the exact
-    admin scope they were effectively using, leaves look-alikes and ordinary keys alone,
-    and is idempotent."""
-    if "alembic_version" not in _table_names():
-        _reset_schema()
-        _run_migrate_wrapper()
-    command.downgrade(_alembic_cfg(), "v6z28_case_excerpts")
+def _load_admin_scope_compat():
+    import importlib.util
 
-    tenant_id = uuid.uuid4()
-    user_id = uuid.uuid4()
-    keys = {
-        "sub_scope": ["agents:read", "agenticorg:admin:full"],
-        "already_admin": ["agenticorg:admin", "agenticorg:admin:read"],
-        "look_alike": ["agenticorg:administration:read"],
-        "near_miss": ["agenticorg:adminx"],
-        "ordinary": ["agents:read", "connectors.read"],
-        "revoked_sub_scope": ["agenticorg:admin:ops"],
-    }
-    ids = {name: uuid.uuid4() for name in keys}
-    engine = create_engine(_SYNC_URL)
+    path = os.path.join("migrations", "versions", "v6_z29_admin_scope_compat.py")
+    spec = importlib.util.spec_from_file_location("v6_z29_admin_scope_compat", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _seed_admin_scope_keys(engine, tenant_id, keys):
+    """Insert a tenant, an admin and a non-admin user, and ``keys``: name -> (scopes, status,
+    created_at, owner) where owner is "admin" or "member"."""
+    admin_id, member_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
             text("""
@@ -1651,55 +1644,139 @@ def test_admin_scope_compat_migration_keeps_admin_only_for_colon_sub_scopes():
             """),
             {"id": tenant_id, "name": f"tenant-{tenant_id.hex}", "slug": f"tenant-{tenant_id.hex}"},
         )
-        conn.execute(
-            text("""
-                INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled)
-                VALUES (:id, :tenant_id, :email, 'Key owner', 'admin', 'active', false)
-            """),
-            {"id": user_id, "tenant_id": tenant_id, "email": f"owner-{tenant_id.hex[:8]}@example.com"},
-        )
-        for name, scopes in keys.items():
+        for user_id, role in ((admin_id, "admin"), (member_id, "sales_manager")):
             conn.execute(
                 text("""
-                    INSERT INTO api_keys (id, tenant_id, user_id, name, prefix, key_hash, scopes, status)
-                    VALUES (:id, :tenant_id, :user_id, :name, :prefix, 'hash', :scopes, :status)
+                    INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled)
+                    VALUES (:id, :tenant_id, :email, 'Key owner', :role, 'active', false)
+                """),
+                {"id": user_id, "tenant_id": tenant_id, "email": f"{role}-{user_id.hex[:8]}@example.com", "role": role},
+            )
+        for name, (scopes, status, created_at, owner) in keys.items():
+            key_id = uuid.uuid4()
+            conn.execute(
+                text("""
+                    INSERT INTO api_keys (id, tenant_id, user_id, name, prefix, key_hash, scopes, status, created_at)
+                    VALUES (:id, :tenant_id, :user_id, :name, :prefix, 'hash', :scopes, :status, :created_at)
                 """),
                 {
-                    "id": ids[name],
+                    "id": key_id,
                     "tenant_id": tenant_id,
-                    "user_id": user_id,
+                    "user_id": admin_id if owner == "admin" else member_id,
                     "name": name,
-                    "prefix": ids[name].hex[:12],
+                    "prefix": key_id.hex[:12],
                     "scopes": scopes,
-                    "status": "revoked" if name.startswith("revoked") else "active",
+                    "status": status,
+                    "created_at": created_at,
                 },
             )
 
-    def stored() -> dict[str, list[str]]:
-        with engine.connect() as conn:
-            rows = conn.execute(
-                text("SELECT name, scopes, status FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id}
-            ).all()
-        return {row.name: (list(row.scopes), row.status) for row in rows}
 
+def _stored_admin_scope_keys(engine, tenant_id):
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("SELECT name, scopes, status FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id}
+        ).all()
+    return {row.name: (list(row.scopes), row.status) for row in rows}
+
+
+def _drop_admin_scope_tenant(engine, tenant_id):
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id})
+        conn.execute(text("DELETE FROM users WHERE tenant_id = :t"), {"t": tenant_id})
+        conn.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
+
+
+_BEFORE_EXACT_MATCH = datetime(2026, 9, 1, tzinfo=UTC)
+_AFTER_EXACT_MATCH = datetime(2026, 9, 26, tzinfo=UTC)
+
+
+def test_admin_scope_compat_migration_restores_only_old_admin_owned_sub_scope_keys():
+    """``v6z29_admin_scope_compat`` gives the exact admin scope only to keys that held
+    ``agenticorg:admin:<sub>``, predate the exact-match fix and whose owner is an admin.
+    Everything else is untouched, and a second run changes nothing."""
+    if "alembic_version" not in _table_names():
+        _reset_schema()
+        _run_migrate_wrapper()
+    command.downgrade(_alembic_cfg(), "v6z28_case_excerpts")
+
+    tenant_id = uuid.uuid4()
+    old, new = _BEFORE_EXACT_MATCH, _AFTER_EXACT_MATCH
+    keys = {
+        "sub_scope": (["agents:read", "agenticorg:admin:full"], "active", old, "admin"),
+        "revoked_sub_scope": (["agenticorg:admin:ops"], "revoked", old, "admin"),
+        "already_admin": (["agenticorg:admin", "agenticorg:admin:read"], "active", old, "admin"),
+        "look_alike": (["agenticorg:administration:read"], "active", old, "admin"),
+        "near_miss": (["agenticorg:adminx"], "active", old, "admin"),
+        "dot_form": (["agenticorg.admin:full"], "active", old, "admin"),
+        "ordinary": (["agents:read", "connectors.read"], "active", old, "admin"),
+        "issued_after_fix": (["agenticorg:admin:read"], "active", new, "admin"),
+        "non_admin_owner": (["agenticorg:admin:full"], "active", old, "member"),
+    }
+    engine = create_engine(_SYNC_URL)
+    _seed_admin_scope_keys(engine, tenant_id, keys)
     try:
         command.upgrade(_alembic_cfg(), "head")
-        after = stored()
+        after = _stored_admin_scope_keys(engine, tenant_id)
         assert after["sub_scope"] == (["agents:read", "agenticorg:admin:full", "agenticorg:admin"], "active")
-        assert after["already_admin"] == (keys["already_admin"], "active")
-        assert after["look_alike"] == (keys["look_alike"], "active")
-        assert after["near_miss"] == (keys["near_miss"], "active")
-        assert after["ordinary"] == (keys["ordinary"], "active")
         # Status is untouched: a revoked key gains the scope but stays revoked.
         assert after["revoked_sub_scope"] == (["agenticorg:admin:ops", "agenticorg:admin"], "revoked")
+        unchanged = (
+            "already_admin",
+            "look_alike",
+            "near_miss",
+            "dot_form",
+            "ordinary",
+            "issued_after_fix",
+            "non_admin_owner",
+        )
+        for name in unchanged:
+            assert after[name] == (keys[name][0], keys[name][1]), name
 
-        # Idempotent: a second pass adds nothing.
         command.downgrade(_alembic_cfg(), "v6z28_case_excerpts")
         command.upgrade(_alembic_cfg(), "head")
-        assert stored() == after
+        assert _stored_admin_scope_keys(engine, tenant_id) == after
     finally:
+        _drop_admin_scope_tenant(engine, tenant_id)
+        engine.dispose()
+
+
+def test_admin_scope_compat_update_works_for_a_role_that_cannot_bypass_rls():
+    """``api_keys`` has FORCE ROW LEVEL SECURITY. A migration role without BYPASSRLS must
+    still reach every tenant's keys (the pre-auth policy shows all rows with no tenant
+    context), and must not be refused by a ``row_security = off`` setting."""
+    if "alembic_version" not in _table_names():
+        _reset_schema()
+        _run_migrate_wrapper()
+    module = _load_admin_scope_compat()
+    tenant_id = uuid.uuid4()
+    role = f"ao_rls_probe_{uuid.uuid4().hex[:8]}"
+    engine = create_engine(_SYNC_URL)
+    _seed_admin_scope_keys(
+        engine, tenant_id, {"sub_scope": (["agenticorg:admin:full"], "active", _BEFORE_EXACT_MATCH, "admin")}
+    )
+    try:
         with engine.begin() as conn:
-            conn.execute(text("DELETE FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id})
-            conn.execute(text("DELETE FROM users WHERE tenant_id = :t"), {"t": tenant_id})
-            conn.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
+            conn.execute(text(f"CREATE ROLE {role} NOSUPERUSER NOBYPASSRLS"))
+            conn.execute(text(f"GRANT USAGE ON SCHEMA public TO {role}"))
+            conn.execute(text(f"GRANT SELECT, UPDATE ON api_keys TO {role}"))
+            conn.execute(text(f"GRANT SELECT ON users TO {role}"))
+        with engine.begin() as conn:
+            from alembic.operations import Operations
+            from alembic.runtime.migration import MigrationContext
+
+            conn.execute(text(f"SET LOCAL ROLE {role}"))
+            module.op = Operations(MigrationContext.configure(conn))
+            module.upgrade()
+        assert _stored_admin_scope_keys(engine, tenant_id)["sub_scope"][0] == [
+            "agenticorg:admin:full",
+            "agenticorg:admin",
+        ]
+    finally:
+        _drop_admin_scope_tenant(engine, tenant_id)
+        with engine.begin() as conn:
+            conn.execute(text(f"REVOKE ALL ON api_keys FROM {role}"))
+            conn.execute(text(f"REVOKE ALL ON users FROM {role}"))
+            conn.execute(text(f"REVOKE USAGE ON SCHEMA public FROM {role}"))
+            conn.execute(text(f"DROP ROLE IF EXISTS {role}"))
         engine.dispose()

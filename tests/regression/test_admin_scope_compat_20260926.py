@@ -43,7 +43,17 @@ def _create(monkeypatch: pytest.MonkeyPatch, scopes: list[str]) -> None:
 
 @pytest.mark.parametrize(
     "scope",
-    ["agenticorg:admin:full", "agenticorg:admin:read", "agenticorg:administration:read", "agenticorg:adminx"],
+    [
+        "agenticorg:admin:full",
+        "agenticorg:admin:read",
+        "agenticorg:administration:read",
+        "agenticorg:adminx",
+        "agenticorg.admin",
+        "agenticorg.admin:full",
+        "AgenticOrg:Admin",
+        " agenticorg:admin",
+        "agenticorg:admin ",
+    ],
 )
 def test_key_creation_refuses_an_ambiguous_admin_scope(monkeypatch: pytest.MonkeyPatch, scope: str) -> None:
     with pytest.raises(HTTPException) as info:
@@ -78,22 +88,25 @@ def test_migration_is_the_single_head_after_case_excerpts() -> None:
     assert heads == ["v6z29_admin_scope_compat"]
 
 
-def test_migration_matches_only_the_colon_delimited_admin_form() -> None:
-    """The SQL pattern must carry over exactly what the old prefix check granted as admin
-    through a sub-scope, and nothing the exact-match fix meant to close."""
+def test_migration_is_bounded_to_old_colon_sub_scopes_of_admin_owners() -> None:
+    """The restore must cover only keys that were admin under the prefix rule and whose
+    owner is still an admin; its behaviour on rows is tested against Postgres."""
     import re
 
-    statements: list[str] = []
-    module = _migration()
-    module.op = SimpleNamespace(execute=statements.append)
-    module.upgrade()
+    sql = _migration().RESTORE_ADMIN_SQL
+    assert re.findall(r"LIKE '([^']+)'", sql) == ["agenticorg:admin:%"]
+    assert "NOT ('agenticorg:admin' = ANY(scopes))" in sql
+    assert "created_at < TIMESTAMPTZ '2026-09-25 05:58:53+00'" in sql
+    assert "u.role = 'admin'" in sql
+    assert "row_security" not in sql
 
-    assert statements[0] == "SET LOCAL row_security = off"
-    update = statements[1]
-    assert "array_append(scopes, 'agenticorg:admin')" in update
-    assert "NOT ('agenticorg:admin' = ANY(scopes))" in update
-    patterns = re.findall(r"LIKE '([^']+)'", update)
-    assert patterns == ["agenticorg:admin:%"]
+
+def test_migration_refuses_to_run_with_a_tenant_context() -> None:
+    module = _migration()
+    bind = SimpleNamespace(execute=lambda *_a, **_k: SimpleNamespace(scalar=lambda: "tenant-1"))
+    module.op = SimpleNamespace(get_bind=lambda: bind)
+    with pytest.raises(RuntimeError, match="without a tenant context"):
+        module.upgrade()
 
 
 @pytest.mark.parametrize(

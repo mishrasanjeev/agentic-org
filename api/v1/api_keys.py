@@ -91,12 +91,16 @@ class CreateKeyResponse(BaseModel):
 )
 async def create_api_key(body: CreateKeyRequest, request: Request):
     """Generate a new API key. The full key is only shown once."""
-    # Admin is the exact ``agenticorg:admin`` scope. A look-alike such as
-    # ``agenticorg:admin:full`` was an administrator only while the check
-    # matched by prefix; refuse it rather than mint a key whose access is
-    # not what its scope says.
+    # Admin is the exact ``agenticorg:admin`` scope for key creation and
+    # ownership (``core.rbac.has_admin_scope``). Anything else that merely
+    # looks like it - a sub-scope such as ``agenticorg:admin:full``, the dot
+    # form, another case or surrounding space - is refused rather than minted
+    # as a key whose access is not what its scope says.
     ambiguous = sorted(
-        scope for scope in body.scopes if scope != ADMIN_SCOPE and scope.startswith(ADMIN_SCOPE)
+        scope
+        for scope in body.scopes
+        if scope != ADMIN_SCOPE
+        and scope.strip().lower().replace("agenticorg.admin", "agenticorg:admin", 1).startswith(ADMIN_SCOPE)
     )
     if ambiguous:
         raise HTTPException(
