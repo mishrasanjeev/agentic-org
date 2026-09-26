@@ -13,6 +13,9 @@ The latest checked-in workstation run is:
 That report measures one Docker Desktop host. It is useful for regression and
 resource-safety decisions, but it is not a Cloud Run SLA or a claim about
 tenant, LLM, telephony, payment-provider, or third-party connector capacity.
+The [September 2026 scale and resilience gap review](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+tracks the additional broker, tenant-skew, failover, and recovery work needed
+before a production-scale claim.
 
 ## Runtime protections
 
@@ -43,6 +46,18 @@ budget has been calculated. Capacity gates are process-local, so effective
 container concurrency is `WEB_CONCURRENCY` multiplied by each configured
 limit. More workers are not automatically faster for a CPU-saturated OCR/RPA
 container.
+
+The legacy `LLMRouter.complete` path has a 90-second total deadline by default.
+The primary model gets 70% of that budget; only transport, timeout, 429, or
+server failures may use the remaining time for a configured fallback. An
+explicitly selected model (agent runs normally pass one) falls back only when the
+fallback model is served by the same provider, so a transient outage never moves
+a request to a different provider. Invalid requests, credential/configuration
+errors, and spend caps never fall back to another model. Operators can tune
+`AGENTICORG_LLM_COMPLETE_TIMEOUT_SECONDS` and
+`AGENTICORG_LLM_PRIMARY_TIMEOUT_FRACTION` after measuring provider latency.
+This bound does not cover every LangGraph, connector, or third-party model path;
+those paths need separate deadline and fault-injection evidence.
 
 ## Reproduce locally
 

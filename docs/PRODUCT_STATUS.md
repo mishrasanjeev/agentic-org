@@ -1,6 +1,8 @@
 # Current Product Status
 
-Last verified: 2026-09-24 (repository source; confirm the deployed SHA separately)
+Last source-verified: 2026-09-24 (repository source; confirm the deployed SHA
+separately). Production deployment and SLOs require separate operational
+evidence.
 
 This page is the concise capability truth for AgenticOrg. It distinguishes
 shipped runtime behavior from tenant configuration and external-provider
@@ -33,12 +35,13 @@ records product behavior and availability, not deployment state.
 | Knowledge and OCR | Native extraction for text, data, email, PDF, Office, OpenDocument, RTF, and image uploads; OCR for scanned PDFs and images; provenance-aware chunks and tenant search | Production image tools and installed language packs; model/embedding service for semantic retrieval | Corrupt, unsupported, oversized, or zero-text files fail explicitly; audio/video are not document uploads |
 | Voice | Signed Twilio webhook runtime, provider-managed STT/TTS, encrypted bounded transcripts, masked call history, runtime health, and explicit outbound-call API | Twilio account, number, credentials, mapped active agent, callback configuration, and call charges | No unsigned webhook; no paid call without an approved destination; other voice providers remain configuration-only until their workers ship |
 | RPA | Built-in Playwright script discovery, tenant-scoped execution, schedules, durable history, screenshots/results, timeout handling, and approved-domain egress controls | Browser runtime, tenant-approved domains, credentials, and target-site stability | RPA runs are explicit external actions; catalog presence does not authorize a run or bypass anti-bot/provider policy |
-| Connectors | Native connector registry, health/configuration surfaces, scoped tool gateway, optional integration gateways, and merchant-scoped Shopify credential custody | Provider accounts, scopes, secrets, rate limits, and tenant approval | A listed connector is not proof of a live tenant connection |
+| Connectors | Native connector registry, tenant/company-scoped credential-presence and health-freshness projection, scoped tool gateway, optional integration gateways, and merchant-scoped Shopify credential custody | Provider accounts, scopes, secrets, rate limits, and tenant approval | Registration and a recent health check do not verify scopes, API contracts, sustained sync, or an error budget; no credentials are returned in the readiness projection |
 | Developer surfaces | REST, OpenAPI, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces | Compatible client, authentication, tenant/company context, and server version | Discovery metadata does not create tool or transaction authority |
 | Governed cases | Tenant-gated business onboarding cases, read-only provider investigation, local exact-purpose allowlists, strict grant checks, cited memos, policy scores, screening dispositions, human review, and case hand-off | Exactly one active shared agent per case role, a reviewed provider manifest and policy, Grantex root grant, and a tenant feature flag | Published Python Grantex SDK 0.5.1 does not enforce token-level case purpose or per-case caps; pooled grants are not case-bound. Machine credentials cannot perform human-only decisions. Confirm deployment before calling this live. |
 | Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
 | Billing and operations | Hosted plan catalog, billing routes, health, migrations, observability hooks, security checks, and reviewed Cloud Run rollout helper | Payment-provider configuration and operational ownership | Billing integration is separate from OACP buyer-payment execution |
+| Activity and feed continuity | Dashboard Recent Activity and Observatory read audit history; Observatory polls the newest 20 rows every 5 seconds and labels that scope. A separate internal feed has tenant-scoped persistence, catch-up/retry, bounded fanout, Redis reconnect, and periodic credential revalidation | Operational event writers, Redis, PostgreSQL, authenticated browser session, and an operator-owned scale budget | No production writer currently publishes into the internal feed; its safe status UI is not mounted as a live dashboard; audit polling is not a complete live stream or full-day total; source-level resilience is not a measured delivery or recovery guarantee |
 
 ## OACP Runtime Truth
 
@@ -90,3 +93,5 @@ their outcomes.
 - [OACP truth inventory](oacp/truth-inventory.md)
 - [OACP operations](oacp/runtime-operations-runbook.md)
 - [Deployment guide](deployment.md)
+- [Scale and resilience assessment](reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+- [Backup and recovery evidence boundary](BACKUP_AND_DR.md)

@@ -1201,28 +1201,37 @@ graph LR
 ### Live Activity Feed
 ```
 WS /api/v1/ws/feed/{tenant_id}
+GET /api/v1/feed/events?after={sequence}&limit={limit}
 ```
-Real-time stream of agent activity, workflow events, and HITL notifications.
+Internal tenant-scoped delivery and catch-up contract. A browser session cookie
+or authorized bearer credential is required; a query-string token is rejected.
+The server checks tenant binding at the handshake and periodically revalidates
+an established credential. Revoked access closes with a policy code; a
+temporary auth-store outage closes with a retryable code. The catch-up endpoint
+returns persisted records after a sequence number for the authenticated tenant.
+
+**Current integration limit:** no production operational writer calls the feed
+publisher. The Dashboard Recent Activity and Observatory read `/audit`; they
+are not subscribers to this WebSocket. Do not describe the feed as an active
+agent/workflow/HITL stream until a post-commit publisher and durable recovery
+path are implemented and tested. A heartbeat proves the socket is connected,
+not that any business event has been published.
 
 ```mermaid
 sequenceDiagram
     participant UI as Browser UI
     participant WS as WebSocket Server
-    participant NEXUS as NEXUS Orchestrator
-    participant Agent as Agent Layer
+    participant Auth as Auth state
+    participant Store as Tenant feed store
 
-    UI->>WS: Connect /ws/feed/{tenant_id}<br/>(Bearer token)
-    WS->>WS: Validate JWT + tenant
-
-    loop Real-time Events
-        Agent-->>NEXUS: TaskResult / tool_call
-        NEXUS-->>WS: Event published
-        WS-->>UI: JSON event frame
-        Note right of UI: {type, agent_id,<br/>event, timestamp}
+    UI->>WS: Connect /ws/feed/{tenant_id}<br/>(cookie or bearer)
+    WS->>Auth: Validate credential and tenant
+    WS-->>UI: Heartbeat
+    loop While connected
+        WS->>Auth: Periodic credential recheck
     end
-
-    UI->>WS: Close connection
-    WS-->>UI: Connection closed
+    UI->>Store: GET /feed/events?after=last_sequence
+    Store-->>UI: Persisted items for the same tenant
 ```
 
 ---

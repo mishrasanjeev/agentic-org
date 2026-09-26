@@ -64,6 +64,20 @@ with the Docker-backed [local multichannel simulation](docs/local-multichannel-s
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
 real Playwright Chromium while keeping paid calls and production mutations off.
 
+The dashboard's Recent Activity queries audit records. The separate internal
+live-feed pipeline persists events per tenant *when published* and can replay
+them by sequence after a WebSocket interruption, but operational event writers
+are not yet wired to that pipeline. Its browser component exposes
+connection/catch-up status without raw payload display; it is not mounted as
+the dashboard's live stream. Broker reconnection, bounded socket fanout, and
+periodic credential revalidation are covered by local tests. Production
+latency, throughput, and availability remain unmeasured. The
+[activity delivery guide](https://agenticorg.ai/resources/agent-activity-audit-and-live-feed)
+explains the boundary. The [scale and resilience assessment](docs/reports/ema-agenticorg-gap-and-resilience-2026-09-24.md)
+tracks remaining connection-scale, load, and restore work; the
+[recovery guide](docs/BACKUP_AND_DR.md) separates planned targets from proven
+production controls.
+
 ## What is in this repository
 
 | Area | Current implementation |
@@ -78,7 +92,7 @@ real Playwright Chromium while keeping paid calls and production mutations off.
 | Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
 
-A source definition is not evidence that a specific tenant has connected the provider or enabled write access. Connector actions still require approved credentials, scopes, policies, and provider availability.
+A source definition is not evidence that a specific tenant has connected the provider or enabled write access. The Connectors page now separates registration from configured credentials and a recent, stale, failed, or missing health check. That evidence does not verify provider scopes, API contract coverage, sustained sync, or an error budget. Connector actions still require approved credentials, scopes, policies, and provider availability.
 
 ## Capability status
 

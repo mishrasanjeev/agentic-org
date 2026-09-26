@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
+import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
 from typing import Any
@@ -32,10 +34,14 @@ from core.models.api_key import APIKey
 
 router = APIRouter()
 logger = structlog.get_logger()
+FEED_SOCKET_SEND_TIMEOUT_SECONDS = 2.0
+FEED_SUBSCRIBE_TIMEOUT_SECONDS = 5.0
+FEED_AUTH_REVALIDATE_SECONDS = 60.0
 
 # Local socket registry only. PostgreSQL feed events and broker fanout are authoritative.
 _connections: dict[str, set[WebSocket]] = {}  # enterprise-gate: process-local-ok reason=local-socket-registry-only
 _subscriptions: dict[str, BrokerSubscription] = {}
+_subscription_tasks: dict[str, asyncio.Task[BrokerSubscription]] = {}
 _connections_lock = asyncio.Lock()
 
 
@@ -97,6 +103,7 @@ async def _claims_from_api_key(token: str) -> dict[str, Any]:
 
     return {
         "sub": f"apikey:{matched_key.prefix}",
+        "agenticorg:api_key_id": str(matched_key.id),
         "agenticorg:tenant_id": str(matched_key.tenant_id),
         "grantex:scopes": matched_key.scopes or [],
     }
@@ -121,10 +128,13 @@ async def authenticate_websocket(websocket: WebSocket, path_tenant_id: str) -> d
         raise WebSocketAuthError("missing_auth", "Missing session cookie or bearer token")
 
     if token.startswith("ao_sk_"):
+        credential_kind = "api_key"
         claims = await _claims_from_api_key(token)
     elif _is_grantex_token(token):
+        credential_kind = "grantex"
         claims = await _claims_from_grantex_token(token)
     else:
+        credential_kind = "session"
         try:
             claims = await validate_token(token)
         except ValueError as exc:
@@ -147,7 +157,60 @@ async def authenticate_websocket(websocket: WebSocket, path_tenant_id: str) -> d
         "claims": claims,
         "tenant_id": tenant_id,
         "scopes": extract_scopes(claims),
+        "credential_kind": credential_kind,
     }
+
+
+async def revalidate_websocket(websocket: WebSocket, path_tenant_id: str, original: dict[str, Any]) -> None:
+    """Recheck long-lived feed credentials without repeating API-key bcrypt work."""
+    if original["credential_kind"] == "api_key":
+        try:
+            key_id = uuid.UUID(original["claims"]["agenticorg:api_key_id"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise WebSocketAuthError("invalid_api_key", "API key is no longer valid") from exc
+        try:
+            async with async_session_factory() as session:
+                key = (
+                    await session.execute(select(APIKey).where(APIKey.id == key_id))
+                ).scalar_one_or_none()
+        # enterprise-gate: broad-except-ok reason=websocket-api-key-recheck-fails-closed-on-database-error
+        except Exception as exc:
+            raise WebSocketAuthError("auth_unavailable", "Session validation temporarily unavailable") from exc
+        if (
+            key is None
+            or key.status != "active"
+            or str(key.tenant_id) != str(path_tenant_id)
+            or (key.expires_at is not None and key.expires_at <= datetime.now(UTC))
+            or sorted(key.scopes or []) != sorted(original["scopes"])
+        ):
+            raise WebSocketAuthError("invalid_api_key", "API key is no longer valid")
+        return
+
+    try:
+        current = await authenticate_websocket(websocket, path_tenant_id)
+    except WebSocketAuthError:
+        raise
+    # enterprise-gate: broad-except-ok reason=websocket-auth-backend-error-fails-closed-on-recheck
+    except Exception as exc:
+        raise WebSocketAuthError("auth_unavailable", "Session validation temporarily unavailable") from exc
+    if (
+        current["credential_kind"] != original["credential_kind"]
+        or current["claims"].get("sub") != original["claims"].get("sub")
+        or sorted(current["scopes"]) != sorted(original["scopes"])
+    ):
+        raise WebSocketAuthError("invalid_token", "Session is no longer valid")
+
+
+async def _close_evicted_socket(tenant_id: str, socket: WebSocket) -> None:
+    """Close a socket that failed a send, so its client reconnects and catches up."""
+    try:
+        await asyncio.wait_for(
+            socket.close(code=1013, reason="feed_delivery_stalled"),
+            timeout=FEED_SOCKET_SEND_TIMEOUT_SECONDS,
+        )
+    # enterprise-gate: broad-except-ok reason=evicted-feed-socket-close-is-cleanup-only
+    except Exception as exc:  # noqa: BLE001 - the socket is already out of fanout.
+        logger.debug("live_feed_socket_close_failed", tenant_id=tenant_id, error=str(exc))
 
 
 async def _fanout_local(message: dict[str, Any]) -> int:
@@ -155,36 +218,91 @@ async def _fanout_local(message: dict[str, Any]) -> int:
     async with _connections_lock:
         sockets = list(_connections.get(tenant_id, set()))
 
-    failed: list[WebSocket] = []
-    sent = 0
-    for socket in sockets:
+    async def send_one(socket: WebSocket) -> bool:
         try:
-            await socket.send_json(message)
-            sent += 1
+            await asyncio.wait_for(
+                socket.send_json(message), timeout=FEED_SOCKET_SEND_TIMEOUT_SECONDS
+            )
+            return True
         # enterprise-gate: broad-except-ok reason=live-feed-stale-socket-send-failure-removes-local-socket
         except Exception as exc:  # noqa: BLE001 - stale sockets are removed below.
             logger.debug("live_feed_socket_send_failed", tenant_id=tenant_id, error=str(exc))
-            failed.append(socket)
+            return False
+
+    failed: list[WebSocket] = []
+    sent = 0
+    # Bound concurrent sends so a slow client cannot stall peers or spawn
+    # unbounded send tasks for a tenant with many connected clients.
+    for offset in range(0, len(sockets), 32):
+        batch = sockets[offset : offset + 32]
+        outcomes = await asyncio.gather(*(send_one(socket) for socket in batch))
+        sent += sum(outcomes)
+        failed.extend(socket for socket, delivered in zip(batch, outcomes, strict=True) if not delivered)
 
     if failed:
+        # A socket dropped from fanout must also be closed. Left open, its
+        # handler keeps answering heartbeats, so the client believes it is live
+        # and never reconnects to catch up on the events it now misses.
+        await asyncio.gather(*(_close_evicted_socket(tenant_id, socket) for socket in failed))
+        subscription: BrokerSubscription | None = None
         async with _connections_lock:
             bucket = _connections.get(tenant_id)
             if bucket is not None:
                 for socket in failed:
                     bucket.discard(socket)
+                if not bucket:
+                    _connections.pop(tenant_id, None)
+                    subscription = _subscriptions.pop(tenant_id, None)
+        if subscription is not None:
+            try:
+                await subscription.close()
+            # enterprise-gate: broad-except-ok reason=stale-feed-cleanup-failure-must-not-block-broker-delivery
+            except Exception as exc:  # noqa: BLE001 - subscription is already detached.
+                logger.warning("live_feed_subscription_close_failed", tenant_id=tenant_id, error=str(exc))
     return sent
 
 
-async def _ensure_subscription_locked(tenant_id: str) -> None:
-    if tenant_id in _subscriptions:
-        return
-    _subscriptions[tenant_id] = await get_feed_event_broker().subscribe(tenant_id, _fanout_local)
-
-
 async def _add_connection(tenant_id: str, websocket: WebSocket) -> None:
+    # Only registry bookkeeping uses the shared lock. A stalled broker must
+    # not serialize connections for every tenant in the process.
     async with _connections_lock:
         _connections.setdefault(tenant_id, set()).add(websocket)
-        await _ensure_subscription_locked(tenant_id)
+        if tenant_id in _subscriptions:
+            return
+        task = _subscription_tasks.get(tenant_id)
+        if task is None:
+            task = asyncio.create_task(
+                asyncio.wait_for(
+                    get_feed_event_broker().subscribe(tenant_id, _fanout_local),
+                    timeout=FEED_SUBSCRIBE_TIMEOUT_SECONDS,
+                )
+            )
+            _subscription_tasks[tenant_id] = task
+
+    try:
+        subscription = await task
+    # enterprise-gate: broad-except-ok reason=subscription-failure-must-clear-tenant-socket-registration
+    except (Exception, asyncio.CancelledError):
+        async with _connections_lock:
+            if _subscription_tasks.get(tenant_id) is task:
+                _subscription_tasks.pop(tenant_id, None)
+            bucket = _connections.get(tenant_id)
+            if bucket is not None:
+                bucket.discard(websocket)
+                if not bucket:
+                    _connections.pop(tenant_id, None)
+        raise
+
+    close_orphan = False
+    async with _connections_lock:
+        if _subscription_tasks.get(tenant_id) is task:
+            _subscription_tasks.pop(tenant_id, None)
+            if _connections.get(tenant_id):
+                _subscriptions[tenant_id] = subscription
+            else:
+                close_orphan = True
+    if close_orphan:
+        await subscription.close()
 
 
 async def _remove_connection(tenant_id: str, websocket: WebSocket) -> None:
@@ -266,19 +384,31 @@ async def list_feed_events(
 )
 async def live_feed(websocket: WebSocket, tenant_id: str) -> None:
     try:
-        await authenticate_websocket(websocket, tenant_id)
+        auth_context = await authenticate_websocket(websocket, tenant_id)
     except WebSocketAuthError as exc:
         logger.warning("live_feed_auth_rejected", tenant_id=tenant_id, code=exc.code)
-        await websocket.close(code=1008, reason=exc.message[:123])
+        await websocket.close(code=1013 if exc.code == "auth_unavailable" else 1008, reason=exc.message[:123])
+        return
+    # enterprise-gate: broad-except-ok reason=websocket-handshake-auth-backend-error-fails-closed
+    except Exception as exc:  # noqa: BLE001 - never accept a socket when auth storage fails.
+        logger.warning("live_feed_auth_unavailable", tenant_id=tenant_id, error=type(exc).__name__)
+        await websocket.close(code=1013, reason="Session validation temporarily unavailable")
         return
 
     await websocket.accept()
     try:
         await _add_connection(tenant_id, websocket)
         await websocket.send_json({"type": "heartbeat", "tenant_id": tenant_id, "sequence": None})
+        next_auth_check = time.monotonic() + FEED_AUTH_REVALIDATE_SECONDS
         while True:
+            if time.monotonic() >= next_auth_check:
+                await revalidate_websocket(websocket, tenant_id, auth_context)
+                next_auth_check = time.monotonic() + FEED_AUTH_REVALIDATE_SECONDS
             try:
-                raw_message = await asyncio.wait_for(websocket.receive_text(), timeout=15)
+                raw_message = await asyncio.wait_for(
+                    websocket.receive_text(),
+                    timeout=min(15.0, max(0.01, next_auth_check - time.monotonic())),
+                )
             except TimeoutError:
                 await websocket.send_json(
                     {"type": "heartbeat", "tenant_id": tenant_id, "sequence": None}
@@ -303,6 +433,10 @@ async def live_feed(websocket: WebSocket, tenant_id: str) -> None:
                 await websocket.send_json({"type": "pong", "tenant_id": tenant_id, "sequence": None})
     except WebSocketDisconnect:
         pass
+    except WebSocketAuthError as exc:
+        logger.warning("live_feed_auth_rejected", tenant_id=tenant_id, code=exc.code)
+        with suppress(RuntimeError):
+            await websocket.close(code=1013 if exc.code == "auth_unavailable" else 1008, reason=exc.message[:123])
     # enterprise-gate: broad-except-ok reason=websocket-connection-failure-closes-current-socket-only
     except Exception as exc:  # noqa: BLE001 - connection-level failure should not crash the app.
         logger.warning("live_feed_connection_failed", tenant_id=tenant_id, error=str(exc))

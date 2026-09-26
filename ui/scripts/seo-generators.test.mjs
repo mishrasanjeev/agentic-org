@@ -5,6 +5,7 @@ import {
   chunkCspHashes,
   cspHash,
   extractObjectBlocks,
+  loadRouteDescriptors,
   outputPathsForRoute,
   replaceGeneratedCspHashReferences,
   renderStaticHtml,
@@ -132,6 +133,47 @@ test("non-root shells have truthful breadcrumb JSON-LD without landing FAQ", () 
   assert.match(html, /"@type":"BlogPosting"/);
   assert.doesNotMatch(html, /"@type":"FAQPage"/);
   assert.match(html, /https:\/\/agenticorg\.ai\/blog\/evidence-first-agents/);
+});
+
+test("resource shells expose the same evidence and answers without JavaScript", () => {
+  const { manifest: actualManifest, routes } = loadRouteDescriptors();
+  const route = routes.find((item) => item.path === "/resources/buyer-agents-shop-safely-oacp");
+  assert.ok(route);
+  const html = renderStaticHtml(baseHtml, route, actualManifest);
+  assert.match(html, /<h2>Evidence First<\/h2>/);
+  assert.match(html, /source refs, TTL, freshness/);
+  assert.match(html, /What happens when artifacts are stale\?/);
+  assert.doesNotMatch(html, /"@type":"FAQPage"/);
+  assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
+});
+
+test("activity resource says the live producer is not wired", () => {
+  const { manifest: actualManifest, routes } = loadRouteDescriptors();
+  const route = routes.find((item) => item.path === "/resources/agent-activity-audit-and-live-feed");
+  assert.ok(route);
+  const html = renderStaticHtml(baseHtml, route, actualManifest);
+  assert.match(html, /no production operational writer publishes/);
+  assert.match(html, /Does the dashboard stream operational events today\?/);
+});
+
+test("every resource has crawlable sections and generated content is escaped", () => {
+  const { routes } = loadRouteDescriptors();
+  const resources = routes.filter((route) => route.kind === "resource");
+  assert.ok(resources.length > 0);
+  assert.ok(resources.every((route) => route.sections.length > 0));
+  const html = renderStaticHtml(baseHtml, {
+    path: "/resources/example",
+    kind: "resource",
+    name: "Example",
+    title: "Example",
+    description: "Example",
+    index: true,
+    sections: [{ heading: "Safe", body: "<script>alert(1)</script>" }],
+    faqs: [{ question: "<img src=x>", answer: "<b>answer</b>" }],
+  }, manifest);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.match(html, /&lt;img src=x&gt;/);
+  assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
 });
 
 test("sitemap contains only canonical indexable URLs and meaningful lastmod", () => {

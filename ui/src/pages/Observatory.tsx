@@ -126,6 +126,7 @@ export default function Observatory() {
   const domains = ROLE_TO_DOMAIN[role] || ["finance", "hr", "marketing", "ops"];
 
   const [events, setEvents] = useState<AgentEvent[]>([]);
+  const [auditStatus, setAuditStatus] = useState<"loading" | "current" | "delayed">("loading");
   const [txCount, setTxCount] = useState(0);
   const [hitlCount, setHitlCount] = useState(0);
   const [throughputData, setThroughputData] = useState<{ t: number; v: number }[]>(
@@ -176,11 +177,12 @@ export default function Observatory() {
   const fetchEvents = useCallback(async () => {
     try {
       // /audit paginates with page/per_page (a ``limit`` param is ignored).
-      // date_from = local midnight so the "Transactions Today" tally only
-      // counts today's rows instead of whatever the newest 20 happen to be.
+      // date_from = local midnight, but this page only observes the first 20
+      // rows per poll; its counters are not full-day totals.
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
       const { data } = await api.get("/audit", { params: { page: 1, per_page: 20, date_from: startOfToday } });
+      setAuditStatus("current");
       const raw: any[] = Array.isArray(data) ? data : data?.items || [];
       if (raw.length === 0) return;
 
@@ -223,7 +225,7 @@ export default function Observatory() {
         return next;
       });
     } catch {
-      // API not available — leave feed empty with "Waiting for agent activity..." message
+      setAuditStatus("delayed");
     }
   }, [mapAuditEntry]);
 
@@ -270,32 +272,32 @@ export default function Observatory() {
       `}</style>
 
       {/* ============ TOP BAR ============ */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-700">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-xl font-bold tracking-tight">Agent Observatory</h1>
-          <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-xs font-semibold text-emerald-400">
-            <span className="obs-pulse inline-block w-2 h-2 rounded-full bg-emerald-400" />
-            LIVE
+          <span role="status" className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${auditStatus === "delayed" ? "bg-amber-500/15 border-amber-500/30 text-amber-300" : "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"}`}>
+            <span className={`inline-block w-2 h-2 rounded-full ${auditStatus === "delayed" ? "bg-amber-400" : "bg-emerald-400"}`} />
+            {auditStatus === "loading" ? "LOADING AUDIT" : auditStatus === "delayed" ? "AUDIT DELAYED" : "AUDIT POLL"}
           </span>
         </div>
         <span className="text-sm text-slate-400">
           {activeAgentCount > 0
-            ? <><span className="text-white font-semibold">{activeAgentCount}</span> agents active</>
-            : "No agents active"
+            ? <><span className="text-white font-semibold">{activeAgentCount}</span> agents seen in recent audit</>
+            : "No agents in recent audit"
           }
         </span>
       </div>
 
       {/* ============ MAIN PANELS ============ */}
-      <div className="flex gap-0 h-[calc(100vh-10.5rem)]">
+      <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-10.5rem)]">
 
         {/* --- LEFT 60%: Active Workflow --- */}
-        <div className="w-[60%] border-r border-slate-700 p-6 flex flex-col">
+        <div className="w-full lg:w-[60%] border-b lg:border-b-0 lg:border-r border-slate-700 p-6 flex flex-col">
           <div className="mb-6">
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Reference Pipeline</p>
             <h2 className="text-lg font-semibold">{workflow.name}</h2>
             <p className="text-xs text-slate-500 mt-1" data-testid="observatory-pipeline-note">
-              Illustrative stage map for this domain. Step status is not tracked here; live activity is in the feed.
+              Illustrative stage map for this domain. Step status is not tracked here; recent audit rows appear beside it.
             </p>
           </div>
 
@@ -340,7 +342,7 @@ export default function Observatory() {
 
           {/* Throughput Sparkline */}
           <div className="mt-auto">
-            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Throughput (events/min)</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">New audit rows per poll (5s)</p>
             <div className="bg-slate-800/60 rounded-lg p-3 border border-slate-700">
               <ResponsiveContainer width="100%" height={100}>
                 <LineChart data={throughputData}>
@@ -359,10 +361,10 @@ export default function Observatory() {
           </div>
         </div>
 
-        {/* --- RIGHT 40%: Live Agent Feed --- */}
-        <div className="w-[40%] flex flex-col">
+        {/* --- RIGHT 40%: polled audit activity --- */}
+        <div className="w-full lg:w-[40%] min-h-[320px] flex flex-col">
           <div className="px-4 py-3 border-b border-slate-700">
-            <p className="text-xs text-slate-500 uppercase tracking-wider">Live Agent Feed</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wider">Recent Agent Audit</p>
           </div>
           <div
             ref={feedRef}
@@ -370,7 +372,7 @@ export default function Observatory() {
             style={{ fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace" }}
           >
             {events.length === 0 && (
-              <p className="text-slate-600 text-xs mt-8 text-center">Waiting for agent activity...</p>
+              <p className="text-slate-500 text-xs mt-8 text-center">{auditStatus === "delayed" ? "Audit data unavailable. Retrying on the next poll." : "No audit activity in the current view."}</p>
             )}
             {events.map((evt) => {
               const style = EVENT_STYLES[evt.eventType];
@@ -400,14 +402,14 @@ export default function Observatory() {
       </div>
 
       {/* ============ BOTTOM STATS BAR ============ */}
-      <div className="border-t border-slate-700 px-6 py-3 flex items-center justify-around bg-slate-800/50">
-        <StatCounter label="Transactions Today" value={txCount > 0 ? txCount.toLocaleString("en-IN") : "--"} color="text-emerald-400" />
+      <div className="border-t border-slate-700 px-6 py-3 grid grid-cols-2 gap-4 lg:flex lg:items-center lg:justify-around bg-slate-800/50">
+        <StatCounter label="Results Observed" value={txCount > 0 ? txCount.toLocaleString("en-IN") : "--"} color="text-emerald-400" />
         <Divider />
-        <StatCounter label="Active Agents" value={activeAgentCount > 0 ? String(activeAgentCount) : "--"} color="text-blue-400" />
+        <StatCounter label="Agents Seen" value={activeAgentCount > 0 ? String(activeAgentCount) : "--"} color="text-blue-400" />
         <Divider />
-        <StatCounter label="Events Received" value={events.length > 0 ? String(events.length) : "--"} color="text-violet-400" />
+        <StatCounter label="Rows Displayed" value={events.length > 0 ? String(events.length) : "--"} color="text-violet-400" />
         <Divider />
-        <StatCounter label="HITL Escalations" value={hitlCount > 0 ? String(hitlCount) : "--"} color="text-red-400" />
+        <StatCounter label="HITL Observed" value={hitlCount > 0 ? String(hitlCount) : "--"} color="text-red-400" />
       </div>
     </div>
   );
@@ -427,5 +429,5 @@ function StatCounter({ label, value, color }: { label: string; value: string; co
 }
 
 function Divider() {
-  return <div className="w-px h-8 bg-slate-700" />;
+  return <div className="hidden lg:block w-px h-8 bg-slate-700" />;
 }

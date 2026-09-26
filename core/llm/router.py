@@ -33,6 +33,7 @@ Hard cap (``AGENTICORG_GEMINI_DAILY_USD_CAP``, default ``10.0``):
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import os
 import time
@@ -60,6 +61,46 @@ RouteLLMController: type[Any] | None = None
 
 class LLMProviderConfigurationError(RuntimeError):
     """Raised when an explicitly selected LLM provider is not configured."""
+
+
+def _is_transient_llm_failure(exc: Exception) -> bool:
+    """Retry only transport failures and rate-limit/server responses."""
+    if isinstance(exc, (DailyBudgetExceeded, LLMProviderConfigurationError, ValueError, PermissionError)):
+        return False
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status is None:
+        status = getattr(exc, "code", None)
+    if isinstance(status, int):
+        return status == 429 or status >= 500
+    try:
+        import httpx
+
+        if isinstance(exc, httpx.TransportError):
+            return True
+    except ImportError:
+        pass
+    # SDK connection errors do not all inherit from httpx.TransportError.
+    for module_name, class_name in (
+        ("openai", "APIConnectionError"),
+        ("anthropic", "APIConnectionError"),
+    ):
+        try:
+            module = __import__(module_name)
+            if isinstance(exc, getattr(module, class_name)):
+                return True
+        except (ImportError, AttributeError):
+            continue
+    return False
+
+
+def _model_provider(model: str) -> str | None:
+    """Provider that serves *model*, matching ``LLMRouter._call_provider``."""
+    for provider in ("gemini", "claude", "gpt"):
+        if provider in model:
+            return provider
+    return None
 
 
 def _load_routellm_controller_cls() -> type[Any] | None:
@@ -541,26 +582,41 @@ class LLMRouter:
         caller restores them at the tool boundary and in its final output. A
         pseudonymisation failure raises before any model is called.
         """
-        if pseudonymiser is not None:
-            messages = await pseudonymiser.pseudonymise_router_messages(messages)
-        model = model_override or self.primary_model
-        temp = temperature if temperature is not None else self.temperature
-        # Only forward tenant_id when set so existing _call_model call shapes stay stable.
-        scope = {"tenant_id": tenant_id} if tenant_id else {}
+        async with asyncio.timeout(settings.llm_complete_timeout_seconds):
+            if pseudonymiser is not None:
+                messages = await pseudonymiser.pseudonymise_router_messages(messages)
+            model = model_override or self.primary_model
+            temp = temperature if temperature is not None else self.temperature
+            # Only forward tenant_id when set so existing _call_model call shapes stay stable.
+            scope = {"tenant_id": tenant_id} if tenant_id else {}
 
-        try:
-            return await self._call_model(model, messages, temp, max_tokens, **scope)
-        except DailyBudgetExceeded:
-            # The cap is per day/tenant, not per model: retrying another
-            # Gemini model would just bypass it.
-            raise
-        # enterprise-gate: broad-except-ok reason=llm-primary-failure-falls-back-or-reraises
-        except Exception as e:
-            logger.warning("llm_primary_failed", model=model, error=str(e))
-            if model != self.fallback_model:
+            try:
+                async with asyncio.timeout(
+                    settings.llm_complete_timeout_seconds * settings.llm_primary_timeout_fraction
+                ):
+                    return await self._call_model(model, messages, temp, max_tokens, **scope)
+            # enterprise-gate: broad-except-ok reason=llm-transient-primary-failure-only-may-fall-back
+            except Exception as exc:
+                logger.warning(
+                    "llm_primary_failed",
+                    model=model,
+                    error_type=type(exc).__name__,
+                    status_code=getattr(exc, "status_code", None),
+                )
+                if (
+                    model == self.fallback_model
+                    or not _is_transient_llm_failure(exc)
+                    or (
+                        model_override is not None
+                        and _model_provider(model_override) != _model_provider(self.fallback_model)
+                    )
+                ):
+                    # An explicitly selected model may fall back only within its
+                    # own provider, so a transient outage never silently moves an
+                    # agent's data to a different provider.
+                    raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
                 return await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
-            raise
 
     async def _call_model(
         self,

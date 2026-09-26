@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import httpx
 import structlog
@@ -61,6 +62,20 @@ def _canonical_refresh_token_url(connector_name: str, creds: dict) -> str | None
         }
         return _ZOHO_TOKEN_URLS.get(aliases.get(region, region), _ZOHO_TOKEN_URLS["in"])
     return _CONNECTOR_CANONICAL_TOKEN_URLS.get(name)
+
+
+def _store_refreshed_credentials(config: Any, encrypted: str) -> None:
+    """Store refreshed OAuth credentials on a connector config.
+
+    A successful refresh proves the grant still works, so the connector is marked
+    healthy as before. It does not prove a failed health check has been fixed:
+    when the connector was not already healthy, its last check time is cleared so
+    readiness asks for a new check instead of reporting the old one as recent.
+    """
+    if str(config.health_status or "").lower() != "healthy":
+        config.last_health_check = None
+    config.credentials_encrypted = {"_encrypted": encrypted}
+    config.health_status = "healthy"
 
 
 @app.task(name="core.tasks.token_refresh.refresh_expiring_tokens")
@@ -223,8 +238,7 @@ async def _refresh_all() -> dict:
                 )
                 fresh = row.scalar_one_or_none()
                 if fresh:
-                    fresh.credentials_encrypted = {"_encrypted": encrypted}
-                    fresh.health_status = "healthy"
+                    _store_refreshed_credentials(fresh, encrypted)
 
             refreshed += 1
             logger.info(

@@ -1034,3 +1034,40 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** confirm the deployed keyring entries are long enough, then refuse
   entries under 32 characters in strict runtimes, with a keyring rotation note
   for any deployment that fails the check.
+
+## A-74 — Connector filters and search only cover the current page
+
+- **Found:** review of the connector readiness paging (2026-09-26).
+- **What:** `ui/src/pages/Connectors.tsx` now pages 50 rows at a time, but the
+  category filter and search still run in the browser over the loaded page, so
+  a match on another page is not shown. The "on page" labels are accurate. A
+  failed health check (the `catch` path) also does not refresh the list, so the
+  row keeps its previous state until reload.
+- **Fix:** pass category and search to `GET /connectors` as query parameters and
+  filter server-side; refresh the list after a failed health check too.
+
+## A-75 — Slow feed sockets delay the tenant's Redis listener
+
+- **Found:** review of the tenant live feed (2026-09-26).
+- **What:** `api/websocket/feed.py` `_fanout_local` sends in batches of 32, one
+  batch after another, each waiting up to the 2s send timeout. The Redis
+  listener awaits the whole fanout, so N slow sockets hold the next message for
+  up to ceil(N/32) x 2s and the backlog sits in the pubsub buffer. Events
+  published while the listener reconnects are only noticed as a gap on the next
+  event.
+- **Fix:** hand each socket its own bounded queue drained by a per-socket
+  sender, so the listener never waits on a client, and close sockets whose queue
+  overflows.
+
+## A-76 — A token refresh counts as a passed health check for agent activation
+
+- **Found:** review of connector readiness (2026-09-26).
+- **What:** `core/tasks/token_refresh.py` marks a connector `healthy` whenever a
+  refresh succeeds, and `api/v1/agents.py` `_assert_connectors_ready_for_activation`
+  gates agents on `health_status == "healthy"`. A connector whose last health
+  check failed for a reason a refresh does not fix (a missing scope, a broken
+  endpoint) becomes activatable again after the next refresh. Readiness now shows
+  it as needing a check, but the activation gate does not.
+- **Fix:** keep refresh state and check state separate (for example a
+  `refresh_status` column), and gate activation on a recent passing check.
+

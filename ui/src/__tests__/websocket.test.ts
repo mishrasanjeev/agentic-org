@@ -74,6 +74,18 @@ describe("AgenticOrgWS", () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 
+  it("exposes a terminal session state without reconnecting", () => {
+    const statuses: string[] = [];
+    const client = new AgenticOrgWS({ baseDelayMs: 10, jitterRatio: 0 });
+    client.subscribeStatus((status) => statuses.push(status));
+    client.connect("tenant-a");
+    MockWebSocket.instances[0].emitOpen();
+    MockWebSocket.instances[0].emitClose(1008);
+    vi.advanceTimersByTime(1000);
+    expect(statuses).toEqual(["offline", "connecting", "live", "sign_in_required"]);
+    expect(MockWebSocket.instances).toHaveLength(1);
+  });
+
   it("isolates bad JSON socket messages", () => {
     const listener = vi.fn();
     const client = new AgenticOrgWS({ baseDelayMs: 10, jitterRatio: 0 });
@@ -117,5 +129,121 @@ describe("AgenticOrgWS", () => {
     await vi.waitFor(() => {
       expect(listener).toHaveBeenCalledWith({ type: "missed", sequence: 2 });
     });
+  });
+
+  it("replays every page before releasing a newer live event", async () => {
+    const listener = vi.fn();
+    const statuses: string[] = [];
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ items: [{ type: "missed", sequence: 2 }, { type: "missed", sequence: 3 }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ items: [{ type: "missed", sequence: 4 }, { type: "missed", sequence: 5 }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true, status: 200, json: async () => ({ items: [] }),
+      } as Response);
+    const client = new AgenticOrgWS({ baseDelayMs: 10, jitterRatio: 0, catchUpLimit: 2, fetchImpl });
+    client.subscribe(listener);
+    client.subscribeStatus((status) => statuses.push(status));
+    client.connect("tenant-a");
+    const firstSocket = MockWebSocket.instances[0];
+    firstSocket.emitMessage(JSON.stringify({ type: "seen", sequence: 1 }));
+    firstSocket.emitClose(1006);
+    vi.advanceTimersByTime(10);
+    const reconnectSocket = MockWebSocket.instances[1];
+    reconnectSocket.emitOpen();
+    reconnectSocket.emitMessage(JSON.stringify({ type: "live", sequence: 6 }));
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(6));
+    expect(listener.mock.calls.map(([event]) => event.sequence)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(fetchImpl).toHaveBeenCalledWith("/api/v1/feed/events?after=3&limit=2", {
+      credentials: "include",
+    });
+    await vi.waitFor(() => expect(statuses[statuses.length - 1]).toBe("live"));
+  });
+
+  it("does not claim the stream is live while a later catch-up page is pending", async () => {
+    let resolveSecond!: (response: Response) => void;
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ items: [{ type: "missed", sequence: 2 }, { type: "missed", sequence: 3 }] }),
+      } as Response)
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveSecond = resolve; }));
+    const statuses: string[] = [];
+    const client = new AgenticOrgWS({ baseDelayMs: 10, jitterRatio: 0, catchUpLimit: 2, fetchImpl });
+    client.subscribeStatus((status) => statuses.push(status));
+    client.connect("tenant-a");
+    const first = MockWebSocket.instances[0];
+    first.emitMessage(JSON.stringify({ type: "seen", sequence: 1 }));
+    first.emitClose(1006);
+    vi.advanceTimersByTime(10);
+    MockWebSocket.instances[1].emitOpen();
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(statuses[statuses.length - 1]).toBe("delayed");
+    resolveSecond({ ok: true, status: 200, json: async () => ({ items: [] }) } as Response);
+    await vi.waitFor(() => expect(statuses[statuses.length - 1]).toBe("live"));
+    client.disconnect();
+  });
+
+  it("resets sequence and pending events when the tenant changes", () => {
+    const listener = vi.fn();
+    const client = new AgenticOrgWS();
+    client.subscribe(listener);
+    client.connect("tenant-a");
+    MockWebSocket.instances[0].emitMessage(JSON.stringify({ type: "old", sequence: 100 }));
+
+    client.connect("tenant-b");
+    MockWebSocket.instances[1].emitMessage(JSON.stringify({ type: "new", sequence: 1 }));
+
+    expect(listener.mock.calls.map(([event]) => event.type)).toEqual(["old", "new"]);
+  });
+
+  it("ignores a catch-up response from the previous tenant", async () => {
+    let resolveResponse!: (response: Response) => void;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => { resolveResponse = resolve; }));
+    const listener = vi.fn();
+    const client = new AgenticOrgWS({ fetchImpl });
+    client.subscribe(listener);
+    client.connect("tenant-a");
+    MockWebSocket.instances[0].emitMessage(JSON.stringify({ type: "old", sequence: 1 }));
+    MockWebSocket.instances[0].emitMessage(JSON.stringify({ type: "gap", sequence: 3 }));
+
+    client.connect("tenant-b");
+    MockWebSocket.instances[1].emitMessage(JSON.stringify({ type: "new", sequence: 1 }));
+    resolveResponse({
+      ok: true, status: 200,
+      json: async () => ({ items: [{ type: "old-missed", sequence: 2 }] }),
+    } as Response);
+    await vi.runAllTicks();
+
+    expect(listener.mock.calls.map(([event]) => event.type)).toEqual(["old", "new"]);
+  });
+
+  it("keeps a gap visible and retries catch-up after a transient failure", async () => {
+    const statuses: string[] = [];
+    const listener = vi.fn();
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ items: [{ type: "missed", sequence: 2 }] }) } as Response);
+    const client = new AgenticOrgWS({ fetchImpl });
+    client.subscribe(listener);
+    client.subscribeStatus((status) => statuses.push(status));
+    client.connect("tenant-a");
+    const socket = MockWebSocket.instances[0];
+    socket.emitOpen();
+    socket.emitMessage(JSON.stringify({ type: "first", sequence: 1 }));
+    socket.emitMessage(JSON.stringify({ type: "third", sequence: 3 }));
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    expect(statuses).toContain("delayed");
+    expect(listener.mock.calls.map(([event]) => event.sequence)).toEqual([1]);
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.waitFor(() => expect(listener.mock.calls.map(([event]) => event.sequence)).toEqual([1, 2, 3]));
+    expect(statuses[statuses.length - 1]).toBe("live");
+    client.disconnect();
   });
 });
