@@ -1204,6 +1204,8 @@ async def register_connector(
             cc_existing = cc_existing_result.scalar_one_or_none()
             if cc_existing is not None:
                 cc_existing.credentials_encrypted = {"_encrypted": encrypted_creds}
+                # A health check proves the credentials it ran against, not these.
+                cc_existing.last_health_check = None
                 cc_existing.config = non_secret_config
                 cc_existing.auth_type = body.auth_type or "api_key"
                 cc_existing.status = "configured"
@@ -1470,6 +1472,7 @@ async def upsert_cmo_vendor_sandbox_connectors(
                 existing.display_name = row["display_name"]
                 existing.auth_type = row["auth_type"]
                 existing.credentials_encrypted = {"_encrypted": encrypted}
+                existing.last_health_check = None
                 existing.config = row["config"]
                 existing.status = "configured"
                 existing.health_status = "healthy"
@@ -1752,6 +1755,8 @@ async def update_connector(
             )
             if cc:
                 cc.credentials_encrypted = {"_encrypted": encrypted}
+                # A health check proves the credentials it ran against, not these.
+                cc.last_health_check = None
                 cc.auth_type = connector.auth_type or cc.auth_type
                 cc.config = (
                     zoho_non_secret_config
@@ -1814,6 +1819,7 @@ async def update_connector(
                 cc.config = next_config
                 cc.auth_type = connector.auth_type or cc.auth_type
                 cc.health_status = "unknown"
+                cc.last_health_check = None
                 cc.sync_error = "credential_surface_changed"
 
         await session.commit()

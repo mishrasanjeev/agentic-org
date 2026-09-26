@@ -3452,7 +3452,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1246,
+    "source_line": 1248,
     "tenant_required": true
   },
   {
@@ -3470,7 +3470,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.cmo_vendor_sandbox.write",
-    "source_line": 1319,
+    "source_line": 1321,
     "tenant_required": true
   },
   {
@@ -3614,7 +3614,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1845,
+    "source_line": 1851,
     "tenant_required": true
   },
   {
@@ -3632,7 +3632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1513,
+    "source_line": 1516,
     "tenant_required": true
   },
   {
@@ -3650,7 +3650,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 1569,
+    "source_line": 1572,
     "tenant_required": true
   },
   {
@@ -3668,7 +3668,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1880,
+    "source_line": 1886,
     "tenant_required": true
   },
   {
@@ -3686,7 +3686,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1939,
+    "source_line": 1945,
     "tenant_required": true
   },
   {
@@ -4172,7 +4172,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "feed.events.read",
-    "source_line": 343,
+    "source_line": 359,
     "tenant_required": true
   },
   {
@@ -7106,7 +7106,7 @@
     "public_exempt_reason": null,
     "rate_limit": "websocket-connect",
     "scope": "feed.websocket.connect",
-    "source_line": 369,
+    "source_line": 385,
     "tenant_required": true
   }
 ]

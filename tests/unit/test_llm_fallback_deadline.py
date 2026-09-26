@@ -63,10 +63,38 @@ async def test_permanent_failure_never_uses_fallback(failure: Exception) -> None
 @pytest.mark.asyncio
 async def test_explicit_model_does_not_silently_change_provider() -> None:
     router = router_module.LLMRouter()
+    router.fallback_model = "gemini-fallback"
     router._call_model = AsyncMock(side_effect=TimeoutError("upstream timed out"))
 
     with pytest.raises(TimeoutError):
         await router.complete([{"role": "user", "content": "hello"}], model_override="claude-selected")
+
+    router._call_model.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [TimeoutError(), ProviderStatusError(503)])
+async def test_explicit_model_falls_back_within_its_provider(failure: Exception) -> None:
+    """Agents always pass their model; a transient outage must not fail every run."""
+    router = router_module.LLMRouter()
+    router.fallback_model = "gemini-fallback"
+    response = router_module.LLMResponse(content="recovered", model=router.fallback_model)
+    router._call_model = AsyncMock(side_effect=[failure, response])
+
+    result = await router.complete([{"role": "user", "content": "hello"}], model_override="gemini-selected")
+
+    assert result is response
+    assert [call.args[0] for call in router._call_model.await_args_list] == ["gemini-selected", "gemini-fallback"]
+
+
+@pytest.mark.asyncio
+async def test_explicit_model_permanent_failure_never_falls_back() -> None:
+    router = router_module.LLMRouter()
+    router.fallback_model = "gemini-fallback"
+    router._call_model = AsyncMock(side_effect=ProviderStatusError(400))
+
+    with pytest.raises(ProviderStatusError):
+        await router.complete([{"role": "user", "content": "hello"}], model_override="gemini-selected")
 
     router._call_model.assert_awaited_once()
 

@@ -4,6 +4,31 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed - live feed, LLM failover and connector readiness are bounded and truthful
+- **Tenant live feed:** subscriptions are single-flight per tenant with bounded
+  fanout, a reconnect loop and a subscribe timeout; browsers catch up through
+  paginated history. Long-lived connections recheck their credential
+  periodically: a revoked, expired, re-scoped or other-tenant API key, or a
+  session whose subject or scopes changed, is disconnected (1008), and an auth
+  backend error disconnects with 1013 rather than keeping the socket. A socket
+  that stalls a delivery is closed (1013) so its client reconnects and catches
+  up instead of staying "live" on heartbeats. A subscribe timeout releases the
+  Redis connection it opened. No operational writer publishes to this feed yet,
+  so the dashboard keeps its audit poll.
+- **`LLMRouter.complete`:** bounded by `AGENTICORG_LLM_COMPLETE_TIMEOUT_SECONDS`
+  (default 90s), with `AGENTICORG_LLM_PRIMARY_TIMEOUT_FRACTION` (default 0.7) for
+  the primary. Only timeouts, connection errors, 429 and 5xx fall back; invalid
+  requests, configuration errors and spend caps never do. An explicitly selected
+  model, which every agent run passes, falls back only to a fallback model from
+  the same provider, so an outage never moves a request to another provider.
+- **Connectors:** list and detail return tenant- and company-scoped readiness
+  evidence (credential presence, health freshness, disabled/missing states)
+  without selecting or returning encrypted credentials, and the UI pages past 50
+  rows. Replacing a connector's credentials clears its last health check, so the
+  list never shows "Recently checked" for credentials no check has used. A
+  health check still does not prove provider scopes, contracts or sync.
+- Public status, README, landing and resilience docs describe these limits.
+
 ### Fixed - the credential vault no longer falls back to a published key
 - Outside a local, dev, development, test or CI runtime, the credential vault
   now refuses its code default (`dev-only-vault-key`), any secret value

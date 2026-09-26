@@ -95,6 +95,14 @@ def _is_transient_llm_failure(exc: Exception) -> bool:
     return False
 
 
+def _model_provider(model: str) -> str | None:
+    """Provider that serves *model*, matching ``LLMRouter._call_provider``."""
+    for provider in ("gemini", "claude", "gpt"):
+        if provider in model:
+            return provider
+    return None
+
+
 def _load_routellm_controller_cls() -> type[Any] | None:
     """Lazily import RouteLLM and return its controller when usable."""
     global RouteLLMController, _ROUTELLM_AVAILABLE
@@ -595,7 +603,17 @@ class LLMRouter:
                     error_type=type(exc).__name__,
                     status_code=getattr(exc, "status_code", None),
                 )
-                if model_override is not None or model == self.fallback_model or not _is_transient_llm_failure(exc):
+                if (
+                    model == self.fallback_model
+                    or not _is_transient_llm_failure(exc)
+                    or (
+                        model_override is not None
+                        and _model_provider(model_override) != _model_provider(self.fallback_model)
+                    )
+                ):
+                    # An explicitly selected model may fall back only within its
+                    # own provider, so a transient outage never silently moves an
+                    # agent's data to a different provider.
                     raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
                 return await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)

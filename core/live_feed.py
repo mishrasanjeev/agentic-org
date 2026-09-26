@@ -267,9 +267,12 @@ class _RedisFeedSubscription:
     async def start(self) -> None:
         try:
             await self._open()
+        # BaseException, not Exception: the caller bounds subscribe() with a
+        # timeout, which arrives here as CancelledError and must still release
+        # the connection opened for this subscription.
         # enterprise-gate: broad-except-ok reason=redis-feed-subscribe-failure-closes-connection-before-reraise
-        except Exception:
-            await self._close_current()
+        except BaseException:
+            await asyncio.shield(self._close_current())
             raise
         self._task = asyncio.create_task(self._run())
 

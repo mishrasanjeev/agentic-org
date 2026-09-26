@@ -201,6 +201,18 @@ async def revalidate_websocket(websocket: WebSocket, path_tenant_id: str, origin
         raise WebSocketAuthError("invalid_token", "Session is no longer valid")
 
 
+async def _close_evicted_socket(tenant_id: str, socket: WebSocket) -> None:
+    """Close a socket that failed a send, so its client reconnects and catches up."""
+    try:
+        await asyncio.wait_for(
+            socket.close(code=1013, reason="feed_delivery_stalled"),
+            timeout=FEED_SOCKET_SEND_TIMEOUT_SECONDS,
+        )
+    # enterprise-gate: broad-except-ok reason=evicted-feed-socket-close-is-cleanup-only
+    except Exception as exc:  # noqa: BLE001 - the socket is already out of fanout.
+        logger.debug("live_feed_socket_close_failed", tenant_id=tenant_id, error=str(exc))
+
+
 async def _fanout_local(message: dict[str, Any]) -> int:
     tenant_id = str(message.get("tenant_id") or "")
     async with _connections_lock:
@@ -228,6 +240,10 @@ async def _fanout_local(message: dict[str, Any]) -> int:
         failed.extend(socket for socket, delivered in zip(batch, outcomes, strict=True) if not delivered)
 
     if failed:
+        # A socket dropped from fanout must also be closed. Left open, its
+        # handler keeps answering heartbeats, so the client believes it is live
+        # and never reconnects to catch up on the events it now misses.
+        await asyncio.gather(*(_close_evicted_socket(tenant_id, socket) for socket in failed))
         subscription: BrokerSubscription | None = None
         async with _connections_lock:
             bucket = _connections.get(tenant_id)

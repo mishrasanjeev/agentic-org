@@ -150,6 +150,126 @@ async def test_api_key_recheck_uses_verified_record_without_bcrypt(feed_runtime,
     assert exc.value.code == "invalid_api_key"
 
 
+def _api_key_session(result):
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, _query):
+            if isinstance(result, BaseException):
+                raise result
+            return SimpleNamespace(scalar_one_or_none=lambda: result)
+
+    return Session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "change",
+    ["missing", "revoked", "expired", "other_tenant", "scopes_widened", "scopes_narrowed"],
+)
+async def test_api_key_recheck_refuses_every_changed_credential(feed_runtime, monkeypatch, change) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    tenant_id = str(uuid.uuid4())
+    key = SimpleNamespace(status="active", tenant_id=tenant_id, expires_at=None, scopes=["feed.read"])
+    if change == "revoked":
+        key.status = "revoked"
+    elif change == "expired":
+        key.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    elif change == "other_tenant":
+        key.tenant_id = str(uuid.uuid4())
+    elif change == "scopes_widened":
+        key.scopes = ["feed.read", "agenticorg:admin"]
+    elif change == "scopes_narrowed":
+        key.scopes = []
+    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(None if change == "missing" else key))
+    original = {
+        "credential_kind": "api_key",
+        "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},
+        "scopes": ["feed.read"],
+    }
+
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), tenant_id, original)
+    assert exc.value.code == "invalid_api_key"
+
+
+@pytest.mark.asyncio
+async def test_api_key_recheck_accepts_a_future_expiry(feed_runtime, monkeypatch) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    tenant_id = str(uuid.uuid4())
+    key = SimpleNamespace(
+        status="active", tenant_id=tenant_id, expires_at=datetime.now(UTC) + timedelta(hours=1), scopes=["feed.read"]
+    )
+    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(key))
+    original = {
+        "credential_kind": "api_key",
+        "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},
+        "scopes": ["feed.read"],
+    }
+    await feed.revalidate_websocket(AsyncMock(), tenant_id, original)
+
+
+@pytest.mark.asyncio
+async def test_api_key_recheck_fails_closed_when_the_database_errors(feed_runtime, monkeypatch) -> None:
+    monkeypatch.setattr(feed, "async_session_factory", _api_key_session(ConnectionError("database unavailable")))
+    original = {
+        "credential_kind": "api_key",
+        "claims": {"agenticorg:api_key_id": str(uuid.uuid4())},
+        "scopes": ["feed.read"],
+    }
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), "tenant-1", original)
+    assert exc.value.code == "auth_unavailable"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("claims", [{}, {"agenticorg:api_key_id": "not-a-uuid"}])
+async def test_api_key_recheck_refuses_a_malformed_key_id(feed_runtime, claims) -> None:
+    original = {"credential_kind": "api_key", "claims": claims, "scopes": ["feed.read"]}
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), "tenant-1", original)
+    assert exc.value.code == "invalid_api_key"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "current",
+    [
+        {"credential_kind": "session", "claims": {"sub": "user-2"}, "scopes": ["feed.read"]},
+        {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": ["feed.read", "agenticorg:admin"]},
+        {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": []},
+        {"credential_kind": "api_key", "claims": {"sub": "user-1"}, "scopes": ["feed.read"]},
+    ],
+    ids=["different_subject", "scopes_widened", "scopes_narrowed", "different_kind"],
+)
+async def test_session_recheck_refuses_a_changed_identity(feed_runtime, monkeypatch, current) -> None:
+    async def authenticate(_socket, _tenant_id):
+        return current
+
+    monkeypatch.setattr(feed, "authenticate_websocket", authenticate)
+    original = {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": ["feed.read"]}
+    with pytest.raises(feed.WebSocketAuthError) as exc:
+        await feed.revalidate_websocket(AsyncMock(), "tenant-1", original)
+    assert exc.value.code == "invalid_token"
+
+
+@pytest.mark.asyncio
+async def test_session_recheck_accepts_the_same_identity(feed_runtime, monkeypatch) -> None:
+    original = {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": ["feed.read", "b"]}
+
+    async def authenticate(_socket, _tenant_id):
+        return {"credential_kind": "session", "claims": {"sub": "user-1"}, "scopes": ["b", "feed.read"]}
+
+    monkeypatch.setattr(feed, "authenticate_websocket", authenticate)
+    await feed.revalidate_websocket(AsyncMock(), "tenant-1", original)
+
+
 @pytest.mark.asyncio
 async def test_session_recheck_fails_closed_when_auth_store_is_unavailable(feed_runtime, monkeypatch) -> None:
     async def unavailable(_socket, _tenant_id):
@@ -269,6 +389,31 @@ async def test_slow_socket_does_not_block_peer_and_is_removed(feed_runtime, monk
     fast.send_json.assert_awaited_once()
     assert slow not in feed._connections[tenant_id]
     assert fast in feed._connections[tenant_id]
+    # Evicted, the slow socket is closed so its client reconnects and catches up
+    # rather than staying "live" on heartbeats while events stop arriving.
+    slow.close.assert_awaited_once_with(code=1013, reason="feed_delivery_stalled")
+    fast.close.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_socket_whose_close_hangs_does_not_stall_fanout(feed_runtime, monkeypatch) -> None:
+    tenant_id = str(uuid.uuid4())
+    stuck = AsyncMock()
+
+    async def never(*_args, **_kwargs) -> None:
+        await asyncio.Event().wait()
+
+    stuck.send_json.side_effect = never
+    stuck.close.side_effect = never
+    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.01)
+    feed._connections[tenant_id] = {stuck}
+
+    delivered = await asyncio.wait_for(
+        feed._fanout_local({"tenant_id": tenant_id, "type": "update"}), timeout=0.2
+    )
+
+    assert delivered == 0
+    assert tenant_id not in feed._connections
 
 
 @pytest.mark.asyncio
@@ -431,6 +576,30 @@ async def test_redis_feed_subscription_recovers_after_listener_disconnect(monkey
     assert calls == [{"sequence": 1}]
     assert instances[0].aclose.await_count == 1
     assert instances[1].aclose.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_redis_feed_start_releases_connection_when_subscribe_times_out() -> None:
+    """The subscribe timeout cancels start(); the connection must not leak."""
+    redis = MagicMock()
+    redis.aclose = AsyncMock()
+    pubsub = AsyncMock()
+
+    async def stalled(*_args: object) -> None:
+        await asyncio.Event().wait()
+
+    pubsub.subscribe.side_effect = stalled
+    redis.pubsub.return_value = pubsub
+
+    with patch("core.live_feed.aioredis.from_url", return_value=redis):
+        subscription = _RedisFeedSubscription("redis://test", "tenant-1", AsyncMock())
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(subscription.start(), timeout=0.05)
+
+    pubsub.close.assert_awaited_once()
+    redis.aclose.assert_awaited_once()
+    assert subscription._redis is None
+    assert subscription._pubsub is None
 
 
 @pytest.mark.asyncio
