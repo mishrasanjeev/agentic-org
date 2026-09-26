@@ -196,6 +196,11 @@ class _Rows:
     def all(self) -> list[Any]:
         return self._rows
 
+    def scalar_one_or_none(self) -> Any:
+        # The backfill re-reads one agent's config just before its push; these
+        # rows carry no route scopes.
+        return None
+
 
 class _TenantSession:
     def __init__(self, agents: list[Any], writes: list[Any]) -> None:

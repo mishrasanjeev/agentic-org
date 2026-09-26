@@ -140,6 +140,32 @@ LEGACY_SCOPE_ALIASES: dict[str, str] = {
 }
 
 
+# Scopes an operator may attach to an agent's Grantex registration so its
+# token can call the matching route families. Exactly the
+# canonical family scopes: never ``agenticorg:admin``, legacy aliases or any
+# scope that is not route-enforced.
+GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(
+    scope for pair in SCOPE_FAMILIES.values() for scope in pair
+)
+
+
+def validate_route_scopes(scopes: object) -> list[str]:
+    """Return ``scopes`` de-duplicated and sorted, or raise ``ValueError`` saying why.
+
+    Only canonical route-family scopes (``GRANTABLE_ROUTE_SCOPES``) are accepted,
+    compared exactly.
+    """
+    if not isinstance(scopes, list) or not all(isinstance(s, str) for s in scopes):
+        raise ValueError("route_scopes must be a list of scope names")
+    unknown = sorted({s for s in scopes if s not in GRANTABLE_ROUTE_SCOPES})
+    if unknown:
+        raise ValueError(
+            f"route_scopes {unknown} cannot be granted to an agent; "
+            f"allowed: {sorted(GRANTABLE_ROUTE_SCOPES)}"
+        )
+    return sorted(set(scopes))
+
+
 def _family(declared_scope: str) -> str:
     head = declared_scope.split(":", 1)[0]
     return head.split(".", 1)[0]

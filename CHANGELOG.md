@@ -4,6 +4,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - agents can be granted route scopes
+- Route scope checks apply to agent tokens, but registration only ever gave an
+  agent tool scopes, so an agent token was refused on every scoped route. A
+  human tenant admin can now grant an agent named route scopes with
+  `PATCH /agents/{id}` `{"route_scopes": [...]}`; they are added to the agent's
+  Grantex registration so a grant issued to it can carry them.
+- Only canonical route-family scopes are accepted (never `agenticorg:admin` or
+  an alias; `422`); only an active human tenant admin, checked against the user
+  row at request time, may set them (`403`); only on a shared agent registered
+  on Grantex (`403` for a personal agent, `409` for an unregistered one).
+  Grantex is updated before anything is stored, an explicit `route_scopes`
+  PATCH always rewrites the registration so drift can be repaired, and every
+  change is audited.
+- Route scopes are stored apart from tool scopes, so run grants and delegated
+  grants never carry them. A tools PATCH and the scope backfill keep them on
+  the registration.
+- Existing agents have none until an admin grants them; until then an agent
+  token keeps getting `403` on scoped routes, as since the route-scope fix.
+
 ### Fixed - API keys that were administrators stay administrators
 - Revision `v6z29_admin_scope_compat` gives an API key the exact
   `agenticorg:admin` scope - the access it had before admin became an exact
@@ -126,9 +145,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   scope (`agents:read`, `agents:run`, `audit:read`, ...) or `agenticorg:admin`,
   or it gets `403`. An authenticated request with an unrecognised
   authentication mode is refused the same way.
-- Agent registration does not yet put route scopes in a grant (FINDINGS
-  A-64), so agents calling scoped routes with a grant token are refused until
-  it does; use an API key meanwhile. A2A and MCP routes are unaffected.
+- A tenant admin grants an agent the route scopes its token needs with
+  `PATCH /agents/{id}` `route_scopes` (see "Added - agents can be granted route
+  scopes" above). A2A and MCP routes are unaffected.
   See `docs/operations/grant-enforcement.md`.
 
 ### Fixed - three external changes that broke CI on every pull request

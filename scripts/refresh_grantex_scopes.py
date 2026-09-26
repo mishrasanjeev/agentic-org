@@ -66,7 +66,9 @@ class ScopeRefresh:
         return json.dumps(line, sort_keys=True)
 
 
-FAILED_OUTCOMES = frozenset({"grantex_failed", "storage_failed", "scope_limit_exceeded", "connector_lookup_failed"})
+FAILED_OUTCOMES = frozenset(
+    {"grantex_failed", "storage_failed", "scope_limit_exceeded", "connector_lookup_failed", "route_scope_read_failed"}
+)
 
 
 async def refresh_agent_scopes(
@@ -79,15 +81,23 @@ async def refresh_agent_scopes(
     grantex_client: Any,
     apply: bool,
     persist: Callable[[list[str]], Awaitable[None]],
+    current_route_scopes: Callable[[], Awaitable[list[str]]] | None = None,
 ) -> ScopeRefresh:
     """Recompute one agent's scopes and, with ``apply``, push them to Grantex then storage.
 
     ``persist`` stores the new scope list as ``config.grantex.grantex_scopes``.
+    The registration also keeps the agent's operator-granted route scopes
+    (``config.grantex.route_scopes``); they are pushed with the
+    tool scopes and never written into ``grantex_scopes``. ``current_route_scopes``
+    re-reads them just before the push, so a revoke made while the backfill runs
+    is not pushed back from the listing snapshot.
     """
     from auth.grantex_registration import (
         ScopeLimitExceededError,
         _tools_to_scopes,
         bounded_scopes,
+        registration_scopes,
+        stored_route_scopes,
         update_agent_scopes,
     )
 
@@ -99,14 +109,31 @@ async def refresh_agent_scopes(
 
     try:
         after = bounded_scopes(_tools_to_scopes(list(authorized_tools or []), domain, connector_names=connector_names))
+        registered = registration_scopes(after, stored_route_scopes(grantex_cfg))
     except ScopeLimitExceededError as exc:
         return ScopeRefresh(agent_id, grantex_agent_id, before, before, "scope_limit_exceeded", str(exc))
     if sorted(after) == sorted(before):
         return ScopeRefresh(agent_id, grantex_agent_id, before, after, "unchanged")
     if not apply:
         return ScopeRefresh(agent_id, grantex_agent_id, before, after, "would_update")
+    if current_route_scopes is not None:
+        try:
+            registered = registration_scopes(after, await current_route_scopes())
+        except ScopeLimitExceededError as exc:
+            return ScopeRefresh(agent_id, grantex_agent_id, before, before, "scope_limit_exceeded", str(exc))
+        # enterprise-gate: broad-except-ok reason=route-scope-read-failure-is-reported-per-agent-and-nothing-is-pushed
+        except Exception as exc:
+            logger.error("grantex_scope_refresh_route_read_failed", agent_id=agent_id, error_type=type(exc).__name__)
+            return ScopeRefresh(
+                agent_id,
+                grantex_agent_id,
+                before,
+                before,
+                "route_scope_read_failed",
+                f"route scopes unreadable: {type(exc).__name__}",
+            )
     try:
-        await asyncio.to_thread(update_agent_scopes, grantex_client, grantex_agent_id, after)
+        await asyncio.to_thread(update_agent_scopes, grantex_client, grantex_agent_id, registered)
     # enterprise-gate: broad-except-ok reason=grantex-update-failure-is-reported-and-storage-is-not-changed
     except Exception as exc:
         logger.error("grantex_scope_refresh_failed", agent_id=agent_id, error_type=type(exc).__name__)
@@ -226,6 +253,15 @@ async def run(args: argparse.Namespace) -> int:
                     if written.rowcount != 1:
                         raise AgentNotUpdatedError("no live registered agent row matched")
 
+            async def _route_scopes(_aid: uuid.UUID = agent_id, _tid: uuid.UUID = tid) -> list[str]:
+                from auth.grantex_registration import stored_route_scopes
+
+                async with get_tenant_session(_tid) as read:
+                    fresh = (
+                        await read.execute(select(Agent.config).where(Agent.id == _aid, Agent.tenant_id == _tid))
+                    ).scalar_one_or_none()
+                return stored_route_scopes((fresh or {}).get("grantex"))
+
             result = await refresh_agent_scopes(
                 agent_id=str(agent_id),
                 domain=domain,
@@ -235,6 +271,7 @@ async def run(args: argparse.Namespace) -> int:
                 grantex_client=client,
                 apply=args.apply,
                 persist=_persist,
+                current_route_scopes=_route_scopes,
             )
             totals[result.outcome] = totals.get(result.outcome, 0) + 1
             print(result.as_json())
