@@ -7,7 +7,8 @@ rewrote ``actor_id`` on the subject's ``audit_log`` rows, and the
 The CI schema is built with ``create_all``, which has no trigger, so the
 Postgres replay in ``test_secrets_dsar_webhooks_audit_20260913`` passed.
 
-Pinned here, against Postgres with the production trigger installed:
+Pinned here, against Postgres with the production rule in force (the
+``audit_log_immutable`` trigger, or an identical one under test-only names):
 
 1. Erasure completes: the ``users`` row is anonymised, feedback is
    pseudonymised, and the audit rows are left unchanged and reported as
@@ -30,9 +31,13 @@ pytestmark = [
     pytest.mark.asyncio(loop_scope="session"),
 ]
 
-# Same function and trigger as ``core/database.py`` installs in production.
-_REJECT_MUTATION_FN = """
-CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$
+# The rule ``core/database.py`` installs in production (``audit_log_immutable``
+# calling ``audit_log_reject_mutation()``), under names of the test's own, so the
+# fixture never replaces or drops a production object that is already there.
+_TEST_FUNCTION = "dsar_test_audit_log_reject_mutation"
+_TEST_TRIGGER = "dsar_test_audit_log_immutable"
+_REJECT_MUTATION_FN = f"""
+CREATE OR REPLACE FUNCTION {_TEST_FUNCTION}() RETURNS trigger AS $$
 BEGIN
     RAISE EXCEPTION
       'audit_log is append-only — UPDATE/DELETE rejected'
@@ -40,24 +45,25 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 """
-_IMMUTABLE_TRIGGER = """
-CREATE TRIGGER audit_log_immutable
+_IMMUTABLE_TRIGGER = f"""
+CREATE TRIGGER {_TEST_TRIGGER}
 BEFORE UPDATE OR DELETE ON audit_log
-FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation();
+FOR EACH ROW EXECUTE FUNCTION {_TEST_FUNCTION}();
 """
 
 
 @pytest.fixture
 async def immutable_audit_log(monkeypatch):
-    """Build the schema, install the production audit-log trigger and route the
-    app's sessions through a private engine.
+    """Build the schema, put the audit-log rule in force and route the app's
+    sessions through a private engine.
 
     The private NullPool engine keeps these tests off the shared, loop-guarded
     engine, whose cross-loop trips tests/conftest.py holds to a baseline.
     ``get_tenant_session`` and the tests resolve ``async_session_factory`` from
-    ``core.database`` at call time, so they follow the patch. The trigger is
-    removed afterwards only if this fixture created it, so the shared CI
-    database is left as it was found.
+    ``core.database`` at call time, so they follow the patch. When the
+    production trigger is absent, the fixture adds the same rule under its own
+    names and drops exactly those afterwards, so the shared CI database is left
+    as it was found.
     """
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
     from sqlalchemy.pool import NullPool
@@ -74,10 +80,9 @@ async def immutable_audit_log(monkeypatch):
                 text("SELECT 1 FROM pg_trigger WHERE tgname = 'audit_log_immutable' AND NOT tgisinternal")
             )
         ).first() is not None
-        had_function = (
-            await conn.execute(text("SELECT 1 FROM pg_proc WHERE proname = 'audit_log_reject_mutation'"))
-        ).first() is not None
         if not had_trigger:
+            # A run killed before teardown can leave the test trigger behind.
+            await conn.execute(text(f"DROP TRIGGER IF EXISTS {_TEST_TRIGGER} ON audit_log"))
             await conn.execute(text(_REJECT_MUTATION_FN))
             await conn.execute(text(_IMMUTABLE_TRIGGER))
     monkeypatch.setattr(
@@ -88,9 +93,8 @@ async def immutable_audit_log(monkeypatch):
     finally:
         if not had_trigger:
             async with engine.begin() as conn:
-                await conn.execute(text("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_log"))
-                if not had_function:
-                    await conn.execute(text("DROP FUNCTION IF EXISTS audit_log_reject_mutation()"))
+                await conn.execute(text(f"DROP TRIGGER IF EXISTS {_TEST_TRIGGER} ON audit_log"))
+                await conn.execute(text(f"DROP FUNCTION IF EXISTS {_TEST_FUNCTION}()"))
         await engine.dispose()
 
 

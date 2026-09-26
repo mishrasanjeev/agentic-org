@@ -1096,3 +1096,17 @@ Remove an entry in the pull request that fixes it.
   (`actor_id` and `details.subject_email`), where erasure can no longer reach it.
 - **Fix:** record `requested_by` as the actor and reference the subject by the
   DSAR request id (or `audit.dsar.pseudonymise`) in `details`.
+
+## A-80 — Some audit writers record the session e-mail as the actor
+
+- **Found:** review of the DSAR erasure fix (2026-09-26).
+- **What:** the session token's `sub` is the user's e-mail. Most audit writers
+  record the stable user id, but `api/v1/governance.py:113` falls back to `sub`
+  when the token has no `agenticorg:user_id`, feedback records `sub`
+  (`api/v1/agents.py:4847`), and DSAR request entries record the subject's
+  e-mail (A-79). `audit_log` is append-only, so erasure keeps those rows and
+  reports them as retained (GDPR Art. 17(3)(b)); the e-mail in them stays.
+- **Fix:** record the user id (or `audit.dsar.pseudonymise`) as `actor_id` at
+  write time and keep e-mail addresses out of `details`, so retained audit rows
+  carry no direct identifier. Rows already written stay as they are.
+
