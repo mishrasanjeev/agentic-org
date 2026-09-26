@@ -4,6 +4,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the production Playwright suite no longer runs local-stack specs
+- `ui/e2e/regression.config.ts` ran every `*.spec.ts` against production,
+  including the specs owned by `dev-stack.config.ts` and
+  `decision-grants.config.ts`, which need the dev stack's seeded data and
+  dev-only secrets. `decision-grants.spec.ts` throws at load without its
+  variables, so the post-deploy run collected no tests and failed. The
+  regression config now ignores those specs (722 tests in 78 files remain), and
+  a test fails if another config's spec is not ignored.
+
 ### Fixed - the post-deploy suite checks the AP Processor's real PineLabs tools
 - `tests/e2e/test_cxo_flows.py` still required `check_order_status`, a name no
   connector registers (the PineLabs tool is `get_order_status`) and which was
