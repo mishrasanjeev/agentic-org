@@ -31,6 +31,8 @@ The product facts endpoint is authoritative for the deployed version and current
 ## Boundaries
 
 - A connector listing is not proof that a tenant configured credentials or provider access.
+- Governed cases are tenant-gated. Repository source checks a role's registered tools, an exact local case-purpose allowlist and a delegated grant before provider calls; this does not prove a hosted deployment enabled the flow.
+- Published Grantex Python SDK 0.5.1 does not enforce a token-level case purpose or per-case cap. A machine credential or MCP tool cannot perform a human-only case decision.
 - Model-backed work requires a supported cloud provider or configured local model runtime.
 - Optional channels and provider rails require separate approvals, secrets, callbacks, and adapters.
 - OACP artifacts cannot create orders, inventory holds, mandates, payments, refunds, or paid states.
@@ -54,7 +56,7 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 - [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
 - [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
 - [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): AgenticOrg ships the bounded Shopify-to-OACP runtime while separating merchant facts, Grantex artifact authority, buyer-agent behavior, and provider/POS execution authority.
-- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
+- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Governed cases check registered role tools, an exact local purpose allowlist, and a delegated grant before provider calls; case decisions still require a signed-in human.
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
 - [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
@@ -94,6 +96,10 @@ Not from OACP artifacts. AgenticOrg can answer from valid evidence and prepare a
 ### Can AgenticOrg be self-hosted?
 
 Yes. The repository is Apache-2.0 licensed and includes local Docker and deployment assets. The managed production path uses Google Cloud Run.
+
+### Can an agent approve a governed business case?
+
+No. An agent can investigate with a valid tenant role, local case purpose and delegated tool grant. Review and case decisions require a signed-in human. See https://github.com/mishrasanjeev/agentic-org/blob/main/docs/governance/case-lifecycle.md for setup and current SDK limits.
 
 ## More
 

@@ -18,7 +18,10 @@ RUN npm run build
 
 # nginx:alpine @ 2026-05-01
 FROM nginx:alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
-RUN apk add --no-cache 'libexpat>=2.8.5-r0'
+# CVE-2026-93990: the base ships libexpat 2.8.4-r0 and no nginx:alpine digest
+# carries the fix yet. Upgrade in place, and fail the build if the fixed
+# package is unavailable. Drop this once the base digest carries 2.8.5-r0.
+RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0'
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'

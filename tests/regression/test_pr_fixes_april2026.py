@@ -132,8 +132,14 @@ class TestApiKeyAdminScope:
         # Should not raise
         checker(request)
 
-    def test_require_scope_allows_admin_wildcard(self):
-        """Users with agenticorg:admin* prefix pass."""
+    def test_require_scope_admin_is_the_exact_scope_not_a_prefix(self):
+        """Only ``agenticorg:admin`` itself passes; a scope that merely starts with it does not.
+
+        A prefix match let an agent in a domain such as ``administration``
+        (registered with ``agenticorg:administration:read``) create API keys.
+        """
+        from fastapi import HTTPException
+
         from api.deps import require_scope
 
         dep = require_scope("agenticorg:admin")
@@ -141,7 +147,10 @@ class TestApiKeyAdminScope:
 
         request = MagicMock()
         request.state.scopes = ["agenticorg:admin:full"]
+        with pytest.raises(HTTPException):
+            checker(request)
 
+        request.state.scopes = ["agenticorg:admin"]
         checker(request)
 
     def test_api_keys_router_has_admin_dependency(self):

@@ -9,6 +9,11 @@ TypeScript SDK for AgenticOrg - run AI agents, generate agents from plain
 English or SOPs, discover A2A/MCP tools, search knowledge, and create/run
 workflows.
 
+The npm registry currently publishes `agenticorg-sdk@0.3.0`. The `0.4.0`
+source in this repository adds runtime resources, including `client.cases`;
+build this checkout for evaluation until a newer package is published. A
+matching backend deployment is required.
+
 ## Install
 
 ```bash
@@ -86,7 +91,8 @@ const run = await client.workflows.run(workflow.id as string, {
 // API Key (dashboard users)
 new AgenticOrg({ apiKey: "your-key" });
 
-// Grantex Grant Token (external agents)
+// Grantex Grant Token (external agents). A route needs its scope in the
+// grant (e.g. agents:read), exactly as for an API key; tool scopes alone get 403.
 new AgenticOrg({ grantexToken: "eyJ..." });
 
 // Environment variable
@@ -103,6 +109,7 @@ new AgenticOrg();
 | `client.sop` | `parseText(text, domain?)`, `deploy(config)` |
 | `client.a2a` | `agentCard()`, `agents()` |
 | `client.mcp` | `tools()`, `call(name, args?)` |
+| `client.cases` | `submit(application, purpose, policyId?)`, `list({state?, limit?})`, `get(caseRef)`, `investigate(caseRef)`; repository source only |
 | `client.workflows` | `templates()`, `list()`, `generate(description)`, `create(opts)`, `get(id)`, `run(id, opts?)`, `getRun(id)` |
 | `client.knowledge` | `search()`, `supportedTypes()`, `upload()`, `documents()`, `delete()`, `health()`, `stats()` |
 | `client.voice` | `status()`, `saveConfig()`, `testConnection()`, `runtimeHealth()`, `calls()`, `placeOutboundCall()` |
@@ -128,6 +135,28 @@ const voiceRuntime = await client.voice.runtimeHealth("agent-uuid");
 verification are intentionally explicit because they may contact external
 systems or incur charges. Purchase/POS helpers prepare handoffs; provider and
 POS systems remain transaction authorities.
+
+## Governed cases
+
+The source SDK exposes only machine-safe case calls:
+
+```typescript
+const record = await client.cases.submit(
+  { legal_name: "Example Ltd", jurisdiction: "GB" },
+  "aml.cdd.onboarding",
+);
+const scheduled = await client.cases.investigate(record.case_ref as string);
+const current = await client.cases.get(record.case_ref as string);
+```
+
+`investigate()` schedules work; it does not certify a completed investigation.
+The backend checks tenant enablement, role registration, the local case-purpose
+allowlist and delegated tool grants before provider calls. The currently
+published Python Grantex SDK `0.5.1` does not enforce token-level case purpose
+or per-case caps. Human-only decisions, withdrawal, screening review and
+information-request approval are not exposed through this API-key/agent-token
+client or the MCP agent catalog. See the [case lifecycle](../docs/governance/case-lifecycle.md)
+and [SDK contract test](test/sdk-contract-smoke.mjs).
 
 ## License
 

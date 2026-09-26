@@ -21,6 +21,7 @@ from connectors.providers.mock import MockConfig, MockProvider
 from connectors.providers.mock.data import MockDataset, default_dataset
 from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
 from core.policy import EXAMPLES_DIR, load_policy
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 from core.test_doubles.scripted_model import final
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
@@ -82,7 +83,9 @@ async def _run(key: str, dataset: MockDataset, scripted_model: Any) -> tuple[Any
             require_os_isolation=False,
             llm_model="scripted",
         ),
-        deps=UnderwriterDependencies(provider=provider, clock=lambda: FROZEN, sleep=no_wait),
+        deps=UnderwriterDependencies(
+            provider=provider, clock=lambda: FROZEN, sleep=no_wait, authorizer=ALLOW_PROVIDER_CALLS
+        ),
     )
     return outcome, model.calls
 

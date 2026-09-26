@@ -24,7 +24,7 @@ source .venv/bin/activate  # or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
 
 # Start infrastructure
-docker compose up -d postgres redis s3mock
+docker compose up -d postgres redis minio
 
 # Copy and configure environment
 cp .env.example .env

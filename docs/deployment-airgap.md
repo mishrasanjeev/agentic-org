@@ -2,12 +2,6 @@
 
 Deploy AgenticOrg in environments with no internet access using local LLMs (Ollama + vLLM).
 
-This is an implementation sketch, not a validated production deployment
-recipe. The repository's local Compose stack uses S3Mock for tests only. An
-air-gapped production deployment needs a supported object store chosen and
-operated by the deploying organization, with backup, restore, access-control,
-and S3-compatibility tests before use.
-
 ## Prerequisites
 
 - Docker 24+ and Docker Compose v2
@@ -49,7 +43,7 @@ docker load < agenticorg-ui.tar
 docker load < ollama.tar
 docker load < pgvector.tar
 docker load < redis.tar
-# Load the operator-approved object-store image separately, if self-hosted.
+docker load < minio.tar
 
 # Extract Ollama models
 mkdir -p /opt/ollama/models
@@ -103,7 +97,13 @@ for img in agenticorg/api agenticorg/ui ollama/ollama pgvector/pgvector:pg16 red
   docker tag $img $REGISTRY/$img
   docker push $REGISTRY/$img
 done
-# Import the operator-approved object-store image separately, if self-hosted.
+
+# MinIO is pinned by digest, and Docker will not tag to a digest: give the
+# mirrored copy a plain tag instead.
+MINIO=cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+docker pull $MINIO
+docker tag $MINIO $REGISTRY/chainguard/minio:2026-09-24
+docker push $REGISTRY/chainguard/minio:2026-09-24
 ```
 
 ### 2. Pre-load Ollama models

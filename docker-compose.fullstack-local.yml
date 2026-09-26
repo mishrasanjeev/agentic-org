@@ -1,5 +1,5 @@
 # docker-compose.fullstack-local.yml — run the COMPLETE containerized stack
-# (postgres, redis, s3mock, migrate, api, worker, beat) on a workstation that
+# (postgres, redis, minio, migrate, api, worker, beat) on a workstation that
 # already has services bound to 5432/6379/8000/9000.
 #
 #   docker compose -p agenticorg_fullstack \
@@ -28,9 +28,10 @@ services:
   redis:
     ports: !override
       - "6379"
-  s3mock:
+  minio:
     ports: !override
-      - "9090"
+      - "9000"
+      - "9001"
   api:
     <<: *app-image
     ports: !override

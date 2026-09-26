@@ -20,7 +20,7 @@ x-backend-env: &backend-env
   AGENTICORG_DB_URL: postgresql+asyncpg://agenticorg:agenticorg_dev@postgres:5432/agenticorg
   AGENTICORG_REDIS_URL: redis://redis:6379/0
   AGENTICORG_STORAGE_BUCKET: agenticorg-docs-dev
-  AGENTICORG_STORAGE_ENDPOINT: http://s3mock:9090
+  AGENTICORG_STORAGE_ENDPOINT: http://minio:9000
   AGENTICORG_SECRET_KEY: agenticorg-dev-only-do-not-use-in-production
   AGENTICORG_PII_MASKING: "true"
   AGENTICORG_TEST_FAKE_LLM: "1"
@@ -73,20 +73,24 @@ services:
       timeout: 3s
       retries: 20
 
-  s3mock:
-    image: adobe/s3mock@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92
-    mem_limit: 768m
+  minio:
+    # MinIO no longer publishes a public server image (quay.io removed it;
+    # Docker Hub needs credentials). This build defaults to uid 65532, which
+    # cannot open a miniodata volume the old image wrote as root, so it runs
+    # as root as that image did and existing volumes keep working.
+    image: cgr.dev/chainguard/minio@sha256:bd014394a80898e68c149f2311fdf8d5a2c2f3bb2c33b9327ae6d02b4b065ae1
+    user: "0:0"
+    command: server /data --console-address ":9001"
     environment:
-      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: agenticorg-docs-dev
-      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+      MINIO_ROOT_USER: agenticorg
+      MINIO_ROOT_PASSWORD: agenticorg_dev
     volumes:
-      - s3mockdata:/s3mockroot
+      - miniodata:/data
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9090/favicon.ico"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 5s
       retries: 20
-      start_period: 30s
 
   # One-shot, idempotent schema bootstrap/upgrade (Alembic is the schema authority).
   migrate:
@@ -116,7 +120,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      s3mock:
+      minio:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -408,5 +412,5 @@ services:
 volumes:
   pgdata:
   redisdata:
-  s3mockdata:
+  miniodata:
   e2e-node-modules:

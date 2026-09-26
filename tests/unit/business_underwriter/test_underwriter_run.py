@@ -20,6 +20,7 @@ from core.agents.business_underwriter.memo import iter_memo_evidence
 from core.agents.business_underwriter.prompts import PINNED, PromptIntegrityError, load_prompt
 from core.domain_schemas import validate
 from core.policy import EXAMPLES_DIR, Policy, evaluate, load_policy
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 from core.test_doubles.scripted_model import final
 from core.tool_gateway.provider_gateway import READ_TOOLS, ToolDecision
 from tests.unit.business_underwriter.conftest import ALL_FIXTURES
@@ -106,7 +107,7 @@ async def test_verification_that_never_completes_becomes_a_timeout_error_section
         config=UnderwriterConfig(
             policy=policy_for("gb-"), require_os_isolation=False, verification_timeout_s=0.05, llm_model="scripted"
         ),
-        deps=UnderwriterDependencies(provider=backend, clock=frozen),
+        deps=UnderwriterDependencies(provider=backend, clock=frozen, authorizer=ALLOW_PROVIDER_CALLS),
     )
     assert outcome.status == "completed"
     registry = _section(outcome.memo, "registry")
@@ -499,11 +500,18 @@ def test_frozen_clock_is_the_fixture_snapshot() -> None:
     assert FROZEN.isoformat() == "2026-09-01T09:00:00+00:00"
 
 
-async def test_documented_example_runs(narrative) -> None:
+async def test_documented_example_runs(narrative, monkeypatch: pytest.MonkeyPatch) -> None:
     narrative()
+    from core.cases.grant_authorizer import CaseGrantAuthorizer
+
+    async def permitted(self: CaseGrantAuthorizer, *, connector: str, tool: str) -> ToolDecision:
+        return ToolDecision(allowed=True)
+
+    monkeypatch.setattr(CaseGrantAuthorizer, "authorize", permitted)
     # docs-snippet: start run-underwriter
     from connectors.providers.mock import MockProvider
     from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDependencies, run_underwriter
+    from core.cases.grant_authorizer import case_authorizer
     from core.policy import EXAMPLES_DIR, load_policy
 
     provider = MockProvider()
@@ -513,7 +521,10 @@ async def test_documented_example_runs(narrative) -> None:
         case_id="case-0001",
         application=application,
         config=UnderwriterConfig(policy=load_policy(EXAMPLES_DIR / "business_onboarding_us.yaml")),
-        deps=UnderwriterDependencies(provider=provider),
+        deps=UnderwriterDependencies(
+            provider=provider,
+            authorizer=case_authorizer("", "case-0001", "business_underwriter", "aml.cdd.onboarding"),
+        ),
     )
     assert outcome.status == "completed"
     memo = outcome.memo  # schema: underwriting_memo, every section cites evidence
@@ -535,7 +546,7 @@ async def test_a_new_run_re_queries_the_provider_while_a_retry_within_a_run_does
     async def run(run_id: str) -> Any:
         return await run_underwriter(
             tenant_id="", case_id="case-requery", run_id=run_id, application=application, config=config,
-            deps=UnderwriterDependencies(provider=provider, clock=frozen),
+            deps=UnderwriterDependencies(provider=provider, clock=frozen, authorizer=ALLOW_PROVIDER_CALLS),
         )  # fmt: skip
 
     first = await run("run-1")

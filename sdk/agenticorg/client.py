@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 import httpx
+
+_CASE_REF_RE = re.compile(r"^case_[0-9a-f]{24}$")
 
 
 @dataclass
@@ -118,6 +122,7 @@ class AgenticOrg:
         self.sop = _SOPResource(self._http)
         self.a2a = _A2AResource(self._http)
         self.mcp = _MCPResource(self._http)
+        self.cases = _CasesResource(self._http)
         self.workflows = _WorkflowsResource(self._http)
         self.knowledge = _KnowledgeResource(self._http)
         self.voice = _VoiceResource(self._http)
@@ -363,6 +368,47 @@ class _MCPResource:
                 "arguments": arguments or {},
             },
         )
+        resp.raise_for_status()
+        return resp.json()
+
+
+class _CasesResource:
+    """Machine-safe governed-case calls; human decisions remain in the console."""
+
+    def __init__(self, http: httpx.Client):
+        self._http = http
+
+    def submit(
+        self, application: dict[str, Any], *, purpose: str, policy_id: str | None = None
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {"application": application, "purpose": purpose}
+        if policy_id is not None:
+            payload["policy_id"] = policy_id
+        resp = self._http.post("/api/v1/governed-cases", json=payload)
+        resp.raise_for_status()
+        return resp.json()
+
+    def list(self, *, state: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        if not 1 <= limit <= 200:
+            raise ValueError("limit must be between 1 and 200")
+        params: dict[str, Any] = {"limit": limit}
+        if state is not None:
+            params["state"] = state
+        resp = self._http.get("/api/v1/governed-cases", params=params)
+        resp.raise_for_status()
+        return resp.json()["cases"]
+
+    def get(self, case_ref: str) -> dict[str, Any]:
+        if not _CASE_REF_RE.fullmatch(case_ref):
+            raise ValueError("case_ref must be a case_ identifier with 24 lowercase hex characters")
+        resp = self._http.get(f"/api/v1/governed-cases/{quote(case_ref, safe='')}")
+        resp.raise_for_status()
+        return resp.json()
+
+    def investigate(self, case_ref: str) -> dict[str, Any]:
+        if not _CASE_REF_RE.fullmatch(case_ref):
+            raise ValueError("case_ref must be a case_ identifier with 24 lowercase hex characters")
+        resp = self._http.post(f"/api/v1/governed-cases/{quote(case_ref, safe='')}/investigate")
         resp.raise_for_status()
         return resp.json()
 

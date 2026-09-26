@@ -345,6 +345,46 @@ class MCPResource {
   }
 }
 
+class CasesResource {
+  constructor(private http: HttpClient) {}
+
+  private casePath(caseRef: string): string {
+    if (!/^case_[0-9a-f]{24}$/.test(caseRef)) {
+      throw new Error("caseRef must be a case_ identifier with 24 lowercase hex characters");
+    }
+    return `/api/v1/governed-cases/${encodeURIComponent(caseRef)}`;
+  }
+
+  async submit(
+    application: Record<string, unknown>,
+    purpose: string,
+    policyId?: string,
+  ): Promise<Record<string, unknown>> {
+    const payload: Record<string, unknown> = { application, purpose };
+    if (policyId !== undefined) payload.policy_id = policyId;
+    return (await this.http.post("/api/v1/governed-cases", payload)) as Record<string, unknown>;
+  }
+
+  async list(options: { state?: string; limit?: number } = {}): Promise<Record<string, unknown>[]> {
+    const limit = options.limit ?? 50;
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      throw new RangeError("limit must be between 1 and 200");
+    }
+    const params: Record<string, string> = { limit: String(limit) };
+    if (options.state !== undefined) params.state = options.state;
+    const data = (await this.http.get("/api/v1/governed-cases", params)) as { cases: Record<string, unknown>[] };
+    return data.cases;
+  }
+
+  async get(caseRef: string): Promise<Record<string, unknown>> {
+    return (await this.http.get(this.casePath(caseRef))) as Record<string, unknown>;
+  }
+
+  async investigate(caseRef: string): Promise<Record<string, unknown>> {
+    return (await this.http.post(`${this.casePath(caseRef)}/investigate`)) as Record<string, unknown>;
+  }
+}
+
 class WorkflowsResource {
   constructor(private http: HttpClient) {}
 
@@ -655,6 +695,8 @@ export class AgenticOrg {
   public sop: SOPResource;
   public a2a: A2AResource;
   public mcp: MCPResource;
+  /** Machine-safe case operations. Human-only review, withdrawal and decisions are not exposed. */
+  public cases: CasesResource;
   public workflows: WorkflowsResource;
   public knowledge: KnowledgeResource;
   public voice: VoiceResource;
@@ -687,6 +729,7 @@ export class AgenticOrg {
     this.sop = new SOPResource(http);
     this.a2a = new A2AResource(http);
     this.mcp = new MCPResource(http);
+    this.cases = new CasesResource(http);
     this.workflows = new WorkflowsResource(http);
     this.knowledge = new KnowledgeResource(http);
     this.voice = new VoiceResource(http);

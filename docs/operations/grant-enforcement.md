@@ -7,6 +7,11 @@ when an agent happened to have a token in `config.grantex.grant_token`, which
 registration never set, so on the common path it did not run at all. This page
 covers how the check is switched on, what it records and how to read it.
 
+Governed-case provider calls are stricter than the general mode described below:
+they always require a positive grant check, including while the general mode is
+`off` or `warn`. See [the case lifecycle](../governance/case-lifecycle.md#turning-it-on)
+for the required role registrations and the current SDK limitations.
+
 ## Modes
 
 | Mode | A call the grant does not cover | Recorded as |
@@ -268,6 +273,22 @@ agent. A failure for one agent is reported on its line and the run continues:
 ones - re-run), `scope_limit_exceeded` (more than 100 scopes; nothing changed)
 or `connector_lookup_failed`. The exit status is 1 when any agent failed. Then
 re-read the warn-mode report before switching the tenant to `deny`.
+
+## Agent tokens on the platform API
+
+Tool scopes govern what an agent's run may call through the tool gateway. They
+say nothing about the platform API. An agent token that calls a route - listing
+agents, starting a run, reading the audit trail - is checked against the
+route's scope exactly as an API key is (`api/route_enforcement.py`): the grant
+must carry the family's scope, such as `agents:read`, `agents:write` (or its
+alias `agents:run`), `workflows:write` or `audit:read`, or `agenticorg:admin`.
+A grant holding only `tool:...` and `agenticorg:{domain}:read` scopes gets
+`403 Missing scope` on every route in a mapped family. Routes in unmapped
+families (A2A and MCP among them) are not scope-checked for any credential.
+
+Registration does not yet add route scopes to an agent's grant (FINDINGS
+A-64), so an external agent that needs the platform API should use an API key
+with the scopes it needs until it does.
 
 ## Runbook
 

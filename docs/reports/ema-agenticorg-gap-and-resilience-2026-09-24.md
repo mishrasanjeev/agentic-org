@@ -128,23 +128,7 @@ These are prioritized by failure impact, not by how easy they are to document.
     producer and durable outbox (or equivalent) before mounting the live
     component; test delivery, duplicate suppression, tenant isolation, broker
     outage, and hot-tenant write load. Do not put synchronous feed append on
-   a high-volume audit path without measuring the DB cost.
-
-## Local-stack reproducibility
-
-The PR's Local Stack CI initially stopped before tests because its pinned
-Quay MinIO digest rejected anonymous pulls. Both local Compose definitions
-now use a digest-pinned, local-only S3Mock image; the development bucket and
-storage endpoint are aligned across Compose, the local E2E script, and the
-quickstart. Production object storage is unchanged. On the workstation,
-`make dev` passed with Git Bash selected as its shell: all Compose services
-reached healthy, migrations exited successfully, and the repository smoke
-passed. An API-container S3-style PUT/GET/DELETE round trip also passed.
-Without the shell override, this Windows installation resolves `bash` to a
-WSL installation without `/bin/bash`, so the wrapper stops at the final
-smoke-script invocation despite healthy services. The focused bug-sheet
-regression passed (26 tests). This verifies local boot, not object-store
-compatibility for every production storage operation or production readiness.
+    a high-volume audit path without measuring the DB cost.
 
 ## Execution order and gates
 

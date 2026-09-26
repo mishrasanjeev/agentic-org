@@ -599,6 +599,110 @@ class TestGetAgent:
 
 class TestUpdateAgent:
     @pytest.mark.asyncio
+    async def test_case_purposes_requires_human_admin_and_records_audit(self, mock_session, tenant_id):
+        from api.v1.agents import update_agent
+        from core.models.audit import AuditLog
+        from core.ownership import Caller
+        from core.schemas.api import AgentUpdate
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(
+            id=aid,
+            agent_type="business_underwriter",
+            visibility="tenant",
+            owner_user_id=None,
+            company_id=None,
+            config={"grantex": {"grantex_agent_id": "ag_test"}},
+        )
+        agent.visibility = "tenant"
+        agent.owner_user_id = None
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+        admin = Caller(user_id=uuid.uuid4(), role="admin", domains=None, is_admin=True, is_machine=False)
+        body = AgentUpdate(case_purposes=["aml.cdd.onboarding"])
+
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            result = await update_agent(agent_id=aid, body=body, tenant_id=tenant_id, caller=admin)
+
+        assert result["updated"] is True
+        assert agent.config["grantex"]["case_purposes"] == ["aml.cdd.onboarding"]
+        [audit] = [call.args[0] for call in mock_session.add.call_args_list if isinstance(call.args[0], AuditLog)]
+        assert audit.actor_id == str(admin.user_id)
+        assert audit.details == {"before": None, "after": ["aml.cdd.onboarding"]}
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "is_admin,is_machine,has_user,agent_type,visibility",
+        [
+            (False, False, True, "business_underwriter", "tenant"),
+            (True, False, False, "business_underwriter", "tenant"),
+            (True, True, False, "business_underwriter", "tenant"),
+            (True, False, True, "ap_processor", "tenant"),
+            (True, False, True, "business_underwriter", "personal"),
+        ],
+    )
+    async def test_case_purpose_update_refuses_wrong_principal_or_agent(
+        self, mock_session, tenant_id, is_admin, is_machine, has_user, agent_type, visibility
+    ):
+        from api.v1.agents import update_agent
+        from core.ownership import Caller
+        from core.schemas.api import AgentUpdate
+
+        caller = Caller(
+            user_id=uuid.uuid4() if has_user else None,
+            role="admin" if is_admin else "member",
+            domains=None,
+            is_admin=is_admin,
+            is_machine=is_machine,
+        )
+        aid = uuid.uuid4()
+        agent = make_mock_agent(id=aid, agent_type=agent_type, visibility=visibility, owner_user_id=None)
+        agent.visibility = visibility
+        agent.owner_user_id = None
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await update_agent(
+                    agent_id=aid,
+                    body=AgentUpdate(case_purposes=["aml.cdd.onboarding"]),
+                    tenant_id=tenant_id,
+                    caller=caller,
+                )
+        assert exc_info.value.status_code == 403
+        assert not mock_session.add.called
+
+    @pytest.mark.asyncio
+    async def test_case_purpose_update_refuses_malformed_policy(self, mock_session, tenant_id):
+        from api.v1.agents import update_agent
+        from core.ownership import Caller
+        from core.schemas.api import AgentUpdate
+
+        aid = uuid.uuid4()
+        agent = make_mock_agent(id=aid, agent_type="business_underwriter", visibility="tenant")
+        agent.visibility = "tenant"
+        agent.owner_user_id = None
+        exec_result = MagicMock()
+        exec_result.scalar_one_or_none.return_value = agent
+        mock_session.execute = AsyncMock(return_value=exec_result)
+        admin = Caller(user_id=uuid.uuid4(), role="admin", domains=None, is_admin=True, is_machine=False)
+        with patch("api.v1.agents.get_tenant_session") as mock_gts:
+            mock_gts.return_value = _make_tenant_session_ctx(mock_session)
+            with pytest.raises(HTTPException) as exc_info:
+                await update_agent(
+                    agent_id=aid,
+                    body=AgentUpdate(case_purposes=["invalid"]),
+                    tenant_id=tenant_id,
+                    caller=admin,
+                )
+        assert exc_info.value.status_code == 422
+        assert not mock_session.add.called
+
+    @pytest.mark.asyncio
     async def test_update_agent_name(self, mock_session, tenant_id):
         from api.v1.agents import update_agent
 

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_session, get_tenant_session
 from core.models.user import User
-from core.rbac import get_allowed_domains
+from core.rbac import get_allowed_domains, has_admin_scope
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +47,7 @@ def get_current_user(request: Request) -> dict:
 def require_scope(scope: str):
     def checker(request: Request):
         scopes = getattr(request.state, "scopes", [])
-        if scope not in scopes and not any(s.startswith("agenticorg:admin") for s in scopes):
+        if scope not in scopes and not has_admin_scope(scopes):
             raise HTTPException(403, f"Missing scope: {scope}")
 
     return Depends(checker)
@@ -122,7 +122,7 @@ def get_user_domains(request: Request) -> list[str] | None:
     if getattr(request.state, "auth_mode", None) in {"api_key", "grantex"}:
         return None
     scopes = getattr(request.state, "scopes", None) or claims.get("grantex:scopes") or []
-    if any(str(scope).startswith("agenticorg:admin") for scope in scopes):
+    if has_admin_scope(scopes):
         # The admin scope already bypasses every scope check (require_scope);
         # a role-less admin token must not collapse to "no domains".
         return None

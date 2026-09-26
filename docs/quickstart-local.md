@@ -35,8 +35,7 @@ All ports bind to `127.0.0.1` only.
 `docker-compose.dev.yml` starts:
 
 - **postgres** (pgvector 16) and **redis** — data kept in named volumes
-- **s3mock** — local-only S3-compatible emulator for document storage tests;
-  it is not the production object store
+- **minio** — object storage for uploaded documents (internal only)
 - **migrate** — applies Alembic migrations once, then exits; the API and
   worker wait for it
 - **api** — the FastAPI application
@@ -55,12 +54,7 @@ All ports bind to `127.0.0.1` only.
 - **grantex-db** and **grantex** — the Grantex auth service from its published
   image, with its own database; see [Local Grantex](#local-grantex)
 
-Every base image is pinned by digest.
-The S3Mock bucket is for local tests only; it does not configure or exercise
-production object storage. The image may take several seconds to start on its
-first run.
-
-The API and worker set
+Every base image is pinned by digest. The API and worker set
 `AGENTICORG_TEST_FAKE_LLM=1` (see `docs/hermetic_test_doubles.md`), so
 completions made through the LLM router return stable, clearly synthetic output
 without calling a model provider. LangGraph agent runs, which the fake does not

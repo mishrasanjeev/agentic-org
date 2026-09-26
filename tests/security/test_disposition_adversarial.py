@@ -13,6 +13,7 @@ from connectors.framework.verification_provider import Deadline, PersonSubject, 
 from connectors.providers.mock import MockConfig, MockProvider
 from connectors.providers.mock.data import MockDataset, default_dataset
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 from core.test_doubles.scripted_model import final
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
@@ -42,7 +43,7 @@ async def _dispose(dataset: MockDataset, scripted_model: Any) -> tuple[Any, list
         subject={"kind": "person", "name": "Wilhelmina Strand", "date_of_birth": "1979-12", "nationalities": ["GB"]},
         associated_entities=["Northgate Textiles Ltd"],
         config=DispositionConfig(llm_model="scripted"),
-        deps=DispositionDependencies(provider=provider, clock=lambda: FROZEN),
+        deps=DispositionDependencies(provider=provider, clock=lambda: FROZEN, authorizer=ALLOW_PROVIDER_CALLS),
         run_id="run-northgate",
     )
     return outcome, model.calls

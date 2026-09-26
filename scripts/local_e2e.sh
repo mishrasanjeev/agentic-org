@@ -11,10 +11,10 @@
 #   the full Dockerfile which installs torch / scipy / pandas (~1-2 GB of
 #   ML deps, 30-60 min first build). Instead we run the API on the host
 #   via uvicorn, reusing the already-installed `.venv`. docker compose is
-#   only used for the stateful services (postgres + redis + s3mock).
+#   only used for the stateful services (postgres + redis + minio).
 #
 # What it does:
-#   1. docker compose up postgres + redis + s3mock
+#   1. docker compose up postgres + redis + minio (fast, ~30 s first time)
 #   2. Wait for postgres health
 #   3. Launch `uvicorn api.main:app` on host via the repo's .venv
 #   4. Wait for the API /health endpoint
@@ -140,7 +140,7 @@ cleanup() {
   stop_pid "$UI_PID" "UI server"
   stop_pid "$API_PID" "API uvicorn"
   if [[ "${KEEP_UP:-0}" != "1" ]]; then
-    log "Tearing down docker compose (postgres/redis/s3mock)"
+    log "Tearing down docker compose (postgres/redis/minio)"
     docker compose "${COMPOSE_FILES[@]}" down --remove-orphans >/dev/null 2>&1 \
       || docker compose down --remove-orphans >/dev/null 2>&1 || true
   else
@@ -243,22 +243,22 @@ done
 }
 
 if [[ "${RESET:-0}" == "1" ]]; then
-  log "RESET=1 — tearing down any prior compose + removing pgdata/redisdata/s3mockdata volumes"
+  log "RESET=1 — tearing down any prior compose + removing pgdata/redisdata/miniodata volumes"
   docker compose "${COMPOSE_FILES[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
 fi
 
-log "docker compose up -d postgres redis s3mock (project=${COMPOSE_PROJECT_NAME}, Docker-assigned host ports)"
-docker compose "${COMPOSE_FILES[@]}" up -d postgres redis s3mock
+log "docker compose up -d postgres redis minio (project=${COMPOSE_PROJECT_NAME}, Docker-assigned host ports)"
+docker compose "${COMPOSE_FILES[@]}" up -d postgres redis minio
 
 PG_PORT="$(compose_port postgres 5432)"
 REDIS_PORT="$(compose_port redis 6379)"
-S3MOCK_PORT="$(compose_port s3mock 9090)"
-if [[ -z "$PG_PORT" || -z "$REDIS_PORT" || -z "$S3MOCK_PORT" ]]; then
-  fail "Could not read host ports from docker compose. pg='${PG_PORT}' redis='${REDIS_PORT}' s3mock='${S3MOCK_PORT}'"
+MINIO_PORT="$(compose_port minio 9000)"
+if [[ -z "$PG_PORT" || -z "$REDIS_PORT" || -z "$MINIO_PORT" ]]; then
+  fail "Could not read host ports from docker compose. pg='${PG_PORT}' redis='${REDIS_PORT}' minio='${MINIO_PORT}'"
   docker compose "${COMPOSE_FILES[@]}" ps
   exit 3
 fi
-ok "host ports assigned — pg=${PG_PORT}, redis=${REDIS_PORT}, s3mock=${S3MOCK_PORT}"
+ok "host ports assigned — pg=${PG_PORT}, redis=${REDIS_PORT}, minio=${MINIO_PORT}"
 
 log "Waiting for redis ready (PING, timeout 30s)"
 deadline=$(( $(date +%s) + 30 ))
@@ -329,7 +329,7 @@ export AGENTICORG_ENV=development
 export AGENTICORG_DB_URL="postgresql+asyncpg://agenticorg:agenticorg_dev@localhost:${PG_PORT}/agenticorg"
 export AGENTICORG_REDIS_URL="redis://localhost:${REDIS_PORT}/0"
 export AGENTICORG_STORAGE_BUCKET="agenticorg-docs-dev"
-export AGENTICORG_STORAGE_ENDPOINT="http://localhost:${S3MOCK_PORT}"
+export AGENTICORG_STORAGE_ENDPOINT="http://localhost:${MINIO_PORT}"
 export AGENTICORG_SECRET_KEY="dev-secret-key-change-in-production-32chars"
 export AGENTICORG_PII_MASKING="true"
 

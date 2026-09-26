@@ -23,6 +23,7 @@ from core.domain_schemas import validate
 from core.langgraph import llm_factory
 from core.model_replay import CassetteMissError
 from core.policy import EXAMPLES_DIR, load_policy
+from core.test_doubles.grant_authorizer import ALLOW_PROVIDER_CALLS
 
 FROZEN = datetime(2026, 9, 1, 9, 0, tzinfo=UTC)
 MODEL = "gemini-2.5-flash"
@@ -57,7 +58,9 @@ async def _underwrite(application_key: str) -> Any:
             require_os_isolation=False,
             llm_model=MODEL,
         ),
-        deps=UnderwriterDependencies(provider=provider, clock=lambda: FROZEN, sleep=no_wait),
+        deps=UnderwriterDependencies(
+            provider=provider, clock=lambda: FROZEN, sleep=no_wait, authorizer=ALLOW_PROVIDER_CALLS
+        ),
     )
 
 

@@ -46,6 +46,25 @@ buyer channel, payment rail, merchant system, or POS path is usable only when
 the target tenant has the required credentials, scopes, configuration, and
 provider approval.
 
+### Governed business cases
+
+The repository includes a tenant-gated business onboarding case workflow with
+read-only provider investigation, a cited memo, deterministic policy scoring,
+screening dispositions, human review, and an auditable hand-off. Provider calls
+are refused unless the active role agent, registered tools, exact local case
+purpose, and delegated grant all authorize the call. This case-specific check
+is strict even if general tool enforcement is in `off` or `warn` mode.
+
+The currently published `grantex==0.5.1` does **not** verify a case purpose in
+the token or enforce a per-case cap. The role's `case_purposes` list is a local
+AgenticOrg control, and pooled grants are not bound to one case. Decision and
+analyst actions still require a signed-in human; API keys, agent tokens, and
+MCP tools cannot act as that human. The case runtime is off for a tenant until
+enabled and configured. This source description is not a claim that a particular
+hosted deployment has enabled the workflow. See the [case lifecycle and setup](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/governance/case-lifecycle.md),
+[grant-enforcement runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/operations/grant-enforcement.md), and
+[decision requests](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/governance/decision-requests.md).
+
 Voice, email, OCR, and browser RPA can be exercised together before release
 with the Docker-backed [local multichannel simulation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/local-multichannel-simulation.md).
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
@@ -184,10 +203,14 @@ Install the platform and development extras:
 
 Start local dependencies:
 
-    docker compose up -d postgres redis s3mock
+    docker compose up -d postgres redis minio
 
-Run migrations and the API:
+Run migrations and the API. `AGENTICORG_ENV` must be in the shell environment,
+not only in `.env`: the credential vault reads the process environment, and
+outside a local, dev, development, test or CI runtime it refuses to start
+without a real vault key.
 
+    export AGENTICORG_ENV=development
     python scripts/alembic_migrate.py
     uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 
@@ -532,7 +555,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Agent Evaluations](https://agenticorg.ai/evals): AgenticOrg evaluations help teams assess quality, safety, reliability, security, latency, and cost before promoting an agent from testing into governed use.
 - [Integration Workflow](https://agenticorg.ai/integration-workflow): The integration workflow takes a connection from discovery through scoped configuration, validation, shadow testing, approval, activation, and ongoing audit.
 - [Open Agentic Commerce Protocol](https://agenticorg.ai/open-agentic-commerce-protocol): AgenticOrg ships the bounded Shopify-to-OACP runtime while separating merchant facts, Grantex artifact authority, buyer-agent behavior, and provider/POS execution authority.
-- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.
+- [How Grantex Works](https://agenticorg.ai/how-grantex-works): Governed cases check registered role tools, an exact local purpose allowlist, and a delegated grant before provider calls; case decisions still require a signed-in human.
 - [AI Agents for CA Firms](https://agenticorg.ai/solutions/ca-firms): AgenticOrg can help CA firms coordinate repeatable client-service workflows while keeping filings, payments, and other consequential actions within configured approval and provider boundaries.
 - [AI Agents for Finance](https://agenticorg.ai/solutions/cfo): Finance teams can compose agents around defined tasks and data sources while retaining human approval for high-impact actions and evidence for review.
 - [AI Agents for HR](https://agenticorg.ai/solutions/chro): HR teams can use agents for repeatable coordination and information tasks while keeping sensitive data scoped and employment decisions under human authority.
@@ -614,6 +637,7 @@ Titles describe educational topics. Verify any numerical claim against page evid
 - Do not present a source connector name as evidence of a customer connection.
 - Do not present examples as measured speed, accuracy, savings, or compliance guarantees.
 - Do not describe repository controls as a third-party certification.
+- Do not describe source-only governed-case controls as deployed until the live revision is verified; distinguish the local case-purpose allowlist from token-level purpose and per-case cap enforcement.
 - Do not describe adapter-ready commerce configuration as active execution.
 - Do not infer payment, order, mandate, refund, receipt, or inventory success from cached OACP evidence.
 - Prefer current code and canonical runbooks over dated reports.

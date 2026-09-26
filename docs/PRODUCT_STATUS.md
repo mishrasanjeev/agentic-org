@@ -1,7 +1,8 @@
 # Current Product Status
 
-Last source-verified: 2026-09-24. Production deployment and SLOs require
-separate operational evidence.
+Last source-verified: 2026-09-24 (repository source; confirm the deployed SHA
+separately). Production deployment and SLOs require separate operational
+evidence.
 
 This page is the concise capability truth for AgenticOrg. It distinguishes
 shipped runtime behavior from tenant configuration and external-provider
@@ -36,6 +37,7 @@ records product behavior and availability, not deployment state.
 | RPA | Built-in Playwright script discovery, tenant-scoped execution, schedules, durable history, screenshots/results, timeout handling, and approved-domain egress controls | Browser runtime, tenant-approved domains, credentials, and target-site stability | RPA runs are explicit external actions; catalog presence does not authorize a run or bypass anti-bot/provider policy |
 | Connectors | Native connector registry, tenant/company-scoped credential-presence and health-freshness projection, scoped tool gateway, optional integration gateways, and merchant-scoped Shopify credential custody | Provider accounts, scopes, secrets, rate limits, and tenant approval | Registration and a recent health check do not verify scopes, API contracts, sustained sync, or an error budget; no credentials are returned in the readiness projection |
 | Developer surfaces | REST, OpenAPI, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces | Compatible client, authentication, tenant/company context, and server version | Discovery metadata does not create tool or transaction authority |
+| Governed cases | Tenant-gated business onboarding cases, read-only provider investigation, local exact-purpose allowlists, strict grant checks, cited memos, policy scores, screening dispositions, human review, and case hand-off | Exactly one active shared agent per case role, a reviewed provider manifest and policy, Grantex root grant, and a tenant feature flag | Published Python Grantex SDK 0.5.1 does not enforce token-level case purpose or per-case caps; pooled grants are not case-bound. Machine credentials cannot perform human-only decisions. Confirm deployment before calling this live. |
 | Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
 | Billing and operations | Hosted plan catalog, billing routes, health, migrations, observability hooks, security checks, and reviewed Cloud Run rollout helper | Payment-provider configuration and operational ownership | Billing integration is separate from OACP buyer-payment execution |

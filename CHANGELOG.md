@@ -4,6 +4,131 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the credential vault no longer falls back to a published key
+- Outside a local, dev, development, test or CI runtime, the credential vault
+  now refuses its code default (`dev-only-vault-key`), any secret value
+  published in this repository (the code defaults, `.env.example`, the compose
+  files, the `Makefile`, CI and scripts; compared ignoring case and surrounding
+  whitespace), and a blank key. It needs `AGENTICORG_VAULT_KEYRING`, or
+  `AGENTICORG_VAULT_KEY`, or as before `AGENTICORG_SECRET_KEY`, in the process
+  environment. Before, a production runtime whose secrets were only in `.env`
+  (loaded into settings, but not into the environment the vault reads) sealed
+  every connector credential and LangGraph checkpoint under the default, which
+  anyone with this repository can derive.
+- An unset or unrecognised `AGENTICORG_ENV` counts as production here.
+- The API refuses to start without a usable key. So does a worker: the check
+  runs on Celery's `worker_init` in the main worker process and exits, and the
+  Cloud Run entrypoint (`scripts/run_worker.py`) checks before it starts its
+  health server. The checkpointer reports `checkpoint_encryption_key_missing`.
+- Refusals and keyring parse errors name the setting and the entry's position
+  or id, never key material. Before, an entry missing its `id:` prefix (which
+  is the raw key) was quoted in the error.
+- `Settings` in a strict runtime now refuses every published placeholder as
+  `AGENTICORG_SECRET_KEY`, not only `dev-only-secret-key`.
+- A keyring that is set but has no entries is refused in every runtime
+  instead of falling through to the single-key path. A blank
+  `AGENTICORG_VAULT_KEY` now counts as unset (the next fallback applies), and
+  a keyring entry with no key material (`v1:`) is refused. Before, both
+  derived the key from the empty string, which is public.
+- **Breaking for operators:**
+  - A strict runtime without a vault key in its process environment no longer
+    starts; set `AGENTICORG_VAULT_KEYRING` (see `docs/deployment.md`). CI's
+    background Celery worker now sets `AGENTICORG_ENV=ci`, and local
+    development must export `AGENTICORG_ENV=development` (see the README).
+  - A runtime that ran on the default has credentials sealed under a public
+    key. Strict runtimes refuse the default even as a keyring entry, so rewrap
+    those rows from a trusted machine with `AGENTICORG_ENV=local` and
+    `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:dev-only-vault-key`, then rotate
+    every affected provider credential.
+  - Rows sealed under an empty-string key (a blank `AGENTICORG_VAULT_KEY`, or
+    a `v1:` entry) can no longer be decrypted in any runtime. Treat those
+    provider credentials as exposed and re-enter them.
+- The `AGENTICORG_SECRET_KEY` fallback is unchanged; FINDINGS A-71 tracks
+  giving every deployment a dedicated vault key.
+
+### Fixed - approval policies cannot be satisfied by one person
+- A reviewer may vote once per approval item, across every step of its
+  policy. Before, the duplicate-vote check covered only the current step, and
+  a step's count resets when the item advances, so one senior user could
+  approve each step in turn and decide a multi-person policy alone. A second
+  vote now gets `409`.
+- A policy step whose condition cannot be evaluated - a field the item does
+  not carry, a non-numeric ordering comparison, an unparseable expression -
+  now applies instead of being skipped, so the item needs that step's
+  approvals. So does a malformed operand (`status ==`, an unterminated
+  quote). `NOT` over a missing field no longer counts as a match.
+- If an item's policy is deleted mid-approval, another policy now resolves
+  for it, or the step it is waiting on is removed, decisions on the item get
+  `409` and it stays pending, instead of being decided on the next single
+  vote with no policy applied.
+- A reviewer is matched on every identifier their session carries (user id,
+  subject and email), so an invite-acceptance session and a login session for
+  the same person count as one reviewer.
+- **Breaking for operators:** items whose policy conditions name fields their
+  context lacks now need those steps' approvals. Someone who voted at one step
+  cannot approve or reject at a later one, so a policy that needs the same
+  person twice cannot complete. Editing (deleting and recreating) a policy, or
+  adding one that now resolves instead, leaves items in flight under the old
+  one refusing every decision until they expire; there is no override yet
+  (FINDINGS A-67). See `docs/approval-policies.md`.
+
+### Fixed - agent tokens need a route's scope, like API keys
+- **Breaking:** route scope checks now apply to Grantex agent tokens. Before,
+  any credential other than a user session or an API key skipped them, so an
+  agent token granted only `tool:mock:read` could read the whole tenant audit
+  trail and run any agent. An agent token must now carry the route family's
+  scope (`agents:read`, `agents:run`, `audit:read`, ...) or `agenticorg:admin`,
+  or it gets `403`. An authenticated request with an unrecognised
+  authentication mode is refused the same way.
+- Agent registration does not yet put route scopes in a grant (FINDINGS
+  A-64), so agents calling scoped routes with a grant token are refused until
+  it does; use an API key meanwhile. A2A and MCP routes are unaffected.
+  See `docs/operations/grant-enforcement.md`.
+
+### Fixed - three external changes that broke CI on every pull request
+- `make check`: SQLAlchemy 2.1.0 was released. The tools image and the
+  production API image both install `pyproject.toml`'s ranges, so mypy ran
+  against 2.1.0 and failed on five unchanged files, and the next API image
+  would have shipped 2.1.0 untested. The range is capped below 2.1, which
+  keeps both on the 2.0 line `requirements.txt` pins (FINDINGS A-70).
+- `make dev`: quay.io removed the MinIO server image the stack pinned, and
+  Docker Hub's `minio/minio` now needs credentials. Both compose files use
+  `cgr.dev/chainguard/minio`, pinned by digest. It defaults to uid 65532,
+  which cannot open a `miniodata` volume the old image wrote as root, so it
+  runs as root as that image did and existing volumes keep working. The
+  air-gap image list follows.
+- UI container scan: CVE-2026-93990 in `libexpat` 2.8.4-r0, which every
+  current `nginx:alpine` digest still ships. `Dockerfile.ui` and
+  `Dockerfile.ui.cloudrun` - the image Cloud Run serves, which CI did not
+  scan - upgrade it to 2.8.5-r0 and fail the build if that version is
+  unavailable. The container scan now covers `Dockerfile.ui.cloudrun` too.
+
+### Security - admin is the exact `agenticorg:admin` scope, never a prefix
+- Six admin checks accepted any scope *starting with* `agenticorg:admin`.
+  Every agent is registered with `agenticorg:{domain}:read` and its domain is
+  free text, so a grant token for an agent in a domain such as
+  `administration` passed `require_scope` - including the tenant-admin gate
+  on API-key creation - and was treated as an administrator for agent,
+  connector and approval visibility, report schedules, admin-only RPA
+  scripts and merchant commerce configuration. Free-form API-key scopes had
+  the same effect. All six now use `core.rbac.has_admin_scope`, an exact
+  match, and a test fails if any production module matches the admin scope
+  by prefix again.
+- **Breaking:** an API key or grant holding a scope such as
+  `agenticorg:admin:full` is no longer an administrator. Nothing in this
+  repository issues such a scope, but API-key scopes are free-form. To find
+  any in use:
+  `SELECT tenant_id, id, name FROM api_keys WHERE EXISTS (SELECT 1 FROM unnest(scopes) s WHERE (s LIKE 'agenticorg:admin%' OR s LIKE 'agenticorg.admin%') AND s <> 'agenticorg:admin');`
+  Replace such a scope with `agenticorg:admin` if the key should be an
+  administrator.
+
+### Fixed - governed-case provider authorization
+- The reference underwriter and screening agent now refuse every provider call
+  without an authorizer and a positive delegated-grant check. This applies even
+  when general grant enforcement is off or in warn mode. Tenants must register
+  one active, shared agent for each role before enabling governed cases; cases
+  without that configuration fail closed rather than making unchecked calls.
+
 ### Added - the governed-case decision is proven end to end
 - `make e2e-decisions` (`ui/e2e/decision-grants.spec.ts`) takes a real
   four-eyes decline across both systems in a browser, with nothing stubbed:

@@ -780,6 +780,33 @@ export default function HowGrantexWorks() {
           </div>
         </section>
 
+        <section id="governed-business-cases" className="py-16 bg-white border-y border-slate-200">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">How are business onboarding cases authorized?</h2>
+            <p className="mt-4 max-w-3xl text-slate-700 leading-relaxed">
+              In repository source, the governed-case runtime checks an active tenant role, its registered
+              provider tools, the exact case purpose on a local allowlist, and a delegated grant before
+              every provider call. A missing or denied check stops the call. The case feature is off until
+              an operator enables and configures it for a tenant; availability in a hosted deployment
+              depends on its deployed revision.
+            </p>
+            <h3 className="mt-8 text-lg font-semibold text-slate-900">What does a human still control?</h3>
+            <p className="mt-2 max-w-3xl text-slate-700 leading-relaxed">
+              An agent can prepare evidence and a recommendation. A signed-in person must review or decide
+              the case; an API key, agent token, or MCP tool cannot act as that person. The currently
+              published Grantex Python SDK checks token and tool authority, but does not yet enforce a
+              token-level case purpose or a per-case cap. The local purpose check is not a substitute for
+              those future controls.
+            </p>
+            <a
+              href="https://github.com/mishrasanjeev/agentic-org/blob/main/docs/governance/case-lifecycle.md"
+              className="mt-6 inline-block text-sm font-semibold text-blue-700 underline underline-offset-4 hover:text-blue-900"
+            >
+              Read the case setup and enforcement boundary
+            </a>
+          </div>
+        </section>
+
         {/* ============================================================ */}
         {/* S6: KEY NUMBERS                                              */}
         {/* ============================================================ */}

@@ -1,0 +1,14 @@
+{
+  "connector": "mock",
+  "version": "1.0.0",
+  "description": "Reference verification provider",
+  "tools": {
+    "resolve_business": "read",
+    "verify_business": "read",
+    "verification_result": "read",
+    "ownership": "read",
+    "screen_person": "read",
+    "screen_business": "read",
+    "web_presence": "read"
+  }
+}

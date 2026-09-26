@@ -14,12 +14,13 @@ open in this codebase by static + runtime verification:
  #29      connector rename onto an existing name surfaced as a 500.
  #48      upload marked ``indexed`` before/despite pgvector ingestion and
           the content_text search fallback matched non-indexed rows.
- #1       the development stack must use a pullable, pinned S3 emulator.
+ #1       docker-compose pulled a MinIO image its registry no longer serves.
 """
 
 from __future__ import annotations
 
 import inspect
+import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -245,15 +246,20 @@ class TestKnowledgeIndexStatus:
 
 
 # ---------------------------------------------------------------------------
-# #1 — local docker stack boots with a pinned S3 emulator
+# #1 — local docker stack boots (the MinIO image must still be pullable)
 # ---------------------------------------------------------------------------
 
 
-def test_compose_s3mock_image_is_pinned() -> None:
-    compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: adobe/s3mock@sha256:ab01a6946750f451ca215a47e91030695b260e4003b8a5a6201d25029b8fca92" in compose
-    assert "COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: agenticorg-docs-dev" in compose
-    assert "AGENTICORG_STORAGE_ENDPOINT: http://s3mock:9090" in compose
+@pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.dev.yml"])
+def test_compose_minio_image_is_pullable(compose_file: str) -> None:
+    """Neither registry MinIO used to publish on serves the server image any more.
+
+    quay.io removed ``quay.io/minio/minio`` (every tag and digest), and Docker
+    Hub's ``minio/minio`` now needs credentials, so ``make dev`` failed to pull.
+    """
+    compose = (REPO / compose_file).read_text(encoding="utf-8")
+    assert re.search(r"^\s*image: cgr\.dev/chainguard/minio@sha256:[0-9a-f]{64}\s*$", compose, re.M)
+    assert re.search(r"^\s*image: (quay\.io/)?minio/minio", compose, re.M) is None
 
 
 def test_claim_values_are_uuid_strings() -> None:
