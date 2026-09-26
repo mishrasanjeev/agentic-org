@@ -254,11 +254,21 @@ class TestCFOJourney:
         assert len(items) >= 2
 
     def test_ap_processor_has_pinelabs_payment_tools(self):
-        """AP Processor agent includes PineLabs payment tools."""
+        """AP Processor agent includes PineLabs payment tools, each one the connector registers.
+
+        ``check_order_status`` was never a PineLabs tool (the connector registers
+        ``get_order_status``); it was dropped from the defaults on 2026-09-15 because
+        nothing could bind it.
+        """
         from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
+        from core.langgraph.tool_adapter import _build_tool_index
+
         ap_tools = _AGENT_TYPE_DEFAULT_TOOLS["ap_processor"]
+        index = _build_tool_index(include_connector_aliases=True)
         assert "create_order" in ap_tools, "AP Processor missing PineLabs create_order"
-        assert "check_order_status" in ap_tools, "AP Processor missing PineLabs check_order_status"
+        assert index["create_order"][0] == "pinelabs_plural"
+        for tool in ap_tools:
+            assert tool in index, f"AP Processor default tool {tool!r} is not registered by any connector"
 
     def test_treasury_agent_has_expected_tools(self):
         """Treasury agent has the expected set of finance tools."""
