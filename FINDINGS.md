@@ -337,14 +337,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** replace the blanket override with a per-module list of the legacy
   connectors that still fail, so new code under `connectors/` is checked.
 
-## A-28 — CLAUDE.md lists the preflight test suites without tests/contract
-
-- **Found:** adding `tests/contract/` to the CI unit job and
-  `scripts/preflight.sh` (2026-09-15).
-- **What:** "Required Before Every Push" in `CLAUDE.md` still lists
-  `pytest tests/regression/ tests/unit/ tests/security/ tests/connector_harness/`.
-- **Fix:** add `tests/contract/` to that line.
-
 ## A-29 — Encrypted-migration gates cannot read JSONB ciphertext containers
 
 - **Found:** re-running `v6z24_case_pseudonym_maps` on a table with rows
