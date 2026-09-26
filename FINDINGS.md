@@ -1054,3 +1054,17 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** keep refresh state and check state separate (for example a
   `refresh_status` column), and gate activation on a recent passing check.
 
+## A-77 — Route enforcement treats `agenticorg.admin` as the admin scope
+
+- **Found:** review of the admin-key compatibility migration (2026-09-26).
+- **What:** `api/route_enforcement.py` `_expand_granted` adds the colon/dot
+  separator variant of every granted scope, so a key or grant holding
+  `agenticorg.admin` gains `agenticorg:admin` there and passes every
+  route-family check (`agents:write`, `approvals:write`, `workflows:write`, ...).
+  `core.rbac.has_admin_scope` and `require_scope` compare exactly, so it cannot
+  create keys or pass ownership checks. Key creation now refuses the dot form,
+  but keys issued with it before keep that route access.
+- **Fix:** stop expanding separator variants for `agenticorg:admin` in
+  `_expand_granted`, after checking with the CHANGELOG audit query that no live
+  key depends on it.
+
