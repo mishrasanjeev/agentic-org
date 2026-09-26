@@ -11,9 +11,11 @@ This module now does the actual work against a tenant-scoped session:
                           (bounded; ``truncated`` is reported honestly).
 * ``erase_subject``     — erasure: anonymise the subject's ``users`` PII
                           (e-mail, name, password) and pseudonymise the
-                          ``actor_id`` on audit / feedback rows with a
-                          one-way hash. Sessions are revoked via the
-                          ``sessions_invalid_before`` watermark.
+                          ``actor_id`` on feedback rows with a one-way hash.
+                          Sessions are revoked via the
+                          ``sessions_invalid_before`` watermark. Audit rows
+                          are kept unchanged and reported with a count (see
+                          ``AUDIT_LOG_RETENTION_BASIS``).
 
 Everything runs inline in the request that submitted it (no background
 worker is wired), so a ``completed`` status means the work is done; a
@@ -44,6 +46,14 @@ logger = structlog.get_logger()
 # was hit so they can narrow the request or ask for an operator export.
 AUDIT_ROW_CAP = 500
 FEEDBACK_ROW_CAP = 500
+
+# Erasure leaves the subject's ``audit_log`` rows as they are. The table is
+# append-only: the ``audit_log_immutable`` trigger rejects every UPDATE and
+# DELETE, so rewriting ``actor_id`` failed every erase request. The trail is
+# kept for the controller's record-keeping obligations, which GDPR
+# Art. 17(3)(b) exempts from erasure; the result reports how many rows were
+# retained and on what basis.
+AUDIT_LOG_RETENTION_BASIS = "GDPR Art. 17(3)(b): retained for compliance with a legal obligation"
 
 
 def pseudonymise(subject_email: str) -> str:
@@ -171,10 +181,8 @@ class DSARHandler:
             "truncated": int(audit_total) > AUDIT_ROW_CAP or int(feedback_total) > FEEDBACK_ROW_CAP,
         }
 
-    async def erase_subject(
-        self, session: AsyncSession, *, tenant_id: uuid.UUID, subject_email: str
-    ) -> dict[str, Any]:
-        """Anonymise the subject's PII and pseudonymise their audit trail."""
+    async def erase_subject(self, session: AsyncSession, *, tenant_id: uuid.UUID, subject_email: str) -> dict[str, Any]:
+        """Anonymise the subject's PII; keep their audit rows and count them."""
         pseudo = pseudonymise(subject_email)
         now = datetime.now(UTC)
 
@@ -190,40 +198,47 @@ class DSARHandler:
                 sessions_invalid_before=now,
             )
         )
-        audit_result = await session.execute(
-            update(AuditLog)
-            .where(AuditLog.tenant_id == tenant_id, AuditLog.actor_id == subject_email)
-            .values(actor_id=pseudo)
-        )
         feedback_result = await session.execute(
             update(AgentFeedback)
             .where(AgentFeedback.tenant_id == tenant_id, AgentFeedback.actor_id == subject_email)
             .values(actor_id=pseudo)
         )
+        audit_retained = (
+            await session.execute(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.tenant_id == tenant_id, AuditLog.actor_id == subject_email)
+            )
+        ).scalar() or 0
         await session.flush()
         counts = {
             "users_anonymised": int(users_result.rowcount or 0),
-            "audit_log_pseudonymised": int(audit_result.rowcount or 0),
             "agent_feedback_pseudonymised": int(feedback_result.rowcount or 0),
+            "audit_log_retained": int(audit_retained),
         }
         logger.info("dsar_erase_applied", **counts)
-        return {"pseudonym": pseudo, **counts}
+        return {"pseudonym": pseudo, **counts, "audit_log_retention_basis": AUDIT_LOG_RETENTION_BASIS}
 
     async def process(self, session: AsyncSession, record: DSARRequestRecord) -> DSARRequestRecord:
         """Execute ``record`` inline and persist its terminal status."""
         record.status = "processing"
         await session.flush()
         try:
-            if record.request_type == "erase":
-                result = await self.erase_subject(
-                    session, tenant_id=record.tenant_id, subject_email=record.subject_email
-                )
-            else:
-                result = await self.collect_subject(
-                    session, tenant_id=record.tenant_id, subject_email=record.subject_email
-                )
-                if record.request_type == "export":
-                    result["format"] = "json"
+            # The savepoint confines a database error to this request's own
+            # work. Without it Postgres aborts the whole transaction, the
+            # ``failed`` status below cannot be written, and the caller gets
+            # an unrecorded 500 instead of a persisted failure.
+            async with session.begin_nested():
+                if record.request_type == "erase":
+                    result = await self.erase_subject(
+                        session, tenant_id=record.tenant_id, subject_email=record.subject_email
+                    )
+                else:
+                    result = await self.collect_subject(
+                        session, tenant_id=record.tenant_id, subject_email=record.subject_email
+                    )
+                    if record.request_type == "export":
+                        result["format"] = "json"
             record.result = result
             record.status = "completed"
             record.completed_at = datetime.now(UTC)

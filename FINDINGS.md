@@ -1068,3 +1068,26 @@ Remove an entry in the pull request that fixes it.
   `_expand_granted`, after checking with the CHANGELOG audit query that no live
   key depends on it.
 
+## A-78 — The GDPR and DPDP pages list DSAR endpoints that do not exist
+
+- **Found:** fixing DSAR erasure against the append-only audit log (2026-09-26).
+- **What:** `docs/GDPR.md` gives the DSAR routes as `/api/v1/compliance/dsar/...`
+  (they are mounted at `/api/v1/dsar/...`) and lists `dsar/restrict` and
+  `dsar/export?format=jsonld`, neither of which exists. `docs/DPDP_ACT.md` lists
+  `/api/v1/compliance/dsar/withdraw`, which does not exist either. The
+  "Compliance Flow" diagram in `docs/api-reference.md` describes a scan of 18
+  tables and an HMAC-signed report; the handler reads three tables.
+- **Fix:** list only the routes in `api/v1/compliance.py`, mark restriction and
+  withdrawal as handled by request to the controller, and redraw the diagram
+  from `audit/dsar.py`.
+
+## A-79 — DSAR request audit entries name the subject as the actor
+
+- **Found:** fixing DSAR erasure against the append-only audit log (2026-09-26).
+- **What:** `api/v1/compliance.py` `_create_dsar_audit_entry` writes
+  `actor_id=subject_email` for every DSAR request, although the actor is the
+  tenant admin who made it (`requested_by`). The trail misattributes who acted,
+  and each request writes the subject's e-mail into the append-only log twice
+  (`actor_id` and `details.subject_email`), where erasure can no longer reach it.
+- **Fix:** record `requested_by` as the actor and reference the subject by the
+  DSAR request id (or `audit.dsar.pseudonymise`) in `details`.
