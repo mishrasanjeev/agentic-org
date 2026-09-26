@@ -97,7 +97,7 @@ def test_migration_is_bounded_to_old_colon_sub_scopes_of_admin_owners() -> None:
     assert re.findall(r"LIKE '([^']+)'", sql) == ["agenticorg:admin:%"]
     assert "NOT ('agenticorg:admin' = ANY(scopes))" in sql
     assert "created_at < TIMESTAMPTZ '2026-09-25 05:58:53+00'" in sql
-    assert "u.role = 'admin'" in sql
+    assert "u.role = 'admin' AND u.status = 'active'" in sql
     assert "row_security" not in sql
 
 

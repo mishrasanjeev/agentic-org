@@ -9,14 +9,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agenticorg:admin` scope - the access it had before admin became an exact
   match - when it holds a colon-delimited admin sub-scope such as
   `agenticorg:admin:full`, was created before the exact-match fix was merged
-  (2026-09-25 05:58:53 UTC), and its owner is still an administrator. Keys
-  issued later, keys whose owner is not an admin, and look-alikes such as
+  (2026-09-25 05:58:53 UTC), and its owner is still an active administrator.
+  Keys issued later (even where the fix was deployed afterwards), keys whose
+  owner is not an active admin, and look-alikes such as
   `agenticorg:administration:read`, `agenticorg:adminx` or the dot form are not
   changed: those still lose admin as described for the exact-match fix below,
   and its audit query still finds them. Status and other scopes are unchanged;
   a second run changes nothing; the ids of the keys changed are logged.
-- The revision runs under a migration role without BYPASSRLS and refuses to run
-  with a tenant context set, which would hide other tenants' keys.
+- The revision also works for a migration role without BYPASSRLS, and refuses
+  to run with a tenant context set, which would hide other tenants' keys.
 - Creating an API key with a scope that looks like admin but is not exactly
   `agenticorg:admin` (a sub-scope, the dot form, another case or surrounding
   space) is refused with `422`, naming the scopes and the exact one to use.

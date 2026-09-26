@@ -1634,7 +1634,7 @@ def _load_admin_scope_compat():
 
 def _seed_admin_scope_keys(engine, tenant_id, keys):
     """Insert a tenant, an admin and a non-admin user, and ``keys``: name -> (scopes, status,
-    created_at, owner) where owner is "admin" or "member"."""
+    created_at, owner) where owner is "admin", "member" or "disabled_admin"."""
     admin_id, member_id = uuid.uuid4(), uuid.uuid4()
     with engine.begin() as conn:
         conn.execute(
@@ -1644,13 +1644,25 @@ def _seed_admin_scope_keys(engine, tenant_id, keys):
             """),
             {"id": tenant_id, "name": f"tenant-{tenant_id.hex}", "slug": f"tenant-{tenant_id.hex}"},
         )
-        for user_id, role in ((admin_id, "admin"), (member_id, "sales_manager")):
+        disabled_id = uuid.uuid4()
+        owners = (
+            (admin_id, "admin", "active"),
+            (member_id, "sales_manager", "active"),
+            (disabled_id, "admin", "disabled"),
+        )
+        for user_id, role, status in owners:
             conn.execute(
                 text("""
                     INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled)
-                    VALUES (:id, :tenant_id, :email, 'Key owner', :role, 'active', false)
+                    VALUES (:id, :tenant_id, :email, 'Key owner', :role, :status, false)
                 """),
-                {"id": user_id, "tenant_id": tenant_id, "email": f"{role}-{user_id.hex[:8]}@example.com", "role": role},
+                {
+                    "id": user_id,
+                    "tenant_id": tenant_id,
+                    "email": f"{role}-{user_id.hex[:8]}@example.com",
+                    "role": role,
+                    "status": status,
+                },
             )
         for name, (scopes, status, created_at, owner) in keys.items():
             key_id = uuid.uuid4()
@@ -1662,7 +1674,7 @@ def _seed_admin_scope_keys(engine, tenant_id, keys):
                 {
                     "id": key_id,
                     "tenant_id": tenant_id,
-                    "user_id": admin_id if owner == "admin" else member_id,
+                    "user_id": {"admin": admin_id, "member": member_id, "disabled_admin": disabled_id}[owner],
                     "name": name,
                     "prefix": key_id.hex[:12],
                     "scopes": scopes,
@@ -1712,6 +1724,7 @@ def test_admin_scope_compat_migration_restores_only_old_admin_owned_sub_scope_ke
         "ordinary": (["agents:read", "connectors.read"], "active", old, "admin"),
         "issued_after_fix": (["agenticorg:admin:read"], "active", new, "admin"),
         "non_admin_owner": (["agenticorg:admin:full"], "active", old, "member"),
+        "disabled_admin_owner": (["agenticorg:admin:full"], "active", old, "disabled_admin"),
     }
     engine = create_engine(_SYNC_URL)
     _seed_admin_scope_keys(engine, tenant_id, keys)
@@ -1729,6 +1742,7 @@ def test_admin_scope_compat_migration_restores_only_old_admin_owned_sub_scope_ke
             "ordinary",
             "issued_after_fix",
             "non_admin_owner",
+            "disabled_admin_owner",
         )
         for name in unchanged:
             assert after[name] == (keys[name][0], keys[name][1]), name

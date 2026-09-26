@@ -18,11 +18,13 @@ already had - only when all of these hold:
 * it holds a scope of the form ``agenticorg:admin:<anything>``. Look-alikes such as
   ``agenticorg:administration:read`` or ``agenticorg:adminx`` were never meant as admin and
   are exactly what the fix closed, so they are left alone;
-* it was created before the exact-match fix was merged. No deployment could run exact
-  matching earlier, so every key restored was an administrator under the old rule. A key
-  created later may have been issued, or deliberately left as a sub-scope, under exact
-  matching; it is not elevated;
-* its owner is still an administrator (``users.role = 'admin'``). Before the fix the
+* it was created before the exact-match fix was merged, so it was certainly an
+  administrator under the old rule. A key created later may have been issued, or
+  deliberately left as a sub-scope, in a deployment already running exact matching, so it
+  is not elevated - even in a deployment that took the fix later, where the operator
+  decides with the audit query;
+* its owner is still an active administrator (``users.role = 'admin'`` and
+  ``status = 'active'``, as ``get_active_human_admin`` requires). Before the fix the
   key-creation gate could itself be passed through the prefix hole; a key whose owner is
   not an admin is not restored.
 
@@ -58,7 +60,7 @@ RESTORE_ADMIN_SQL = """
      WHERE NOT ('agenticorg:admin' = ANY(scopes))
        AND EXISTS (SELECT 1 FROM unnest(scopes) AS s WHERE s LIKE 'agenticorg:admin:%')
        AND created_at < TIMESTAMPTZ '2026-09-25 05:58:53+00'
-       AND EXISTS (SELECT 1 FROM users AS u WHERE u.id = api_keys.user_id AND u.role = 'admin')
+       AND EXISTS (SELECT 1 FROM users AS u WHERE u.id = api_keys.user_id AND u.role = 'admin' AND u.status = 'active')
  RETURNING id, tenant_id
 """
 
