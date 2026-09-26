@@ -36,6 +36,11 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: ".",
   testMatch: "*.spec.ts",
+  // Specs owned by the local-stack configs (dev-stack.config.ts,
+  // decision-grants.config.ts) need the dev stack's seeded data and dev-only
+  // secrets and must never run against a hosted environment. decision-grants
+  // also throws at load without its variables, which aborted this whole run.
+  testIgnore: ["dev-stack.spec.ts", "governed-cases*.spec.ts", "decision-grants.spec.ts"],
   timeout: 60_000,
   // CI's production run sets PLAYWRIGHT_RETRIES=1 so failing specs cannot
   // triple the runtime; the default stays 2 for other callers.
