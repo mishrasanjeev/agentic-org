@@ -29,6 +29,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   tester (`RU_TESTER_EMAIL` / `RU_TESTER_PASSWORD`, passed by the deploy
   workflow) and fails without them, unless the workflow has declared them
   unavailable, in which case it is skipped with a warning on the run.
+### Changed - one engineering guide for every contributor
+- `AGENTS.md` is the repository's engineering guide, and the other guide file
+  in the root carries the same text, so every contributor and tool works from
+  one set of rules. It adds the hard rules (no tool attribution in commits,
+  branches or docs; vendor-neutral provider interfaces; house terminology; no
+  new public exposure; synthetic data; placeholder secrets) to the existing
+  conventions.
+- The guide no longer points at the removed `helm/` directory or at version
+  strings in `api/main.py` and `api/v1/health.py` (the API reads its version
+  from `pyproject.toml`), and its preflight suite list includes
+  `tests/contract/` (FINDINGS A-28).
 
 ### Fixed - the production Playwright suite no longer runs local-stack specs
 - `ui/e2e/regression.config.ts` ran every `*.spec.ts` against production,
