@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the post-deploy suite checks the AP Processor's real PineLabs tools
+- `tests/e2e/test_cxo_flows.py` still required `check_order_status`, a name no
+  connector registers (the PineLabs tool is `get_order_status`) and which was
+  removed from the defaults on 2026-09-15, so the manual post-deploy run failed
+  before its synthetic and browser steps. It now requires `create_order` from
+  the PineLabs connector and that every AP Processor default is registered.
+
 ### Added - agents can be granted route scopes
 - Route scope checks apply to agent tokens, but registration only ever gave an
   agent tool scopes, so an agent token was refused on every scoped route. A
