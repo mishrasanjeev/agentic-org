@@ -62,7 +62,7 @@ describe("SessionKeeper.fresh", () => {
     await expect(keeper.fresh(NOW)).resolves.toBe(renewed);
   });
 
-  it("keeps the old token while it is valid, and retries a failed login at most once a minute", async () => {
+  it("keeps the old token while it is valid, and retries a failed login only after the gap", async () => {
     const token = jwtExpiringAt(NOW + 5 * 60_000);
     const login = vi.fn(async (): Promise<string> => {
       throw new Error("login returned HTTP 503");
@@ -98,7 +98,7 @@ describe("SessionKeeper.fresh", () => {
 
 describe("SessionKeeper with a shared LoginFailureLog", () => {
   // Playwright starts a new worker, and so a new keeper, after every failed
-  // test; the shared log keeps the once-a-minute retry gap across them.
+  // test; the shared log keeps the retry gap across them.
   function memoryLog(): LoginFailureLog {
     let entry: { at: number; reason: string } | null = null;
     return {
@@ -109,7 +109,7 @@ describe("SessionKeeper with a shared LoginFailureLog", () => {
     };
   }
 
-  it("a failure in one keeper holds back the next keeper's login for a minute", async () => {
+  it("a failure in one keeper holds back the next keeper's login for the gap", async () => {
     const log = memoryLog();
     const failing = async (): Promise<string> => {
       throw new Error("login returned HTTP 503");
@@ -125,13 +125,48 @@ describe("SessionKeeper with a shared LoginFailureLog", () => {
     expect(login).toHaveBeenCalledTimes(1);
   });
 
-  it("an expired token reports the reason another keeper recorded", async () => {
+  it("a keeper with an expired token waits out another keeper's failure, then logs in once", async () => {
     const log = memoryLog();
-    log.write(NOW - 1_000, "login returned HTTP 401");
-    const login = vi.fn(async () => "new");
-    const keeper = new SessionKeeper(jwtExpiringAt(NOW - 60_000), login, log);
-    await expect(keeper.fresh(NOW)).rejects.toThrow("could not be renewed: login returned HTTP 401.");
-    expect(login).not.toHaveBeenCalled();
+    log.write(NOW - 1_000, "login returned HTTP 503");
+    const renewed = jwtExpiringAt(NOW + 3_600_000);
+    const login = vi.fn(async () => renewed);
+    const sleep = vi.fn(async (_ms: number) => {});
+    const keeper = new SessionKeeper(jwtExpiringAt(NOW - 60_000), login, log, sleep);
+    await expect(keeper.fresh(NOW)).resolves.toBe(renewed);
+    expect(sleep).toHaveBeenCalledWith(RELOGIN_RETRY_MS - 1_000);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("after waiting, a login that still fails throws with its own reason", async () => {
+    const log = memoryLog();
+    log.write(NOW - 1_000, "login returned HTTP 503");
+    const login = vi.fn(async (): Promise<string> => {
+      throw new Error("login returned HTTP 502");
+    });
+    const sleep = vi.fn(async (_ms: number) => {});
+    const keeper = new SessionKeeper(jwtExpiringAt(NOW - 60_000), login, log, sleep);
+    await expect(keeper.fresh(NOW)).rejects.toThrow("could not be renewed: login returned HTTP 502.");
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(log.read()?.reason).toBe("login returned HTTP 502");
+  });
+
+  it("does not wait for its own failure, or while the token is still valid", async () => {
+    const log = memoryLog();
+    const login = vi.fn(async (): Promise<string> => {
+      throw new Error("login returned HTTP 503");
+    });
+    const sleep = vi.fn(async (_ms: number) => {});
+    const valid = new SessionKeeper(jwtExpiringAt(NOW + 5 * 60_000), login, log, sleep);
+    await expect(valid.fresh(NOW)).resolves.toBeTruthy();
+    await expect(valid.fresh(NOW + 1_000)).resolves.toBeTruthy();
+    expect(sleep).not.toHaveBeenCalled();
+
+    const expired = new SessionKeeper(jwtExpiringAt(NOW - 1_000), login, memoryLog(), sleep);
+    await expect(expired.fresh(NOW)).rejects.toThrow("could not be renewed");
+    await expect(expired.fresh(NOW + 1_000)).rejects.toThrow("could not be renewed");
+    expect(sleep).not.toHaveBeenCalled();
+    expect(login).toHaveBeenCalledTimes(2);
   });
 });
 

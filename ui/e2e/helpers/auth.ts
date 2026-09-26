@@ -14,7 +14,7 @@
  * All three patterns came up in `ca-firms.spec.ts` and the fixes are
  * generic. Use these helpers in every regression spec.
  */
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -84,9 +84,10 @@ export async function ensureFreshE2EToken(): Promise<string> {
   const token = await _session.fresh(Date.now());
   if (token !== E2E_TOKEN) {
     // The mint step in deploy.yml masks the first token; mask each new one
-    // before anything can print it. Worker stdout reaches the Actions log as
-    // whole lines, so the runner reads this as a command.
-    if (process.env.GITHUB_ACTIONS === "true") console.log(`::add-mask::${token}`);
+    // before anything can print it. Written straight to the inherited stdout:
+    // console output inside a fixture is captured as the test's stdio and
+    // saved into the JSON and HTML reports, which are uploaded.
+    if (process.env.GITHUB_ACTIONS === "true") writeSync(1, `::add-mask::${token}\n`);
     E2E_TOKEN = token;
     // Specs that read process.env.E2E_TOKEN directly see the new token too.
     process.env.E2E_TOKEN = token;

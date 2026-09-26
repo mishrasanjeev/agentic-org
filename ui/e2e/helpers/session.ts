@@ -9,8 +9,13 @@
 
 /** Log in again when less than this much of the session is left. */
 export const SESSION_REFRESH_MARGIN_MS = 15 * 60_000;
-/** Minimum gap between login attempts after a failure, so a failing login is not hammered. */
-export const RELOGIN_RETRY_MS = 60_000;
+/**
+ * Minimum gap between login attempts after a failure, shared by every worker
+ * of a run: at most four attempts a minute, under the login endpoint's five
+ * per minute, and short enough that a worker waiting it out (see
+ * `SessionKeeper`) stays within Playwright's fixture timeout.
+ */
+export const RELOGIN_RETRY_MS = 15_000;
 
 /** The `exp` of a JWT session token in epoch milliseconds, or null when the token is not a JWT. */
 export function sessionExpiresAt(token: string): number | null {
@@ -62,11 +67,15 @@ export interface LoginFailureLog {
  *
  * `fresh()` returns the current token while more than 15 minutes of it are
  * left. Otherwise it logs in again and returns the new token. A failed login
- * is retried at most once a minute, across every keeper sharing the same
- * `LoginFailureLog`; until the token actually expires the old one is still
- * returned. Once it has expired and cannot be renewed, `fresh()` throws with
- * the reason, so the run fails on the real cause instead of on a spec's
- * assertions about 401 responses.
+ * is retried at most once every `RELOGIN_RETRY_MS`, across every keeper
+ * sharing the same `LoginFailureLog`; until the token actually expires the
+ * old one is still returned. A keeper whose token has already expired, and
+ * whose retry is held back only by another keeper's failure, waits for the
+ * rest of that gap and then tries once: a new worker starts with the runner's
+ * original token, so failing it outright would fail every test started in
+ * that gap over one transient error. Once the token has expired and cannot be renewed,
+ * `fresh()` throws with the reason, so the run fails on the real cause
+ * instead of on a spec's assertions about 401 responses.
  */
 export class SessionKeeper {
   private lastAttempt = Number.NEGATIVE_INFINITY;
@@ -76,6 +85,7 @@ export class SessionKeeper {
     private currentToken: string,
     private readonly login: () => Promise<string>,
     private readonly failures: LoginFailureLog | null = null,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   ) {}
 
   get token(): string {
@@ -88,7 +98,13 @@ export class SessionKeeper {
     if (expiresAt === null || expiresAt - now > SESSION_REFRESH_MARGIN_MS) return this.currentToken;
     const shared = this.failures?.read() ?? null;
     if (shared && shared.at > this.lastAttempt) this.lastFailure = shared.reason;
-    if (now - Math.max(this.lastAttempt, shared?.at ?? Number.NEGATIVE_INFINITY) >= RELOGIN_RETRY_MS) {
+    const blockedBy = Math.max(this.lastAttempt, shared?.at ?? Number.NEGATIVE_INFINITY);
+    const remaining = RELOGIN_RETRY_MS - (now - blockedBy);
+    if (remaining > 0 && expiresAt <= now && blockedBy !== this.lastAttempt) {
+      await this.sleep(remaining);
+      now += remaining;
+    }
+    if (now - blockedBy >= RELOGIN_RETRY_MS) {
       this.lastAttempt = now;
       try {
         this.currentToken = await this.login();
