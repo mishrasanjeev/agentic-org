@@ -1060,3 +1060,51 @@ Remove an entry in the pull request that fixes it.
   `_expand_granted`, after checking with the CHANGELOG audit query that no live
   key depends on it.
 
+## A-78 — The GDPR, DPDP and HIPAA pages misdescribe the DSAR endpoints
+
+- **Found:** fixing DSAR erasure against the append-only audit log (2026-09-26).
+- **What:** the DSAR routes are mounted at `/api/v1/dsar/...`, but
+  `docs/GDPR.md`, `docs/DPDP_ACT.md` and `docs/HIPAA.md` give them as
+  `/api/v1/compliance/dsar/...`. `docs/GDPR.md` lists `dsar/restrict`, which
+  does not exist, and `dsar/export?format=jsonld`: `POST /api/v1/dsar/export`
+  exists but produces JSON only (`audit/dsar.py`), and `format` is ignored.
+  `docs/DPDP_ACT.md` lists `dsar/withdraw`, which does not exist. Both pages
+  cite `PATCH /api/v1/users/{id}` for rectification, which no router defines,
+  and `docs/GDPR.md` says admins can run requests from a Compliance tab that
+  the console does not have. `docs/HIPAA.md` says data is hard-deleted on a
+  DSAR and that the audit log records the deletion, while erasure anonymises
+  the user record, pseudonymises feedback and keeps audit rows, and the
+  request's audit entry is written as `received` before processing. The
+  "Compliance Flow" diagram in `docs/api-reference.md` shows a scan of 18
+  tables and an HMAC-signed audit entry; the handler reads three tables and
+  nothing signs the entry.
+- **Fix:** list only the routes in `api/v1/compliance.py` under their real
+  prefix, say export is JSON only, mark restriction, withdrawal and
+  rectification as handled by request to the controller until routes exist,
+  drop the Compliance-tab claim, describe erasure in `docs/HIPAA.md` as
+  `docs/GDPR.md` now does, and redraw the diagram from `audit/dsar.py`.
+
+## A-79 — DSAR request audit entries name the subject as the actor
+
+- **Found:** fixing DSAR erasure against the append-only audit log (2026-09-26).
+- **What:** `api/v1/compliance.py` `_create_dsar_audit_entry` writes
+  `actor_id=subject_email` for every DSAR request, although the actor is the
+  tenant admin who made it (`requested_by`). The trail misattributes who acted,
+  and each request writes the subject's e-mail into the append-only log twice
+  (`actor_id` and `details.subject_email`), where erasure can no longer reach it.
+- **Fix:** record `requested_by` as the actor and reference the subject by the
+  DSAR request id (or `audit.dsar.pseudonymise`) in `details`.
+
+## A-80 — Some audit writers record the session e-mail as the actor
+
+- **Found:** review of the DSAR erasure fix (2026-09-26).
+- **What:** the session token's `sub` is the user's e-mail. Most audit writers
+  record the stable user id, but `api/v1/governance.py:113` falls back to `sub`
+  when the token has no `agenticorg:user_id`, feedback records `sub`
+  (`api/v1/agents.py:4847`), and DSAR request entries record the subject's
+  e-mail (A-79). `audit_log` is append-only, so erasure keeps those rows and
+  reports them as retained (GDPR Art. 17(3)(b)); the e-mail in them stays.
+- **Fix:** record the user id (or `audit.dsar.pseudonymise`) as `actor_id` at
+  write time and keep e-mail addresses out of `details`, so retained audit rows
+  carry no direct identifier. Rows already written stay as they are.
+

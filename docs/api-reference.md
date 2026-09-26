@@ -1095,7 +1095,21 @@ POST /api/v1/dsar/access
 ```
 POST /api/v1/dsar/erase
 ```
-30-day deadline enforced per GDPR/DPDP Act.
+Runs inline and returns the persisted request. The subject's user record is
+anonymised and their feedback pseudonymised. Audit log rows are append-only,
+so they are kept unchanged and counted:
+```json
+{
+  "status": "completed",
+  "result": {
+    "pseudonym": "erased:3f1c9a0b7d2e4c58",
+    "users_anonymised": 1,
+    "agent_feedback_pseudonymised": 0,
+    "audit_log_retained": 12,
+    "audit_log_retention_basis": "GDPR Art. 17(3)(b): retained for compliance with a legal obligation"
+  }
+}
+```
 
 ### Evidence Package
 ```

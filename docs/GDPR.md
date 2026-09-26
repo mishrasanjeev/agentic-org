@@ -39,10 +39,13 @@ Compliance tab in the web UI.
 | Portability (Art. 20)     | `POST /api/v1/compliance/dsar/export?format=jsonld` | 30 days       |
 | Objection (Art. 21)       | Contact `sanjeev@orchestrum.in`                     | 30 days       |
 
-Erasure is executed via `audit/dsar.py` which cascades across
-customer-owned tables and writes an immutable audit record. Backups
-older than 30 days are not rewritten — they expire per the standard
-retention policy. See `docs/BACKUP_AND_DR.md`.
+Erasure runs inline in `audit/dsar.py`. The subject's user record is
+anonymised (e-mail replaced with a one-way pseudonym, name and password
+cleared, sessions revoked) and their agent feedback is pseudonymised. Audit
+log rows are append-only, so they are kept unchanged under Art. 17(3)(b); the
+result reports how many were retained (`audit_log_retained`) and on what
+basis. Backups older than 30 days are not rewritten — they expire per the
+standard retention policy. See `docs/BACKUP_AND_DR.md`.
 
 ## Sub-processors
 

@@ -4,6 +4,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - DSAR erasure no longer fails on the append-only audit log
+- Every `POST /api/v1/dsar/erase` failed with a 500. Erasure rewrote
+  `actor_id` on the subject's `audit_log` rows, and the `audit_log_immutable`
+  trigger rejects every UPDATE and DELETE on that table. The CI schema is
+  built without the trigger, so the Postgres test passed.
+- Erasure now leaves audit rows unchanged and reports them as retained under
+  GDPR Art. 17(3)(b) (`audit_log_retained`, `audit_log_retention_basis`). The
+  user record is still anonymised and feedback pseudonymised. The result no
+  longer carries `audit_log_pseudonymised`; no erase request ever completed
+  with it.
+- A database error while processing a DSAR request is now persisted as
+  `failed`. Before, the error aborted the transaction, so the `failed` status
+  could not be written and the caller got an unrecorded 500.
 ### Changed - one engineering guide for every contributor
 - `AGENTS.md` is the repository's engineering guide, and the other guide file
   in the root carries the same text, so every contributor and tool works from

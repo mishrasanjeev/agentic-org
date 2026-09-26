@@ -185,7 +185,8 @@ async def test_dsar_erase_and_access_replay_against_postgres():
         record = await handler.process(session, record)
         assert record.status == "completed"
         assert record.result["users_anonymised"] == 1
-        assert record.result["audit_log_pseudonymised"] == 1
+        # Audit rows are append-only and kept (test_dsar_erase_keeps_audit_rows_20260926).
+        assert record.result["audit_log_retained"] == 1
         await session.commit()
 
         stored = (
