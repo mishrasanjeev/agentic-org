@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Lifetime of the shared E2E session token.
  *
  * Kept free of Playwright imports so the logic is unit-tested with the rest
- * of the frontend (src/__tests__/e2eSessionKeeper.test.ts). `./auth` wires it
- * to the suite's `E2E_TOKEN`.
+ * of the frontend (`session.test.ts`, which the vitest config includes).
+ * `./auth` wires it to the suite's `E2E_TOKEN`.
  */
 
 /** Log in again when less than this much of the session is left. */

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -6,7 +7,7 @@ import {
   SessionKeeper,
   loginForToken,
   sessionExpiresAt,
-} from "../../e2e/helpers/session";
+} from "./session";
 
 /**
  * The production Playwright suite runs for more than an hour on one 60-minute

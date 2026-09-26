@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * `test` and `expect` for specs that use the shared E2E session.
  *
