@@ -19,13 +19,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (default 90s), with `AGENTICORG_LLM_PRIMARY_TIMEOUT_FRACTION` (default 0.7) for
   the primary. Only timeouts, connection errors, 429 and 5xx fall back; invalid
   requests, configuration errors and spend caps never do. An explicitly selected
-  model, which every agent run passes, falls back only to a fallback model from
+  model, which agent runs normally pass, falls back only to a fallback model from
   the same provider, so an outage never moves a request to another provider.
 - **Connectors:** list and detail return tenant- and company-scoped readiness
   evidence (credential presence, health freshness, disabled/missing states)
   without selecting or returning encrypted credentials, and the UI pages past 50
-  rows. Replacing a connector's credentials clears its last health check, so the
-  list never shows "Recently checked" for credentials no check has used. A
+  rows. Replacing a connector's credentials clears its last health check, and a
+  token refresh that revives a connector which was not healthy clears it too, so
+  the list does not show "Recently checked" for credentials no check has used. A
   health check still does not prove provider scopes, contracts or sync.
 - Public status, README, landing and resilience docs describe these limits.
 

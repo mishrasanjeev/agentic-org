@@ -1059,3 +1059,15 @@ Remove an entry in the pull request that fixes it.
   sender, so the listener never waits on a client, and close sockets whose queue
   overflows.
 
+## A-76 — A token refresh counts as a passed health check for agent activation
+
+- **Found:** review of connector readiness (2026-09-26).
+- **What:** `core/tasks/token_refresh.py` marks a connector `healthy` whenever a
+  refresh succeeds, and `api/v1/agents.py` `_assert_connectors_ready_for_activation`
+  gates agents on `health_status == "healthy"`. A connector whose last health
+  check failed for a reason a refresh does not fix (a missing scope, a broken
+  endpoint) becomes activatable again after the next refresh. Readiness now shows
+  it as needing a check, but the activation gate does not.
+- **Fix:** keep refresh state and check state separate (for example a
+  `refresh_status` column), and gate activation on a recent passing check.
+

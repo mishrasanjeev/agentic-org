@@ -50,7 +50,7 @@ container.
 The legacy `LLMRouter.complete` path has a 90-second total deadline by default.
 The primary model gets 70% of that budget; only transport, timeout, 429, or
 server failures may use the remaining time for a configured fallback. An
-explicitly selected model (every agent run passes one) falls back only when the
+explicitly selected model (agent runs normally pass one) falls back only when the
 fallback model is served by the same provider, so a transient outage never moves
 a request to a different provider. Invalid requests, credential/configuration
 errors, and spend caps never fall back to another model. Operators can tune

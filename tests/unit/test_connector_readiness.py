@@ -119,3 +119,44 @@ def test_a_naive_check_time_is_unverified_not_an_error():
     )
     assert result["health_state"] == "unverified"
 
+
+def test_a_token_refresh_does_not_revive_a_failed_check_time():
+    """A refresh proves the grant, not that a failed health check is fixed."""
+    from types import SimpleNamespace
+
+    from core.tasks.token_refresh import _store_refreshed_credentials
+
+    failed_at = NOW - timedelta(hours=1)
+    config = SimpleNamespace(
+        health_status="unhealthy", last_health_check=failed_at, credentials_encrypted={"_encrypted": "old"}
+    )
+    _store_refreshed_credentials(config, "new")
+
+    assert config.credentials_encrypted == {"_encrypted": "new"}
+    assert config.health_status == "healthy"
+    assert config.last_health_check is None
+    readiness = project_connector_readiness(
+        registration_status="active",
+        configuration_status="configured",
+        auth_type="oauth2",
+        has_credentials=True,
+        health_status=config.health_status,
+        last_health_check=config.last_health_check,
+        last_sync_at=None,
+        observed_at=NOW,
+    )
+    assert readiness["state"] == "needs_health_check"
+
+
+def test_a_token_refresh_keeps_a_passing_check_time():
+    from types import SimpleNamespace
+
+    from core.tasks.token_refresh import _store_refreshed_credentials
+
+    checked_at = NOW - timedelta(hours=1)
+    config = SimpleNamespace(health_status="healthy", last_health_check=checked_at, credentials_encrypted={})
+    _store_refreshed_credentials(config, "new")
+
+    assert config.last_health_check == checked_at
+    assert config.health_status == "healthy"
+
