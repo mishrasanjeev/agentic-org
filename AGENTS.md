@@ -275,7 +275,8 @@ Run `make check` and `make test` before claiming a release-ready result.
 - Backend tests: `python -m pytest -q`
 - Targeted backend tests without coverage fallback: `python -m pytest -q --no-cov <tests...>`
 - Security scan: `python -m bandit -r api auth core -x migrations,tests -f json`
-- Vendor denylist: `python scripts/check_denylist.py audit`
+- Vendor denylist (what CI and `make check-denylist` run): `python scripts/check_denylist.py scan --base origin/main --head HEAD`.
+  `audit` checks every tracked file and still fails on the three lines FINDINGS A-40 tracks.
 - Frontend tests: `cd ui && npm test`
 - Frontend build: `cd ui && npm run build`
 
