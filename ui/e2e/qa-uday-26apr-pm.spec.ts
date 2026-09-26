@@ -17,7 +17,8 @@
  * the right tool to assert the dispatch contract independent of which
  * specific connector happens to be healthy at run time.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 

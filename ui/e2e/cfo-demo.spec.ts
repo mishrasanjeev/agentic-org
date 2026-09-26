@@ -6,10 +6,9 @@
  * - Navigation to login
  * - Dashboard pages load (auth-gated)
  */
-import { test, expect } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(

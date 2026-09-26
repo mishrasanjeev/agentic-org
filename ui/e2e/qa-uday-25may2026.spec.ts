@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { authenticate } from "./helpers/auth";
 
 test("Uday 2026-05-25: CRM connector detail exposes operation tools", async ({

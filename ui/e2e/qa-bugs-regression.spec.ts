@@ -8,10 +8,10 @@
  * Auth-dependent tests skip if E2E_TOKEN is not set.
  */
 
-import { test, expect, Page } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 const MARKETING =
   process.env.MARKETING_URL ||

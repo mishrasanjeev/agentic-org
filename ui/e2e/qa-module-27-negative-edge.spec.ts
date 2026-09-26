@@ -6,7 +6,7 @@
  * false-green prevention applies hard here — every "what if
  * the input is bad?" must produce a documented failure shape.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

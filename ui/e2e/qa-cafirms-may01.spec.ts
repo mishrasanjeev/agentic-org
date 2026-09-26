@@ -21,10 +21,11 @@
  * DEPLOYED app, not localhost. Without `E2E_TOKEN`, the spec skips —
  * the verification is post-deploy, not part of every PR run.
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+import { type APIRequestContext } from "@playwright/test";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const AGENT_ID = "02ca34a7-2835-43e5-992d-cda4817c1497";
 const IS_LOCAL_APP = /(^http:\/\/localhost[:/])|(^http:\/\/127\.0\.0\.1[:/])/.test(APP);
 

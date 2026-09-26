@@ -9,7 +9,8 @@
  * page.goto for UI flows (the conftest sets up a real session
  * via /auth/login fixture — see helpers/auth.ts).
  */
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth, setSessionToken } from "./helpers/auth";
 

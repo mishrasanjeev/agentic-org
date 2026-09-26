@@ -6,7 +6,8 @@
  * read-only wherever possible; the onboarding/voice cases that do
  * mutate delete what they create at the end.
  */
-import { expect, test, type Page } from "@playwright/test";
+import { type Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { APP, E2E_TOKEN, authenticate, canAuth, requireAuth } from "./helpers/auth";
 
 /**

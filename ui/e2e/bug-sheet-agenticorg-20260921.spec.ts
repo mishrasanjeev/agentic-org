@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-import { expect, Page, test } from "@playwright/test";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { E2E_TOKEN, requireAuth, setSessionToken } from "./helpers/auth";
 
 async function installCommonRoutes(page: Page) {

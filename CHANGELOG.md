@@ -4,6 +4,30 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the production Playwright suite logs in again before its session expires
+- The post-deploy suite runs for about 90 minutes on one session token that
+  lasts 60, so every test after the first hour failed with 401s that read as
+  product failures (28 of the 33 failures on 2026-09-26). Specs now take
+  `test` from `ui/e2e/helpers/test.ts`, whose fixtures log in again with
+  `E2E_EMAIL` / `E2E_PASSWORD` when less than 15 minutes are left, and read
+  `E2E_TOKEN` as a live export of `ui/e2e/helpers/auth.ts` instead of a copy
+  taken when the spec loads. The deploy workflow passes the two credentials to
+  the Playwright step.
+- A token that has expired and cannot be renewed now fails every test with
+  the reason, instead of producing assertion failures. A failed login is
+  retried at most once every 15 seconds across all workers of the run.
+- Each renewed token is masked in the Actions log, and a new workflow step
+  revokes every session of the E2E user (`/auth/logout-all`) before the
+  Playwright artifacts are uploaded; if it cannot, the upload is skipped. The
+  suite's own global teardown ends the demo accounts' sessions the same way
+  when `E2E_REVOKE_DEMO_SESSIONS=1`, so the workflow names no demo account.
+  Production runs of the suite are serialised, since that revocation would
+  break a second run in progress. The default Playwright config now collects
+  `*.spec.ts` only.
+- `sop-flow.spec.ts` and `video-recordings.spec.ts` passed without a session:
+  they accepted a 401 as a validation error, or the login page as a loaded
+  page. They now require the expected `400`, and `expectSignedIn` checks for
+  the signed-in layout.
 ### Changed - one engineering guide for every contributor
 - `AGENTS.md` is the repository's engineering guide, and the other guide file
   in the root carries the same text, so every contributor and tool works from

@@ -477,6 +477,11 @@ jobs:
         (github.ref == 'refs/heads/main' && needs.deploy-production.result == 'success') ||
         (github.event_name == 'workflow_dispatch' && inputs.run_post_deploy_e2e == true)
       )
+    # One production run at a time: the last step revokes every session of
+    # the E2E account, which would break a second run in progress.
+    concurrency:
+      group: production-e2e
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -641,6 +646,12 @@ jobs:
         env:
           BASE_URL: https://app.agenticorg.ai
           E2E_TOKEN: ${{ steps.auth.outputs.token }}
+          # The session token lasts 60 minutes and this suite runs longer:
+          # ui/e2e/helpers/auth.ts logs in again with these before it expires.
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          # The suite's global teardown ends the demo accounts' sessions.
+          E2E_REVOKE_DEMO_SESSIONS: "1"
           PLAYWRIGHT_RETRIES: "1"
           AGENTICORG_DEMO_USER_PASSWORD: ${{ secrets.AGENTICORG_DEMO_USER_PASSWORD }}
           AGENTICORG_DEMO_CEO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CEO_PASSWORD }}
@@ -650,13 +661,54 @@ jobs:
           AGENTICORG_DEMO_COO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_COO_PASSWORD }}
           AGENTICORG_DEMO_AUDITOR_PASSWORD: ${{ secrets.AGENTICORG_DEMO_AUDITOR_PASSWORD }}
 
+      - name: End the E2E sessions before uploading artifacts
+        # The Playwright step logs in again as the session nears expiry, and
+        # its reports can carry request headers. Revoking every session of the
+        # E2E user (logout-all sets sessions_invalid_before) makes any token of
+        # that account in the artifacts dead before they are uploaded; the
+        # upload is skipped if this fails. The demo accounts' sessions are
+        # ended by the suite's own teardown (E2E_REVOKE_DEMO_SESSIONS above),
+        # which knows those accounts; this workflow names none of them.
+        id: revoke_sessions
+        if: always()
+        env:
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+        run: |
+          AUTH_PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["E2E_EMAIL"],"password":os.environ["E2E_PASSWORD"]}))')
+          for attempt in 1 2 3 4 5; do
+            TOKEN=$(curl -s -X POST "https://app.agenticorg.ai/api/v1/auth/login" \
+              -H "Content-Type: application/json" -d "$AUTH_PAYLOAD" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
+            CODE=none
+            if [ -n "$TOKEN" ]; then
+              echo "::add-mask::$TOKEN"
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://app.agenticorg.ai/api/v1/auth/logout-all" \
+                -H "Authorization: Bearer $TOKEN") || CODE="curl-exit-$?"
+              if [ "$CODE" = "200" ]; then
+                echo "E2E sessions revoked on attempt $attempt"
+                # Every other API replica keeps the user's session watermark
+                # cached for USER_SESSION_STATE_TTL (30 s, core/auth_state.py);
+                # let that expire before the artifacts become available.
+                sleep 31
+                exit 0
+              fi
+            fi
+            echo "Attempt $attempt did not revoke the E2E sessions (logout-all: $CODE); retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Could not revoke the E2E sessions; the Playwright artifacts are not uploaded"
+          exit 1
+
       - name: Upload Playwright report and failure artifacts
         # test-results holds each failure's error context and screenshot as
         # it happens, so a run that times out before the HTML report is
         # written still shows why tests failed. This repository is public:
         # trace archives record request headers and session cookies, so they
-        # are never uploaded, and artifacts expire after a week.
-        if: always()
+        # are never uploaded, and artifacts expire after a week. Other reports
+        # can still quote request headers, so they go up only once every E2E
+        # session has been revoked.
+        if: always() && steps.revoke_sessions.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report

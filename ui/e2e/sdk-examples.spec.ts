@@ -7,11 +7,10 @@
  * `AgentRunResult` type, changes the `.status` / `.confidence` / `.output`
  * property names, or reintroduces a raw-dict example, this spec fails.
  */
-import { expect, test } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
 function requireAuth(): void {

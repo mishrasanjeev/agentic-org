@@ -7,7 +7,7 @@
  * widgets render, the partial-failure warning UX works, and
  * the metric labels match the documented contract.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, authenticate, requireAuth } from "./helpers/auth";
 

@@ -25,7 +25,7 @@
  * When a richer dashboard template ships, extend this spec alongside the
  * component change rather than keeping stale assertions around.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { APP, authenticate, canAuth, requireAuth } from "./helpers/auth";
 
 const DASHBOARDS = [
