@@ -35,8 +35,9 @@ TENANT = str(uuid.UUID(int=0x1F9A))
 TOOLS = ["agenticorg:sales:read", "tool:hubspot:read:list_contacts"]
 NEW_TOOLS = ["agenticorg:sales:read", "tool:hubspot:read:get_contact"]
 ADMIN = Caller(user_id=uuid.UUID(int=0xAD), role="admin", domains=None, is_admin=True, is_machine=False)
+# A different id from ADMIN, so the audit test shows the actor comes from the user row.
 DB_ADMIN = ActiveHumanAdmin(
-    user_id=uuid.UUID(int=0xAD), tenant_id=uuid.UUID(TENANT), email="admin@example.com", role="admin"
+    user_id=uuid.UUID(int=0xADB), tenant_id=uuid.UUID(TENANT), email="admin@example.com", role="admin"
 )
 
 
@@ -214,8 +215,13 @@ async def test_a_direct_call_without_a_request_is_refused() -> None:
     assert info.value.status_code == 403
 
 
-async def test_a_personal_agent_cannot_be_granted_route_scopes() -> None:
-    agent = _agent(_registered(), visibility="personal", owner=uuid.UUID(int=0xB0))
+@pytest.mark.parametrize(
+    ("visibility", "owner"),
+    [("personal", uuid.UUID(int=0xB0)), ("tenant", uuid.UUID(int=0xB0)), ("personal", None)],
+    ids=["personal_owned", "tenant_but_owned", "personal_unowned"],
+)
+async def test_a_personal_agent_cannot_be_granted_route_scopes(visibility: str, owner: uuid.UUID | None) -> None:
+    agent = _agent(_registered(), visibility=visibility, owner=owner)
     client = MagicMock()
     with pytest.raises(HTTPException) as info:
         await _patch(agent, {"route_scopes": ["agents:read"]}, client=client)
@@ -265,6 +271,14 @@ async def test_granting_route_scopes_updates_the_registration_then_stores_them_a
 async def test_scope_changes_lock_the_agent_row() -> None:
     agent = _agent(_registered())
     _, session = await _patch(agent, {"route_scopes": ["agents:read"]}, client=MagicMock())
+    statement = session.execute.await_args_list[0].args[0]
+    assert statement._for_update_arg is not None
+
+
+async def test_a_tools_patch_locks_the_agent_row() -> None:
+    """A concurrent tools PATCH is the race the lock exists for."""
+    agent = _agent(_registered(["agents:read"]))
+    _, session = await _patch(agent, {"authorized_tools": ["get_contact"]}, client=MagicMock(), tool_scopes=NEW_TOOLS)
     statement = session.execute.await_args_list[0].args[0]
     assert statement._for_update_arg is not None
 
@@ -461,4 +475,69 @@ async def test_a_backfill_route_scope_read_failure_is_reported_and_nothing_is_pu
     assert result.outcome in FAILED_OUTCOMES
     client._http.patch.assert_not_called()
     persist.assert_not_awaited()
+
+
+def test_the_backfill_command_pushes_the_route_scopes_read_just_before_the_push(capsys) -> None:
+    """``run()`` lists agents, then re-reads each agent's route scopes right before its push.
+    An admin changed them after the listing: the push must carry the fresh list, and storage
+    must still receive tool scopes only."""
+    import asyncio
+
+    from scripts import refresh_grantex_scopes as script
+
+    agent_id = uuid.UUID(int=0xA1)
+    listed = SimpleNamespace(
+        id=agent_id,
+        domain="sales",
+        authorized_tools=["get_contact"],
+        config={"grantex": _registered(["agents:read"])},
+        connector_ids=[],
+        company_id=None,
+    )
+    fresh_config = {"grantex": _registered(["audit:read"])}
+    writes: list[Any] = []
+
+    class _Result:
+        def __init__(self, rows: list[Any], one: Any = None) -> None:
+            self._rows, self._one, self.rowcount = rows, one, 1
+
+        def scalars(self) -> _Result:
+            return self
+
+        def all(self) -> list[Any]:
+            return self._rows
+
+        def scalar_one_or_none(self) -> Any:
+            return self._one
+
+    class _Session:
+        async def __aenter__(self) -> _Session:
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def execute(self, statement: Any) -> _Result:
+            from sqlalchemy.sql.dml import Update
+
+            if isinstance(statement, Update):
+                writes.append(statement)
+                return _Result([])
+            if statement.column_descriptions[0]["name"] == "config":
+                return _Result([], fresh_config)
+            return _Result([listed])
+
+    client = MagicMock()
+    with (
+        patch("auth.grantex_registration._get_grantex_client", return_value=client),
+        patch("auth.grantex_registration._tools_to_scopes", return_value=list(NEW_TOOLS)),
+        patch("core.database.get_tenant_session", lambda *_a, **_k: _Session()),
+        patch.object(script, "_tenant_ids", AsyncMock(return_value=[uuid.UUID(TENANT)])),
+    ):
+        code = asyncio.run(script.run(script.build_parser().parse_args(["--tenant", TENANT, "--apply"])))
+
+    assert code == 0
+    client._http.patch.assert_called_once_with("/v1/agents/ag_1", {"scopes": [*NEW_TOOLS, "audit:read"]})
+    [write] = writes
+    assert NEW_TOOLS in write.compile().params.values()
 
