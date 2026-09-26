@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { authenticate } from "./helpers/auth";
 
 async function mockPartnerDashboard(page: import("@playwright/test").Page) {

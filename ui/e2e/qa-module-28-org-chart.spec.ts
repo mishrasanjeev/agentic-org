@@ -17,7 +17,7 @@
  * don't depend on a fully populated org chart in the test
  * environment.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

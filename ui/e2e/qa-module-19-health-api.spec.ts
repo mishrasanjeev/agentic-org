@@ -6,7 +6,7 @@
  * endpoints. The shapes pinned here are the public-API
  * contract.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

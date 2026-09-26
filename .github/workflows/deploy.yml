@@ -641,6 +641,10 @@ jobs:
         env:
           BASE_URL: https://app.agenticorg.ai
           E2E_TOKEN: ${{ steps.auth.outputs.token }}
+          # The session token lasts 60 minutes and this suite runs longer:
+          # ui/e2e/helpers/auth.ts logs in again with these before it expires.
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           PLAYWRIGHT_RETRIES: "1"
           AGENTICORG_DEMO_USER_PASSWORD: ${{ secrets.AGENTICORG_DEMO_USER_PASSWORD }}
           AGENTICORG_DEMO_CEO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CEO_PASSWORD }}

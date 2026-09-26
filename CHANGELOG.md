@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the production Playwright suite logs in again before its session expires
+- The post-deploy suite runs for about 90 minutes on one session token that
+  lasts 60, so every test after the first hour failed with 401s that read as
+  product failures (28 of the 33 failures on 2026-09-26). Specs now take
+  `test` from `ui/e2e/helpers/test.ts`, whose fixtures log in again with
+  `E2E_EMAIL` / `E2E_PASSWORD` when less than 15 minutes are left, and read
+  `E2E_TOKEN` as a live export of `ui/e2e/helpers/auth.ts` instead of a copy
+  taken when the spec loads. The deploy workflow passes the two credentials to
+  the Playwright step.
+- A token that has expired and cannot be renewed now fails every test with
+  the reason, instead of producing assertion failures.
+- `sop-flow.spec.ts` and `video-recordings.spec.ts` passed without a session:
+  they accepted a 401 as a validation error, or the login page as a loaded
+  page. They now require the expected `400`, and `expectSignedIn` checks for
+  the signed-in layout.
+
 ### Fixed - the production Playwright suite no longer runs local-stack specs
 - `ui/e2e/regression.config.ts` ran every `*.spec.ts` against production,
   including the specs owned by `dev-stack.config.ts` and

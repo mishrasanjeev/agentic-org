@@ -3,12 +3,12 @@
  *
  * Converted from video-recording scripts to functional tests.
  * Tests that each page the demo videos would show actually loads.
- * Auth-gated pages skip when E2E_TOKEN is not set.
+ * Auth-gated pages fail when E2E_TOKEN is not set, and each one must render
+ * the signed-in layout: a page that bounced to /login is not "loaded".
  */
-import { test, expect } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, expectSignedIn, setSessionToken } from "./helpers/auth";
 
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(
@@ -50,32 +50,32 @@ test.describe("Video Flows: Platform Overview (auth required)", () => {
 
   test("dashboard loads", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("observatory page loads", async ({ page }) => {
     await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("approvals page loads", async ({ page }) => {
     await page.goto("/dashboard/approvals", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("connectors page loads", async ({ page }) => {
     await page.goto("/dashboard/connectors", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("workflows page loads", async ({ page }) => {
     await page.goto("/dashboard/workflows", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("audit page loads", async ({ page }) => {
     await page.goto("/dashboard/audit", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 });
 
@@ -92,12 +92,12 @@ test.describe("Video Flows: CFO Finance (auth required)", () => {
 
   test("agents page loads with agent content", async ({ page }) => {
     await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("observatory page loads for finance tracing", async ({ page }) => {
     await page.goto("/dashboard/observatory", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 });
 
@@ -114,12 +114,12 @@ test.describe("Video Flows: CHRO HR (auth required)", () => {
 
   test("agents page loads", async ({ page }) => {
     await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("audit page loads", async ({ page }) => {
     await page.goto("/dashboard/audit", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 });
 
@@ -136,7 +136,7 @@ test.describe("Video Flows: CMO Marketing (auth required)", () => {
 
   test("agents page loads for marketing agents", async ({ page }) => {
     await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 });
 
@@ -153,11 +153,11 @@ test.describe("Video Flows: COO Operations (auth required)", () => {
 
   test("agents page loads for ops agents", async ({ page }) => {
     await page.goto("/dashboard/agents", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 
   test("connectors page loads", async ({ page }) => {
     await page.goto("/dashboard/connectors", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("body")).not.toBeEmpty();
+    await expectSignedIn(page);
   });
 });

@@ -18,16 +18,16 @@
  *
  * All other TCs use the demo accounts seeded by the platform.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import {
-  DEMO_ROLE_CREDENTIALS,
   clearSession,
+  DEMO_ROLE_CREDENTIALS,
+  E2E_TOKEN,
   requireDemoRoleCredentials,
   setSessionToken,
 } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 
 const DEMO = DEMO_ROLE_CREDENTIALS;
 

@@ -7,7 +7,7 @@
  * branches, seed-prospects environment gate, process-lead's
  * safe-fields-only output.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

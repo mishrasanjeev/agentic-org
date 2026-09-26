@@ -6,7 +6,12 @@
  * CxO dashboard is tested.
  *
  * Usage:
- *   E2E_TOKEN=<token> BASE_URL=https://app.agenticorg.ai npx playwright test --config=e2e/regression.config.ts
+ *   E2E_TOKEN=<token> E2E_EMAIL=<email> E2E_PASSWORD=<password> \
+ *     BASE_URL=https://app.agenticorg.ai npx playwright test --config=e2e/regression.config.ts
+ *
+ * The run takes longer than the 60-minute session. Specs import `test` from
+ * helpers/test.ts, whose fixtures log in again with E2E_EMAIL / E2E_PASSWORD
+ * before the token expires; without them, tests fail once it has expired.
  *
  * Spec files included (20 files, 438+ tests):
  *   - ca-firms.spec.ts          (58 tests) — CA flow, companies, approvals, credentials
@@ -46,7 +51,7 @@ export default defineConfig({
   // triple the runtime; the default stays 2 for other callers.
   retries: Number.parseInt(process.env.PLAYWRIGHT_RETRIES ?? "2", 10),
   workers: 1, // Sequential for regression stability
-  // Codex 2026-04-22 release-signoff post-deploy e2e flagged the
+  // The 2026-04-22 release-signoff post-deploy run flagged the
   // clash: Playwright refuses when the HTML reporter folder sits
   // inside the test-artifact outputDir. Give each its own top-level
   // subtree so a future artifact layout doesn't re-introduce it.

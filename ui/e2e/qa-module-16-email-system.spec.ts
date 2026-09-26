@@ -9,7 +9,7 @@
  * send_email() under the hood and reports rejection back to
  * the caller.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

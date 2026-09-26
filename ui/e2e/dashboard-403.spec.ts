@@ -12,11 +12,10 @@
  *     not a silent redirect to `/dashboard/audit`. The page tells the
  *     user what was blocked and why.
  */
-import { expect, test } from "@playwright/test";
-import { DEMO_ROLE_CREDENTIALS, requireDemoRoleCredentials, setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { DEMO_ROLE_CREDENTIALS, E2E_TOKEN, requireDemoRoleCredentials, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 const ROLE_CREDS: Record<string, { email: string; password: string }> = {
   cfo: DEMO_ROLE_CREDENTIALS.cfo,
