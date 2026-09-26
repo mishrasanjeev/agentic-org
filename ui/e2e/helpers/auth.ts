@@ -14,9 +14,13 @@
  * All three patterns came up in `ca-firms.spec.ts` and the fixes are
  * generic. Use these helpers in every regression spec.
  */
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { expect, test, type Page, type Locator } from "@playwright/test";
 
-import { SessionKeeper, loginForToken } from "./session";
+import { SessionKeeper, loginForToken, type LoginFailureLog } from "./session";
 
 export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 /**
@@ -27,12 +31,43 @@ export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
 export let E2E_TOKEN = process.env.E2E_TOKEN || "";
 export const canAuth = !!E2E_TOKEN;
 
-const _session = new SessionKeeper(E2E_TOKEN, () => {
-  const email = process.env.E2E_EMAIL;
-  const password = process.env.E2E_PASSWORD;
-  if (!email || !password) return Promise.reject(new Error("E2E_EMAIL and E2E_PASSWORD are not set"));
-  return loginForToken(APP, email, password);
-});
+/**
+ * Failed logins, shared by every worker of this run. Workers are children of
+ * the runner, so its pid identifies the run. Best effort: an unreadable or
+ * unwritable file only means a worker may retry sooner.
+ */
+const _loginFailures: LoginFailureLog = {
+  read() {
+    try {
+      const data = JSON.parse(readFileSync(_loginFailureFile(), "utf8"));
+      return typeof data?.at === "number" && typeof data?.reason === "string" ? data : null;
+    } catch {
+      return null;
+    }
+  },
+  write(at, reason) {
+    try {
+      writeFileSync(_loginFailureFile(), JSON.stringify({ at, reason }));
+    } catch {
+      // See above.
+    }
+  },
+};
+
+function _loginFailureFile(): string {
+  return join(tmpdir(), `agenticorg-e2e-login-failures-${process.ppid}.json`);
+}
+
+const _session = new SessionKeeper(
+  E2E_TOKEN,
+  () => {
+    const email = process.env.E2E_EMAIL;
+    const password = process.env.E2E_PASSWORD;
+    if (!email || !password) return Promise.reject(new Error("E2E_EMAIL and E2E_PASSWORD are not set"));
+    return loginForToken(APP, email, password);
+  },
+  _loginFailures,
+);
 
 /**
  * Keep the shared session alive for runs longer than its 60-minute lifetime.
@@ -48,6 +83,10 @@ const _session = new SessionKeeper(E2E_TOKEN, () => {
 export async function ensureFreshE2EToken(): Promise<string> {
   const token = await _session.fresh(Date.now());
   if (token !== E2E_TOKEN) {
+    // The mint step in deploy.yml masks the first token; mask each new one
+    // before anything can print it. Worker stdout reaches the Actions log as
+    // whole lines, so the runner reads this as a command.
+    if (process.env.GITHUB_ACTIONS === "true") console.log(`::add-mask::${token}`);
     E2E_TOKEN = token;
     // Specs that read process.env.E2E_TOKEN directly see the new token too.
     process.env.E2E_TOKEN = token;

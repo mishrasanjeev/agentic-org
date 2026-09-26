@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   RELOGIN_RETRY_MS,
+  type LoginFailureLog,
   SESSION_REFRESH_MARGIN_MS,
   SessionKeeper,
   loginForToken,
@@ -91,6 +92,45 @@ describe("SessionKeeper.fresh", () => {
     const login = vi.fn(async () => "new");
     await expect(new SessionKeeper("", login).fresh(NOW)).resolves.toBe("");
     await expect(new SessionKeeper("opaque", login).fresh(NOW)).resolves.toBe("opaque");
+    expect(login).not.toHaveBeenCalled();
+  });
+});
+
+describe("SessionKeeper with a shared LoginFailureLog", () => {
+  // Playwright starts a new worker, and so a new keeper, after every failed
+  // test; the shared log keeps the once-a-minute retry gap across them.
+  function memoryLog(): LoginFailureLog {
+    let entry: { at: number; reason: string } | null = null;
+    return {
+      read: () => entry,
+      write: (at, reason) => {
+        entry = { at, reason };
+      },
+    };
+  }
+
+  it("a failure in one keeper holds back the next keeper's login for a minute", async () => {
+    const log = memoryLog();
+    const failing = async (): Promise<string> => {
+      throw new Error("login returned HTTP 503");
+    };
+    const token = jwtExpiringAt(NOW + 5 * 60_000);
+    await new SessionKeeper(token, failing, log).fresh(NOW);
+
+    const login = vi.fn(async () => jwtExpiringAt(NOW + 3_600_000));
+    const next = new SessionKeeper(token, login, log);
+    await expect(next.fresh(NOW + 1_000)).resolves.toBe(token);
+    expect(login).not.toHaveBeenCalled();
+    await expect(next.fresh(NOW + RELOGIN_RETRY_MS)).resolves.not.toBe(token);
+    expect(login).toHaveBeenCalledTimes(1);
+  });
+
+  it("an expired token reports the reason another keeper recorded", async () => {
+    const log = memoryLog();
+    log.write(NOW - 1_000, "login returned HTTP 401");
+    const login = vi.fn(async () => "new");
+    const keeper = new SessionKeeper(jwtExpiringAt(NOW - 60_000), login, log);
+    await expect(keeper.fresh(NOW)).rejects.toThrow("could not be renewed: login returned HTTP 401.");
     expect(login).not.toHaveBeenCalled();
   });
 });

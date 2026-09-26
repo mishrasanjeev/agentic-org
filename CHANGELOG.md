@@ -14,7 +14,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   taken when the spec loads. The deploy workflow passes the two credentials to
   the Playwright step.
 - A token that has expired and cannot be renewed now fails every test with
-  the reason, instead of producing assertion failures.
+  the reason, instead of producing assertion failures. A failed login is
+  retried at most once a minute across all workers of the run.
+- Each renewed token is masked in the Actions log, and a new workflow step
+  revokes every session of the E2E user (`/auth/logout-all`) before the
+  Playwright artifacts are uploaded; if it cannot, the upload is skipped. The
+  default Playwright config now collects `*.spec.ts` only.
 - `sop-flow.spec.ts` and `video-recordings.spec.ts` passed without a session:
   they accepted a 401 as a validation error, or the login page as a loaded
   page. They now require the expected `400`, and `expectSignedIn` checks for

@@ -46,14 +46,27 @@ export async function loginForToken(
 }
 
 /**
+ * Where failed logins are recorded, so the retry gap holds across processes.
+ *
+ * Playwright starts a new worker process after every failed test, and each
+ * one builds its own `SessionKeeper`. Without a shared record, an expired
+ * token that cannot be renewed would cost one login attempt per test.
+ */
+export interface LoginFailureLog {
+  read(): { at: number; reason: string } | null;
+  write(at: number, reason: string): void;
+}
+
+/**
  * Hands out a session token that is not about to expire.
  *
  * `fresh()` returns the current token while more than 15 minutes of it are
  * left. Otherwise it logs in again and returns the new token. A failed login
- * is retried at most once a minute; until the token actually expires the old
- * one is still returned. Once it has expired and cannot be renewed, `fresh()`
- * throws with the reason, so the run fails on the real cause instead of on a
- * spec's assertions about 401 responses.
+ * is retried at most once a minute, across every keeper sharing the same
+ * `LoginFailureLog`; until the token actually expires the old one is still
+ * returned. Once it has expired and cannot be renewed, `fresh()` throws with
+ * the reason, so the run fails on the real cause instead of on a spec's
+ * assertions about 401 responses.
  */
 export class SessionKeeper {
   private lastAttempt = Number.NEGATIVE_INFINITY;
@@ -62,6 +75,7 @@ export class SessionKeeper {
   constructor(
     private currentToken: string,
     private readonly login: () => Promise<string>,
+    private readonly failures: LoginFailureLog | null = null,
   ) {}
 
   get token(): string {
@@ -72,13 +86,16 @@ export class SessionKeeper {
     if (!this.currentToken) return this.currentToken;
     const expiresAt = sessionExpiresAt(this.currentToken);
     if (expiresAt === null || expiresAt - now > SESSION_REFRESH_MARGIN_MS) return this.currentToken;
-    if (now - this.lastAttempt >= RELOGIN_RETRY_MS) {
+    const shared = this.failures?.read() ?? null;
+    if (shared && shared.at > this.lastAttempt) this.lastFailure = shared.reason;
+    if (now - Math.max(this.lastAttempt, shared?.at ?? Number.NEGATIVE_INFINITY) >= RELOGIN_RETRY_MS) {
       this.lastAttempt = now;
       try {
         this.currentToken = await this.login();
         return this.currentToken;
       } catch (err) {
         this.lastFailure = err instanceof Error ? err.message : String(err);
+        this.failures?.write(now, this.lastFailure);
       }
     }
     if (expiresAt <= now) {

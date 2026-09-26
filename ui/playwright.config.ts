@@ -2,6 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Specs only: e2e/helpers holds vitest unit tests (*.test.ts) that
+  // Playwright's default pattern would otherwise try to load.
+  testMatch: "**/*.spec.ts",
   timeout: 60_000,
   retries: 2,
   // Explicit output dirs so the HTML reporter and test-artifacts dir
