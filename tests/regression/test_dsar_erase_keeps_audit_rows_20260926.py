@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Regression tests: DSAR erasure against the append-only audit log (2026-09-26).
 
 Every ``POST /dsar/erase`` in production failed with a 500. ``erase_subject``
