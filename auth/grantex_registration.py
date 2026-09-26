@@ -47,6 +47,23 @@ def bounded_scopes(scopes: Iterable[str]) -> list[str]:
     return unique
 
 
+def stored_route_scopes(grantex_config: dict[str, Any] | None) -> list[str]:
+    """Operator-granted route scopes stored in an agent's ``config["grantex"]``."""
+    raw = (grantex_config or {}).get("route_scopes") or []
+    return [s for s in raw if isinstance(s, str) and s]
+
+
+def registration_scopes(tool_scopes: Iterable[str], route_scopes: Iterable[str]) -> list[str]:
+    """Scopes an agent's Grantex registration carries: its tool scopes plus any
+    operator-granted route scopes.
+
+    Route scopes are kept apart from ``grantex_scopes`` in storage so run grants
+    minted from stored scopes never carry them; they only let a grant the agent
+    is issued include the named route families.
+    """
+    return bounded_scopes([*tool_scopes, *route_scopes])
+
+
 def update_agent_scopes(client: Any, grantex_agent_id: str, scopes: Iterable[str]) -> None:
     """Replace a registered agent's scopes on Grantex. Blocking: call it off the event loop.
 

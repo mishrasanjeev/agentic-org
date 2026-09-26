@@ -2876,6 +2876,36 @@ async def update_agent(
                     details={"before": before, "after": purposes},
                 )
             )
+        # Route scopes let a grant issued to this agent call the
+        # named route families. Granting them widens what the agent's token can
+        # do across the tenant, so only a human tenant admin may set them.
+        pending_route_scopes: list[str] | None = None
+        if "route_scopes" in update_data:
+            from api.route_enforcement import validate_route_scopes
+            from auth.grantex_registration import stored_route_scopes
+
+            if not effective_caller.is_admin or not effective_caller.is_human:
+                raise HTTPException(403, "Only a human tenant admin may grant an agent route scopes")
+            try:
+                pending_route_scopes = validate_route_scopes(update_data.pop("route_scopes"))
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            before_route_scopes = stored_route_scopes((agent.config or {}).get("grantex"))
+            if pending_route_scopes != sorted(before_route_scopes):
+                session.add(
+                    AuditLog(
+                        tenant_id=tid,
+                        event_type="agent.route_scopes.updated",
+                        actor_type="user",
+                        actor_id=str(effective_caller.user_id),
+                        agent_id=agent.id,
+                        resource_type="agent",
+                        resource_id=str(agent.id),
+                        action="Updated the route scopes an agent's grants may carry",
+                        outcome="success",
+                        details={"before": before_route_scopes, "after": pending_route_scopes},
+                    )
+                )
         if isinstance(update_data.get("hitl_policy"), dict):
             _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
         if "domain" in update_data:
@@ -3068,14 +3098,34 @@ async def update_agent(
             )
             session.add(audit)
 
-        if pending_grantex_scopes is not None:
-            await _push_grantex_scopes(agent, pending_grantex_scopes, tenant_id=tenant_id)
+        grantex_config = dict((agent.config or {}).get("grantex") or {})
+        if pending_grantex_scopes is not None or (
+            pending_route_scopes is not None and grantex_config.get("grantex_agent_id")
+        ):
+            tool_scopes = (
+                pending_grantex_scopes
+                if pending_grantex_scopes is not None
+                else [s for s in grantex_config.get("grantex_scopes") or [] if isinstance(s, str)]
+            )
+            await _push_grantex_scopes(agent, tool_scopes, tenant_id=tenant_id, route_scopes=pending_route_scopes)
+        elif pending_route_scopes is not None:
+            # Not registered on Grantex yet: nothing can mint a grant for it, so
+            # store the scopes for when it is.
+            grantex_config["route_scopes"] = pending_route_scopes
+            agent.config = {**(agent.config or {}), "grantex": grantex_config}
 
     return {"id": str(agent_id), "updated": True}
 
 
-async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str) -> None:
+async def _push_grantex_scopes(
+    agent: Any, scopes: list[str], *, tenant_id: str, route_scopes: list[str] | None = None
+) -> None:
     """Update a registered agent's scopes on Grantex, then store them on the agent.
+
+    The registration carries the tool scopes plus the operator-granted route
+    scopes (``route_scopes``, or the stored ones when ``None``); storage keeps
+    them apart (``grantex_scopes`` and ``route_scopes``) so run grants minted
+    from ``grantex_scopes`` never carry a route scope.
 
     Grantex (``update_agent_scopes``) is called off the event loop and first; the scopes are stored only
     after it accepted them. Any failure raises (``reason_code``
@@ -3083,13 +3133,32 @@ async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str)
     transaction rolls back and the agent keeps the tools and scopes it had.
     Unchanged scopes are stored without calling Grantex.
     """
-    from auth.grantex_registration import _get_grantex_client, update_agent_scopes
+    from auth.grantex_registration import (
+        ScopeLimitExceededError,
+        _get_grantex_client,
+        registration_scopes,
+        stored_route_scopes,
+        update_agent_scopes,
+    )
 
     cfg = dict(agent.config or {})
     grx = dict(cfg.get("grantex") or {})
     grantex_agent_id = str(grx.get("grantex_agent_id") or "")
     stored = [s for s in grx.get("grantex_scopes") or [] if isinstance(s, str)]
-    if sorted(stored) != sorted(scopes):
+    stored_routes = stored_route_scopes(grx)
+    routes = stored_routes if route_scopes is None else list(route_scopes)
+    try:
+        registered = registration_scopes(scopes, routes)
+    except ScopeLimitExceededError as exc:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "grantex_scope_refresh_failed",
+                "reason_code": "scope_limit_exceeded",
+                "message": str(exc),
+            },
+        ) from exc
+    if sorted(set(stored) | set(stored_routes)) != sorted(registered):
         client = _get_grantex_client()
         if client is None:
             logger.warning(
@@ -3108,7 +3177,7 @@ async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str)
                 },
             )
         try:
-            await asyncio.to_thread(update_agent_scopes, client, grantex_agent_id, list(scopes))
+            await asyncio.to_thread(update_agent_scopes, client, grantex_agent_id, registered)
         # enterprise-gate: broad-except-ok reason=grantex-update-failure-rolls-back-the-patch-with-a-reason
         except Exception as exc:
             logger.warning(
@@ -3126,8 +3195,10 @@ async def _push_grantex_scopes(agent: Any, scopes: list[str], *, tenant_id: str)
                     "message": "Grantex did not accept the agent's new scopes; nothing was changed.",
                 },
             ) from exc
-        logger.info("grantex_scopes_refreshed", agent_id=str(agent.id), scopes_count=len(scopes))
+        logger.info("grantex_scopes_refreshed", agent_id=str(agent.id), scopes_count=len(registered))
     grx["grantex_scopes"] = list(scopes)
+    if routes or "route_scopes" in grx:
+        grx["route_scopes"] = routes
     cfg["grantex"] = grx
     agent.config = cfg
 

@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - agents can be granted route scopes
+- Route scope checks apply to agent tokens, but registration only ever gave an
+  agent tool scopes, so an agent token was refused on every scoped route. A
+  human tenant admin can now grant an agent named route scopes with
+  `PATCH /agents/{id}` `{"route_scopes": [...]}`; they are added to the agent's
+  Grantex registration so a grant issued to it can carry them.
+- Only canonical route-family scopes are accepted (never `agenticorg:admin` or
+  an alias; `422`), only a human tenant admin may set them (`403`), Grantex is
+  updated before anything is stored, and every change is audited.
+- Route scopes are stored apart from tool scopes, so run grants and delegated
+  grants never carry them. A tools PATCH and the scope backfill keep them on
+  the registration.
+- Existing agents have none until an admin grants them; until then an agent
+  token keeps getting `403` on scoped routes, as since the route-scope fix.
+
 ### Changed - live feed, LLM failover and connector readiness are bounded and truthful
 - **Tenant live feed:** subscriptions are single-flight per tenant with bounded
   fanout, a reconnect loop and a subscribe timeout; browsers catch up through
@@ -106,9 +121,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   scope (`agents:read`, `agents:run`, `audit:read`, ...) or `agenticorg:admin`,
   or it gets `403`. An authenticated request with an unrecognised
   authentication mode is refused the same way.
-- Agent registration does not yet put route scopes in a grant (FINDINGS
-  A-64), so agents calling scoped routes with a grant token are refused until
-  it does; use an API key meanwhile. A2A and MCP routes are unaffected.
+- A tenant admin grants an agent the route scopes its token needs with
+  `PATCH /agents/{id}` `route_scopes` (see "Added - agents can be granted route
+  scopes" above). A2A and MCP routes are unaffected.
   See `docs/operations/grant-enforcement.md`.
 
 ### Fixed - three external changes that broke CI on every pull request

@@ -286,9 +286,33 @@ A grant holding only `tool:...` and `agenticorg:{domain}:read` scopes gets
 `403 Missing scope` on every route in a mapped family. Routes in unmapped
 families (A2A and MCP among them) are not scope-checked for any credential.
 
-Registration does not yet add route scopes to an agent's grant (FINDINGS
-A-64), so an external agent that needs the platform API should use an API key
-with the scopes it needs until it does.
+### Granting an agent route scopes
+
+A human tenant admin grants an agent the route families its token may call:
+
+    PATCH /api/v1/agents/{agent_id}
+    {"route_scopes": ["agents:read", "workflows:write"]}
+
+- Only the canonical family scopes are accepted
+  (`api.route_enforcement.GRANTABLE_ROUTE_SCOPES`: `agents:read`,
+  `agents:write`, `workflows:read`, `workflows:write`, `approvals:read`,
+  `approvals:write`, `audit:read`, `connectors.read`, `report_schedules.read`,
+  `report_schedules.write`). `agenticorg:admin`, legacy aliases and anything
+  else get `422`. A non-admin, or an admin API key, gets `403`.
+- For a registered agent the scopes are added to its Grantex registration
+  first and stored after; if Grantex refuses, nothing changes. Send `[]` to
+  remove them. Each change writes an `agent.route_scopes.updated` audit event
+  with the before and after lists.
+- They are stored in `config.grantex.route_scopes`, apart from the tool scopes
+  in `grantex_scopes`. Run grants and delegated child grants are minted from
+  the tool scopes only, so they never carry a route scope. A tools PATCH and
+  `scripts/refresh_grantex_scopes.py` keep the route scopes on the
+  registration.
+- The registration only allows them: a grant issued to the agent must still
+  request the route scopes it needs. Tool and route scopes together are capped
+  at 100.
+- A route scope applies across the tenant (an `agents:write` grant can run any
+  shared agent), so grant the narrowest families the integration needs.
 
 ## Runbook
 

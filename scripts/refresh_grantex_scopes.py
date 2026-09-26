@@ -83,11 +83,16 @@ async def refresh_agent_scopes(
     """Recompute one agent's scopes and, with ``apply``, push them to Grantex then storage.
 
     ``persist`` stores the new scope list as ``config.grantex.grantex_scopes``.
+    The registration also keeps the agent's operator-granted route scopes
+    (``config.grantex.route_scopes``); they are pushed with the
+    tool scopes and never written into ``grantex_scopes``.
     """
     from auth.grantex_registration import (
         ScopeLimitExceededError,
         _tools_to_scopes,
         bounded_scopes,
+        registration_scopes,
+        stored_route_scopes,
         update_agent_scopes,
     )
 
@@ -99,6 +104,7 @@ async def refresh_agent_scopes(
 
     try:
         after = bounded_scopes(_tools_to_scopes(list(authorized_tools or []), domain, connector_names=connector_names))
+        registered = registration_scopes(after, stored_route_scopes(grantex_cfg))
     except ScopeLimitExceededError as exc:
         return ScopeRefresh(agent_id, grantex_agent_id, before, before, "scope_limit_exceeded", str(exc))
     if sorted(after) == sorted(before):
@@ -106,7 +112,7 @@ async def refresh_agent_scopes(
     if not apply:
         return ScopeRefresh(agent_id, grantex_agent_id, before, after, "would_update")
     try:
-        await asyncio.to_thread(update_agent_scopes, grantex_client, grantex_agent_id, after)
+        await asyncio.to_thread(update_agent_scopes, grantex_client, grantex_agent_id, registered)
     # enterprise-gate: broad-except-ok reason=grantex-update-failure-is-reported-and-storage-is-not-changed
     except Exception as exc:
         logger.error("grantex_scope_refresh_failed", agent_id=agent_id, error_type=type(exc).__name__)
