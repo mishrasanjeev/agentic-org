@@ -17,12 +17,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the reason, instead of producing assertion failures. A failed login is
   retried at most once every 15 seconds across all workers of the run.
 - Each renewed token is masked in the Actions log, and a new workflow step
-  revokes every session of the E2E user (`/auth/logout-all`), and of each
-  demo account whose password is configured, before the Playwright artifacts
-  are uploaded; if the E2E user's sessions cannot be revoked, the upload is
-  skipped. Production runs of the suite are serialised, since that revocation
-  would break a second run in progress. The default Playwright config now
-  collects `*.spec.ts` only.
+  revokes every session of the E2E user (`/auth/logout-all`) before the
+  Playwright artifacts are uploaded; if it cannot, the upload is skipped. The
+  suite's own global teardown ends the demo accounts' sessions the same way
+  when `E2E_REVOKE_DEMO_SESSIONS=1`, so the workflow names no demo account.
+  Production runs of the suite are serialised, since that revocation would
+  break a second run in progress. The default Playwright config now collects
+  `*.spec.ts` only.
 - `sop-flow.spec.ts` and `video-recordings.spec.ts` passed without a session:
   they accepted a 401 as a validation error, or the login page as a loaded
   page. They now require the expected `400`, and `expectSignedIn` checks for

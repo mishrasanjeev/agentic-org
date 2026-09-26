@@ -139,6 +139,18 @@ const DEMO_PASSWORD_ENV: Record<DemoAccount, string> = {
   auditor: "AGENTICORG_DEMO_AUDITOR_PASSWORD",
 };
 
+/**
+ * The configured password for a demo account: the env var, or the local
+ * stack's seeded default when the target is the local stack. Empty when the
+ * account is not usable against this target.
+ */
+export function demoPasswordFromEnv(account: DemoAccount): string {
+  const fromEnv = process.env[DEMO_PASSWORD_ENV[account]];
+  if (fromEnv) return fromEnv;
+  if (!targetsLocalStack()) return "";
+  return account === "user" ? DEMO_USER_CREDENTIALS.password : DEMO_ROLE_CREDENTIALS[account].password;
+}
+
 function targetsLocalStack(): boolean {
   try {
     return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(APP).hostname);
