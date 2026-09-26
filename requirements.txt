@@ -69,7 +69,7 @@ anthropic==0.125.0
 openai==2.54.0
 
 # ─── LangChain & LangGraph (Agent Runtime) ──────────────────────────────────
-langgraph==1.2.11
+langgraph==1.2.12
 langchain==1.4.2
 langchain-core==1.6.3
 langchain-google-genai==4.4.0
