@@ -8,11 +8,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - TC-API-003 (`qa-module-19-health-api.spec.ts`) read the API version from
   `/openapi.json`, which the strict runtime does not serve (`api/main.py`). It
   now reads the version from `/api/v1/health` and, on hosted targets, checks
-  that the OpenAPI document is not published.
+  that the origin under test does not serve the OpenAPI document (the console
+  origin, unless `API_URL` points at the API).
 - `tests/e2e/test_smoke.py::test_openapi_docs_accessible` passed only because
   the console answers `/docs` with its own page and a 200. It is replaced by
   `test_api_docs_are_not_published`, which checks the content of
-  `/openapi.json`, `/docs` and `/redoc`.
+  `/openapi.json`, `/docs` and `/redoc` on the public origin, and on the API's
+  own origin when `AGENTICORG_E2E_API_URL` is set.
 - D2 Promote/Rollback clicked the first fleet card, but the fleet page lists
   only the selected company's agents and the E2E tenant's agents have none.
   It now opens a shadow agent returned by `GET /api/v1/agents?status=shadow`
@@ -20,7 +22,8 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - AGENT-CONFIG-003 created an agent with no connector, which has had no tools
   since bug sheet #46 (2026-09-14). It now links Zendesk, checks for a tool
   badge and deletes the agent afterwards instead of leaving one in the
-  production tenant on every attempt.
+  production tenant on every attempt. The agent is created paused, so a full
+  shadow-agent budget cannot fail it.
 - `qa-cafirms-may01.spec.ts` fell back to the shared suite token, whose tenant
   cannot see the tester's agent and connector. It now signs in only as the
   tester (`RU_TESTER_EMAIL` / `RU_TESTER_PASSWORD`, passed by the deploy

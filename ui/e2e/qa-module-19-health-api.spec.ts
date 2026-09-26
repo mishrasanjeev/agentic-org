@@ -115,6 +115,8 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
     expect(body.version.length).toBeGreaterThan(0);
 
     // Local stacks run the non-strict runtime, which serves the document.
+    // Hosted, this checks the origin under test: the console (which proxies
+    // only /api/ and /ws/) unless API_URL points at the API itself.
     const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(API).hostname);
     if (!isLocal) {
       const spec = await request.get(`${API}/openapi.json`, { failOnStatusCode: false });

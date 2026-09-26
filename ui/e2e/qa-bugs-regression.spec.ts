@@ -706,6 +706,9 @@ test.describe("AGENT-CONFIG-003: Agent Tools Auto-populate", () => {
           // Tools come only from linked connectors (bug sheet #46,
           // 2026-09-14); Zendesk offers the support_triage defaults.
           connector_ids: ["zendesk"],
+          // Paused, not shadow: the tenant's shadow-agent budget is shared,
+          // and a full budget would fail this test for an unrelated reason.
+          initial_status: "paused",
         },
       },
     );

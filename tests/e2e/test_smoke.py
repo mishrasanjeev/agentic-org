@@ -68,16 +68,28 @@ class TestSmoke:
         assert resp.status_code == 200, f"Liveness returned {resp.status_code}"
 
     def test_api_docs_are_not_published(self, client):
-        """The strict runtime disables /docs, /redoc and /openapi.json (api/main.py).
+        """The public origin does not serve the API docs.
 
-        The console answers unknown paths with its own index.html and a 200,
-        so a status check proves nothing either way: check the content.
+        The strict runtime disables /docs, /redoc and /openapi.json
+        (api/main.py). The console proxies only /api/ and /ws/ to the API, so
+        against the console origin this checks what the public URL exposes;
+        set AGENTICORG_E2E_API_URL to the API's own origin to check the API
+        itself as well. The console answers unknown paths with its own
+        index.html and a 200, so a status check proves nothing either way:
+        check the content.
         """
-        spec = _request_with_retry(client, "/openapi.json")
-        assert not (spec.status_code == 200 and '"openapi"' in spec.text), "the OpenAPI document is publicly served"
-        for path, marker in (("/docs", "swagger-ui"), ("/redoc", "redoc.standalone")):
-            page = _request_with_retry(client, path)
-            assert marker not in page.text.lower(), f"{path} serves the API docs"
+        origins = [client]
+        api_url = os.getenv("AGENTICORG_E2E_API_URL", "").rstrip("/")
+        if api_url:
+            origins.append(api_url)
+        for origin in origins:
+            spec = _request_with_retry(origin, "/openapi.json")
+            assert not (spec.status_code == 200 and '"openapi"' in spec.text), (
+                f"the OpenAPI document is publicly served at {spec.url}"
+            )
+            for path, marker in (("/docs", "swagger-ui"), ("/redoc", "redoc.standalone")):
+                page = _request_with_retry(origin, path)
+                assert marker not in page.text.lower(), f"{page.url} serves the API docs"
 
     def test_agents_list_requires_auth(self):
         """Verify unauthenticated requests are rejected."""
