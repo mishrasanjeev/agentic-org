@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - API keys that were administrators stay administrators
+- Revision `v6z29_admin_scope_compat` gives every API key holding a
+  colon-delimited admin sub-scope such as `agenticorg:admin:full` the exact
+  `agenticorg:admin` scope, the access it had before admin became an exact
+  match. Look-alikes such as `agenticorg:administration:read` or
+  `agenticorg:adminx` were never meant as admin and stay non-admin; key status
+  and every other scope are unchanged, and a second run changes nothing. This
+  removes the breaking change noted for the exact-match fix below; the audit
+  query there is no longer needed.
+- Creating an API key with an ambiguous admin scope (anything starting with
+  `agenticorg:admin` other than exactly that) is refused with `422`, naming the
+  scopes and the exact one to use.
+- Deploy with `--with-migrations` so the revision runs before the new code
+  serves traffic.
+
 ### Changed - live feed, LLM failover and connector readiness are bounded and truthful
 - **Tenant live feed:** subscriptions are single-flight per tenant with bounded
   fanout, a reconnect loop and a subscribe timeout; browsers catch up through

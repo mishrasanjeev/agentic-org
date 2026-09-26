@@ -16,6 +16,7 @@ from api.deps import require_scope
 from api.route_metadata import route_meta
 from core.database import async_session_factory
 from core.models.api_key import APIKey
+from core.rbac import ADMIN_SCOPE
 
 logger = logging.getLogger(__name__)
 router = APIRouter(
@@ -90,6 +91,22 @@ class CreateKeyResponse(BaseModel):
 )
 async def create_api_key(body: CreateKeyRequest, request: Request):
     """Generate a new API key. The full key is only shown once."""
+    # Admin is the exact ``agenticorg:admin`` scope. A look-alike such as
+    # ``agenticorg:admin:full`` was an administrator only while the check
+    # matched by prefix; refuse it rather than mint a key whose access is
+    # not what its scope says.
+    ambiguous = sorted(
+        scope for scope in body.scopes if scope != ADMIN_SCOPE and scope.startswith(ADMIN_SCOPE)
+    )
+    if ambiguous:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Scopes {ambiguous} are not administrator scopes. "
+                f"Use exactly '{ADMIN_SCOPE}' for an administrator key."
+            ),
+        )
+
     tenant_id = _get_tenant_id(request)
     user_sub = _get_user_sub(request)
 

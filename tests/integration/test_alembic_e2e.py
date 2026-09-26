@@ -1620,3 +1620,86 @@ def test_a_waiting_migrate_job_does_not_bootstrap_after_the_holder_stamped_it():
     assert versions == 1
     _assert_no_schema_drift_from_orm()
     _reset_schema()
+
+
+def test_admin_scope_compat_migration_keeps_admin_only_for_colon_sub_scopes():
+    """``v6z29_admin_scope_compat`` gives keys holding ``agenticorg:admin:<sub>`` the exact
+    admin scope they were effectively using, leaves look-alikes and ordinary keys alone,
+    and is idempotent."""
+    if "alembic_version" not in _table_names():
+        _reset_schema()
+        _run_migrate_wrapper()
+    command.downgrade(_alembic_cfg(), "v6z28_case_excerpts")
+
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    keys = {
+        "sub_scope": ["agents:read", "agenticorg:admin:full"],
+        "already_admin": ["agenticorg:admin", "agenticorg:admin:read"],
+        "look_alike": ["agenticorg:administration:read"],
+        "near_miss": ["agenticorg:adminx"],
+        "ordinary": ["agents:read", "connectors.read"],
+        "revoked_sub_scope": ["agenticorg:admin:ops"],
+    }
+    ids = {name: uuid.uuid4() for name in keys}
+    engine = create_engine(_SYNC_URL)
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO tenants (id, name, slug, plan, data_region, settings, byok_kek_resource)
+                VALUES (:id, :name, :slug, 'enterprise', 'IN', '{}'::jsonb, '')
+            """),
+            {"id": tenant_id, "name": f"tenant-{tenant_id.hex}", "slug": f"tenant-{tenant_id.hex}"},
+        )
+        conn.execute(
+            text("""
+                INSERT INTO users (id, tenant_id, email, name, role, status, mfa_enabled)
+                VALUES (:id, :tenant_id, :email, 'Key owner', 'admin', 'active', false)
+            """),
+            {"id": user_id, "tenant_id": tenant_id, "email": f"owner-{tenant_id.hex[:8]}@example.com"},
+        )
+        for name, scopes in keys.items():
+            conn.execute(
+                text("""
+                    INSERT INTO api_keys (id, tenant_id, user_id, name, prefix, key_hash, scopes, status)
+                    VALUES (:id, :tenant_id, :user_id, :name, :prefix, 'hash', :scopes, :status)
+                """),
+                {
+                    "id": ids[name],
+                    "tenant_id": tenant_id,
+                    "user_id": user_id,
+                    "name": name,
+                    "prefix": ids[name].hex[:12],
+                    "scopes": scopes,
+                    "status": "revoked" if name.startswith("revoked") else "active",
+                },
+            )
+
+    def stored() -> dict[str, list[str]]:
+        with engine.connect() as conn:
+            rows = conn.execute(
+                text("SELECT name, scopes, status FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id}
+            ).all()
+        return {row.name: (list(row.scopes), row.status) for row in rows}
+
+    try:
+        command.upgrade(_alembic_cfg(), "head")
+        after = stored()
+        assert after["sub_scope"] == (["agents:read", "agenticorg:admin:full", "agenticorg:admin"], "active")
+        assert after["already_admin"] == (keys["already_admin"], "active")
+        assert after["look_alike"] == (keys["look_alike"], "active")
+        assert after["near_miss"] == (keys["near_miss"], "active")
+        assert after["ordinary"] == (keys["ordinary"], "active")
+        # Status is untouched: a revoked key gains the scope but stays revoked.
+        assert after["revoked_sub_scope"] == (["agenticorg:admin:ops", "agenticorg:admin"], "revoked")
+
+        # Idempotent: a second pass adds nothing.
+        command.downgrade(_alembic_cfg(), "v6z28_case_excerpts")
+        command.upgrade(_alembic_cfg(), "head")
+        assert stored() == after
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM api_keys WHERE tenant_id = :t"), {"t": tenant_id})
+            conn.execute(text("DELETE FROM users WHERE tenant_id = :t"), {"t": tenant_id})
+            conn.execute(text("DELETE FROM tenants WHERE id = :t"), {"t": tenant_id})
+        engine.dispose()
