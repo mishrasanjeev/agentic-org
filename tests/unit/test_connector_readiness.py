@@ -160,3 +160,15 @@ def test_a_token_refresh_keeps_a_passing_check_time():
     assert config.last_health_check == checked_at
     assert config.health_status == "healthy"
 
+
+def test_the_scheduled_refresh_task_is_the_refresh_entry_point():
+    """The beat schedule calls this task name with no arguments; it must be the
+    refresh entry point, not a helper that happens to sit under the decorator."""
+    from core.tasks import token_refresh
+    from core.tasks.celery_app import app
+
+    task = app.tasks["core.tasks.token_refresh.refresh_expiring_tokens"]
+    assert task.run.__name__ == "refresh_expiring_tokens"
+    assert task.run.__module__ == token_refresh.__name__
+    assert not hasattr(token_refresh._store_refreshed_credentials, "delay")
+

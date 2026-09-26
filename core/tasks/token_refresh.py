@@ -64,7 +64,6 @@ def _canonical_refresh_token_url(connector_name: str, creds: dict) -> str | None
     return _CONNECTOR_CANONICAL_TOKEN_URLS.get(name)
 
 
-@app.task(name="core.tasks.token_refresh.refresh_expiring_tokens")
 def _store_refreshed_credentials(config: Any, encrypted: str) -> None:
     """Store refreshed OAuth credentials on a connector config.
 
@@ -79,6 +78,7 @@ def _store_refreshed_credentials(config: Any, encrypted: str) -> None:
     config.health_status = "healthy"
 
 
+@app.task(name="core.tasks.token_refresh.refresh_expiring_tokens")
 def refresh_expiring_tokens() -> dict:
     """Celery-compatible sync entry point."""
     return run_async(_refresh_all())
