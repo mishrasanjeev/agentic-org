@@ -35,16 +35,15 @@ const IS_LOCAL_APP = /(^http:\/\/localhost[:/])|(^http:\/\/127\.0\.0\.1[:/])/.te
 // We log in directly via the API to keep the spec deterministic — UI
 // flake on a slow login redirect would obscure whether the BUG-01..04
 // fixes deployed. The login itself isn't what we're verifying.
-const TESTER_EMAIL =
-  process.env.RU_TESTER_EMAIL || "qa.uday@example.com";
+const TESTER_EMAIL = process.env.RU_TESTER_EMAIL || "";
 const TESTER_PASSWORD = process.env.RU_TESTER_PASSWORD || "";
 
 async function getTesterToken(
   request: APIRequestContext,
 ): Promise<string> {
-  if (!TESTER_PASSWORD) {
+  if (!TESTER_EMAIL || !TESTER_PASSWORD) {
     throw new Error(
-      "Set RU_TESTER_PASSWORD so the spec can authenticate as the tester.",
+      "Set RU_TESTER_EMAIL and RU_TESTER_PASSWORD so the spec can authenticate as the tester.",
     );
   }
   const resp = await request.post(`${APP}/api/v1/auth/login`, {
