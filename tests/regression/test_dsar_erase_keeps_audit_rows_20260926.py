@@ -26,8 +26,7 @@ from sqlalchemy import text
 
 pytestmark = [
     pytest.mark.skipif(not os.getenv("AGENTICORG_DB_URL"), reason="requires Postgres (AGENTICORG_DB_URL)"),
-    # The fixture runs on the session loop; the tests share it so pooled
-    # connections never cross event loops.
+    # The fixture runs on the session loop; the tests share it.
     pytest.mark.asyncio(loop_scope="session"),
 ]
 
@@ -49,18 +48,25 @@ FOR EACH ROW EXECUTE FUNCTION audit_log_reject_mutation();
 
 
 @pytest.fixture
-async def immutable_audit_log():
-    """Build the schema and install the production audit-log trigger.
+async def immutable_audit_log(monkeypatch):
+    """Build the schema, install the production audit-log trigger and route the
+    app's sessions through a private engine.
 
-    The trigger is removed afterwards only if this fixture created it, so the
-    shared CI database is left as it was found.
+    The private NullPool engine keeps these tests off the shared, loop-guarded
+    engine, whose cross-loop trips tests/conftest.py holds to a baseline.
+    ``get_tenant_session`` and the tests resolve ``async_session_factory`` from
+    ``core.database`` at call time, so they follow the patch. The trigger is
+    removed afterwards only if this fixture created it, so the shared CI
+    database is left as it was found.
     """
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    import core.database as db
     import core.models  # noqa: F401 — registers every ORM model
-    from core.database import engine
     from core.models.base import BaseModel as ORMBase
 
-    # Earlier tests may have used the shared engine on another event loop.
-    await engine.dispose()
+    engine = create_async_engine(os.environ["AGENTICORG_DB_URL"], poolclass=NullPool)
     async with engine.begin() as conn:
         await conn.run_sync(ORMBase.metadata.create_all)
         had_trigger = (
@@ -74,6 +80,9 @@ async def immutable_audit_log():
         if not had_trigger:
             await conn.execute(text(_REJECT_MUTATION_FN))
             await conn.execute(text(_IMMUTABLE_TRIGGER))
+    monkeypatch.setattr(
+        db, "async_session_factory", async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    )
     try:
         yield
     finally:
