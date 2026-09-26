@@ -153,13 +153,15 @@ test.describe("D2: Promote & Rollback Buttons", () => {
 
     // The fleet page lists only the selected company's agents (since
     // 2026-06-02) and the E2E tenant's agents have no company, so the list
-    // can be empty. Open an agent the API returns instead of a fleet card.
-    const listResp = await page.request.get(`${baseURL}/api/v1/agents?per_page=1`, {
+    // can be empty. Open an agent the API returns instead of a fleet card,
+    // and ask for a shadow one: the list is newest-first, and on an active
+    // agent Promote is shown but disabled.
+    const listResp = await page.request.get(`${baseURL}/api/v1/agents?status=shadow&per_page=1`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
     });
     expect(listResp.ok(), `GET /agents returned ${listResp.status()}`).toBeTruthy();
     const agentId = (await listResp.json()).items?.[0]?.id;
-    expect(agentId, "the E2E tenant has no agents").toBeTruthy();
+    expect(agentId, "the E2E tenant has no shadow agent to promote").toBeTruthy();
 
     await page.goto(`${baseURL}/dashboard/agents/${agentId}`, {
       waitUntil: "domcontentloaded",
@@ -169,26 +171,24 @@ test.describe("D2: Promote & Rollback Buttons", () => {
     const promoteBtn = page.getByRole("button", { name: /Promote/i });
     const rollbackBtn = page.getByRole("button", { name: /Rollback/i });
 
-    // The agent detail page must surface at least one of Promote/Rollback.
-    // If neither is visible the page is degraded and the test should fail.
+    // The agent detail page must surface both actions; on a shadow agent
+    // Promote is the enabled one.
     await expect(promoteBtn.or(rollbackBtn).first()).toBeVisible({ timeout: 10000 });
-    const hasPromote = await promoteBtn.isVisible().catch(() => false);
-    const hasRollback = await rollbackBtn.isVisible().catch(() => false);
+    await expect(rollbackBtn).toBeVisible();
+    await expect(promoteBtn).toBeEnabled({ timeout: 10000 });
 
-    if (hasPromote) {
-      // Click Promote -- should show response (error or success)
-      await promoteBtn.click();
-      await page.waitForLoadState("networkidle");
+    // Click Promote -- should show response (error or success)
+    await promoteBtn.click();
+    await page.waitForLoadState("networkidle");
 
-      const bodyText = await page.textContent("body");
-      const hasFeedback =
-        bodyText?.includes("Promot") ||
-        bodyText?.includes("failed") ||
-        bodyText?.includes("error") ||
-        bodyText?.includes("active") ||
-        bodyText?.includes("shadow");
-      expect(hasFeedback).toBeTruthy();
-    }
+    const bodyText = await page.textContent("body");
+    const hasFeedback =
+      bodyText?.includes("Promot") ||
+      bodyText?.includes("failed") ||
+      bodyText?.includes("error") ||
+      bodyText?.includes("active") ||
+      bodyText?.includes("shadow");
+    expect(hasFeedback).toBeTruthy();
   });
 });
 

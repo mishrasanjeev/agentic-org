@@ -19,9 +19,11 @@
  * Per Rule 6 of docs/bug_triage_skill.md and Rule 7 of
  * feedback_28apr_reopen_autopsy.md: this spec must run against the
  * DEPLOYED app, not localhost. The agent and connector ids belong to the
- * tester's tenant, so the spec authenticates only as that tester: without
- * `RU_TESTER_PASSWORD` it skips. The shared suite token belongs to another
- * tenant and can never see those ids.
+ * tester's tenant, so the spec authenticates only as that tester
+ * (`RU_TESTER_EMAIL` / `RU_TESTER_PASSWORD`). The shared suite token belongs
+ * to another tenant and can never see those ids. Without the credentials the
+ * spec fails, unless the pipeline has declared them unavailable
+ * (`E2E_RU_TESTER=unavailable`, set with a warning by deploy.yml).
  */
 import { test, expect, type APIRequestContext } from "@playwright/test";
 
@@ -56,10 +58,10 @@ async function getTesterToken(
 
 test.describe("CA Firms — RU-May01 agent runtime", () => {
   test.skip(
-    IS_LOCAL_APP || !TESTER_PASSWORD,
+    IS_LOCAL_APP || process.env.E2E_RU_TESTER === "unavailable",
     IS_LOCAL_APP
       ? "Production CA runtime probe uses hardcoded deployed agent/connector IDs; skipped for local Docker runs."
-      : "Set RU_TESTER_PASSWORD to run this probe of the tester's tenant.",
+      : "The tester's credentials (RU_TESTER_EMAIL / RU_TESTER_PASSWORD) are not configured for this pipeline.",
   );
 
   test("agent run produces non-empty tool_calls + confidence > 0.5", async ({

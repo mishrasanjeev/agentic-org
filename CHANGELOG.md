@@ -15,14 +15,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `/openapi.json`, `/docs` and `/redoc`.
 - D2 Promote/Rollback clicked the first fleet card, but the fleet page lists
   only the selected company's agents and the E2E tenant's agents have none.
-  It now opens an agent returned by `GET /api/v1/agents`.
+  It now opens a shadow agent returned by `GET /api/v1/agents?status=shadow`
+  (Promote is disabled on an active one) and requires Promote to be enabled.
 - AGENT-CONFIG-003 created an agent with no connector, which has had no tools
   since bug sheet #46 (2026-09-14). It now links Zendesk, checks for a tool
   badge and deletes the agent afterwards instead of leaving one in the
   production tenant on every attempt.
 - `qa-cafirms-may01.spec.ts` fell back to the shared suite token, whose tenant
   cannot see the tester's agent and connector. It now signs in only as the
-  tester and skips without `RU_TESTER_PASSWORD`.
+  tester (`RU_TESTER_EMAIL` / `RU_TESTER_PASSWORD`, passed by the deploy
+  workflow) and fails without them, unless the workflow has declared them
+  unavailable, in which case it is skipped with a warning on the run.
 
 ### Fixed - the production Playwright suite no longer runs local-stack specs
 - `ui/e2e/regression.config.ts` ran every `*.spec.ts` against production,
