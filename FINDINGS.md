@@ -1064,18 +1064,24 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** fixing DSAR erasure against the append-only audit log (2026-09-26).
 - **What:** the DSAR routes are mounted at `/api/v1/dsar/...`, but
-  `docs/GDPR.md` and `docs/HIPAA.md` give them as `/api/v1/compliance/dsar/...`.
-  `docs/GDPR.md` lists `dsar/restrict`, which does not exist, and
-  `dsar/export?format=jsonld`: `POST /api/v1/dsar/export` exists but produces
-  JSON only (`audit/dsar.py`), and `format` is ignored. `docs/DPDP_ACT.md` lists
-  `/api/v1/compliance/dsar/withdraw`, which does not exist. `docs/HIPAA.md`
-  says data is hard-deleted on a DSAR, while erasure anonymises the user
-  record, pseudonymises feedback and keeps audit rows. The "Compliance Flow"
-  diagram in `docs/api-reference.md` describes a scan of 18 tables and an
-  HMAC-signed report; the handler reads three tables and signs nothing.
+  `docs/GDPR.md`, `docs/DPDP_ACT.md` and `docs/HIPAA.md` give them as
+  `/api/v1/compliance/dsar/...`. `docs/GDPR.md` lists `dsar/restrict`, which
+  does not exist, and `dsar/export?format=jsonld`: `POST /api/v1/dsar/export`
+  exists but produces JSON only (`audit/dsar.py`), and `format` is ignored.
+  `docs/DPDP_ACT.md` lists `dsar/withdraw`, which does not exist. Both pages
+  cite `PATCH /api/v1/users/{id}` for rectification, which no router defines,
+  and `docs/GDPR.md` says admins can run requests from a Compliance tab that
+  the console does not have. `docs/HIPAA.md` says data is hard-deleted on a
+  DSAR and that the audit log records the deletion, while erasure anonymises
+  the user record, pseudonymises feedback and keeps audit rows, and the
+  request's audit entry is written as `received` before processing. The
+  "Compliance Flow" diagram in `docs/api-reference.md` shows a scan of 18
+  tables and an HMAC-signed audit entry; the handler reads three tables and
+  nothing signs the entry.
 - **Fix:** list only the routes in `api/v1/compliance.py` under their real
-  prefix, say export is JSON only, mark restriction and withdrawal as handled
-  by request to the controller, describe erasure in `docs/HIPAA.md` as
+  prefix, say export is JSON only, mark restriction, withdrawal and
+  rectification as handled by request to the controller until routes exist,
+  drop the Compliance-tab claim, describe erasure in `docs/HIPAA.md` as
   `docs/GDPR.md` now does, and redraw the diagram from `audit/dsar.py`.
 
 ## A-79 — DSAR request audit entries name the subject as the actor
