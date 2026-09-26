@@ -628,6 +628,20 @@ jobs:
             echo "E2E_DEMO_ROLES=unavailable" >> "$GITHUB_ENV"
           fi
 
+      - name: Declare CA Firms tester credentials for Playwright
+        # qa-cafirms-may01.spec.ts probes the tester's own tenant and signs in
+        # as that tester. Without these secrets the probe is skipped with this
+        # warning on the run; with them it runs, and a missing password
+        # anywhere else fails the spec instead of hiding it.
+        env:
+          RU_TESTER_EMAIL: ${{ secrets.RU_TESTER_EMAIL }}
+          RU_TESTER_PASSWORD: ${{ secrets.RU_TESTER_PASSWORD }}
+        run: |
+          if [ -z "$RU_TESTER_EMAIL" ] || [ -z "$RU_TESTER_PASSWORD" ]; then
+            echo "::warning title=CA Firms tester probe skipped::Missing secrets RU_TESTER_EMAIL / RU_TESTER_PASSWORD. qa-cafirms-may01.spec.ts is skipped; see the skip reason in the Playwright report."
+            echo "E2E_RU_TESTER=unavailable" >> "$GITHUB_ENV"
+          fi
+
       - name: Run ALL Playwright E2E regression suite against production
         # Blocking. PR #151 (Phase 1 auth role) and #152 (Phase 2 cxo
         # rewrite) fixed the systemic drift that had been hidden by
@@ -649,6 +663,8 @@ jobs:
           AGENTICORG_DEMO_CMO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_CMO_PASSWORD }}
           AGENTICORG_DEMO_COO_PASSWORD: ${{ secrets.AGENTICORG_DEMO_COO_PASSWORD }}
           AGENTICORG_DEMO_AUDITOR_PASSWORD: ${{ secrets.AGENTICORG_DEMO_AUDITOR_PASSWORD }}
+          RU_TESTER_EMAIL: ${{ secrets.RU_TESTER_EMAIL }}
+          RU_TESTER_PASSWORD: ${{ secrets.RU_TESTER_PASSWORD }}
 
       - name: Upload Playwright report and failure artifacts
         # test-results holds each failure's error context and screenshot as
