@@ -290,6 +290,18 @@ See [`.env.example`](../.env.example) for the complete reference.
 - `AGENTICORG_DB_URL` — PostgreSQL connection string
 - `AGENTICORG_REDIS_URL` — Redis connection string
 - `AGENTICORG_SECRET_KEY` — 32+ char random string for HMAC signing
+- `AGENTICORG_VAULT_KEYRING` — credential-vault keys, `id:secret,...`, active key
+  first. It must be in the process environment of the API and every worker, not
+  only in `.env`. Without it (or `AGENTICORG_VAULT_KEY`, or as a legacy fallback
+  `AGENTICORG_SECRET_KEY`) the API and the worker refuse to start unless
+  `AGENTICORG_ENV` is `local`, `dev`, `development`, `test` or `ci`. An unset
+  `AGENTICORG_ENV` counts as production. Placeholder values written in this
+  repository (`core.config.PUBLISHED_PLACEHOLDER_SECRETS`) are refused as keys
+  there, as if unset. A
+  deployment that has been sealing credentials under `AGENTICORG_SECRET_KEY`
+  keeps working; to move off it, set
+  `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:<current secret key>` and rewrap
+  (`docs/SECRETS_ROTATION.md`).
 - `GRANTEX_CLIENT_ID` / `GRANTEX_CLIENT_SECRET` — OAuth2 credentials
 - `AGENTICORG_JWT_PUBLIC_KEY_URL` — JWKS endpoint for token validation
 

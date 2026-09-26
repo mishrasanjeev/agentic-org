@@ -62,6 +62,9 @@ role's local `case_purposes`; the SDK does **not** yet enforce token-level purpo
 and the pooled token is not bound to a single case. Do not treat these as active
 controls until the newer SDK is published and the case context is passed to it.
 
+The [Grantex integration guide](https://docs.grantex.dev/guides/agenticorg-governed-cases)
+maps the cross-project responsibilities and published-versus-source SDK status.
+
 | Setting | Default | Purpose |
 |---|---|---|
 | `AGENTICORG_CASE_PROVIDER` | `mock` | Registered verification provider for new cases. The mock refuses to run outside local and test environments. |

@@ -40,6 +40,25 @@ buyer channel, payment rail, merchant system, or POS path is usable only when
 the target tenant has the required credentials, scopes, configuration, and
 provider approval.
 
+### Governed business cases
+
+The repository includes a tenant-gated business onboarding case workflow with
+read-only provider investigation, a cited memo, deterministic policy scoring,
+screening dispositions, human review, and an auditable hand-off. Provider calls
+are refused unless the active role agent, registered tools, exact local case
+purpose, and delegated grant all authorize the call. This case-specific check
+is strict even if general tool enforcement is in `off` or `warn` mode.
+
+The currently published `grantex==0.5.1` does **not** verify a case purpose in
+the token or enforce a per-case cap. The role's `case_purposes` list is a local
+AgenticOrg control, and pooled grants are not bound to one case. Decision and
+analyst actions still require a signed-in human; API keys, agent tokens, and
+MCP tools cannot act as that human. The case runtime is off for a tenant until
+enabled and configured. This source description is not a claim that a particular
+hosted deployment has enabled the workflow. See the [case lifecycle and setup](docs/governance/case-lifecycle.md),
+[grant-enforcement runbook](docs/operations/grant-enforcement.md), and
+[decision requests](docs/governance/decision-requests.md).
+
 Voice, email, OCR, and browser RPA can be exercised together before release
 with the Docker-backed [local multichannel simulation](docs/local-multichannel-simulation.md).
 It uses fresh PostgreSQL, local Mailpit delivery, real Tesseract, and optional
@@ -166,8 +185,12 @@ Start local dependencies:
 
     docker compose up -d postgres redis minio
 
-Run migrations and the API:
+Run migrations and the API. `AGENTICORG_ENV` must be in the shell environment,
+not only in `.env`: the credential vault reads the process environment, and
+outside a local, dev, development, test or CI runtime it refuses to start
+without a real vault key.
 
+    export AGENTICORG_ENV=development
     python scripts/alembic_migrate.py
     uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 

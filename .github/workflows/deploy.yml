@@ -335,6 +335,7 @@ jobs:
       # only for tests that explicitly opt back into a real worker.
       - name: Start Celery worker (background)
         run: |
+          AGENTICORG_ENV=ci \
           AGENTICORG_REDIS_URL=redis://localhost:6379/0 \
           AGENTICORG_SECRET_KEY=ci-test-secret-key-minimum-16 \
             celery -A core.tasks.celery_app worker \

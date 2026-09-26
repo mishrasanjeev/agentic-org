@@ -162,11 +162,13 @@ class SealedSerializer(SerializerProtocol):
 
 def sealed_serializer() -> SealedSerializer:
     """Serializer over the current credential-vault keyring. A malformed keyring is refused."""
-    from core.crypto.credential_vault import _load_keyring
+    from core.crypto.credential_vault import VaultKeyNotConfiguredError, _load_keyring
 
     try:
         keys = [key for _kid, key in _load_keyring()]
         return SealedSerializer(VaultKeyringCipher(keys), JsonPlusSerializer())
+    except VaultKeyNotConfiguredError as exc:
+        raise CheckpointerUnavailableError("checkpoint_encryption_key_missing") from exc
     except (ValueError, TypeError) as exc:
         # The message can quote a keyring entry; keep only the type.
         raise CheckpointerUnavailableError("checkpoint_encryption_key_invalid", type(exc).__name__) from exc

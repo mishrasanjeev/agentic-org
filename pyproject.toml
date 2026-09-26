@@ -61,7 +61,9 @@ classifiers = [
 dependencies = [
     "fastapi>=0.141.1",
     "uvicorn[standard]>=0.53.0",
-    "sqlalchemy[asyncio]>=2.0.54",
+    # Capped below 2.1 to match requirements.txt: 2.1.0 changed its typing and
+    # the tools image, which installs these ranges, failed mypy (FINDINGS A-70).
+    "sqlalchemy[asyncio]>=2.0.54,<2.1",
     "asyncpg>=0.30.0",
     "psycopg2-binary>=2.9.13",
     # Agent checkpoint store driver (langgraph-checkpoint-postgres); the binary
@@ -99,17 +101,17 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.65b0",
     "wrapt>=1.17.3",
     "prometheus-client>=0.26.0",
-    "langgraph>=1.2.11",
+    "langgraph>=1.2.12",
     "langchain>=1.4.2",
     "langchain-google-genai>=4.4.0",
     "langchain-anthropic>=1.7.2",
-    "langchain-openai>=1.6.2",
+    "langchain-openai>=1.6.4",
     # Exact pins: core/langgraph/checkpoint_postgres.py overrides saver internals
     # of these versions and refuses to start the Postgres store with any other.
     "langgraph-checkpoint-postgres==3.1.2",
     "langgraph-checkpoint==4.2.0",
     "grantex>=0.5.1",
-    "langsmith>=0.13.0",
+    "langsmith>=0.14.0",
     "pypdf>=6.19.0",
     # Canonical document extraction. The production image below ships the
     # matching Tesseract, Poppler, and LibreOffice system dependencies.

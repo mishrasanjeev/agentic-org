@@ -64,6 +64,11 @@ Set one authentication value:
 - `AGENTICORG_API_KEY` for an API key accepted by the configured endpoint; or
 - `AGENTICORG_GRANTEX_TOKEN` for a delegated grant accepted by that endpoint.
 
+A delegated grant is checked against each API route's scope exactly as an API
+key is. `list_agents` and `get_agent_details` need `agents:read` in the grant,
+and `list_connectors` needs `connectors.read`; a grant with only tool scopes
+gets `403` from them. `run_agent` goes through A2A and is unaffected.
+
 `AGENTICORG_BASE_URL` selects the API endpoint. Endpoint trust and readiness
 require separate verification.
 
@@ -96,6 +101,15 @@ setting limits the visible tool surface but does not create transaction authorit
 Direct connector invocation is not exposed by this server. Connector records
 and agent-tool records are discovery data, not proof that provider credentials,
 permissions, or live accounts are configured.
+
+Governed business cases use separate `/api/v1/governed-cases` routes. The
+`business_underwriter` and `screening_disposition` case roles are not MCP
+agent tools, and `list_mcp_tools` must not be interpreted as a case-execution
+or human-approval catalog. Creating a case or scheduling an investigation via
+the repository SDKs requires tenant enablement and server-side grant checks.
+Review, withdrawal, information-request approval and case decisions require a
+signed-in human; this MCP adapter accepts machine credentials and provides no
+shortcut for those operations. See the [case lifecycle](../docs/governance/case-lifecycle.md).
 
 ## Company-scoped execution example
 

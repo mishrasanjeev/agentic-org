@@ -180,15 +180,16 @@
     },
     {
       "path": "/how-grantex-works",
+      "lastmod": "2026-09-24",
       "name": "How Grantex Works",
       "title": "How Grantex Delegated Authority Works | AgenticOrg",
-      "description": "Learn how Grantex authority artifacts, scopes, expiry, revocation, tenant boundaries, and audit evidence constrain delegated agent access in AgenticOrg.",
-      "summary": "Grantex represents delegated authority as bounded, inspectable artifacts. AgenticOrg validates the applicable scope and context before an authorized action or evidence-backed handoff.",
+      "description": "Learn how AgenticOrg checks delegated grants and local case purpose before provider calls in governed business cases, with human decisions and SDK limits made explicit.",
+      "summary": "Governed cases check registered role tools, an exact local purpose allowlist, and a delegated grant before provider calls; case decisions still require a signed-in human.",
       "section": "Governance",
       "schemaType": "TechArticle",
       "index": true,
       "primaryQuestion": "How does Grantex constrain delegated authority for an AI agent?",
-      "keywords": ["Grantex", "delegated authority", "agent authorization", "scope enforcement", "revocation"]
+      "keywords": ["Grantex", "governed business cases", "case purpose", "agent authorization", "scope enforcement", "human decision"]
     },
     {
       "path": "/solutions/ca-firms",

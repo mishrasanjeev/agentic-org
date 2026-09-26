@@ -6,7 +6,7 @@ Three independent controls make that structural rather than a matter of instruct
 
 | Control | Answers | Decided by | Where |
 |---|---|---|---|
-| **Grant** | May this agent call this tool, for this purpose, now? | The Grantex grant attached to the run | Tool gateway, before every call |
+| **Role, purpose and grant** | May this active tenant role call this registered tool under the case's locally allowed purpose? | AgenticOrg's exact `case_purposes` allowlist plus the delegated Grantex tool grant | Case authorizer, before every provider call |
 | **Policy score** | How risky is this case on the evidence, and what should a human be told? | A versioned, deterministic policy over provider data | After the investigation, before the memo |
 | **Human decision** | What happens to the case? | A named human, proven by a decision grant | Only path to `decided` |
 
@@ -45,15 +45,18 @@ Every provider call a reference agent makes passes through the provider tool gat
    presence. A tool set naming anything else (a decision, a filing, a deletion, a monitor enrolment)
    is refused when the gateway is built. The Screening Disposition agent holds only the two
    screening tools.
-2. The run's grant is checked before the call. A refusal, or a grant check that cannot answer,
+2. The role's exact local purpose allowlist and run grant are checked before the call, strictly
+   even when general `grants.enforce_closed` is `off` or `warn`. A refusal, or a check that cannot answer,
    stops the run before the provider is reached: the case goes to `failed` with
-   `tool_refused:<reason>` (for example `tool_refused:grant_missing`). This is the seam PRD F-1's
-   per-run grant (`grants.enforce_closed`) plugs into.
+   `tool_refused:<reason>` (for example `tool_refused:grant_missing`).
 3. A capability the provider does not offer is `not_available`, not an error: the memo section says
    so and the missing-items list asks for it.
 
-Grants bound *what* an agent can touch. They never let an agent decide: there is no decision tool
-to grant.
+The published Python Grantex SDK `0.5.1` verifies tool authority but does not
+enforce case purpose in the token or per-case caps. The purpose check above is
+local to AgenticOrg, and pooled grants are not bound to one case. Grants bound
+*what* an agent can touch. They never let an agent decide: there is no decision
+tool to grant.
 
 ## Policy scores: what the evidence says
 

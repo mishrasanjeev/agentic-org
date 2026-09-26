@@ -76,6 +76,7 @@ from core.models.commerce_c6z_runtime import (
     C6ZSellerOnboardingPacketRow,
 )
 from core.models.connector_config import ConnectorConfig
+from core.rbac import has_admin_scope
 from core.security.egress import (
     EgressValidationError,
     build_pinned_async_transport,
@@ -95,7 +96,7 @@ MERCHANT_COMMERCE_CONFIG_SCOPE = "commerce.merchant_config.write"
 
 def require_merchant_commerce_config_write(request: Request) -> None:
     scopes = set(getattr(request.state, "scopes", []) or [])
-    if MERCHANT_COMMERCE_CONFIG_SCOPE in scopes or any(scope.startswith("agenticorg:admin") for scope in scopes):
+    if MERCHANT_COMMERCE_CONFIG_SCOPE in scopes or has_admin_scope(scopes):
         return
     raise HTTPException(403, f"Missing scope: {MERCHANT_COMMERCE_CONFIG_SCOPE}")
 

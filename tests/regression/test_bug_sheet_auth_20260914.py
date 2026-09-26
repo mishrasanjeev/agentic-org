@@ -14,7 +14,7 @@ open in this codebase by static + runtime verification:
  #29      connector rename onto an existing name surfaced as a 500.
  #48      upload marked ``indexed`` before/despite pgvector ingestion and
           the content_text search fallback matched non-indexed rows.
- #1       docker-compose pulled ``minio/minio`` from Docker Hub (removed).
+ #1       docker-compose pulled a MinIO image its registry no longer serves.
 """
 
 from __future__ import annotations
@@ -246,14 +246,20 @@ class TestKnowledgeIndexStatus:
 
 
 # ---------------------------------------------------------------------------
-# #1 — local docker stack boots (MinIO image lives on quay.io now)
+# #1 — local docker stack boots (the MinIO image must still be pullable)
 # ---------------------------------------------------------------------------
 
 
-def test_compose_minio_image_is_pullable() -> None:
-    compose = (REPO / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "image: quay.io/minio/minio:latest" in compose
-    assert re.search(r"^\s*image: minio/minio", compose, re.M) is None
+@pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.dev.yml"])
+def test_compose_minio_image_is_pullable(compose_file: str) -> None:
+    """Neither registry MinIO used to publish on serves the server image any more.
+
+    quay.io removed ``quay.io/minio/minio`` (every tag and digest), and Docker
+    Hub's ``minio/minio`` now needs credentials, so ``make dev`` failed to pull.
+    """
+    compose = (REPO / compose_file).read_text(encoding="utf-8")
+    assert re.search(r"^\s*image: cgr\.dev/chainguard/minio@sha256:[0-9a-f]{64}\s*$", compose, re.M)
+    assert re.search(r"^\s*image: (quay\.io/)?minio/minio", compose, re.M) is None
 
 
 def test_claim_values_are_uuid_strings() -> None:

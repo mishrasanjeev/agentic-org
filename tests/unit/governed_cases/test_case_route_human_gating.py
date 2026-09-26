@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Who may act on a governed case: the four actions a person is accountable for need a human session.
 
-Agent tokens carry tool scopes and are deliberately exempt from the RBAC scope families
-(``api.route_enforcement._check_scope``), and an API key's scopes say nothing about who holds it,
-so the route itself has to refuse them. These tests pin that refusal per route, and pin that an
-actor recorded on a case always says what kind of credential acted.
+Scope enforcement (``api.route_enforcement._check_scope``) refuses an agent token that lacks the
+route scope, but a machine credential that holds it - an API key, or an agent whose grant carries
+``approvals:write`` - says nothing about which person acted, so the route itself has to refuse it.
+These tests pin that refusal per route, and pin that an actor recorded on a case always says what
+kind of credential acted.
 """
 
 from __future__ import annotations
@@ -173,15 +174,25 @@ def test_a_request_whose_auth_mode_was_never_set_is_a_machine() -> None:
         human_actor_for(unset)
 
 
-def test_agent_tokens_skip_the_rbac_scope_family_so_the_route_gate_is_what_refuses_them() -> None:
-    """Pins why the gate lives on the route: scope enforcement never sees an agent token."""
+def test_a_machine_credential_with_the_route_scope_is_still_refused_by_the_route_gate() -> None:
+    """Pins why the gate lives on the route: holding the scope says nothing about which person acted."""
+    from fastapi import HTTPException
+
     from api.route_enforcement import _check_scope
 
     meta = {"auth_required": True, "scope": "approvals.governed_cases.write"}
     agent = _agent_token()
     agent.method, agent.url = "POST", SimpleNamespace(path="/governed-cases/x/decision")
-    _check_scope(agent, meta)  # no exception: tool scopes are enforced by the tool gateway instead
+    with pytest.raises(HTTPException) as denied:
+        _check_scope(agent, meta)  # a tool scope satisfies no route family (review H-1)
+    assert denied.value.status_code == 403
 
+    scoped_agent = _agent_token()
+    scoped_agent.state.scopes = ["tool:mock:read", "approvals:write"]
     api_key = _api_key()
-    api_key.method, api_key.url = "POST", SimpleNamespace(path="/governed-cases/x/decision")
-    _check_scope(api_key, meta)  # an API key with approvals:write satisfies the family
+    for caller in (scoped_agent, api_key):
+        caller.method, caller.url = "POST", SimpleNamespace(path="/governed-cases/x/decision")
+        _check_scope(caller, meta)  # approvals:write satisfies the family ...
+        with pytest.raises(CaseError) as refused:
+            human_actor_for(caller)  # ... and the route gate still refuses a machine
+        assert refused.value.reason == "human_session_required"
