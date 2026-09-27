@@ -54,7 +54,12 @@ from core.agents.case_model_call import call_case_model
 from core.agents.screening_disposition.comparison import IDENTIFIERS, compare, propose, template_rationale
 from core.domain_schemas import DomainSchemaError, validate
 from core.extraction import UntrustedContentLeakError, UntrustedTextRegistry, build_model_context
-from core.tool_gateway.provider_gateway import ProviderToolGateway, ToolAuthorizer, ToolRefusedError
+from core.tool_gateway.provider_gateway import (
+    ProviderToolGateway,
+    ToolAuthorizer,
+    ToolRefusedError,
+    require_authorizer,
+)
 
 logger = structlog.get_logger()
 
@@ -106,9 +111,14 @@ class DispositionConfig:
 @dataclass
 class DispositionDependencies:
     provider: VerificationProvider
-    authorizer: ToolAuthorizer | None = None
+    #: The run's grant check. Required; ``None`` (``NO_AUTHORIZER_FOR_TESTS``) is refused outside
+    #: local and test runtimes, and the gateway refuses every call without one.
+    authorizer: ToolAuthorizer | None
     clock: Callable[[], datetime] = _utc_now
     pseudonym_store: Any = None
+
+    def __post_init__(self) -> None:
+        require_authorizer(self.authorizer, AGENT_NAME)
 
 
 @dataclass

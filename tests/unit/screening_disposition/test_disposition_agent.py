@@ -240,7 +240,12 @@ def test_the_tool_set_holds_read_only_screening_and_nothing_that_closes() -> Non
     assert TOOL_SET <= frozenset(READ_TOOLS)
     for tool in ("close_hit", "resolve_hit", "dismiss_alert", "case_decision", "monitor_delete"):
         with pytest.raises(ToolSetError):
-            ProviderToolGateway(provider=MockProvider(), agent="screening_disposition", tool_set=TOOL_SET | {tool})
+            ProviderToolGateway(
+                provider=MockProvider(),
+                agent="screening_disposition",
+                tool_set=TOOL_SET | {tool},
+                authorizer=ALLOW_PROVIDER_CALLS,
+            )
 
 
 def test_no_callable_in_the_agent_package_closes_clears_or_dismisses() -> None:

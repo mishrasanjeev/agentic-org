@@ -87,6 +87,7 @@ from core.tool_gateway.provider_gateway import (
     ProviderToolGateway,
     ToolAuthorizer,
     ToolRefusedError,
+    require_authorizer,
 )
 
 logger = structlog.get_logger()
@@ -126,13 +127,17 @@ class UnderwriterConfig:
 @dataclass
 class UnderwriterDependencies:
     provider: VerificationProvider
-    #: The run's grant check (PRD F-1). ``None`` means calls are not grant-checked.
-    authorizer: ToolAuthorizer | None = None
+    #: The run's grant check (PRD F-1). Required; ``None`` (``NO_AUTHORIZER_FOR_TESTS``) is refused
+    #: outside local and test runtimes, and the gateway refuses every call without one.
+    authorizer: ToolAuthorizer | None
     excerpts: ExcerptStore = field(default_factory=InMemoryExcerptStore)
     clock: Callable[[], datetime] = _utc_now
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     #: Pseudonym map store; ``None`` uses the database store when the flag is on.
     pseudonym_store: Any = None
+
+    def __post_init__(self) -> None:
+        require_authorizer(self.authorizer, AGENT_NAME)
 
 
 @dataclass
