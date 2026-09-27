@@ -67,7 +67,9 @@ Set one authentication value:
 A delegated grant is checked against each API route's scope exactly as an API
 key is. `list_agents` and `get_agent_details` need `agents:read` in the grant,
 and `list_connectors` needs `connectors.read`; a grant with only tool scopes
-gets `403` from them. `run_agent` goes through A2A and is unaffected.
+gets `403` from them. `run_agent` goes through A2A (`POST /api/v1/a2a/tasks`),
+which is not scope-checked unless the deployment sets
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`; then it needs `a2a:write`.
 
 `AGENTICORG_BASE_URL` selects the API endpoint. Endpoint trust and readiness
 require separate verification.

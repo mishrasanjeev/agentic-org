@@ -10,20 +10,24 @@ fields into real checks, applied as a global FastAPI dependency:
   and pre-auth routes) via the Redis-backed ``core.auth_state.check_window_rate``.
 * ``scope`` — declared route scopes are grouped into families
   (:data:`SCOPE_FAMILIES`) that map onto the RBAC scopes ``core.rbac.ROLE_SCOPES``
-  hands to roles. GET/HEAD/OPTIONS require the family's read scope, everything
-  else the write scope. ``agenticorg:admin`` satisfies every family.
+  hands to roles, except ``a2a`` and ``mcp``, whose scopes only API keys and
+  agent grants hold. GET/HEAD/OPTIONS require the family's read scope,
+  everything else the write scope. ``agenticorg:admin`` satisfies every family.
 
 Scope enforcement applies to every credential: user sessions, API keys and
 Grantex agent tokens alike. An agent token's tool scopes
 (``tool:<connector>:<permission>``) are checked separately by the tool
 gateway and satisfy no route family, so an agent that calls the API needs the
 route scope in its grant, exactly as an API key does (review H-1). An
-authenticated request with an unrecognised ``auth_mode`` is checked the same
-way and, carrying no route scope, is refused.
+authenticated route reached with an ``auth_mode`` the auth middleware does not
+set is refused before any scope is read, whatever scopes it carries.
 
 Families that are not mapped are NOT enforced — they are reported by
 :func:`unmapped_scope_families` and pinned by a unit test so the gap is
-visible instead of silent.
+visible instead of silent. The ``a2a`` and ``mcp`` families are mapped but
+enforced only while ``AGENTICORG_ROUTE_SCOPE_A2A_MCP`` is on; no role holds
+their scopes, so API keys and agent grants that are given them, and admins,
+reach those routes.
 
 ``AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`` turns denials into warnings for a
 staged rollout; the default is ``enforce``.
@@ -111,7 +115,11 @@ _FAIL_CLOSED_CLASS_PREFIXES = ("auth-", "public-", "demo-")
 _DEGRADE_ON_OUTAGE_CLASSES = frozenset({"auth-sso-login-initiation", "auth-sso-callback"})
 
 # Declared route-scope family (prefix before the first "." or ":") ->
-# (read scope, write scope) from core.rbac.ROLE_SCOPES.
+# (read scope, write scope). Every pair is taken from core.rbac.ROLE_SCOPES
+# except ``a2a`` and ``mcp``: no role holds their scopes, so only API keys and
+# agent grants given them, and agenticorg:admin, pass; and they are enforced
+# only while route_scope_a2a_mcp is on (_enforced_family). A family that is
+# not listed here is not scope-checked at all (unmapped_scope_families).
 SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "agents": ("agents:read", "agents:write"),
     # Chat executes agents (bug sheet #53, 2026-09-14): a query needs the
@@ -127,23 +135,38 @@ SCOPE_FAMILIES: dict[str, tuple[str, str]] = {
     "audit": ("audit:read", "audit:read"),
     "connectors": ("connectors.read", "connectors.read"),
     "report_schedules": ("report_schedules.read", "report_schedules.write"),
+    # A2A tasks and MCP calls run any agent type for machine callers (FINDINGS
+    # A-68). No role holds these scopes: API keys and agent grants are given
+    # them. Enforced only while AGENTICORG_ROUTE_SCOPE_A2A_MCP is on
+    # (_A2A_MCP_FAMILIES), so they can be issued before they are required.
+    "a2a": ("a2a:read", "a2a:write"),
+    "mcp": ("mcp:read", "mcp:write"),
 }
+
+# Families above that are enforced only while ``route_scope_a2a_mcp`` is on.
+_A2A_MCP_FAMILIES = frozenset({"a2a", "mcp"})
 
 # Legacy spellings that issued credentials still carry. ``create_api_key``
 # used to hand out ``agents:run`` / ``connectors:read`` (colon), which could
-# never satisfy the family map above (audit 2026-09-13 finding 2). Aliases
-# map to the canonical RBAC scope; ``_expand_granted`` also accepts the
-# colon/dot separator variant of every family scope.
+# never satisfy the family map above (audit 2026-09-13 finding 2), and still
+# hands out ``mcp:call``. Aliases map to the canonical family scope;
+# ``_expand_granted`` also accepts the colon/dot separator variant of every
+# family scope.
 LEGACY_SCOPE_ALIASES: dict[str, str] = {
     "agents:run": "agents:write",
     "connectors:read": "connectors.read",
+    "mcp:call": "mcp:write",
 }
+
+# The modes ``auth.grantex_middleware`` sets once it has verified a credential.
+KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy"})
 
 
 # Scopes an operator may attach to an agent's Grantex registration so its
 # token can call the matching route families. Exactly the
 # canonical family scopes: never ``agenticorg:admin``, legacy aliases or any
-# scope that is not route-enforced.
+# scope outside SCOPE_FAMILIES. The A2A and MCP scopes are included even while
+# their setting is off, so an agent can hold them before they are required.
 GRANTABLE_ROUTE_SCOPES: frozenset[str] = frozenset(
     scope for pair in SCOPE_FAMILIES.values() for scope in pair
 )
@@ -171,6 +194,13 @@ def _family(declared_scope: str) -> str:
     return head.split(".", 1)[0]
 
 
+def _enforced_family(family: str) -> tuple[str, str] | None:
+    """``SCOPE_FAMILIES[family]``, or ``None`` when the family is not enforced now."""
+    if family in _A2A_MCP_FAMILIES and not settings.route_scope_a2a_mcp:
+        return None
+    return SCOPE_FAMILIES.get(family)
+
+
 def required_scopes_for(declared_scope: str | None, method: str) -> tuple[str, ...]:
     """RBAC scopes (any one suffices) required for ``declared_scope``.
 
@@ -181,7 +211,7 @@ def required_scopes_for(declared_scope: str | None, method: str) -> tuple[str, .
     """
     if not declared_scope:
         return ()
-    family = SCOPE_FAMILIES.get(_family(declared_scope))
+    family = _enforced_family(_family(declared_scope))
     if family is None:
         return ()
     read_scope, write_scope = family
@@ -190,7 +220,7 @@ def required_scopes_for(declared_scope: str | None, method: str) -> tuple[str, .
 
 def unmapped_scope_families(declared_scopes: list[str]) -> set[str]:
     """Families present in the route table with no RBAC mapping (reported, not enforced)."""
-    return {_family(s) for s in declared_scopes if s and _family(s) not in SCOPE_FAMILIES}
+    return {_family(s) for s in declared_scopes if s and _enforced_family(_family(s)) is None}
 
 
 def _expand_granted(granted: list[str]) -> set[str]:
@@ -253,6 +283,25 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
 def _check_scope(request: Request, meta: dict[str, Any]) -> None:
     if not meta.get("auth_required"):
         return
+    # Only the auth middleware's credential paths set a known mode. No HTTP
+    # route that declares auth_required accepts OPTIONS or sits under one of
+    # the middleware's exempt paths or prefixes, which it passes through
+    # unauthenticated; the route table test in
+    # tests/regression/test_route_scope_unknown_mode_20260927.py pins this,
+    # with the one parameterised overlap in FINDINGS A-88. WebSocket routes
+    # never get here (A-86). Any other mode (or none) means the scopes on
+    # this request were not put there by a verified credential, so none of
+    # them - agenticorg:admin included - can be trusted, and a route in an
+    # unmapped family must not pass either. Refused before any scope is read,
+    # and in log mode too: log mode stages scope denials, it does not stand in
+    # for authentication.
+    auth_mode = getattr(request.state, "auth_mode", None)
+    if not isinstance(auth_mode, str) or auth_mode not in KNOWN_AUTH_MODES:
+        logger.warning(
+            "route_enforcement_unknown_auth_mode",
+            extra={"path": request.url.path, "auth_mode": repr(auth_mode)[:40]},
+        )
+        raise HTTPException(status_code=403, detail="Unrecognised authentication mode; request refused")
     required = required_scopes_for(meta.get("scope"), request.method)
     if not required:
         return

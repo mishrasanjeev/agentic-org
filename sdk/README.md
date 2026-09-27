@@ -45,8 +45,21 @@ or tool grants. Keep secrets outside source control.
 
 A delegated grant (`grantex_token=`) is checked against each route's scope
 exactly as an API key is: the grant must carry, for example, `agents:read` to
-list agents or `agents:run` to start a run. A grant with only tool scopes is
-refused with `403`.
+list agents or `agents:write` (or its alias `agents:run`) to start a run by
+agent id. A grant with only tool scopes is refused with `403`.
+
+A2A and MCP calls are scope-checked only when the deployment sets
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`. Then an API key or grant needs:
+
+| Call | Route | Scope (or `agenticorg:admin`) |
+|---|---|---|
+| `client.agents.run(agent_type, company_id=...)` | `POST /api/v1/a2a/tasks` | `a2a:write` |
+| `client.mcp.call(tool_name, arguments)` | `POST /api/v1/mcp/call` | `mcp:write`; `mcp:call` is accepted as its alias |
+
+API keys created with the default scopes carry `mcp:call`, so `client.mcp.call`
+keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
+key is replaced. `client.a2a` and `client.mcp.tools` read public discovery
+routes and need no scope.
 
 ## Company-scoped shadow candidate
 

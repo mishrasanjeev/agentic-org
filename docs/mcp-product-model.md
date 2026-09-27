@@ -29,6 +29,7 @@ The supported MCP product model is **agents-as-tools**. Rationale:
 - **Tool name**: `agenticorg_<agent_type>` (e.g. `agenticorg_ap_processor`).
 - **Discovery**: `GET /api/v1/mcp/tools` returns `{"tools": [{name, description, inputSchema}]}` where every `name` starts with `agenticorg_`.
 - **Invocation**: `POST /api/v1/mcp/call` with `{name, arguments}`; backend strips the `agenticorg_` prefix, validates the agent_type exists, and runs it via the standard agent execution path. Response follows the canonical `AgentRunResult` shape documented in `docs/api/agent-run-contract.md`.
+- **Scope**: when the deployment sets `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`, `POST /api/v1/mcp/call` needs `mcp:write` (the `mcp:call` in default API key scopes is accepted as its alias) or `agenticorg:admin`; with the setting off (the default) any authenticated credential may call it. Discovery (`GET /api/v1/mcp/tools`) is public either way. See `docs/operations/grant-enforcement.md`.
 
 Governed-case roles (`business_underwriter`, `screening_disposition`) are
 separate case-runtime identities, not entries in the general MCP agent catalog.

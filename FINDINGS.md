@@ -934,9 +934,20 @@ Remove an entry in the pull request that fixes it.
   only against per-company roles). A-43 covers A2A and MCP; this is the wider
   gap. Not caused by H-1, which made agent tokens subject to the mapped
   families only.
+- **Update (2026-09-27):** the `a2a` and `mcp` families are now mapped
+  (`a2a:read` / `a2a:write`, `mcp:read` / `mcp:write`, with `mcp:call` as an
+  alias) but enforced only when `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`, which
+  defaults off; while it is off they stay unmapped as described above, and a
+  domain-role session can also run an agent type outside its domains through
+  them, since neither route checks the caller's domains. No role holds their
+  scopes. Every other family listed here is still unmapped. Separately, an
+  authenticated route reached with an unknown `auth_mode` is now refused
+  whatever its family.
 - **Fix:** map every authenticated family to a read and a write scope, or
   refuse by default a family with no mapping, and add each to the unit test
-  that pins the unmapped set.
+  that pins the unmapped set. Turn `AGENTICORG_ROUTE_SCOPE_A2A_MCP` on in each
+  deployment once its A2A integrations hold `a2a:write` (see
+  `docs/operations/grant-enforcement.md`), then make it the default.
 
 ## A-70 — The tools and API images resolve dependency ranges, not pins
 
@@ -1107,4 +1118,57 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** record the user id (or `audit.dsar.pseudonymise`) as `actor_id` at
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
+
+## A-86 — WebSocket routes fail on the app-wide route enforcement dependency
+
+- **Found:** fixing the route scope residual of H-1 (2026-09-27).
+- **What:** `api/main.py` registers `api.route_enforcement.enforce_route_metadata`
+  as an app-wide dependency, and it takes `request: Request`. FastAPI (0.139)
+  passes no `Request` to a WebSocket route's dependencies, so a connection to
+  `api.main.app` fails with `TypeError: enforce_route_metadata() missing 1
+  required positional argument: 'request'` before the handler runs, for
+  `/api/v1/ws/feed/{tenant_id}` and `/api/v1/ws/bridge/{bridge_id}` alike
+  (reproduced with the test client, with and without a token). The WebSocket
+  tests mount the routers on a bare `FastAPI()` without the dependency, so
+  they pass. Deployed behaviour was not checked.
+- **Fix:** have the dependency take `HTTPConnection` and leave WebSocket routes
+  to the authentication their handlers already do, then add a test that
+  connects through `api.main.app`. Do not run `_check_scope` on them as it
+  stands: the auth middleware does not run for WebSockets, so the connection
+  has no `auth_mode` and would be refused as an unknown mode.
+
+## A-87 — The alert gate probe test rewrites tracked files in the working tree
+
+- **Found:** running `tests/unit` on a Windows checkout (2026-09-27).
+- **What:** `tests/unit/observability/test_probes.py` runs
+  `scripts/probe_alert_gate.py`, which mutates the repository's own
+  `monitoring/prometheus/agenticorg-alerts.yml` and
+  `infra/terraform/monitoring/alerts.tf` in place and restores them with
+  `newline="\n"`. On a checkout with CRLF line endings (A-62) both files are
+  left rewritten with LF after every unit run, so `git status` shows them
+  modified, and a run interrupted between mutation and restore leaves a broken
+  alert rule in the working tree.
+- **Fix:** have the probe (or its test) work on copies under `tmp_path`, or
+  restore the exact original bytes (`read_bytes` / `write_bytes`).
+
+## A-88 — An exempt auth prefix reaches into an authenticated route
+
+- **Found:** pinning the route table against the auth middleware's exemptions
+  for the route scope residual of H-1 (2026-09-27).
+- **What:** `GrantexAuthMiddleware.EXEMPT_PREFIXES` holds
+  `/api/v1/aa/consent/callback` as a prefix with no trailing slash, so every
+  request path that begins with it skips the middleware. The authenticated
+  route `GET /api/v1/aa/consent/{consent_handle}/status` falls under it when
+  the handle begins with `callback` (for example
+  `/api/v1/aa/consent/callback-0/status`): the credential is never read. Such
+  a request is now refused with `403 Unrecognised authentication mode; request
+  refused` before the handler runs (before, `get_current_tenant` answered
+  `401`), so nothing is exposed, but a valid caller with such a handle is
+  refused too. Handles come from the account aggregator's response, or are a
+  UUID when it returns none.
+- **Fix:** exempt the callback as an exact path (`EXEMPT_PATHS`; the provider
+  callback is the single route `POST /aa/consent/callback`) once the path the
+  aggregator posts to is confirmed, and remove the pair from
+  `KNOWN_EXEMPT_OVERLAPS` in
+  `tests/regression/test_route_scope_unknown_mode_20260927.py`.
 
