@@ -4,6 +4,31 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - a governed-case agent can no longer be wired without its grant check
+- The provider tool gateway refused every call it had no authorizer for, but
+  `ProviderToolGateway`, `UnderwriterDependencies` and
+  `DispositionDependencies` still defaulted `authorizer` to `None`, so any
+  caller could build them without a grant check. `authorizer` is now a
+  required field of all three, and outside local and test runtimes building
+  any of them with `None` raises `AuthorizerRequiredError`
+  (`core/tool_gateway/provider_gateway.py`). Tests that prove the gateway's
+  own refusal pass the named `NO_AUTHORIZER_FOR_TESTS`; a regression test fails
+  if production code passes it, `authorizer=None` or `authorizer_factory=None`.
+- A `CaseRuntime` whose `authorizer_factory` returned `None` still moved the
+  case to `in_progress` and started the underwriter, which then failed on its
+  first provider call, and one built with `authorizer_factory=None` failed
+  with a `TypeError` on its first run instead of a named refusal. Outside local
+  and test runtimes a `CaseRuntime` can no longer be built without a factory:
+  construction raises `AuthorizerRequiredError` (`core/cases/runtime.py`).
+  `CaseRuntime.authorizer_for` refuses a missing factory or a `None` result
+  with `authorization_unavailable` (status 503) before the case moves or a
+  provider is built, for investigations and screening dispositions alike; a
+  workflow `case_agent` step fails with that reason.
+- `scripts/seed_governed_cases.py` passes `case_authorizer` to the runtime
+  explicitly instead of relying on its default. No feature flag guards this
+  change, because every production caller - the API, the workflow step and the
+  seed - already supplies a real grant check (`case_authorizer`), so none of
+  them behaves differently.
 ### Fixed - four stale production specs and a smoke test that could not fail
 - TC-API-003 (`qa-module-19-health-api.spec.ts`) read the API version from
   `/openapi.json`, which the strict runtime does not serve (`api/main.py`). It
