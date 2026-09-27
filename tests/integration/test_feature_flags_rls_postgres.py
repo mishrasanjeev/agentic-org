@@ -17,6 +17,7 @@ skipped otherwise.
 from __future__ import annotations
 
 import os
+import secrets
 import subprocess
 import sys
 import uuid
@@ -117,7 +118,9 @@ def migrated_db() -> Iterator[_Db]:
             conn.execute(text(f"CREATE ROLE {role} NOLOGIN NOSUPERUSER NOBYPASSRLS"))
         env = os.environ.copy()
         env["AGENTICORG_DB_URL"] = url
-        env.setdefault("AGENTICORG_SECRET_KEY", "integration-test-secret-key-32chars")
+        # A throwaway key for the migration subprocess, made per run so no
+        # key-shaped literal sits in the repository.
+        env.setdefault("AGENTICORG_SECRET_KEY", secrets.token_urlsafe(32))
         result = subprocess.run(  # noqa: S603
             [sys.executable, "-m", "alembic", "upgrade", "head"],
             cwd=_ROOT,

@@ -40,3 +40,6 @@ e3d046d9ab275c2054f198b4c2be323214a0aebe:docs/reports/commerce-agent-real-stagin
 # fingerprint keeps the earlier commit from failing the history scan. Not a
 # credential, and it never was one.
 1e2b256cb0d78486b6d4f562a50dace6669613a2:docker-compose.dev.yml:generic-api-key:285
+# The feature-flag RLS integration test once set a placeholder secret key for its
+# migration subprocess; it now generates one per run.
+c4de4ba34461d69618aa7502f3ccbe64b2d894ab:tests/integration/test_feature_flags_rls_postgres.py:generic-api-key:120
