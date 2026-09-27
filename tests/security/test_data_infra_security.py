@@ -292,36 +292,45 @@ class TestSECDATA006:
 
 
 # ---------------------------------------------------------------------------
-# SEC-DATA-007: DPDP erasure request (PII removed, audit pseudonymised)
+# SEC-DATA-007: DPDP erasure request (PII removed, audit rows retained)
 # ---------------------------------------------------------------------------
 
 
 class TestSECDATA007:
-    """DPDP erasure request must remove PII and pseudonymise audit records."""
+    """DPDP erasure request must remove PII and never mutate the audit log."""
 
     @pytest.mark.asyncio
     async def test_dsar_erase_request_anonymises_subject(self):
-        """SEC-DATA-007: a DPDP erasure request anonymises the subject's PII
-        and pseudonymises their audit trail — with a real, persisted status
-        (audit 2026-09-13 replaced the fake ``processing`` + 30-day stub).
+        """SEC-DATA-007: a DPDP erasure request anonymises the subject's PII,
+        pseudonymises their feedback and keeps their audit rows unchanged
+        (``audit_log`` is append-only), reporting how many were retained —
+        with a real, persisted status (audit 2026-09-13 replaced the fake
+        ``processing`` + 30-day stub).
         """
         from unittest.mock import AsyncMock, MagicMock
 
+        from audit.dsar import AUDIT_LOG_RETENTION_BASIS
+
         handler = DSARHandler()
         session = AsyncMock()
-        session.execute = AsyncMock(side_effect=[MagicMock(rowcount=1), MagicMock(rowcount=3), MagicMock(rowcount=0)])
+        audit_count = MagicMock()
+        audit_count.scalar.return_value = 3
+        session.execute = AsyncMock(side_effect=[MagicMock(rowcount=1), MagicMock(rowcount=2), audit_count])
         result = await handler.erase_subject(session, tenant_id=uuid.uuid4(), subject_email="user@example.com")
 
         assert result["users_anonymised"] == 1
-        assert result["audit_log_pseudonymised"] == 3
+        assert result["agent_feedback_pseudonymised"] == 2
+        assert result["audit_log_retained"] == 3
+        assert result["audit_log_retention_basis"] == AUDIT_LOG_RETENTION_BASIS
         assert result["pseudonym"].startswith("erased:")
         assert "user@example.com" not in result["pseudonym"]
         assert "deadline_days" not in result
-        # The UPDATE statements target users / audit_log / agent_feedback.
         statements = [str(call.args[0]) for call in session.execute.call_args_list]
         assert any("UPDATE users" in s for s in statements)
-        assert any("UPDATE audit_log" in s for s in statements)
         assert any("UPDATE agent_feedback" in s for s in statements)
+        # audit_log is only counted: the immutability trigger rejects UPDATE and DELETE.
+        audit_statements = [s for s in statements if "audit_log" in s]
+        assert len(audit_statements) == 1 and audit_statements[0].lstrip().startswith("SELECT count(")
 
     @pytest.mark.asyncio
     async def test_dsar_access_request_returns_data(self):

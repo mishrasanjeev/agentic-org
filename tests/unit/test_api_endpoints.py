@@ -1167,7 +1167,7 @@ class TestComplianceEndpoints:
         body = DSARRequest(subject_email="user@example.com")
         ctx = _patch_tenant_session("compliance", mock_session)
         try:
-            with self._patch_process({"users_anonymised": 1, "audit_log_pseudonymised": 4}):
+            with self._patch_process({"users_anonymised": 1, "audit_log_retained": 4}):
                 resp = await dsar_erase(body=body, request=self._request(), tenant_id=tenant_id)
         finally:
             ctx.stop()
