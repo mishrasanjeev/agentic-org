@@ -49,6 +49,70 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `/api/v1/org/api-keys`, the request field is `expires_days`, the default
   scopes use the canonical `agents:write` and `connectors.read`, and the list
   response is an array that includes revoked keys.
+### Changed - sanctions screening runs through the verification provider seam
+- The new `sanctions_screening` connector has no endpoint or API key of its
+  own: every call goes to the verification provider named by `provider` in the
+  connector config - `mock` by default, which runs only in local, development,
+  test and CI environments, or a provider from a separately installed package
+  registered through the `agenticorg.providers` entry point. Its tools are
+  `screen_entity`, `screen_person`, `screen_business`, `screen_transaction` and
+  `batch_screen`, and each returns `screening_result` records with every
+  candidate the provider found. A name screened without a `type` is screened
+  as a person and as a business. An unknown or unavailable provider, one
+  without screening, or a screening the provider does not offer fails the call
+  instead of returning an empty result. All the screenings of one tool call
+  share one deadline, the connector's timeout from when the call starts, so a
+  batch of 50 names cannot run for 100 timeouts. Grantex scopes for the new id
+  come from `manifests/sanctions_screening.json`.
+- `sanctions_api`, which was built on one commercial screening service's API
+  and named it in its code, is deprecated and otherwise unchanged: the same
+  five tools (`screen_entity`, `screen_transaction`, `get_alert`,
+  `batch_screen`, `generate_report`), the same `api_key` authentication, the
+  same requests and the same responses. Creating it logs
+  `connector_id_deprecated`, and the connector catalog and product counts list
+  only `sanctions_screening`. An agent moves to `sanctions_screening` only when
+  its connectors are changed to link it. See "The sanctions screening
+  connector" in `docs/providers/plugin-packages.md`.
+- **Breaking for operators:** the address of the service `sanctions_api` calls
+  is no longer in the code. It is the connector config's `base_url` or, when
+  that is empty, the new setting `AGENTICORG_SANCTIONS_API_BASE_URL`, which has
+  no default. Before deploying, set `AGENTICORG_SANCTIONS_API_BASE_URL` in every
+  environment where tenants use `sanctions_api`, to the API base URL those
+  tenants have been calling. Without it, and without a `base_url` in the
+  tenant's connector config, every `sanctions_api` call fails with
+  `SanctionsApiNotConfiguredError` before any request is sent, and the
+  connector test reports `not_configured`.
+- An agent's tools, bare names such as `screen_entity` included, bind to
+  `sanctions_api` unless the agent's connectors name `sanctions_screening` and
+  not `sanctions_api`, so a tool can meet a grant issued under the other id.
+  Every grant check - LangGraph runs, `BaseAgent` (through
+  `execute_agent_tool`) and the tool gateway, in `grants.enforce_closed` off,
+  warn and deny alike - now accepts a scope held under either id for the tools
+  the two connectors share (`enforce_connector_grant` in
+  `auth/grant_enforcement.py`). New grants name `sanctions_screening` for those
+  tools and `sanctions_api` for `get_alert` and `generate_report`, which only
+  the deprecated connector has. Grants issued before keep covering the tools
+  they listed; `screen_person` and `screen_business` are covered once they are
+  added to the agent's tools, which recomputes its scopes.
+- The `sanctions_screening` connector test reports `configured` and the
+  provider's name, never `healthy`, because a provider cannot be probed yet, so
+  an agent that links that connector cannot be activated until the provider
+  seam gains a probe (tracked in `FINDINGS.md`). `sanctions_api` probes its
+  service as before.
+- The Risk Sentinel and Vendor Manager prompts name `sanctions_screening` in
+  their token-scope lines.
+### Added - the vendor denylist audit runs in CI and warns on house terminology
+- `python scripts/check_denylist.py audit` passes on the whole tree, and the
+  Vendor Denylist workflow now runs it on every pull request, except title
+  and description edits, and on pushes to `main`; a denylisted term in any
+  tracked file fails the job. `audit <path>...` checks only the tracked files
+  under those paths and fails closed when they match none.
+- `scan` and `audit` print a warning, with the location and the term to use,
+  for kill switch, white-label, anomaly, trust provider, verification partner
+  and verification result. The terms are listed in plain text in the script
+  (`HOUSE_TERMS`), and a warning never changes the exit code. Directory,
+  consumer and name / version have too many ordinary meanings to flag and stay
+  a review check. See "Vendor-neutral names" in `CONTRIBUTING.md`.
 ### Fixed - the feed fan-out cap test no longer depends on runner speed
 - `test_fanout_caps_parallel_sends_for_large_tenant` forced a 0.2 s send
   timeout on 100 sockets, so a busy CI runner timed out healthy 10 ms sends

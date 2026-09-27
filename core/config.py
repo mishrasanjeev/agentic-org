@@ -214,6 +214,13 @@ class Settings(BaseSettings):
     plugin_loading: bool = False
     plugin_allowlist: str = ""
 
+    # API base URL of the screening service behind the deprecated ``sanctions_api``
+    # connector (connectors/ops/sanctions_api.py), used when a tenant's connector
+    # config has no ``base_url`` of its own. Empty by default: the address is
+    # deployment configuration, never code, and with neither set the connector
+    # refuses every call. Env: AGENTICORG_SANCTIONS_API_BASE_URL.
+    sanctions_api_base_url: str = ""
+
     # Grant enforcement on agent tool calls (auth/grant_enforcement.py,
     # docs/operations/grant-enforcement.md). Deployment default for
     # ``grants.enforce_closed``: ``off`` keeps the legacy behaviour, ``warn``

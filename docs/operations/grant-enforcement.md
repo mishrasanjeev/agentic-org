@@ -276,6 +276,21 @@ ones - re-run), `scope_limit_exceeded` (more than 100 scopes; nothing changed)
 or `connector_lookup_failed`. The exit status is 1 when any agent failed. Then
 re-read the warn-mode report before switching the tenant to `deny`.
 
+A deprecated connector stays linked to its replacement during a deprecation
+window (`sanctions_api`, the legacy connector, to `sanctions_screening`). Scopes
+for the tools the two share are issued under the live id, scopes for a tool
+only the deprecated connector has (`get_alert`, `generate_report`) under the
+deprecated id, and every grant check - in LangGraph runs, `execute_agent_tool`
+and the `ToolGateway`, with `off`, `warn` and `deny` alike - also accepts a
+scope held under the other linked id for a shared tool. Grants issued before
+the replacement keep covering the tools they listed, and an agent that moves
+from `sanctions_api` to `sanctions_screening` keeps its grant for the shared
+tools (`enforce_connector_grant` in `auth/grant_enforcement.py`). A scope never
+counts for a connector whose id it does not name unless the two ids are linked
+(`ConnectorRegistry.register_deprecated`). A tool only the replacement has
+(`screen_person`, `screen_business`) is covered once it is added to the agent's
+tools, which recomputes the scopes as above.
+
 ## Agent tokens on the platform API
 
 Tool scopes govern what an agent's run may call through the tool gateway. They

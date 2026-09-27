@@ -35,13 +35,17 @@ makes sense for one vendor's product, it does not belong in the interface. Publi
 and identity standards and their publishers (AP2, Verifiable Intent, ACP, UCP, Stripe Shared
 Payment Tokens, Visa Trusted Agent Protocol, Web Bot Auth, OpenID Federation, IETF and W3C
 documents) may be named, because this work renders into them. `scripts/check_denylist.py`
-enforces the vendor list; it must pass on every pull request.
+enforces the vendor list on every pull request (`scan`) and over the whole tree (`audit`);
+both must pass.
 
 **House terminology.** Use the left term, never the right: *registry*, not directory;
 *operator override*, not kill switch; *issuer-branded*, not white-label; *irregularity*, not
 anomaly; *attestation*, not verification result; *accredited issuer*, not trust provider or
 verification partner; *relying party*, not consumer; `software_name` / `software_version`,
 not name / version; *Agent Passport* for the credential, *grant* for the delegation.
+`scripts/check_denylist.py` warns, without failing, on the discouraged terms it can match
+reliably; directory, consumer and name / version have ordinary meanings and are checked in
+review.
 
 **No new public exposure.** No internal planning documents, customer or partner names, real
 individuals' names, local filesystem paths, commercial terms or real secret values in this
@@ -276,7 +280,9 @@ Run `make check` and `make test` before claiming a release-ready result.
 - Targeted backend tests without coverage fallback: `python -m pytest -q --no-cov <tests...>`
 - Security scan: `python -m bandit -r api auth core -x migrations,tests -f json`
 - Vendor denylist (what CI and `make check-denylist` run): `python scripts/check_denylist.py scan --base origin/main --head HEAD`.
-  `audit` checks every tracked file and still fails on the three lines FINDINGS A-40 tracks.
+  `audit` checks every tracked file (`audit <path>...` only those under the paths); CI runs it on
+  every pull request and on `main`, and it must pass. Both print house-terminology warnings,
+  which never change the result.
 - Frontend tests: `cd ui && npm test`
 - Frontend build: `cd ui && npm run build`
 

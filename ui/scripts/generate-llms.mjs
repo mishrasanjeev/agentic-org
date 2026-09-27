@@ -181,6 +181,9 @@ function connectors() {
     for (const file of readdirSync(path).sort()) {
       if (!file.endsWith(".py") || file.startsWith("__")) continue;
       const source = text(join(path, file));
+      // A deprecated connector names its replacement (connectors/ops/sanctions_api.py). The
+      // connector catalog and product counts leave it out, and so does this listing.
+      if (/^\s*replacement\s*=/m.test(source)) continue;
       const name = source.match(/^\s*name\s*=\s*["']([^"']+)["']/m)?.[1];
       const auth =
         source.match(/^\s*auth_type\s*=\s*["']([^"']+)["']/m)?.[1] || "";

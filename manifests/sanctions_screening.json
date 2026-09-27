@@ -1,0 +1,12 @@
+{
+  "connector": "sanctions_screening",
+  "version": "1.0.0",
+  "description": "Sanctions, PEP and watch-list screening through the configured verification provider",
+  "tools": {
+    "batch_screen": "read",
+    "screen_business": "read",
+    "screen_entity": "read",
+    "screen_person": "read",
+    "screen_transaction": "read"
+  }
+}

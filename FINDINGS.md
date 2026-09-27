@@ -76,10 +76,11 @@ Remove an entry in the pull request that fixes it.
 - **What:** the `Token scope:` line of most built-in prompts lists
   connector/permission pairs that are neither registered tools nor in the
   agent's defaults, e.g. `ocr(r:extract)` and `banking_api(w:queue_payment)`
-  in `ap_processor`, `jira(w:create_issue)` and `sanctions_api(r:batch_screen)`
-  in `risk_sentinel`, `outlook(...)` in `email_agent`. The model reads them as
-  capabilities. `scripts/check_prompt_tools.py` checks tool calls only and
-  skips these lines because they are not tool names.
+  in `ap_processor`, `jira(w:create_issue)` and
+  `sanctions_screening(r:batch_screen)` in `risk_sentinel`, `outlook(...)` in
+  `email_agent`. The model reads them as capabilities.
+  `scripts/check_prompt_tools.py` checks tool calls only and skips these lines
+  because they are not tool names.
 - **Fix:** rewrite each token-scope line from the agent's default tools
   (`connector(tool, ...)`) and extend the check to parse and verify it.
 
@@ -149,20 +150,6 @@ Remove an entry in the pull request that fixes it.
   `core.autocrlf=false` is unaffected.
 - **Fix:** add `.gitattributes` with `*.sh text eol=lf` (and the same for
   other files executed inside Linux containers), then renormalise.
-
-## A-15 — Existing files name commercial screening and business-data vendors
-
-- **Found:** `python scripts/check_denylist.py audit` when adding the vendor
-  denylist (2026-09-15).
-- **What:** six tracked lines predate the vendor-neutral rule and name
-  commercial vendors: two in `connectors/ops/sanctions_api.py`, one each in
-  `core/agents/packs/insurance/prompts/underwriting_analyst.prompt.txt`,
-  `docs/PRD_CxO_v5.0.md`, `docs/connector_production_readiness.md` and
-  `scripts/generate_connectors.py`. The pull request check only looks at added
-  lines, so these pass today but fail as soon as someone edits them.
-- **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
-  and description become configuration or `acme_kyb`-style examples; the prompt
-  and documents drop the vendor names), then confirm `audit` exits 0.
 
 ## A-16 — Re-running `make dev` after an API change breaks the console proxy
 
@@ -414,7 +401,8 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
 - **What:** in `off` mode `core/langgraph/agent_graph.py::validate_tool_scopes`
-  still calls `grantex.enforce(...)` directly inside the async graph node.
+  still calls `grantex.enforce(...)` (through `enforce_connector_grant`)
+  directly inside the async graph node.
   `enforce` can fetch the JWKS with a synchronous HTTP request, blocking the
   event loop. The warn/deny path and `ToolGateway.execute` run it with
   `asyncio.to_thread`; the legacy path was left byte-for-byte unchanged so
@@ -449,24 +437,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** have `evaluate` preserve a `failed` status set by scope validation
   (or set `grant_denial` from the legacy path too), and update the tests that
   describe the legacy result.
-
-## A-40 — A built-in connector is tied to one commercial screening provider
-
-- **Found:** `scripts/check_denylist.py audit` while removing vendor names
-  from prompts and docs (2026-09-15).
-- **What:** `connectors/ops/sanctions_api.py` (connector `sanctions_api`) and
-  its generator entry in `scripts/generate_connectors.py` integrate with one
-  commercial sanctions-screening provider: the module docstring and
-  `base_url` name it. The release rules say no specific commercial
-  verification or screening provider ships in this repository, and PRD §2
-  lists that as a non-goal. The connector is live, so removing it breaks any
-  tenant that configured it.
-- **Fix:** move the connector into its own package that registers through the
-  `agenticorg.connectors` entry point (plugin loading, F-6), keep
-  `sanctions_api` resolvable during a deprecation window with a startup
-  warning for tenants that use it, then delete the in-repo module and its
-  generator entry. New screening integrations go through the
-  `VerificationProvider` interface instead.
 
 ## A-38 — An empty web presence carries no evidence to cite
 
@@ -1324,6 +1294,57 @@ Remove an entry in the pull request that fixes it.
   item waits.
 - **Fix:** describe decision-time resolution in the docstring and point it at
   `docs/approval-policies.md`.
+
+## A-92 — A connector that screens through a provider cannot pass the activation gate
+
+- **Found:** review of the sanctions screening connector (2026-09-27).
+- **What:** the verification provider seam
+  (`connectors/framework/verification_provider.py`) has no probe, so the
+  `sanctions_screening` connector cannot tell a provider with wrong credentials
+  from a working one and its health check reports `configured`, never
+  `healthy`. `_assert_connectors_ready_for_activation` (`api/v1/agents.py`)
+  requires `health_status == "healthy"` for every linked connector, so an
+  agent that links the connector cannot be activated.
+- **Fix:** add an optional probe to the seam that performs no screening and
+  defaults to "not offered", have the connector report `healthy` only when the
+  provider's probe succeeds, and document the probe in
+  `docs/providers/writing-a-verification-provider.md`.
+
+## A-93 — Legacy scope validation checks the first connector with a tool name
+
+- **Found:** review of the sanctions screening rename (2026-09-27).
+- **What:** in `off` mode `validate_tool_scopes`
+  (`core/langgraph/agent_graph.py`) finds the connector of a bare tool name in
+  the unfiltered `_build_tool_index`, which returns the first connector that
+  registers the name. `build_tools_for_agent` binds the name to the agent's own
+  connector, and the warn/deny path checks that one (`tool_refs`). 38 bare
+  names are registered by more than one connector: a Jira-only agent's
+  `create_issue` runs on `jira` and its grant holds `tool:jira:...` scopes
+  (`auth/grantex_registration.py` resolves against the agent's connectors),
+  but the legacy check asks Grantex about `github` and denies the call. The
+  reverse also holds: a grant with only `tool:github:write:create_issue`
+  passes the legacy check for that agent's `jira` call, so in `off` a scope
+  for one connector covers another connector's tool of the same name. The
+  runtime registration path (`core/langgraph/grantex_auth.py::_tools_to_scopes`,
+  unfiltered index) issues exactly such scopes.
+- **Fix:** look the call up in `tool_refs` first in the legacy path too, and
+  fall back to the index only for names the agent did not register, as
+  `_enforce_tool_grants` does. Refresh the scopes of agents registered through
+  the runtime path first (`scripts/refresh_grantex_scopes.py`), or their calls
+  start failing in `off`.
+
+## A-94 — The deprecated `sanctions_api` connector has no removal date
+
+- **Found:** reworking the screening connector for provider neutrality (2026-09-27).
+- **What:** `connectors/ops/sanctions_api.py` stays in the tree as a deprecated
+  legacy connector so tenants that use it keep working. It no longer names a
+  provider (its base URL comes from connector config or
+  `AGENTICORG_SANCTIONS_API_BASE_URL`), but it is still shaped around one
+  service's API, and nothing tracks moving those tenants to
+  `sanctions_screening` or deleting the module.
+- **Fix:** list the tenants whose agents link `sanctions_api`, move them to
+  `sanctions_screening` with a provider package, then delete the module, its
+  registration and the grant alias.
 
 ## A-95 — An unrecognised authentication mode is refused only when `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` is on
 
