@@ -142,10 +142,12 @@ approve control in it. A decision is taken in four steps:
 
    ![Four eyes: waiting for a second, different approver](images/governed-case-decision-four-eyes.png)
 
-4. **Record decision.** Enabled only once the grants exist. The server fetches
-   them from the issuer and consumes them; a decision grant never reaches the
-   browser. The recorded decision then shows each approver and the decision grant
-   that was consumed.
+4. **Record decision.** Enabled only once the grants exist. The server consumes
+   them at the issuer: by the request's id with
+   `AGENTICORG_CASE_DECISION_GRANT_RELEASE` on, so it never presents, stores or
+   forwards a grant, or by fetching and presenting them with it off. Either way
+   a decision grant never reaches the browser. The recorded decision then shows
+   each approver and the decision grant that was consumed.
 
 Refusals are shown with their reason code, never swallowed: `decision_required`
 (nothing proves a person decided), `decision_not_approved`, `same_approver`,

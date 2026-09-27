@@ -36,13 +36,31 @@ class DecisionCheck:
 
 
 class DecisionVerifier(Protocol):
-    async def verify(self, *, tenant_id: str, case: GovernedCase, outcome: str, grants: list[str]) -> DecisionCheck: ...
+    async def verify(
+        self,
+        *,
+        tenant_id: str,
+        case: GovernedCase,
+        outcome: str,
+        grants: list[str],
+        decision_request_id: str | None = None,
+    ) -> DecisionCheck:
+        """``decision_request_id`` is passed only for a decision consumed by its request id."""
+        ...
 
 
 class RequireDecisionGrant:
     """The default: no decision grant can be verified yet, so every decision is refused."""
 
-    async def verify(self, *, tenant_id: str, case: GovernedCase, outcome: str, grants: list[str]) -> DecisionCheck:
+    async def verify(
+        self,
+        *,
+        tenant_id: str,
+        case: GovernedCase,
+        outcome: str,
+        grants: list[str],
+        decision_request_id: str | None = None,
+    ) -> DecisionCheck:
         return DecisionCheck(allowed=False, reason="decision_required")
 
 
@@ -66,13 +84,19 @@ async def record_decision(
     verifier: DecisionVerifier,
     actor: str,
     now: datetime | None = None,
+    decision_request_id: str | None = None,
 ) -> GovernedCase:
     if outcome not in DECISION_OUTCOMES:
         raise CaseError("decision_outcome_invalid", outcome, status=422)
     if case.state != CaseState.AWAITING_DECISION:
         raise CaseError("transition_not_allowed", f"{case.state} -> decided")
+    # A decision consumed by its request id (AGENTICORG_CASE_DECISION_GRANT_RELEASE) names the
+    # request; otherwise the verifier is called exactly as before that existed.
+    by_request = {"decision_request_id": decision_request_id} if decision_request_id else {}
     try:
-        check = await verifier.verify(tenant_id=str(case.tenant_id), case=case, outcome=outcome, grants=list(grants))
+        check = await verifier.verify(
+            tenant_id=str(case.tenant_id), case=case, outcome=outcome, grants=list(grants), **by_request
+        )
     # enterprise-gate: broad-except-ok reason=verifier-failure-fails-closed-as-decision-invalid
     except Exception as exc:
         logger.error("case_decision_verifier_failed", case_ref=case.case_ref, error=type(exc).__name__)

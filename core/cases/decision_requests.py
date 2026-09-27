@@ -22,12 +22,24 @@ Everything here is inert unless a tenant has ``governed_cases.enabled`` *and* th
 ``AGENTICORG_CASE_DECISION_SERVICE=grantex``. Without it, decision requests are refused with
 ``decision_service_not_configured`` and the case decision route keeps refusing every decision with
 ``decision_required``: no decision grant, no decision.
+
+A case decision is this platform's own: a person decides it, no agent does, and the request names
+no agent (no ``agentId`` or ``grantId``). With ``AGENTICORG_CASE_DECISION_GRANT_RELEASE`` on, it is
+consumed at the issuer by its request id, and this platform never asks for, presents, stores or
+forwards one of its grants; readiness comes from the request's own state and
+``decisionGrantsReady``. Until the issuer turns ``DECISION_GRANT_AGENT_BINDING`` on, its status
+answer still carries the grants once a request is approved; they are parsed with that answer and
+dropped. Once it is on, the issuer never sends a decision grant to the developer API key at all and
+releases one only to the agent a request names, which makes consumption by request id the only way
+to record a case decision. Off, the grants are read from the request's status and presented for
+consumption, as before.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -118,6 +130,8 @@ class DecisionRequestView:
     approvals_required: int
     approvals: tuple[Approval, ...] = ()
     expires_at: str = ""
+    #: The issuer's ``decisionGrantsReady``, when it sends one (its agent binding is on).
+    issuer_grants_ready: bool | None = None
 
     @property
     def approvals_received(self) -> int:
@@ -125,7 +139,14 @@ class DecisionRequestView:
 
     @property
     def grants_ready(self) -> bool:
-        return self.status == "approved" and self.approvals_received >= self.approvals_required
+        # The issuer's own answer can only withhold readiness, never grant it: it also knows
+        # whether a grant has been consumed, revoked or has expired, which counting approvals
+        # does not, and where the two disagree the answer that refuses is the one that holds.
+        return (
+            self.status == "approved"
+            and self.approvals_received >= self.approvals_required
+            and self.issuer_grants_ready is not False
+        )
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -192,6 +213,16 @@ class DecisionGrantService(Protocol):
     async def consume(
         self, *, grants: Sequence[str], action: Mapping[str, Any], case_version: str
     ) -> ConsumedDecision: ...
+
+    #: Decisions are consumed by request id and their grants are never read
+    #: (``AGENTICORG_CASE_DECISION_GRANT_RELEASE``).
+    consume_by_request_id: bool
+
+    async def consume_request(
+        self, *, request_id: str, action: Mapping[str, Any], case_version: str
+    ) -> ConsumedDecision:
+        """Consume the grants of this platform's own request where the issuer holds them."""
+        ...
 
 
 def _text(value: Any, limit: int) -> str:
@@ -348,7 +379,31 @@ def _approval(entry: Mapping[str, Any]) -> Approval:
     )
 
 
-def _view(payload: Mapping[str, Any], *, require_approval_page: bool = False) -> DecisionRequestView:
+def _platform_owned_readiness(payload: Mapping[str, Any]) -> bool | None:
+    """``decisionGrantsReady`` of a request this platform consumes by id, or ``None`` when absent.
+
+    Consumption by request id is for a request that names no agent; the issuer refuses any other
+    (``wrong_agent``), and a request that names one is that agent's decision, not this platform's.
+    So a request naming an agent or a grant - which the issuer can answer when asked again for
+    the same action while someone else's request is open - is refused here, before it is recorded
+    on a case or offered to anyone as ready. An issuer from before the binding answers
+    ``decisionGrantsReady`` not at all, which leaves readiness to the approvals; any value other
+    than a boolean is refused rather than read as either.
+    """
+    for key in ("agentId", "grantId"):
+        if payload.get(key) is not None:
+            raise DecisionServiceError("decision_invalid", "wrong_agent", status=409)
+    if "decisionGrantsReady" not in payload:
+        return None
+    ready = payload["decisionGrantsReady"]
+    if not isinstance(ready, bool):
+        raise DecisionServiceError("decision_service_response_invalid", "decisionGrantsReady is not a boolean")
+    return ready
+
+
+def _view(
+    payload: Mapping[str, Any], *, require_approval_page: bool = False, platform_owned: bool = False
+) -> DecisionRequestView:
     """The issuer's answer, parsed strictly.
 
     The console states what this carries - which action is being approved, how many approvals it
@@ -356,7 +411,11 @@ def _view(payload: Mapping[str, Any], *, require_approval_page: bool = False) ->
     ``decision_service_response_invalid``, not a default. The field names are provisional
     (see the module docstring); a rename has to fail loudly rather than show one approver where
     four eyes were required.
+
+    ``platform_owned`` is set when the request is consumed by its id
+    (``AGENTICORG_CASE_DECISION_GRANT_RELEASE``); see :func:`_platform_owned_readiness`.
     """
+    issuer_ready = _platform_owned_readiness(payload) if platform_owned else None
     approvals_entries = payload.get("approvals") or []
     if not isinstance(approvals_entries, list):
         raise DecisionServiceError("decision_service_response_invalid", "approvals is not a list")
@@ -376,6 +435,57 @@ def _view(payload: Mapping[str, Any], *, require_approval_page: bool = False) ->
         approvals_required=_required_count("approvalsRequired", payload.get("approvalsRequired")),
         approvals=approvals,
         expires_at=_required_text("expiresAt", payload.get("expiresAt")),
+        issuer_grants_ready=issuer_ready,
+    )
+
+
+#: What the issuer issues as a decision request id; anything else is not one of its requests.
+_REQUEST_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def _consumed_request(payload: Mapping[str, Any], request_id: str) -> ConsumedDecision:
+    """The issuer's receipt for a request consumed by its id, parsed strictly.
+
+    The case records who decided and which grant each of them spent from this answer alone, so it
+    has to be a confirmed consumption of exactly this request that names the grant on every
+    approver, and the grants it names have to be exactly the ones it says it consumed. Anything
+    else is refused (``decision_service_response_invalid``) rather than guessed: an approver
+    recorded against the wrong credential is worse than a decision not recorded. The issuer has
+    spent the grants by the time it answers, so a refusal here means a person approves again; that
+    is the price of never recording a decision on an answer nobody can read. Unlike presented
+    grants there is no second lookup for an answer without ``approvers[].jti``: every issuer that
+    consumes by request id names it.
+    """
+
+    def invalid(detail: str) -> DecisionServiceError:
+        return DecisionServiceError("decision_service_response_invalid", detail)
+
+    if payload.get("consumed") is not True:
+        raise invalid("the consumption was not confirmed")
+    if payload.get("requestId") != request_id:
+        raise invalid("the consumption is for another request")
+    jtis = payload.get("jtis")
+    if (
+        not isinstance(jtis, list)
+        or not jtis
+        or any(not isinstance(grant_id, str) or not grant_id.strip() for grant_id in jtis)
+        or len(set(jtis)) != len(jtis)
+    ):
+        raise invalid("decision grant ids are invalid")
+    approvers = payload.get("approvers")
+    if not isinstance(approvers, list) or not approvers or any(not isinstance(a, Mapping) for a in approvers):
+        raise invalid("the approvers are invalid")
+    pairs = tuple(
+        (_required_text("consumption sub", a.get("sub")), _required_text("consumption jti", a.get("jti")))
+        for a in approvers
+    )
+    spent = [grant_id for _, grant_id in pairs]
+    if len(set(spent)) != len(spent) or set(spent) != set(jtis):
+        raise invalid("the approvers' decision grants are not the consumed ones")
+    return ConsumedDecision(
+        request_id=request_id,
+        approvers=pairs,
+        action_hash=_required_text("actionHash", payload.get("actionHash")),
     )
 
 
@@ -385,13 +495,19 @@ class GrantexDecisionGrantService:
 
     Provisional endpoint shapes (Grantex ``spec/decision-grant.md``):
 
-    ``PUT  /v1/decisions/cases/{caseId}``     register the case's current version
-    ``POST /v1/decisions/requests``           create a request, answering ``approvalPage``
-    ``GET  /v1/decisions/requests/{id}``      status, approvals and, once approved, ``decisionGrants``
-    ``POST /v1/decisions/consume``            consume the grants for one action, atomically
+    ``PUT  /v1/decisions/cases/{caseId}``          register the case's current version
+    ``POST /v1/decisions/requests``                create a request, answering ``approvalPage``
+    ``GET  /v1/decisions/requests/{id}``           status, approvals and, once approved,
+                                                   ``decisionGrants`` (issuer binding off) or
+                                                   ``decisionGrantsReady`` (binding on)
+    ``POST /v1/decisions/consume``                 consume presented grants for one action, atomically
+    ``POST /v1/decisions/requests/{id}/consume``   consume a request that names no agent by its id
+                                                   (``consume_by_request_id``)
 
     Authenticated with the platform's developer API key. The approval page is the *only* place an
-    approval happens; nothing here can approve.
+    approval happens; nothing here can approve. ``POST /v1/decisions/requests/{id}/grants``, which
+    releases a request's grants to the agent it names, is not used: this platform's requests name
+    no agent.
     """
 
     base_url: str
@@ -403,6 +519,9 @@ class GrantexDecisionGrantService:
     client_factory: Any = None
     connector: str = "governed_cases"
     expires_in_seconds: int = 24 * 60 * 60
+    #: ``AGENTICORG_CASE_DECISION_GRANT_RELEASE``: consume decisions by request id and never read
+    #: their grants. Off, the grants are read from the request's status and presented, as before.
+    consume_by_request_id: bool = False
     _headers: dict[str, str] = field(init=False, default_factory=dict)
     #: One client per running event loop; the console polls every few seconds per open case.
     _clients: dict[int, httpx.AsyncClient] = field(init=False, default_factory=dict)
@@ -465,8 +584,7 @@ class GrantexDecisionGrantService:
             raise DecisionServiceError(reason, detail, status=502 if response.status_code >= 500 else 409)
         return payload
 
-    @staticmethod
-    def _refusal(status: int, payload: Mapping[str, Any]) -> tuple[str, str]:
+    def _refusal(self, status: int, payload: Mapping[str, Any]) -> tuple[str, str]:
         code = str(payload.get("code") or "")
         sub_reason = str(payload.get("subReason") or "")
         if code == "DECISION_GRANTS_DISABLED":
@@ -475,6 +593,10 @@ class GrantexDecisionGrantService:
             # The issuer answers 404 NOT_FOUND for a request it no longer holds - a request that
             # aged past its ceiling, for example. That is not the service being switched off.
             return "decision_request_not_found", code or "not found"
+        if status == 403 and sub_reason and self.consume_by_request_id:
+            # The issuer answers `wrong_agent` with 403: a refusal of this decision (the request
+            # names an agent), not a failed sign-in, so the case says which. Still a refusal.
+            return "decision_invalid", sub_reason
         if status == 401 or status == 403:
             return "decision_service_unauthorised", code
         if sub_reason:
@@ -510,16 +632,49 @@ class GrantexDecisionGrantService:
         }
         payload = await self._call("POST", "/v1/decisions/requests", body)
         # Only the create answer carries the approval page; the status answer does not.
-        return _view(payload, require_approval_page=True)
+        return _view(payload, require_approval_page=True, platform_owned=self.consume_by_request_id)
 
     async def get_request(self, request_id: str) -> DecisionRequestView:
         payload = await self._call("GET", f"/v1/decisions/requests/{request_id}")
-        return _view(payload)
+        return _view(payload, platform_owned=self.consume_by_request_id)
 
     async def grants(self, request_id: str) -> list[str]:
+        if self.consume_by_request_id:
+            # The request is consumed by its id and its grants are never asked for. Refused rather
+            # than answered with an empty list, which a caller would read as "not approved yet".
+            raise DecisionServiceError("decision_grants_not_released", "consumed by request id", status=409)
         payload = await self._call("GET", f"/v1/decisions/requests/{request_id}")
         grants = payload.get("decisionGrants")
         return [str(g) for g in grants] if isinstance(grants, list) else []
+
+    async def consume_request(
+        self, *, request_id: str, action: Mapping[str, Any], case_version: str
+    ) -> ConsumedDecision:
+        """Consume the grants of this platform's own request for one action, by the request's id.
+
+        ``POST /v1/decisions/requests/{id}/consume`` runs the same checks under the same locks as
+        presenting the grants - the action, the case version, single use, four eyes - and answers
+        the same receipt, but nothing here presents a grant: the issuer spends the ones it holds.
+        A request that names an agent is refused (``wrong_agent``): only the grants its agent
+        presents spend it. The receipt is parsed here; the verifier then holds it to the approvals
+        the case recorded for the request (:func:`_hold_to_recorded_approvals`).
+        """
+        if not self.consume_by_request_id:
+            # Off means exactly the behaviour from before the setting: the endpoint is never called.
+            raise DecisionServiceError(
+                "decision_service_not_configured", "consumption by request id is off", status=503
+            )
+        if not _REQUEST_ID.fullmatch(request_id):
+            # Not an id the issuer could have issued, and it goes into the path.
+            raise DecisionServiceError("decision_request_not_found", "not a decision request id", status=404)
+        payload = await self._call(
+            "POST",
+            f"/v1/decisions/requests/{request_id}/consume",
+            {"action": dict(action), "caseVersion": case_version},
+            # The caller holds the case row locked while this runs.
+            timeout=self.consume_timeout_seconds,
+        )
+        return _consumed_request(payload, request_id)
 
     async def _grant_ids_by_approver(
         self, request_id: str, subjects: Sequence[str], consumed: set[str]
@@ -619,13 +774,55 @@ class GrantexDecisionGrantService:
         )
 
 
+def _recorded_approvals_required(case: GovernedCase, request_id: str) -> int:
+    """How many approvals this request needs, from the case's own record of it.
+
+    The case API records every request it makes with the ``approvalsRequired`` the issuer answered,
+    which is what the console showed the person asking. A decision consumed by request id is held
+    to it. A request the case has no record of, or whose record states no usable count, is refused
+    before the issuer is asked (``decision_request_not_found``): there would be nothing to hold the
+    receipt to, and a missing count must never read as one approver.
+    """
+    for record in case.decision_requests or []:
+        if isinstance(record, Mapping) and record.get("request_id") == request_id:
+            required = record.get("approvals_required")
+            if isinstance(required, int) and not isinstance(required, bool) and required >= 1:
+                return required
+            raise DecisionServiceError(
+                "decision_request_not_found", "the case's record of the request states no approval count", status=404
+            )
+    raise DecisionServiceError("decision_request_not_found", "not recorded on this case", status=404)
+
+
+def _hold_to_recorded_approvals(consumed: ConsumedDecision, required: int) -> None:
+    """A receipt names exactly the approvals the request needed, each from a different person.
+
+    The issuer enforces four eyes when it consumes; this is the platform's own check of what it is
+    about to record, so one approver where two were needed, more than were needed, or one person
+    twice is refused (``decision_service_response_invalid``) rather than recorded. As with any
+    receipt this platform cannot record on, the issuer has spent the grants by then and a person
+    approves again. Presented grants carry no request the case recorded, so their count stays the
+    issuer's alone.
+    """
+    subjects = [subject for subject, _ in consumed.approvers]
+    if len(subjects) != required or len(set(subjects)) != len(subjects):
+        raise DecisionServiceError(
+            "decision_service_response_invalid",
+            f"{len(subjects)} approvers, {len(set(subjects))} distinct; the request needed {required}",
+        )
+
+
 @dataclass
 class ServiceDecisionVerifier:
     """``CaseRuntime.decision_verifier`` backed by a decision service.
 
     It consumes the grants at their issuer for the exact semantic action and the case's current
     version, so a case that changed since the approval is refused (``case_changed``) and a grant
-    can be spent once. Anything other than a confirmed consumption is a refusal.
+    can be spent once. Anything other than a confirmed consumption is a refusal. Given a
+    ``decision_request_id`` instead of grants, it consumes that request by its id
+    (``AGENTICORG_CASE_DECISION_GRANT_RELEASE``) and holds the receipt to the approvals the case
+    recorded for that request; given both, it refuses, because the caller has not said which
+    decision it means.
 
     **This platform does not verify the decision grants themselves.** The issuer checks the
     signature and key, the audience and issuer, the action hash, the dwell source, the memo and
@@ -639,12 +836,29 @@ class ServiceDecisionVerifier:
 
     service: DecisionGrantService
 
-    async def verify(self, *, tenant_id: str, case: GovernedCase, outcome: str, grants: list[str]) -> DecisionCheck:
-        if not grants:
+    async def verify(
+        self,
+        *,
+        tenant_id: str,
+        case: GovernedCase,
+        outcome: str,
+        grants: list[str],
+        decision_request_id: str | None = None,
+    ) -> DecisionCheck:
+        if decision_request_id and grants:
+            return DecisionCheck(allowed=False, reason="decision_invalid")
+        if not grants and not decision_request_id:
             return DecisionCheck(allowed=False, reason="decision_required")
         action = case_action(case, outcome)
         try:
-            consumed = await self.service.consume(grants=grants, action=action, case_version=str(case.version))
+            if decision_request_id:
+                required = _recorded_approvals_required(case, decision_request_id)
+                consumed = await self.service.consume_request(
+                    request_id=decision_request_id, action=action, case_version=str(case.version)
+                )
+                _hold_to_recorded_approvals(consumed, required)
+            else:
+                consumed = await self.service.consume(grants=grants, action=action, case_version=str(case.version))
         except DecisionServiceError as exc:
             decision_grants_consumed_total.labels(outcome=outcome, result="refused").inc()
             logger.warning("case_decision_grants_refused", case_ref=case.case_ref, reason=exc.reason, detail=exc.detail)
@@ -655,6 +869,7 @@ class ServiceDecisionVerifier:
             case_ref=case.case_ref,
             request_id=consumed.request_id,
             approvers=len(consumed.approvers),
+            consumed_by="request_id" if decision_request_id else "grants",
         )
         return DecisionCheck(allowed=True, approvers=consumed.approvers)
 
@@ -744,4 +959,5 @@ def decision_service() -> DecisionGrantService | None:
         base_url=base_url,
         api_key=os.getenv("GRANTEX_API_KEY", "") or external_keys.grantex_api_key,
         connector=str(getattr(settings, "case_decision_connector", "governed_cases")),
+        consume_by_request_id=settings.case_decision_grant_release is True,
     )

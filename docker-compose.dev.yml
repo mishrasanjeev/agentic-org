@@ -38,6 +38,10 @@ x-backend-env: &backend-env
   # defaults off everywhere, development included.
   AGENTICORG_CASE_DECISION_SERVICE: "${AGENTICORG_DEV_CASE_DECISION_SERVICE:-}"
   AGENTICORG_CASE_DECISION_FOUR_EYES_ON: "${AGENTICORG_DEV_CASE_DECISION_FOUR_EYES_ON:-decline}"
+  # Consume case decisions by request id. Off unless a run sets it; it also
+  # needs an auth service build that serves that endpoint, which the pin below
+  # predates (docs/governance/decision-requests.md, rollout order).
+  AGENTICORG_CASE_DECISION_GRANT_RELEASE: "${AGENTICORG_DEV_CASE_DECISION_GRANT_RELEASE:-false}"
 
 x-backend-build: &backend-build
   context: .

@@ -16,7 +16,9 @@ own approval page, in the approver's browser, on the auth service's origin.
                                                           policy score, approves;
                                                           the service measures the dwell
  Live status       ─────► GET .../decision-requests/{id} ► GET  /v1/decisions/requests/{id}
- Record decision   ─────► POST .../decision             ► POST /v1/decisions/consume
+ Record decision   ─────► POST .../decision             ► POST /v1/decisions/requests/{id}/consume
+                                                          (AGENTICORG_CASE_DECISION_GRANT_RELEASE on)
+                                                          or POST /v1/decisions/consume (off)
                           case → decided               ◄─── approvers, grant ids
 ```
 
@@ -69,6 +71,14 @@ the issuer-measured `dwell_ms` with `dwell_source: "server"`, whether the grants
 whether the case has changed since. A request that is not recorded on this case is `404
 decision_request_not_found`, so one case's screen cannot poll another's request.
 
+`grants_ready` is true when the request is `approved` with as many approvals as it needs. With
+`AGENTICORG_CASE_DECISION_GRANT_RELEASE` on, an issuer that answers `decisionGrantsReady` (its agent
+binding is on) can also withhold it: `false` there — a grant consumed, revoked or expired — makes
+`grants_ready` false whatever the approvals say. It never makes a request ready that the approvals
+do not. A `decisionGrantsReady` that is not a boolean, or a request that names an agent (`agentId`
+or `grantId`), is refused (`decision_service_response_invalid`, or `decision_invalid` with
+`wrong_agent`).
+
 **Dwell.** The authoritative dwell is the one the approval page measured. The console may send
 `client_dwell_ms` — how long its own screen was open before the person acted — and that is recorded
 as advisory telemetry only (`agenticorg_case_console_dwell_seconds{stage}`, logged with
@@ -81,10 +91,32 @@ POST /api/v1/governed-cases/{case_ref}/decision
 {"outcome": "decline", "decision_request_id": "…", "client_dwell_ms": 120000}
 ```
 
-The server fetches the minted grants from the issuer itself — **a decision grant never reaches the
-browser** — and consumes them atomically for the exact action and the case's current version. Only
-a confirmed consumption records the decision, with each approver and grant id on the case. Every
-other answer is a refusal:
+**A decision grant never reaches the browser.** The grants are consumed atomically at the issuer,
+for the exact action and the case's current version, while the case row is locked, and only a
+confirmed consumption records the decision, with each approver and grant id on the case. How the
+server gets there depends on `AGENTICORG_CASE_DECISION_GRANT_RELEASE`:
+
+- **On.** A case decision is AgenticOrg's own — a person decides it, no agent does — so its request
+  names no agent (no `agentId` or `grantId`), and the issuer consumes it by its id
+  (`POST /v1/decisions/requests/{id}/consume` with `{"action", "caseVersion"}`). This server never
+  asks for, presents, stores or forwards one of its grants. How far that goes depends on the
+  issuer: until its `DECISION_GRANT_AGENT_BINDING` is on, its answer to
+  `GET /v1/decisions/requests/{id}` — the console's status polls and the readiness check before
+  recording — still carries `decisionGrants` once the request is approved, and this server parses
+  that answer and drops them; once the binding is on, the issuer never sends a decision grant here
+  at all. Whether they are ready comes from the request's own state (`grants_ready`, above). The
+  answer must be a confirmed consumption of exactly that request naming the grant each approver
+  spent, with exactly as many approvers as the case recorded the request as needing
+  (`approvals_required`), each a different person; anything else is refused
+  (`decision_service_response_invalid`) and nothing is recorded. A request the case has no usable
+  record of is refused `decision_request_not_found` before the issuer is asked. The issuer's
+  grant-release endpoint (`POST /v1/decisions/requests/{id}/grants`) releases grants only to the
+  agent a request names, so it is not used.
+- **Off.** The server reads the grants from the request's status (`decisionGrants`) and presents
+  them to `POST /v1/decisions/consume`, as before. This stops working once the issuer turns
+  `DECISION_GRANT_AGENT_BINDING` on (see [the rollout order](#binding-decisions-to-the-requesting-agent-rollout-order)).
+
+Every other answer is a refusal:
 
 | Reason | Means |
 | --- | --- |
@@ -95,12 +127,18 @@ other answer is a refusal:
 | `case_changed` | the case changed after the approval |
 | `consumed`, `expired`, `revoked` | the grants are spent or no longer valid |
 | `same_approver`, `four_eyes_incomplete` | four eyes is not satisfied |
+| `unknown_grant` | consumed by request id before any grant was minted |
+| `wrong_agent` | the request names an agent, so it is not AgenticOrg's decision to consume (setting on; the issuer's 403 is read as this, not as an authentication failure) |
+| `decision_service_response_invalid` | the issuer's answer is not one this server can record a decision on |
 | `decision_service_not_configured` | no issuer is configured here |
 | `decision_service_unavailable`, `decision_service_disabled` | the issuer could not answer, or has decision grants switched off |
-| `decision_request_not_found` | the issuer no longer holds that request (an unknown id, or one past its 24-hour ceiling) |
+| `decision_request_not_found` | the issuer no longer holds that request (an unknown id, or one past its 24-hour ceiling), or — setting on — it does not serve consumption by request id at all, or the case has no usable record of the request (refused before the issuer is asked) |
 
 Passing `decision_grants` directly is still supported for callers that already hold tokens; the
-same consumption and the same refusals apply.
+same consumption and the same refusals apply, in both states of the setting. With the issuer's
+agent binding on, nobody can hold the grants of a request that names no agent, so this path — and
+the `business_onboarding` workflow's `record_decision` step, which passes `$decision_grants` — has
+nothing to present for a decision AgenticOrg requested.
 
 ## Configuration
 
@@ -109,6 +147,7 @@ same consumption and the same refusals apply.
 | `AGENTICORG_CASE_DECISION_SERVICE` | `""` (off) | `grantex` to enable decision requests |
 | `AGENTICORG_CASE_DECISION_CONNECTOR` | `governed_cases` | connector the request is made under |
 | `AGENTICORG_CASE_DECISION_FOUR_EYES_ON` | `decline` | outcomes needing two different approvers |
+| `AGENTICORG_CASE_DECISION_GRANT_RELEASE` | `false` | `true` to consume decisions by request id, so this server never presents, stores or forwards a decision grant (the issuer stops sending them here once its `DECISION_GRANT_AGENT_BINDING` is on); required before the issuer turns that binding on |
 | `GRANTEX_BASE_URL`, `GRANTEX_API_KEY` | — | the issuer and the platform's developer key; **both are required** when the service is on, and an unset `GRANTEX_BASE_URL` is refused (`decision_service_not_configured`) rather than falling back to a default origin |
 
 Decision requests also need the tenant's `governed_cases.enabled` flag. With the service off, the
@@ -116,6 +155,49 @@ case API behaves exactly as before: every decision is refused with `decision_req
 
 The auth service must run with decision grants enabled and with the approver identity providers
 allow-listed by its administrator; AgenticOrg's developer key cannot do either, by design.
+
+### Binding decisions to the requesting agent: rollout order
+
+The auth service's `DECISION_GRANT_AGENT_BINDING` (off by default) stops
+`GET /v1/decisions/requests/{id}` returning decision grants to the developer API key: it answers
+`decisionGrantsReady` instead, releases grants only to the grant token of the agent a request names,
+and refuses another agent's consumption with `wrong_agent`. With `AGENTICORG_CASE_DECISION_GRANT_RELEASE`
+off, AgenticOrg reads the grants from that `GET`, so once the binding is on every decision would be
+refused `decision_not_approved`. Change them in this order, confirming each step before the next:
+
+1. **The issuer serves consumption by request id.** Run a Grantex auth service release that answers
+   `POST /v1/decisions/requests/{id}/consume` (the release that introduced the agent binding), with
+   the binding still off. An older one answers that path `404`, which the setting would report as
+   `decision_request_not_found` on every decision.
+2. **Deploy this AgenticOrg change** with the setting off. Nothing changes: decisions are recorded
+   with grants read from the status and presented, as before.
+3. **Turn `AGENTICORG_CASE_DECISION_GRANT_RELEASE=true` on.** Record a four-eyes decline end to end
+   and check that AgenticOrg logged `case_decision_grants_consumed` with
+   `consumed_by: "request_id"` and that the issuer's audit chain shows the consumption by request id
+   (`consumed_by: decision_request`). The console, its routes and their responses are unchanged.
+   The issuer's status answers still carry the grants in this state; this server drops them.
+4. **Turn `DECISION_GRANT_AGENT_BINDING=true` on at the issuer.** Record a four-eyes decline again.
+   From here the issuer sends no decision grant to this server at all.
+
+To roll back, reverse the order: turn the issuer's binding off before turning the setting off.
+The setting off with the binding on refuses every decision (`decision_not_approved`); it fails
+closed, but no decision can be recorded until one of the two is changed.
+
+What changes when the setting flips, and what does not:
+
+- **The console** (`DecisionPanel`) is unchanged. It still posts `decision_request_id`, never a
+  grant, and enables recording on `grants_ready`.
+- **`ui/e2e/decision-grants.spec.ts`** needs no change: it drives the console and the approval
+  page and asserts on what the console and the case record, which are the same in both states,
+  and its check that no decision grant reaches the browser holds in both. To run it with the
+  setting on, start the stack with `AGENTICORG_DEV_CASE_DECISION_GRANT_RELEASE=true` *and* move
+  the auth service pin in `docker-compose.dev.yml` to a build that serves consumption by request
+  id: the pinned `5b867f68` build predates it, so with that pin the four-eyes test's recording
+  step is refused `decision_request_not_found` and the `case_changed` test still passes (it is
+  refused before the issuer is asked).
+- **Callers that pass `decision_grants`** and the workflow's `record_decision` step keep using
+  `POST /v1/decisions/consume` in both states; see [Recording the decision](#recording-the-decision)
+  for why they have nothing to present once the binding is on.
 
 ### Trying it on the local stack
 
@@ -198,7 +280,8 @@ grants are the auth service's.
    decision is refused `409 case_changed` with the case still `awaiting_decision`.
 7. **No decision grant reaches the browser.** The suite inspects every response the console is
    served for a `typ: "decision+jwt"` token and fails if one appears. The server fetches the grants
-   from the issuer and consumes them itself.
+   from the issuer and consumes them itself (`AGENTICORG_CASE_DECISION_GRANT_RELEASE` off, the only
+   state the pinned auth service build supports).
 8. **The issuer is named explicitly.** With the service on and no `GRANTEX_BASE_URL`, decision
    requests are refused (`decision_service_not_configured`): nothing is asked of an issuer nobody
    chose. Covered by `tests/unit/governed_cases/test_case_decision_requests.py`.
@@ -222,6 +305,13 @@ stack serves decision grants only when a run sets `AGENTICORG_DEV_CASE_DECISION_
   suites cover them, but the console's `expired` and `revoked` paths have only unit coverage here.
 - **Nothing has been run at scale or against a hosted issuer.** The dwell floor, the rate limits and
   the 24-hour ceiling have only been exercised with the development defaults.
+- **Consumption by request id has not run against a real auth service.**
+  `AGENTICORG_CASE_DECISION_GRANT_RELEASE` is covered against the issuer's HTTP answers in both
+  states of its agent binding (`core/test_doubles/fake_grantex_decision_issuer.py`, in
+  `tests/unit/governed_cases/test_case_decision_grant_release.py` and, through the case API on
+  PostgreSQL, `tests/integration/test_governed_cases_postgres.py`), but `make e2e-decisions` runs
+  it only once the development pin moves to an auth service build that serves it (see the
+  [rollout order](#binding-decisions-to-the-requesting-agent-rollout-order)).
 
 Answers from the issuer are parsed strictly: any field the console states as fact - the action, its
 hash, the case version, how many approvals are required, and each approval's subject,
@@ -252,7 +342,18 @@ published decision-grant API before either side had talked to the other; they ar
 against the real issuer by `make e2e-decisions`, and the Grantex Python SDK's `decisions` client
 (grantex 0.6) will replace the hand-written request building once it is released. Unit tests run
 against `core/test_doubles/fake_decision_grants.py`, which enforces the same rules — four eyes, the
-same approver refused, single-use grants, action and case-version binding.
+same approver refused, single-use grants, action and case-version binding — and, for the HTTP
+client itself, against `core/test_doubles/fake_grantex_decision_issuer.py`, which answers as the
+auth service does with its agent binding off and on.
+
+A decision consumed by its request id takes no fallback: the answer to
+`POST /v1/decisions/requests/{id}/consume` must name the grant on every approver, and those grants
+must be exactly the `jtis` it consumed, for exactly the request asked for. Every issuer that
+consumes by request id names them. The verifier then holds that answer to the case's own record of
+the request: as many approvers as its `approvals_required`, no subject twice. The issuer enforces
+four eyes itself; this is a second, independent check of what is about to be recorded. Presented
+grants (`decision_grants`, or the setting off) carry no request the case recorded, so their
+approval count is checked by the issuer alone, as before.
 
 One shape the first real run corrected: the issuer's consumption answer lists the approvers and the
 grant ids it spent, and names the grant on each approver only in its audit entry, not in the
