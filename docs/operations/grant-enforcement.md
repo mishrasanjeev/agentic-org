@@ -39,7 +39,8 @@ tenant id), so a tenant row never hides a global row: a global
 tenant admin, so nobody inside a tenant can switch enforcement off or delete a
 mode an operator set. The same applies to the programme's other authority
 flags (`pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
-`decisions.required`, `caps.enforce`; see `RESERVED_FLAG_KEYS` in
+`approvals.unevaluable_condition`, `decisions.required`, `caps.enforce`; see
+`RESERVED_FLAG_KEYS` in
 `core/feature_flags.py`). Operators manage them with database access:
 
 ```

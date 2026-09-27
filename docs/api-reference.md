@@ -1099,6 +1099,12 @@ POST /api/v1/approvals/{id}/decide
   "notes": "Scope change email confirmed, approving amended PO."
 }
 ```
+Under an approval policy a decision can get `409` and leave the item pending: a
+reviewer voting twice, a policy changed mid-approval, or - with the operator
+flag `approvals.unevaluable_condition` in `deny` mode - a step condition that
+cannot be evaluated for the item (`detail.reason_code`
+`approval_condition_unevaluable`; a `reject` is still taken and closes the
+item). See [Approval policies](approval-policies.md).
 
 ---
 

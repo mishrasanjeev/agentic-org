@@ -4,6 +4,8 @@ Used by the /api/v1/approvals/decide endpoint to answer:
   - Who is the next approver? (role + quorum)
   - Have we collected enough decisions at the current step to advance?
   - Are we done (all steps complete)?
+  - Which steps' conditions cannot be evaluated for the item, and does the
+    tenant's ``approvals.unevaluable_condition`` mode refuse the decision?
 
 The engine is deliberately stateless — callers pass in the current
 HITL item + its decision history, and get back a new state to persist.
@@ -22,6 +24,18 @@ from core.database import get_tenant_session
 from core.models.approval_policy import ApprovalPolicy, ApprovalStep
 
 logger = structlog.get_logger()
+
+# Operator-managed authority flag (reserved in ``core.feature_flags``): what a
+# decision does when a step's condition cannot be evaluated for the item.
+# ``off`` (no enabling row) applies the step; ``deny`` refuses every decision
+# but a rejection, which closes the item and approves nothing.
+# The flag store holds booleans, so ``deny`` is a row of its own, as for
+# ``grants.enforce_closed.deny``.
+UNEVALUABLE_CONDITION_FLAG = "approvals.unevaluable_condition"
+UNEVALUABLE_CONDITION_DENY_FLAG = f"{UNEVALUABLE_CONDITION_FLAG}.deny"
+UNEVALUABLE_CONDITION_OFF = "off"
+UNEVALUABLE_CONDITION_DENY = "deny"
+REASON_CONDITION_UNEVALUABLE = "approval_condition_unevaluable"
 
 
 @dataclass
@@ -48,18 +62,54 @@ def _condition_matches(condition: str | None, context: dict[str, Any]) -> bool:
     """
     if not condition:
         return True
+    result = _evaluate_condition(condition, context)
+    return True if result is None else result
+
+
+def _evaluate_condition(condition: str, context: dict[str, Any]) -> bool | None:
+    """Three-valued: ``None`` when the condition cannot be evaluated for this item."""
     try:
         from workflows.condition_evaluator import evaluate_condition_strict
 
         result = evaluate_condition_strict(condition, context)
-    # enterprise-gate: broad-except-ok reason=approval-policy-condition-failure-applies-the-step-fail-closed
+    # enterprise-gate: broad-except-ok reason=approval-policy-condition-failure-is-unknown-never-a-skip-fail-closed
     except Exception:
         logger.warning("approval_policy_condition_eval_failed", condition=condition)
-        return True
+        return None
     if result is None:
         logger.warning("approval_policy_condition_unevaluable", condition=condition)
-        return True
     return result
+
+
+async def unevaluable_condition_mode(tenant_id: uuid.UUID) -> str:
+    """The tenant's ``approvals.unevaluable_condition`` mode: ``off`` (the default) or ``deny``.
+
+    ``deny`` when the global row or the tenant's row of
+    ``approvals.unevaluable_condition.deny`` enables it, each evaluated on its
+    own, so a tenant row can make a tenant stricter but never lift an
+    operator's global setting.
+    """
+    from core.feature_flags import FeatureFlagLookupError, load_flag_rows_strict, row_enabled
+
+    try:
+        rows = await load_flag_rows_strict(UNEVALUABLE_CONDITION_DENY_FLAG, tenant_id=tenant_id)
+    except FeatureFlagLookupError:
+        # The mode is unknown, and reading it as ``off`` would count a vote
+        # against a step nobody could evaluate. A refused vote never approves
+        # anything, so an unreadable store resolves to ``deny``.
+        logger.error(
+            "approval_unevaluable_condition_mode_lookup_failed",
+            reason_code="flag_store_unreadable",
+            tenant_id=str(tenant_id),
+            effective_mode=UNEVALUABLE_CONDITION_DENY,
+        )
+        return UNEVALUABLE_CONDITION_DENY
+    subject = str(tenant_id)
+    if row_enabled(UNEVALUABLE_CONDITION_DENY_FLAG, rows.global_row, subject_id=subject) or row_enabled(
+        UNEVALUABLE_CONDITION_DENY_FLAG, rows.tenant_row, subject_id=subject
+    ):
+        return UNEVALUABLE_CONDITION_DENY
+    return UNEVALUABLE_CONDITION_OFF
 
 
 async def resolve_policy(
@@ -161,6 +211,23 @@ async def next_step_after(
         if _condition_matches(step.condition, context):
             return step
     return None
+
+
+async def unevaluable_steps(policy: ApprovalPolicy, context: dict[str, Any]) -> list[ApprovalStep]:
+    """Every step of ``policy``, in sequence, whose condition cannot be evaluated for ``context``.
+
+    All steps, not only the next one: a later step that cannot be evaluated
+    decides where the item goes once the current step is satisfied.
+    """
+    async with get_tenant_session(policy.tenant_id) as session:
+        result = await session.execute(
+            select(ApprovalStep)
+            .where(ApprovalStep.policy_id == policy.id)
+            .order_by(ApprovalStep.sequence)
+        )
+        steps = result.scalars().all()
+
+    return [step for step in steps if step.condition and _evaluate_condition(step.condition, context) is None]
 
 
 def apply_decision(
