@@ -142,8 +142,9 @@ class DecisionRequest(BaseModel):
 
     outcome: Literal["approve", "decline"]
     decision_grants: Annotated[list[Annotated[str, Field(min_length=1, max_length=8192)]], Field(max_length=2)] = []
-    #: Record the decision with the grants of this request; the server fetches them from the
-    #: issuer, so a decision grant never reaches the browser.
+    #: Record the decision on this request. The server consumes it at the issuer by its id
+    #: (AGENTICORG_CASE_DECISION_GRANT_RELEASE on) or fetches its grants and presents them (off);
+    #: either way a decision grant never reaches the browser.
     decision_request_id: str | None = Field(default=None, max_length=128, pattern=r"^[A-Za-z0-9_-]{1,128}$")
     #: Advisory only: milliseconds from the case screen rendering to this submission. The
     #: authoritative dwell is the one the approval page measured (``dwell_source: server``).
@@ -648,6 +649,7 @@ async def decide_governed_case(
     try:
         actor = human_actor_for(request)
         grants = list(body.decision_grants)
+        consumed_request_id: str | None = None
         if body.decision_request_id:
             service = _decision_service(runtime)
             async with _session(tenant_id) as session:
@@ -662,14 +664,23 @@ async def decide_governed_case(
                     "case_changed", f"the request was made for version {record.get('case_version')}", status=409
                 )
             try:
-                # The grants stay on the server: a decision grant never reaches the browser.
-                grants = await service.grants(body.decision_request_id)
+                if getattr(service, "consume_by_request_id", False) is True:
+                    # AGENTICORG_CASE_DECISION_GRANT_RELEASE: no grant is asked for or presented.
+                    # Whether they are ready comes from the request's own state; the request is
+                    # consumed by its id below, under the case row lock like presented grants.
+                    view = await service.get_request(body.decision_request_id)
+                    grants, consumed_request_id, ready = [], body.decision_request_id, view.grants_ready
+                else:
+                    # The grants stay on the server: a decision grant never reaches the browser.
+                    grants = await service.grants(body.decision_request_id)
+                    ready = bool(grants)
             except DecisionServiceError as exc:
                 raise CaseError(exc.reason, exc.detail, status=exc.status) from exc
-            if not grants:
+            if not ready:
                 raise CaseError("decision_not_approved", "the decision request has no usable grants yet", status=409)
         result = await decide_case(
             tenant_id, case_ref, runtime=runtime, actor=actor, outcome=body.outcome, grants=grants,
+            decision_request_id=consumed_request_id,
         )  # fmt: skip
         _record_console_dwell("record", body.client_dwell_ms, case_ref)
         if body.decision_request_id:
