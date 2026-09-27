@@ -18,6 +18,7 @@ from connectors.framework.verification_provider import (
 )
 from connectors.providers.mock import FaultKind, MockConfig, MockProvider
 from core.tool_gateway.provider_gateway import (
+    NO_AUTHORIZER_FOR_TESTS,
     READ_TOOLS,
     ProviderToolGateway,
     ToolDecision,
@@ -92,6 +93,7 @@ async def test_missing_authorizer_refuses_before_provider_dispatch() -> None:
         provider=provider,
         agent="test_agent",
         tool_set=frozenset({"resolve_business"}),
+        authorizer=NO_AUTHORIZER_FOR_TESTS,
     )
     with pytest.raises(ToolRefusedError, match="authorization_unavailable"):
         await gateway.resolve_business(BusinessQuery(name="Brightwater"), deadline=Deadline.after(5))
