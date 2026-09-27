@@ -77,15 +77,17 @@ def _migration():
     return module
 
 
-def test_migration_is_the_single_head_after_case_excerpts() -> None:
+def test_migration_follows_case_excerpts_on_the_single_head_chain() -> None:
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
     module = _migration()
     assert module.revision == "v6z29_admin_scope_compat"
     assert module.down_revision == "v6z28_case_excerpts"
-    heads = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini"))).get_heads()
-    assert heads == ["v6z29_admin_scope_compat"]
+    script = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini")))
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert "v6z29_admin_scope_compat" in {rev.revision for rev in script.walk_revisions("base", heads[0])}
 
 
 def test_migration_is_bounded_to_old_colon_sub_scopes_of_admin_owners() -> None:

@@ -52,6 +52,17 @@ python scripts/authority_flags.py list --tenant <tenant id>
 
 Changes reach running processes within 30 seconds (the flag cache TTL).
 
+**Global rows need a privileged database role to write.** `feature_flags` is
+under row-level security. Every role reads the global rows (`tenant_id` NULL)
+alongside its tenant's rows (revision `v6z30_flag_global_read`, from the next
+release; before it, a role subject to row-level security read no global row,
+so set tenant rows there), but no policy lets such a role insert, update or
+delete a global row. Run `set --global` and `clear --global` with
+`AGENTICORG_DB_URL` pointing at a superuser or `BYPASSRLS` role; as any other
+role they exit `2` with a message saying so and change nothing. Tenant rows and
+`list` work with the application's role. To check a role:
+`SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user;`
+
 ### When the flag table cannot be read
 
 The run uses the stricter of the deployment default and the tenant's last mode

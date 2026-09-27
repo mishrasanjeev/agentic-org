@@ -1226,24 +1226,6 @@ Remove an entry in the pull request that fixes it.
   `decision_options` at the boundary, and answer an unknown decision with a
   `422` that says why.
 
-## A-90 — Global authority-flag rows are invisible to a role subject to row-level security
-
-- **Found:** replaying `approvals.unevaluable_condition` on a fully migrated
-  schema as a `NOSUPERUSER NOBYPASSRLS` role (2026-09-27).
-- **What:** `feature_flags` is FORCE ROW LEVEL SECURITY (v6z16) with the one
-  policy `tenant_id::text = current_setting('agenticorg.tenant_id', true)`. A
-  global row has `tenant_id` NULL and never satisfies it, so
-  `core.feature_flags.load_flag_rows_strict` and `_query_flag` read no global
-  row in any tenant session, nor under the nil tenant. For a role subject to
-  row-level security every authority flag's global row is therefore ignored,
-  and `scripts/authority_flags.py set --global` fails the policy's WITH CHECK.
-  The Postgres tests of global rows run as a role that bypasses row-level
-  security, so they pass.
-- **Fix:** a forward migration adding a SELECT policy for `tenant_id IS NULL`
-  rows on `feature_flags` (writes stay with operators on a privileged role),
-  and a Postgres test of global and tenant rows run as a
-  `NOSUPERUSER NOBYPASSRLS` role.
-
 ## A-91 — The approval policy model describes resolution at item creation
 
 - **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
@@ -1464,3 +1446,22 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** give workflows a principal — register the workflow definition (or
   require a stored agent on every step) as a Grantex agent with scopes for its
   connector steps, and resolve the step's grant from it.
+
+## A-105 — Nothing provisions or checks an application database role that row-level security binds
+
+- **Found:** working out which role reads `feature_flags` in a deployment
+  (2026-09-27).
+- **What:** row-level security is a control only for a role that is neither a
+  superuser nor `BYPASSRLS` (ADR 0002, revision `v6z16_rls_coverage`). The one
+  provisioning script, `infra/gcp-setup-lean.sh`, points `AGENTICORG_DB_URL`
+  at the Cloud SQL `postgres` administrator, the same secret the GKE migrate
+  job reads, so the application runs as the migration role that owns every
+  table; the Cloud Run services' role is configured outside the repository.
+  Neither path creates a separate application role, and nothing at startup or
+  in readiness reports whether the running role bypasses row-level security.
+  The CI Postgres service runs every integration test as its superuser, so
+  only the tests that create a probe role exercise the policies.
+- **Fix:** provision separate migration and application roles (the
+  application role `NOSUPERUSER NOBYPASSRLS`, DML only), log the running
+  role's `rolsuper` / `rolbypassrls` at startup, and document the check in the
+  deploy runbook.

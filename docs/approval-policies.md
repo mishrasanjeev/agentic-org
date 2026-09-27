@@ -111,13 +111,17 @@ Tenant admins cannot set, change or delete the flag through `/api/v1/feature-fla
 python scripts/authority_flags.py set approvals.unevaluable_condition.deny --tenant <tenant id> --operator <name>
 python scripts/authority_flags.py clear approvals.unevaluable_condition.deny --tenant <tenant id> --operator <name>
 python scripts/authority_flags.py list --tenant <tenant id>
+python scripts/authority_flags.py set approvals.unevaluable_condition.deny --global --operator <name>
 ```
 
 The mode is `deny` when the global row or the tenant's row enables it, so a disabled tenant row does
-not lift a global `deny`. On a database role subject to row-level security the global row is not
-read at present (an open entry in `FINDINGS.md`): set the tenant row. Changes reach running
-processes within 30 seconds. If the flag table cannot be read the mode is `deny`, and
-`approval_unevaluable_condition_mode_lookup_failed` (`reason_code=flag_store_unreadable`) is logged;
+not lift a global `deny`. `--global` changes need a privileged database role (superuser or
+`BYPASSRLS`); see "Global rows need a privileged database role to write" in
+`docs/operations/grant-enforcement.md`. The application reads the global row on a role subject to
+row-level security from the next release (revision `v6z30_flag_global_read`); before it, set the
+tenant row. Changes reach running processes within 30 seconds. If the flag table cannot be read the
+mode is `deny`, and `approval_unevaluable_condition_mode_lookup_failed`
+(`reason_code=flag_store_unreadable`) is logged;
 only decisions other than a rejection, on items with a condition that cannot be evaluated, are
 refused, so every other decision goes ahead.
 

@@ -187,8 +187,9 @@ gate pauses in a LangGraph checkpoint. Two switches control what happens next:
 tenant feature-flag API refuses it (`403 flag_key_reserved`). A platform
 operator enables it for a tenant with
 `python scripts/authority_flags.py set approvals.resume_agent_runs --tenant <tenant id> --operator <name>`.
-A global row that disables it keeps runs paused for every tenant; otherwise the
-tenant row decides, else the global row.
+A global row that disables it (written with `--global` on a privileged database
+role, see `docs/operations/grant-enforcement.md`) keeps runs paused for every
+tenant; otherwise the tenant row decides, else the global row.
 Resuming across restarts and replicas needs `postgres`.
 
 Operating the Postgres store:

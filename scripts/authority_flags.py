@@ -20,6 +20,12 @@ operator, the command and the row before and after, in the same transaction as
 the change. Connects through the application's tenant session
 (``AGENTICORG_DB_URL``). The process flag cache expires within 30 seconds, so
 running API and worker processes pick the change up without a restart.
+
+``--global`` changes need a privileged database role (a superuser or a role with
+``BYPASSRLS``). ``feature_flags`` is under row-level security: any role may read
+global rows, but no policy lets a role it binds write one, so ``set --global`` and
+``clear --global`` refuse such a role before touching the table. Tenant rows and
+``list`` work with the application's role.
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from core.feature_flags import is_reserved_flag_key
 from core.models.feature_flag import FeatureFlag
@@ -43,6 +49,14 @@ logger = structlog.get_logger()
 # the same context the feature-flag evaluator uses for them.
 GLOBAL_CONTEXT_TENANT = uuid.UUID(int=0)
 AUDIT_EVENT = "feature_flag.authority_changed"
+
+
+async def _role_bypasses_row_security(session: Any) -> bool:
+    """Whether the session's role is a superuser or has ``BYPASSRLS``."""
+    row = (
+        await session.execute(text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"))
+    ).scalar_one_or_none()
+    return row is True
 
 
 def _row_state(row: Any) -> dict[str, Any] | None:
@@ -102,6 +116,18 @@ async def run(args: argparse.Namespace) -> int:
             return 2
 
     async with get_tenant_session(context_tenant) as session:
+        if args.command != "list" and tenant_id is None and not await _role_bypasses_row_security(session):
+            # Refuse up front rather than fail on the policy (``set``) or, worse, delete
+            # nothing and record the clear as applied (``clear``): row-level security
+            # skips a global row in an UPDATE or DELETE instead of raising. A failed role
+            # lookup raises and changes nothing.
+            print(
+                "refusing: --global changes need a privileged database role (superuser or BYPASSRLS); "
+                "the role for AGENTICORG_DB_URL is subject to row-level security on feature_flags, "
+                "which lets it read global rows but not write them",
+                file=sys.stderr,
+            )
+            return 2
         if args.command == "list":
             rows = (await session.execute(select(FeatureFlag).where(scope_clause))).scalars().all()
             for row in sorted(rows, key=lambda r: r.flag_key):
@@ -174,7 +200,13 @@ def build_parser() -> argparse.ArgumentParser:
             cmd.add_argument("--operator", required=True, help="who is making the change (recorded in the audit log)")
         scope = cmd.add_mutually_exclusive_group(required=True)
         scope.add_argument("--tenant", help="tenant uuid")
-        scope.add_argument("--global", dest="global_scope", action="store_true", help="the global row")
+        scope.add_argument(
+            "--global",
+            dest="global_scope",
+            action="store_true",
+            help="the global row"
+            + ("" if name == "list" else " (needs a privileged database role: superuser or BYPASSRLS)"),
+        )
         if name == "set":
             cmd.add_argument("--rollout", type=int, default=100, choices=range(0, 101), metavar="0-100")
             cmd.add_argument("--description", default=None)
