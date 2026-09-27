@@ -145,6 +145,19 @@ class Settings(BaseSettings):
     grantex_audience: str = ""
     # route_meta enforcement (api/route_enforcement.py): "enforce" | "log"
     route_enforcement_mode: str = "enforce"
+    # Route scope checks for the A2A and MCP families (FINDINGS A-68). Off, they
+    # stay unmapped and any authenticated credential reaches POST /a2a/tasks,
+    # GET /a2a/tasks/{id} and POST /mcp/call; on, those routes need a2a:read,
+    # a2a:write or mcp:write (or agenticorg:admin) like every mapped family.
+    # Env: AGENTICORG_ROUTE_SCOPE_A2A_MCP.
+    route_scope_a2a_mcp: bool = False
+    # Authenticated routes reached with an auth_mode the auth middleware does
+    # not set (FINDINGS A-95). Off, such a request is logged as
+    # route_enforcement_unknown_auth_mode and then checked on whatever scopes
+    # it carries, agenticorg:admin included, as before; on, it gets 403 before
+    # any scope is read, in enforce and log mode alike.
+    # Env: AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE.
+    route_refuse_unknown_auth_mode: bool = False
     # Governed business cases (core/cases, flag governed_cases.enabled per tenant).
     # Verification provider new cases use, by registered name.
     case_provider: str = "mock"

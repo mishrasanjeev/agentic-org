@@ -903,9 +903,21 @@ Remove an entry in the pull request that fixes it.
   only against per-company roles). A-43 covers A2A and MCP; this is the wider
   gap. Not caused by H-1, which made agent tokens subject to the mapped
   families only.
+- **Update (2026-09-27):** the `a2a` and `mcp` families are now mapped
+  (`a2a:read` / `a2a:write`, `mcp:read` / `mcp:write`, with `mcp:call` as an
+  alias) but enforced only when `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`, which
+  defaults off; while it is off they stay unmapped as described above, and a
+  domain-role session can also run an agent type outside its domains through
+  them, since neither route checks the caller's domains. No role holds their
+  scopes. Every other family listed here is still unmapped. Separately, an
+  authenticated route reached with an unknown `auth_mode` is now logged, and
+  refused whatever its family when `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`
+  is on (A-95).
 - **Fix:** map every authenticated family to a read and a write scope, or
   refuse by default a family with no mapping, and add each to the unit test
-  that pins the unmapped set.
+  that pins the unmapped set. Turn `AGENTICORG_ROUTE_SCOPE_A2A_MCP` on in each
+  deployment once its A2A integrations hold `a2a:write` (see
+  `docs/operations/grant-enforcement.md`), then make it the default.
 
 ## A-70 — The tools and API images resolve dependency ranges, not pins
 
@@ -1175,6 +1187,62 @@ Remove an entry in the pull request that fixes it.
   or the variable is set), or document the variable in the README next to the
   migrate step.
 
+## A-86 — WebSocket routes fail on the app-wide route enforcement dependency
+
+- **Found:** fixing the route scope residual of H-1 (2026-09-27).
+- **What:** `api/main.py` registers `api.route_enforcement.enforce_route_metadata`
+  as an app-wide dependency, and it takes `request: Request`. FastAPI (0.139)
+  passes no `Request` to a WebSocket route's dependencies, so a connection to
+  `api.main.app` fails with `TypeError: enforce_route_metadata() missing 1
+  required positional argument: 'request'` before the handler runs, for
+  `/api/v1/ws/feed/{tenant_id}` and `/api/v1/ws/bridge/{bridge_id}` alike
+  (reproduced with the test client, with and without a token). The WebSocket
+  tests mount the routers on a bare `FastAPI()` without the dependency, so
+  they pass. Deployed behaviour was not checked.
+- **Fix:** have the dependency take `HTTPConnection` and leave WebSocket routes
+  to the authentication their handlers already do, then add a test that
+  connects through `api.main.app`. Do not run `_check_scope` on them as it
+  stands: the auth middleware does not run for WebSockets, so the connection
+  has no `auth_mode` or scopes and would be refused as an unknown mode with
+  `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` on, or judged on no scopes with
+  it off.
+
+## A-87 — The alert gate probe test rewrites tracked files in the working tree
+
+- **Found:** running `tests/unit` on a Windows checkout (2026-09-27).
+- **What:** `tests/unit/observability/test_probes.py` runs
+  `scripts/probe_alert_gate.py`, which mutates the repository's own
+  `monitoring/prometheus/agenticorg-alerts.yml` and
+  `infra/terraform/monitoring/alerts.tf` in place and restores them with
+  `newline="\n"`. On a checkout with CRLF line endings (A-62) both files are
+  left rewritten with LF after every unit run, so `git status` shows them
+  modified, and a run interrupted between mutation and restore leaves a broken
+  alert rule in the working tree.
+- **Fix:** have the probe (or its test) work on copies under `tmp_path`, or
+  restore the exact original bytes (`read_bytes` / `write_bytes`).
+
+## A-88 — An exempt auth prefix reaches into an authenticated route
+
+- **Found:** pinning the route table against the auth middleware's exemptions
+  for the route scope residual of H-1 (2026-09-27).
+- **What:** `GrantexAuthMiddleware.EXEMPT_PREFIXES` holds
+  `/api/v1/aa/consent/callback` as a prefix with no trailing slash, so every
+  request path that begins with it skips the middleware. The authenticated
+  route `GET /api/v1/aa/consent/{consent_handle}/status` falls under it when
+  the handle begins with `callback` (for example
+  `/api/v1/aa/consent/callback-0/status`): the credential is never read. With
+  `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` on, such a request is refused
+  with `403 Unrecognised authentication mode; request refused` before the
+  handler runs; with it off (the default) it is logged as an unknown mode and
+  `get_current_tenant` answers `401`, as before. Either way nothing is
+  exposed, but a valid caller with such a handle is refused too. Handles come
+  from the account aggregator's response, or are a UUID when it returns none.
+- **Fix:** exempt the callback as an exact path (`EXEMPT_PATHS`; the provider
+  callback is the single route `POST /aa/consent/callback`) once the path the
+  aggregator posts to is confirmed, and remove the pair from
+  `KNOWN_EXEMPT_OVERLAPS` in
+  `tests/regression/test_route_scope_unknown_mode_20260927.py`.
+
 ## A-89 — Defer ends an approval without a policy and fails under one
 
 - **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
@@ -1277,3 +1345,31 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** list the tenants whose agents link `sanctions_api`, move them to
   `sanctions_screening` with a provider package, then delete the module, its
   registration and the grant alias.
+
+## A-95 — An unrecognised authentication mode is refused only when `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` is on
+
+- **Found:** review of the route scope residual of H-1 (2026-09-27). The
+  refusal was first written to apply by default, which the feature flag rule
+  in `AGENTS.md` does not allow for a change on an existing path.
+- **What:** the auth middleware sets `auth_mode` to `api_key`, `grantex` or
+  `legacy` once it has verified a credential. `_check_scope` in
+  `api/route_enforcement.py` logs `route_enforcement_unknown_auth_mode` for an
+  authenticated route reached with any other mode, or none, but refuses it
+  only while `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` is on, and the
+  setting defaults off. While it is off, a request whose mode was not set by a
+  verified credential is judged on whatever scopes it carries, as before:
+  `agenticorg:admin` among them passes every route, a route in an unmapped
+  family (A-68) needs no scope, and `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`
+  lets a missing scope through. The mounted middleware sets scopes only
+  together with a known mode, so today such a request carries no scopes (it
+  arrives through an exemption, A-88) and the route's own dependencies refuse
+  it. The exposure is any later code that sets `request.state.scopes` without
+  a known mode, as the unmounted `auth.middleware.AuthMiddleware` does, or a
+  new exemption that reaches an authenticated route.
+- **Fix:** owned by the code owners of `api/route_enforcement.py` and
+  `auth/grantex_middleware.py` (`.github/CODEOWNERS`). The warning is logged
+  with the setting off too: watch staging for
+  `route_enforcement_unknown_auth_mode`, and once it shows none, make `true`
+  the default in a release that records the flip in `CHANGELOG.md` as a
+  breaking change with `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE=false` as the
+  explicit opt-out, then remove this entry.
