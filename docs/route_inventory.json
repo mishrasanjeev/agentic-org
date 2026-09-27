@@ -4046,7 +4046,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "webhooks.email.inbox.read",
-    "source_line": 637,
+    "source_line": 633,
     "tenant_required": true
   },
   {
@@ -6710,7 +6710,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "webhooks.discovery.read",
-    "source_line": 617,
+    "source_line": 613,
     "tenant_required": false
   },
   {
@@ -6764,7 +6764,7 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.mailchimp",
-    "source_line": 769,
+    "source_line": 765,
     "tenant_required": false
   },
   {
@@ -6782,7 +6782,7 @@
     "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.mailchimp",
-    "source_line": 809,
+    "source_line": 805,
     "tenant_required": true
   },
   {
@@ -6800,7 +6800,7 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.moengage",
-    "source_line": 851,
+    "source_line": 847,
     "tenant_required": false
   },
   {
@@ -6818,7 +6818,7 @@
     "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.moengage",
-    "source_line": 893,
+    "source_line": 889,
     "tenant_required": true
   },
   {
@@ -6836,7 +6836,7 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.sendgrid",
-    "source_line": 668,
+    "source_line": 664,
     "tenant_required": false
   },
   {
@@ -6854,7 +6854,7 @@
     "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.sendgrid",
-    "source_line": 716,
+    "source_line": 712,
     "tenant_required": true
   },
   {
