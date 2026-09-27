@@ -1172,3 +1172,24 @@ Remove an entry in the pull request that fixes it.
   `KNOWN_EXEMPT_OVERLAPS` in
   `tests/regression/test_route_scope_unknown_mode_20260927.py`.
 
+## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+
+- **Found:** running `scripts/seed_governed_cases.py` end to end against a
+  migrated local database after `scripts/seed_dev.py` (2026-09-27).
+- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
+  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
+  exactly one active, shared `business_underwriter` and `screening_disposition`
+  agent in the tenant, registered with Grantex, with a `case_purposes` list and
+  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
+  `scripts/seed_dev.py` nor the development stack creates those agents or
+  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
+  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
+  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
+  `awaiting_decision` with proposed dispositions. The case runtime's default
+  authorizer was already `case_authorizer`, so this predates the seed passing
+  it explicitly.
+- **Fix:** have the development seed create and register the two shared role
+  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
+  Grantex service and provision a development root grant for them, then rerun
+  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
+  for development.

@@ -28,7 +28,9 @@ disposition = outcome.disposition  # schema: screening_disposition, review is nu
 
 The empty tenant ID is a placeholder. A real run needs a tenant UUID, one active shared
 `screening_disposition` registration, an allowed case purpose and a valid delegated grant;
-otherwise the provider call is refused.
+otherwise the provider call is refused. `DispositionDependencies.authorizer` is required, and
+outside local and test runtimes it cannot be `None`: construction raises `AuthorizerRequiredError`
+(see [the underwriter's grants](business-underwriter.md#grants)).
 
 ## What a run does
 
