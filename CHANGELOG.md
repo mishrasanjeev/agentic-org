@@ -13,6 +13,40 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the runner's speed nor a change to the service's timeout can fail it. It
   still checks that every socket is delivered to and that no more than 32
   sends run at once.
+### Added - approval decisions can be refused when a policy condition cannot be evaluated
+- A new operator-managed authority flag, `approvals.unevaluable_condition`
+  (default `off`; decisions behave as before), decides what happens when a
+  step of an item's approval policy has a condition that cannot be evaluated
+  for the item. `off` keeps the current rule: the step applies and the vote
+  counts. `deny` (an enabled `approvals.unevaluable_condition.deny` row,
+  global or for the tenant) refuses every decision on the item that could
+  move it forward - an approval, a `defer` or any other value - with `409`
+  and `detail.reason_code` `approval_condition_unevaluable`, listing the steps
+  in `detail.unevaluable_steps`. A rejection is still taken: it closes the
+  item at the step it has reached and approves nothing. Every step of the
+  policy is checked before any vote counts, so a later step that cannot be
+  evaluated cannot route the item either.
+- The refusal is committed before the `409` is returned: the item's
+  `context.policy_state` records `last_action: "refused"`, the reason and the
+  steps, and the audit log gets a `hitl.decision_refused` event (outcome
+  `denied`). The refused vote is not counted, does not make its caller the
+  decider and does not bind the item to the policy, so once the policy is
+  recreated with a condition that evaluates (or the flag is cleared) the same
+  reviewer can decide. The next decision recorded on the item removes the
+  refusal keys from `policy_state`, so a decided item never reads as refused;
+  the audit event stays.
+- The check runs at decision time, the only place a policy is applied to an
+  item: items are raised without consulting a policy, and a policy can be
+  created or edited while they wait.
+- The key is reserved (`403 flag_key_reserved` through the tenant
+  feature-flag API); operators set it with `scripts/authority_flags.py`. An
+  unreadable flag table resolves to `deny` and logs
+  `approval_unevaluable_condition_mode_lookup_failed`; only decisions other
+  than a rejection, on items with a condition that cannot be evaluated, are
+  refused, and a rejection never reads the flag. A global row is not read by a
+  database role subject to row-level security (an open entry in
+  `FINDINGS.md`), so set the tenant row. See "When a condition cannot be
+  evaluated" in `docs/approval-policies.md`.
 ### Added - a runbook for rotating the credential-vault key
 - `docs/runbooks/vault-key-rotation.md` rotates the vault key with the tools in
   the repository: add the new key to `AGENTICORG_VAULT_KEYRING` as a

@@ -54,6 +54,13 @@ _ROLE_HIERARCHY: dict[str, int] = {
 }
 
 
+# What a decision refused under ``approvals.unevaluable_condition`` leaves in
+# the item's ``context.policy_state``. A later decision that is recorded
+# removes them, so a decided item never reads as refused.
+_REFUSED = "refused"
+_REFUSAL_MARKERS = ("last_action", "last_reason", "unevaluable_steps")
+
+
 def _role_level(role: str) -> int:
     return _ROLE_HIERARCHY.get((role or "").lower(), 0)
 
@@ -486,13 +493,6 @@ async def decide(
             )
             raise HTTPException(403, f"Cannot decide on this approval: {reason}")
 
-        # Apply decision with full attribution
-        if user_uuid is not None:
-            item.decision_by = user_uuid
-        else:
-            # Non-UUID sub claim — store None but log
-            _log.warning("hitl_decide_non_uuid_user", user_id=user_id_str)
-
         # ── Multi-step approval policy resolution ──────────────────────
         #
         # If there's an ApprovalPolicy attached to this agent or workflow,
@@ -508,10 +508,14 @@ async def decide(
         #     "approvals": [{"user_id": ..., "decision": ..., "at": ...}, ...]
         #   }
         from core.approvals import (
+            REASON_CONDITION_UNEVALUABLE,
+            UNEVALUABLE_CONDITION_DENY,
             apply_decision,
             first_applicable_step,
             next_step_after,
             resolve_policy,
+            unevaluable_condition_mode,
+            unevaluable_steps,
         )
 
         ctx = dict(item.context or {})
@@ -548,6 +552,98 @@ async def decide(
                 409,
                 "The approval policy for this item changed while it was in progress",
             )
+
+        # Flag approvals.unevaluable_condition (default off). In deny mode, when
+        # a step of the policy has a condition that cannot be evaluated for
+        # this item, the policy cannot say which steps, and so which
+        # approvers, the item needs. A rejection is still taken: it closes the
+        # item at the step it has reached and approves nothing. Every other
+        # decision is refused - an approval, and a defer or any other value,
+        # which the policy engine has no rule for and which, where no policy
+        # applies, ends the item as decided and resumes its run. A rejection
+        # skips the flag read, so an unreadable flag store never blocks one.
+        # Checked before a step is chosen or a vote counted, because a
+        # decision is the only place a policy is applied to an item - items
+        # are raised without one, and a policy can be added or edited while
+        # they wait. Off keeps the rule that such a step applies.
+        if (
+            policy is not None
+            and body.decision != "reject"
+            and await unevaluable_condition_mode(tid) == UNEVALUABLE_CONDITION_DENY
+        ):
+            unevaluable = [step.sequence for step in await unevaluable_steps(policy, ctx)]
+            if unevaluable:
+                # Not added to ``approvals`` (the reviewer can vote once the
+                # condition is corrected), and no ``policy_id`` is added, so
+                # an item that had not entered the policy stays unbound.
+                policy_state = {
+                    **policy_state,
+                    "last_action": _REFUSED,
+                    "last_reason": REASON_CONDITION_UNEVALUABLE,
+                    "unevaluable_steps": unevaluable,
+                }
+                ctx["policy_state"] = policy_state
+                item.context = ctx
+                session.add(
+                    AuditLog(
+                        tenant_id=tid,
+                        event_type="hitl.decision_refused",
+                        actor_type="user",
+                        actor_id=user_id_str,
+                        agent_id=item.agent_id,
+                        action=body.decision or "decide",
+                        outcome="denied",
+                        resource_type="hitl_item",
+                        resource_id=str(hitl_id),
+                        details={
+                            "reason_code": REASON_CONDITION_UNEVALUABLE,
+                            "decision": body.decision,
+                            "policy_id": str(policy.id),
+                            "unevaluable_steps": unevaluable,
+                            "user_role": user_role,
+                            "assignee_role": item.assignee_role,
+                            "delegated_from": delegated_from,
+                        },
+                    )
+                )
+                _log.warning(
+                    "hitl_decide_refused",
+                    hitl_id=str(hitl_id),
+                    reason_code=REASON_CONDITION_UNEVALUABLE,
+                    policy_id=str(policy.id),
+                    unevaluable_steps=unevaluable,
+                    decision=body.decision,
+                )
+                # Commit the refusal first: raising inside the tenant
+                # session rolls back everything written in it.
+                await session.commit()
+                raise HTTPException(
+                    409,
+                    detail={
+                        "error": "approval_decision_refused",
+                        "reason_code": REASON_CONDITION_UNEVALUABLE,
+                        "message": (
+                            "A step of this item's approval policy has a condition that cannot be "
+                            "evaluated for it, so this decision is not counted and the item stays "
+                            "pending. It can still be rejected; to approve it, correct the step's "
+                            "condition, then decide again."
+                        ),
+                        "unevaluable_steps": unevaluable,
+                    },
+                )
+
+        # Past the refusal check. An earlier refused attempt no longer
+        # describes the item once this decision is recorded, on every path
+        # below - including no policy, or no step that applies, where
+        # policy_state is not rebuilt. An error below rolls this back with
+        # the rest of the decision.
+        if policy_state.get("last_action") == _REFUSED:
+            policy_state = {key: value for key, value in policy_state.items() if key not in _REFUSAL_MARKERS}
+            if policy_state:
+                ctx["policy_state"] = policy_state
+            else:
+                ctx.pop("policy_state", None)
+            item.context = ctx
 
         if policy is not None:
             # Hydrate the engine's view of the current step
@@ -638,6 +734,14 @@ async def decide(
 
             ctx["policy_state"] = policy_state
             item.context = ctx
+
+        # Apply decision with full attribution. Set only once the vote counts,
+        # so a refused decision above never records its caller as the decider.
+        if user_uuid is not None:
+            item.decision_by = user_uuid
+        else:
+            # Non-UUID sub claim — store None but log
+            _log.warning("hitl_decide_non_uuid_user", user_id=user_id_str)
 
         if policy_action == "collect":
             # Quorum not met yet OR moved to next step — persist the

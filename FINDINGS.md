@@ -480,7 +480,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
 
-
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
 - **Found:** binding caller tokens on every run route (PRD F-1b review,
@@ -1108,6 +1107,28 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+
+- **Found:** running `scripts/seed_governed_cases.py` end to end against a
+  migrated local database after `scripts/seed_dev.py` (2026-09-27).
+- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
+  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
+  exactly one active, shared `business_underwriter` and `screening_disposition`
+  agent in the tenant, registered with Grantex, with a `case_purposes` list and
+  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
+  `scripts/seed_dev.py` nor the development stack creates those agents or
+  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
+  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
+  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
+  `awaiting_decision` with proposed dispositions. The case runtime's default
+  authorizer was already `case_authorizer`, so this predates the seed passing
+  it explicitly.
+- **Fix:** have the development seed create and register the two shared role
+  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
+  Grantex service and provision a development root grant for them, then rerun
+  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
+  for development.
+
 ## A-82 — Key rotation tooling does not see vault ciphertext outside five columns
 
 - **Found:** rehearsing the vault key rotation runbook against a local database
@@ -1184,24 +1205,54 @@ Remove an entry in the pull request that fixes it.
   or the variable is set), or document the variable in the README next to the
   migrate step.
 
-## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+## A-89 — Defer ends an approval without a policy and fails under one
 
-- **Found:** running `scripts/seed_governed_cases.py` end to end against a
-  migrated local database after `scripts/seed_dev.py` (2026-09-27).
-- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
-  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
-  exactly one active, shared `business_underwriter` and `screening_disposition`
-  agent in the tenant, registered with Grantex, with a `case_purposes` list and
-  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
-  `scripts/seed_dev.py` nor the development stack creates those agents or
-  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
-  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
-  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
-  `awaiting_decision` with proposed dispositions. The case runtime's default
-  authorizer was already `case_authorizer`, so this predates the seed passing
-  it explicitly.
-- **Fix:** have the development seed create and register the two shared role
-  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
-  Grantex service and provision a development root grant for them, then rerun
-  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
-  for development.
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the approval card offers Approve, Reject and Defer
+  (`ui/src/components/ApprovalCard.tsx`), and `HITLDecision.decision` accepts
+  any string. On an item with no policy, `POST /approvals/{id}/decide` with
+  `defer` takes the legacy path: the item is marked `decided` with decision
+  `defer`, and a workflow item's run is resumed with that decision, so
+  deferring ends the approval. Under a policy, `apply_decision` raises
+  `ValueError("Unknown decision 'defer'")`, which the global handler returns
+  as a generic `400 Invalid request`. With `approvals.unevaluable_condition`
+  in `deny` mode, a defer (or any value other than `reject`) on an item whose
+  policy has a condition that cannot be evaluated gets that flag's `409`
+  instead, as an approval does, because where no policy applies it ends the
+  item.
+- **Fix:** decide what defer means (leave the item pending and record the
+  deferral, or drop the button), validate `decision` against the item's
+  `decision_options` at the boundary, and answer an unknown decision with a
+  `422` that says why.
+
+## A-90 — Global authority-flag rows are invisible to a role subject to row-level security
+
+- **Found:** replaying `approvals.unevaluable_condition` on a fully migrated
+  schema as a `NOSUPERUSER NOBYPASSRLS` role (2026-09-27).
+- **What:** `feature_flags` is FORCE ROW LEVEL SECURITY (v6z16) with the one
+  policy `tenant_id::text = current_setting('agenticorg.tenant_id', true)`. A
+  global row has `tenant_id` NULL and never satisfies it, so
+  `core.feature_flags.load_flag_rows_strict` and `_query_flag` read no global
+  row in any tenant session, nor under the nil tenant. For a role subject to
+  row-level security every authority flag's global row is therefore ignored,
+  and `scripts/authority_flags.py set --global` fails the policy's WITH CHECK.
+  The Postgres tests of global rows run as a role that bypasses row-level
+  security, so they pass.
+- **Fix:** a forward migration adding a SELECT policy for `tenant_id IS NULL`
+  rows on `feature_flags` (writes stay with operators on a privileged role),
+  and a Postgres test of global and tenant rows run as a
+  `NOSUPERUSER NOBYPASSRLS` role.
+
+## A-91 — The approval policy model describes resolution at item creation
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the docstring of `core/models/approval_policy.py` says a policy is
+  resolved when an approval item is created, setting the item's assignee role,
+  quorum and step index, and points to `docs/adr/0005-approval-policies.md`,
+  which does not exist. Nothing resolves a policy at creation:
+  `api/v1/approvals.py::decide` resolves it on the first decision and keeps the
+  item's progress in `context.policy_state`. The docstring invites a
+  creation-time check, which would miss policies created or edited while an
+  item waits.
+- **Fix:** describe decision-time resolution in the docstring and point it at
+  `docs/approval-policies.md`.
