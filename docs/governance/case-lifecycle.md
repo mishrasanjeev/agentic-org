@@ -56,7 +56,13 @@ tools; other providers need their own manifest in `GRANTEX_MANIFESTS_DIR`.
 Provider calls in governed cases always use strict grant checking, even when general
 `grants.enforce_closed` is `off` or `warn`. A denied call is recorded in the case's
 tool-call record and the investigation fails with `tool_refused:<reason>`; no provider
-request is sent. The current published Python SDK checks the grant signature, connector,
+request is sent. No agent run starts without its grant check. Outside local and test
+runtimes a case runtime cannot be built without an authorizer factory (construction raises
+`AuthorizerRequiredError`). If the factory supplies none - or a local or test runtime was
+built without one - the investigation or the screening dispositions are refused with
+`authorization_unavailable` before the case moves or a provider is built (a failed
+`case_agent` step in a workflow, and the error log `governed_case_authorizer_missing`).
+The current published Python SDK checks the grant signature, connector,
 tool and permission. AgenticOrg checks the stored case purpose against the selected
 role's local `case_purposes`; the SDK does **not** yet enforce token-level purpose or per-case caps,
 and the pooled token is not bound to a single case. Do not treat these as active

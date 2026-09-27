@@ -103,6 +103,16 @@ else. The run's grant check plugs in as `UnderwriterDependencies.authorizer`: a 
 authorizer that errors - stops the run before the provider is called, with
 `failure_reason = "tool_refused:<reason>"` and no memo.
 
+The authorizer is a required field of `UnderwriterDependencies` and of the gateway, so it cannot be
+left out by omission. Outside local and test runtimes (`AGENTICORG_ENV` other than `local`, `dev`,
+`development`, `test` or `ci`) neither can be built with `authorizer=None`: construction raises
+`AuthorizerRequiredError`. Where `None` is accepted - only tests pass it, as
+`NO_AUTHORIZER_FOR_TESTS` - the gateway refuses every call with `authorization_unavailable` before
+the provider is reached. `CaseRuntime`, which supplies each run's authorizer, is held to the same
+rule: outside local and test runtimes it cannot be built with `authorizer_factory=None`, and a
+runtime that cannot supply an authorizer refuses the run with `authorization_unavailable` before the
+case moves.
+
 ## Requests for more information
 
 `information_request.py` turns a memo that recommends `request_information` into a proposal naming
