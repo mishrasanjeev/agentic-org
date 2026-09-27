@@ -1175,6 +1175,58 @@ Remove an entry in the pull request that fixes it.
   or the variable is set), or document the variable in the README next to the
   migrate step.
 
+## A-89 — Defer ends an approval without a policy and fails under one
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the approval card offers Approve, Reject and Defer
+  (`ui/src/components/ApprovalCard.tsx`), and `HITLDecision.decision` accepts
+  any string. On an item with no policy, `POST /approvals/{id}/decide` with
+  `defer` takes the legacy path: the item is marked `decided` with decision
+  `defer`, and a workflow item's run is resumed with that decision, so
+  deferring ends the approval. Under a policy, `apply_decision` raises
+  `ValueError("Unknown decision 'defer'")`, which the global handler returns
+  as a generic `400 Invalid request`. With `approvals.unevaluable_condition`
+  in `deny` mode, a defer (or any value other than `reject`) on an item whose
+  policy has a condition that cannot be evaluated gets that flag's `409`
+  instead, as an approval does, because where no policy applies it ends the
+  item.
+- **Fix:** decide what defer means (leave the item pending and record the
+  deferral, or drop the button), validate `decision` against the item's
+  `decision_options` at the boundary, and answer an unknown decision with a
+  `422` that says why.
+
+## A-90 — Global authority-flag rows are invisible to a role subject to row-level security
+
+- **Found:** replaying `approvals.unevaluable_condition` on a fully migrated
+  schema as a `NOSUPERUSER NOBYPASSRLS` role (2026-09-27).
+- **What:** `feature_flags` is FORCE ROW LEVEL SECURITY (v6z16) with the one
+  policy `tenant_id::text = current_setting('agenticorg.tenant_id', true)`. A
+  global row has `tenant_id` NULL and never satisfies it, so
+  `core.feature_flags.load_flag_rows_strict` and `_query_flag` read no global
+  row in any tenant session, nor under the nil tenant. For a role subject to
+  row-level security every authority flag's global row is therefore ignored,
+  and `scripts/authority_flags.py set --global` fails the policy's WITH CHECK.
+  The Postgres tests of global rows run as a role that bypasses row-level
+  security, so they pass.
+- **Fix:** a forward migration adding a SELECT policy for `tenant_id IS NULL`
+  rows on `feature_flags` (writes stay with operators on a privileged role),
+  and a Postgres test of global and tenant rows run as a
+  `NOSUPERUSER NOBYPASSRLS` role.
+
+## A-91 — The approval policy model describes resolution at item creation
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the docstring of `core/models/approval_policy.py` says a policy is
+  resolved when an approval item is created, setting the item's assignee role,
+  quorum and step index, and points to `docs/adr/0005-approval-policies.md`,
+  which does not exist. Nothing resolves a policy at creation:
+  `api/v1/approvals.py::decide` resolves it on the first decision and keeps the
+  item's progress in `context.policy_state`. The docstring invites a
+  creation-time check, which would miss policies created or edited while an
+  item waits.
+- **Fix:** describe decision-time resolution in the docstring and point it at
+  `docs/approval-policies.md`.
+
 ## A-92 — A connector that screens through a provider cannot pass the activation gate
 
 - **Found:** review of the sanctions screening connector (2026-09-27).

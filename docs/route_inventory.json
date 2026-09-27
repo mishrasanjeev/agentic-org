@@ -950,7 +950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.sensitive.list",
-    "source_line": 147,
+    "source_line": 154,
     "tenant_required": true
   },
   {
@@ -968,7 +968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "approvals.decide",
-    "source_line": 357,
+    "source_line": 364,
     "tenant_required": true
   },
   {
