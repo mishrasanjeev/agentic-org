@@ -462,6 +462,8 @@ Real-time tracking via SendGrid, Mailchimp, and MoEngage webhooks:
 
 All events are stored and linked to the drip sequence, updating lead scores and triggering next steps automatically.
 
+Each tenant also has its own URL for each provider, which binds events to the tenant without relying on tags in the email. A tenant administrator reads them from `GET /api/v1/email-webhook-inbox` and sets them in the provider's webhook settings; see [Email webhooks: per-tenant URLs](RUNBOOKS.md#email-webhooks-per-tenant-urls).
+
 ---
 
 ## ABM with Intent Data

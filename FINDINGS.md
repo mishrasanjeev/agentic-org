@@ -1346,6 +1346,73 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** pass the `decisions`, `e2e` and `tools` profiles to `down` in both
   targets.
 
+## A-98 — Email webhook signatures are verified with one key per provider
+
+- **Found:** binding email webhooks to the tenant by URL (2026-09-27).
+- **What:** `api/v1/webhooks.py` verifies every SendGrid, Mailchimp and
+  MoEngage delivery with one deployment-wide key (`SENDGRID_WEBHOOK_KEY`,
+  `MAILCHIMP_WEBHOOK_KEY`, `MOENGAGE_WEBHOOK_KEY`), on the shared and the
+  per-tenant URLs alike. A tenant whose provider account (or webhook) signs
+  with its own key cannot be verified at all, so the per-tenant URLs only
+  work when every tenant's webhook signs with the deployment's key, and any
+  holder of that key can sign for any tenant whose path it knows.
+- **Fix:** store a verification key per tenant and provider, encrypted like
+  connector credentials, verify the per-tenant route with the tenant's key,
+  and keep the deployment key only for the shared URLs while they exist.
+
+## A-99 — The console and `GET /webhooks` list only the shared email webhook URLs
+
+- **Found:** binding email webhooks to the tenant by URL (2026-09-27).
+- **What:** the Webhooks card in `ui/src/pages/Settings.tsx` lists
+  `/api/v1/webhooks/email/{sendgrid,mailchimp,moengage}` and says to use "the
+  signing secret issued from Settings → API Keys". The signing keys come from
+  the deployment's environment, not from API keys, and the tenant's own URLs
+  (`GET /api/v1/email-webhook-inbox`) are not shown, so an administrator has
+  to call the API to find them. The discovery route `GET /api/v1/webhooks`
+  (`list_webhook_endpoints` in `api/v1/webhooks.py`) returns the same three
+  shared paths and mentions neither the per-tenant paths nor the inbox route.
+  With `AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS` on, both point a provider at
+  URLs that answer 409 to tenant-tagged events.
+- **Fix:** for an administrator, show the tenant's per-tenant URLs from
+  `GET /api/v1/email-webhook-inbox` (as credentials: masked, copy on demand)
+  and describe where the provider's signing key is configured. Add the
+  per-tenant path pattern and the inbox route to `GET /api/v1/webhooks`.
+
+## A-100 — `wait_for_event` can take its tenant from the trigger payload
+
+- **Found:** binding email webhooks to the tenant by URL (2026-09-27).
+- **What:** `workflows/step_types.py` `_execute_wait_for_event` registers the
+  wait with `state["tenant_id"]`, or, when the run has none,
+  `trigger_payload["tenant_id"]` / `["agenticorg:tenant_id"]`. The API start
+  path always sets the run's tenant, so this only applies to runs started
+  without one, but it is the same pattern as the webhook defect: a tenant
+  chosen by the payload decides whose events can resume the step.
+- **Fix:** register the wait only under the run's own tenant, and refuse to
+  register one (fail the step) when the run has no tenant.
+
+## A-101 — Email event history in Redis is not keyed by tenant
+
+- **Found:** binding email webhooks to the tenant by URL (2026-09-27).
+- **What:** `api/v1/webhooks.py` `_store_email_event` writes every event to
+  the Redis hash `email_events:{campaign_id}:{email}`. Two tenants with the
+  same campaign id and recipient address write into one hash, each
+  overwriting the other's `tenant_id` and timestamps. Nothing in this
+  repository reads the hash.
+- **Fix:** key the hash by tenant (`email_events:{tenant_id}:...`) with a TTL,
+  or remove the write if nothing is going to read it.
+
+## A-102 — Email webhook handlers log recipient e-mail addresses
+
+- **Found:** review of the per-tenant email webhook URLs (2026-09-27).
+- **What:** `api/v1/webhooks.py` logs the recipient's e-mail address in
+  `mailchimp_webhook_processed` and `moengage_webhook_processed` (shared
+  URLs), and `_store_email_event` logs it in `workflow_event_match` and
+  `email_event_redis_store_failed` on every URL. DSAR erasure
+  (`audit/dsar.py`) does not reach application logs, so each processed event
+  leaves a direct identifier there.
+- **Fix:** log the event and campaign ids, or a keyed hash of the address,
+  instead of the address itself.
+
 ## A-103 — The onboarding workflow's decision step presents grants nobody can hold
 
 - **Found:** consuming governed-case decisions by request id ahead of the
