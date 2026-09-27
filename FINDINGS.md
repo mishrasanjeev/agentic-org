@@ -1108,3 +1108,58 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-89 — Defer ends an approval without a policy and fails under one
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the approval card offers Approve, Reject and Defer
+  (`ui/src/components/ApprovalCard.tsx`), and `HITLDecision.decision` accepts
+  any string. On an item with no policy, `POST /approvals/{id}/decide` with
+  `defer` takes the legacy path: the item is marked `decided` with decision
+  `defer`, and a workflow item's run is resumed with that decision, so
+  deferring ends the approval. Under a policy, `apply_decision` raises
+  `ValueError("Unknown decision 'defer'")`, which the global handler returns
+  as a generic `400 Invalid request`. With `approvals.unevaluable_condition`
+  in `deny` mode, a defer (or any value other than `reject`) on an item whose
+  policy has a condition that cannot be evaluated gets that flag's `409`
+  instead, as an approval does, because where no policy applies it ends the
+  item.
+- **Fix:** decide what defer means (leave the item pending and record the
+  deferral, or drop the button), validate `decision` against the item's
+  `decision_options` at the boundary, and answer an unknown decision with a
+  `422` that says why.
+
+## A-90 — Global authority-flag rows are invisible to a role subject to row-level security
+
+- **Found:** replaying `approvals.unevaluable_condition` on a fully migrated
+  schema as a `NOSUPERUSER NOBYPASSRLS` role (2026-09-27).
+- **What:** `feature_flags` is FORCE ROW LEVEL SECURITY (v6z16) with the one
+  policy `tenant_id::text = current_setting('agenticorg.tenant_id', true)`. A
+  global row has `tenant_id` NULL and never satisfies it, so
+  `core.feature_flags.load_flag_rows_strict` and `_query_flag` read no global
+  row in any tenant session, nor under the nil tenant. For such a role every
+  authority flag's global row is ignored - a global
+  `grants.enforce_closed.deny`, `pseudonymisation.pre_model`,
+  `approvals.resume_agent_runs` or `approvals.unevaluable_condition.deny` has
+  no effect - and `scripts/authority_flags.py set --global` fails the policy's
+  WITH CHECK. CI and the development stack connect as a superuser, so the
+  Postgres tests of global rows (`tests/integration/test_authority_flags_postgres.py`)
+  pass; production is RLS-bound (the 2026-09-14 login incident,
+  `tests/regression/test_login_seed_rls_20260914.py`).
+- **Fix:** a forward migration adding a SELECT policy for `tenant_id IS NULL`
+  rows on `feature_flags` (writes stay with operators on a privileged role),
+  and a Postgres test of global and tenant rows run as a
+  `NOSUPERUSER NOBYPASSRLS` role.
+
+## A-91 — The approval policy model describes resolution at item creation
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the docstring of `core/models/approval_policy.py` says a policy is
+  resolved when an approval item is created, setting the item's assignee role,
+  quorum and step index, and points to `docs/adr/0005-approval-policies.md`,
+  which does not exist. Nothing resolves a policy at creation:
+  `api/v1/approvals.py::decide` resolves it on the first decision and keeps the
+  item's progress in `context.policy_state`. The docstring invites a
+  creation-time check, which would miss policies created or edited while an
+  item waits.
+- **Fix:** describe decision-time resolution in the docstring and point it at
+  `docs/approval-policies.md`.

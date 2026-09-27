@@ -19,7 +19,9 @@ decided only when no step remains. A rejection at any step rejects the item.
   not carry, compares a non-number with `<`, `>`, `<=` or `>=`, uses a list that does not parse,
   has a malformed operand (`status ==`, `status === ok`, an unterminated quote, an unquoted value
   with spaces), or is not in the grammar. The step applies and a warning is logged
-  (`approval_policy_condition_unevaluable`).
+  (`approval_policy_condition_unevaluable`). An operator can have such items refuse every decision
+  except a rejection instead, with a reason the reviewer sees - see
+  [When a condition cannot be evaluated](#when-a-condition-cannot-be-evaluated).
 - **A policy that changes mid-approval stops the item.** An item part-way through a policy stays
   bound to it. If that policy is deleted, another policy now resolves for the item, or the step it
   is waiting on no longer exists, decisions on the item get `409` and it stays pending for an
@@ -44,6 +46,80 @@ unable to finish:
   flight, or expect to re-raise the affected items.
 - **Check conditions against real items.** A condition naming a field the item does not carry now
   requires its step instead of skipping it.
+
+## When a condition cannot be evaluated
+
+By default a step whose condition cannot be evaluated for an item applies, and the vote counts
+toward its quorum; only the server log says the condition was unknown. The operator-managed authority
+flag `approvals.unevaluable_condition` can refuse the decision instead:
+
+| Mode | Flag rows | A decision on an item whose policy has a step that cannot be evaluated for it |
+|---|---|---|
+| `off` (default) | none enabled | The step applies and the vote is counted, as above. |
+| `deny` | `approvals.unevaluable_condition.deny` enabled | A rejection is taken as usual. Any other decision is refused with `409` and a reason code, and nothing is counted. |
+
+In `deny` mode:
+
+- **Every step is checked before any vote counts,** not only the step the item is waiting on: a
+  later step that cannot be evaluated decides where the item goes once the current step is
+  satisfied. A policy whose conditions all evaluate for the item is unaffected.
+- **A rejection is taken; every other decision is refused.** The policy cannot say which steps, and
+  so which approvers, the item needs, so nothing that could move the item forward is counted: an
+  approval, a `defer` (which ends an item as decided wherever no policy applies, and which the
+  policy engine has no rule for) or any other value. A rejection closes the item at the step it has
+  reached and approves nothing, so it is recorded as usual: the vote joins the item's approvals and
+  the item is `rejected`. A rejection does not read the flag, so an unreadable flag table never
+  blocks one. Nothing waiting on the item proceeds while it is pending.
+- **The caller gets the reason.** The response is `409` with the sequences of the steps that could
+  not be evaluated:
+
+  ```json
+  {
+    "detail": {
+      "error": "approval_decision_refused",
+      "reason_code": "approval_condition_unevaluable",
+      "message": "A step of this item's approval policy has a condition that cannot be evaluated for it, so this decision is not counted and the item stays pending. It can still be rejected; to approve it, correct the step's condition, then decide again.",
+      "unevaluable_steps": [2]
+    }
+  }
+  ```
+
+- **The refusal is recorded although the request fails.** It is committed before the `409` is
+  returned: the item's `context.policy_state` gets `last_action: "refused"`,
+  `last_reason: "approval_condition_unevaluable"` and `unevaluable_steps`, and the audit log gets a
+  `hitl.decision_refused` event (outcome `denied`) with the policy id, the step sequences and the
+  decision that was attempted. The server logs `hitl_decide_refused`. The next decision recorded on
+  the item - a rejection, or an approval once its conditions evaluate or the flag is cleared -
+  removes those three keys, so a decided item never reads as refused; the audit event stays.
+- **A refused vote is not a vote.** It is not added to the item's approvals, the caller is not
+  recorded as the decider, and an item that had not entered the policy stays unbound. Policies are
+  corrected by deleting and recreating them, so such an item can be decided - by the same reviewer
+  too - once the recreated policy's conditions evaluate for it, or once the flag is cleared. An item
+  already part-way through the policy can still be rejected, or approved once the flag is cleared;
+  recreating the policy strands it (see above).
+
+The check runs when a decision is made, not when the item is raised. Agent runs, chat and workflows
+raise approval items without consulting a policy; the policy is resolved and its conditions
+evaluated only when someone decides, and a policy can be created or edited while an item waits. A
+check at creation would miss both, and the decision is where an unknown condition would otherwise
+route the item.
+
+Tenant admins cannot set, change or delete the flag through `/api/v1/feature-flags`
+(`403 flag_key_reserved`). Platform operators manage it:
+
+```
+python scripts/authority_flags.py set approvals.unevaluable_condition.deny --tenant <tenant id> --operator <name>
+python scripts/authority_flags.py clear approvals.unevaluable_condition.deny --tenant <tenant id> --operator <name>
+python scripts/authority_flags.py list --tenant <tenant id>
+```
+
+The mode is `deny` when the global row or the tenant's row enables it, so a disabled tenant row does
+not lift a global `deny`. On a database role subject to row-level security the global row is not
+read at present (an open entry in `FINDINGS.md`): set the tenant row. Changes reach running
+processes within 30 seconds. If the flag table cannot be read the mode is `deny`, and
+`approval_unevaluable_condition_mode_lookup_failed` (`reason_code=flag_store_unreadable`) is logged;
+only decisions other than a rejection, on items with a condition that cannot be evaluated, are
+refused, so every other decision goes ahead.
 
 ## Conditions
 
