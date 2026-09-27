@@ -17,6 +17,7 @@ Full DR procedures live in `docs/BACKUP_AND_DR.md`.
 9. [Agent runs paused for approval: checkpoint store and resume](#agent-runs-paused-for-approval-checkpoint-store-and-resume)
 10. [Governed case push: dead letters and replay](#governed-case-push-dead-letters-and-replay)
 11. [Provider webhooks: verification failures and replays](#provider-webhooks-verification-failures-and-replays)
+12. [Email webhooks: per-tenant URLs](#email-webhooks-per-tenant-urls)
 
 ---
 
@@ -397,3 +398,107 @@ are lost (they are not queued anywhere), so do this for **every** tenant that ha
 Rotating `AGENTICORG_SECRET_KEY` changes every tenant's path, so it means repeating steps 3-5 for
 every tenant; schedule it with that in mind.
 
+---
+
+## Email webhooks: per-tenant URLs
+
+SendGrid, Mailchimp and MoEngage post email events (open, click, bounce, ...) that resume
+`wait_for_event` workflow steps (`api/v1/webhooks.py`). Each provider signs with one key for the
+whole deployment (`SENDGRID_WEBHOOK_KEY`, `MAILCHIMP_WEBHOOK_KEY`, `MOENGAGE_WEBHOOK_KEY`), so a
+valid signature proves which provider sent an event, not which tenant it belongs to.
+
+| URL | The tenant comes from | An event whose payload names a tenant |
+|---|---|---|
+| `POST /api/v1/webhooks/email/{provider}` (shared) | the payload: SendGrid `tenant:<id>` categories, `custom_args.tenant_id` and `tenant_id`; Mailchimp `tenant_id` and `data[tenant_id]`; MoEngage `tenant_id`; `agenticorg:tenant_id` is read too | setting off: resumes that tenant's waits, as before. Setting on: the whole delivery is refused with 409 and nothing is stored |
+| `POST /api/v1/webhooks/email/{provider}/{tenant_id}/{path_token}` (per tenant) | the path token | must name this tenant. An event that names another tenant, or a value that is not a tenant id, is refused: not stored, resumes no wait in either tenant, and counted in the response's `refused` |
+
+The setting is `AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS` (default off). The per-tenant URLs work
+with it on or off, so tenants can move before it is switched on. An event that names no tenant is
+processed on the shared URL as before, with the setting on or off; it can only resume a wait
+registered without a tenant, which a per-tenant URL never resumes.
+
+The two refusals answer differently on purpose. On the shared URL the fault is the URL, so the
+delivery fails (409) and shows in the provider's delivery log, and a provider that retries failed
+deliveries will redeliver it. On a tenant's URL the fault is one event: redelivering it cannot
+change the answer, and one event with a foreign tenant tag must not hold back the rest of a SendGrid
+batch, so the delivery answers 200 with `"refused": <count>`.
+
+**The per-tenant URL.** The path token is an HMAC of the tenant and provider under
+`AGENTICORG_SECRET_KEY` (the construction the governed-case provider inbox uses, under its own
+label). The API's access log writes `[redacted]` in place of the token for these URLs and for the
+governed-case provider inbox, so the log never holds a usable path. An active human administrator
+of the tenant reads the tenant's paths from
+`GET /api/v1/email-webhook-inbox` (an API key or agent token with the admin scope is refused):
+
+```json
+{"inboxes": [
+  {"provider": "sendgrid", "path": "/api/v1/webhooks/email/sendgrid/<tenant>/<token>"},
+  {"provider": "mailchimp", "path": "/api/v1/webhooks/email/mailchimp/<tenant>/<token>"},
+  {"provider": "moengage", "path": "/api/v1/webhooks/email/moengage/<tenant>/<token>"}
+]}
+```
+
+Treat a path like a credential: it is what binds a delivery to the tenant. A wrong token, a token for
+another tenant or provider, or a malformed tenant id answers 404 before the body is read; the
+provider signature is then verified exactly as on the shared URL (403 when it does not verify).
+
+**Configuring each provider.** The URL is `https://<API host><path>`:
+
+- **SendGrid:** set the Event Webhook's HTTP POST URL to the `sendgrid` path, with the signed Event
+  Webhook on. Deliveries are verified with `SENDGRID_WEBHOOK_KEY`, so the webhook must sign with the
+  key configured there. Tenant tags are optional: a `tenant:<id>` category or `tenant_id` custom arg
+  naming this tenant is accepted, any other value is refused.
+- **Mailchimp (Transactional):** set the webhook URL to the `mailchimp` path. The signature covers the
+  exact URL, so the URL configured at Mailchimp must be the one the API receives (same scheme and
+  host), and the webhook must sign with `MAILCHIMP_WEBHOOK_KEY`. If creating a webhook would issue a
+  new key, change the URL of the existing webhook instead.
+- **MoEngage:** set the callback URL to the `moengage` path; deliveries carry an HMAC-SHA256 of the
+  body under `MOENGAGE_WEBHOOK_KEY` in `X-MoEngage-Signature`.
+
+**Only a webhook that signs with the deployment's key can move.** Until verification keys are stored
+per tenant (known limitation "Email webhook signatures are verified with one key per provider" in
+`FINDINGS.md`), a per-tenant URL is verified with the same deployment key as the shared URL.
+SendGrid and Mailchimp generate a signing key for each webhook, so for each of them only one webhook
+in the deployment, the one whose key is configured, can move; a delivery from any other webhook to
+its per-tenant URL answers 403 and is not processed. Leave those tenants on the shared URL. While
+any of them sends tenant-tagged events, `shared_path_tenant_named` does not go flat and the setting
+stays off (step 5 below).
+
+**Detect:** `agenticorg_email_webhook_tenant_binding_total{provider, outcome}`:
+`shared_path_tenant_named` counts shared-URL events that name a tenant while the setting is off
+(what switching it on would refuse); `shared_path_refused` counts them once it is on (a provider
+still posts tenant-tagged events to the shared URL, and its delivery log shows 409s);
+`tenant_mismatch` counts events refused on a tenant's URL (the URL is configured in another tenant's
+provider account, or one provider account posts every tenant's events to each URL); `unbound`
+counts deliveries to a wrong or stale path (usually after `AGENTICORG_SECRET_KEY` was rotated);
+`bound` counts events accepted on per-tenant URLs.
+
+**Diagnose:** the logs `email_webhook_shared_path_tenant_event_refused` (provider, event count),
+`email_webhook_tenant_mismatch_refused` (provider, the tenant the path binds) and
+`email_webhook_not_bound` (provider). These three events log no payload values.
+
+**Mitigate:** switching the setting off and restarting the API restores the shared URLs (the
+setting is read when the process starts). A delivery refused with 409 shortly before is processed
+when the provider redelivers it (check each provider's retry window); a wait is claimed once, so a
+redelivered event never resumes a step twice.
+
+### Moving tenants to per-tenant email webhook URLs (one-off)
+
+1. **Deploy with the setting off.** Nothing changes on the shared URLs; the per-tenant URLs are live.
+2. **Read each tenant's paths.** For every tenant whose workflows wait for email events, an active
+   human administrator of the tenant calls `GET /api/v1/email-webhook-inbox`.
+3. **Configure the providers** with the tenant's URLs, as above, for each webhook that signs with the
+   deployment's key. Do not send a path over an unencrypted channel or paste it into a ticket.
+4. **Confirm** within a day: the provider's delivery log shows 2xx for the new URL,
+   `outcome="bound"` rises for the provider while `tenant_mismatch` and `unbound` stay flat, and the
+   tenant's waits resume:
+   `SELECT status, count(*) FROM workflow_event_waits WHERE tenant_id = :t AND updated_at > now() -
+   interval '1 day' GROUP BY status;` shows `matched` rows.
+5. **Switch the setting on** (`AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS=1`, then restart the API) only
+   once `outcome="shared_path_tenant_named"` has been flat for at least a full day of normal sending
+   for every provider.
+6. **Watch** `outcome="shared_path_refused"` for a day. Any increase is a provider still posting to
+   the shared URL: move it (step 3), or switch the setting off and restart the API while you do.
+
+Rotating `AGENTICORG_SECRET_KEY` changes every per-tenant URL, so it means repeating steps 2-4 for
+every tenant; until a provider is moved, its deliveries answer 404 and count as `unbound`.

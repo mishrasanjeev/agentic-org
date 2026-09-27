@@ -1311,6 +1311,34 @@ POST /api/v1/webhooks/email/moengage
 ```
 Receives MoEngage engagement events (email open, click, push delivered).
 
+### Per-tenant email webhook URLs
+```
+POST /api/v1/webhooks/email/{provider}/{tenant_id}/{path_token}
+GET  /api/v1/email-webhook-inbox
+```
+The three URLs above are shared by every tenant and take the tenant from the payload (a SendGrid
+`tenant:<id>` category or `tenant_id` custom arg, a Mailchimp or MoEngage `tenant_id` field). Each
+tenant also has its own URL per provider (`sendgrid`, `mailchimp`, `moengage`), whose path token
+binds the tenant; the provider signature is verified as on the shared URL. On a tenant's URL an event
+whose payload names a different tenant is refused - not stored, resumes no workflow wait - and
+counted in the response:
+
+```json
+{"status": "ok", "processed": 3, "refused": 1}
+```
+
+(Mailchimp and MoEngage answer their usual body plus `"refused": 0` or `1`.) A wrong path answers
+`404`, a signature that does not verify `403`.
+
+`GET /api/v1/email-webhook-inbox` returns the calling tenant's three paths
+(`{"inboxes": [{"provider": "sendgrid", "path": "..."}, ...]}`) to an active human tenant
+administrator; an API key or agent token is refused with `403`.
+
+With `AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS=1` the shared URLs answer `409` to any delivery with an
+event that names a tenant, and store nothing from it; events that name no tenant are processed as
+before. Off (the default) they behave as before. Moving providers to the per-tenant URLs:
+[Email webhooks: per-tenant URLs](RUNBOOKS.md#email-webhooks-per-tenant-urls).
+
 ---
 
 ## Push Notifications (Tier 1)

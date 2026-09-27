@@ -4032,6 +4032,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "webhooks.email.inbox.read",
+    "auth_required": true,
+    "function": "get_email_webhook_inbox",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/email-webhook-inbox api/v1/webhooks.py:get_email_webhook_inbox",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/email-webhook-inbox",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "webhooks.email.inbox.read",
+    "source_line": 633,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-public-evals-read",
     "auth_required": false,
     "function": "get_evals",
@@ -6692,7 +6710,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "webhooks.discovery.read",
-    "source_line": 402,
+    "source_line": 613,
     "tenant_required": false
   },
   {
@@ -6746,8 +6764,26 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.mailchimp",
-    "source_line": 499,
+    "source_line": 765,
     "tenant_required": false
+  },
+  {
+    "audit_event": "webhooks.email.mailchimp.received",
+    "auth_required": false,
+    "function": "mailchimp_tenant_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/mailchimp/{tenant_id}/{path_token} api/v1/webhooks.py:mailchimp_tenant_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/mailchimp/{tenant_id}/{path_token}",
+    "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.mailchimp",
+    "source_line": 805,
+    "tenant_required": true
   },
   {
     "audit_event": "webhooks.email.moengage.received",
@@ -6764,8 +6800,26 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.moengage",
-    "source_line": 564,
+    "source_line": 847,
     "tenant_required": false
+  },
+  {
+    "audit_event": "webhooks.email.moengage.received",
+    "auth_required": false,
+    "function": "moengage_tenant_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/moengage/{tenant_id}/{path_token} api/v1/webhooks.py:moengage_tenant_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/moengage/{tenant_id}/{path_token}",
+    "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.moengage",
+    "source_line": 889,
+    "tenant_required": true
   },
   {
     "audit_event": "webhooks.email.sendgrid.received",
@@ -6782,8 +6836,26 @@
     "public_exempt_reason": "provider-hmac-signature-required",
     "rate_limit": "provider-webhook",
     "scope": "public:webhooks.email.sendgrid",
-    "source_line": 423,
+    "source_line": 664,
     "tenant_required": false
+  },
+  {
+    "audit_event": "webhooks.email.sendgrid.received",
+    "auth_required": false,
+    "function": "sendgrid_tenant_webhook",
+    "idempotency": "provider-delivery-event-hash",
+    "key": "POST /api/v1/webhooks/email/sendgrid/{tenant_id}/{path_token} api/v1/webhooks.py:sendgrid_tenant_webhook",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/webhooks.py",
+    "path": "/api/v1/webhooks/email/sendgrid/{tenant_id}/{path_token}",
+    "public_exempt_reason": "per-tenant-path-token-plus-provider-signature-required",
+    "rate_limit": "provider-webhook",
+    "scope": "public:webhooks.email.sendgrid",
+    "source_line": 712,
+    "tenant_required": true
   },
   {
     "audit_event": "providers.webhook_received",
