@@ -13,8 +13,9 @@ Every provider call a reference agent makes goes through :class:`ProviderToolGat
    and the upstream record identifiers the response cites - for the case record and evidence
    package, and counts it in low-cardinality metrics (provider latency and outcome by capability).
 
-Grant enforcement (PRD F-1) plugs in as the authorizer. A missing authorizer
-refuses calls rather than dispatching without a grant check.
+Grant enforcement (PRD F-1) plugs in as the authorizer, which is required: outside local and
+test runtimes a gateway without one cannot be built (:func:`require_authorizer`), and a gateway
+without one refuses every call rather than dispatching without a grant check.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Final, Protocol
 
 import structlog
 from prometheus_client import Counter, Histogram
@@ -53,6 +54,7 @@ from connectors.framework.verification_provider import (
     WebPresence,
     call_capability,
 )
+from core.config import is_strict_runtime_env, settings
 
 logger = structlog.get_logger()
 
@@ -69,6 +71,13 @@ READ_TOOLS: Mapping[str, Capability] = {
 
 TOOL_NOT_IN_TOOL_SET = "tool_not_in_agent_tool_set"
 AUTHORIZATION_UNAVAILABLE = "authorization_unavailable"
+
+# The gateway, ``UnderwriterDependencies`` and ``DispositionDependencies`` take ``authorizer`` as a
+# required field so the grant check can never be left out by omission. Tests that prove the gateway
+# refuses every call without one pass this named sentinel; it is refused when built outside local
+# and test runtimes, and production code never passes it or ``authorizer=None`` (a test in
+# tests/regression/test_case_authorizer_required_20260927.py scans for both).
+NO_AUTHORIZER_FOR_TESTS: Final[None] = None
 
 _provider_calls_total = Counter(
     "agenticorg_provider_calls_total",
@@ -109,6 +118,24 @@ class ToolRefusedError(RuntimeError):
 
 class ToolSetError(ValueError):
     """An agent was configured with a tool that is not a read tool."""
+
+
+class AuthorizerRequiredError(ValueError):
+    """A case agent's provider access was built without the run's grant check in a strict runtime."""
+
+
+def require_authorizer(authorizer: ToolAuthorizer | None, owner: str) -> None:
+    """Refuse to build ``owner`` without a grant check anywhere but a local or test runtime.
+
+    The gateway refuses every call it has no authorizer for, so nothing would reach a provider
+    either way; refusing here makes the wiring mistake fail where it is made instead of on a
+    tenant's first case. An unknown runtime label counts as strict.
+    """
+    if authorizer is None and is_strict_runtime_env(settings.env):
+        raise AuthorizerRequiredError(
+            f"{owner}: a governed case agent's provider calls need the run's grant check "
+            f"(authorizer); None is accepted only in local and test runtimes, not env={settings.env!r}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -276,7 +303,9 @@ class ProviderToolGateway:
     provider: VerificationProvider
     agent: str
     tool_set: frozenset[str]
-    authorizer: ToolAuthorizer | None = None
+    #: The run's grant check. Required; ``None`` (``NO_AUTHORIZER_FOR_TESTS``) is refused outside
+    #: local and test runtimes, and refuses every call where it is accepted.
+    authorizer: ToolAuthorizer | None
     clock: Callable[[], datetime] = _utc_now
     records: list[ToolCallRecord] = field(default_factory=list)
     #: ``(provider, record_id, field)`` of every evidence entry in every response received.
@@ -289,6 +318,7 @@ class ProviderToolGateway:
         if unknown:
             raise ToolSetError(f"{self.agent}: tools {unknown} are not read tools; a case agent cannot hold them")
         self.tool_set = frozenset(self.tool_set)
+        require_authorizer(self.authorizer, self.agent)
 
     @property
     def connector(self) -> str:
@@ -321,6 +351,8 @@ class ProviderToolGateway:
         capability = READ_TOOLS[tool]
 
         if self.authorizer is None:
+            # No grant check: built so in a local or test runtime, or cleared after it was built.
+            # Refuse, exactly as for an authorizer that cannot answer.
             decision = ToolDecision(allowed=False, reason=AUTHORIZATION_UNAVAILABLE)
         else:
             try:
@@ -406,8 +438,10 @@ class ProviderToolGateway:
 
 __all__ = [
     "AUTHORIZATION_UNAVAILABLE",
+    "NO_AUTHORIZER_FOR_TESTS",
     "READ_TOOLS",
     "TOOL_NOT_IN_TOOL_SET",
+    "AuthorizerRequiredError",
     "ProviderToolGateway",
     "ToolAuthorizer",
     "ToolCallRecord",
@@ -419,4 +453,5 @@ __all__ = [
     "CapturedExcerpt",
     "captured_excerpts",
     "cited_record_ids",
+    "require_authorizer",
 ]

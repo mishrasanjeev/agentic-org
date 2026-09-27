@@ -9,7 +9,7 @@ from typing import Any
 
 import structlog
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant
 from auth.scopes import check_scope
 from core.config import is_strict_runtime_env, settings
@@ -206,9 +206,11 @@ class ToolGateway:
 
             grantex = get_grantex_client()
             # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
-            # synchronous HTTPS fetch; run it off the event loop.
+            # synchronous HTTPS fetch; run it off the event loop. A grant held
+            # under another id of a deprecated connector and its replacement counts too.
             result = await asyncio.to_thread(
-                grantex.enforce,
+                enforce_connector_grant,
+                grantex,
                 grant_token=effective_token,
                 connector=connector_name,
                 tool=tool_name,

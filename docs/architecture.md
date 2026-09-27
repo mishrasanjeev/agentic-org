@@ -689,8 +689,8 @@ The workflow ensures no filing is submitted to GSTN without explicit partner app
 
 ### Credential Vault
 
-- **Encryption**: Fernet symmetric encryption (AES-128-CBC with HMAC-SHA256 authentication)
-- **Key management**: `encryption_key_ref` field supports key rotation -- new credentials use the latest key version, old credentials decrypt with their stored key ref
+- **Encryption**: under a KMS key, envelope encryption: a fresh AES-256-GCM data key per password, wrapped by the KMS key and stored with it (prefix `env1:`). Without one, Fernet symmetric encryption (AES-128-CBC with HMAC-SHA256 authentication) under the credential-vault keyring
+- **Key management**: the password is sealed with a KMS key, the tenant's own (`tenants.byok_kek_resource`) or else the platform KEK (`AGENTICORG_PLATFORM_KEK`) when it is set; with neither, with the credential-vault keyring (`AGENTICORG_VAULT_KEYRING`). If the tenant's key cannot be looked up, sealing fails rather than falling back to the platform KEK. Vault ciphertext carries the id of the key that sealed it and opens under any key still in the keyring; the `encryption_key_ref` column is not read. Vault key rotation follows [vault key rotation](runbooks/vault-key-rotation.md)
 - **API safety**: `GET /credentials` never returns the `password` or `encrypted_password` fields
 - **Verification**: `POST /credentials/{cid}/verify` tests decryption and optionally validates against the GSTN portal
 - **Deactivation**: `DELETE` soft-deactivates (sets `is_active=false`) -- records retained for audit

@@ -48,7 +48,10 @@ Every provider call a reference agent makes passes through the provider tool gat
 2. The role's exact local purpose allowlist and run grant are checked before the call, strictly
    even when general `grants.enforce_closed` is `off` or `warn`. A refusal, or a check that cannot answer,
    stops the run before the provider is reached: the case goes to `failed` with
-   `tool_refused:<reason>` (for example `tool_refused:grant_missing`).
+   `tool_refused:<reason>` (for example `tool_refused:grant_missing`). The check cannot be left
+   out: outside local and test runtimes the gateway, each agent's dependencies and the case runtime
+   (its authorizer factory) refuse to be built without it, and a case runtime that cannot supply one
+   refuses the run with `authorization_unavailable` before the case moves.
 3. A capability the provider does not offer is `not_available`, not an error: the memo section says
    so and the missing-items list asks for it.
 

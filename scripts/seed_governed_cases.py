@@ -112,13 +112,15 @@ async def enable_flag(session: Any, tenant_id: uuid.UUID) -> None:
 
 
 async def seed_cases(keys: Sequence[str], *, runtime: Any = None, llm_model: str = SAMPLE_AGENT_MODEL) -> dict[str, Any]:
+    from core.cases.grant_authorizer import case_authorizer  # noqa: PLC0415
     from core.cases.runtime import CaseRuntime, default_policy_id, dispose_screening_hits, investigate_case  # noqa: PLC0415
     from core.cases.states import CaseError  # noqa: PLC0415
     from core.cases.store import create_case  # noqa: PLC0415
     from core.config import settings  # noqa: PLC0415
 
     applications = load_applications(keys)
-    runtime = runtime or CaseRuntime(llm_model=llm_model)
+    # The grant check is passed explicitly, as the API does, rather than left to the runtime's default.
+    runtime = runtime or CaseRuntime(llm_model=llm_model, authorizer_factory=case_authorizer)
     tenant_id = seed_id("tenant")
     async with runtime.session_factory(tenant_id) as session:
         await enable_flag(session, tenant_id)

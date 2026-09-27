@@ -25,10 +25,17 @@ missing or malformed, or an extra text file is unreadable or not UTF-8. Exit 1 m
 
     python scripts/check_denylist.py scan --base origin/main --head HEAD
     python scripts/check_denylist.py audit
+    python scripts/check_denylist.py audit connectors docs
     python scripts/check_denylist.py build --terms-file /path/outside/the/repo/terms.txt
 
-``audit`` applies the same matching to every tracked file, to locate mentions
-that predate the check.
+``audit`` applies the same matching to every tracked file, or to the tracked
+files under the paths it is given, to locate mentions that predate the check.
+Paths that match no tracked file fail closed.
+
+``scan`` and ``audit`` also warn about house terminology (``HOUSE_TERMS``: a
+kill switch is an operator override, white-label is issuer-branded, and so on).
+Those words are not secret, so they are listed and printed in plain text, and a
+warning never changes the exit code.
 
 ``build`` rewrites the hash file from a plaintext list kept outside the
 repository (one term per line, ``#`` comments allowed). It refuses a terms file
@@ -46,7 +53,7 @@ import subprocess
 import sys
 import unicodedata
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 FORMAT_VERSION = "1"
@@ -188,6 +195,50 @@ def load_text(text: str, path: str = "<hash file>") -> Denylist:
     return Denylist(salt=bytes.fromhex(salt_hex), max_tokens=max_tokens, hashes=frozenset(hashes))
 
 
+# ── House terminology (warnings) ────────────────────────────────────────────
+
+# Each house term: a pattern over a line's word tokens joined by single spaces
+# (the tokens the denylist hashes, so ``kill_switch``, ``KillSwitch`` and
+# ``kill-switch`` all read ``kill switch``) and the term to use instead.
+# ``directory`` (for the registry), ``consumer`` (for a relying party) and
+# ``name`` / ``version`` (for ``software_name`` / ``software_version``) have too
+# many ordinary meanings to flag and are reviewed by hand.
+HOUSE_TERMS: tuple[tuple[str, str], ...] = (
+    (r"kill ?switch(?:es)?", "operator override"),
+    (r"white ?label(?:s|l?ed|l?ing)?", "issuer-branded"),
+    (r"anomal(?:y|ies|ous|ously)", "irregularity"),
+    (r"trust ?providers?", "accredited issuer"),
+    (r"verification ?partners?", "accredited issuer"),
+    (r"verification ?results?", "attestation"),
+)
+_HOUSE_TERM_RES = tuple(
+    (re.compile(rf"(?<![a-z0-9]){pattern}(?![a-z0-9])"), preferred) for pattern, preferred in HOUSE_TERMS
+)
+# Every house term contains one of these, so a line with none of them skips tokenising.
+_HOUSE_TERM_STEMS = ("kill", "label", "anomal", "trust", "verification")
+
+
+@dataclass(frozen=True)
+class TermMatch:
+    position: int
+    found: str
+    preferred: str
+
+
+def house_terms(text: str) -> list[TermMatch]:
+    """House terms in ``text``, with the token position where each starts and the term to use."""
+    lowered = text.lower()
+    if not any(stem in lowered for stem in _HOUSE_TERM_STEMS):
+        return []
+    joined = " ".join(tokens(text))
+    matches = [
+        TermMatch(joined.count(" ", 0, match.start()), match.group(), preferred)
+        for pattern, preferred in _HOUSE_TERM_RES
+        for match in pattern.finditer(joined)
+    ]
+    return sorted(matches, key=lambda match: match.position)
+
+
 # ── Git inputs ──────────────────────────────────────────────────────────────
 
 
@@ -214,6 +265,25 @@ def _resolve(repo: Path, ref: str) -> str:
 class Finding:
     where: str
     position: int
+
+
+@dataclass(frozen=True)
+class TermWarning:
+    where: str
+    match: TermMatch
+
+
+@dataclass
+class Report:
+    """Denylisted terms (they fail the check) and house terms (warnings only) found by a scan or audit."""
+
+    denylist: Denylist
+    findings: list[Finding] = field(default_factory=list)
+    warnings: list[TermWarning] = field(default_factory=list)
+
+    def check(self, where: str, text: str) -> None:
+        self.findings.extend(Finding(where, position) for position in self.denylist.matches(text))
+        self.warnings.extend(TermWarning(where, match) for match in house_terms(text))
 
 
 def added_lines(repo: Path, base: str, head: str) -> Iterator[tuple[str, int, str]]:
@@ -275,13 +345,11 @@ def scan(
     *,
     branch: str | None,
     text_files: Iterable[Path] = (),
-) -> list[Finding]:
+) -> Report:
     base_sha = _resolve(repo, base)
     head_sha = _resolve(repo, head)
-    findings: list[Finding] = []
-
-    def check(where: str, text: str) -> None:
-        findings.extend(Finding(where, position) for position in denylist.matches(text))
+    report = Report(denylist)
+    check = report.check
 
     for path in changed_paths(repo, base_sha, head_sha):
         check(f"file path {path}", path)
@@ -299,16 +367,19 @@ def scan(
             raise DenylistError(f"cannot read {text_file}: {exc}") from exc
         for offset, line in enumerate(content.splitlines(), start=1):
             check(f"{text_file.name} line {offset}", line)
-    return findings
+    return report
 
 
-def audit(denylist: Denylist, repo: Path) -> list[Finding]:
-    """Check every tracked path and text file at the working tree, not just a change."""
-    findings: list[Finding] = []
-    for name in _git(repo, "ls-files", "-z").split("\0"):
-        if not name:
-            continue
-        findings.extend(Finding(f"file path {name}", position) for position in denylist.matches(name))
+def audit(denylist: Denylist, repo: Path, paths: Iterable[str] = ()) -> Report:
+    """Check every tracked path and text file at the working tree (or those under ``paths``), not just a change."""
+    paths = list(paths)
+    names = [name for name in _git(repo, "ls-files", "-z", "--", *paths).split("\0") if name]
+    if paths and not names:
+        # A mistyped path would otherwise audit nothing and pass.
+        raise DenylistError(f"no tracked file under {' '.join(paths)}")
+    report = Report(denylist)
+    for name in names:
+        report.check(f"file path {name}", name)
         try:
             data = (repo / name).read_bytes()
         except OSError:
@@ -316,8 +387,8 @@ def audit(denylist: Denylist, repo: Path) -> list[Finding]:
         if b"\0" in data:
             continue  # binary
         for line_no, line in enumerate(data.decode("utf-8", "replace").splitlines(), start=1):
-            findings.extend(Finding(f"{name}:{line_no}", position) for position in denylist.matches(line))
-    return findings
+            report.check(f"{name}:{line_no}", line)
+    return report
 
 
 # ── Building the hash file ──────────────────────────────────────────────────
@@ -391,7 +462,8 @@ def main(argv: list[str] | None = None) -> int:
     scan_p.add_argument("--branch", default=None, help="branch name to check (default: the checked-out branch)")
     scan_p.add_argument("--text-file", type=Path, action="append", default=[], help="extra text to check")
 
-    sub.add_parser("audit", help="check every tracked file, e.g. to find existing mentions")
+    audit_p = sub.add_parser("audit", help="check every tracked file, e.g. to find existing mentions")
+    audit_p.add_argument("paths", nargs="*", help="check only the tracked files under these paths")
 
     build_p = sub.add_parser("build", help="regenerate the hash file from a plaintext terms file")
     build_p.add_argument("--terms-file", type=Path, required=True)
@@ -408,18 +480,23 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         denylist = load(hash_file)
         if args.command == "audit":
-            findings = audit(denylist, repo)
+            report = audit(denylist, repo, args.paths)
         else:
-            findings = scan(denylist, repo, args.base, args.head, branch=args.branch, text_files=args.text_file)
+            report = scan(denylist, repo, args.base, args.head, branch=args.branch, text_files=args.text_file)
     except DenylistError as exc:
         print(f"check_denylist: {exc}", file=sys.stderr)
         return 2
 
-    if findings:
+    if report.warnings:
+        print("House terminology (warnings; they do not change the result):")
+        for warning in report.warnings:
+            match = warning.match
+            print(f'  {warning.where} (word {match.position + 1}): "{match.found}" -> {match.preferred}')
+    if report.findings:
         subject = "the tracked files" if args.command == "audit" else "this change"
         print(f"A denylisted vendor name appears in {subject}. Use a provider-neutral name instead")
         print("(the mock provider is `mock`; documentation and examples use `acme_kyb`):")
-        for finding in findings:
+        for finding in report.findings:
             print(f"  {finding.where} (word {finding.position + 1})")
         return 1
     print(f"check_denylist: no denylisted terms ({len(denylist.hashes)} terms checked)")

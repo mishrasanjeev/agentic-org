@@ -66,16 +66,23 @@ from connectors.ops import confluence as _  # noqa: F401, F811
 from connectors.ops import jira as _  # noqa: F401, F811
 from connectors.ops import mca_portal as _  # noqa: F401, F811
 from connectors.ops import pagerduty as _  # noqa: F401, F811
-from connectors.ops import sanctions_api as _  # noqa: F401, F811
+from connectors.ops import sanctions_api as _  # noqa: F401, F811 - deprecated, see _auto_register
+from connectors.ops import sanctions_screening as _  # noqa: F401, F811
 from connectors.ops import servicenow as _  # noqa: F401, F811
 from connectors.ops import zendesk as _  # noqa: F401, F811
 from connectors.registry import ConnectorRegistry
 
 
 def _auto_register() -> None:
-    """Register all loaded BaseConnector subclasses with the ConnectorRegistry."""
+    """Register all loaded BaseConnector subclasses with the ConnectorRegistry.
+
+    A deprecated connector (``sanctions_api``) names its ``replacement``: it is registered as a
+    deprecated id, which resolves by name but stays out of the catalog and the product counts.
+    """
     for cls in BaseConnector.__subclasses__():
-        if cls.name and cls.name not in ConnectorRegistry._connectors:
+        if getattr(cls, "replacement", None):
+            ConnectorRegistry.register_deprecated(cls)
+        elif cls.name and cls.name not in ConnectorRegistry._connectors:
             ConnectorRegistry.register(cls)
 
 

@@ -132,15 +132,26 @@ closed when git or the hash file misbehaves.
 ```bash
 python scripts/check_denylist.py scan --base origin/main   # this branch (also part of make check)
 python scripts/check_denylist.py audit                     # every tracked file
+python scripts/check_denylist.py audit connectors docs     # the tracked files under these paths
 ```
 
 The **Vendor Denylist** workflow runs `scan` on every pull request (including
-title and description edits) and on pushes to `main`. If it flags a word that
+title and description edits) and on pushes to `main`, and `audit` on the same
+events except a title or description edit; both must pass. If it flags a word that
 is not a vendor name, tell a maintainer rather than working around it. To change
 the list, a maintainer edits the private terms file and regenerates the hashes
 (`python scripts/check_denylist.py build --keep-salt --terms-file <path outside
 the repository>`, which refuses a terms file inside the working tree and
 prints only a count), then commits `config/denylist.sha256`.
+
+`scan` and `audit` also print house-terminology warnings, with the location and
+the term to use: operator override (not kill switch), issuer-branded (not
+white-label), irregularity (not anomaly), accredited issuer (not trust provider
+or verification partner) and attestation (not verification result). These words
+are not secret, so they are listed in plain text in `HOUSE_TERMS`, and a warning
+never fails the check. Directory (for the registry), consumer (for a relying
+party) and name / version (for `software_name` / `software_version`) have too
+many ordinary meanings to flag automatically and are checked in review.
 
 ### Python (Backend)
 

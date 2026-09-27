@@ -100,6 +100,19 @@ new AgenticOrg({ grantexToken: "eyJ..." });
 new AgenticOrg();
 ```
 
+A2A and MCP calls are scope-checked only when the deployment sets
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`. Then an API key or grant needs:
+
+| Call | Route | Scope (or `agenticorg:admin`) |
+|---|---|---|
+| `client.agents.run(agentType, { companyId })` | `POST /api/v1/a2a/tasks` | `a2a:write` |
+| `client.mcp.call(name, args)` | `POST /api/v1/mcp/call` | `mcp:write`; `mcp:call` is accepted as its alias |
+
+API keys created with the default scopes carry `mcp:call`, so `client.mcp.call`
+keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
+key is replaced. `client.a2a` and `client.mcp.tools()` read public discovery
+routes and need no scope.
+
 ## Resources
 
 | Resource | Methods |

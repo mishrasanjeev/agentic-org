@@ -354,62 +354,72 @@ Triggers a health check and connectivity test for the specified connector. Retur
 
 ## API Keys
 
+All three routes need `agenticorg:admin`.
+
 ### List API Keys
 ```
-GET /api/v1/api-keys
+GET /api/v1/org/api-keys
 ```
-Returns all active API keys for the current organization. Admin-only.
+Returns every API key of the current organization, active and revoked, newest
+first. The secret is never returned.
 
 **Response:** `200 OK`
 ```json
-{
-  "keys": [
-    {
-      "id": "uuid",
-      "name": "Production SDK Key",
-      "prefix": "ao_sk_a1b2",
-      "scopes": ["agents:read", "agents:run", "connectors:read"],
-      "created_at": "2026-03-15T08:00:00Z",
-      "last_used_at": "2026-03-31T09:30:00Z",
-      "expires_at": null
-    }
-  ],
-  "count": 1,
-  "max_keys": 10
-}
+[
+  {
+    "id": "uuid",
+    "name": "Production SDK Key",
+    "prefix": "ao_sk_1a2b3c",
+    "scopes": ["agents:read", "agents:write", "connectors.read", "mcp:read", "mcp:call", "a2a:read"],
+    "status": "active",
+    "last_used_at": "2026-03-31T09:30:00+00:00",
+    "expires_at": null,
+    "created_at": "2026-03-15T08:00:00+00:00"
+  }
+]
 ```
 
 ### Create API Key
 ```
-POST /api/v1/api-keys
+POST /api/v1/org/api-keys
 ```
-Generates a new API key. The full key (`ao_sk_{40 hex chars}`) is returned only once — it is bcrypt-hashed before storage. Admin-only. Maximum 10 active keys per organization.
+Generates a new API key. The full key (`ao_sk_` followed by 40 hex characters) is returned only once; it is bcrypt-hashed before storage. The caller must be an administrator user of the organization: an administrator API key gets `403`. Maximum 10 active keys per organization (`400` beyond that).
 
 **Request Body:**
 ```json
 {
   "name": "My SDK Key",
-  "scopes": ["agents:read", "agents:run", "connectors:read", "mcp:read", "mcp:call", "a2a:read"],
-  "expires_in_days": null
+  "scopes": ["agents:read", "agents:write", "connectors.read", "mcp:read", "mcp:call", "a2a:read"],
+  "expires_days": 90
 }
 ```
+
+`scopes` may be omitted or empty: the key then gets the default scopes shown
+above (`agents:read`, `agents:write`, `connectors.read`, `mcp:read`,
+`mcp:call`, `a2a:read`). `expires_days` may be omitted or `null` for a key
+that never expires. A scope that looks like the administrator scope but is not
+exactly `agenticorg:admin` (for example `agenticorg:admin:full`) gets `422`.
 
 **Response:** `201 Created`
 ```json
 {
   "id": "uuid",
-  "key": "ao_sk_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0",
   "name": "My SDK Key",
-  "scopes": ["agents:read", "agents:run", "connectors:read", "mcp:read", "mcp:call", "a2a:read"],
-  "created_at": "2026-03-31T10:00:00Z"
+  "prefix": "ao_sk_1a2b3c",
+  "key": "ao_sk_...",
+  "scopes": ["agents:read", "agents:write", "connectors.read", "mcp:read", "mcp:call", "a2a:read"],
+  "expires_at": "2026-06-29T10:00:00+00:00",
+  "created_at": "2026-03-31T10:00:00+00:00"
 }
 ```
 
 ### Revoke API Key
 ```
-DELETE /api/v1/api-keys/{key_id}
+DELETE /api/v1/org/api-keys/{key_id}
 ```
-Permanently revokes an API key. Admin-only.
+Permanently revokes an API key. An unknown key gets `404` and a key that is
+already revoked gets `400`. Keys cannot be edited: to change a key's scopes,
+create a replacement and revoke the old key.
 
 **Response:** `200 OK`
 ```json
@@ -423,12 +433,23 @@ Permanently revokes an API key. Admin-only.
 
 | Scope | Description |
 |-------|-------------|
-| `agents:read` | List and view agent details |
-| `agents:run` | Execute agent tasks |
-| `connectors:read` | List connectors and tools |
-| `mcp:read` | List MCP tools |
-| `mcp:call` | Execute MCP tool calls |
-| `a2a:read` | Access A2A agent cards |
+| `agents:read` | List and view agents |
+| `agents:write` | Create and change agents, and run one by id (`POST /agents/{id}/run`) |
+| `agents:run` | Legacy alias of `agents:write`, still accepted on keys issued before 2026-09-13 |
+| `connectors.read` | List connectors and their tools |
+| `connectors:read` | Legacy alias of `connectors.read` |
+| `mcp:read` | Reserved for MCP reads; tool discovery (`GET /mcp/tools`) is public |
+| `mcp:call` | Execute MCP tool calls (`POST /mcp/call`); accepted as `mcp:write` |
+| `mcp:write` | Execute MCP tool calls (`POST /mcp/call`) |
+| `a2a:read` | Read A2A task status (`GET /a2a/tasks/{id}`); agent cards are public |
+| `a2a:write` | Run an agent by type (`POST /a2a/tasks`) |
+
+A key may also carry any other route family scope listed in
+`docs/operations/grant-enforcement.md`, or `agenticorg:admin` for an
+administrator key. The A2A and MCP scopes are checked only when the deployment
+sets `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`; until then any authenticated key
+reaches those routes. The default key scopes include `mcp:call` and `a2a:read`
+but not `a2a:write`.
 
 ---
 
@@ -1078,6 +1099,12 @@ POST /api/v1/approvals/{id}/decide
   "notes": "Scope change email confirmed, approving amended PO."
 }
 ```
+Under an approval policy a decision can get `409` and leave the item pending: a
+reviewer voting twice, a policy changed mid-approval, or - with the operator
+flag `approvals.unevaluable_condition` in `deny` mode - a step condition that
+cannot be evaluated for the item (`detail.reason_code`
+`approval_condition_unevaluable`; a `reject` is still taken and closes the
+item). See [Approval policies](approval-policies.md).
 
 ---
 
@@ -2264,6 +2291,11 @@ expected to cover this end-to-end path:
    buyer/seller discovery.
 3. List connectors, search knowledge, generate an agent, generate a workflow,
    create the workflow, run it, and poll the run status.
+
+Discovery is public. When the deployment sets
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`, the launch in step 2 needs `a2a:write`
+through A2A, or `mcp:write` through MCP (`client.mcp.call`; the `mcp:call` in
+default API key scopes is accepted as its alias), on the API key or grant.
 
 The direct CLI is installed by `pip install agenticorg`:
 

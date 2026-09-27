@@ -27,7 +27,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant, refresh_run_grant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.langgraph.grantex_auth import get_grantex_client
@@ -214,8 +214,10 @@ async def validate_tool_scopes(
         connector_name = match[0] if match else "unknown"
         actual_tool_name = _actual_tool_name(tool_name)
 
-        # One call — Grantex handles JWT verification + manifest lookup + permission check
-        result = grantex.enforce(
+        # One call — Grantex handles JWT verification + manifest lookup + permission check.
+        # A grant held under another id of a deprecated connector and its replacement counts too.
+        result = enforce_connector_grant(
+            grantex,
             grant_token=grant_token,
             connector=connector_name,
             tool=actual_tool_name,
