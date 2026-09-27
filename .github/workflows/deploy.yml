@@ -716,45 +716,6 @@ jobs:
           echo "::error::Could not revoke the E2E sessions; the Playwright artifacts are not uploaded"
           exit 1
 
-      - name: End the E2E sessions before uploading artifacts
-        # The Playwright step logs in again as the session nears expiry, and
-        # its reports can carry request headers. Revoking every session of the
-        # E2E user (logout-all sets sessions_invalid_before) makes any token of
-        # that account in the artifacts dead before they are uploaded; the
-        # upload is skipped if this fails. The demo accounts' sessions are
-        # ended by the suite's own teardown (E2E_REVOKE_DEMO_SESSIONS above),
-        # which knows those accounts; this workflow names none of them.
-        id: revoke_sessions
-        if: always()
-        env:
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-        run: |
-          AUTH_PAYLOAD=$(python3 -c 'import json,os; print(json.dumps({"email":os.environ["E2E_EMAIL"],"password":os.environ["E2E_PASSWORD"]}))')
-          for attempt in 1 2 3 4 5; do
-            TOKEN=$(curl -s -X POST "https://app.agenticorg.ai/api/v1/auth/login" \
-              -H "Content-Type: application/json" -d "$AUTH_PAYLOAD" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin).get('access_token',''))" 2>/dev/null || true)
-            CODE=none
-            if [ -n "$TOKEN" ]; then
-              echo "::add-mask::$TOKEN"
-              CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "https://app.agenticorg.ai/api/v1/auth/logout-all" \
-                -H "Authorization: Bearer $TOKEN") || CODE="curl-exit-$?"
-              if [ "$CODE" = "200" ]; then
-                echo "E2E sessions revoked on attempt $attempt"
-                # Every other API replica keeps the user's session watermark
-                # cached for USER_SESSION_STATE_TTL (30 s, core/auth_state.py);
-                # let that expire before the artifacts become available.
-                sleep 31
-                exit 0
-              fi
-            fi
-            echo "Attempt $attempt did not revoke the E2E sessions (logout-all: $CODE); retrying in 10s..."
-            sleep 10
-          done
-          echo "::error::Could not revoke the E2E sessions; the Playwright artifacts are not uploaded"
-          exit 1
-
       - name: Upload Playwright report and failure artifacts
         # test-results holds each failure's error context and screenshot as
         # it happens, so a run that times out before the HTML report is
