@@ -214,10 +214,23 @@ make e2e-decisions
 Without `AGENTICORG_DEV_DECISION_GRANTS=true` the auth service runs with decision grants off, no
 administrator key and no relaxed outbound rules, and the identity provider approvers sign in with
 (`oidc-approvers`, two fixture people, in the `decisions` compose profile) is not started at all —
-so a stack that never asks for any of this does not get it. The decision E2E target requires the
-seed password up front and starts the local approver identity provider; it never skips silently when
-credentials are missing. Allow-listing that provider is a service-administrator action, with the
-administrator key above:
+so a stack that never asks for any of this does not get it. `make e2e-decisions` refuses to start,
+before it touches the stack, unless `AGENTICORG_DEV_DECISION_GRANTS=true`,
+`AGENTICORG_SEED_PASSWORD`, `AGENTICORG_DEV_GRANTEX_ADMIN_KEY` and
+`AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex` are all set, and the suite's runner uses exactly the
+administrator key the auth service was started with, with no fallback. It then starts the local
+approver identity provider; it never skips silently when credentials are missing. The cases it
+decides come from `make seed-cases`, which also creates and registers the governed-case agents the
+investigations need ([console guide](../console/governed-cases.md#trying-it-locally)).
+
+CI runs exactly this sequence on every pull request and every push to `main`: the
+`make e2e-decisions` job of `.github/workflows/local-stack.yml` starts the stack with decision
+grants on and the decision service set to `grantex`, generates the seed password and the
+administrator key for the run with `openssl rand` (masked in the log, never stored), runs
+`make seed`, `make seed-cases` and `make e2e-decisions`, and uploads the Playwright report when it
+fails. `make e2e-decisions` is the check name to require on `main`.
+
+Allow-listing that provider is a service-administrator action, with the administrator key above:
 
 ```
 DEV=$(curl -fsS -H "Authorization: Bearer $GRANTEX_API_KEY" "$GRANTEX/v1/me" | jq -r .developerId)
@@ -237,7 +250,8 @@ console is still reached by service name.
 ### Proven
 
 The join between the two systems runs, and is kept running by
-`ui/e2e/decision-grants.spec.ts` (`make e2e-decisions`) against the local stack. Nothing in that
+`ui/e2e/decision-grants.spec.ts` (`make e2e-decisions`) against the local stack, in CI on every
+pull request (the `make e2e-decisions` job of `.github/workflows/local-stack.yml`). Nothing in that
 suite is stubbed: the console, the API and the database are this stack's; the decision request, the
 approval page, the sign-in, the step-up, the dwell measurement, the four-eyes rule and the decision
 grants are the auth service's.

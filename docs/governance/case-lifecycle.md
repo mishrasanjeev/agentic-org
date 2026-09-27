@@ -53,6 +53,17 @@ Do not enable the flag until the role registrations and provider manifest have b
 verified. The shipped `manifests/mock.json` lists exactly the mock provider's read
 tools; other providers need their own manifest in `GRANTEX_MANIFESTS_DIR`.
 
+On the local development stack `make seed-cases` does all of this for the development
+tenant (`scripts/seed_governed_cases.py`): it creates the two role agents, registers them
+with the stack's Grantex service through the same registration code, sets their
+`case_purposes` to `["aml.cdd.onboarding"]` directly (a development seed, not an audited
+admin change), and obtains a root grant for the run from a *sandbox* Grantex developer,
+which is approved without a consent screen. The root grant is held in the seed's process
+only. The grant checks themselves are unchanged. So on the development stack an investigation
+started or retried later through the API or the worker, for example from the console, has no
+root grant to delegate from: once the run grants the seed left cached in Redis expire, it fails
+with `minting_unconfigured`. Run `make seed-cases` again for fresh sample cases.
+
 Provider calls in governed cases always use strict grant checking, even when general
 `grants.enforce_closed` is `off` or `warn`. A denied call is recorded in the case's
 tool-call record and the investigation fails with `tool_refused:<reason>`; no provider

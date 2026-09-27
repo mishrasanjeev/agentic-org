@@ -71,6 +71,7 @@ Production and staging configuration rejects them.
 |---|---|
 | `make dev` | build, start, wait for health, smoke test |
 | `make seed` | development tenant, users, agents and sample data; safe to repeat |
+| `make seed-cases` | sample governed cases, with the case agents they need (see [the console guide](console/governed-cases.md#trying-it-locally)) |
 | `make ps` | service status |
 | `make logs` | follow logs from every service |
 | `make down` | stop the stack, keep data |
@@ -128,11 +129,21 @@ checkout and owned by your user.
 ### CI
 
 `.github/workflows/local-stack.yml` runs this path on fresh GitHub runners for
-every pull request and push to `main`: one job runs `make check`; another runs
-`make dev`, `make test`, `make coverage-gate` (pull requests), `make seed` and
-`make e2e`, then `make clean`. It uses nothing but Docker and make, so a green
-run means a new contributor's clone works too. The coverage report and browser
-reports are uploaded as the `local-stack-<sha>` artifact.
+every pull request and push to `main`, in three jobs:
+
+| Job (check name) | Runs |
+|---|---|
+| `make check` | `make check` |
+| `make dev && make test` | `make dev`, `make test`, `make coverage-gate` (pull requests), `make seed`, `make seed-cases` and `make e2e` (including the governed-case suites), then `make clean` |
+| `make e2e-decisions` | `make dev` with decision grants on, `make seed`, `make seed-cases` and `make e2e-decisions`, then `make clean` |
+
+It uses nothing but Docker and make (and the runner's `openssl`, below), so a
+green run means a new contributor's clone works too. The seed password, and for the decision-grant job the auth
+service's administrator key, are generated for each run with `openssl rand`
+and masked in the log; nothing secret is stored in the workflow. The coverage
+report and browser reports are uploaded as the `local-stack-<sha>` artifact;
+the decision-grant job uploads its browser report as `decision-grants-<sha>`
+when it fails.
 
 ## Browser end-to-end tests
 
@@ -142,6 +153,13 @@ version in `ui/package-lock.json`) on the stack's network, against the console
 service. It checks that the console serves the sign-in page and proxies the
 API, that a signed-out visitor is sent to sign-in and that unknown credentials
 are rejected. It refuses to start when the stack is not healthy.
+
+The same config also runs the governed-case suites
+(`ui/e2e/governed-cases*.spec.ts`), which sign in as the seeded approvers and
+open the cases `make seed-cases` created. Without `AGENTICORG_SEED_PASSWORD`
+or the seeded cases they skip locally. CI sets
+`AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true`, and then a missing prerequisite
+fails the run instead of skipping it.
 
 The console's locked npm dependencies are installed into a container-only
 volume on the first run. Reports go to `ui/playwright-report/dev-stack` and
@@ -309,6 +327,12 @@ service instead of the hosted one:
 - The API and worker get `GRANTEX_BASE_URL=http://grantex:3001` and that key as
   `GRANTEX_API_KEY` (a development placeholder). Its issuer is
   `http://grantex:3001`.
+- It also seeds a second, *sandbox* developer key
+  (`agenticorg-dev-grantex-sandbox-key`, another placeholder). Only
+  `make seed-cases` uses it: it registers the governed-case agents under it and
+  obtains a development root grant for them, which a sandbox developer gets
+  without a consent screen while a live one's request waits for the principal's
+  passkey. The API and worker never see it.
 
 The smoke test checks that Grantex is healthy, publishes its keys, and that the
 API container reaches it and the key is accepted. `make clean` removes its data

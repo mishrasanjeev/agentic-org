@@ -12,7 +12,7 @@ ARG GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca
 ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc g++ libjpeg-dev zlib1g-dev libffi-dev git curl ca-certificates \
+        gcc g++ libjpeg-dev zlib1g-dev libffi-dev git curl ca-certificates make \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eu; \
