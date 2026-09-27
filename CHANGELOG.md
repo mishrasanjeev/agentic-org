@@ -68,6 +68,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`HOUSE_TERMS`), and a warning never changes the exit code. Directory,
   consumer and name / version have too many ordinary meanings to flag and stay
   a review check. See "Vendor-neutral names" in `CONTRIBUTING.md`.
+### Fixed - the feed fan-out cap test no longer depends on runner speed
+- `test_fanout_caps_parallel_sends_for_large_tenant` forced a 0.2 s send
+  timeout on 100 sockets, so a busy CI runner timed out healthy 10 ms sends
+  and the delivery count failed at random. Each mocked send now yields to the
+  event loop once instead of sleeping, so the sends of a batch overlap
+  deterministically, and the test sets its own 30 s send timeout, so neither
+  the runner's speed nor a change to the service's timeout can fail it. It
+  still checks that every socket is delivered to and that no more than 32
+  sends run at once.
 ### Added - approval decisions can be refused when a policy condition cannot be evaluated
 - A new operator-managed authority flag, `approvals.unevaluable_condition`
   (default `off`; decisions behave as before), decides what happens when a
