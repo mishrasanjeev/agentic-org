@@ -1318,7 +1318,7 @@ def sec06_connectors(pdf: FuncSpecPdf) -> None:
         ("Zendesk", 8, "Tickets, users, organizations, macros, SLAs"),
         ("PagerDuty", 6, "Incidents, services, escalation, on-call, analytics"),
         ("Confluence", 5, "Pages, spaces, search, comments, attachments"),
-        ("Sanctions API", 3, "OFAC, UN, EU sanctions screening, watchlists"),
+        ("Sanctions Screening", 5, "Sanctions, PEP and watch-list screening through a provider"),
         ("MCA Portal", 4, "Company filings, director info, charge status"),
     ]
     cols_c4 = [("Connector", 32), ("Tools", 12), ("Capabilities", 146)]

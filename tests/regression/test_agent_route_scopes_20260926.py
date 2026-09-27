@@ -138,7 +138,7 @@ def test_grantable_scopes_are_exactly_the_route_family_scopes() -> None:
         ["agenticorg:admin"],
         ["agents:run"],  # a legacy alias, not the canonical scope
         ["connectors:read"],
-        ["mcp:call"],  # an unenforced family
+        ["mcp:call"],  # a legacy alias of mcp:write
         ["agents:read", "tool:hubspot:read:list_contacts"],
         ["AGENTS:READ"],
         [" agents:read"],

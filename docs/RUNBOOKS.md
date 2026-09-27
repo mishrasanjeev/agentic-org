@@ -205,7 +205,9 @@ Operating the Postgres store:
   do **not** cover checkpoint tables (FINDINGS A-21): `verify_all` can report a
   key unreferenced while paused runs still need it, and rewrap never moves
   checkpoints to the active key. Keep a retired key in the keyring for longer
-  than the approval window plus checkpoint retention.
+  than the approval window plus checkpoint retention. The rotation procedure,
+  with a check for checkpoints still sealed under the old key, is
+  [vault key rotation](runbooks/vault-key-rotation.md).
 - Each encrypted payload is bound to its thread and namespace; a blob copied
   into another thread fails with `checkpoint_binding_mismatch`.
 - `langgraph-checkpoint-postgres` and `langgraph-checkpoint` are pinned exactly;

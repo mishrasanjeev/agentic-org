@@ -344,6 +344,33 @@ def record_denial(
         logger.warning("grant_enforcement_metric_failed", error_type=type(exc).__name__)
 
 
+def enforce_connector_grant(client: Any, *, connector: str, **call: Any) -> Any:
+    """``client.enforce`` for ``connector``, counting a grant held under another id of it.
+
+    A deprecated connector id stays linked to its replacement during a
+    deprecation window (``sanctions_api`` -> ``sanctions_screening``,
+    ``ConnectorRegistry.ids_of``): grants issued before the replacement name
+    the old id, later ones the live id, and an agent's tools may be bound to
+    either. Grantex checks scopes per id, so the call is allowed when Grantex
+    allows it under any of the linked ids; otherwise the result for
+    ``connector`` itself is returned. Grantex allows a tool only under an id
+    whose manifest lists it, so the link covers the tools the two connectors
+    share. Only Grantex decides: an exception from ``enforce`` propagates to
+    the caller, which treats it as a denial.
+    """
+    result = client.enforce(connector=connector, **call)
+    if bool(getattr(result, "allowed", False)):
+        return result
+    # Imported here: it loads every connector, and only a denial needs it.
+    from connectors.registry import ConnectorRegistry  # noqa: PLC0415
+
+    for other_id in ConnectorRegistry.ids_of(connector)[1:]:
+        other = client.enforce(connector=other_id, **call)
+        if bool(getattr(other, "allowed", False)):
+            return other
+    return result
+
+
 async def check_tool_grant(
     *,
     mode: EnforcementMode,
@@ -377,7 +404,8 @@ async def check_tool_grant(
             client = client_factory()
             # ``enforce`` may fetch the JWKS synchronously; keep it off the loop.
             result = await asyncio.to_thread(
-                client.enforce,
+                enforce_connector_grant,
+                client,
                 grant_token=grant_token,
                 connector=connector,
                 tool=tool,

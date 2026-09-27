@@ -39,7 +39,8 @@ tenant id), so a tenant row never hides a global row: a global
 tenant admin, so nobody inside a tenant can switch enforcement off or delete a
 mode an operator set. The same applies to the programme's other authority
 flags (`pseudonymisation.pre_model`, `approvals.resume_agent_runs`,
-`decisions.required`, `caps.enforce`; see `RESERVED_FLAG_KEYS` in
+`approvals.unevaluable_condition`, `decisions.required`, `caps.enforce`; see
+`RESERVED_FLAG_KEYS` in
 `core/feature_flags.py`). Operators manage them with database access:
 
 ```
@@ -195,9 +196,10 @@ strength of its own scopes. A denial by the caller token is logged with
 
 This holds on every route that starts a run: `POST /agents/{id}/run`, chat,
 A2A, MCP, `POST /workflows/{id}/run` (agent, collaboration, parallel,
-connector and sub-workflow steps) and the sales pipeline routes. Grantex agent
-tokens skip the route scope checks, so this binding is what keeps them to
-their own grant.
+connector and sub-workflow steps) and the sales pipeline routes. A route scope
+check decides only whether an agent token may call a route at all (see "Agent
+tokens on the platform API"), so this binding is what keeps the run it starts
+to its own grant.
 
 **A binding outlives the request, the token does not.** A workflow run started
 with a caller token keeps the token in memory for the execution the request
@@ -274,6 +276,21 @@ ones - re-run), `scope_limit_exceeded` (more than 100 scopes; nothing changed)
 or `connector_lookup_failed`. The exit status is 1 when any agent failed. Then
 re-read the warn-mode report before switching the tenant to `deny`.
 
+A deprecated connector stays linked to its replacement during a deprecation
+window (`sanctions_api`, the legacy connector, to `sanctions_screening`). Scopes
+for the tools the two share are issued under the live id, scopes for a tool
+only the deprecated connector has (`get_alert`, `generate_report`) under the
+deprecated id, and every grant check - in LangGraph runs, `execute_agent_tool`
+and the `ToolGateway`, with `off`, `warn` and `deny` alike - also accepts a
+scope held under the other linked id for a shared tool. Grants issued before
+the replacement keep covering the tools they listed, and an agent that moves
+from `sanctions_api` to `sanctions_screening` keeps its grant for the shared
+tools (`enforce_connector_grant` in `auth/grant_enforcement.py`). A scope never
+counts for a connector whose id it does not name unless the two ids are linked
+(`ConnectorRegistry.register_deprecated`). A tool only the replacement has
+(`screen_person`, `screen_business`) is covered once it is added to the agent's
+tools, which recomputes the scopes as above.
+
 ## Agent tokens on the platform API
 
 Tool scopes govern what an agent's run may call through the tool gateway. They
@@ -284,7 +301,73 @@ must carry the family's scope, such as `agents:read`, `agents:write` (or its
 alias `agents:run`), `workflows:write` or `audit:read`, or `agenticorg:admin`.
 A grant holding only `tool:...` and `agenticorg:{domain}:read` scopes gets
 `403 Missing scope` on every route in a mapped family. Routes in unmapped
-families (A2A and MCP among them) are not scope-checked for any credential.
+families are not scope-checked for any credential (FINDINGS A-68); A2A and MCP
+are among them unless `AGENTICORG_ROUTE_SCOPE_A2A_MCP` is on (below).
+
+### Unknown authentication modes
+
+The auth middleware sets one of three authentication modes once it has
+verified a credential: `api_key`, `grantex` or `legacy` (a user session). A
+request that reaches an authenticated route with any other mode, or none, is
+logged as `route_enforcement_unknown_auth_mode` with its path and mode (never
+its scopes or credential). What happens next depends on
+`AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`:
+
+- `false` (the default): the request is checked on whatever scopes it carries,
+  as before, so `agenticorg:admin` among them passes every route and an
+  unmapped family needs no scope (FINDINGS A-95).
+- `true`: it gets `403 Unrecognised authentication mode; request refused`
+  before any scope is read - even with `agenticorg:admin`, on an unmapped
+  family, and with `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`.
+
+Public routes are not checked either way, and no credential the middleware
+accepts is affected. Turn the setting on once the deployment logs no
+`route_enforcement_unknown_auth_mode` warnings; roll back by setting it to
+`false` (or removing it) and restarting the API. A later release will turn it
+on by default, with the setting as the explicit opt-out.
+
+The middleware passes OPTIONS requests and its exempt paths and prefixes
+through without reading a credential, so an authenticated route must never be
+reachable that way: `tests/regression/test_route_scope_unknown_mode_20260927.py`
+pins the route table against the exemptions and the known modes against the
+ones the middleware sets. The one overlap, a consent status path whose handle
+begins with `callback`, is refused as an unknown mode with the setting on, and
+by the route's tenant check (`401`) with it off (FINDINGS A-88).
+
+### A2A and MCP route scopes
+
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true` (default `false`) maps the A2A and MCP
+families:
+
+| Route | Needs (or `agenticorg:admin`) |
+|---|---|
+| `POST /a2a/tasks` | `a2a:write` |
+| `GET /a2a/tasks/{id}` | `a2a:read` |
+| `POST /mcp/call` | `mcp:write`; the `mcp:call` that API keys are issued with is accepted as an alias |
+
+Discovery (`/a2a/.well-known/agent.json`, `/a2a/agent-card`, `/a2a/agents`,
+`/mcp/tools`) stays public. With the setting off, any authenticated credential
+reaches the three routes, as before.
+
+No role carries these scopes. The routes run any agent type with no domain
+check, so of user sessions only administrators reach them once the setting is
+on; API keys and agent grants are given the scopes explicitly. Before turning
+it on:
+
+- API keys created with the default scopes carry `mcp:call` and `a2a:read`
+  but not `a2a:write`: they keep `POST /mcp/call` and `GET /a2a/tasks/{id}`
+  and get `403` on `POST /a2a/tasks`, which is how the SDKs and the MCP
+  server's `run_agent` run an agent by type. Keys cannot be edited, so issue a
+  replacement with `a2a:write` for each A2A integration and revoke the old
+  one. Active keys that would lose it:
+  `SELECT tenant_id, id, name FROM api_keys WHERE status = 'active' AND NOT (scopes && ARRAY['a2a:write', 'a2a.write', 'agenticorg:admin']::text[]);`
+- Grant each agent whose token calls these routes the `a2a:*` or `mcp:*`
+  scopes it needs (below); they can be granted while the setting is off.
+- Scripts that call these routes with a non-admin user's session get `403`;
+  move them to an API key.
+
+Roll back by setting the variable to `false` (or removing it) and restarting
+the API.
 
 ### Granting an agent route scopes
 
@@ -297,10 +380,11 @@ A human tenant admin grants an agent the route families its token may call:
   (`api.route_enforcement.GRANTABLE_ROUTE_SCOPES`: `agents:read`,
   `agents:write`, `workflows:read`, `workflows:write`, `approvals:read`,
   `approvals:write`, `audit:read`, `connectors.read`, `report_schedules.read`,
-  `report_schedules.write`). `agenticorg:admin`, legacy aliases and anything
-  else get `422`. The caller must be an active tenant administrator in a human
-  session, checked against the user row when the request runs, so a demoted
-  user's older session and admin API keys get `403`.
+  `report_schedules.write`, `a2a:read`, `a2a:write`, `mcp:read`,
+  `mcp:write`). `agenticorg:admin`, legacy aliases (such as `mcp:call`) and
+  anything else get `422`. The caller must be an active tenant administrator
+  in a human session, checked against the user row when the request runs, so
+  a demoted user's older session and admin API keys get `403`.
 - Only a shared agent (tenant visibility, no personal owner) that is registered
   on Grantex can hold route scopes: a personal agent gets `403` and an
   unregistered one `409`.

@@ -427,14 +427,20 @@ async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime, monkeyp
         active += 1
         peak = max(peak, active)
         try:
-            await asyncio.sleep(0.01)
+            # Yield once instead of sleeping: the event loop starts every send
+            # already scheduled before it resumes this one, so the peak is the
+            # number of sends running at once whatever the runner's speed.
+            await asyncio.sleep(0)
         finally:
             active -= 1
 
     sockets = {AsyncMock() for _ in range(100)}
     for socket in sockets:
         socket.send_json.side_effect = send
-    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.2)
+    # This test is about the concurrency cap, not timeouts. Its own timeout,
+    # well inside the suite's 60 s limit, keeps it independent of both the
+    # runner's speed and the service's send timeout.
+    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 30.0)
     feed._connections[tenant_id] = sockets
 
     assert await feed._fanout_local({"tenant_id": tenant_id, "type": "update"}) == 100

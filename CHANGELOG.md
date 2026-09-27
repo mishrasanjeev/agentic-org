@@ -31,6 +31,221 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   it on), so the setting can be switched on once the first is flat. Moving
   providers: `docs/RUNBOOKS.md#email-webhooks-per-tenant-urls`.
 
+### Security - route scope checks can refuse unknown authentication modes and cover A2A and MCP
+- Route scope checks never looked at how a request was authenticated. The
+  auth middleware sets `api_key`, `grantex` or `legacy` once it has verified a
+  credential; a request that reached an authenticated route with any other
+  mode, or none, was checked against whatever scopes it carried, so
+  `agenticorg:admin` passed every route and an unmapped family needed no scope.
+  Such a request is now always logged as `route_enforcement_unknown_auth_mode`
+  (path and mode only). New setting `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`
+  (default `false`): off, the request is then checked on its scopes exactly as
+  before; set to `true`, it is refused with `403 Unrecognised authentication
+  mode; request refused` before any scope is read, also in
+  `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`. No credential the middleware
+  accepts is affected either way; public routes are not checked. A later
+  release will turn the refusal on by default, with this setting as the
+  explicit opt-out, once staging shows no unknown-mode warnings (FINDINGS
+  A-95). Rollback: set it back to `false`.
+- New setting `AGENTICORG_ROUTE_SCOPE_A2A_MCP` (default `false`, nothing
+  changes). Set to `true`, `POST /a2a/tasks` needs `a2a:write`,
+  `GET /a2a/tasks/{id}` needs `a2a:read` and `POST /mcp/call` needs
+  `mcp:write` (API keys' `mcp:call` is accepted as an alias), or
+  `agenticorg:admin`; discovery stays public. No role carries these scopes,
+  because the routes run any agent type without a domain check, so only
+  administrators' sessions reach them. **Turning it on is breaking** for
+  default API keys on `POST /a2a/tasks` (they carry `a2a:read`, not
+  `a2a:write`), which is the SDKs' run-by-type path, and for non-admin
+  sessions. Issue replacement keys and grant agents the scopes first; the four
+  scopes can be granted to agents (`PATCH /agents/{id}` `route_scopes`) while
+  the setting is off. Rollback: set it back to `false`. See
+  `docs/operations/grant-enforcement.md` (FINDINGS A-68).
+- Once on, the refusal leaves valid callers alone only while every
+  authenticated route goes through the auth middleware. A regression test now
+  pins that no authenticated route accepts OPTIONS or sits under one of the
+  middleware's exempt paths or prefixes, and that the known modes are exactly
+  the ones the middleware sets. It found one overlap (FINDINGS A-88): an account aggregator
+  consent status path whose handle begins with `callback` skips the
+  middleware. It is still answered `401` while the refusal is off, and `403`
+  with `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE=true`.
+- Docs: the Python and TypeScript SDK READMEs, the MCP product model and the
+  API reference's SDK launch contract say which scope `client.mcp.call`
+  (`mcp:write`, or the `mcp:call` alias) and a run by agent type
+  (`a2a:write`) need with `AGENTICORG_ROUTE_SCOPE_A2A_MCP` on. The API
+  reference's API key section now matches the code: the routes are under
+  `/api/v1/org/api-keys`, the request field is `expires_days`, the default
+  scopes use the canonical `agents:write` and `connectors.read`, and the list
+  response is an array that includes revoked keys.
+### Changed - sanctions screening runs through the verification provider seam
+- The new `sanctions_screening` connector has no endpoint or API key of its
+  own: every call goes to the verification provider named by `provider` in the
+  connector config - `mock` by default, which runs only in local, development,
+  test and CI environments, or a provider from a separately installed package
+  registered through the `agenticorg.providers` entry point. Its tools are
+  `screen_entity`, `screen_person`, `screen_business`, `screen_transaction` and
+  `batch_screen`, and each returns `screening_result` records with every
+  candidate the provider found. A name screened without a `type` is screened
+  as a person and as a business. An unknown or unavailable provider, one
+  without screening, or a screening the provider does not offer fails the call
+  instead of returning an empty result. All the screenings of one tool call
+  share one deadline, the connector's timeout from when the call starts, so a
+  batch of 50 names cannot run for 100 timeouts. Grantex scopes for the new id
+  come from `manifests/sanctions_screening.json`.
+- `sanctions_api`, which was built on one commercial screening service's API
+  and named it in its code, is deprecated and otherwise unchanged: the same
+  five tools (`screen_entity`, `screen_transaction`, `get_alert`,
+  `batch_screen`, `generate_report`), the same `api_key` authentication, the
+  same requests and the same responses. Creating it logs
+  `connector_id_deprecated`, and the connector catalog and product counts list
+  only `sanctions_screening`. An agent moves to `sanctions_screening` only when
+  its connectors are changed to link it. See "The sanctions screening
+  connector" in `docs/providers/plugin-packages.md`.
+- **Breaking for operators:** the address of the service `sanctions_api` calls
+  is no longer in the code. It is the connector config's `base_url` or, when
+  that is empty, the new setting `AGENTICORG_SANCTIONS_API_BASE_URL`, which has
+  no default. Before deploying, set `AGENTICORG_SANCTIONS_API_BASE_URL` in every
+  environment where tenants use `sanctions_api`, to the API base URL those
+  tenants have been calling. Without it, and without a `base_url` in the
+  tenant's connector config, every `sanctions_api` call fails with
+  `SanctionsApiNotConfiguredError` before any request is sent, and the
+  connector test reports `not_configured`.
+- An agent's tools, bare names such as `screen_entity` included, bind to
+  `sanctions_api` unless the agent's connectors name `sanctions_screening` and
+  not `sanctions_api`, so a tool can meet a grant issued under the other id.
+  Every grant check - LangGraph runs, `BaseAgent` (through
+  `execute_agent_tool`) and the tool gateway, in `grants.enforce_closed` off,
+  warn and deny alike - now accepts a scope held under either id for the tools
+  the two connectors share (`enforce_connector_grant` in
+  `auth/grant_enforcement.py`). New grants name `sanctions_screening` for those
+  tools and `sanctions_api` for `get_alert` and `generate_report`, which only
+  the deprecated connector has. Grants issued before keep covering the tools
+  they listed; `screen_person` and `screen_business` are covered once they are
+  added to the agent's tools, which recomputes its scopes.
+- The `sanctions_screening` connector test reports `configured` and the
+  provider's name, never `healthy`, because a provider cannot be probed yet, so
+  an agent that links that connector cannot be activated until the provider
+  seam gains a probe (tracked in `FINDINGS.md`). `sanctions_api` probes its
+  service as before.
+- The Risk Sentinel and Vendor Manager prompts name `sanctions_screening` in
+  their token-scope lines.
+### Added - the vendor denylist audit runs in CI and warns on house terminology
+- `python scripts/check_denylist.py audit` passes on the whole tree, and the
+  Vendor Denylist workflow now runs it on every pull request, except title
+  and description edits, and on pushes to `main`; a denylisted term in any
+  tracked file fails the job. `audit <path>...` checks only the tracked files
+  under those paths and fails closed when they match none.
+- `scan` and `audit` print a warning, with the location and the term to use,
+  for kill switch, white-label, anomaly, trust provider, verification partner
+  and verification result. The terms are listed in plain text in the script
+  (`HOUSE_TERMS`), and a warning never changes the exit code. Directory,
+  consumer and name / version have too many ordinary meanings to flag and stay
+  a review check. See "Vendor-neutral names" in `CONTRIBUTING.md`.
+### Fixed - the feed fan-out cap test no longer depends on runner speed
+- `test_fanout_caps_parallel_sends_for_large_tenant` forced a 0.2 s send
+  timeout on 100 sockets, so a busy CI runner timed out healthy 10 ms sends
+  and the delivery count failed at random. Each mocked send now yields to the
+  event loop once instead of sleeping, so the sends of a batch overlap
+  deterministically, and the test sets its own 30 s send timeout, so neither
+  the runner's speed nor a change to the service's timeout can fail it. It
+  still checks that every socket is delivered to and that no more than 32
+  sends run at once.
+### Added - approval decisions can be refused when a policy condition cannot be evaluated
+- A new operator-managed authority flag, `approvals.unevaluable_condition`
+  (default `off`; decisions behave as before), decides what happens when a
+  step of an item's approval policy has a condition that cannot be evaluated
+  for the item. `off` keeps the current rule: the step applies and the vote
+  counts. `deny` (an enabled `approvals.unevaluable_condition.deny` row,
+  global or for the tenant) refuses every decision on the item that could
+  move it forward - an approval, a `defer` or any other value - with `409`
+  and `detail.reason_code` `approval_condition_unevaluable`, listing the steps
+  in `detail.unevaluable_steps`. A rejection is still taken: it closes the
+  item at the step it has reached and approves nothing. Every step of the
+  policy is checked before any vote counts, so a later step that cannot be
+  evaluated cannot route the item either.
+- The refusal is committed before the `409` is returned: the item's
+  `context.policy_state` records `last_action: "refused"`, the reason and the
+  steps, and the audit log gets a `hitl.decision_refused` event (outcome
+  `denied`). The refused vote is not counted, does not make its caller the
+  decider and does not bind the item to the policy, so once the policy is
+  recreated with a condition that evaluates (or the flag is cleared) the same
+  reviewer can decide. The next decision recorded on the item removes the
+  refusal keys from `policy_state`, so a decided item never reads as refused;
+  the audit event stays.
+- The check runs at decision time, the only place a policy is applied to an
+  item: items are raised without consulting a policy, and a policy can be
+  created or edited while they wait.
+- The key is reserved (`403 flag_key_reserved` through the tenant
+  feature-flag API); operators set it with `scripts/authority_flags.py`. An
+  unreadable flag table resolves to `deny` and logs
+  `approval_unevaluable_condition_mode_lookup_failed`; only decisions other
+  than a rejection, on items with a condition that cannot be evaluated, are
+  refused, and a rejection never reads the flag. A global row is not read by a
+  database role subject to row-level security (an open entry in
+  `FINDINGS.md`), so set the tenant row. See "When a condition cannot be
+  evaluated" in `docs/approval-policies.md`.
+### Added - a runbook for rotating the credential-vault key
+- `docs/runbooks/vault-key-rotation.md` rotates the vault key with the tools in
+  the repository: add the new key to `AGENTICORG_VAULT_KEYRING` as a
+  decrypt-only entry and roll the API, worker and beat; move it to the front and
+  roll again; `python -m core.crypto.rewrap --dry-run`, the rewrap and
+  `--verify`; `python -m core.crypto.verify_all --check=<old id>`; then remove
+  the old key. It covers moving off `AGENTICORG_VAULT_KEY` or
+  `AGENTICORG_SECRET_KEY` (and what else that key signs), rollback at each step,
+  checks for what the tools cannot see, and a local rehearsal. It lists what
+  `scripts/deploy_cloud_run.sh` re-applies on each roll, including the public
+  commerce discovery flag taken from the operator's shell; counts a roll as
+  complete only once the older revisions have no instances, which is also the
+  checkpoint cutoff; stops the rotation on a row rewrap cannot decrypt instead
+  of rerunning it; and runs the maintenance job on the services' image. The
+  `rewrap` and `verify_all` commands, the SQL checks and the rehearsal were run
+  against a local database, and the deploy script against local stand-ins for
+  `gcloud`; no `gcloud` step was run against Cloud Run.
+- `docs/SECRETS_ROTATION.md` said no secret has a second read path and listed
+  the vault only as the `AGENTICORG_SECRET_KEY` fallback. The vault keyring
+  decrypts under every key it holds; the page now says so and links the runbook,
+  as do `docs/deployment.md`, `docs/RUNBOOKS.md` and the documentation index.
+  `docs/architecture.md` no longer says `encryption_key_ref` selects a key
+  (nothing reads it) and names both KMS keys a GSTN password can be sealed
+  under. `rewrap --help` gave exit code 2 for a missing keyring; it exits 1. It
+  also failed to print on a console that cannot encode `→`.
+- A regression test starts `uvicorn api.main:app`, the API image's command, with
+  `AGENTICORG_ENV=production` and no vault key in its process environment, and
+  requires it to exit non-zero with the refusal before it serves or reaches the
+  database. The existing lifespan test only read the source.
+- Rehearsing the runbook found three gaps, now FINDINGS A-82 to A-84: vault
+  ciphertext outside the five registered columns (SSO client secrets, case push
+  signing keys, governed-case excerpts, voice SIP settings) is invisible to
+  `verify_all`, which calls a key unreferenced while those values still need
+  it; rewrap can overwrite a credential written while it runs; and the secrets
+  rotation workflow accepts the vault's own secrets. Migrating the scratch
+  database also rewrote a committed migration audit record (A-85); the
+  rehearsal sets `AGENTICORG_MIGRATION_AUDIT_DIR` to avoid it.
+
+### Fixed - a governed-case agent can no longer be wired without its grant check
+- The provider tool gateway refused every call it had no authorizer for, but
+  `ProviderToolGateway`, `UnderwriterDependencies` and
+  `DispositionDependencies` still defaulted `authorizer` to `None`, so any
+  caller could build them without a grant check. `authorizer` is now a
+  required field of all three, and outside local and test runtimes building
+  any of them with `None` raises `AuthorizerRequiredError`
+  (`core/tool_gateway/provider_gateway.py`). Tests that prove the gateway's
+  own refusal pass the named `NO_AUTHORIZER_FOR_TESTS`; a regression test fails
+  if production code passes it, `authorizer=None` or `authorizer_factory=None`.
+- A `CaseRuntime` whose `authorizer_factory` returned `None` still moved the
+  case to `in_progress` and started the underwriter, which then failed on its
+  first provider call, and one built with `authorizer_factory=None` failed
+  with a `TypeError` on its first run instead of a named refusal. Outside local
+  and test runtimes a `CaseRuntime` can no longer be built without a factory:
+  construction raises `AuthorizerRequiredError` (`core/cases/runtime.py`).
+  `CaseRuntime.authorizer_for` refuses a missing factory or a `None` result
+  with `authorization_unavailable` (status 503) before the case moves or a
+  provider is built, for investigations and screening dispositions alike; a
+  workflow `case_agent` step fails with that reason.
+- `scripts/seed_governed_cases.py` passes `case_authorizer` to the runtime
+  explicitly instead of relying on its default. No feature flag guards this
+  change, because every production caller - the API, the workflow step and the
+  seed - already supplies a real grant check (`case_authorizer`), so none of
+  them behaves differently.
 ### Fixed - four stale production specs and a smoke test that could not fail
 - TC-API-003 (`qa-module-19-health-api.spec.ts`) read the API version from
   `/openapi.json`, which the strict runtime does not serve (`api/main.py`). It
