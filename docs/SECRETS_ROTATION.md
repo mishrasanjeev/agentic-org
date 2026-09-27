@@ -9,14 +9,18 @@ are rotated continuously and don't need an operational runbook.
 | Secret ID                       | How it rotates                                                     |
 |---------------------------------|--------------------------------------------------------------------|
 | CDC_WEBHOOK_SECRET_<CONNECTOR>  | `secrets-rotation.yml` (self-generated HMAC; update the sender too) |
-| AGENTICORG_SECRET_KEY           | `core/crypto/rewrap.py` only - it is also the vault key fallback    |
+| AGENTICORG_VAULT_KEYRING        | By hand, never with the workflow: [vault key rotation](runbooks/vault-key-rotation.md) (stage, promote, rewrap, retire) |
+| AGENTICORG_SECRET_KEY           | Never with the workflow. While a service has no `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY` it is also the vault key: [move the vault off it](runbooks/vault-key-rotation.md#moving-off-a-single-key) first. Even then a rotation signs everyone out and moves every provider webhook inbox path (same section) |
 | GRANTEX_API_KEY                 | Re-issue in the Grantex console, then add the new version manually |
 | STRIPE_WEBHOOK_SECRET / Plural  | Re-issue in the provider console; never generated locally          |
 | LLM provider keys               | Rotated by vendor console (annually)                               |
 
 The workflow refuses `AGENTICORG_SECRET_KEY` and any externally issued
 credential: replacing a provider-issued key with random bytes does not
-"rotate" it, it breaks every call that uses it (audit 2026-09-13).
+"rotate" it, it breaks every call that uses it (audit 2026-09-13). It
+does not yet refuse the vault's own secrets (FINDINGS A-84): never pass
+it `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY`, whose value it
+would replace with random bytes that open nothing already stored.
 
 Database passwords and long-lived OAuth refresh tokens are rotated on
 separate cadences — see the relevant runbooks.
@@ -38,6 +42,12 @@ application has no second-version read path. The previous version is
 left enabled only so an operator can roll back. Update the sending side
 (connector/provider console) to the new value right after the roll,
 verify deliveries, then disable the old version manually.
+
+The credential vault is the exception. `AGENTICORG_VAULT_KEYRING` holds
+several keys: the first encrypts and every one decrypts, so a vault key is
+rotated by adding the new key next to the old one, re-encrypting stored
+data, and only then removing the old key, never by replacing the value.
+Follow [vault key rotation](runbooks/vault-key-rotation.md).
 
 ## Manual rotation
 
