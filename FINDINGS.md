@@ -480,7 +480,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
 
-
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
 - **Found:** binding caller tokens on every run route (PRD F-1b review,
@@ -1119,58 +1118,28 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
-## A-86 — WebSocket routes fail on the app-wide route enforcement dependency
+## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
 
-- **Found:** fixing the route scope residual of H-1 (2026-09-27).
-- **What:** `api/main.py` registers `api.route_enforcement.enforce_route_metadata`
-  as an app-wide dependency, and it takes `request: Request`. FastAPI (0.139)
-  passes no `Request` to a WebSocket route's dependencies, so a connection to
-  `api.main.app` fails with `TypeError: enforce_route_metadata() missing 1
-  required positional argument: 'request'` before the handler runs, for
-  `/api/v1/ws/feed/{tenant_id}` and `/api/v1/ws/bridge/{bridge_id}` alike
-  (reproduced with the test client, with and without a token). The WebSocket
-  tests mount the routers on a bare `FastAPI()` without the dependency, so
-  they pass. Deployed behaviour was not checked.
-- **Fix:** have the dependency take `HTTPConnection` and leave WebSocket routes
-  to the authentication their handlers already do, then add a test that
-  connects through `api.main.app`. Do not run `_check_scope` on them as it
-  stands: the auth middleware does not run for WebSockets, so the connection
-  has no `auth_mode` and would be refused as an unknown mode.
+- **Found:** running `scripts/seed_governed_cases.py` end to end against a
+  migrated local database after `scripts/seed_dev.py` (2026-09-27).
+- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
+  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
+  exactly one active, shared `business_underwriter` and `screening_disposition`
+  agent in the tenant, registered with Grantex, with a `case_purposes` list and
+  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
+  `scripts/seed_dev.py` nor the development stack creates those agents or
+  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
+  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
+  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
+  `awaiting_decision` with proposed dispositions. The case runtime's default
+  authorizer was already `case_authorizer`, so this predates the seed passing
+  it explicitly.
+- **Fix:** have the development seed create and register the two shared role
+  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
+  Grantex service and provision a development root grant for them, then rerun
+  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
+  for development.
 
-## A-87 — The alert gate probe test rewrites tracked files in the working tree
-
-- **Found:** running `tests/unit` on a Windows checkout (2026-09-27).
-- **What:** `tests/unit/observability/test_probes.py` runs
-  `scripts/probe_alert_gate.py`, which mutates the repository's own
-  `monitoring/prometheus/agenticorg-alerts.yml` and
-  `infra/terraform/monitoring/alerts.tf` in place and restores them with
-  `newline="\n"`. On a checkout with CRLF line endings (A-62) both files are
-  left rewritten with LF after every unit run, so `git status` shows them
-  modified, and a run interrupted between mutation and restore leaves a broken
-  alert rule in the working tree.
-- **Fix:** have the probe (or its test) work on copies under `tmp_path`, or
-  restore the exact original bytes (`read_bytes` / `write_bytes`).
-
-## A-88 — An exempt auth prefix reaches into an authenticated route
-
-- **Found:** pinning the route table against the auth middleware's exemptions
-  for the route scope residual of H-1 (2026-09-27).
-- **What:** `GrantexAuthMiddleware.EXEMPT_PREFIXES` holds
-  `/api/v1/aa/consent/callback` as a prefix with no trailing slash, so every
-  request path that begins with it skips the middleware. The authenticated
-  route `GET /api/v1/aa/consent/{consent_handle}/status` falls under it when
-  the handle begins with `callback` (for example
-  `/api/v1/aa/consent/callback-0/status`): the credential is never read. Such
-  a request is now refused with `403 Unrecognised authentication mode; request
-  refused` before the handler runs (before, `get_current_tenant` answered
-  `401`), so nothing is exposed, but a valid caller with such a handle is
-  refused too. Handles come from the account aggregator's response, or are a
-  UUID when it returns none.
-- **Fix:** exempt the callback as an exact path (`EXEMPT_PATHS`; the provider
-  callback is the single route `POST /aa/consent/callback`) once the path the
-  aggregator posts to is confirmed, and remove the pair from
-  `KNOWN_EXEMPT_OVERLAPS` in
-  `tests/regression/test_route_scope_unknown_mode_20260927.py`.
 ## A-82 — Key rotation tooling does not see vault ciphertext outside five columns
 
 - **Found:** rehearsing the vault key rotation runbook against a local database
@@ -1247,24 +1216,55 @@ Remove an entry in the pull request that fixes it.
   or the variable is set), or document the variable in the README next to the
   migrate step.
 
-## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+## A-86 — WebSocket routes fail on the app-wide route enforcement dependency
 
-- **Found:** running `scripts/seed_governed_cases.py` end to end against a
-  migrated local database after `scripts/seed_dev.py` (2026-09-27).
-- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
-  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
-  exactly one active, shared `business_underwriter` and `screening_disposition`
-  agent in the tenant, registered with Grantex, with a `case_purposes` list and
-  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
-  `scripts/seed_dev.py` nor the development stack creates those agents or
-  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
-  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
-  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
-  `awaiting_decision` with proposed dispositions. The case runtime's default
-  authorizer was already `case_authorizer`, so this predates the seed passing
-  it explicitly.
-- **Fix:** have the development seed create and register the two shared role
-  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
-  Grantex service and provision a development root grant for them, then rerun
-  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
-  for development.
+- **Found:** fixing the route scope residual of H-1 (2026-09-27).
+- **What:** `api/main.py` registers `api.route_enforcement.enforce_route_metadata`
+  as an app-wide dependency, and it takes `request: Request`. FastAPI (0.139)
+  passes no `Request` to a WebSocket route's dependencies, so a connection to
+  `api.main.app` fails with `TypeError: enforce_route_metadata() missing 1
+  required positional argument: 'request'` before the handler runs, for
+  `/api/v1/ws/feed/{tenant_id}` and `/api/v1/ws/bridge/{bridge_id}` alike
+  (reproduced with the test client, with and without a token). The WebSocket
+  tests mount the routers on a bare `FastAPI()` without the dependency, so
+  they pass. Deployed behaviour was not checked.
+- **Fix:** have the dependency take `HTTPConnection` and leave WebSocket routes
+  to the authentication their handlers already do, then add a test that
+  connects through `api.main.app`. Do not run `_check_scope` on them as it
+  stands: the auth middleware does not run for WebSockets, so the connection
+  has no `auth_mode` and would be refused as an unknown mode.
+
+## A-87 — The alert gate probe test rewrites tracked files in the working tree
+
+- **Found:** running `tests/unit` on a Windows checkout (2026-09-27).
+- **What:** `tests/unit/observability/test_probes.py` runs
+  `scripts/probe_alert_gate.py`, which mutates the repository's own
+  `monitoring/prometheus/agenticorg-alerts.yml` and
+  `infra/terraform/monitoring/alerts.tf` in place and restores them with
+  `newline="\n"`. On a checkout with CRLF line endings (A-62) both files are
+  left rewritten with LF after every unit run, so `git status` shows them
+  modified, and a run interrupted between mutation and restore leaves a broken
+  alert rule in the working tree.
+- **Fix:** have the probe (or its test) work on copies under `tmp_path`, or
+  restore the exact original bytes (`read_bytes` / `write_bytes`).
+
+## A-88 — An exempt auth prefix reaches into an authenticated route
+
+- **Found:** pinning the route table against the auth middleware's exemptions
+  for the route scope residual of H-1 (2026-09-27).
+- **What:** `GrantexAuthMiddleware.EXEMPT_PREFIXES` holds
+  `/api/v1/aa/consent/callback` as a prefix with no trailing slash, so every
+  request path that begins with it skips the middleware. The authenticated
+  route `GET /api/v1/aa/consent/{consent_handle}/status` falls under it when
+  the handle begins with `callback` (for example
+  `/api/v1/aa/consent/callback-0/status`): the credential is never read. Such
+  a request is now refused with `403 Unrecognised authentication mode; request
+  refused` before the handler runs (before, `get_current_tenant` answered
+  `401`), so nothing is exposed, but a valid caller with such a handle is
+  refused too. Handles come from the account aggregator's response, or are a
+  UUID when it returns none.
+- **Fix:** exempt the callback as an exact path (`EXEMPT_PATHS`; the provider
+  callback is the single route `POST /aa/consent/callback`) once the path the
+  aggregator posts to is confirmed, and remove the pair from
+  `KNOWN_EXEMPT_OVERLAPS` in
+  `tests/regression/test_route_scope_unknown_mode_20260927.py`.
