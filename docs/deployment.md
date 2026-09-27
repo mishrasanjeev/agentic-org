@@ -299,9 +299,11 @@ See [`.env.example`](../.env.example) for the complete reference.
   repository (`core.config.PUBLISHED_PLACEHOLDER_SECRETS`) are refused as keys
   there, as if unset. A
   deployment that has been sealing credentials under `AGENTICORG_SECRET_KEY`
-  keeps working; to move off it, set
-  `AGENTICORG_VAULT_KEYRING=v2:<new>,legacy:<current secret key>` and rewrap
-  (`docs/SECRETS_ROTATION.md`).
+  keeps working; to move off it, stage
+  `AGENTICORG_VAULT_KEYRING=legacy:<current secret key>,v2:<new>`, promote `v2`
+  and rewrap as described in
+  [moving off a single key](runbooks/vault-key-rotation.md#moving-off-a-single-key).
+  Every later key change follows [vault key rotation](runbooks/vault-key-rotation.md).
 - `GRANTEX_CLIENT_ID` / `GRANTEX_CLIENT_SECRET` — OAuth2 credentials
 - `AGENTICORG_JWT_PUBLIC_KEY_URL` — JWKS endpoint for token validation
 

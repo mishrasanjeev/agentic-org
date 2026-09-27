@@ -45,7 +45,7 @@ Service health comes from
 | Integrate through APIs | [API reference](api-reference.md), generated OpenAPI, [Python SDK](../sdk/README.md), [TypeScript SDK](../sdk-ts/README.md) |
 | Connect an MCP client | [MCP server](../mcp-server/README.md) |
 | Implement agentic commerce | [OACP documentation](oacp/README.md) |
-| Operate production | [Deployment](deployment.md), [runbooks](RUNBOOKS.md), [backup and recovery](BACKUP_AND_DR.md) |
+| Operate production | [Deployment](deployment.md), [runbooks](RUNBOOKS.md), [backup and recovery](BACKUP_AND_DR.md), [secrets rotation](SECRETS_ROTATION.md), [vault key rotation](runbooks/vault-key-rotation.md) |
 | Review security | [Security policy](../SECURITY.md), [vulnerability disclosure](VULNERABILITY_DISCLOSURE.md) |
 
 ## OACP And Agentic Commerce

@@ -223,6 +223,7 @@ RESERVED_FLAG_KEYS: tuple[str, ...] = (
     "grants.enforce_closed",
     "pseudonymisation.pre_model",
     "approvals.resume_agent_runs",
+    "approvals.unevaluable_condition",
     "decisions.required",
     "caps.enforce",
 )

@@ -227,6 +227,12 @@ def _tools_to_scopes(
     global index only if no scoped match exists. Agents that don't
     declare any connector_ids continue to use the unscoped index — for
     them we have no signal that *should* have constrained the choice.
+
+    A deprecated connector id's tool is scoped under its live id
+    (``sanctions_api`` -> ``sanctions_screening``) when the live connector
+    has the same tool, and under the deprecated id when only it has the tool
+    (``get_alert``); the grant check counts a grant under either id
+    (``auth.grant_enforcement.enforce_connector_grant``).
     """
     from core.langgraph.grantex_auth import _tool_permission
 
@@ -236,7 +242,7 @@ def _tools_to_scopes(
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
-        from core.langgraph.tool_adapter import _build_tool_index, _split_connector_tool_ref
+        from core.langgraph.tool_adapter import _build_tool_index, _grant_connector_id, _split_connector_tool_ref
 
         scoped_index = (
             _build_tool_index(connector_names=connector_names)
@@ -259,13 +265,13 @@ def _tools_to_scopes(
             # to a first-wins match of the bare name.
             qualified = qualified_index.get(f"{connector_hint}:{bare_tool}")
             if qualified:
-                scopes.append(_scope(qualified[0], bare_tool))
+                scopes.append(_scope(_grant_connector_id(qualified[0], bare_tool, qualified_index), bare_tool))
             else:
                 scopes.append(_scope("agenticorg", tool_name))
             continue
         match = scoped_index.get(tool_name) or global_index.get(tool_name)
         if match:
-            scopes.append(_scope(match[0], tool_name))
+            scopes.append(_scope(_grant_connector_id(match[0], tool_name, qualified_index), tool_name))
         else:
             scopes.append(_scope("agenticorg", tool_name))
 

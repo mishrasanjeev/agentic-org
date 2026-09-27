@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
 from api.route_enforcement import (
+    GRANTABLE_ROUTE_SCOPES,
     RATE_LIMIT_CLASSES,
     SCOPE_FAMILIES,
     enforce_route_metadata,
@@ -207,7 +208,13 @@ class TestRouteTableCoverage:
         from core.rbac import ROLE_SCOPES
 
         known = {s for scopes in ROLE_SCOPES.values() for s in scopes}
-        for read_scope, write_scope in SCOPE_FAMILIES.values():
+        for family, (read_scope, write_scope) in SCOPE_FAMILIES.items():
+            if family in {"a2a", "mcp"}:
+                # Machine entry points behind AGENTICORG_ROUTE_SCOPE_A2A_MCP:
+                # API keys and agent grants hold these scopes, no role does.
+                assert read_scope in GRANTABLE_ROUTE_SCOPES and write_scope in GRANTABLE_ROUTE_SCOPES
+                assert read_scope not in known and write_scope not in known
+                continue
             assert read_scope in known and write_scope in known
 
     def test_unmapped_families_are_reported_not_silently_enforced(self):

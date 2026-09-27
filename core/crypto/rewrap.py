@@ -10,8 +10,8 @@ Foundation #4 iteration 3 — the operational counterpart to
     3. **rewrap** (this module) walks every encrypted column and
        re-encrypts rows whose stamp != active id, so they get
        restamped with the new active id.
-    4. ``verify_all --check=<old_id>`` returns 0 references → safe to
-       drop the old keyring entry.
+    4. ``verify_all --check=<old_id>`` returns 0 references, so the
+       old keyring entry is safe to drop.
 
 Without this loop you cannot retire an old key without leaving live
 ciphertext orphaned (the same incident class as the SECRET_KEY
@@ -34,13 +34,19 @@ Usage::
     # Verify every row landed on the active key (read-only check).
     python -m core.crypto.rewrap --verify
 
-The script exits 0 on success, 1 on any decrypt/encrypt error, 2 on
-config errors (missing column, no keyring set, etc.). Errors surface
-the first failing row so operators can pin its tenant and re-run.
+The script exits 0 on success; 1 on any decrypt/encrypt error, a
+failed tenant scan, or a refused vault key (a malformed keyring, or
+no key at all outside a local or test runtime); 2 on an unknown
+``--column`` or a ``--batch-size`` below 1. A row that cannot be
+decrypted rolls back its batch and stops the run; the error names
+its column, row id and stamp. Running again fails on the same row
+until its cause is fixed. The operator runbook is
+``docs/runbooks/vault-key-rotation.md``.
 
 Audit log: every UPDATE prints a single JSONL line to stdout with
-``{ts, column, row_id, old_kid, new_kid}`` so an operator can pipe
-the run into a file and have a complete record of what changed.
+``{ts, column, row_id, tenant_id, company_id, old_kid, new_kid}``
+so an operator can pipe the run into a file and have a complete
+record of what changed.
 """
 
 from __future__ import annotations

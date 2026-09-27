@@ -76,10 +76,11 @@ Remove an entry in the pull request that fixes it.
 - **What:** the `Token scope:` line of most built-in prompts lists
   connector/permission pairs that are neither registered tools nor in the
   agent's defaults, e.g. `ocr(r:extract)` and `banking_api(w:queue_payment)`
-  in `ap_processor`, `jira(w:create_issue)` and `sanctions_api(r:batch_screen)`
-  in `risk_sentinel`, `outlook(...)` in `email_agent`. The model reads them as
-  capabilities. `scripts/check_prompt_tools.py` checks tool calls only and
-  skips these lines because they are not tool names.
+  in `ap_processor`, `jira(w:create_issue)` and
+  `sanctions_screening(r:batch_screen)` in `risk_sentinel`, `outlook(...)` in
+  `email_agent`. The model reads them as capabilities.
+  `scripts/check_prompt_tools.py` checks tool calls only and skips these lines
+  because they are not tool names.
 - **Fix:** rewrite each token-scope line from the agent's default tools
   (`connector(tool, ...)`) and extend the check to parse and verify it.
 
@@ -149,20 +150,6 @@ Remove an entry in the pull request that fixes it.
   `core.autocrlf=false` is unaffected.
 - **Fix:** add `.gitattributes` with `*.sh text eol=lf` (and the same for
   other files executed inside Linux containers), then renormalise.
-
-## A-15 — Existing files name commercial screening and business-data vendors
-
-- **Found:** `python scripts/check_denylist.py audit` when adding the vendor
-  denylist (2026-09-15).
-- **What:** six tracked lines predate the vendor-neutral rule and name
-  commercial vendors: two in `connectors/ops/sanctions_api.py`, one each in
-  `core/agents/packs/insurance/prompts/underwriting_analyst.prompt.txt`,
-  `docs/PRD_CxO_v5.0.md`, `docs/connector_production_readiness.md` and
-  `scripts/generate_connectors.py`. The pull request check only looks at added
-  lines, so these pass today but fail as soon as someone edits them.
-- **Fix:** rename to provider-neutral terms (the sanctions connector's base URL
-  and description become configuration or `acme_kyb`-style examples; the prompt
-  and documents drop the vendor names), then confirm `audit` exits 0.
 
 ## A-16 — Re-running `make dev` after an API change breaks the console proxy
 
@@ -414,7 +401,8 @@ Remove an entry in the pull request that fixes it.
 
 - **Found:** adding warn/deny modes to `validate_tool_scopes` (2026-09-15).
 - **What:** in `off` mode `core/langgraph/agent_graph.py::validate_tool_scopes`
-  still calls `grantex.enforce(...)` directly inside the async graph node.
+  still calls `grantex.enforce(...)` (through `enforce_connector_grant`)
+  directly inside the async graph node.
   `enforce` can fetch the JWKS with a synchronous HTTP request, blocking the
   event loop. The warn/deny path and `ToolGateway.execute` run it with
   `asyncio.to_thread`; the legacy path was left byte-for-byte unchanged so
@@ -450,24 +438,6 @@ Remove an entry in the pull request that fixes it.
   (or set `grant_denial` from the legacy path too), and update the tests that
   describe the legacy result.
 
-## A-40 — A built-in connector is tied to one commercial screening provider
-
-- **Found:** `scripts/check_denylist.py audit` while removing vendor names
-  from prompts and docs (2026-09-15).
-- **What:** `connectors/ops/sanctions_api.py` (connector `sanctions_api`) and
-  its generator entry in `scripts/generate_connectors.py` integrate with one
-  commercial sanctions-screening provider: the module docstring and
-  `base_url` name it. The release rules say no specific commercial
-  verification or screening provider ships in this repository, and PRD §2
-  lists that as a non-goal. The connector is live, so removing it breaks any
-  tenant that configured it.
-- **Fix:** move the connector into its own package that registers through the
-  `agenticorg.connectors` entry point (plugin loading, F-6), keep
-  `sanctions_api` resolvable during a deprecation window with a startup
-  warning for tenants that use it, then delete the in-repo module and its
-  generator entry. New screening integrations go through the
-  `VerificationProvider` interface instead.
-
 ## A-38 — An empty web presence carries no evidence to cite
 
 - **Found:** assembling memo sections for businesses with no website
@@ -479,7 +449,6 @@ Remove an entry in the pull request that fixes it.
   resolved registry record instead.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
-
 
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
@@ -934,9 +903,21 @@ Remove an entry in the pull request that fixes it.
   only against per-company roles). A-43 covers A2A and MCP; this is the wider
   gap. Not caused by H-1, which made agent tokens subject to the mapped
   families only.
+- **Update (2026-09-27):** the `a2a` and `mcp` families are now mapped
+  (`a2a:read` / `a2a:write`, `mcp:read` / `mcp:write`, with `mcp:call` as an
+  alias) but enforced only when `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`, which
+  defaults off; while it is off they stay unmapped as described above, and a
+  domain-role session can also run an agent type outside its domains through
+  them, since neither route checks the caller's domains. No role holds their
+  scopes. Every other family listed here is still unmapped. Separately, an
+  authenticated route reached with an unknown `auth_mode` is now logged, and
+  refused whatever its family when `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`
+  is on (A-95).
 - **Fix:** map every authenticated family to a read and a write scope, or
   refuse by default a family with no mapping, and add each to the unit test
-  that pins the unmapped set.
+  that pins the unmapped set. Turn `AGENTICORG_ROUTE_SCOPE_A2A_MCP` on in each
+  deployment once its A2A integrations hold `a2a:write` (see
+  `docs/operations/grant-enforcement.md`), then make it the default.
 
 ## A-70 — The tools and API images resolve dependency ranges, not pins
 
@@ -1108,6 +1089,291 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+
+- **Found:** running `scripts/seed_governed_cases.py` end to end against a
+  migrated local database after `scripts/seed_dev.py` (2026-09-27).
+- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
+  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
+  exactly one active, shared `business_underwriter` and `screening_disposition`
+  agent in the tenant, registered with Grantex, with a `case_purposes` list and
+  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
+  `scripts/seed_dev.py` nor the development stack creates those agents or
+  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
+  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
+  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
+  `awaiting_decision` with proposed dispositions. The case runtime's default
+  authorizer was already `case_authorizer`, so this predates the seed passing
+  it explicitly.
+- **Fix:** have the development seed create and register the two shared role
+  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
+  Grantex service and provision a development root grant for them, then rerun
+  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
+  for development.
+
+## A-82 — Key rotation tooling does not see vault ciphertext outside five columns
+
+- **Found:** rehearsing the vault key rotation runbook against a local database
+  (2026-09-27).
+- **What:** `core/crypto/verify_all.py` and `core/crypto/rewrap.py` walk only
+  the five columns in `_SCANNERS`. `encrypt_for_tenant` and `encrypt_with_kek`
+  seal with the vault keyring whenever the tenant has no KMS key, and four
+  other places store the result: `sso_configs.config` (`client_secret_enc`,
+  `api/v1/sso.py`), `case_push_endpoints.signing_keys_encrypted`
+  (`core/cases/push.py`), `governed_cases.excerpts_encrypted` (each entry's
+  `text_encrypted`, `core/cases/excerpts.py`) and `tenants.settings`
+  (`voice_configs.*.credentials_encrypted`, `api/v1/voice.py`). After a
+  promote and rewrap, `verify_all --check=<old id>` exited 0 while an SSO client
+  secret and a case push signing key were still stamped with the old id; with
+  the old key removed both failed with `InvalidToken`, which stops OIDC sign-in
+  and case push signing for those tenants. The runbook's step 5 query finds
+  such values meanwhile.
+- **Fix:** register the four locations with both tools (a scanner that reads
+  and writes ciphertext at a JSON path, since two of them sit inside a document
+  or a list), with a test that a key referenced only there blocks retirement,
+  and a test that fails when a new `encrypt_for_tenant` or `encrypt_with_kek`
+  call site stores somewhere unregistered.
+
+## A-83 — Rewrap can overwrite a credential written while it runs
+
+- **Found:** rehearsing the vault key rotation runbook against a local database
+  (2026-09-27).
+- **What:** `core/crypto/rewrap.py` reads a batch with a plain `SELECT` and
+  writes each row back with `UPDATE ... WHERE id = :id`, with no row lock and no
+  check that the value is unchanged. A credential stored in between (the token
+  refresh task rewrites `connector_configs.credentials_encrypted` every 15
+  minutes; a reconnect does too) is replaced by the re-encrypted old value.
+  Reproduced against Postgres: a write committed after rewrap read the row was
+  reverted and rewrap exited 0. A provider that rotates refresh tokens then
+  refuses the restored one.
+- **Fix:** read each batch with `SELECT ... FOR UPDATE` in the transaction that
+  writes it (or update only where the column still holds the value read, and
+  count the rows skipped), with a test that commits a concurrent write between
+  the read and the update.
+
+## A-84 — The secrets rotation workflow accepts the vault's own secrets, and its runbook is stale
+
+- **Found:** documenting vault key rotation (2026-09-27).
+- **What:**
+  - `.github/workflows/secrets-rotation.yml` refuses `AGENTICORG_SECRET_KEY` and
+    externally issued secrets by ID, but not the secrets behind
+    `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY`, and replaces a value
+    with `openssl rand -base64 48`. A keyring replaced that way has no `id:`
+    entry, so new API and worker instances refuse to start; a single vault key
+    replaced that way opens nothing already stored. Its comment gives the order
+    "generate new key -> rewrap -> cut over", but rewrap only moves rows to the
+    key that is already active.
+  - `docs/SECRETS_ROTATION.md` still says the workflow runs quarterly on a
+    schedule (it is `workflow_dispatch` only), and its verification and rollback
+    sections use `kubectl` against the removed GKE deployment and mention a
+    30-minute dual-read window.
+- **Fix:** refuse the vault's secrets in the workflow (by ID, and by checking
+  whether a service mounts the secret as a vault variable), correct the
+  comment, and rewrite the page's schedule, verification and rollback sections
+  for Cloud Run.
+
+## A-85 — Migrating a fresh local database rewrites a committed audit record
+
+- **Found:** migrating a scratch database for the vault key rotation rehearsal
+  (2026-09-27).
+- **What:** `python scripts/alembic_migrate.py`, the README's local setup step,
+  rewrote the tracked `migrations/audit/v6z12_voice_runtime.json` with the local
+  run's `started_at` and `completed_at`. `core.crypto.migration_helpers` writes
+  audit records into the checkout unless `AGENTICORG_MIGRATION_AUDIT_DIR` is set,
+  and only the test session sets it (A-13), so every developer who migrates an
+  empty database gets a modified file that is easy to commit.
+- **Fix:** write local and test runs' records outside the checkout by default
+  (for example under the system's temporary files unless the runtime is strict
+  or the variable is set), or document the variable in the README next to the
+  migrate step.
+
+## A-86 — WebSocket routes fail on the app-wide route enforcement dependency
+
+- **Found:** fixing the route scope residual of H-1 (2026-09-27).
+- **What:** `api/main.py` registers `api.route_enforcement.enforce_route_metadata`
+  as an app-wide dependency, and it takes `request: Request`. FastAPI (0.139)
+  passes no `Request` to a WebSocket route's dependencies, so a connection to
+  `api.main.app` fails with `TypeError: enforce_route_metadata() missing 1
+  required positional argument: 'request'` before the handler runs, for
+  `/api/v1/ws/feed/{tenant_id}` and `/api/v1/ws/bridge/{bridge_id}` alike
+  (reproduced with the test client, with and without a token). The WebSocket
+  tests mount the routers on a bare `FastAPI()` without the dependency, so
+  they pass. Deployed behaviour was not checked.
+- **Fix:** have the dependency take `HTTPConnection` and leave WebSocket routes
+  to the authentication their handlers already do, then add a test that
+  connects through `api.main.app`. Do not run `_check_scope` on them as it
+  stands: the auth middleware does not run for WebSockets, so the connection
+  has no `auth_mode` or scopes and would be refused as an unknown mode with
+  `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` on, or judged on no scopes with
+  it off.
+
+## A-87 — The alert gate probe test rewrites tracked files in the working tree
+
+- **Found:** running `tests/unit` on a Windows checkout (2026-09-27).
+- **What:** `tests/unit/observability/test_probes.py` runs
+  `scripts/probe_alert_gate.py`, which mutates the repository's own
+  `monitoring/prometheus/agenticorg-alerts.yml` and
+  `infra/terraform/monitoring/alerts.tf` in place and restores them with
+  `newline="\n"`. On a checkout with CRLF line endings (A-62) both files are
+  left rewritten with LF after every unit run, so `git status` shows them
+  modified, and a run interrupted between mutation and restore leaves a broken
+  alert rule in the working tree.
+- **Fix:** have the probe (or its test) work on copies under `tmp_path`, or
+  restore the exact original bytes (`read_bytes` / `write_bytes`).
+
+## A-88 — An exempt auth prefix reaches into an authenticated route
+
+- **Found:** pinning the route table against the auth middleware's exemptions
+  for the route scope residual of H-1 (2026-09-27).
+- **What:** `GrantexAuthMiddleware.EXEMPT_PREFIXES` holds
+  `/api/v1/aa/consent/callback` as a prefix with no trailing slash, so every
+  request path that begins with it skips the middleware. The authenticated
+  route `GET /api/v1/aa/consent/{consent_handle}/status` falls under it when
+  the handle begins with `callback` (for example
+  `/api/v1/aa/consent/callback-0/status`): the credential is never read. With
+  `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` on, such a request is refused
+  with `403 Unrecognised authentication mode; request refused` before the
+  handler runs; with it off (the default) it is logged as an unknown mode and
+  `get_current_tenant` answers `401`, as before. Either way nothing is
+  exposed, but a valid caller with such a handle is refused too. Handles come
+  from the account aggregator's response, or are a UUID when it returns none.
+- **Fix:** exempt the callback as an exact path (`EXEMPT_PATHS`; the provider
+  callback is the single route `POST /aa/consent/callback`) once the path the
+  aggregator posts to is confirmed, and remove the pair from
+  `KNOWN_EXEMPT_OVERLAPS` in
+  `tests/regression/test_route_scope_unknown_mode_20260927.py`.
+
+## A-89 — Defer ends an approval without a policy and fails under one
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the approval card offers Approve, Reject and Defer
+  (`ui/src/components/ApprovalCard.tsx`), and `HITLDecision.decision` accepts
+  any string. On an item with no policy, `POST /approvals/{id}/decide` with
+  `defer` takes the legacy path: the item is marked `decided` with decision
+  `defer`, and a workflow item's run is resumed with that decision, so
+  deferring ends the approval. Under a policy, `apply_decision` raises
+  `ValueError("Unknown decision 'defer'")`, which the global handler returns
+  as a generic `400 Invalid request`. With `approvals.unevaluable_condition`
+  in `deny` mode, a defer (or any value other than `reject`) on an item whose
+  policy has a condition that cannot be evaluated gets that flag's `409`
+  instead, as an approval does, because where no policy applies it ends the
+  item.
+- **Fix:** decide what defer means (leave the item pending and record the
+  deferral, or drop the button), validate `decision` against the item's
+  `decision_options` at the boundary, and answer an unknown decision with a
+  `422` that says why.
+
+## A-90 — Global authority-flag rows are invisible to a role subject to row-level security
+
+- **Found:** replaying `approvals.unevaluable_condition` on a fully migrated
+  schema as a `NOSUPERUSER NOBYPASSRLS` role (2026-09-27).
+- **What:** `feature_flags` is FORCE ROW LEVEL SECURITY (v6z16) with the one
+  policy `tenant_id::text = current_setting('agenticorg.tenant_id', true)`. A
+  global row has `tenant_id` NULL and never satisfies it, so
+  `core.feature_flags.load_flag_rows_strict` and `_query_flag` read no global
+  row in any tenant session, nor under the nil tenant. For a role subject to
+  row-level security every authority flag's global row is therefore ignored,
+  and `scripts/authority_flags.py set --global` fails the policy's WITH CHECK.
+  The Postgres tests of global rows run as a role that bypasses row-level
+  security, so they pass.
+- **Fix:** a forward migration adding a SELECT policy for `tenant_id IS NULL`
+  rows on `feature_flags` (writes stay with operators on a privileged role),
+  and a Postgres test of global and tenant rows run as a
+  `NOSUPERUSER NOBYPASSRLS` role.
+
+## A-91 — The approval policy model describes resolution at item creation
+
+- **Found:** adding `approvals.unevaluable_condition` (2026-09-27).
+- **What:** the docstring of `core/models/approval_policy.py` says a policy is
+  resolved when an approval item is created, setting the item's assignee role,
+  quorum and step index, and points to `docs/adr/0005-approval-policies.md`,
+  which does not exist. Nothing resolves a policy at creation:
+  `api/v1/approvals.py::decide` resolves it on the first decision and keeps the
+  item's progress in `context.policy_state`. The docstring invites a
+  creation-time check, which would miss policies created or edited while an
+  item waits.
+- **Fix:** describe decision-time resolution in the docstring and point it at
+  `docs/approval-policies.md`.
+
+## A-92 — A connector that screens through a provider cannot pass the activation gate
+
+- **Found:** review of the sanctions screening connector (2026-09-27).
+- **What:** the verification provider seam
+  (`connectors/framework/verification_provider.py`) has no probe, so the
+  `sanctions_screening` connector cannot tell a provider with wrong credentials
+  from a working one and its health check reports `configured`, never
+  `healthy`. `_assert_connectors_ready_for_activation` (`api/v1/agents.py`)
+  requires `health_status == "healthy"` for every linked connector, so an
+  agent that links the connector cannot be activated.
+- **Fix:** add an optional probe to the seam that performs no screening and
+  defaults to "not offered", have the connector report `healthy` only when the
+  provider's probe succeeds, and document the probe in
+  `docs/providers/writing-a-verification-provider.md`.
+
+## A-93 — Legacy scope validation checks the first connector with a tool name
+
+- **Found:** review of the sanctions screening rename (2026-09-27).
+- **What:** in `off` mode `validate_tool_scopes`
+  (`core/langgraph/agent_graph.py`) finds the connector of a bare tool name in
+  the unfiltered `_build_tool_index`, which returns the first connector that
+  registers the name. `build_tools_for_agent` binds the name to the agent's own
+  connector, and the warn/deny path checks that one (`tool_refs`). 38 bare
+  names are registered by more than one connector: a Jira-only agent's
+  `create_issue` runs on `jira` and its grant holds `tool:jira:...` scopes
+  (`auth/grantex_registration.py` resolves against the agent's connectors),
+  but the legacy check asks Grantex about `github` and denies the call. The
+  reverse also holds: a grant with only `tool:github:write:create_issue`
+  passes the legacy check for that agent's `jira` call, so in `off` a scope
+  for one connector covers another connector's tool of the same name. The
+  runtime registration path (`core/langgraph/grantex_auth.py::_tools_to_scopes`,
+  unfiltered index) issues exactly such scopes.
+- **Fix:** look the call up in `tool_refs` first in the legacy path too, and
+  fall back to the index only for names the agent did not register, as
+  `_enforce_tool_grants` does. Refresh the scopes of agents registered through
+  the runtime path first (`scripts/refresh_grantex_scopes.py`), or their calls
+  start failing in `off`.
+
+## A-94 — The deprecated `sanctions_api` connector has no removal date
+
+- **Found:** reworking the screening connector for provider neutrality (2026-09-27).
+- **What:** `connectors/ops/sanctions_api.py` stays in the tree as a deprecated
+  legacy connector so tenants that use it keep working. It no longer names a
+  provider (its base URL comes from connector config or
+  `AGENTICORG_SANCTIONS_API_BASE_URL`), but it is still shaped around one
+  service's API, and nothing tracks moving those tenants to
+  `sanctions_screening` or deleting the module.
+- **Fix:** list the tenants whose agents link `sanctions_api`, move them to
+  `sanctions_screening` with a provider package, then delete the module, its
+  registration and the grant alias.
+
+## A-95 — An unrecognised authentication mode is refused only when `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` is on
+
+- **Found:** review of the route scope residual of H-1 (2026-09-27). The
+  refusal was first written to apply by default, which the feature flag rule
+  in `AGENTS.md` does not allow for a change on an existing path.
+- **What:** the auth middleware sets `auth_mode` to `api_key`, `grantex` or
+  `legacy` once it has verified a credential. `_check_scope` in
+  `api/route_enforcement.py` logs `route_enforcement_unknown_auth_mode` for an
+  authenticated route reached with any other mode, or none, but refuses it
+  only while `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE` is on, and the
+  setting defaults off. While it is off, a request whose mode was not set by a
+  verified credential is judged on whatever scopes it carries, as before:
+  `agenticorg:admin` among them passes every route, a route in an unmapped
+  family (A-68) needs no scope, and `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`
+  lets a missing scope through. The mounted middleware sets scopes only
+  together with a known mode, so today such a request carries no scopes (it
+  arrives through an exemption, A-88) and the route's own dependencies refuse
+  it. The exposure is any later code that sets `request.state.scopes` without
+  a known mode, as the unmounted `auth.middleware.AuthMiddleware` does, or a
+  new exemption that reaches an authenticated route.
+- **Fix:** owned by the code owners of `api/route_enforcement.py` and
+  `auth/grantex_middleware.py` (`.github/CODEOWNERS`). The warning is logged
+  with the setting off too: watch staging for
+  `route_enforcement_unknown_auth_mode`, and once it shows none, make `true`
+  the default in a release that records the flip in `CHANGELOG.md` as a
+  breaking change with `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE=false` as the
+  explicit opt-out, then remove this entry.
+
 ## A-103 — The onboarding workflow's decision step presents grants nobody can hold
 
 - **Found:** consuming governed-case decisions by request id ahead of the
@@ -1126,4 +1392,3 @@ Remove an entry in the pull request that fixes it.
   (the request is on this case, for this outcome, at this case version), then
   consume by request id; or drop `decision_grants` from the step and document
   that a workflow decision is recorded through the console.
-

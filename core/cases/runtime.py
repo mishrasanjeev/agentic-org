@@ -9,7 +9,9 @@ none. ``run_case_step`` is the workflow engine's ``case_agent`` step.
 
 Everything here is gated per tenant by the ``governed_cases.enabled`` flag, off by default; a flag
 that cannot be read counts as off. The provider tool gateway's grant check is supplied by
-``CaseRuntime.authorizer_factory`` (PRD F-1 wires the run grant in).
+``CaseRuntime.authorizer_factory`` (PRD F-1 wires the run grant in). Outside local and test runtimes a
+runtime without one cannot be built; a missing factory, or one that returns ``None``, refuses the run
+with ``authorization_unavailable`` before the case moves or a provider is built.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ from core.cases.grant_authorizer import case_authorizer
 from core.cases.states import CaseError, CaseState
 from core.cases.store import CASE_REF_RE, get_case, record_update, transition
 from core.policy import EXAMPLES_DIR, Policy, PolicyLoadError, load_policies
-from core.tool_gateway.provider_gateway import ToolAuthorizer
+from core.tool_gateway.provider_gateway import AUTHORIZATION_UNAVAILABLE, AuthorizerRequiredError, ToolAuthorizer
 
 logger = structlog.get_logger()
 
@@ -123,6 +125,20 @@ class CaseRuntime:
     #: Ask for immediate delivery of queued case push events once a change has committed.
     push_kick: Callable[[uuid.UUID], None] = field(default=lambda tenant_id: _kick(tenant_id))
 
+    def __post_init__(self) -> None:
+        # Without a factory no agent run could get its grant check. Outside local and test runtimes
+        # that is refused here, where the wiring mistake is made, as for the gateway and each agent's
+        # dependencies (an unknown runtime label counts as strict). Where it is accepted,
+        # ``authorizer_for`` refuses every run instead.
+        if not callable(self.authorizer_factory):
+            from core.config import is_strict_runtime_env, settings
+
+            if is_strict_runtime_env(settings.env):
+                raise AuthorizerRequiredError(
+                    "CaseRuntime: authorizer_factory must supply each agent run's grant check; "
+                    f"None is accepted only in local and test runtimes, not env={settings.env!r}"
+                )
+
     async def require_enabled(self, tenant_id: uuid.UUID) -> None:
         try:
             enabled = await self.flag(tenant_id)
@@ -132,6 +148,21 @@ class CaseRuntime:
             enabled = False
         if not enabled:
             raise CaseError("governed_cases_disabled", status=404)
+
+    def authorizer_for(self, tenant_id: str, case_ref: str, role: str, purpose: str) -> ToolAuthorizer:
+        """The grant check for one agent run. A missing factory, or ``None`` from one, is refused, never passed on."""
+        # Only a local or test runtime can be built without a factory (see ``__post_init__``).
+        authorizer: ToolAuthorizer | None = None
+        detail = f"no authorizer_factory for {role}"
+        if callable(self.authorizer_factory):
+            authorizer = self.authorizer_factory(tenant_id, case_ref, role, purpose)
+            detail = f"authorizer_factory returned None for {role}"
+        if authorizer is None:
+            # The gateway would refuse every call without one, but a run must not start at all when
+            # the runtime cannot supply its grant check: refuse here, where the mistake can be named.
+            logger.error("governed_case_authorizer_missing", case_ref=case_ref, role=role)
+            raise CaseError(AUTHORIZATION_UNAVAILABLE, detail, status=503)
+        return authorizer
 
 
 def _kick(tenant_id: uuid.UUID) -> None:
@@ -218,12 +249,13 @@ async def investigate_case(
     await runtime.require_enabled(tenant)
     async with runtime.session_factory(tenant) as session:
         case = await get_case(session, tenant, case_ref, for_update=True)
+        # Before the case moves: a runtime that cannot supply the run's grant check refuses the
+        # investigation outright instead of leaving a case that started without one.
+        authorizer = runtime.authorizer_for(str(tenant), case_ref, "business_underwriter", case.purpose)
         started_state = case.state
         await transition(session, case, CaseState.IN_PROGRESS, actor=actor, reason=reason, now=runtime.clock())
         started_version = case.version
-        application, provider_name, policy_id, purpose = (
-            dict(case.application), case.provider, case.policy_id, case.purpose
-        )
+        application, provider_name, policy_id = dict(case.application), case.provider, case.policy_id
 
     outcome = None
     failure = ""
@@ -252,9 +284,7 @@ async def investigate_case(
                 ),
                 deps=UnderwriterDependencies(
                     provider=provider,
-                    authorizer=runtime.authorizer_factory(
-                        str(tenant), case_ref, "business_underwriter", purpose
-                    ),
+                    authorizer=authorizer,
                     clock=runtime.clock,
                     pseudonym_store=runtime.pseudonym_store,
                 ),
@@ -372,6 +402,8 @@ async def dispose_screening_hits(
         existing = {d["hit_id"] for d in case.screening_dispositions or []}
         provider_name, purpose = case.provider, case.purpose
 
+    # Before the provider is built: no disposition run starts without its grant check.
+    authorizer = runtime.authorizer_for(str(tenant), case_ref, "screening_disposition", purpose)
     provider = runtime.provider_factory(provider_name)
     proposed: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
@@ -392,9 +424,7 @@ async def dispose_screening_hits(
                 config=DispositionConfig(llm_model=runtime.llm_model),
                 deps=DispositionDependencies(
                     provider=provider,
-                    authorizer=runtime.authorizer_factory(
-                        str(tenant), case_ref, "screening_disposition", purpose
-                    ),
+                    authorizer=authorizer,
                     clock=runtime.clock,
                     pseudonym_store=runtime.pseudonym_store,
                 ),
