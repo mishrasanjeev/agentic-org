@@ -98,9 +98,11 @@ class _Db:
             ]
 
     def reset(self) -> None:
+        # audit_log is append-only (the audit_log_immutable trigger refuses
+        # every DELETE), so the audit rows the authority-flag script writes
+        # are left for the module's database drop to remove.
         with self.owner.begin() as conn:
             conn.execute(text("DELETE FROM feature_flags"))
-            conn.execute(text("DELETE FROM audit_log WHERE event_type = 'feature_flag.authority_changed'"))
 
 
 @pytest.fixture(scope="module")
