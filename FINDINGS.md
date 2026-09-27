@@ -409,21 +409,6 @@ Remove an entry in the pull request that fixes it.
   `off` keeps today's behaviour.
 - **Fix:** run the legacy call through `asyncio.to_thread` too.
 
-## A-38 — Workflow connector steps and unstored workflow agents have no grant principal
-
-- **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
-  2026-09-15).
-- **What:** a workflow `connector_tool` step calls a connector with no agent at
-  all, and an agent step whose `agent_id` does not resolve to a stored agent
-  runs as a synthetic `wf_agent_<step>` id. Neither has a Grantex agent
-  registration, so no grant can be resolved for them: in `warn` every call is
-  recorded as `grant_missing`/`no_agent` (or `lookup_failed`), in `deny` it is
-  refused. A2A and MCP calls for an agent type with no shared agent of that
-  type behave the same unless the caller brings its own Grantex token.
-- **Fix:** give workflows a principal — register the workflow definition (or
-  require a stored agent on every step) as a Grantex agent with scopes for its
-  connector steps, and resolve the step's grant from it.
-
 ## A-39 — A legacy scope denial is reported as a completed run
 
 - **Found:** making deny-mode runs report `failed` (PRD F-1c, 2026-09-15).
@@ -1373,3 +1358,18 @@ Remove an entry in the pull request that fixes it.
   the default in a release that records the flip in `CHANGELOG.md` as a
   breaking change with `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE=false` as the
   explicit opt-out, then remove this entry.
+
+## A-104 — Workflow connector steps and unstored workflow agents have no grant principal
+
+- **Found:** covering run entry points for `grants.enforce_closed` (PRD F-1b,
+  2026-09-15).
+- **What:** a workflow `connector_tool` step calls a connector with no agent at
+  all, and an agent step whose `agent_id` does not resolve to a stored agent
+  runs as a synthetic `wf_agent_<step>` id. Neither has a Grantex agent
+  registration, so no grant can be resolved for them: in `warn` every call is
+  recorded as `grant_missing`/`no_agent` (or `lookup_failed`), in `deny` it is
+  refused. A2A and MCP calls for an agent type with no shared agent of that
+  type behave the same unless the caller brings its own Grantex token.
+- **Fix:** give workflows a principal — register the workflow definition (or
+  require a stored agent on every step) as a Grantex agent with scopes for its
+  connector steps, and resolve the step's grant from it.
