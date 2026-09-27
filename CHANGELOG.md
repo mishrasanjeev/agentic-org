@@ -38,6 +38,43 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   database role subject to row-level security (an open entry in
   `FINDINGS.md`), so set the tenant row. See "When a condition cannot be
   evaluated" in `docs/approval-policies.md`.
+### Added - a runbook for rotating the credential-vault key
+- `docs/runbooks/vault-key-rotation.md` rotates the vault key with the tools in
+  the repository: add the new key to `AGENTICORG_VAULT_KEYRING` as a
+  decrypt-only entry and roll the API, worker and beat; move it to the front and
+  roll again; `python -m core.crypto.rewrap --dry-run`, the rewrap and
+  `--verify`; `python -m core.crypto.verify_all --check=<old id>`; then remove
+  the old key. It covers moving off `AGENTICORG_VAULT_KEY` or
+  `AGENTICORG_SECRET_KEY` (and what else that key signs), rollback at each step,
+  checks for what the tools cannot see, and a local rehearsal. It lists what
+  `scripts/deploy_cloud_run.sh` re-applies on each roll, including the public
+  commerce discovery flag taken from the operator's shell; counts a roll as
+  complete only once the older revisions have no instances, which is also the
+  checkpoint cutoff; stops the rotation on a row rewrap cannot decrypt instead
+  of rerunning it; and runs the maintenance job on the services' image. The
+  `rewrap` and `verify_all` commands, the SQL checks and the rehearsal were run
+  against a local database, and the deploy script against local stand-ins for
+  `gcloud`; no `gcloud` step was run against Cloud Run.
+- `docs/SECRETS_ROTATION.md` said no secret has a second read path and listed
+  the vault only as the `AGENTICORG_SECRET_KEY` fallback. The vault keyring
+  decrypts under every key it holds; the page now says so and links the runbook,
+  as do `docs/deployment.md`, `docs/RUNBOOKS.md` and the documentation index.
+  `docs/architecture.md` no longer says `encryption_key_ref` selects a key
+  (nothing reads it) and names both KMS keys a GSTN password can be sealed
+  under. `rewrap --help` gave exit code 2 for a missing keyring; it exits 1. It
+  also failed to print on a console that cannot encode `→`.
+- A regression test starts `uvicorn api.main:app`, the API image's command, with
+  `AGENTICORG_ENV=production` and no vault key in its process environment, and
+  requires it to exit non-zero with the refusal before it serves or reaches the
+  database. The existing lifespan test only read the source.
+- Rehearsing the runbook found three gaps, now FINDINGS A-82 to A-84: vault
+  ciphertext outside the five registered columns (SSO client secrets, case push
+  signing keys, governed-case excerpts, voice SIP settings) is invisible to
+  `verify_all`, which calls a key unreferenced while those values still need
+  it; rewrap can overwrite a credential written while it runs; and the secrets
+  rotation workflow accepts the vault's own secrets. Migrating the scratch
+  database also rewrote a committed migration audit record (A-85); the
+  rehearsal sets `AGENTICORG_MIGRATION_AUDIT_DIR` to avoid it.
 
 ### Fixed - a governed-case agent can no longer be wired without its grant check
 - The provider tool gateway refused every call it had no authorizer for, but
