@@ -4,16 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
-### Security - route scope checks refuse unknown authentication modes and can cover A2A and MCP
+### Security - route scope checks can refuse unknown authentication modes and cover A2A and MCP
 - Route scope checks never looked at how a request was authenticated. The
   auth middleware sets `api_key`, `grantex` or `legacy` once it has verified a
   credential; a request that reached an authenticated route with any other
   mode, or none, was checked against whatever scopes it carried, so
   `agenticorg:admin` passed every route and an unmapped family needed no scope.
-  It is now refused with `403 Unrecognised authentication mode; request
-  refused` before any scope is read, also in `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`.
-  No credential the middleware accepts is affected; public routes are not
-  checked.
+  Such a request is now always logged as `route_enforcement_unknown_auth_mode`
+  (path and mode only). New setting `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`
+  (default `false`): off, the request is then checked on its scopes exactly as
+  before; set to `true`, it is refused with `403 Unrecognised authentication
+  mode; request refused` before any scope is read, also in
+  `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`. No credential the middleware
+  accepts is affected either way; public routes are not checked. A later
+  release will turn the refusal on by default, with this setting as the
+  explicit opt-out, once staging shows no unknown-mode warnings (FINDINGS
+  A-95). Rollback: set it back to `false`.
 - New setting `AGENTICORG_ROUTE_SCOPE_A2A_MCP` (default `false`, nothing
   changes). Set to `true`, `POST /a2a/tasks` needs `a2a:write`,
   `GET /a2a/tasks/{id}` needs `a2a:read` and `POST /mcp/call` needs
@@ -27,21 +33,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   scopes can be granted to agents (`PATCH /agents/{id}` `route_scopes`) while
   the setting is off. Rollback: set it back to `false`. See
   `docs/operations/grant-enforcement.md` (FINDINGS A-68).
-- The refusal leaves valid callers alone only while every authenticated route
-  goes through the auth middleware. A regression test now pins that no
-  authenticated route accepts OPTIONS or sits under one of the middleware's
-  exempt paths or prefixes, and that the known modes are exactly the ones the
-  middleware sets. It found one overlap (FINDINGS A-88): an account aggregator
+- Once on, the refusal leaves valid callers alone only while every
+  authenticated route goes through the auth middleware. A regression test now
+  pins that no authenticated route accepts OPTIONS or sits under one of the
+  middleware's exempt paths or prefixes, and that the known modes are exactly
+  the ones the middleware sets. It found one overlap (FINDINGS A-88): an account aggregator
   consent status path whose handle begins with `callback` skips the
-  middleware, and is now answered `403` instead of `401`.
+  middleware. It is still answered `401` while the refusal is off, and `403`
+  with `AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE=true`.
 - Docs: the Python and TypeScript SDK READMEs, the MCP product model and the
   API reference's SDK launch contract say which scope `client.mcp.call`
   (`mcp:write`, or the `mcp:call` alias) and a run by agent type
-  (`a2a:write`) need with the setting on. The API reference's API key
-  section now matches the code: the routes are under `/api/v1/org/api-keys`,
-  the request field is `expires_days`, the default scopes use the canonical
-  `agents:write` and `connectors.read`, and the list response is an array
-  that includes revoked keys.
+  (`a2a:write`) need with `AGENTICORG_ROUTE_SCOPE_A2A_MCP` on. The API
+  reference's API key section now matches the code: the routes are under
+  `/api/v1/org/api-keys`, the request field is `expires_days`, the default
+  scopes use the canonical `agents:write` and `connectors.read`, and the list
+  response is an array that includes revoked keys.
 ### Added - a runbook for rotating the credential-vault key
 - `docs/runbooks/vault-key-rotation.md` rotates the vault key with the tools in
   the repository: add the new key to `AGENTICORG_VAULT_KEYRING` as a

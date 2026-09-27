@@ -286,21 +286,37 @@ alias `agents:run`), `workflows:write` or `audit:read`, or `agenticorg:admin`.
 A grant holding only `tool:...` and `agenticorg:{domain}:read` scopes gets
 `403 Missing scope` on every route in a mapped family. Routes in unmapped
 families are not scope-checked for any credential (FINDINGS A-68); A2A and MCP
-are among them unless the setting below is on.
+are among them unless `AGENTICORG_ROUTE_SCOPE_A2A_MCP` is on (below).
 
-Every authenticated route also requires one of the authentication modes the
-auth middleware sets once it has verified a credential: `api_key`, `grantex`
-or `legacy` (a user session). A request that reaches such a route with any
-other mode, or none, gets `403 Unrecognised authentication mode; request
-refused` before any scope is read - even with `agenticorg:admin`, on an
-unmapped family, and with `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`. Public
-routes are not checked. The middleware passes OPTIONS requests and its exempt
-paths and prefixes through without reading a credential, so an
-authenticated route must never be reachable that way:
-`tests/regression/test_route_scope_unknown_mode_20260927.py` pins the route
-table against the exemptions and the known modes against the ones the
-middleware sets. The one overlap, a consent status path whose handle begins
-with `callback`, is refused this way (FINDINGS A-88).
+### Unknown authentication modes
+
+The auth middleware sets one of three authentication modes once it has
+verified a credential: `api_key`, `grantex` or `legacy` (a user session). A
+request that reaches an authenticated route with any other mode, or none, is
+logged as `route_enforcement_unknown_auth_mode` with its path and mode (never
+its scopes or credential). What happens next depends on
+`AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`:
+
+- `false` (the default): the request is checked on whatever scopes it carries,
+  as before, so `agenticorg:admin` among them passes every route and an
+  unmapped family needs no scope (FINDINGS A-95).
+- `true`: it gets `403 Unrecognised authentication mode; request refused`
+  before any scope is read - even with `agenticorg:admin`, on an unmapped
+  family, and with `AGENTICORG_ROUTE_ENFORCEMENT_MODE=log`.
+
+Public routes are not checked either way, and no credential the middleware
+accepts is affected. Turn the setting on once the deployment logs no
+`route_enforcement_unknown_auth_mode` warnings; roll back by setting it to
+`false` (or removing it) and restarting the API. A later release will turn it
+on by default, with the setting as the explicit opt-out.
+
+The middleware passes OPTIONS requests and its exempt paths and prefixes
+through without reading a credential, so an authenticated route must never be
+reachable that way: `tests/regression/test_route_scope_unknown_mode_20260927.py`
+pins the route table against the exemptions and the known modes against the
+ones the middleware sets. The one overlap, a consent status path whose handle
+begins with `callback`, is refused as an unknown mode with the setting on, and
+by the route's tenant check (`401`) with it off (FINDINGS A-88).
 
 ### A2A and MCP route scopes
 

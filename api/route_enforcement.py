@@ -20,7 +20,9 @@ Grantex agent tokens alike. An agent token's tool scopes
 gateway and satisfy no route family, so an agent that calls the API needs the
 route scope in its grant, exactly as an API key does (review H-1). An
 authenticated route reached with an ``auth_mode`` the auth middleware does not
-set is refused before any scope is read, whatever scopes it carries.
+set is logged; with ``AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`` on it is
+refused before any scope is read, whatever scopes it carries, and with it off
+(the default) it is checked on its scopes like any other request.
 
 Families that are not mapped are NOT enforced — they are reported by
 :func:`unmapped_scope_families` and pinned by a unit test so the gap is
@@ -290,18 +292,20 @@ def _check_scope(request: Request, meta: dict[str, Any]) -> None:
     # tests/regression/test_route_scope_unknown_mode_20260927.py pins this,
     # with the one parameterised overlap in FINDINGS A-88. WebSocket routes
     # never get here (A-86). Any other mode (or none) means the scopes on
-    # this request were not put there by a verified credential, so none of
-    # them - agenticorg:admin included - can be trusted, and a route in an
-    # unmapped family must not pass either. Refused before any scope is read,
-    # and in log mode too: log mode stages scope denials, it does not stand in
-    # for authentication.
+    # this request were not put there by a verified credential, and it is
+    # always logged. With route_refuse_unknown_auth_mode on it is refused
+    # before any scope is read, in log mode too: log mode stages scope
+    # denials, it does not stand in for authentication. Off (the default,
+    # FINDINGS A-95), the checks below run on whatever scopes it carries,
+    # agenticorg:admin included, and an unmapped family passes, as before.
     auth_mode = getattr(request.state, "auth_mode", None)
     if not isinstance(auth_mode, str) or auth_mode not in KNOWN_AUTH_MODES:
         logger.warning(
             "route_enforcement_unknown_auth_mode",
             extra={"path": request.url.path, "auth_mode": repr(auth_mode)[:40]},
         )
-        raise HTTPException(status_code=403, detail="Unrecognised authentication mode; request refused")
+        if settings.route_refuse_unknown_auth_mode:
+            raise HTTPException(status_code=403, detail="Unrecognised authentication mode; request refused")
     required = required_scopes_for(meta.get("scope"), request.method)
     if not required:
         return

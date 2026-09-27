@@ -5,8 +5,10 @@
   ``api_key``, ``grantex`` or ``legacy`` once it has verified a credential, but
   a request carrying any other mode was checked against its scopes all the
   same, so ``agenticorg:admin`` in them passed every route and a route in an
-  unmapped family needed no scope at all. Such a request is now refused before
-  any scope is read, in log mode too.
+  unmapped family needed no scope at all. Such a request is now always logged.
+  With ``AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE`` on it is refused before
+  any scope is read, in log mode too; off (the default), it is checked on its
+  scopes as before (FINDINGS A-95).
 * A2A (``/a2a/tasks``) and MCP (``/mcp/call``) run agents, but their families
   were unmapped, so any authenticated credential reached them. With
   ``AGENTICORG_ROUTE_SCOPE_A2A_MCP`` on they need ``a2a:read`` / ``a2a:write``
@@ -33,6 +35,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 import auth.grantex_middleware as auth_middleware
+from api import route_enforcement
 from api.route_enforcement import (
     GRANTABLE_ROUTE_SCOPES,
     KNOWN_AUTH_MODES,
@@ -50,6 +53,9 @@ from core.rbac import ROLE_SCOPES
 ADMIN = ["agenticorg:admin"]
 TOOL_ONLY = ["tool:mock:read"]
 KNOWN_MODES = ("api_key", "grantex", "legacy")
+REFUSED = "Unrecognised authentication mode; request refused"
+UNSET = object()  # request.state.auth_mode never assigned
+UNKNOWN_MODES = [pytest.param(UNSET, id="unset"), None, "", "mystery", "Legacy", "api-key"]
 
 
 def _declared(endpoint: Any) -> dict[str, Any]:
@@ -63,12 +69,13 @@ GET_TASK = _declared(a2a.get_task)
 CALL_TOOL = _declared(mcp.call_tool)
 
 
-def _client(auth_mode: str | None, scopes: list[str]) -> TestClient:
+def _client(auth_mode: object, scopes: list[str]) -> TestClient:
     app = FastAPI(dependencies=[Depends(enforce_route_metadata)])
 
     @app.middleware("http")
     async def fake_auth(request: Request, call_next):
-        request.state.auth_mode = auth_mode
+        if auth_mode is not UNSET:
+            request.state.auth_mode = auth_mode
         request.state.scopes = list(scopes)
         request.state.tenant_id = "t-1"
         return await call_next(request)
@@ -117,21 +124,90 @@ def _no_rate_limit():
         yield
 
 
-@pytest.mark.parametrize("mode", [None, "", "mystery", "Legacy", "api-key"])
-def test_an_unknown_auth_mode_is_refused_even_with_admin_scope(mode: str | None) -> None:
+def _unknown_mode_warnings(warning: Any) -> list[dict[str, Any]]:
+    """The ``extra`` of every unknown-mode warning the patched logger received."""
+    return [c.kwargs["extra"] for c in warning.call_args_list if c.args == ("route_enforcement_unknown_auth_mode",)]
+
+
+def _logged_mode(mode: object) -> str:
+    return repr(None if mode is UNSET else mode)[:40]
+
+
+@pytest.mark.parametrize("mode", UNKNOWN_MODES)
+def test_an_unknown_auth_mode_is_refused_even_with_admin_scope(mode: object) -> None:
     client = _client(mode, ADMIN)
-    for method, path in (("get", "/agents"), ("post", "/billing/subscribe"), ("post", "/a2a/tasks")):
-        response = getattr(client, method)(path)
-        assert response.status_code == 403, path
-        assert response.json()["detail"] == "Unrecognised authentication mode; request refused"
+    with (
+        patch.object(settings, "route_refuse_unknown_auth_mode", True),
+        patch.object(route_enforcement.logger, "warning") as warning,
+    ):
+        for method, path in (("get", "/agents"), ("post", "/billing/subscribe"), ("post", "/a2a/tasks")):
+            response = getattr(client, method)(path)
+            assert response.status_code == 403, path
+            assert response.json()["detail"] == REFUSED
 
-    # Log mode stages scope denials; it does not let an unknown mode through.
-    with patch.object(settings, "route_enforcement_mode", "log"):
-        assert client.get("/agents").status_code == 403
+        # Log mode stages scope denials; it does not let an unknown mode through.
+        with patch.object(settings, "route_enforcement_mode", "log"):
+            assert client.get("/agents").status_code == 403
 
-    # Public routes are not authenticated, so they are not checked for a mode.
-    assert client.get("/a2a/agents").status_code == 200
-    assert client.get("/mcp/tools").status_code == 200
+        # Public routes are not authenticated, so they are not checked for a mode.
+        assert client.get("/a2a/agents").status_code == 200
+        assert client.get("/mcp/tools").status_code == 200
+
+    assert _unknown_mode_warnings(warning) == [
+        {"path": path, "auth_mode": _logged_mode(mode)}
+        for path in ("/agents", "/billing/subscribe", "/a2a/tasks", "/agents")
+    ]
+
+
+@pytest.mark.parametrize("mode", UNKNOWN_MODES)
+def test_an_unknown_auth_mode_is_logged_and_checked_as_before_while_the_refusal_is_off(mode: object) -> None:
+    """Off (the default), the scope checks run on whatever scopes the request carries, as before."""
+    assert Settings.model_fields["route_refuse_unknown_auth_mode"].default is False
+
+    with (
+        patch.object(settings, "route_refuse_unknown_auth_mode", False),
+        patch.object(route_enforcement.logger, "warning") as warning,
+    ):
+        # The admin scope, or the family's own scope, passes a mapped route.
+        assert _client(mode, ADMIN).get("/agents").status_code == 200
+        assert _client(mode, [*TOOL_ONLY, "agents:read"]).get("/agents").status_code == 200
+
+        # Without it the route answers Missing scope, not the unknown-mode refusal.
+        response = _client(mode, TOOL_ONLY).get("/agents")
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Missing scope: agents:read"
+
+        # An unmapped family needs no scope, and log mode lets a denial through.
+        assert _client(mode, TOOL_ONLY).post("/billing/subscribe").status_code == 200
+        with patch.object(settings, "route_enforcement_mode", "log"):
+            assert _client(mode, TOOL_ONLY).get("/agents").status_code == 200
+
+    # Every one of those requests was logged, with the path and mode only.
+    assert _unknown_mode_warnings(warning) == [
+        {"path": path, "auth_mode": _logged_mode(mode)}
+        for path in ("/agents", "/agents", "/agents", "/billing/subscribe", "/agents")
+    ]
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+@pytest.mark.parametrize("mode", KNOWN_MODES)
+def test_a_known_auth_mode_is_not_logged_as_unknown(mode: str, enabled: bool) -> None:
+    with (
+        patch.object(settings, "route_refuse_unknown_auth_mode", enabled),
+        patch.object(route_enforcement.logger, "warning") as warning,
+    ):
+        assert _client(mode, ADMIN).get("/agents").status_code == 200
+        assert _client(mode, TOOL_ONLY).get("/agents").status_code == 403
+    assert _unknown_mode_warnings(warning) == []
+
+
+def test_the_refusal_setting_defaults_off_and_reads_its_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE", raising=False)
+    assert Settings(_env_file=None).route_refuse_unknown_auth_mode is False
+    monkeypatch.setenv("AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE", "true")
+    assert Settings(_env_file=None).route_refuse_unknown_auth_mode is True
+    monkeypatch.setenv("AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE", "false")
+    assert Settings(_env_file=None).route_refuse_unknown_auth_mode is False
 
 
 @pytest.mark.parametrize("mode", KNOWN_MODES)
@@ -269,15 +345,17 @@ def test_the_real_mcp_route_follows_the_setting(enabled: bool) -> None:
 # GrantexAuthMiddleware passes every OPTIONS request, and every path in
 # EXEMPT_PATHS or under EXEMPT_PREFIXES, to the app without reading a
 # credential, so no ``auth_mode`` is set on it. An authenticated route reached
-# that way is refused as an unknown mode. That fails closed, but a valid caller
-# would be refused too, so no authenticated route may be reachable through an
-# exemption.
+# that way is logged as an unknown mode and, with
+# AGENTICORG_ROUTE_REFUSE_UNKNOWN_AUTH_MODE on, refused. That fails closed, but
+# a valid caller would be refused too, so no authenticated route may be
+# reachable through an exemption.
 
 # (route path, exemption) pairs where a path parameter reaches under an
 # exempt prefix. Remove an entry with the fix; never add one without a finding.
 KNOWN_EXEMPT_OVERLAPS = {
     # FINDINGS A-88: a consent handle that begins with "callback" falls under
-    # the "/api/v1/aa/consent/callback" prefix. Refused as an unknown mode
+    # the "/api/v1/aa/consent/callback" prefix. Refused as an unknown mode with
+    # the refusal on, and by the route's tenant dependency with it off
     # (test_a_request_the_middleware_skips_is_refused_on_an_authenticated_route).
     ("/api/v1/aa/consent/{consent_handle}/status", "/api/v1/aa/consent/callback"),
 }
@@ -365,10 +443,32 @@ def test_a_request_the_middleware_skips_is_refused_on_an_authenticated_route() -
 
     overlap_path = "/api/v1/aa/consent/callback-0/status"
     assert overlap_path.startswith(GrantexAuthMiddleware.EXEMPT_PREFIXES)
-    with patch("api.v1.aa_callback._get_consent_manager", AsyncMock()) as manager:
+    with (
+        patch.object(settings, "route_refuse_unknown_auth_mode", True),
+        patch("api.v1.aa_callback._get_consent_manager", AsyncMock()) as manager,
+    ):
         client = TestClient(app, raise_server_exceptions=False)
         for headers in ({}, {"Authorization": "Bearer fake-test-token"}):
             response = client.get(overlap_path, headers=headers)
             assert response.status_code == 403, headers
             assert response.json()["detail"] == "Unrecognised authentication mode; request refused"
     manager.assert_not_awaited()
+
+
+def test_a_request_the_middleware_skips_gets_the_old_answer_while_the_refusal_is_off() -> None:
+    """Off (the default), the known overlap (A-88) is logged and refused by the route's tenant dependency."""
+    from api.main import app
+
+    overlap_path = "/api/v1/aa/consent/callback-0/status"
+    with (
+        patch.object(settings, "route_refuse_unknown_auth_mode", False),
+        patch.object(route_enforcement.logger, "warning") as warning,
+        patch("api.v1.aa_callback._get_consent_manager", AsyncMock()) as manager,
+    ):
+        client = TestClient(app, raise_server_exceptions=False)
+        for headers in ({}, {"Authorization": "Bearer fake-test-token"}):
+            response = client.get(overlap_path, headers=headers)
+            assert response.status_code == 401, headers
+            assert response.json()["detail"] == "No tenant context"
+    manager.assert_not_awaited()
+    assert _unknown_mode_warnings(warning) == [{"path": overlap_path, "auth_mode": "None"}] * 2
