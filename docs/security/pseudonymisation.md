@@ -16,7 +16,8 @@ The flag is off by default. It is an operator-managed authority flag: the
 tenant feature-flag API refuses it (`403 flag_key_reserved`). A platform
 operator enables it for a tenant with
 `python scripts/authority_flags.py set pseudonymisation.pre_model --tenant <tenant id> --operator <name>`,
-or for every tenant with `--global`. Pseudonymisation is on when either the
+or for every tenant with `--global` (on a privileged database role; see
+`docs/operations/grant-enforcement.md`). Pseudonymisation is on when either the
 global row or the tenant's row enables it, so a tenant row cannot switch off a
 global setting.
 

@@ -4,6 +4,43 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - global feature-flag rows are read by a role subject to row-level security
+- `feature_flags` is FORCE ROW LEVEL SECURITY with a policy that compares
+  `tenant_id` with the session's tenant, so a global row (`tenant_id` NULL)
+  was invisible to a database role that is neither a superuser nor
+  `BYPASSRLS`: `core.feature_flags` read no global row in any tenant session
+  or under the nil tenant, and every global default - including an
+  operator's global rows of the authority flags such as
+  `approvals.unevaluable_condition.deny`, `grants.enforce_closed.deny` and
+  `pseudonymisation.pre_model` - was ignored. Roles that bypass row-level
+  security (and the Postgres tests, which ran as one) were not affected.
+- Revision `v6z30_flag_global_read` adds a SELECT-only policy for
+  `tenant_id IS NULL` rows. A session now sees its tenant's rows and the
+  global rows, and still no other tenant's rows; a tenant row still overrides
+  the global row in `is_enabled`, and authority flags still take the stricter
+  of the two. A global row holds no tenant data (flag key, enabled, rollout,
+  description, timestamps). There is no write policy for global rows: a role
+  subject to row-level security cannot insert, update or delete one.
+- **Breaking (deployments whose application role is subject to row-level
+  security):** global rows that already exist start to apply to every tenant
+  that has no row of its own (for authority flags, to every tenant). There is
+  no flag: a Postgres policy cannot be switched per request. The opt-out is to
+  clear the global rows that should not apply. Migration steps: before
+  deploying, list the global rows as a privileged role with
+  `SELECT flag_key, enabled, rollout_percentage FROM feature_flags WHERE tenant_id IS NULL;`
+  then delete or disable each one that should not apply
+  (`scripts/authority_flags.py clear <key> --global` for an authority flag).
+  Rollback: the same, or restore the pre-migration backup; migrations are
+  forward-only.
+- `scripts/authority_flags.py set --global` and `clear --global` need a
+  privileged database role (superuser or `BYPASSRLS`). Run as a role subject
+  to row-level security they now exit `2` with a message saying so, before
+  reading or writing anything, instead of failing on the policy (`set`) or
+  reporting the global row as absent or cleared while deleting nothing
+  (`clear`). `list --global` and tenant rows work with the application's
+  role.
+- Deploy with `--with-migrations` so the revision runs before the new code
+  serves traffic.
 ### Security - route scope checks can refuse unknown authentication modes and cover A2A and MCP
 - Route scope checks never looked at how a request was authenticated. The
   auth middleware sets `api_key`, `grantex` or `legacy` once it has verified a
@@ -152,10 +189,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   unreadable flag table resolves to `deny` and logs
   `approval_unevaluable_condition_mode_lookup_failed`; only decisions other
   than a rejection, on items with a condition that cannot be evaluated, are
-  refused, and a rejection never reads the flag. A global row is not read by a
-  database role subject to row-level security (an open entry in
-  `FINDINGS.md`), so set the tenant row. See "When a condition cannot be
-  evaluated" in `docs/approval-policies.md`.
+  refused, and a rejection never reads the flag. A global row applies to every
+  tenant, also on a database role subject to row-level security once revision
+  `v6z30_flag_global_read` has run (see "global feature-flag rows" above). See
+  "When a condition cannot be evaluated" in `docs/approval-policies.md`.
 ### Added - a runbook for rotating the credential-vault key
 - `docs/runbooks/vault-key-rotation.md` rotates the vault key with the tools in
   the repository: add the new key to `AGENTICORG_VAULT_KEYRING` as a

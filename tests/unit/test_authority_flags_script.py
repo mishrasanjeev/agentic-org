@@ -51,9 +51,17 @@ class _Session:
         self.added.append(row)
 
 
-def _run(argv: list[str], rows: list[Any] | None = None) -> tuple[int, _Session, list[uuid.UUID]]:
+def _run(
+    argv: list[str], rows: list[Any] | None = None, *, privileged_role: bool = True
+) -> tuple[int, _Session, list[uuid.UUID]]:
     session = _Session(rows or [])
     contexts: list[uuid.UUID] = []
+    role_checks: list[bool] = []
+
+    async def _bypasses(_session: Any) -> bool:
+        # The fake session cannot answer the pg_roles lookup; the Postgres test runs it.
+        role_checks.append(privileged_role)
+        return privileged_role
 
     @asynccontextmanager
     async def _tenant_session(tenant_id: uuid.UUID, company_id: Any = None):
@@ -61,8 +69,13 @@ def _run(argv: list[str], rows: list[Any] | None = None) -> tuple[int, _Session,
         yield session
 
     args = authority_flags.build_parser().parse_args(argv)
-    with patch("core.database.get_tenant_session", _tenant_session):
+    with (
+        patch("core.database.get_tenant_session", _tenant_session),
+        patch.object(authority_flags, "_role_bypasses_row_security", _bypasses),
+    ):
         code = asyncio.run(authority_flags.run(args))
+    # Only a change to a global row needs the privileged role.
+    assert role_checks == ([privileged_role] if "--global" in argv and argv[0] != "list" else [])
     return code, session, contexts
 
 
@@ -155,6 +168,33 @@ def test_list_prints_only_authority_flags(capsys):
     assert code == 0 and session.added == []
     assert "grants.enforce_closed.warn enabled=True rollout=100" in out
     assert "new_workflow_builder" not in out
+
+
+@pytest.mark.parametrize("command", ["set", "clear"])
+def test_global_changes_refuse_a_role_bound_by_row_level_security(command, capsys):
+    existing = SimpleNamespace(enabled=False, rollout_percentage=0, description=None)
+    code, session, contexts = _run(
+        [command, "grants.enforce_closed.deny", "--global", "--operator", "ops"], [existing], privileged_role=False
+    )
+    assert code == 2 and contexts == [authority_flags.GLOBAL_CONTEXT_TENANT]
+    assert session.added == [] and session.executed == []
+    assert existing.enabled is False
+    err = capsys.readouterr().err
+    assert "privileged database role" in err and "row-level security" in err
+
+
+def test_tenant_changes_and_global_list_do_not_need_a_privileged_role():
+    code, session, _ = _run(
+        ["set", "grants.enforce_closed.warn", "--tenant", TENANT, "--operator", "ops"], privileged_role=False
+    )
+    assert code == 0 and any(isinstance(row, FeatureFlag) for row in session.added)
+    code, _, _ = _run(["list", "--global"], privileged_role=False)
+    assert code == 0
+
+
+def test_global_help_says_a_privileged_role_is_needed():
+    set_parser = authority_flags.build_parser()._subparsers._group_actions[0].choices["set"]
+    assert "privileged database role" in set_parser.format_help()
 
 
 def test_main_parses_and_runs():
