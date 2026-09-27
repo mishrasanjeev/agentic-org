@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the feed fan-out cap test no longer depends on runner speed
+- `test_fanout_caps_parallel_sends_for_large_tenant` forced a 0.2 s send
+  timeout on 100 sockets, so a busy CI runner timed out healthy 10 ms sends
+  and the delivery count failed at random. It now keeps the service's own
+  send timeout; the test still checks that every socket is delivered to and
+  that no more than 32 sends run at once.
+
 ### Fixed - a governed-case agent can no longer be wired without its grant check
 - The provider tool gateway refused every call it had no authorizer for, but
   `ProviderToolGateway`, `UnderwriterDependencies` and

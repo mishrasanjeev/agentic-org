@@ -417,7 +417,7 @@ async def test_a_socket_whose_close_hangs_does_not_stall_fanout(feed_runtime, mo
 
 
 @pytest.mark.asyncio
-async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime, monkeypatch) -> None:
+async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime) -> None:
     tenant_id = str(uuid.uuid4())
     active = 0
     peak = 0
@@ -434,7 +434,9 @@ async def test_fanout_caps_parallel_sends_for_large_tenant(feed_runtime, monkeyp
     sockets = {AsyncMock() for _ in range(100)}
     for socket in sockets:
         socket.send_json.side_effect = send
-    monkeypatch.setattr(feed, "FEED_SOCKET_SEND_TIMEOUT_SECONDS", 0.2)
+    # This test is about the concurrency cap, not timeouts: keep the service's
+    # own send timeout. A 0.2 s timeout let a busy CI runner time out healthy
+    # 10 ms sends and fail the delivery count.
     feed._connections[tenant_id] = sockets
 
     assert await feed._fanout_local({"tenant_id": tenant_id, "type": "update"}) == 100
