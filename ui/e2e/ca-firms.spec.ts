@@ -11,12 +11,12 @@
  *
  * All tests are read-only and production-safe.
  */
-import { test, expect, Page } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "http://127.0.0.1:4173";
 const MARKETING = process.env.MARKETING_URL || APP;
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(

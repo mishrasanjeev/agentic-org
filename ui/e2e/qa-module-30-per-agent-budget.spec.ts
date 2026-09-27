@@ -15,7 +15,7 @@
  * Cost tab and assert the rendered text. This keeps the spec
  * deterministic without depending on prior fixture data.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 

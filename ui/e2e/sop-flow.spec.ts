@@ -2,13 +2,13 @@
  * SOP Upload Flow — Production E2E Tests
  *
  * Tests the Create Agent from SOP flow against production.
- * Auth-gated tests skip when E2E_TOKEN is not set.
+ * Auth-gated tests fail when E2E_TOKEN is not set, and none of them accepts
+ * a 401/403 or the login page as a pass.
  * Public endpoints (A2A, MCP) are tested without auth.
  */
-import { test, expect } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, expectSignedIn, setSessionToken } from "./helpers/auth";
 
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(
@@ -83,7 +83,7 @@ test.describe("SOP: API Parse (auth required)", () => {
       data: { text: sopText, domain_hint: "finance" },
     });
 
-    // Accept both success (200) and LLM-unavailable failure
+    // Accept both success (200) and LLM-unavailable failure, never a lost session.
     if (resp.ok()) {
       const data = await resp.json();
       expect(data.status).toBe("draft");
@@ -91,6 +91,7 @@ test.describe("SOP: API Parse (auth required)", () => {
       expect(data.config.agent_name).toBeTruthy();
     } else {
       expect(resp.status()).toBeGreaterThanOrEqual(400);
+      expect([401, 403]).not.toContain(resp.status());
     }
   });
 
@@ -99,9 +100,9 @@ test.describe("SOP: API Parse (auth required)", () => {
       headers: { Authorization: `Bearer ${E2E_TOKEN}`, "Content-Type": "application/json" },
       data: { text: "" },
     });
-    // 400 = validation error, 401 = token expired, 422 = unprocessable
-    expect(resp.status()).toBeGreaterThanOrEqual(400);
-    expect(resp.status()).not.toBe(500);
+    // api/v1/sop.py: "SOP text is required". A 401 here would mean the
+    // session was lost, not that the input was rejected.
+    expect(resp.status()).toBe(400);
   });
 
   test("parse text too long returns 4xx (not 500)", async ({ request }) => {
@@ -109,8 +110,8 @@ test.describe("SOP: API Parse (auth required)", () => {
       headers: { Authorization: `Bearer ${E2E_TOKEN}`, "Content-Type": "application/json" },
       data: { text: "x".repeat(60000) },
     });
-    expect(resp.status()).toBeGreaterThanOrEqual(400);
-    expect(resp.status()).not.toBe(500);
+    // api/v1/sop.py: "Text too long (max 50,000 characters)".
+    expect(resp.status()).toBe(400);
   });
 });
 
@@ -154,6 +155,7 @@ test.describe("SOP: Dashboard v3.0 (auth required)", () => {
 
   test("Dashboard shows LangGraph + Grantex + External Access cards", async ({ page }) => {
     await page.goto("/dashboard", { waitUntil: "domcontentloaded" });
+    await expectSignedIn(page);
     await page.waitForLoadState("networkidle").catch(() => {});
 
     const bodyText = await page.textContent("body") || "";
@@ -169,6 +171,7 @@ test.describe("SOP: Dashboard v3.0 (auth required)", () => {
 
   test("Integrations page renders A2A and MCP info", async ({ page }) => {
     await page.goto("/dashboard/integrations", { waitUntil: "domcontentloaded" });
+    await expectSignedIn(page);
     await page.waitForLoadState("networkidle").catch(() => {});
 
     const bodyText = await page.textContent("body") || "";

@@ -25,7 +25,8 @@
  * spec fails, unless the pipeline has declared them unavailable
  * (`E2E_RU_TESTER=unavailable`, set with a warning by deploy.yml).
  */
-import { test, expect, type APIRequestContext } from "@playwright/test";
+// Plain Playwright test: this probe never uses the shared suite session.
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 const APP = process.env.BASE_URL || "https://agenticorg.ai";
 const AGENT_ID = process.env.RU_AGENT_ID || "02ca34a7-2835-43e5-992d-cda4817c1497";

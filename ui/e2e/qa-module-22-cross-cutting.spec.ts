@@ -8,7 +8,7 @@
  * test in tests/unit/test_module_22_cross_cutting.py source-pins
  * the SET LOCAL + RLS plumbing instead.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

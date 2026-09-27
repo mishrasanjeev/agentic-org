@@ -6,7 +6,7 @@
  * audit-retention floor are referenced by SOC-2 evidence
  * collection. Failure paths matter as much as happy paths.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

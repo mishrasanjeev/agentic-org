@@ -17,7 +17,7 @@
  * because it leaves a real connector row on the demo tenant. The
  * other 3 TCs are read-only and run against prod cleanly.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, authenticate, requireAuth } from "./helpers/auth";
 

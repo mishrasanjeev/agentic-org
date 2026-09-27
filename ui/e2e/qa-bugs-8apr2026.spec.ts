@@ -9,16 +9,17 @@
  * Auth-gated tests skip gracefully when E2E_TOKEN is not set.
  * NO page.route() mocking -- all responses are real.
  */
-import { test, expect, Page } from "@playwright/test";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import {
   DEMO_ROLE_CREDENTIALS,
   DEMO_USER_CREDENTIALS,
+  E2E_TOKEN,
   requireDemoRoleCredentials,
   setSessionToken,
 } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 function requireAuth(): void {
   if (!canAuth) throw new Error(

@@ -27,7 +27,7 @@
  * one exception is BUG-09's CSRF middleware check — it pokes the
  * production /api/v1/auth/google directly.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, authenticate, setSessionToken } from "./helpers/auth";
 

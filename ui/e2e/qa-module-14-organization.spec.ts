@@ -7,7 +7,7 @@
  * what we need to defend most aggressively, and those live at the
  * HTTP layer.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 
