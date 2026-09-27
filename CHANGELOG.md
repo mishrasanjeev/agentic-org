@@ -35,6 +35,40 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`/api/v1/webhooks/providers/...`), which carried the same kind of token
   in its path: uvicorn logs every request line, so each delivery used to copy
   a reusable path token into the logs.
+### Added - governed-case decisions consumed by request id at the issuer (off by default)
+- `AGENTICORG_CASE_DECISION_GRANT_RELEASE` (default `false`). On, recording a
+  case decision consumes the request at the Grantex auth service by its id
+  (`POST /v1/decisions/requests/{id}/consume`) instead of reading
+  `decisionGrants` from the request's status and presenting them, so
+  AgenticOrg never presents, stores or forwards a decision grant. Until the
+  issuer's `DECISION_GRANT_AGENT_BINDING` is on, the status answer still
+  carries the grants and they are dropped; once it is on, the issuer never
+  sends one here. A case decision is AgenticOrg's own: a person decides it and
+  the request names no agent, so it is not fetched with an agent's grant token.
+  Readiness comes from the request's state and, when the issuer sends it,
+  `decisionGrantsReady`, which can only withhold it.
+- This is what keeps decisions recordable once the issuer turns
+  `DECISION_GRANT_AGENT_BINDING` on, which stops returning decision grants to
+  the developer API key. Order: an issuer release that serves consumption by
+  request id, then this change, then this setting on, then the issuer's
+  binding on; roll back in reverse. With the setting off and the binding on,
+  every decision is refused `decision_not_approved`.
+- With the setting on, it fails closed: a request that names an agent is
+  refused `wrong_agent` (the issuer's 403 `wrong_agent` is read as that, not as
+  an authentication failure), a `decisionGrantsReady` that is not a boolean
+  and any consumption answer that is not a confirmed consumption of that
+  request naming the grant each approver spent are refused
+  (`decision_service_response_invalid`), and nothing is recorded. The receipt
+  is also held to the approvals the case recorded for the request: one
+  approver where four eyes was needed, more approvers than needed, or the same
+  person twice is refused `decision_service_response_invalid`, and a request
+  the case has no usable record of is refused `decision_request_not_found`
+  before the issuer is asked.
+- Off, nothing changes. `ui/e2e/decision-grants.spec.ts` is unchanged and
+  holds in both states; running it with the setting on
+  (`AGENTICORG_DEV_CASE_DECISION_GRANT_RELEASE=true`) needs the development
+  auth service pin moved to a build that serves consumption by request id.
+  See `docs/governance/decision-requests.md`.
 
 ### Security - route scope checks can refuse unknown authentication modes and cover A2A and MCP
 - Route scope checks never looked at how a request was authenticated. The
