@@ -101,20 +101,31 @@ test.describe("Module 19: Health & API @qa @health @api", () => {
   // TC-API-003: API versioning
   // -------------------------------------------------------------------------
 
-  test("TC-API-003 OpenAPI doc carries a non-empty version string", async ({
+  test("TC-API-003 /health carries a non-empty version; the OpenAPI document is not published", async ({
     request,
   }) => {
-    // SDK consumers parse OpenAPI to detect breaking changes.
-    // /openapi.json must serve and must include info.version.
-    const resp = await request.get(`${API}/openapi.json`, {
+    // The strict runtime disables /docs, /redoc and /openapi.json
+    // (api/main.py), so clients read the API version from /health.
+    const resp = await request.get(`${API}/api/v1/health`, {
       failOnStatusCode: false,
     });
-    expect(resp.status()).toBeLessThan(300);
-    const spec = await resp.json();
-    expect(spec).toHaveProperty("info");
-    expect(spec.info).toHaveProperty("version");
-    expect(typeof spec.info.version).toBe("string");
-    expect(spec.info.version.length).toBeGreaterThan(0);
+    expect(resp.status()).toBe(200);
+    const body = await resp.json();
+    expect(typeof body.version).toBe("string");
+    expect(body.version.length).toBeGreaterThan(0);
+
+    // Local stacks run the non-strict runtime, which serves the document.
+    // Hosted, this checks the origin under test: the console (which proxies
+    // only /api/ and /ws/) unless API_URL points at the API itself.
+    const isLocal = ["localhost", "127.0.0.1", "[::1]"].includes(new URL(API).hostname);
+    if (!isLocal) {
+      const spec = await request.get(`${API}/openapi.json`, { failOnStatusCode: false });
+      const text = await spec.text();
+      expect(
+        spec.ok() && text.includes('"openapi"'),
+        "the OpenAPI document is publicly served",
+      ).toBe(false);
+    }
   });
 
   test("TC-API-003b /api/v1 prefix is honored — root /api is a 404", async ({
