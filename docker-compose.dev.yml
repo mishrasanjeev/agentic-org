@@ -59,7 +59,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agenticorg -d agenticorg"]
+      # Over TCP: on a fresh volume the image first initialises the database
+      # with a temporary server that listens on the Unix socket only, and a
+      # socket check would report healthy before grantex-db and migrate can
+      # connect to it.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U agenticorg -d agenticorg"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -286,6 +290,12 @@ services:
       PUBLIC_BASE_URL: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
       JWT_ISSUER: http://grantex:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
       SEED_API_KEY: agenticorg-dev-grantex-api-key
+      # A second, sandbox developer key (another development placeholder),
+      # used only by `make seed-cases`: it registers the governed-case agents
+      # under it and obtains a root grant for them, which a sandbox
+      # developer gets at once while a live one's request waits for the
+      # principal's passkey. The API and worker keep the live key above.
+      SEED_SANDBOX_KEY: agenticorg-dev-grantex-sandbox-key
       LOG_PRETTY: "false"
       # Decision grants (PRD G-3). Off unless a run opts in, here as in the
       # service itself: with these unset the decision routes and the approval
@@ -402,7 +412,9 @@ services:
     environment:
       BASE_URL: http://ui
       GRANTEX_APPROVAL_ORIGIN: http://127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}
-      GRANTEX_ADMIN_API_KEY: "${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-agenticorg-dev-grantex-admin-key}"
+      # Exactly the key the auth service was started with, and no fallback:
+      # a missing key fails the suite as missing, not as a refused one.
+      GRANTEX_ADMIN_API_KEY: "${AGENTICORG_DEV_GRANTEX_ADMIN_KEY:-}"
       GRANTEX_API_KEY: agenticorg-dev-grantex-api-key
       GRANTEX_APPROVER_ISSUER: http://127.0.0.1:${AGENTICORG_DEV_OIDC_APPROVERS_PORT:-9401}
       CI: "true"

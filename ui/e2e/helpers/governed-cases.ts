@@ -41,11 +41,22 @@ export function seededCases(): SeededCases | null {
   return parsed.cases && Object.keys(parsed.cases).length > 0 ? parsed : null;
 }
 
-/** Why the suite cannot run, or "" when it can. Never silently passes. */
+/**
+ * Why the suite cannot run, or "" when it can. Never silently passes.
+ *
+ * Locally a missing seed skips the suite. CI sets
+ * AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true, and there a missing prerequisite
+ * throws, which fails every test: a skip would leave the job green even
+ * though nothing was checked.
+ */
 export function missingPrerequisite(): string {
-  if (!SEED_PASSWORD) return "AGENTICORG_SEED_PASSWORD is not set: run `AGENTICORG_SEED_PASSWORD=... make seed`";
-  if (!seededCases()) return `no seeded governed cases at ${SEED_PATH}: run \`make seed-cases\``;
-  return "";
+  let missing = "";
+  if (!SEED_PASSWORD) missing = "AGENTICORG_SEED_PASSWORD is not set: run `AGENTICORG_SEED_PASSWORD=... make seed`";
+  else if (!seededCases()) missing = `no seeded governed cases at ${SEED_PATH}: run \`make seed-cases\``;
+  if (missing && process.env.AGENTICORG_E2E_REQUIRE_GOVERNED_CASES === "true") {
+    throw new Error(`the governed case suites are required in this run: ${missing}`);
+  }
+  return missing;
 }
 
 export function seededCase(key: string): SeededCase {
