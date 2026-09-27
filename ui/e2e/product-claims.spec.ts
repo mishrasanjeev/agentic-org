@@ -6,12 +6,11 @@
  * hardcodes a number in JSX (including a stale cached copy) fails this
  * spec — which is the entire point.
  */
-import { expect, test } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "http://127.0.0.1:4173";
 const MARKETING = process.env.MARKETING_URL || APP;
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
 function requireAuth(): void {

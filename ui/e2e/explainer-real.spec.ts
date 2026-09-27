@@ -15,11 +15,10 @@
  *     / "Confidence was above threshold") must NOT appear unless the
  *     real response contains them).
  */
-import { expect, test } from "@playwright/test";
-import { setSessionToken } from "./helpers/auth";
+import { expect, test } from "./helpers/test";
+import { E2E_TOKEN, setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-const E2E_TOKEN = process.env.E2E_TOKEN || "";
 const canAuth = !!E2E_TOKEN;
 
 function requireAuth(): void {

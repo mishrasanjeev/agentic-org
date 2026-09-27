@@ -1,4 +1,5 @@
-import { expect, Page, test } from "@playwright/test";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { setSessionToken } from "./helpers/auth";
 
 async function installCommonRoutes(page: Page) {

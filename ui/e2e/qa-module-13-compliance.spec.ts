@@ -12,7 +12,7 @@
  * effects only fire when a matching subject exists, and `.invalid`
  * never resolves to anyone.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

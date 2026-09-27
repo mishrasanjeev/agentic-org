@@ -9,7 +9,8 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/setup.ts"],
     globals: true,
     css: false,
-    include: ["src/__tests__/**/*.test.{ts,tsx}"],
+    // e2e/helpers holds Playwright-free logic the browser suite depends on.
+    include: ["src/__tests__/**/*.test.{ts,tsx}", "e2e/helpers/**/*.test.ts"],
   },
   resolve: {
     alias: {

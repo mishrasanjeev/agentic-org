@@ -7,7 +7,7 @@
  * provisioned in the test tenant; the tests here pin the
  * input-validation, RBAC, and run-trigger contracts.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

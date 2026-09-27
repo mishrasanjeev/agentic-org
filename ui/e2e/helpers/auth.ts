@@ -14,11 +14,86 @@
  * All three patterns came up in `ca-firms.spec.ts` and the fixes are
  * generic. Use these helpers in every regression spec.
  */
-import { test, type Page, type Locator } from "@playwright/test";
+import { readFileSync, writeFileSync, writeSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { expect, test, type Page, type Locator } from "@playwright/test";
+
+import { SessionKeeper, loginForToken, type LoginFailureLog } from "./session";
 
 export const APP = process.env.BASE_URL || "https://app.agenticorg.ai";
-export const E2E_TOKEN = process.env.E2E_TOKEN || "";
+/**
+ * The shared E2E session token. A live binding: `ensureFreshE2EToken`
+ * replaces it after logging in again, and every module that imports it sees
+ * the new value. Read it where you use it; do not copy it into a constant.
+ */
+export let E2E_TOKEN = process.env.E2E_TOKEN || "";
 export const canAuth = !!E2E_TOKEN;
+
+/**
+ * Failed logins, shared by every worker of this run. Workers are children of
+ * the runner, so its pid identifies the run. Best effort: an unreadable or
+ * unwritable file only means a worker may retry sooner.
+ */
+const _loginFailures: LoginFailureLog = {
+  read() {
+    try {
+      const data = JSON.parse(readFileSync(_loginFailureFile(), "utf8"));
+      return typeof data?.at === "number" && typeof data?.reason === "string" ? data : null;
+    } catch {
+      return null;
+    }
+  },
+  write(at, reason) {
+    try {
+      writeFileSync(_loginFailureFile(), JSON.stringify({ at, reason }));
+    } catch {
+      // See above.
+    }
+  },
+};
+
+function _loginFailureFile(): string {
+  return join(tmpdir(), `agenticorg-e2e-login-failures-${process.ppid}.json`);
+}
+
+const _session = new SessionKeeper(
+  E2E_TOKEN,
+  () => {
+    const email = process.env.E2E_EMAIL;
+    const password = process.env.E2E_PASSWORD;
+    if (!email || !password) return Promise.reject(new Error("E2E_EMAIL and E2E_PASSWORD are not set"));
+    return loginForToken(APP, email, password);
+  },
+  _loginFailures,
+);
+
+/**
+ * Keep the shared session alive for runs longer than its 60-minute lifetime.
+ *
+ * The production suite runs for more than an hour on one token, so every
+ * test after the first hour failed with 401s that looked like product bugs.
+ * This logs in again (with `E2E_EMAIL` / `E2E_PASSWORD`) when less than 15
+ * minutes are left, and throws with the reason once the token has expired
+ * and cannot be renewed (see `SessionKeeper`). The fixtures in `./test` call
+ * it when a worker starts and before every test; `authenticate`,
+ * `getProfile` and `getCompanyId` call it too.
+ */
+export async function ensureFreshE2EToken(): Promise<string> {
+  const token = await _session.fresh(Date.now());
+  if (token !== E2E_TOKEN) {
+    // The mint step in deploy.yml masks the first token; mask each new one
+    // before anything can print it. Written straight to the inherited stdout:
+    // console output inside a fixture is captured as the test's stdio and
+    // saved into the JSON and HTML reports, which are uploaded.
+    if (process.env.GITHUB_ACTIONS === "true") writeSync(1, `::add-mask::${token}\n`);
+    E2E_TOKEN = token;
+    // Specs that read process.env.E2E_TOKEN directly see the new token too.
+    process.env.E2E_TOKEN = token;
+  }
+  return token;
+}
 
 export const DEMO_USER_CREDENTIALS = {
   email: process.env.AGENTICORG_DEMO_USER_EMAIL || "demo@cafirm.agenticorg.ai",
@@ -63,6 +138,18 @@ const DEMO_PASSWORD_ENV: Record<DemoAccount, string> = {
   coo: "AGENTICORG_DEMO_COO_PASSWORD",
   auditor: "AGENTICORG_DEMO_AUDITOR_PASSWORD",
 };
+
+/**
+ * The configured password for a demo account: the env var, or the local
+ * stack's seeded default when the target is the local stack. Empty when the
+ * account is not usable against this target.
+ */
+export function demoPasswordFromEnv(account: DemoAccount): string {
+  const fromEnv = process.env[DEMO_PASSWORD_ENV[account]];
+  if (fromEnv) return fromEnv;
+  if (!targetsLocalStack()) return "";
+  return account === "user" ? DEMO_USER_CREDENTIALS.password : DEMO_ROLE_CREDENTIALS[account].password;
+}
 
 function targetsLocalStack(): boolean {
   try {
@@ -140,6 +227,7 @@ let _cachedCompanyId: string | null = null;
  */
 export async function authenticate(page: Page): Promise<void> {
   requireAuth();
+  await ensureFreshE2EToken();
   await setSessionToken(page, E2E_TOKEN);
   await page.goto(`${APP}/login`, { waitUntil: "domcontentloaded" });
 }
@@ -189,6 +277,19 @@ export async function setSessionToken(
   ]);
 }
 
+/**
+ * Assert that the page is behind a live session.
+ *
+ * A protected route sends the browser to /login once `/auth/me` fails, so
+ * "the page rendered something" proves nothing on its own: a spec that only
+ * checks the body passes on the login page. The Logout control is part of
+ * the signed-in layout only.
+ */
+export async function expectSignedIn(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: "Logout" }).first()).toBeAttached({ timeout: 15_000 });
+  await expect(page).not.toHaveURL(/\/login(?:[?#]|$)/);
+}
+
 /** Clear all cookies for the current page context — use to simulate logout. */
 export async function clearSession(page: Page): Promise<void> {
   await page.context().clearCookies();
@@ -204,6 +305,7 @@ export async function clearSession(page: Page): Promise<void> {
  */
 export async function getProfile(page: Page): Promise<AuthUser> {
   if (_cachedProfile) return _cachedProfile;
+  await ensureFreshE2EToken();
   try {
     const resp = await page.request.get(`${APP}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${E2E_TOKEN}` },
@@ -244,6 +346,7 @@ export async function getProfile(page: Page): Promise<AuthUser> {
  */
 export async function getCompanyId(page: Page): Promise<string> {
   if (_cachedCompanyId) return _cachedCompanyId;
+  await ensureFreshE2EToken();
   try {
     const resp = await page.request.get(
       `${APP}/api/v1/companies?page=1&per_page=1`,

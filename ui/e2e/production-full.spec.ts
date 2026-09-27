@@ -7,7 +7,8 @@
  * All tests are read-only and production-safe -- no data is created,
  * mutated, or deleted.
  */
-import { test, expect, Page } from "@playwright/test";
+import { Page } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { setSessionToken } from "./helpers/auth";
 
 const APP = process.env.BASE_URL || "https://app.agenticorg.ai";

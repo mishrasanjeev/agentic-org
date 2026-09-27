@@ -7,7 +7,7 @@
  * source-pinned; here we cover the input-validation and error-
  * envelope contracts the UI relies on.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, requireAuth } from "./helpers/auth";
 

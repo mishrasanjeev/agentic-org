@@ -5,7 +5,7 @@
  * requires real session state, so we run as the seeded admin
  * user and clean up created agents in afterEach.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 import { APP, E2E_TOKEN, authenticate, requireAuth } from "./helpers/auth";
 
