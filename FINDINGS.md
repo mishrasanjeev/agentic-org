@@ -1108,3 +1108,79 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-82 — Key rotation tooling does not see vault ciphertext outside five columns
+
+- **Found:** rehearsing the vault key rotation runbook against a local database
+  (2026-09-27).
+- **What:** `core/crypto/verify_all.py` and `core/crypto/rewrap.py` walk only
+  the five columns in `_SCANNERS`. `encrypt_for_tenant` and `encrypt_with_kek`
+  seal with the vault keyring whenever the tenant has no KMS key, and four
+  other places store the result: `sso_configs.config` (`client_secret_enc`,
+  `api/v1/sso.py`), `case_push_endpoints.signing_keys_encrypted`
+  (`core/cases/push.py`), `governed_cases.excerpts_encrypted` (each entry's
+  `text_encrypted`, `core/cases/excerpts.py`) and `tenants.settings`
+  (`voice_configs.*.credentials_encrypted`, `api/v1/voice.py`). After a
+  promote and rewrap, `verify_all --check=<old id>` exited 0 while an SSO client
+  secret and a case push signing key were still stamped with the old id; with
+  the old key removed both failed with `InvalidToken`, which stops OIDC sign-in
+  and case push signing for those tenants. The runbook's step 5 query finds
+  such values meanwhile.
+- **Fix:** register the four locations with both tools (a scanner that reads
+  and writes ciphertext at a JSON path, since two of them sit inside a document
+  or a list), with a test that a key referenced only there blocks retirement,
+  and a test that fails when a new `encrypt_for_tenant` or `encrypt_with_kek`
+  call site stores somewhere unregistered.
+
+## A-83 — Rewrap can overwrite a credential written while it runs
+
+- **Found:** rehearsing the vault key rotation runbook against a local database
+  (2026-09-27).
+- **What:** `core/crypto/rewrap.py` reads a batch with a plain `SELECT` and
+  writes each row back with `UPDATE ... WHERE id = :id`, with no row lock and no
+  check that the value is unchanged. A credential stored in between (the token
+  refresh task rewrites `connector_configs.credentials_encrypted` every 15
+  minutes; a reconnect does too) is replaced by the re-encrypted old value.
+  Reproduced against Postgres: a write committed after rewrap read the row was
+  reverted and rewrap exited 0. A provider that rotates refresh tokens then
+  refuses the restored one.
+- **Fix:** read each batch with `SELECT ... FOR UPDATE` in the transaction that
+  writes it (or update only where the column still holds the value read, and
+  count the rows skipped), with a test that commits a concurrent write between
+  the read and the update.
+
+## A-84 — The secrets rotation workflow accepts the vault's own secrets, and its runbook is stale
+
+- **Found:** documenting vault key rotation (2026-09-27).
+- **What:**
+  - `.github/workflows/secrets-rotation.yml` refuses `AGENTICORG_SECRET_KEY` and
+    externally issued secrets by ID, but not the secrets behind
+    `AGENTICORG_VAULT_KEYRING` or `AGENTICORG_VAULT_KEY`, and replaces a value
+    with `openssl rand -base64 48`. A keyring replaced that way has no `id:`
+    entry, so new API and worker instances refuse to start; a single vault key
+    replaced that way opens nothing already stored. Its comment gives the order
+    "generate new key -> rewrap -> cut over", but rewrap only moves rows to the
+    key that is already active.
+  - `docs/SECRETS_ROTATION.md` still says the workflow runs quarterly on a
+    schedule (it is `workflow_dispatch` only), and its verification and rollback
+    sections use `kubectl` against the removed GKE deployment and mention a
+    30-minute dual-read window.
+- **Fix:** refuse the vault's secrets in the workflow (by ID, and by checking
+  whether a service mounts the secret as a vault variable), correct the
+  comment, and rewrite the page's schedule, verification and rollback sections
+  for Cloud Run.
+
+## A-85 — Migrating a fresh local database rewrites a committed audit record
+
+- **Found:** migrating a scratch database for the vault key rotation rehearsal
+  (2026-09-27).
+- **What:** `python scripts/alembic_migrate.py`, the README's local setup step,
+  rewrote the tracked `migrations/audit/v6z12_voice_runtime.json` with the local
+  run's `started_at` and `completed_at`. `core.crypto.migration_helpers` writes
+  audit records into the checkout unless `AGENTICORG_MIGRATION_AUDIT_DIR` is set,
+  and only the test session sets it (A-13), so every developer who migrates an
+  empty database gets a modified file that is easy to commit.
+- **Fix:** write local and test runs' records outside the checkout by default
+  (for example under the system's temporary files unless the runtime is strict
+  or the variable is set), or document the variable in the README next to the
+  migrate step.
+
