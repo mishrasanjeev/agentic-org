@@ -450,7 +450,6 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** require at least one evidence entry on `WebPresence` (the search that
   found nothing) in the interface and the conformance suite.
 
-
 ## A-43 — Grants are per connector, not per tool; A2A and MCP run a type's default tools
 
 - **Found:** binding caller tokens on every run route (PRD F-1b review,
@@ -1078,6 +1077,28 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
+
+- **Found:** running `scripts/seed_governed_cases.py` end to end against a
+  migrated local database after `scripts/seed_dev.py` (2026-09-27).
+- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
+  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
+  exactly one active, shared `business_underwriter` and `screening_disposition`
+  agent in the tenant, registered with Grantex, with a `case_purposes` list and
+  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
+  `scripts/seed_dev.py` nor the development stack creates those agents or
+  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
+  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
+  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
+  `awaiting_decision` with proposed dispositions. The case runtime's default
+  authorizer was already `case_authorizer`, so this predates the seed passing
+  it explicitly.
+- **Fix:** have the development seed create and register the two shared role
+  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
+  Grantex service and provision a development root grant for them, then rerun
+  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
+  for development.
+
 ## A-82 — Key rotation tooling does not see vault ciphertext outside five columns
 
 - **Found:** rehearsing the vault key rotation runbook against a local database
@@ -1154,28 +1175,6 @@ Remove an entry in the pull request that fixes it.
   or the variable is set), or document the variable in the README next to the
   migrate step.
 
-## A-81 — `make seed-cases` leaves every sample case `failed` on `grant_missing`
-
-- **Found:** running `scripts/seed_governed_cases.py` end to end against a
-  migrated local database after `scripts/seed_dev.py` (2026-09-27).
-- **What:** every seeded case ends `failed` with `tool_refused:grant_missing`
-  (`sub_reason=case_agent_not_configured`). Governed-case provider calls need
-  exactly one active, shared `business_underwriter` and `screening_disposition`
-  agent in the tenant, registered with Grantex, with a `case_purposes` list and
-  a delegated root grant (`docs/governance/case-lifecycle.md`). Neither
-  `scripts/seed_dev.py` nor the development stack creates those agents or
-  provisions `GRANTEX_ROOT_GRANT_TOKEN`. The seed's docstring and the
-  `@dev-stack` browser suites (`ui/e2e/governed-cases.spec.ts`,
-  `ui/e2e/governed-cases-dispositions.spec.ts`) expect cases at
-  `awaiting_decision` with proposed dispositions. The case runtime's default
-  authorizer was already `case_authorizer`, so this predates the seed passing
-  it explicitly.
-- **Fix:** have the development seed create and register the two shared role
-  agents with `case_purposes: ["aml.cdd.onboarding"]` against the stack's
-  Grantex service and provision a development root grant for them, then rerun
-  `make seed-cases` and the `@dev-stack` suites. Do not relax the grant check
-  for development.
-
 ## A-92 — A connector that screens through a provider cannot pass the activation gate
 
 - **Found:** review of the sanctions screening connector (2026-09-27).
@@ -1226,4 +1225,3 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** list the tenants whose agents link `sanctions_api`, move them to
   `sanctions_screening` with a provider package, then delete the module, its
   registration and the grant alias.
-
