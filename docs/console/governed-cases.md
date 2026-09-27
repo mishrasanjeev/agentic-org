@@ -203,7 +203,26 @@ provider service and the model stub, and writes the new case references to
 `ui/test-results/governed-cases-seed.json`. It refuses to run outside a
 development runtime, and it never decides or reviews anything.
 
+Every provider call an agent makes is checked against a grant, as in
+production ([case lifecycle](../governance/case-lifecycle.md#turning-it-on)), so
+`make seed-cases` first gives the development tenant what that check needs: one
+active, shared agent per case role (`business_underwriter`,
+`screening_disposition`) with only its reference agent's read tools, registered
+with the stack's Grantex service under its sandbox developer key and allowed the
+`aml.cdd.onboarding` purpose, and a development root grant for both, obtained
+for the run and never stored. Running it again reuses the agents and their
+registrations. It stops, before registering anything, if the tenant already has
+an active shared agent of either role that it did not create, and it refuses a
+`GRANTEX_BASE_URL` that is not the stack's own. A call a grant does not cover is
+still refused and the case fails. Because the root grant lives only in the seed's
+process, an investigation you start or retry from the console on this stack fails
+with `minting_unconfigured` once the seed's cached run grants expire; run
+`make seed-cases` again for fresh cases.
+
 `make e2e` runs the browser suite (`ui/e2e/governed-cases*.spec.ts`) against the
 running stack. It checks the screens with axe (WCAG 2.1 A and AA) at desktop and
 phone width and regenerates every screenshot on this page into
-`docs/console/images/`.
+`docs/console/images/`. CI runs the same sequence on every pull request (the
+`make dev && make test` job of `.github/workflows/local-stack.yml`), with a
+seed password generated for the run. Locally the suite skips when the seed is
+missing; in CI (`AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true`) that fails the run.

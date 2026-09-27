@@ -41,6 +41,57 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   role.
 - Deploy with `--with-migrations` so the revision runs before the new code
   serves traffic.
+### Added - the decision-grant join and the governed-case suites run in CI
+- A new `make e2e-decisions` job in `.github/workflows/local-stack.yml` runs
+  on every pull request and every push to `main`: it starts the development
+  stack with decision grants on and `AGENTICORG_DEV_CASE_DECISION_SERVICE=grantex`,
+  then runs `make seed`, `make seed-cases` and `make e2e-decisions`
+  (`ui/e2e/decision-grants.spec.ts`) against the real Grantex auth service,
+  and uploads the Playwright report when it fails. Its check name,
+  `make e2e-decisions`, is the one to require on `main`.
+- The `make dev && make test` job now runs `make seed-cases` before `make e2e`,
+  so the governed-case suites (`ui/e2e/governed-cases*.spec.ts`) run instead
+  of skipping. They stay on that job's stack, which has no decision-grant
+  issuer, because `governed-cases-decision.spec.ts` asserts that refusal.
+- Both jobs generate the seed password, and the decision job the auth
+  service's administrator key, with `openssl rand` for each run and mask them
+  in the log. Nothing secret is written into the workflow.
+- `make e2e-decisions` now also refuses to start without
+  `AGENTICORG_DEV_GRANTEX_ADMIN_KEY` or with a case decision service other than
+  `grantex`, before it touches the stack, and the suite's runner uses exactly
+  the administrator key the auth service was given: the development
+  placeholder it fell back to, which the service never had, is gone.
+- In that job a missing seed password or seed file now fails the governed-case
+  suites instead of skipping them (`AGENTICORG_E2E_REQUIRE_GOVERNED_CASES=true`),
+  so a wiring change cannot leave the job green with nothing checked. Locally
+  they still skip.
+- The tools image now includes `make`, so the tests that run the
+  `make e2e-decisions` guards run in `make test` too instead of skipping.
+### Fixed - the dev stack's Postgres is healthy only once it accepts TCP connections
+- The `postgres` healthcheck in `docker-compose.dev.yml` ran `pg_isready` over
+  the Unix socket, which the image's init-time temporary server already
+  answers on a fresh volume, so `grantex-db` or `migrate` could start, get
+  `Connection refused` over TCP and fail `make dev`. It now checks
+  `127.0.0.1`.
+### Fixed - `make seed-cases` no longer leaves every sample case failed
+- Every seeded case ended `failed` with `tool_refused:grant_missing`, because
+  the development tenant had no agent for either governed-case role and the
+  stack no root grant to delegate from. `make seed-cases` now creates one
+  active, shared `business_underwriter` and `screening_disposition` agent
+  with only its reference agent's read tools, registers them with the stack's
+  Grantex service and allows them `aml.cdd.onboarding`, and obtains a root
+  grant covering both for the run. It is held in the seed's process only and
+  never stored or printed. Re-running reuses the agents and registrations.
+- The root grant comes from a second, sandbox developer key the development
+  Grantex service now seeds (`SEED_SANDBOX_KEY`), because a live developer's
+  authorization waits for the principal's passkey. Only `make seed-cases`
+  uses it; the API and worker keep the live key.
+- The seed refuses a `GRANTEX_BASE_URL` that is unset or not the stack's own
+  Grantex service, stops before registering anything when the tenant already
+  has an active shared agent of either role it did not create, and fails
+  instead of continuing when a registration cannot be made or read. The
+  grant checks are unchanged: a call the delegated grant does not cover is
+  still refused.
 ### Added - governed-case decisions consumed by request id at the issuer (off by default)
 - `AGENTICORG_CASE_DECISION_GRANT_RELEASE` (default `false`). On, recording a
   case decision consumes the request at the Grantex auth service by its id
