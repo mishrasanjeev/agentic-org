@@ -173,6 +173,15 @@ class Settings(BaseSettings):
     # proxy (Cloud Run / nginx) that overwrites the header; otherwise the
     # throttle bucket is client-spoofable. Env: AGENTICORG_TRUST_PROXY_HEADERS.
     trust_proxy_headers: bool = False
+    # Email event webhooks (api/v1/webhooks.py). Every tenant has its own
+    # SendGrid, Mailchimp and MoEngage URL whose path token binds the tenant
+    # (GET /api/v1/email-webhook-inbox). On, the shared URLs
+    # /webhooks/email/{provider} refuse with 409 any delivery with an event
+    # that names a tenant in its payload, so a signed event can no longer pick
+    # the tenant whose workflow waits it resumes. Off keeps the shared URLs as
+    # they were. Turn it on once every tenant's provider posts to its own URL
+    # (docs/RUNBOOKS.md). Env: AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS.
+    webhooks_tenant_bound_paths: bool = False
 
     # Google OAuth
     google_oauth_client_id: str = ""  # Google Cloud Console OAuth 2.0 Client ID

@@ -4,6 +4,33 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Security - email webhooks can take the tenant from the URL, not the payload
+- The SendGrid, Mailchimp and MoEngage webhooks read the tenant from the
+  signed body (a `tenant:<id>` category, `custom_args.tenant_id`, a
+  `tenant_id` field), and each provider signs with one key for the whole
+  deployment, so a validly signed event could name any tenant and resume that
+  tenant's `wait_for_event` steps.
+- Each tenant now has its own URL per provider,
+  `POST /api/v1/webhooks/email/{provider}/{tenant_id}/{path_token}`, whose
+  path token is an HMAC of the tenant and provider under
+  `AGENTICORG_SECRET_KEY`. The provider signature is still verified; a wrong
+  path answers 404 before the body is read. An event whose payload names a
+  different tenant, or a value that is not a tenant id, is refused: it is not
+  stored and resumes no wait, and the response counts it in `refused`. An
+  active human tenant administrator reads the paths from
+  `GET /api/v1/email-webhook-inbox`; API keys and agent tokens are refused.
+- New setting `AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS`, default off. On, the
+  shared `/api/v1/webhooks/email/{provider}` URLs answer 409 to any delivery
+  with an event that names a tenant and store nothing from it, so the
+  provider records the failure and can redeliver; events that name no tenant
+  are processed as before. Off, the shared URLs behave exactly as before.
+- `agenticorg_email_webhook_tenant_binding_total{provider, outcome}` counts
+  events accepted on per-tenant URLs (`bound`), refused there
+  (`tenant_mismatch`, `unbound`), and shared-URL events that name a tenant
+  (`shared_path_tenant_named` with the setting off, `shared_path_refused` with
+  it on), so the setting can be switched on once the first is flat. Moving
+  providers: `docs/RUNBOOKS.md#email-webhooks-per-tenant-urls`.
+
 ### Fixed - four stale production specs and a smoke test that could not fail
 - TC-API-003 (`qa-module-19-health-api.spec.ts`) read the API version from
   `/openapi.json`, which the strict runtime does not serve (`api/main.py`). It

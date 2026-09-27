@@ -3,6 +3,14 @@
 Every externally reachable webhook handler here fails closed when the
 provider's verification secret is missing, per SECURITY_AUDIT-2026-04-19
 HIGH-04. Set ``AGENTICORG_WEBHOOK_ALLOW_UNSIGNED=1`` only in local dev.
+
+Each provider has two receivers. ``/webhooks/email/{provider}`` is shared by
+every tenant and takes the tenant from the payload; with
+``AGENTICORG_WEBHOOKS_TENANT_BOUND_PATHS`` on it refuses (409) any delivery
+with an event that names a tenant. ``/webhooks/email/{provider}/{tenant_id}/
+{path_token}`` takes the tenant from the path token (``core.email_webhooks``)
+and refuses an event whose payload names a different tenant. Tenant admins
+read their paths from ``GET /email-webhook-inbox``.
 """
 
 from __future__ import annotations
@@ -12,12 +20,16 @@ import hashlib
 import hmac
 import json
 import os
+import uuid
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from api.deps import ActiveHumanAdmin, get_active_human_admin, get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
+from core import email_webhooks
+from core.config import settings
 from workflows.event_waits import WorkflowEventWaitStore
 
 logger = structlog.get_logger()
@@ -127,6 +139,16 @@ def _listener_match_criteria(listener_payload: dict[str, Any]) -> dict[str, Any]
     return raw if isinstance(raw, dict) else {}
 
 
+def _category_tenant(category: str) -> str | None:
+    """The tenant a ``tenant:<id>`` style SendGrid category names, or None."""
+    if ":" not in category:
+        return None
+    key, value = category.split(":", 1)
+    if key.strip().lower().replace("-", "_") in {"tenant", "tenant_id", "agenticorg_tenant_id"}:
+        return value.strip()
+    return None
+
+
 def _sendgrid_category_metadata(categories: Any) -> tuple[str, dict[str, str]]:
     category_list = categories if isinstance(categories, list) else [categories]
     campaign_id = ""
@@ -135,15 +157,204 @@ def _sendgrid_category_metadata(categories: Any) -> tuple[str, dict[str, str]]:
         if not raw_category:
             continue
         category = str(raw_category)
-        if ":" in category:
-            key, value = category.split(":", 1)
-            normalized = key.strip().lower().replace("-", "_")
-            if normalized in {"tenant", "tenant_id", "agenticorg_tenant_id"}:
-                extra["tenant_id"] = value.strip()
-                continue
+        tenant = _category_tenant(category)
+        if tenant is not None:
+            extra["tenant_id"] = tenant
+            continue
         if not campaign_id:
             campaign_id = category
     return campaign_id, extra
+
+
+def _sendgrid_event_fields(event: dict[str, Any]) -> dict[str, Any] | None:
+    """``_store_email_event`` arguments for one SendGrid event, or None when it is skipped."""
+    email = event.get("email", "")
+    event_type = event.get("event", "")
+    sg_message_id = event.get("sg_message_id", "")
+    ts = event.get("timestamp", "")
+    url = event.get("url", "")
+
+    if not email or not event_type:
+        return None
+
+    # Use sg_message_id as campaign_id proxy, or extract from categories.
+    categories = event.get("category", [])
+    campaign_id, category_extra = _sendgrid_category_metadata(categories)
+    if not campaign_id:
+        campaign_id = sg_message_id or "unknown"
+    extra: dict[str, Any] = dict(category_extra)
+    custom_args = event.get("custom_args")
+    if isinstance(custom_args, dict):
+        tenant_id = custom_args.get("tenant_id") or custom_args.get("agenticorg:tenant_id")
+        if tenant_id:
+            extra["tenant_id"] = tenant_id
+    explicit_tenant_id = event.get("tenant_id") or event.get("agenticorg:tenant_id")
+    if explicit_tenant_id:
+        extra["tenant_id"] = explicit_tenant_id
+    if url:
+        extra["url"] = url
+    return {
+        "campaign_id": campaign_id,
+        "email": email,
+        "event_type": event_type,
+        "timestamp": ts,
+        "extra": extra or None,
+    }
+
+
+def _sendgrid_tenant_claims(event: dict[str, Any]) -> list[Any]:
+    """Every tenant a SendGrid event names: all ``tenant:`` categories, ``custom_args`` and fields."""
+    categories = event.get("category", [])
+    claims: list[Any] = [
+        tenant
+        for raw in (categories if isinstance(categories, list) else [categories])
+        if raw and (tenant := _category_tenant(str(raw))) is not None
+    ]
+    claims.extend(email_webhooks.tenant_claims(event.get("custom_args")))
+    claims.extend(email_webhooks.tenant_claims(event))
+    return claims
+
+
+def _mailchimp_event_fields(form: dict[str, str]) -> dict[str, Any] | None:
+    """``_store_email_event`` arguments for a Mailchimp delivery, or None when it names no address."""
+    data_email = form.get("data[email]", "")
+    if not data_email:
+        return None
+    # Map Mailchimp types to our event types
+    event_map = {
+        "subscribe": "subscribe",
+        "unsubscribe": "unsubscribe",
+        "campaign": "delivered",
+        "cleaned": "bounce",
+    }
+    webhook_type = form.get("type", "")
+    event_type = event_map.get(str(webhook_type), str(webhook_type))
+    campaign_id = str(form.get("data[id]", "") or form.get("data[list_id]", "unknown"))
+    extra: dict[str, Any] = {}
+    tenant_id = form.get("tenant_id") or form.get("agenticorg:tenant_id") or form.get("data[tenant_id]")
+    if tenant_id:
+        extra["tenant_id"] = tenant_id
+    return {
+        "campaign_id": campaign_id,
+        "email": str(data_email),
+        "event_type": event_type,
+        "timestamp": str(form.get("fired_at", "")),
+        "extra": extra or None,
+    }
+
+
+def _mailchimp_tenant_claims(form: dict[str, str]) -> list[Any]:
+    return email_webhooks.tenant_claims(form) + email_webhooks.tenant_claims(form, prefix="data[{}]")
+
+
+def _moengage_event_fields(payload: dict[str, Any]) -> dict[str, Any]:
+    """``_store_email_event`` arguments for a MoEngage callback; 400 when it names no event or address."""
+    event_type = payload.get("event_type", payload.get("type", ""))
+    email = payload.get("email", payload.get("user_email", ""))
+    campaign_id = payload.get("campaign_id", payload.get("campaign_name", "unknown"))
+    timestamp = payload.get("timestamp", payload.get("event_time", ""))
+
+    if not event_type or not email:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing event_type or email in payload",
+        )
+
+    # Normalize MoEngage event types
+    moengage_event_map = {
+        "EMAIL_OPEN": "opened",
+        "EMAIL_CLICK": "clicked",
+        "EMAIL_BOUNCE": "bounce",
+        "EMAIL_DELIVERED": "delivered",
+        "EMAIL_SENT": "sent",
+        "EMAIL_DROPPED": "dropped",
+    }
+    normalized_event = moengage_event_map.get(event_type, event_type.lower())
+
+    url = payload.get("url", payload.get("click_url", ""))
+    extra: dict[str, Any] = {}
+    tenant_id = payload.get("tenant_id") or payload.get("agenticorg:tenant_id")
+    if tenant_id:
+        extra["tenant_id"] = tenant_id
+    if url:
+        extra["url"] = url
+    return {
+        "campaign_id": campaign_id,
+        "email": email,
+        "event_type": normalized_event,
+        "timestamp": timestamp,
+        "extra": extra or None,
+    }
+
+
+# ── Tenant binding ─────────────────────────────────────────────────
+
+
+def _names_a_tenant(fields: dict[str, Any] | None) -> bool:
+    """True when the shared route reads a tenant from the event (``_extract_event_tenant_id``)."""
+    return bool(fields and _extract_event_tenant_id(fields["extra"] or {}))
+
+
+def _count_shared_path_event(provider: str, fields: dict[str, Any]) -> None:
+    """With tenant-bound paths off, count a shared-URL event that switching them on would refuse."""
+    if _names_a_tenant(fields):
+        email_webhooks.tenant_binding_total.labels(provider=provider, outcome="shared_path_tenant_named").inc()
+
+
+def _refuse_events_naming_a_tenant(provider: str, prepared: list[dict[str, Any] | None]) -> None:
+    """With tenant-bound paths on, a shared URL refuses a delivery with an event that names a tenant.
+
+    Fail closed: the shared URL cannot tell which tenant an event belongs to (every tenant shares
+    the provider key), so it resumes nobody's wait rather than the tenant the payload names. The
+    whole delivery is refused before anything is stored, and with a status the provider records
+    as a failure, so the event is not lost silently: providers redeliver non-2xx responses for a
+    while, which lets an operator who switched too early switch back and have them processed.
+    """
+    named = sum(1 for fields in prepared if _names_a_tenant(fields))
+    if not named:
+        return
+    email_webhooks.tenant_binding_total.labels(provider=provider, outcome="shared_path_refused").inc(named)
+    logger.warning("email_webhook_shared_path_tenant_event_refused", provider=provider, events=named)
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "This webhook URL is shared by every tenant and does not accept events that name a "
+            "tenant. Post them to that tenant's own webhook URL (GET /api/v1/email-webhook-inbox)."
+        ),
+    )
+
+
+def _require_bound_tenant(tenant_id: str, provider: str, path_token: str) -> uuid.UUID:
+    """The tenant a per-tenant path binds, or 404 before the body is read.
+
+    A wrong token, a token for another tenant or provider and a malformed tenant id all answer the
+    same 404 a missing route does, so a caller learns nothing about which tenants exist.
+    """
+    tenant: uuid.UUID | None
+    try:
+        tenant = uuid.UUID(tenant_id)
+    except ValueError:
+        tenant = None
+    if tenant is None or not email_webhooks.path_token_matches(tenant, provider, path_token):
+        email_webhooks.tenant_binding_total.labels(provider=provider, outcome="unbound").inc()
+        logger.warning("email_webhook_not_bound", provider=provider)
+        raise HTTPException(status_code=404, detail="Not Found")
+    return tenant
+
+
+def _bind_event(fields: dict[str, Any], claims: list[Any], tenant: uuid.UUID, provider: str) -> bool:
+    """Set the event's tenant to the path's; False (refused) when the payload names another tenant.
+
+    Refused, not re-labelled: an event that names a different tenant is not stored and resumes no
+    wait, neither in the tenant it names nor in the tenant the path binds.
+    """
+    if not email_webhooks.claims_name_only(tenant, claims):
+        email_webhooks.tenant_binding_total.labels(provider=provider, outcome="tenant_mismatch").inc()
+        logger.warning("email_webhook_tenant_mismatch_refused", provider=provider, tenant_id=str(tenant))
+        return False
+    fields["extra"] = {**(fields["extra"] or {}), "tenant_id": str(tenant)}
+    email_webhooks.tenant_binding_total.labels(provider=provider, outcome="bound").inc()
+    return True
 
 
 def _event_matches_criteria(
@@ -410,6 +621,36 @@ async def list_webhook_endpoints():
     }
 
 
+@router.get("/email-webhook-inbox")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="webhooks.email.inbox.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="webhooks.email.inbox.read",
+)
+async def get_email_webhook_inbox(
+    tenant_id: str = Depends(get_current_tenant),
+    _admin: Any = require_tenant_admin,
+    _human_admin: ActiveHumanAdmin = Depends(get_active_human_admin),
+) -> dict[str, Any]:
+    """The paths this tenant's SendGrid, Mailchimp and MoEngage must post email events to.
+
+    Treat them as credentials: the path is what binds a delivery to this tenant, so anyone holding
+    it can present events for this tenant (they still have to be signed). An active same-tenant
+    human administrator is required - an API key or an agent token holding the admin scope is
+    refused, as for ``GET /case-push/provider-webhook-inbox``.
+    """
+    tenant = uuid.UUID(tenant_id)
+    return {
+        "inboxes": [
+            {"provider": provider, "path": email_webhooks.webhook_path(tenant, provider)}
+            for provider in email_webhooks.PROVIDERS
+        ]
+    }
+
+
 @router.post("/webhooks/email/sendgrid")
 @route_meta(
     auth_required=False,
@@ -442,45 +683,70 @@ async def sendgrid_webhook(request: Request) -> dict[str, Any]:
     if not isinstance(events, list):
         events = [events]
 
+    if settings.webhooks_tenant_bound_paths:
+        _refuse_events_naming_a_tenant("sendgrid", [_sendgrid_event_fields(event) for event in events])
+
     processed = 0
     for event in events:
-        email = event.get("email", "")
-        event_type = event.get("event", "")
-        sg_message_id = event.get("sg_message_id", "")
-        ts = event.get("timestamp", "")
-        url = event.get("url", "")
-
-        if not email or not event_type:
+        fields = _sendgrid_event_fields(event)
+        if fields is None:
             continue
-
-        # Use sg_message_id as campaign_id proxy, or extract from categories.
-        categories = event.get("category", [])
-        campaign_id, category_extra = _sendgrid_category_metadata(categories)
-        if not campaign_id:
-            campaign_id = sg_message_id or "unknown"
-        extra: dict[str, Any] = dict(category_extra)
-        custom_args = event.get("custom_args")
-        if isinstance(custom_args, dict):
-            tenant_id = custom_args.get("tenant_id") or custom_args.get("agenticorg:tenant_id")
-            if tenant_id:
-                extra["tenant_id"] = tenant_id
-        explicit_tenant_id = event.get("tenant_id") or event.get("agenticorg:tenant_id")
-        if explicit_tenant_id:
-            extra["tenant_id"] = explicit_tenant_id
-        if url:
-            extra["url"] = url
-
-        await _store_email_event(
-            campaign_id=campaign_id,
-            email=email,
-            event_type=event_type,
-            timestamp=ts,
-            extra=extra or None,
-        )
+        _count_shared_path_event("sendgrid", fields)
+        await _store_email_event(**fields)
         processed += 1
 
     logger.info("sendgrid_webhook_processed", count=processed)
     return {"status": "ok", "processed": processed}
+
+
+@router.post("/webhooks/email/sendgrid/{tenant_id}/{path_token}")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:webhooks.email.sendgrid",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.sendgrid.received",
+    public_reason="per-tenant-path-token-plus-provider-signature-required",
+)
+async def sendgrid_tenant_webhook(tenant_id: str, path_token: str, request: Request) -> dict[str, Any]:
+    """SendGrid events for the tenant the path binds; an event naming another tenant is refused.
+
+    Refused per event, answered 200: redelivering the event cannot change its answer, and one
+    event with a foreign tenant tag must not hold back the rest of the tenant's batch.
+    """
+    tenant = _require_bound_tenant(tenant_id, "sendgrid", path_token)
+    body = await request.body()
+    signature = request.headers.get("X-Twilio-Email-Event-Webhook-Signature", "")
+    timestamp = request.headers.get("X-Twilio-Email-Event-Webhook-Timestamp", "")
+
+    if not _verify_sendgrid_signature(body, signature, timestamp):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    try:
+        events = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from None
+
+    if not isinstance(events, list):
+        events = [events]
+    if not all(isinstance(event, dict) for event in events):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    processed = 0
+    refused = 0
+    for event in events:
+        fields = _sendgrid_event_fields(event)
+        if fields is None:
+            continue
+        if not _bind_event(fields, _sendgrid_tenant_claims(event), tenant, "sendgrid"):
+            refused += 1
+            continue
+        await _store_email_event(**fields)
+        processed += 1
+
+    logger.info("sendgrid_webhook_processed", count=processed, refused=refused, tenant_id=str(tenant))
+    return {"status": "ok", "processed": processed, "refused": refused}
 
 
 # ── Mailchimp Webhook ──────────────────────────────────────────────
@@ -510,42 +776,59 @@ async def mailchimp_webhook(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
     webhook_type = form.get("type", "")
-    fired_at = form.get("fired_at", "")
     data_email = form.get("data[email]", "")
 
     if not webhook_type:
         raise HTTPException(status_code=400, detail="Missing webhook type")
 
-    # Map Mailchimp types to our event types
-    event_map = {
-        "subscribe": "subscribe",
-        "unsubscribe": "unsubscribe",
-        "campaign": "delivered",
-        "cleaned": "bounce",
-    }
-    event_type = event_map.get(str(webhook_type), str(webhook_type))
-
-    campaign_id = str(form.get("data[id]", "") or form.get("data[list_id]", "unknown"))
-
-    if data_email:
-        extra: dict[str, Any] = {}
-        tenant_id = (
-            form.get("tenant_id")
-            or form.get("agenticorg:tenant_id")
-            or form.get("data[tenant_id]")
-        )
-        if tenant_id:
-            extra["tenant_id"] = tenant_id
-        await _store_email_event(
-            campaign_id=campaign_id,
-            email=str(data_email),
-            event_type=event_type,
-            timestamp=str(fired_at),
-            extra=extra or None,
-        )
+    fields = _mailchimp_event_fields(form)
+    if settings.webhooks_tenant_bound_paths:
+        _refuse_events_naming_a_tenant("mailchimp", [fields])
+    if fields is not None:
+        _count_shared_path_event("mailchimp", fields)
+        await _store_email_event(**fields)
 
     logger.info("mailchimp_webhook_processed", type=webhook_type, email=data_email)
     return {"status": "ok", "type": webhook_type}
+
+
+@router.post("/webhooks/email/mailchimp/{tenant_id}/{path_token}")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:webhooks.email.mailchimp",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.mailchimp.received",
+    public_reason="per-tenant-path-token-plus-provider-signature-required",
+)
+async def mailchimp_tenant_webhook(tenant_id: str, path_token: str, request: Request) -> dict[str, Any]:
+    """Mailchimp events for the tenant the path binds; an event naming another tenant is refused.
+
+    The signature covers the full URL, so it also covers the tenant and the path token.
+    """
+    tenant = _require_bound_tenant(tenant_id, "mailchimp", path_token)
+    form_data = await request.form()
+    form = {str(k): str(v) for k, v in form_data.items()}
+    signature = request.headers.get("X-Mandrill-Signature", "")
+    webhook_url = str(request.url)
+    if not _verify_mailchimp_signature(webhook_url, form, signature):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    webhook_type = form.get("type", "")
+    if not webhook_type:
+        raise HTTPException(status_code=400, detail="Missing webhook type")
+
+    refused = 0
+    fields = _mailchimp_event_fields(form)
+    if fields is not None:
+        if _bind_event(fields, _mailchimp_tenant_claims(form), tenant, "mailchimp"):
+            await _store_email_event(**fields)
+        else:
+            refused = 1
+
+    logger.info("mailchimp_webhook_processed", type=webhook_type, refused=refused, tenant_id=str(tenant))
+    return {"status": "ok", "type": webhook_type, "refused": refused}
 
 
 # ── MoEngage Webhook ───────────────────────────────────────────────
@@ -577,48 +860,53 @@ async def moengage_webhook(request: Request) -> dict[str, Any]:
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON payload") from None
 
-    event_type = payload.get("event_type", payload.get("type", ""))
-    email = payload.get("email", payload.get("user_email", ""))
-    campaign_id = payload.get("campaign_id", payload.get("campaign_name", "unknown"))
-    timestamp = payload.get("timestamp", payload.get("event_time", ""))
+    fields = _moengage_event_fields(payload)
+    if settings.webhooks_tenant_bound_paths:
+        _refuse_events_naming_a_tenant("moengage", [fields])
 
-    if not event_type or not email:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing event_type or email in payload",
-        )
-
-    # Normalize MoEngage event types
-    moengage_event_map = {
-        "EMAIL_OPEN": "opened",
-        "EMAIL_CLICK": "clicked",
-        "EMAIL_BOUNCE": "bounce",
-        "EMAIL_DELIVERED": "delivered",
-        "EMAIL_SENT": "sent",
-        "EMAIL_DROPPED": "dropped",
-    }
-    normalized_event = moengage_event_map.get(event_type, event_type.lower())
-
-    url = payload.get("url", payload.get("click_url", ""))
-    extra: dict[str, Any] = {}
-    tenant_id = payload.get("tenant_id") or payload.get("agenticorg:tenant_id")
-    if tenant_id:
-        extra["tenant_id"] = tenant_id
-    if url:
-        extra["url"] = url
-
-    await _store_email_event(
-        campaign_id=campaign_id,
-        email=email,
-        event_type=normalized_event,
-        timestamp=timestamp,
-        extra=extra or None,
-    )
+    _count_shared_path_event("moengage", fields)
+    await _store_email_event(**fields)
 
     logger.info(
         "moengage_webhook_processed",
-        event_type=normalized_event,
-        email=email,
-        campaign_id=campaign_id,
+        event_type=fields["event_type"],
+        email=fields["email"],
+        campaign_id=fields["campaign_id"],
     )
-    return {"status": "ok", "event_type": normalized_event}
+    return {"status": "ok", "event_type": fields["event_type"]}
+
+
+@router.post("/webhooks/email/moengage/{tenant_id}/{path_token}")
+@route_meta(
+    auth_required=False,
+    tenant_required=True,
+    scope="public:webhooks.email.moengage",
+    rate_limit="provider-webhook",
+    idempotency="provider-delivery-event-hash",
+    audit_event="webhooks.email.moengage.received",
+    public_reason="per-tenant-path-token-plus-provider-signature-required",
+)
+async def moengage_tenant_webhook(tenant_id: str, path_token: str, request: Request) -> dict[str, Any]:
+    """MoEngage events for the tenant the path binds; an event naming another tenant is refused."""
+    tenant = _require_bound_tenant(tenant_id, "moengage", path_token)
+    body = await request.body()
+    signature = request.headers.get("X-MoEngage-Signature", "")
+    if not _verify_moengage_signature(body, signature):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload") from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    refused = 0
+    fields = _moengage_event_fields(payload)
+    if _bind_event(fields, email_webhooks.tenant_claims(payload), tenant, "moengage"):
+        await _store_email_event(**fields)
+    else:
+        refused = 1
+
+    logger.info("moengage_webhook_processed", event_type=fields["event_type"], refused=refused, tenant_id=str(tenant))
+    return {"status": "ok", "event_type": fields["event_type"], "refused": refused}
