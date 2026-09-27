@@ -457,21 +457,6 @@ CONNECTORS = [
             "file_charge_satisfaction",
         ],
     ),
-    (
-        "connectors/ops/sanctions_api.py",
-        "sanctions_api",
-        "ops",
-        "api_key",
-        "https://api.sanctions.io/v2",
-        500,
-        [
-            "screen_entity_name",
-            "screen_transaction_parties",
-            "get_screening_alert",
-            "run_batch_screen",
-            "generate_screening_report",
-        ],
-    ),
     # Marketing
     (
         "connectors/marketing/hubspot.py",

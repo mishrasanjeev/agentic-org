@@ -89,6 +89,8 @@ def _load_all_manifests(client: Grantex) -> None:
         "grantex.manifests.quickbooks",
         "grantex.manifests.s3",
         "grantex.manifests.salesforce",
+        # Deprecated connector id, kept while it resolves. Its replacement,
+        # sanctions_screening, is described by manifests/sanctions_screening.json.
         "grantex.manifests.sanctions_api",
         "grantex.manifests.sap",
         "grantex.manifests.sendgrid",
@@ -263,7 +265,12 @@ def _tools_to_scopes(tools: list[str]) -> list[str]:
 
     "fetch_bank_statement" -> "tool:banking_aa:read:fetch_bank_statement"
     "create_contact"       -> "tool:hubspot:write:create_contact"
+
+    A deprecated connector id is scoped under its live id
+    (``sanctions_api`` -> ``sanctions_screening``); the grant check counts a
+    grant under either id (``enforce_connector_grant``).
     """
+    from connectors.registry import ConnectorRegistry
     from core.langgraph.tool_adapter import _actual_tool_name, _build_tool_index
 
     index = _build_tool_index(include_connector_aliases=True)
@@ -271,7 +278,7 @@ def _tools_to_scopes(tools: list[str]) -> list[str]:
     for tool_name in tools:
         match = index.get(tool_name)
         if match:
-            connector_name = match[0]
+            connector_name = ConnectorRegistry.live_id(match[0])
             actual = _actual_tool_name(tool_name)
             scopes.append(f"tool:{connector_name}:{_tool_permission(connector_name, actual)}:{actual}")
     return scopes

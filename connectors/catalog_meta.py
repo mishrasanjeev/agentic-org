@@ -40,6 +40,10 @@ CATALOG_META: dict[str, dict[str, str]] = {
     },
     "jira": {"display_name": "Jira", "description": "Issue tracking + project management."},
     "zendesk": {"display_name": "Zendesk", "description": "Customer support tickets."},
+    "sanctions_screening": {
+        "display_name": "Sanctions Screening",
+        "description": "Sanctions, PEP and watch-list screening through a verification provider.",
+    },
     "stripe": {"display_name": "Stripe", "description": "Online payments, subscriptions."},
     "razorpay": {
         "display_name": "Razorpay",

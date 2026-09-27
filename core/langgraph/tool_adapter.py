@@ -23,7 +23,7 @@ import structlog
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
@@ -804,9 +804,11 @@ async def execute_agent_tool(
         from core.langgraph.grantex_auth import get_grantex_client
 
         # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
-        # synchronous HTTPS fetch; run it off the event loop.
+        # synchronous HTTPS fetch; run it off the event loop. A grant held
+        # under another id of a renamed connector counts too.
         enforcement = await asyncio.to_thread(
-            get_grantex_client().enforce,
+            enforce_connector_grant,
+            get_grantex_client(),
             grant_token=grant_token,
             connector=connector_name,
             tool=tool_name,
@@ -1148,8 +1150,10 @@ def _build_tool_index(
 
     index: dict[str, tuple[str, str]] = {}
 
-    # 1. Native connectors first
-    for connector_name in ConnectorRegistry.all_names():
+    # 1. Native connectors first. Deprecated ids (``sanctions_api``) come
+    # after the live ones, so a bare tool name resolves to the live connector
+    # while agents that name the old id keep their connector-qualified tools.
+    for connector_name in ConnectorRegistry.all_names(include_deprecated=True):
         # Skip the composio meta-connector; its tools are handled below
         if connector_name == "composio":
             continue

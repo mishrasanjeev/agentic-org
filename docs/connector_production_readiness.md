@@ -113,12 +113,12 @@ This document categorizes every connector by production readiness and lists exac
 | **ServiceNow** | SANDBOX FIRST | REST + OAuth2. Create OAuth Application in ServiceNow instance. Use Personal Developer Instance (free) for testing at developer.servicenow.com. **Action needed:** Some table APIs require specific roles — confirm scoped app permissions. |
 | **PagerDuty** | READY | API key from pagerduty.com → Configuration → API Access Keys. REST v2. |
 | **MCA Portal** | BLOCKED | Government portal (Ministry of Corporate Affairs). Needs: DIN, DSC, MCA registration. **Action needed:** Same challenge as EPFO — government portal auth with captcha/OTP. Uses DSCAdapter for signing. |
-| **Sanctions API** | READY | API key from the screening provider's developer settings. KYC/AML screening. See FINDINGS A-40 on the provider-specific connector. |
+| **Sanctions Screening** | BLOCKED | Screens through a verification provider, not a built-in service: install and allowlist a provider package, then set `provider` in the connector config. The in-repo `mock` provider runs only in local, development, test and CI environments. `sanctions_api` is its deprecated id. The connector test reports `configured`, never `healthy`, so agents that link it cannot be activated until the provider seam gains a probe (see `FINDINGS.md`). See "The sanctions screening connector" in `docs/providers/plugin-packages.md`. |
 
 ### Ops Summary
-- **Ready now:** 5 (Jira, Confluence, Zendesk, PagerDuty, Sanctions)
+- **Ready now:** 4 (Jira, Confluence, Zendesk, PagerDuty)
 - **Sandbox first:** 1 (ServiceNow)
-- **Blocked:** 1 (MCA Portal — government portal)
+- **Blocked:** 2 (MCA Portal — government portal; Sanctions Screening — needs a provider package)
 - **Total ops tools:** 40
 
 ---
@@ -131,12 +131,12 @@ This document categorizes every connector by production readiness and lists exac
 | Communications | 8 | 1 | 0 | 0 | 9 |
 | HR | 5 | 1 | 0 | 2 | 8 |
 | Marketing | 6 | 2 | 0 | 1 | 9 |
-| Operations | 5 | 1 | 0 | 1 | 7 |
-| **Total** | **29** | **9** | **1** | **4** | **43** |
+| Operations | 4 | 1 | 0 | 2 | 7 |
+| **Total** | **28** | **9** | **1** | **5** | **43** |
 
 *\*Including AA Consent Manager and GSTN Sandbox as separate entries.*
 
-**29 connectors (67%) are ready to go live today with just credentials.**
+**28 connectors (65%) are ready to go live today with just credentials.**
 
 ---
 

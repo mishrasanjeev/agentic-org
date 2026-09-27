@@ -4,6 +4,58 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed - sanctions screening runs through the verification provider seam
+- The `sanctions_screening` connector replaces `sanctions_api`, which was
+  built on one commercial screening service's API and named it in its code.
+  The new connector has no endpoint or API key of its own: every call goes to
+  the verification provider named by `provider` in the connector config -
+  `mock` by default, which runs only in local, development, test and CI
+  environments, or a provider from a separately installed package registered
+  through the `agenticorg.providers` entry point. Its tools are
+  `screen_entity`, `screen_person`, `screen_business`, `screen_transaction` and
+  `batch_screen`, and each returns `screening_result` records with every
+  candidate the provider found. A name screened without a `type` is screened
+  as a person and as a business. An unknown or unavailable provider, one
+  without screening, or a screening the provider does not offer fails the call
+  instead of returning an empty result. Grantex scopes for the new id come
+  from `manifests/sanctions_screening.json`.
+- **Breaking for operators:** `sanctions_api` is deprecated. It still resolves
+  to the same connector, so connector configurations saved under it keep
+  working, and creating one logs `connector_id_deprecated`. It no longer calls
+  the service it was built for, so outside local, development, test and CI
+  environments it refuses to connect until its connector config names an
+  installed provider (`provider`). `get_alert` and `generate_report` are
+  removed, `min_score` is ignored, and the connector catalog and product counts
+  list only `sanctions_screening`. See "The sanctions screening connector" in
+  `docs/providers/plugin-packages.md`.
+- An agent's tools, bare names such as `screen_entity` included, bind to
+  `sanctions_api` when the agent's connectors name it and to
+  `sanctions_screening` otherwise, so a tool can meet a grant issued under the
+  other id. Every grant check - LangGraph runs, `BaseAgent` (through
+  `execute_agent_tool`) and the tool gateway, in `grants.enforce_closed` off,
+  warn and deny alike - now accepts a scope held under any id of the connector
+  (`enforce_connector_grant` in `auth/grant_enforcement.py`), and new grants
+  name `sanctions_screening`. Grants issued before the rename keep covering
+  the tools they listed; `screen_person` and `screen_business` are covered once
+  they are added to the agent's tools, which recomputes its scopes.
+- The connector test reports `configured` and the provider's name, never
+  `healthy`, because a provider cannot be probed yet, so an agent that links
+  the connector cannot be activated until the provider seam gains a probe
+  (tracked in `FINDINGS.md`).
+- The Risk Sentinel and Vendor Manager prompts name `sanctions_screening` in
+  their token-scope lines.
+### Added - the vendor denylist audit runs in CI and warns on house terminology
+- `python scripts/check_denylist.py audit` passes on the whole tree, and the
+  Vendor Denylist workflow now runs it on every pull request, except title
+  and description edits, and on pushes to `main`; a denylisted term in any
+  tracked file fails the job. `audit <path>...` checks only the tracked files
+  under those paths and fails closed when they match none.
+- `scan` and `audit` print a warning, with the location and the term to use,
+  for kill switch, white-label, anomaly, trust provider, verification partner
+  and verification result. The terms are listed in plain text in the script
+  (`HOUSE_TERMS`), and a warning never changes the exit code. Directory,
+  consumer and name / version have too many ordinary meanings to flag and stay
+  a review check. See "Vendor-neutral names" in `CONTRIBUTING.md`.
 ### Fixed - four stale production specs and a smoke test that could not fail
 - TC-API-003 (`qa-module-19-health-api.spec.ts`) read the API version from
   `/openapi.json`, which the strict runtime does not serve (`api/main.py`). It

@@ -1,8 +1,10 @@
 name: Vendor Denylist
 
 # Fails when a pull request names a denylisted third-party vendor in its added
-# lines, file paths, commit messages, branch name, title or description. Only
-# salted hashes of the terms are in the repository (config/denylist.sha256).
+# lines, file paths, commit messages, branch name, title or description, and
+# (the audit job) when any tracked file does. Only salted hashes of the terms
+# are in the repository (config/denylist.sha256). Both jobs also print house
+# terminology warnings, which never fail them.
 # See CONTRIBUTING.md ("Vendor-neutral names").
 
 on:
@@ -54,3 +56,17 @@ jobs:
             *)
               python scripts/check_denylist.py scan --base origin/main --head HEAD --branch "$REF_NAME" ;;
           esac
+
+  audit:
+    name: Vendor denylist audit
+    # Editing a pull request's title or description does not change the tree.
+    if: github.event.action != 'edited'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - name: Audit every tracked file
+        run: python scripts/check_denylist.py audit

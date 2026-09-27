@@ -499,7 +499,7 @@ def build_guide() -> GuidePdf:
         ]),
         ("Ops (7)", C_BLUE, [
             "Jira, ServiceNow, Zendesk, PagerDuty,",
-            "Confluence, Sanctions API, MCA Portal (India)",
+            "Confluence, Sanctions Screening, MCA Portal (India)",
         ]),
         ("Comms (9)", C_TEAL, [
             "Slack, GitHub, Gmail, Google Calendar,",

@@ -788,7 +788,7 @@ def build():
         ("HR", "8", "Darwinbox, Keka, EPFO, Greenhouse, LinkedIn Talent, Okta, Zoom, DocuSign"),
         ("Marketing", "16", "Salesforce, HubSpot, Mailchimp, Google Ads, Meta Ads, LinkedIn Ads, "
          "GA4, Mixpanel, Buffer, Ahrefs, Bombora, G2, TrustRadius, Brandwatch, MoEngage, WordPress"),
-        ("Operations", "7", "Jira, Confluence, ServiceNow, Zendesk, PagerDuty, Sanctions API, MCA Portal"),
+        ("Operations", "7", "Jira, Confluence, ServiceNow, Zendesk, PagerDuty, Sanctions Screening, MCA Portal"),
         ("Comms", "11", "Slack, Gmail, Google Calendar, SendGrid, Twilio, WhatsApp, Twitter, YouTube, "
          "GitHub, S3, LangSmith"),
         ("Microsoft", "1", "Teams Bot"),

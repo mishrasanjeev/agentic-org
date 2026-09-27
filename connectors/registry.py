@@ -11,6 +11,9 @@ logger = structlog.get_logger()
 
 class ConnectorRegistry:
     _connectors: dict[str, type[BaseConnector]] = {}
+    # Retired ids that still resolve during a deprecation window, so stored configurations,
+    # grants and agent tool references keep working. Left out of the catalog and the counts.
+    _deprecated: dict[str, type[BaseConnector]] = {}
     _composio_tools: dict[str, dict] = {}  # tool_name -> metadata
 
     @classmethod
@@ -18,12 +21,39 @@ class ConnectorRegistry:
         cls._connectors[connector_cls.name] = connector_cls
 
     @classmethod
-    def get(cls, name: str) -> type[BaseConnector] | None:
-        return cls._connectors.get(name)
+    def register_deprecated(cls, connector_cls: type[BaseConnector]) -> None:
+        """Register a retired id. The class names its live id in ``replacement``."""
+        cls._deprecated[connector_cls.name] = connector_cls
 
     @classmethod
-    def all_names(cls) -> list[str]:
-        return list(cls._connectors.keys())
+    def get(cls, name: str) -> type[BaseConnector] | None:
+        return cls._connectors.get(name) or cls._deprecated.get(name)
+
+    @classmethod
+    def live_id(cls, name: str) -> str:
+        """The id to issue grants under: a deprecated id's replacement, else ``name`` itself."""
+        if name in cls._connectors:
+            return name
+        replacement = getattr(cls._deprecated.get(name), "replacement", None)
+        return replacement if isinstance(replacement, str) and replacement in cls._connectors else name
+
+    @classmethod
+    def ids_of(cls, name: str) -> tuple[str, ...]:
+        """``name`` first, then the connector's other ids: its live id and every deprecated id of it.
+
+        One connector answers to all of them during a deprecation window, so a grant that names
+        any of them is a grant for that connector. An id with no other names gives ``(name,)``.
+        """
+        live = cls.live_id(name)
+        retired = [old for old, c in cls._deprecated.items() if getattr(c, "replacement", None) == live]
+        return tuple(dict.fromkeys([name, live, *retired]))
+
+    @classmethod
+    def all_names(cls, *, include_deprecated: bool = False) -> list[str]:
+        names = list(cls._connectors.keys())
+        if include_deprecated:
+            names.extend(name for name in cls._deprecated if name not in cls._connectors)
+        return names
 
     @classmethod
     def by_category(cls, category: str) -> list[type[BaseConnector]]:
