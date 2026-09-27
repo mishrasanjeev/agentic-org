@@ -425,7 +425,9 @@ batch, so the delivery answers 200 with `"refused": <count>`.
 
 **The per-tenant URL.** The path token is an HMAC of the tenant and provider under
 `AGENTICORG_SECRET_KEY` (the construction the governed-case provider inbox uses, under its own
-label). An active human administrator of the tenant reads the tenant's paths from
+label). The API's access log writes `[redacted]` in place of the token for these URLs and for the
+governed-case provider inbox, so the log never holds a usable path. An active human administrator
+of the tenant reads the tenant's paths from
 `GET /api/v1/email-webhook-inbox` (an API key or agent token with the admin scope is refused):
 
 ```json

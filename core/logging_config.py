@@ -20,6 +20,7 @@ Call it once per process: ``api/main.py`` at import, and the Celery
 from __future__ import annotations
 
 import logging
+import re
 import sys
 from collections.abc import MutableMapping
 from typing import Any
@@ -65,9 +66,7 @@ _CLOUD_SEVERITY = {
 }
 
 
-def add_cloud_severity(
-    _logger: Any, _method: str, event_dict: MutableMapping[str, Any]
-) -> MutableMapping[str, Any]:
+def add_cloud_severity(_logger: Any, _method: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
     """Mirror ``level`` into ``severity`` for Google Cloud Logging.
 
     Cloud Run parses single-line JSON stdout into ``jsonPayload`` but only
@@ -98,6 +97,24 @@ def build_formatter(log_format: str) -> logging.Formatter:
             renderer,
         ],
     )
+
+
+# Per-tenant webhook URLs end in a path token derived from the deployment
+# secret (core/email_webhooks.py, core/cases/provider_webhooks.py). uvicorn's
+# access log writes the whole request line, so without this every delivery
+# would copy a reusable routing credential into the logs.
+_WEBHOOK_PATH_TOKEN = re.compile(r"(/api/v1/webhooks/(?:email/[^/?\s]+/[^/?\s]+|providers/[^/?\s]+/[^/?\s]+)/)[^/?\s]+")
+
+
+def redact_webhook_path_tokens(record: logging.LogRecord) -> bool:
+    """Logging filter: replace webhook path tokens in a request line; never drops a record."""
+    if isinstance(record.args, tuple) and record.args:
+        record.args = tuple(
+            _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", arg) if isinstance(arg, str) else arg for arg in record.args
+        )
+    elif isinstance(record.msg, str):
+        record.msg = _WEBHOOK_PATH_TOKEN.sub(r"\1[redacted]", record.msg)
+    return True
 
 
 def _resolve_level() -> int:
@@ -141,6 +158,9 @@ def configure_logging() -> str:
         uv_logger = logging.getLogger(name)
         uv_logger.handlers = []
         uv_logger.propagate = True
+    access_logger = logging.getLogger("uvicorn.access")
+    if redact_webhook_path_tokens not in access_logger.filters:
+        access_logger.addFilter(redact_webhook_path_tokens)
 
     _configured_format = log_format
     return log_format

@@ -30,6 +30,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`shared_path_tenant_named` with the setting off, `shared_path_refused` with
   it on), so the setting can be switched on once the first is flat. Moving
   providers: `docs/RUNBOOKS.md#email-webhooks-per-tenant-urls`.
+- The API's access log replaces the path token with `[redacted]` in the
+  request line for these URLs and for the governed-case provider inbox
+  (`/api/v1/webhooks/providers/...`), which carried the same kind of token
+  in its path: uvicorn logs every request line, so each delivery used to copy
+  a reusable path token into the logs.
 
 ### Security - route scope checks can refuse unknown authentication modes and cover A2A and MCP
 - Route scope checks never looked at how a request was authenticated. The
