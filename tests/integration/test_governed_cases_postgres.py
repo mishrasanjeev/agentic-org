@@ -1162,3 +1162,90 @@ async def test_decision_requests_are_refused_without_a_configured_issuer_and_out
         assert unknown.status_code == 404 and unknown.json()["error"]["reason"] == "decision_request_not_found"
     finally:
         app.dependency_overrides.pop(routes.get_case_runtime, None)
+
+
+@pytest.mark.parametrize("binding", [False, True], ids=["issuer_binding_off", "issuer_binding_on"])
+async def test_case_api_records_a_decision_by_request_id_without_asking_for_or_presenting_a_grant(
+    client: Any, auth_headers: dict[str, str], scripted_model: Any, binding: bool
+) -> None:
+    """``AGENTICORG_CASE_DECISION_GRANT_RELEASE``: the console's own decision is consumed where it is held.
+
+    Against the issuer's HTTP answers in both states of its agent binding: the request names no
+    agent, readiness comes from the request's own state, the decision is consumed by request id
+    while the case row is locked, and no call the platform makes asks for or carries a grant.
+    """
+    from api.main import app
+    from api.v1 import governed_cases as routes
+    from core.cases.decision_requests import GrantexDecisionGrantService, ServiceDecisionVerifier
+    from core.test_doubles.fake_grantex_decision_issuer import ISSUER_ORIGIN, FakeDecisionIssuer
+
+    scripted_model([_respond])
+    issuer = FakeDecisionIssuer(binding=binding)
+    service = GrantexDecisionGrantService(
+        base_url=ISSUER_ORIGIN,
+        api_key="test-only-key",
+        client_factory=issuer.client_factory,
+        consume_by_request_id=True,
+    )
+    runtime = _runtime(decision_service=lambda: service, decision_verifier=ServiceDecisionVerifier(service))
+    app.dependency_overrides[routes.get_case_runtime] = lambda: runtime
+    try:
+        application = MockProvider().fixture("us-clean-hollowbrook").application
+        case_ref = (
+            await client.post("/api/v1/governed-cases", json={"application": application}, headers=auth_headers)
+        ).json()["case_ref"]
+        assert (
+            await client.post(f"/api/v1/governed-cases/{case_ref}/investigate", headers=auth_headers)
+        ).status_code == 202
+        requested = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests", json={"outcome": "decline"}, headers=auth_headers
+        )
+        assert requested.status_code == 201, requested.text
+        request_id = requested.json()["request_id"]
+        assert requested.json()["approvals_required"] == 2
+
+        issuer.approve(request_id, "user:9f:approver-a")
+        not_yet = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert not_yet.status_code == 409 and not_yet.json()["error"]["reason"] == "decision_not_approved"
+
+        issuer.approve(request_id, "user:9f:approver-b")
+        status = await client.get(
+            f"/api/v1/governed-cases/{case_ref}/decision-requests/{request_id}", headers=auth_headers
+        )
+        assert status.json()["grants_ready"] is True
+        decided = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert decided.status_code == 200, decided.text
+        assert decided.json()["state"] == "decided"
+
+        detail = (await client.get(f"/api/v1/governed-cases/{case_ref}", headers=auth_headers)).json()
+        assert [(a["approver"], a["decision_grant_id"]) for a in detail["decision"]["approvers"]] == [
+            ("user:9f:approver-a", issuer.requests[request_id].grants[0].jti),
+            ("user:9f:approver-b", issuer.requests[request_id].grants[1].jti),
+        ]
+
+        calls = [f"{method} {path}" for method, path, _ in issuer.calls]
+        assert f"POST /v1/decisions/requests/{request_id}/consume" in calls
+        assert "POST /v1/decisions/consume" not in calls
+        assert not any(call.endswith("/grants") for call in calls)
+        created = next(body for method, path, body in issuer.calls if path == "/v1/decisions/requests")
+        assert "agentId" not in created and "grantId" not in created
+        sent = repr([body for _, _, body in issuer.calls])
+        assert all(token not in sent for token in issuer.tokens(request_id))
+
+        # Spent: the same request cannot decide the case twice.
+        again = await client.post(
+            f"/api/v1/governed-cases/{case_ref}/decision",
+            json={"outcome": "decline", "decision_request_id": request_id},
+            headers=auth_headers,
+        )
+        assert again.status_code in (403, 409)
+    finally:
+        app.dependency_overrides.pop(routes.get_case_runtime, None)
