@@ -1137,3 +1137,17 @@ Remove an entry in the pull request that fixes it.
   `_enforce_tool_grants` does. Refresh the scopes of agents registered through
   the runtime path first (`scripts/refresh_grantex_scopes.py`), or their calls
   start failing in `off`.
+
+## A-94 — The deprecated `sanctions_api` connector has no removal date
+
+- **Found:** reworking the screening connector for provider neutrality (2026-09-27).
+- **What:** `connectors/ops/sanctions_api.py` stays in the tree as a deprecated
+  legacy connector so tenants that use it keep working. It no longer names a
+  provider (its base URL comes from connector config or
+  `AGENTICORG_SANCTIONS_API_BASE_URL`), but it is still shaped around one
+  service's API, and nothing tracks moving those tenants to
+  `sanctions_screening` or deleting the module.
+- **Fix:** list the tenants whose agents link `sanctions_api`, move them to
+  `sanctions_screening` with a provider package, then delete the module, its
+  registration and the grant alias.
+

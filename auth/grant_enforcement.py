@@ -347,14 +347,16 @@ def record_denial(
 def enforce_connector_grant(client: Any, *, connector: str, **call: Any) -> Any:
     """``client.enforce`` for ``connector``, counting a grant held under another id of it.
 
-    A renamed connector answers to its old id during a deprecation window
-    (``sanctions_api`` -> ``sanctions_screening``, ``ConnectorRegistry.ids_of``):
-    grants issued before the rename name the old id, later ones the live id, and
-    an agent's tools may be bound to either. Grantex checks scopes per id, so the
-    call is allowed when it allows the call for any of the connector's ids;
-    otherwise the result for ``connector`` itself is returned. Only Grantex
-    decides: an exception from ``enforce`` propagates to the caller, which
-    treats it as a denial.
+    A deprecated connector id stays linked to its replacement during a
+    deprecation window (``sanctions_api`` -> ``sanctions_screening``,
+    ``ConnectorRegistry.ids_of``): grants issued before the replacement name
+    the old id, later ones the live id, and an agent's tools may be bound to
+    either. Grantex checks scopes per id, so the call is allowed when Grantex
+    allows it under any of the linked ids; otherwise the result for
+    ``connector`` itself is returned. Grantex allows a tool only under an id
+    whose manifest lists it, so the link covers the tools the two connectors
+    share. Only Grantex decides: an exception from ``enforce`` propagates to
+    the caller, which treats it as a denial.
     """
     result = client.enforce(connector=connector, **call)
     if bool(getattr(result, "allowed", False)):

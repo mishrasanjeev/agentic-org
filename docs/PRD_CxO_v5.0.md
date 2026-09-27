@@ -1646,7 +1646,7 @@ The CMO dashboard must be a working cockpit, not a marketing brochure.
   - `sanctions_screening.screen_person` / `sanctions_screening.screen_business` -- Screening one kind of party
   - `sanctions_screening.screen_transaction` -- Transaction party screening
   - `sanctions_screening.batch_screen` -- Bulk screening
-  - Screening runs through the configured verification provider; `sanctions_api` is the connector's deprecated id, and its alert and report tools were removed with it
+  - Screening runs through the configured verification provider. The deprecated `sanctions_api` connector keeps its old tools, `get_alert` and `generate_report` included, for tenants that use it until their agents link `sanctions_screening`
   - `mca_portal.fetch_company_master_data` -- Company verification
 - **KPIs:**
   | Metric | Source | Refresh | Unit | Formula |
@@ -4178,7 +4178,7 @@ Registration alone is not a production-readiness claim. For current CMO truth la
 | 41 | `zendesk` | ops | create_ticket, update_ticket, get_ticket, apply_macro, get_csat_score, escalate_ticket, merge_tickets, get_sla_status | api_token | 200/min | Live |
 | 42 | `confluence` | ops | search_pages, get_page, create_page, update_page | api_token | 100/min | Live |
 | 43 | `mca_portal` | ops | file_annual_return, complete_director_kyc, fetch_company_master_data, file_charge_satisfaction | dsc | 10/min | Live |
-| 44 | `sanctions_screening` (deprecated id `sanctions_api`) | ops | screen_entity, screen_person, screen_business, screen_transaction, batch_screen | verification provider (`provider` in the connector config) | set by the provider | Live |
+| 44 | `sanctions_screening` (replaces the deprecated `sanctions_api`) | ops | screen_entity, screen_person, screen_business, screen_transaction, batch_screen | verification provider (`provider` in the connector config) | set by the provider | Live |
 | 45 | `slack` | comms | send_message, invite_user, remove_user, create_channel, get_channel_history | oauth2 | 100/min | Live |
 | 46 | `sendgrid` | comms | send_email, send_template_email, get_bounces, get_stats | api_key | 100/min | Live |
 | 47 | `twilio` | comms | send_sms, make_call, send_whatsapp | api_key | 100/min | Live |
@@ -4189,6 +4189,8 @@ Registration alone is not a production-readiness claim. For current CMO truth la
 | 52 | `google_calendar` | comms | create_event, list_events, update_event, delete_event | oauth2 | 100/min | Live |
 | 53 | `s3` | comms | upload_file, download_file, list_objects, delete_file | api_key | 200/min | Live |
 | 54 | `teams_bot` | microsoft | send_message, create_channel, get_messages | oauth2 | 100/min | Live |
+
+Not counted above: the deprecated `sanctions_api` connector (ops; screen_entity, screen_transaction, get_alert, batch_screen, generate_report; api_key; 500/min) stays registered, unchanged, for tenants that use it. The screening service's API base URL comes from `base_url` in its connector config or `AGENTICORG_SANCTIONS_API_BASE_URL`; without one it refuses every call.
 
 ### Appendix C. Complete KPI Registry
 

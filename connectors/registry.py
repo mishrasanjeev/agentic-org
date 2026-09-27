@@ -11,8 +11,9 @@ logger = structlog.get_logger()
 
 class ConnectorRegistry:
     _connectors: dict[str, type[BaseConnector]] = {}
-    # Retired ids that still resolve during a deprecation window, so stored configurations,
-    # grants and agent tool references keep working. Left out of the catalog and the counts.
+    # Deprecated connectors that still resolve during a deprecation window, so stored
+    # configurations, grants and agent tool references keep working. Each names the live
+    # connector that replaces it. Left out of the catalog and the counts.
     _deprecated: dict[str, type[BaseConnector]] = {}
     _composio_tools: dict[str, dict] = {}  # tool_name -> metadata
 
@@ -22,7 +23,7 @@ class ConnectorRegistry:
 
     @classmethod
     def register_deprecated(cls, connector_cls: type[BaseConnector]) -> None:
-        """Register a retired id. The class names its live id in ``replacement``."""
+        """Register a deprecated connector. The class names its live replacement in ``replacement``."""
         cls._deprecated[connector_cls.name] = connector_cls
 
     @classmethod
@@ -31,7 +32,11 @@ class ConnectorRegistry:
 
     @classmethod
     def live_id(cls, name: str) -> str:
-        """The id to issue grants under: a deprecated id's replacement, else ``name`` itself."""
+        """A deprecated id's replacement, else ``name`` itself.
+
+        Grants for a deprecated connector's tools are issued under this id when the replacement
+        has the same tool (``core.langgraph.tool_adapter._grant_connector_id``).
+        """
         if name in cls._connectors:
             return name
         replacement = getattr(cls._deprecated.get(name), "replacement", None)
@@ -41,8 +46,9 @@ class ConnectorRegistry:
     def ids_of(cls, name: str) -> tuple[str, ...]:
         """``name`` first, then the connector's other ids: its live id and every deprecated id of it.
 
-        One connector answers to all of them during a deprecation window, so a grant that names
-        any of them is a grant for that connector. An id with no other names gives ``(name,)``.
+        A deprecated connector stays linked to its replacement during a deprecation window, so a
+        grant that names any of these ids counts for the connector, for the tools the manifest
+        under that id lists. An id with no other names gives ``(name,)``.
         """
         live = cls.live_id(name)
         retired = [old for old, c in cls._deprecated.items() if getattr(c, "replacement", None) == live]

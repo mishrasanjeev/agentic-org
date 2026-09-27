@@ -207,7 +207,7 @@ class ToolGateway:
             grantex = get_grantex_client()
             # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
             # synchronous HTTPS fetch; run it off the event loop. A grant held
-            # under another id of a renamed connector counts too.
+            # under another id of a deprecated connector and its replacement counts too.
             result = await asyncio.to_thread(
                 enforce_connector_grant,
                 grantex,

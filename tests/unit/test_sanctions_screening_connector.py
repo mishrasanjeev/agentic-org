@@ -1,16 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The provider-neutral sanctions screening connector and its deprecated ``sanctions_api`` id.
+"""The provider-neutral sanctions screening connector, and grants under the deprecated ``sanctions_api`` id.
 
-The connector used to call one commercial screening service directly. It now screens through
-the verification provider seam; ``sanctions_api`` still resolves, with a deprecation warning, so
-existing configurations and agents keep their connector.
+The screening connector used to call one commercial screening service directly.
+``sanctions_screening`` screens through the verification provider seam. ``sanctions_api`` stays
+registered, with a deprecation warning, as a separate legacy connector that keeps its old tools
+and requests (``tests/unit/test_sanctions_api_legacy_connector.py``), so existing configurations
+and agents keep the connector they use; an agent moves to ``sanctions_screening`` by linking it.
+A grant held under either id covers the tools the two connectors share.
 """
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import re
+import time
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,20 +31,19 @@ from auth import grantex_registration
 from auth.grant_enforcement import DenialReason, EnforcementMode, GrantCallContext, check_tool_grant
 from auth.run_grants import RunGrant
 from connectors.framework.verification_provider import (
+    BusinessSubject,
     Capability,
     CapabilityNotSupported,
     Deadline,
     PersonSubject,
+    ProviderTimeout,
     ScreeningResult,
     ScreenOptions,
     VerificationProvider,
 )
 from connectors.ops import sanctions_screening as module
-from connectors.ops.sanctions_screening import (
-    SanctionsApiConnector,
-    SanctionsScreeningConnector,
-    ScreeningUnavailableError,
-)
+from connectors.ops.sanctions_api import SanctionsApiConnector
+from connectors.ops.sanctions_screening import SanctionsScreeningConnector, ScreeningUnavailableError
 from connectors.providers.mock import MockProvider
 from connectors.providers.registry import ProviderRegistry
 from connectors.registry import ConnectorRegistry
@@ -51,8 +55,13 @@ from core.tool_gateway.gateway import ToolGateway
 from scripts import check_denylist as dl
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# The tools the two connectors share (OLD_TOOLS), the neutral connector's (TOOLS) and the legacy
+# connector's (LEGACY_TOOLS).
 OLD_TOOLS = {"screen_entity", "screen_transaction", "batch_screen"}
 TOOLS = OLD_TOOLS | {"screen_person", "screen_business"}
+LEGACY_ONLY_TOOLS = {"get_alert", "generate_report"}
+LEGACY_TOOLS = OLD_TOOLS | LEGACY_ONLY_TOOLS
+CONNECTOR_TOOLS = {"sanctions_api": LEGACY_TOOLS, "sanctions_screening": TOOLS}
 # Synthetic entries from connectors/providers/mock/fixtures/watchlist.json.
 LISTED_PERSON = "Jorund Halvesen"
 LISTED_BUSINESS = "Corvane Maritime Logistics Ltd"
@@ -92,7 +101,8 @@ async def _connected(config: dict | None = None) -> SanctionsScreeningConnector:
 def test_old_id_still_resolves_with_a_deprecation_warning() -> None:
     cls = ConnectorRegistry.get("sanctions_api")
     assert cls is SanctionsApiConnector
-    assert issubclass(cls, SanctionsScreeningConnector)
+    # The old id is the legacy connector, not a subclass (alias) of the neutral one.
+    assert not issubclass(cls, SanctionsScreeningConnector)
     with structlog.testing.capture_logs() as logs, pytest.warns(DeprecationWarning, match="sanctions_screening"):
         connector = cls(config={"api_key": "placeholder-not-a-key"})
     assert connector.name == "sanctions_api"
@@ -100,7 +110,8 @@ def test_old_id_still_resolves_with_a_deprecation_warning() -> None:
     assert entry["connector"] == "sanctions_api"
     assert entry["replacement"] == "sanctions_screening"
     assert entry["log_level"] == "warning"
-    assert OLD_TOOLS <= set(connector._tool_registry)
+    # Its own five tools, get_alert and generate_report included, rather than the neutral connector's.
+    assert set(connector._tool_registry) == LEGACY_TOOLS
 
 
 def test_the_new_id_is_not_deprecated() -> None:
@@ -120,17 +131,25 @@ def test_agents_that_name_the_old_id_keep_their_tools() -> None:
     index = _build_tool_index(include_connector_aliases=True)
     assert index["sanctions_api:screen_entity"][0] == "sanctions_api"
     assert index["sanctions_api__batch_screen"][0] == "sanctions_api"
-    assert index["screen_entity"][0] == "sanctions_screening"
+    # A bare name binds to the legacy connector, as it did before sanctions_screening existed,
+    # unless the agent links the neutral one: moving to it is explicit, never a side effect.
+    assert index["screen_entity"][0] == "sanctions_api"
+    assert index["get_alert"][0] == "sanctions_api"
     scoped = _build_tool_index(connector_names=["sanctions_api"])
     assert scoped["screen_transaction"][0] == "sanctions_api"
+    linked = _build_tool_index(connector_names=["sanctions_screening"])
+    assert linked["screen_entity"][0] == "sanctions_screening"
+    assert "get_alert" not in linked
 
 
 # ── Grants under either id ──────────────────────────────────────────────────
 #
-# An agent's tools bind to ``sanctions_api`` when its connectors name the old id and to
-# ``sanctions_screening`` otherwise, while its grant names whichever id was current when it was
-# issued. Grantex checks a scope per connector id, so every pairing must still be allowed, by the
-# legacy check (``grants_enforce_closed`` off) and by the F-1 check (warn / deny).
+# An agent's tools bind to the legacy ``sanctions_api`` connector unless its connectors name only
+# ``sanctions_screening``, while its grant names whichever id was current when it was issued.
+# Grantex checks a scope per connector id, so every pairing must still be allowed for the tools the
+# two connectors share, by the legacy check (``grants_enforce_closed`` off) and by the F-1 check
+# (warn / deny). A tool only the legacy connector has is granted under the old id, whose manifest
+# lists it.
 
 # What an agent registered before the rename holds (the scopes are stored and re-minted as is).
 OLD_GRANT = [
@@ -140,6 +159,9 @@ OLD_GRANT = [
     "tool:sanctions_api:read:batch_screen",
 ]
 BINDINGS = {"old id": ["sanctions_api"], "new id": ["sanctions_screening"], "no connectors": None}
+# Every tool an agent can be given on each binding. The old id is the legacy connector; an agent
+# that names no connectors can be given both connectors' tools (the shared ones bind to the old id).
+BOUND_TOOLS = {"old id": LEGACY_TOOLS, "new id": TOOLS, "no connectors": LEGACY_TOOLS | TOOLS}
 
 
 def _grantex_client(monkeypatch: pytest.MonkeyPatch) -> Grantex:
@@ -189,7 +211,9 @@ async def test_a_grant_issued_under_the_old_id_still_allows_its_tools(
 async def test_a_grant_issued_now_allows_every_tool_on_either_id(
     monkeypatch: pytest.MonkeyPatch, binding: str, registration: str, mode: EnforcementMode
 ) -> None:
-    tools = sorted(TOOLS)
+    # Every tool of the connector the agent is bound to: on the old id that is the legacy
+    # connector's five, get_alert and generate_report included, not the neutral connector's.
+    tools = sorted(BOUND_TOOLS[binding])
     connector_names = BINDINGS[binding]
     scopes = (
         grantex_registration._tools_to_scopes(tools, "ops", connector_names=connector_names)
@@ -197,7 +221,7 @@ async def test_a_grant_issued_now_allows_every_tool_on_either_id(
         else grantex_auth._tools_to_scopes(tools)
     )
     results = await _check(monkeypatch, scopes, tools, connector_names, mode)
-    assert results == dict.fromkeys(TOOLS, {})
+    assert results == dict.fromkeys(tools, {})
 
 
 @pytest.mark.parametrize("mode", [EnforcementMode.OFF, EnforcementMode.DENY], ids=["legacy", "deny"])
@@ -205,8 +229,13 @@ async def test_a_grant_issued_now_allows_every_tool_on_either_id(
 async def test_a_grant_issued_under_the_old_id_does_not_cover_the_new_tools(
     monkeypatch: pytest.MonkeyPatch, binding: str, mode: EnforcementMode
 ) -> None:
+    new_tools = ["screen_business", "screen_person"]
+    if binding == "old id":
+        # The old id is the legacy connector, which has no such tools: the agent is not given them.
+        assert build_tools_for_agent(new_tools, connector_names=BINDINGS[binding]) == []
+        return
     # The old id's manifest does not list them and the grant holds no scope under the new id.
-    results = await _check(monkeypatch, OLD_GRANT, ["screen_business", "screen_person"], BINDINGS[binding], mode)
+    results = await _check(monkeypatch, OLD_GRANT, new_tools, BINDINGS[binding], mode)
     assert [result["status"] for result in results.values()] == ["failed", "failed"]
 
 
@@ -219,6 +248,20 @@ def test_new_grants_name_the_live_id(binding: str) -> None:
     ]
     assert not [scope for scope in scopes if scope.startswith("tool:sanctions_api:")]
     assert {scope.rsplit(":", 1)[1] for scope in scopes if scope.startswith("tool:sanctions_screening:read:")} == TOOLS
+
+
+@pytest.mark.parametrize("binding", ["old id", "no connectors"])
+def test_tools_only_the_legacy_connector_has_are_granted_under_the_old_id(binding: str) -> None:
+    # The neutral connector's manifest does not list them, so a scope under the live id would
+    # never cover them: Grantex answers "unknown tool" there, and the grant holds nothing else.
+    tools = sorted(LEGACY_ONLY_TOOLS)
+    expected = [f"tool:sanctions_api:read:{tool}" for tool in tools]
+    for scopes in (
+        grantex_registration._tools_to_scopes(tools, "ops", connector_names=BINDINGS[binding]),
+        grantex_registration._tools_to_scopes([f"sanctions_api:{tool}" for tool in tools], "ops"),
+        grantex_auth._tools_to_scopes(tools),
+    ):
+        assert sorted(scope for scope in scopes if scope.startswith("tool:")) == expected
 
 
 def test_only_a_renamed_connector_has_other_ids() -> None:
@@ -353,12 +396,34 @@ async def _dispatch(
 async def test_a_grant_under_either_id_allows_the_tools_on_every_path(
     monkeypatch: pytest.MonkeyPatch, path: str, held: str, bound: str, mode: EnforcementMode
 ) -> None:
-    scopes, tools = GRANTS[held]
+    scopes, held_tools = GRANTS[held]
+    # The granted tools the bound connector has: the old id is the legacy connector, which has no
+    # screen_person or screen_business, so on it a grant under the new id covers the shared tools.
+    tools = [tool for tool in held_tools if tool in CONNECTOR_TOOLS[bound]]
     passed, dispatched, denials = await _dispatch(monkeypatch, path, mode, scopes, bound, tools)
     assert passed == dict.fromkeys(tools, True)
     assert denials == []  # warn lets a denied call through, so a recorded denial would hide here
     if path != "langgraph":  # the graph node only checks; the tool node dispatches afterwards
         assert dispatched == [(bound, tool) for tool in tools]
+
+
+@pytest.mark.parametrize("mode", MODES, ids=MODE_IDS)
+@pytest.mark.parametrize("issued", ["before the rename", "now"])
+@pytest.mark.parametrize("path", DISPATCH_PATHS)
+async def test_the_legacy_connectors_own_tools_stay_granted_on_every_path(
+    monkeypatch: pytest.MonkeyPatch, path: str, issued: str, mode: EnforcementMode
+) -> None:
+    tools = sorted(LEGACY_ONLY_TOOLS)
+    if issued == "now":  # as registration computes it for an agent's authorized_tools
+        refs = [f"sanctions_api:{tool}" for tool in tools]
+        scopes = grantex_registration._tools_to_scopes(refs, "ops", connector_names=["sanctions_api"])
+    else:
+        scopes = ["agenticorg:ops:read", *(f"tool:sanctions_api:read:{tool}" for tool in tools)]
+    passed, dispatched, denials = await _dispatch(monkeypatch, path, mode, scopes, "sanctions_api", tools)
+    assert passed == dict.fromkeys(tools, True)
+    assert denials == []
+    if path != "langgraph":
+        assert dispatched == [("sanctions_api", tool) for tool in tools]
 
 
 # A scope for one connector covers another only when ``register_deprecated`` links their ids.
@@ -489,6 +554,92 @@ async def test_invalid_input_is_refused(tool: str, params: dict) -> None:
     connector = await _connected()
     with pytest.raises(ValueError):
         await connector.execute_tool(tool, params)
+
+
+# ── One deadline per tool call ──────────────────────────────────────────────
+#
+# The provider contract (``Deadline`` in ``connectors/framework/verification_provider.py``): create
+# one deadline per unit of work and pass the same one down. A tool call is the unit: 50 names
+# without a type are 100 screenings, and a fresh timeout for each would let one call run for 100.
+
+SCREENING_SECONDS = 0.05
+
+
+class SlowProvider(VerificationProvider):
+    """Takes ``SCREENING_SECONDS`` per screening, bounded by the deadline it is given, which it records."""
+
+    name = "acme_kyb"
+    capabilities = frozenset({Capability.SCREEN_PERSON, Capability.SCREEN_BUSINESS})
+
+    def __init__(self) -> None:
+        self.deadlines: list[Deadline] = []
+
+    async def _work(self, capability: Capability, deadline: Deadline) -> Deadline:
+        self.deadlines.append(deadline)
+        async with deadline.enforce(self.name, capability):
+            await asyncio.sleep(SCREENING_SECONDS)
+        return deadline
+
+    async def screen_person(self, s: PersonSubject, opts: ScreenOptions, *, deadline: Deadline) -> ScreeningResult:
+        answer_by = await self._work(Capability.SCREEN_PERSON, deadline)
+        result = await MockProvider().screen_person(s, opts, deadline=answer_by)
+        return result.model_copy(update={"provider": self.name})
+
+    async def screen_business(self, s: BusinessSubject, opts: ScreenOptions, *, deadline: Deadline) -> ScreeningResult:
+        answer_by = await self._work(Capability.SCREEN_BUSINESS, deadline)
+        result = await MockProvider().screen_business(s, opts, deadline=answer_by)
+        return result.model_copy(update={"provider": self.name})
+
+
+class DeadlineIgnoringProvider(SlowProvider):
+    """Breaks the contract: takes its time whatever the deadline, so only the connector can stop it."""
+
+    async def _work(self, capability: Capability, deadline: Deadline) -> Deadline:
+        self.deadlines.append(deadline)
+        await asyncio.sleep(SCREENING_SECONDS)
+        return Deadline.after(60)
+
+
+@pytest.mark.parametrize(
+    "provider_cls", [SlowProvider, DeadlineIgnoringProvider], ids=["provider keeps it", "provider ignores it"]
+)
+async def test_a_batch_stops_at_the_tool_deadline_not_per_screening(provider_cls: type[SlowProvider]) -> None:
+    ProviderRegistry.register_native("acme_kyb", provider_cls)
+    connector = await _connected({"provider": "acme_kyb"})
+    connector.timeout_ms = 300
+    provider = connector._provider
+    entities = [{"name": f"{CLEAN_NAME} {number}"} for number in range(module.MAX_BATCH)]  # no type: 2 each
+    started = time.monotonic()
+    with pytest.raises(ProviderTimeout):
+        await connector.execute_tool("batch_screen", {"entities": entities})
+    # A fresh 0.3 s timeout per screening never fires: all 100 would run, 5 s in all.
+    assert time.monotonic() - started < 2.0
+    assert 0 < len(provider.deadlines) < 2 * module.MAX_BATCH
+    assert len({id(deadline) for deadline in provider.deadlines}) == 1
+
+
+@pytest.mark.parametrize(
+    ("tool", "params", "screenings"),
+    [
+        ("screen_entity", {"name": CLEAN_NAME}, 2),
+        ("screen_transaction", {"sender_name": CLEAN_NAME, "receiver_name": LISTED_PERSON}, 4),
+        ("batch_screen", {"entities": [{"name": CLEAN_NAME}, {"name": LISTED_PERSON, "type": "individual"}]}, 3),
+    ],
+)
+async def test_every_screening_in_a_tool_call_shares_the_deadline_set_when_it_starts(
+    tool: str, params: dict, screenings: int
+) -> None:
+    ProviderRegistry.register_native("acme_kyb", SlowProvider)
+    connector = await _connected({"provider": "acme_kyb"})
+    provider = connector._provider
+    started = time.monotonic()
+    await connector.execute_tool(tool, params)
+    finished = time.monotonic()
+    assert len(provider.deadlines) == screenings
+    [deadline] = {id(deadline): deadline for deadline in provider.deadlines}.values()
+    budget = connector.timeout_ms / 1000
+    assert started + budget <= deadline.expires_at <= finished + budget
+    assert deadline.expires_at < started + budget + SCREENING_SECONDS  # not restarted by a later screening
 
 
 # ── Failing closed ──────────────────────────────────────────────────────────

@@ -215,7 +215,7 @@ async def validate_tool_scopes(
         actual_tool_name = _actual_tool_name(tool_name)
 
         # One call — Grantex handles JWT verification + manifest lookup + permission check.
-        # A grant held under another id of a renamed connector counts too.
+        # A grant held under another id of a deprecated connector and its replacement counts too.
         result = enforce_connector_grant(
             grantex,
             grant_token=grant_token,

@@ -15,19 +15,23 @@ other provider error propagates, so a call never returns an empty result that re
 Every candidate the provider returns is reported: deciding whether a hit is the subject is a
 human disposition.
 
-``sanctions_api`` is this connector's deprecated id (:class:`SanctionsApiConnector`). A grant held
-under either id covers the connector (``auth.grant_enforcement.enforce_connector_grant``).
+Each tool call has one deadline, the connector's ``timeout_ms`` from when the call starts, and
+every screening the call makes gets that same deadline. When it passes, the screening in progress
+fails the call with ``ProviderTimeout`` and no further screening starts: a batch of 50 names
+screened as people and businesses is 100 screenings within one timeout, not 100 timeouts.
+
+It replaces the deprecated ``sanctions_api`` connector (``connectors/ops/sanctions_api.py``), which
+stays registered with its own tools for tenants that use it; an agent moves here by linking this
+connector. A grant held under either id covers the tools the two share
+(``auth.grant_enforcement.enforce_connector_grant``).
 """
 
 from __future__ import annotations
 
 import re
 import uuid
-import warnings
 from functools import partial
 from typing import Any
-
-import structlog
 
 from connectors.framework.base_connector import BaseConnector
 from connectors.framework.verification_provider import (
@@ -43,8 +47,6 @@ from connectors.framework.verification_provider import (
     VerificationProvider,
     call_capability,
 )
-
-logger = structlog.get_logger()
 
 DEFAULT_PROVIDER = "mock"
 MAX_BATCH = 50
@@ -191,19 +193,28 @@ class SanctionsScreeningConnector(BaseConnector):
             raise ScreeningUnavailableError(f"{self.name} is not connected")
         return self._provider
 
-    async def _screen(self, subjects: list[Subject], list_types: frozenset[ListType]) -> list[ScreeningResult]:
+    def _deadline(self) -> Deadline:
+        """The deadline of one tool call, created when the call starts and shared by all its screenings."""
+        return Deadline.after(self.timeout_ms / 1000)
+
+    async def _screen(
+        self, subjects: list[Subject], list_types: frozenset[ListType], deadline: Deadline
+    ) -> list[ScreeningResult]:
+        """Screen ``subjects`` in turn within ``deadline``, the tool call's, never a fresh one per screening."""
         provider = self._connected()
         results: list[ScreeningResult] = []
         for subject in subjects:
             options = ScreenOptions(idempotency_key=f"sanctions-screening:{uuid.uuid4().hex}", list_types=list_types)
-            deadline = Deadline.after(self.timeout_ms / 1000)
             if isinstance(subject, PersonSubject):
                 capability = Capability.SCREEN_PERSON
                 call = partial(provider.screen_person, subject, options, deadline=deadline)
             else:
                 capability = Capability.SCREEN_BUSINESS
                 call = partial(provider.screen_business, subject, options, deadline=deadline)
-            outcome = await call_capability(provider, capability, call)
+            # The provider must keep the deadline it is given. Enforcing it here as well bounds the
+            # call when a provider does not, and starts no screening once the time is up.
+            async with deadline.enforce(provider.name, capability):
+                outcome = await call_capability(provider, capability, call)
             if isinstance(outcome, NotAvailable):
                 # Fail closed: a screening that did not run is not a clear result.
                 raise CapabilityNotSupported(provider.name, capability, "the provider does not offer this screening")
@@ -219,6 +230,7 @@ class SanctionsScreeningConnector(BaseConnector):
                 list_types (optional: sanctions, pep, watchlist, enforcement, adverse_media).
         Every candidate the provider returns is reported; min_score is not applied.
         """
+        deadline = self._deadline()
         subjects = _subjects(
             _name(params),
             _kinds(params.get("type")),
@@ -226,7 +238,7 @@ class SanctionsScreeningConnector(BaseConnector):
             nationality=_text(params, "nationality"),
             jurisdiction=_text(params, "jurisdiction"),
         )
-        results = await self._screen(subjects, _list_types(params))
+        results = await self._screen(subjects, _list_types(params), deadline)
         return {"provider": self._connected().name, **_summary(results)}
 
     async def screen_person(self, **params: Any) -> dict[str, Any]:
@@ -235,13 +247,14 @@ class SanctionsScreeningConnector(BaseConnector):
         Params: name (required), date_of_birth (optional YYYY[-MM[-DD]]),
                 nationality (optional 2-letter), list_types (optional).
         """
+        deadline = self._deadline()
         subjects = _subjects(
             _name(params),
             (Capability.SCREEN_PERSON,),
             date_of_birth=_text(params, "date_of_birth"),
             nationality=_text(params, "nationality"),
         )
-        results = await self._screen(subjects, _list_types(params))
+        results = await self._screen(subjects, _list_types(params), deadline)
         return {"provider": self._connected().name, **_summary(results)}
 
     async def screen_business(self, **params: Any) -> dict[str, Any]:
@@ -249,8 +262,9 @@ class SanctionsScreeningConnector(BaseConnector):
 
         Params: name (required), jurisdiction (optional 2-letter), list_types (optional).
         """
+        deadline = self._deadline()
         subjects = _subjects(_name(params), (Capability.SCREEN_BUSINESS,), jurisdiction=_text(params, "jurisdiction"))
-        results = await self._screen(subjects, _list_types(params))
+        results = await self._screen(subjects, _list_types(params), deadline)
         return {"provider": self._connected().name, **_summary(results)}
 
     async def screen_transaction(self, **params: Any) -> dict[str, Any]:
@@ -261,6 +275,7 @@ class SanctionsScreeningConnector(BaseConnector):
                 sender_country / receiver_country (optional 2-letter, the jurisdiction of a
                 party screened as an entity), list_types (optional).
         """
+        deadline = self._deadline()
         sender_subjects, receiver_subjects = (
             _subjects(
                 _name(params, f"{role}_name"),
@@ -270,8 +285,8 @@ class SanctionsScreeningConnector(BaseConnector):
             for role in ("sender", "receiver")
         )
         list_types = _list_types(params)
-        sender = _summary(await self._screen(sender_subjects, list_types))
-        receiver = _summary(await self._screen(receiver_subjects, list_types))
+        sender = _summary(await self._screen(sender_subjects, list_types, deadline))
+        receiver = _summary(await self._screen(receiver_subjects, list_types, deadline))
         return {
             "provider": self._connected().name,
             "hit_count": sender["hit_count"] + receiver["hit_count"],
@@ -285,6 +300,7 @@ class SanctionsScreeningConnector(BaseConnector):
         Params: entities (list of {name, type, date_of_birth, nationality, jurisdiction}),
                 list_types (optional, applies to every entity).
         """
+        deadline = self._deadline()
         entities = params.get("entities")
         if not isinstance(entities, list) or not entities:
             raise ValueError("entities must be a non-empty list")
@@ -304,27 +320,11 @@ class SanctionsScreeningConnector(BaseConnector):
             )
             batch.append((name, subjects))
         list_types = _list_types(params)
-        results = [{"name": name, **_summary(await self._screen(subjects, list_types))} for name, subjects in batch]
+        results = [
+            {"name": name, **_summary(await self._screen(subjects, list_types, deadline))} for name, subjects in batch
+        ]
         return {
             "provider": self._connected().name,
             "hit_count": sum(result["hit_count"] for result in results),
             "results": results,
         }
-
-
-class SanctionsApiConnector(SanctionsScreeningConnector):
-    """``sanctions_api``, the deprecated id of this connector, kept for existing configurations and agents.
-
-    Registered with ``ConnectorRegistry.register_deprecated``: it resolves by name and keeps its
-    tools, grants and stored configuration, but is left out of the catalog and the product counts.
-    """
-
-    name = "sanctions_api"
-    replacement = SanctionsScreeningConnector.name
-
-    def __init__(self, config: dict[str, Any] | None = None):
-        warnings.warn(
-            f"connector id {self.name!r} is deprecated; use {self.replacement!r}", DeprecationWarning, stacklevel=2
-        )
-        logger.warning("connector_id_deprecated", connector=self.name, replacement=self.replacement)
-        super().__init__(config)

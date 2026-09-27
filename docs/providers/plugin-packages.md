@@ -109,31 +109,66 @@ because the name is then screened as a person and as a business. Results are
 `screening_result` records (`schemas/screening_result.schema.json`) with every
 candidate the provider returned; there is no score threshold.
 
+Each tool call has one deadline, the connector's timeout from when the call
+starts. Every screening the call makes is given that deadline, and the
+connector enforces it too, so a provider that overruns is stopped. When it
+passes, the call fails with `provider_timeout` and no further screening starts:
+`batch_screen` with 50 names and no `type` is 100 screenings within one
+timeout, not 100 timeouts.
+
 The connector test reports `configured` and the provider's name, never
 `healthy`: a provider has no probe, so wrong credentials only show when the
 first screening fails. Activating an agent checks that each linked connector
 is `healthy`, so an agent that links this connector cannot be activated
 until the provider seam gains a probe (tracked in `FINDINGS.md`).
 
-`sanctions_api` is the connector's deprecated id. It resolves to the same
-connector, so connector configurations saved under it keep working, and
-creating one logs `connector_id_deprecated` (and a Python
-`DeprecationWarning`). It no longer calls a screening service directly: set
-`provider` in its connector config as above, or move the configuration to
-`sanctions_screening`. Its `get_alert` and `generate_report` tools are gone,
-because no provider-neutral equivalent exists.
+### The deprecated `sanctions_api` connector
+
+`sanctions_api` is a separate, deprecated connector kept for tenants that
+already use it, and behaves as it did before `sanctions_screening` existed:
+the tools `screen_entity`, `screen_transaction`, `get_alert`, `batch_screen`
+and `generate_report`, its `api_key` sent as a bearer token, the same HTTP
+requests, and the service's JSON answers returned unchanged. Its connector
+test probes the service, as before. Creating it logs `connector_id_deprecated`
+(and a Python `DeprecationWarning`), and it is left out of the connector
+catalog and the product counts.
+
+The address of the service it calls is configuration, not code:
+
+1. `base_url` in the tenant's connector config, when set;
+2. otherwise the deployment setting `AGENTICORG_SANCTIONS_API_BASE_URL`
+   (`settings.sanctions_api_base_url`), which is empty by default.
+
+With neither, the connector connects nothing and every tool fails with
+`SanctionsApiNotConfiguredError` ("sanctions_api has no provider base URL ...;
+no request was sent") before any request is sent. The connector test reports
+`not_configured`, so an agent that links it cannot be activated.
+
+**Before deploying,** set `AGENTICORG_SANCTIONS_API_BASE_URL` in each
+environment where tenants use `sanctions_api`, to the API base URL those
+tenants have been calling. Operators hold that value; it is not recorded in
+this repository.
+
+Moving to `sanctions_screening` is explicit: link `sanctions_screening` to the
+agent in place of `sanctions_api`, with a connector config that names a
+provider. `get_alert` and `generate_report` have no provider-neutral
+equivalent, and `sanctions_screening` does not apply `min_score`.
 
 An agent's tools, bare names such as `screen_entity` included, bind to
-`sanctions_api` when the agent's connectors name that id and to
-`sanctions_screening` otherwise. Grantex checks scopes per connector id, so
-every grant check - LangGraph agents, `BaseAgent` and the tool gateway, in every
-enforcement mode - also accepts a scope held under the connector's other id
-(`enforce_connector_grant` in `auth/grant_enforcement.py`): grants issued
-before the rename name `sanctions_api` and still cover the tools they
-listed, and grants issued now name `sanctions_screening` whichever id the
-agent uses. Such an old grant does not cover `screen_person` or
-`screen_business`; adding either tool to the agent refreshes its scopes, as any
-tool change does.
+`sanctions_api` unless the agent's connectors name `sanctions_screening` and
+not `sanctions_api`. An agent that links both binds bare names to
+`sanctions_api`; name a tool connector-qualified
+(`sanctions_screening:screen_entity`) to choose. Grantex checks scopes per
+connector id, so every grant check - LangGraph agents, `BaseAgent` and the
+tool gateway, in every enforcement mode - also accepts a scope held under the
+other id for the tools the two connectors share (`enforce_connector_grant` in
+`auth/grant_enforcement.py`). Grants issued before `sanctions_screening`
+existed name `sanctions_api` and keep covering the tools they listed, after
+the agent moves too. Grants issued now name `sanctions_screening` for the
+shared tools and `sanctions_api` for `get_alert` and `generate_report`, which
+only the deprecated connector has. An old grant does not cover
+`screen_person` or `screen_business`; adding either tool to the agent
+refreshes its scopes, as any tool change does.
 
 While the id is kept, a plugin connector cannot register as `sanctions_api`:
 the loader rejects it with `name_conflict`, so a separately packaged screening
