@@ -430,13 +430,21 @@ async def dispose_screening_hits(
 
 
 async def decide_case(
-    tenant_id: str | uuid.UUID, case_ref: str, *, runtime: CaseRuntime, actor: str, outcome: str, grants: list[str]
+    tenant_id: str | uuid.UUID,
+    case_ref: str,
+    *,
+    runtime: CaseRuntime,
+    actor: str,
+    outcome: str,
+    grants: list[str],
+    decision_request_id: str | None = None,
 ) -> dict[str, Any]:
     tenant = _tenant(tenant_id)
     await runtime.require_enabled(tenant)
     async with runtime.session_factory(tenant) as session:
         # The decision grants are consumed at their issuer while this transaction holds the case
-        # row, so bound how long the row can stay locked if the issuer stalls.
+        # row - presented, or by `decision_request_id` where the issuer holds them - so bound how
+        # long the row can stay locked if the issuer stalls.
         await _cap_idle_in_transaction(session)
         case = await get_case(session, tenant, case_ref, for_update=True)
         await record_decision(
@@ -447,6 +455,7 @@ async def decide_case(
             verifier=runtime.decision_verifier,
             actor=actor,
             now=runtime.clock(),
+            decision_request_id=decision_request_id,
         )
         result = {"case_ref": case_ref, "state": case.state}
     runtime.push_kick(tenant)

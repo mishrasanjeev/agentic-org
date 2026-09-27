@@ -7,6 +7,10 @@ through :meth:`approve`, which stands in for a person approving on that page; fo
 different approvers and refuses the same one twice; grants appear only when the request is fully
 approved; consumption is atomic, single-use and bound to the action and the case version.
 
+With ``consume_by_request_id`` it behaves as the service does under
+``AGENTICORG_CASE_DECISION_GRANT_RELEASE``: the grants are never handed out, a request is consumed
+by its id with the same rules, and the status carries the issuer's ``decisionGrantsReady``.
+
 It is a test double, never a production path: nothing in ``core`` or ``api`` constructs it.
 """
 
@@ -54,6 +58,8 @@ class FakeDecisionGrantService:
     requests: dict[str, _Request] = field(default_factory=dict)
     #: Raised by the next call, to exercise the platform's fail-closed paths.
     fail_with: DecisionServiceError | None = None
+    #: ``AGENTICORG_CASE_DECISION_GRANT_RELEASE``.
+    consume_by_request_id: bool = False
     _sequence: int = 0
 
     # ── the platform's side ──────────────────────────────────────────────────────────────────
@@ -109,6 +115,8 @@ class FakeDecisionGrantService:
 
     async def grants(self, request_id: str) -> list[str]:
         self._raise_if_asked()
+        if self.consume_by_request_id:
+            raise DecisionServiceError("decision_grants_not_released", "consumed by request id", status=409)
         request = self._get(request_id)
         if request.status != "approved" or request.consumed:
             return []
@@ -121,9 +129,28 @@ class FakeDecisionGrantService:
         request = next((r for r in self.requests.values() if set(grants) & set(r.grants)), None)
         if request is None or not grants:
             raise DecisionServiceError("decision_invalid", "unknown_grant", status=409)
+        return self._spend(request, len(set(grants)), action, case_version)
+
+    async def consume_request(
+        self, *, request_id: str, action: Mapping[str, Any], case_version: str
+    ) -> ConsumedDecision:
+        self._raise_if_asked()
+        if not self.consume_by_request_id:
+            raise DecisionServiceError(
+                "decision_service_not_configured", "consumption by request id is off", status=503
+            )
+        request = self._get(request_id)
+        if not request.grants and not request.consumed:
+            reason = "case_changed" if request.status == "superseded" else "unknown_grant"
+            raise DecisionServiceError("decision_invalid", reason, status=409)
+        return self._spend(request, len(request.grants), action, case_version)
+
+    def _spend(
+        self, request: _Request, presented: int, action: Mapping[str, Any], case_version: str
+    ) -> ConsumedDecision:
         if request.consumed:
             raise DecisionServiceError("decision_invalid", "consumed", status=409)
-        if len(set(grants)) != request.approvals_required:
+        if presented != request.approvals_required:
             raise DecisionServiceError("decision_invalid", "four_eyes_incomplete", status=409)
         if _canonical(request.action) != _canonical(action):
             raise DecisionServiceError("decision_invalid", "action_mismatch", status=409)
@@ -181,8 +208,7 @@ class FakeDecisionGrantService:
             raise DecisionServiceError("decision_request_not_found", request_id, status=404)
         return request
 
-    @staticmethod
-    def _view(request: _Request) -> DecisionRequestView:
+    def _view(self, request: _Request) -> DecisionRequestView:
         return DecisionRequestView(
             request_id=request.request_id,
             status=request.status,
@@ -193,4 +219,7 @@ class FakeDecisionGrantService:
             approvals_required=request.approvals_required,
             approvals=tuple(request.approvals),
             expires_at="2026-09-21T10:00:00Z",
+            issuer_grants_ready=(request.status == "approved" and not request.consumed)
+            if self.consume_by_request_id
+            else None,
         )

@@ -1108,3 +1108,22 @@ Remove an entry in the pull request that fixes it.
   write time and keep e-mail addresses out of `details`, so retained audit rows
   carry no direct identifier. Rows already written stay as they are.
 
+## A-103 — The onboarding workflow's decision step presents grants nobody can hold
+
+- **Found:** consuming governed-case decisions by request id ahead of the
+  Grantex agent binding (2026-09-27).
+- **What:** the `record_decision` step of
+  `workflows/examples/business_onboarding.yaml` passes `$decision_grants` to
+  `core/cases/runtime.py` `run_case_step`, which presents them to
+  `POST /v1/decisions/consume`. Nothing in the workflow obtains them: the
+  `human_in_loop` step yields only the outcome. With the issuer's
+  `DECISION_GRANT_AGENT_BINDING` on, the grants of a request AgenticOrg makes
+  (it names no agent) are never released to anyone, so the step can only be
+  refused `decision_required`. `AGENTICORG_CASE_DECISION_GRANT_RELEASE` changes
+  the console's route, not this step. It fails closed; it cannot succeed.
+- **Fix:** let the step name a decision request (`decision_request_id`) and
+  record it through the same checks the case API makes before consuming by id
+  (the request is on this case, for this outcome, at this case version), then
+  consume by request id; or drop `decision_grants` from the step and document
+  that a workflow decision is recorded through the console.
+

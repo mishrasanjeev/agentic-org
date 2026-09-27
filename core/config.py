@@ -163,6 +163,16 @@ class Settings(BaseSettings):
     # Decisions that need two different approvers (comma separated, from the
     # tool manifest's four_eyes_on).
     case_decision_four_eyes_on: str = "decline"
+    # Consume a case decision at the issuer by its request id
+    # (POST /v1/decisions/requests/{id}/consume), so this server never presents,
+    # stores or forwards a decision grant, and read readiness from
+    # decisionGrantsReady. Until the issuer turns DECISION_GRANT_AGENT_BINDING on,
+    # its status answer still carries the grants, which are dropped; once it is
+    # on, none is sent here at all. Off keeps reading the grants from the
+    # request's status and presenting them, which stops working once the binding
+    # is on: turn this on first (docs/governance/decision-requests.md).
+    # Env: AGENTICORG_CASE_DECISION_GRANT_RELEASE.
+    case_decision_grant_release: bool = False
     # Periodic delivery sweep for the case push outbox (core/tasks/case_push_tasks.py).
     case_push_sweep_enabled: bool = False
     jwt_public_key_url: str = ""
