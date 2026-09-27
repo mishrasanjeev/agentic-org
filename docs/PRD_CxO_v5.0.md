@@ -1642,18 +1642,18 @@ The CMO dashboard must be a working cockpit, not a marketing brochure.
   - `risk_sentinel` -- Risk assessment, fraud detection, compliance scoring
   - `compliance_guard` -- Regulatory monitoring, policy enforcement
 - **Connectors Required:**
-  - `sanctions_api.screen_entity` -- Entity screening against sanctions lists
-  - `sanctions_api.screen_transaction` -- Transaction party screening
-  - `sanctions_api.batch_screen` -- Bulk screening
-  - `sanctions_api.get_alert` -- Alert management
-  - `sanctions_api.generate_report` -- Compliance reports
+  - `sanctions_screening.screen_entity` -- Person or business screening against sanctions, PEP and watch lists
+  - `sanctions_screening.screen_person` / `sanctions_screening.screen_business` -- Screening one kind of party
+  - `sanctions_screening.screen_transaction` -- Transaction party screening
+  - `sanctions_screening.batch_screen` -- Bulk screening
+  - Screening runs through the configured verification provider. The deprecated `sanctions_api` connector keeps its old tools, `get_alert` and `generate_report` included, for tenants that use it until their agents link `sanctions_screening`
   - `mca_portal.fetch_company_master_data` -- Company verification
 - **KPIs:**
   | Metric | Source | Refresh | Unit | Formula |
   |--------|--------|---------|------|---------|
   | Compliance Score | compliance_guard -> weighted compliance index | Weekly | 0-100 | Weighted average of all compliance areas |
-  | Sanctions Screening Rate | sanctions_api -> screened / total transactions | Daily | Percentage | screened_transactions / total_transactions * 100 |
-  | Screening Alerts (Unresolved) | sanctions_api.get_alert -> pending count | Real-time | Number | COUNT(alerts where status=pending) |
+  | Sanctions Screening Rate | sanctions_screening -> screened / total transactions | Daily | Percentage | screened_transactions / total_transactions * 100 |
+  | Screening Hits (Undisposed) | sanctions_screening hits -> awaiting human disposition | Real-time | Number | COUNT(hits where disposition=pending) |
   | Audit Findings (Open) | risk_sentinel -> open findings | Monthly | Number | COUNT(findings where status != closed) |
   | Risk Register Items | risk_sentinel -> total risks by severity | Monthly | Number[] | GROUP BY severity (critical, high, medium, low) |
   | Policy Violations (MTD) | compliance_guard -> violations count | Monthly | Number | COUNT(violations this month) |
@@ -1665,7 +1665,7 @@ The CMO dashboard must be a working cockpit, not a marketing brochure.
 - **Workflows:**
   - `transaction_screening`:
     1. Trigger: New vendor payment or customer onboarding
-    2. `risk_sentinel` screens entity via `sanctions_api.screen_entity`
+    2. `risk_sentinel` screens entity via `sanctions_screening.screen_entity`
     3. If match found (confidence > 0.5): HITL -> CBO reviews match
     4. If CBO confirms false positive: Mark as cleared, proceed
     5. If CBO confirms true positive: Block transaction, escalate to CEO
@@ -1761,7 +1761,6 @@ The CMO dashboard must be a working cockpit, not a marketing brochure.
   - `compliance_guard` -- DPDPA compliance
 - **Connectors Required:**
   - `s3.list_objects` -- Data inventory
-  - `sanctions_api.generate_report` -- Data processing report
 - **KPIs:**
   | Metric | Source | Refresh | Unit |
   |--------|--------|---------|------|
@@ -1969,7 +1968,7 @@ class ApProcessorAgent(BaseAgent):
 | `support_triage` | Extract ticket subject, description, customer info | Category classification (billing, technical, feature, general), sentiment analysis | Zendesk for tickets, Confluence for KB | Verify classification accuracy > 88% | 0.85 |
 | `support_deflector` | Search knowledge base for matching articles | KB match threshold (>0.90 confidence for auto-response) | Zendesk for auto-response, Confluence for KB search | Verify response relevance, customer satisfaction | 0.90 |
 | `vendor_manager` | Gather vendor data from Tally + contracts | Performance scoring (delivery 30%, quality 30%, cost 20%, communication 20%) | Tally for payments, DocuSign for contracts, Jira for tasks | Verify scoring accuracy, renewal alerts | 0.85 |
-| `compliance_guard` | Scan all compliance areas | Weighted compliance scoring, regulatory deadline tracking | MCA for statutory, EPFO for PF, Sanctions API for screening | Verify compliance score, overdue alerts | 0.92 |
+| `compliance_guard` | Scan all compliance areas | Weighted compliance scoring, regulatory deadline tracking | MCA for statutory, EPFO for PF, Sanctions Screening for screening | Verify compliance score, overdue alerts | 0.92 |
 | `contract_intelligence` | Extract contract metadata | Risk clause identification (unlimited liability, broad IP, non-compete >2yr) | DocuSign for contracts, S3 for archive | Verify clause extraction, risk flags | 0.88 |
 
 **Back Office Domain Agents:**
@@ -1977,7 +1976,7 @@ class ApProcessorAgent(BaseAgent):
 | Agent | Pre-Processing | Domain Rules | Tool Selection | Post-Processing | Confidence Floor |
 |-------|---------------|--------------|----------------|-----------------|-----------------|
 | `legal_ops` | Parse contract text, identify document type | Clause extraction rules, risk scoring (0-1 per clause type) | DocuSign for signing, S3 for storage, Confluence for templates | Verify all clauses extracted, risk scored | 0.90 |
-| `risk_sentinel` | Aggregate risk signals from all domains | Weighted risk model (financial 30%, compliance 25%, operational 25%, security 20%) | Sanctions API for screening, PagerDuty for security incidents | Verify risk score calculation, alert thresholds | 0.95 |
+| `risk_sentinel` | Aggregate risk signals from all domains | Weighted risk model (financial 30%, compliance 25%, operational 25%, security 20%) | Sanctions Screening for screening, PagerDuty for security incidents | Verify risk score calculation, alert thresholds | 0.95 |
 | `facilities_agent` | Parse maintenance requests, asset data | Asset lifecycle rules, maintenance scheduling rules | Jira for tracking, Tally for expense | Verify request routing, expense tracking | 0.82 |
 
 ### 3.3 KPI Data Pipeline
@@ -3924,7 +3923,7 @@ Note: Combined with existing test suite (~2,500 tests), total reaches **~4,000 t
 - [ ] Build CBO dashboard: `CBODashboard.tsx` with all 4 tabs
 - [ ] Build `GET /kpis/cbo` endpoint
   - Wire Legal: `docusign` -> contract status
-  - Wire Risk: `sanctions_api` -> screening results
+  - Wire Risk: `sanctions_screening` -> screening results
   - Wire Corporate: `mca_portal` -> filing status
 - [ ] Add `/dashboard/ceo` and `/dashboard/cbo` routes
 
@@ -4117,10 +4116,10 @@ Registration alone is not a production-readiness claim. For current CMO truth la
 | 19 | `support_triage` | ops | `support_triage.prompt.txt` | 0.85 | confidence < 0.85, very negative sentiment, SLA breach imminent, refund > 10K | zendesk.create_ticket, zendesk.update_ticket, zendesk.get_ticket, zendesk.escalate_ticket, zendesk.get_sla_status |
 | 20 | `support_deflector` | ops | `support_deflector.prompt.txt` | 0.90 | (auto-responds only when confidence > 0.90) | zendesk.apply_macro, zendesk.update_ticket, confluence.search_pages |
 | 21 | `vendor_manager` | ops | `vendor_manager.prompt.txt` | 0.85 | new vendor contract > 10L, performance < 50, renewal without bidding | tally.get_ledger_balance, docusign.send_envelope, docusign.get_envelope_status, jira.create_issue, hubspot.create_company |
-| 22 | `compliance_guard` | ops | `compliance_guard.prompt.txt` | 0.92 | compliance score < 70, new regulation identified | mca_portal.file_annual_return, mca_portal.complete_director_kyc, mca_portal.fetch_company_master_data, epfo.file_ecr, sanctions_api.generate_report, confluence.search_pages |
+| 22 | `compliance_guard` | ops | `compliance_guard.prompt.txt` | 0.92 | compliance score < 70, new regulation identified | mca_portal.file_annual_return, mca_portal.complete_director_kyc, mca_portal.fetch_company_master_data, epfo.file_ecr, confluence.search_pages |
 | 23 | `contract_intelligence` | ops | `contract_intelligence.prompt.txt` | 0.88 | contract value > 50L, high-risk clauses, NDA with competitor | docusign.send_envelope, docusign.get_envelope_status, docusign.download_document, s3.upload_file |
 | 24 | `legal_ops` | backoffice | `legal_ops.prompt.txt` | 0.90 | contract value > 50L, high-risk clauses, NDA with competitor, litigation settlement | docusign.send_envelope, docusign.get_envelope_status, docusign.download_document, s3.upload_file, confluence.search_pages |
-| 25 | `risk_sentinel` | backoffice | `risk_sentinel.prompt.txt` | 0.95 | any sanctions match, fraud alert, compliance < 70, data breach | sanctions_api.screen_entity, sanctions_api.screen_transaction, sanctions_api.batch_screen, sanctions_api.get_alert, sanctions_api.generate_report, pagerduty.list_incidents |
+| 25 | `risk_sentinel` | backoffice | `risk_sentinel.prompt.txt` | 0.95 | any sanctions match, fraud alert, compliance < 70, data breach | sanctions_screening.screen_entity, sanctions_screening.screen_transaction, sanctions_screening.batch_screen, pagerduty.list_incidents |
 | 26 | `facilities_agent` | backoffice | `facilities_agent.prompt.txt` | 0.82 | expense > 110% budget, asset purchase > 50K | jira.create_issue, jira.search_issues, tally.get_ledger_balance |
 | 27 | `email_agent` | marketing | `email_agent.prompt.txt` | 0.85 | unsubscribe rate > 1%, large send > 50K | mailchimp.create_campaign, mailchimp.send_campaign, sendgrid.send_email |
 | 28 | `social_media` | marketing | `social_media.prompt.txt` | 0.82 | crisis detected, competitor mention | buffer.create_post, twitter.post_tweet, twitter.search_mentions |
@@ -4179,7 +4178,7 @@ Registration alone is not a production-readiness claim. For current CMO truth la
 | 41 | `zendesk` | ops | create_ticket, update_ticket, get_ticket, apply_macro, get_csat_score, escalate_ticket, merge_tickets, get_sla_status | api_token | 200/min | Live |
 | 42 | `confluence` | ops | search_pages, get_page, create_page, update_page | api_token | 100/min | Live |
 | 43 | `mca_portal` | ops | file_annual_return, complete_director_kyc, fetch_company_master_data, file_charge_satisfaction | dsc | 10/min | Live |
-| 44 | `sanctions_api` | ops | screen_entity, screen_transaction, get_alert, batch_screen, generate_report | api_key | 500/min | Live |
+| 44 | `sanctions_screening` (replaces the deprecated `sanctions_api`) | ops | screen_entity, screen_person, screen_business, screen_transaction, batch_screen | verification provider (`provider` in the connector config) | set by the provider | Live |
 | 45 | `slack` | comms | send_message, invite_user, remove_user, create_channel, get_channel_history | oauth2 | 100/min | Live |
 | 46 | `sendgrid` | comms | send_email, send_template_email, get_bounces, get_stats | api_key | 100/min | Live |
 | 47 | `twilio` | comms | send_sms, make_call, send_whatsapp | api_key | 100/min | Live |
@@ -4190,6 +4189,8 @@ Registration alone is not a production-readiness claim. For current CMO truth la
 | 52 | `google_calendar` | comms | create_event, list_events, update_event, delete_event | oauth2 | 100/min | Live |
 | 53 | `s3` | comms | upload_file, download_file, list_objects, delete_file | api_key | 200/min | Live |
 | 54 | `teams_bot` | microsoft | send_message, create_channel, get_messages | oauth2 | 100/min | Live |
+
+Not counted above: the deprecated `sanctions_api` connector (ops; screen_entity, screen_transaction, get_alert, batch_screen, generate_report; api_key; 500/min) stays registered, unchanged, for tenants that use it. The screening service's API base URL comes from `base_url` in its connector config or `AGENTICORG_SANCTIONS_API_BASE_URL`; without one it refuses every call.
 
 ### Appendix C. Complete KPI Registry
 

@@ -23,7 +23,7 @@ import structlog
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, ConfigDict, TypeAdapter, create_model
 
-from auth.grant_enforcement import EnforcementMode, GrantCallContext
+from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant
 from connectors.framework.base_connector import BaseConnector
 from connectors.registry import ConnectorRegistry
@@ -804,9 +804,11 @@ async def execute_agent_tool(
         from core.langgraph.grantex_auth import get_grantex_client
 
         # ``enforce`` verifies the grant JWT against Grantex's JWKS with a
-        # synchronous HTTPS fetch; run it off the event loop.
+        # synchronous HTTPS fetch; run it off the event loop. A grant held
+        # under another id of a deprecated connector and its replacement counts too.
         enforcement = await asyncio.to_thread(
-            get_grantex_client().enforce,
+            enforce_connector_grant,
+            get_grantex_client(),
             grant_token=grant_token,
             connector=connector_name,
             tool=tool_name,
@@ -1148,8 +1150,16 @@ def _build_tool_index(
 
     index: dict[str, tuple[str, str]] = {}
 
-    # 1. Native connectors first
-    for connector_name in ConnectorRegistry.all_names():
+    # 1. Native connectors first. A deprecated id (``sanctions_api``) comes
+    # before the live ids, so it keeps the bare tool names it had: an agent
+    # that does not link its replacement keeps the connector it used, and
+    # moving to the replacement is explicit (link it, or name its tools
+    # connector-qualified).
+    live_names = ConnectorRegistry.all_names()
+    deprecated_names = [
+        name for name in ConnectorRegistry.all_names(include_deprecated=True) if name not in live_names
+    ]
+    for connector_name in [*deprecated_names, *live_names]:
         # Skip the composio meta-connector; its tools are handled below
         if connector_name == "composio":
             continue
@@ -1190,3 +1200,21 @@ def _build_tool_index(
                 index[tool_name] = ("composio", meta.get("description", ""))
 
     return index
+
+
+def _grant_connector_id(connector_name: str, tool_name: str, qualified_index: dict[str, tuple[str, str]]) -> str:
+    """The connector id to issue a grant for ``connector_name``'s ``tool_name`` under.
+
+    A deprecated id's tool is granted under the live id when the live
+    connector has the same tool, so the grant keeps covering it once the
+    agent links the live connector; the grant check accepts a scope under
+    either id (``auth.grant_enforcement.enforce_connector_grant``). A tool
+    only the deprecated connector has (``sanctions_api``'s ``get_alert``)
+    stays under the deprecated id, whose manifest lists it: under the live
+    id Grantex would answer "unknown tool". ``qualified_index`` is a
+    ``_build_tool_index(include_connector_aliases=True)`` result.
+    """
+    live = ConnectorRegistry.live_id(connector_name)
+    if live == connector_name or f"{live}:{tool_name}" in qualified_index:
+        return live
+    return connector_name

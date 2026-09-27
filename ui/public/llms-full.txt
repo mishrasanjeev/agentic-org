@@ -518,7 +518,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - Jira - authentication type: oauth2
 - Mca Portal - authentication type: dsc
 - Pagerduty - authentication type: api_key
-- Sanctions Api - authentication type: api_key
+- Sanctions Screening - authentication type: none
 - Servicenow - authentication type: rest_oauth2
 - Zendesk - authentication type: api_token
 

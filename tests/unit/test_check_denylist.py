@@ -7,10 +7,12 @@ for shape.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts import check_denylist as dl
 
@@ -375,6 +377,137 @@ def test_audit_reports_mentions_that_predate_the_check(
     assert code == 1
     assert "existing.py:1" in out
     assert "verify" not in out.lower()
+
+
+def test_audit_can_be_limited_to_paths(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _commit(repo, {"clean/ok.py": "ok = True\n"})
+    base = ["--repo", str(repo), "--hash-file", str(hash_file), "audit"]
+    assert dl.main([*base, "clean"]) == 0
+    assert dl.main([*base, "existing.py"]) == 1
+    assert "existing.py:1" in capsys.readouterr().out
+
+
+def test_audit_of_paths_that_match_no_tracked_file_fails_closed(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code = dl.main(["--repo", str(repo), "--hash-file", str(hash_file), "audit", "no/such/dir"])
+    assert code == 2
+    assert "no tracked file" in capsys.readouterr().err
+
+
+# ── House terminology (warnings) ────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "preferred"),
+    [
+        ("pull the kill switch", "operator override"),
+        ("KillSwitch()", "operator override"),
+        ("kill_switch_enabled = True", "operator override"),
+        ("killswitches", "operator override"),
+        ("a white-label console", "issuer-branded"),
+        ("WhiteLabelTheme", "issuer-branded"),
+        ("white-labelled portal", "issuer-branded"),
+        ("anomaly detection", "irregularity"),
+        ("flag anomalies", "irregularity"),
+        ("ANOMALOUS_SPEND", "irregularity"),
+        ("our trust provider", "accredited issuer"),
+        ("TrustProviders", "accredited issuer"),
+        ("verification partners", "accredited issuer"),
+        ("store the verification result", "attestation"),
+        ("verificationResults", "attestation"),
+    ],
+)
+def test_house_terms_match_spelling_variants(text: str, preferred: str) -> None:
+    assert [match.preferred for match in dl.house_terms(text)] == [preferred]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "kill the worker, then switch regions",
+        "label the white box",
+        "results of the verification",
+        "the provider we trust",
+        "the registry directory",
+        "a consumer group",
+        "software name and version",
+    ],
+)
+def test_ordinary_words_are_not_house_terms(text: str) -> None:
+    assert dl.house_terms(text) == []
+
+
+def test_house_term_match_reports_word_position_and_preferred_term() -> None:
+    assert dl.house_terms("stop it with the kill switch") == [dl.TermMatch(4, "kill switch", "operator override")]
+
+
+def test_terminology_terms_warn_but_do_not_fail(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _commit(
+        repo,
+        {"docs/ops.md": "intro\nUse the kill switch to stop agents.\nA white-label console.\n"},
+        "docs: record the verification result",
+    )
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 0
+    assert "no denylisted terms" in out
+    assert "docs/ops.md:2 (word 3)" in out and "operator override" in out
+    assert "docs/ops.md:3 (word 2)" in out and "issuer-branded" in out
+    assert "message line 1" in out and "attestation" in out
+
+
+def test_terminology_warnings_leave_a_failing_result_failing(
+    repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _commit(repo, {"providers/client.py": "# anomaly score\nclient = 'AcmeVerify'\n"})
+    code, out, _ = _scan(repo, hash_file, capsys)
+    assert code == 1
+    assert "providers/client.py:2 (word 2)" in out
+    assert "providers/client.py:1 (word 1)" in out and "irregularity" in out
+    assert "verify" not in out.lower()
+
+
+def test_audit_prints_terminology_warnings(repo: Path, hash_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _commit(repo, {"notes.md": "Ask the trust provider.\n"})
+    base = ["--repo", str(repo), "--hash-file", str(hash_file), "audit"]
+    assert dl.main([*base, "notes.md"]) == 0
+    out = capsys.readouterr().out
+    assert "notes.md:1 (word 3)" in out and "accredited issuer" in out
+    assert dl.main(base) == 1  # existing.py still names a denylisted term
+    assert "accredited issuer" in capsys.readouterr().out
+
+
+# ── The committed tree and CI ───────────────────────────────────────────────
+
+# Where the audit used to fail: the screening connector that named its vendor,
+# its generator entry and the references to it. The whole tree is audited by
+# the Vendor Denylist workflow's audit job, which takes about a minute: too
+# long for the unit suite.
+PATHS_THAT_NAMED_A_VENDOR = ("connectors", "scripts", "core/langgraph", "core/agents/prompts", "manifests")
+
+
+def test_audit_passes_on_the_paths_that_named_a_vendor(capsys: pytest.CaptureFixture[str]) -> None:
+    code = dl.main(["--repo", str(REPO_ROOT), "audit", *PATHS_THAT_NAMED_A_VENDOR])
+    out = capsys.readouterr().out
+    assert code == 0, out
+
+
+def test_ci_audits_the_whole_tree_on_pull_requests_and_main() -> None:
+    workflow = yaml.safe_load((REPO_ROOT / ".github" / "workflows" / "vendor-denylist.yml").read_text("utf-8"))
+    triggers = workflow.get("on", workflow.get(True))  # YAML 1.1 reads a bare `on` key as true
+    assert "pull_request" in triggers
+    assert "main" in triggers["push"]["branches"]
+    audit_steps = [
+        (job, step)
+        for job in workflow["jobs"].values()
+        for step in job["steps"]
+        if re.fullmatch(r"python scripts/check_denylist\.py audit", step.get("run", "").strip())
+    ]
+    assert audit_steps, "no job runs the whole-tree audit"
+    for job, step in audit_steps:
+        assert not job.get("continue-on-error") and not step.get("continue-on-error")
 
 
 def test_committed_denylist_is_well_formed_and_holds_no_plaintext() -> None:
