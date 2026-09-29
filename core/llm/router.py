@@ -281,7 +281,7 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
             sql += " AND tenant_id = CAST(:tenant_id AS uuid)"
             params["tenant_id"] = str(tenant_id)
             async with get_tenant_session(tenant_id) as session:  # type: ignore[arg-type]
-                row = (await session.execute(_text(sql), params)).scalar_one()
+                row: float | None = (await session.execute(_text(sql), params)).scalar_one()
         else:
             async with async_session_factory() as session:
                 await session.execute(_text("SET LOCAL row_security = off"))

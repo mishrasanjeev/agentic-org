@@ -12,6 +12,7 @@ import hashlib
 import io
 import re
 import uuid as _uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -853,6 +854,7 @@ async def abm_dashboard(
             select(ABMAccount).where(ABMAccount.tenant_id == tid)
         ).order_by(ABMAccount.intent_score.desc()).limit(10)
         top_result = await session.execute(top_q)
+        top_accounts: Sequence[ABMAccount] = top_result.scalars().all()
         top_10 = [
             {
                 "id": str(a.id),
@@ -861,7 +863,7 @@ async def abm_dashboard(
                 "tier": a.tier or "2",
                 "intent_score": float(a.intent_score) if a.intent_score is not None else 0.0,
             }
-            for a in top_result.scalars().all()
+            for a in top_accounts
         ]
 
         # Pipeline influenced: campaigns aren't tier/industry-scoped and

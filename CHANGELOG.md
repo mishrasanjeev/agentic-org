@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed - OpenTelemetry 1.45
+- `requirements.txt` and `pyproject.toml` move `opentelemetry-api`,
+  `opentelemetry-sdk` and `opentelemetry-exporter-otlp` to 1.45.0 and
+  `opentelemetry-instrumentation-fastapi` to 0.66b0 together. The SDK and the
+  exporter pin the API and the 0.66b0 semantic conventions exactly, so bumping
+  one of them alone left `requirements.txt` uninstallable and `pip-audit`
+  unable to audit it.
+
+### Changed - SQLAlchemy 2.1
+- `requirements.txt` pins SQLAlchemy 2.1.0 and `pyproject.toml` allows the
+  2.1 series (`>=2.1.0,<2.2`), replacing the cap below 2.1 (FINDINGS A-70).
+  2.1's result typing no longer infers a type for raw-SQL scalars, so the
+  five values mypy reported are annotated; nothing else changes at runtime.
+
 ### Fixed - the local stack answers the Grantex SDK's revocation check
 - From grantex 0.7 the Python SDK's `enforce()` asks the auth service's
   `GET /v1/revocations/status` about every grant before it allows a tool call
