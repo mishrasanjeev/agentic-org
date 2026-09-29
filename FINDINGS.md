@@ -1465,3 +1465,45 @@ Remove an entry in the pull request that fixes it.
   application role `NOSUPERUSER NOBYPASSRLS`, DML only), log the running
   role's `rolsuper` / `rolbypassrls` at startup, and document the check in the
   deploy runbook.
+
+## A-106 — The token pool's revocation listener times out every two seconds
+
+- **Found:** CI logs of the dev stack while fixing the Grantex revocation
+  check (2026-09-29).
+- **What:** `auth/token_pool.py` listens on `agenticorg:token:revoke` with
+  `pubsub.listen()` on a client built with `redis_socket_timeout_kwargs()`
+  (2s socket timeout). An idle channel raises `TimeoutError` after 2s,
+  `_supervise_revocations` logs `token_pool_revocation_listener_failed`,
+  sleeps 1s and resubscribes, and the delay is reset on every subscribe, so the
+  cycle repeats every ~3s for the life of the process. A token revocation
+  published while the listener is not subscribed is lost (pub/sub keeps
+  nothing), and the agent's cached token stays in Redis until it expires.
+- **Fix:** give the listener its own client without a socket read timeout (or
+  poll with `get_message(timeout=...)` and treat an idle timeout as normal),
+  and keep the timeout only on command clients.
+
+## A-107 — The legacy scope check calls Grantex on the event loop
+
+- **Found:** same work (2026-09-29).
+- **What:** `validate_tool_scopes` in `core/langgraph/agent_graph.py` calls
+  `enforce_connector_grant` directly, unlike `check_tool_grant` and
+  `ToolGateway`, which use `asyncio.to_thread`. From grantex 0.7 `enforce()`
+  makes a synchronous HTTP request to `/v1/revocations/status` for every
+  call (30s timeout, up to three retries with `time.sleep`), so one slow or
+  unreachable auth service blocks the API's event loop for every request.
+- **Fix:** run the call through `asyncio.to_thread` as the other two paths do,
+  and decide per deployment between the online check and the SDK's revocation
+  feed (`revocation_check="feed"`), which fails closed when it goes stale
+  without a request per call.
+
+## A-108 — `requirements.txt` pins a Grantex SDK the images do not install
+
+- **Found:** same work (2026-09-29).
+- **What:** `requirements.txt` pins `grantex==0.5.1`, but the API image, the
+  tools image and the CI jobs install from `pyproject.toml`
+  (`grantex>=0.5.1`) and got 0.7.0 as soon as it was published, which
+  changed enforcement behaviour (revocation checked online by default) on
+  `main` without a pull request. `pip-audit` audits the pin, not what runs.
+- **Fix:** bound the SDK in `pyproject.toml` to the minor version tested
+  (`grantex>=0.7,<0.8` once this change is in) and keep `requirements.txt` at
+  the same version, so an SDK upgrade arrives as a reviewed dependency PR.
