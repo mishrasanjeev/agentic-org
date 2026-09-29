@@ -8,8 +8,9 @@ permissions and configured providers determine what is available to you.
 The UI renders these same articles at `/docs`. The landing page and application
 sidebar link to that hub. Do not maintain a second independent copy in a hosted
 documentation service. See the [publishing runbook](../runbooks/documentation-site.md)
-for the optional `docs.agenticorg.ai` subdomain. That hostname is not yet a claim
-of a configured/live service.
+for the configured [docs.agenticorg.ai](https://docs.agenticorg.ai) alias and its
+Cloud DNS/managed HTTPS checks. The canonical manual is
+[agenticorg.ai/docs](https://agenticorg.ai/docs); both URLs use the same content.
 
 ## Start Here
 

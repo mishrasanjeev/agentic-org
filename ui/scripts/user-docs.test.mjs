@@ -136,6 +136,10 @@ test("both nginx targets reject unknown guides and redirect only the documentati
       config,
       /if \(\$host = docs\.agenticorg\.ai\) \{ return 302 \/docs; \}/,
     );
+    assert.match(
+      config,
+      /location = \/ \{\s*absolute_redirect off;\s*if \(\$host = docs\.agenticorg\.ai\) \{ return 302 \/docs; \}/,
+    );
   }
 });
 

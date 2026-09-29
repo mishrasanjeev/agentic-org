@@ -189,18 +189,58 @@ test("guides are readable without JavaScript and invalid slugs return 404", asyn
   expect(missing.status()).toBe(404);
 });
 
-test("local documentation-host alias redirects to the manual", async ({ request, baseURL }) => {
+test("local documentation-host alias keeps redirects proxy-safe", async ({ request, baseURL }) => {
   const hostname = new URL(baseURL ?? "https://agenticorg.ai").hostname;
   test.skip(
     !["127.0.0.1", "localhost", "[::1]"].includes(hostname),
-    "The documentation hostname needs registrar/HTTPS setup; test alias routing on local nginx only.",
+    "Host-header routing is tested against local nginx; hosted routing has its own HTTPS test.",
   );
-  const alias = await request.get("/", {
-    headers: { Host: "docs.agenticorg.ai" },
-    maxRedirects: 0,
-  });
-  expect(alias.status()).toBe(302);
-  expect(alias.headers().location).toMatch(/\/docs$/);
+  const forwardedHeaders: Record<string, string>[] = [
+    {},
+    { "X-Forwarded-Proto": "https" },
+    { "X-Forwarded-Proto": "http", "X-Forwarded-Host": "untrusted.example:8080" },
+  ];
+  for (const forwarded of forwardedHeaders) {
+    const alias = await request.get("/", {
+      headers: { Host: "docs.agenticorg.ai", ...forwarded },
+      maxRedirects: 0,
+    });
+    expect(alias.status()).toBe(302);
+    expect(alias.headers().location).toBe("/docs");
+  }
+  for (const host of ["agenticorg.ai", "app.agenticorg.ai"]) {
+    const landing = await request.get("/", {
+      headers: { Host: host },
+      maxRedirects: 0,
+    });
+    expect(landing.status()).toBe(200);
+    expect(landing.headers().location).toBeUndefined();
+  }
+});
+
+test("configured documentation hostname works from its HTTPS root", async ({ page, request }) => {
+  const target = process.env.DOCS_HOST_BASE_URL;
+  if (!target) {
+    test.skip(true, "Set DOCS_HOST_BASE_URL to verify an explicitly reviewed hosted alias.");
+    return;
+  }
+  const origin = new URL(target).origin;
+  expect(origin).toBe("https://docs.agenticorg.ai");
+  const root = await request.get(`${origin}/`, { maxRedirects: 0 });
+  expect(root.status()).toBe(302);
+  expect(root.headers().location).toBe("/docs");
+  const response = await page.goto(`${origin}/`);
+  expect(response?.status()).toBe(200);
+  await expect(page).toHaveURL(`${origin}/docs`);
+  await expect(page.locator("h1")).toHaveText("AgenticOrg documentation");
+  await page.getByRole("searchbox").fill("LibreOffice");
+  await page.getByRole("region", { name: "Search results" })
+    .getByRole("link").filter({ hasText: "Knowledge" }).first().click();
+  await expect(page).toHaveURL(`${origin}/docs/knowledge-and-ocr`);
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+    "href", "https://agenticorg.ai/docs/knowledge-and-ocr",
+  );
+  expect((await request.get(`${origin}/docs/not-a-real-guide`)).status()).toBe(404);
 });
 
 test("landing documentation links and accessible reader work", async ({
