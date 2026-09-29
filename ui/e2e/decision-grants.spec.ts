@@ -27,7 +27,7 @@
  * Run with `make e2e-decisions` (the runner shares the auth service's network
  * namespace, see docker-compose.dev.yml).
  */
-import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Request } from "@playwright/test";
 import { openCase, seededCase, signIn } from "./helpers/governed-cases";
 
 /**
@@ -69,31 +69,56 @@ function looksLikeADecisionGrant(body: string): boolean {
   return false;
 }
 
+/** The console's own API, where a decision grant would travel if one ever reached the browser. */
+function isConsoleApi(url: string): boolean {
+  return new URL(url).pathname.startsWith("/api/");
+}
+
 /**
  * Watches everything this browser context is served - the console's own requests and the test's
  * `page.request` calls alike - for a decision grant. Bodies are read asynchronously, so the caller
  * awaits `settled()` before asserting, otherwise a response that arrived late would be inspected
  * after the assertion had already passed.
+ *
+ * A body is read once its request has finished, not as soon as its response arrives. When the test
+ * navigates while the console is still loading (`openCase` right after `signIn`, or a reload), the
+ * navigation cuts off script chunks mid-download, and Chromium can drop the end of such a request:
+ * neither `requestfinished` nor `requestfailed` fires, and `response.text()` on it never settles,
+ * which held `settled()` until the test timed out. A cut-off download never delivered its body to
+ * the page, so it carries nothing to inspect; every console API response, though, must finish and
+ * be read, and `settled()` fails naming any that did not.
  */
 function decisionGrantWatcher(
   context: BrowserContext,
 ): { settled: () => Promise<{ seen: string[]; inspected: number }> } {
   const seen: string[] = [];
   const reads: Promise<void>[] = [];
-  context.on("response", (response) => {
+  // Responses that have arrived but whose request has neither finished nor failed yet.
+  const open = new Map<Request, string>();
+  context.on("response", (response) => open.set(response.request(), response.url()));
+  context.on("requestfailed", (request) => open.delete(request));
+  context.on("requestfinished", (request) => {
+    open.delete(request);
     reads.push(
-      response
-        .text()
+      request
+        .response()
+        .then((response) => (response ? response.text() : ""))
         .then((body) => {
-          if (looksLikeADecisionGrant(body)) seen.push(response.url());
+          if (looksLikeADecisionGrant(body)) seen.push(request.url());
         })
         .catch(() => {
-          // A body that is gone - a redirect, an aborted request - carried nothing.
+          // A body that is gone - a redirect, a request the page abandoned - carried nothing.
         }),
     );
   });
   return {
     settled: async () => {
+      await expect
+        .poll(() => [...open.values()].filter(isConsoleApi), {
+          message: "console API responses that never finished, so were never inspected",
+          timeout: 15_000,
+        })
+        .toEqual([]);
       await Promise.all(reads);
       // `inspected` is the watcher's own positive control: a listener that is
       // not attached, or attached to the wrong thing, reads nothing and would
