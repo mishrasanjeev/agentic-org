@@ -31,8 +31,8 @@ been performed. Local validation is not evidence of production deployment.
 | Check | Result |
 | --- | --- |
 | UI unit/component suite | 52 files, 341 tests passed |
-| Documentation and SEO generator suite | 23 tests passed, including Docker-source packaging regressions |
-| Playwright documentation suite | 10 tests passed across desktop and mobile projects |
+| Documentation and SEO generator suite | 24 tests, including packaging and cross-platform generation regressions |
+| Playwright documentation suite | 12 tests passed against the actual Cloud Run image across desktop and mobile projects |
 | TypeScript and production UI build | Passed |
 | SEO output verification | Passed for 109 route descriptors and 98 canonical sitemap URLs |
 | ESLint | No errors; 23 existing warnings in unrelated application pages |
@@ -97,6 +97,9 @@ missing rather than silently producing an empty reader. `.dockerignore` keeps
 historical/internal reports and scratch artifacts excluded while allowing the
 specific public build inputs. Tests cover both Dockerfile paths and the
 missing-manifest failure.
+Windows/Linux line endings are normalized before rendering and indexing; a
+regression verifies identical generated output. The Cloud Run image build
+generated all 29 guides and passed nginx configuration validation.
 
 The locally installed frontend skill commands and deterministic design detector
 were unavailable. The upstream audit, critique and polish checklists were

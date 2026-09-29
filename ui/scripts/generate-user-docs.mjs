@@ -18,6 +18,7 @@ const headingId = (text) =>
     .replace(/^-|-$/g, "");
 
 export function renderGuide(markdown) {
+  markdown = markdown.replace(/\r\n?/g, "\n");
   const md = new MarkdownIt({
     html: false,
     linkify: false,

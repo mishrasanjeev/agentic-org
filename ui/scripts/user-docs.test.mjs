@@ -74,6 +74,11 @@ test("Markdown escapes raw HTML, unsafe links and diagram labels", () => {
   assert.match(html, /aria-label="Workflow"/);
 });
 
+test("Windows and Linux checkouts generate identical reader data", () => {
+  const markdown = "## A guide\n\n```flow\nStart | Read the source\nFinish | Review the evidence\n```\n";
+  assert.deepEqual(renderGuide(markdown.replaceAll("\n", "\r\n")), renderGuide(markdown));
+});
+
 test("heading anchors are stable and tables have independent keyboard scroll regions", () => {
   const rendered = renderGuide(
     "## Next steps\n\n## Next steps\n\n| Field | Value |\n| --- | --- |\n| Test | Good |\n",
