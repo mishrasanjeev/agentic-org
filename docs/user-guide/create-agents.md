@@ -44,7 +44,7 @@ Do not insert credentials, personal account numbers or legal guarantees into pro
 5. Have the authorized owner decide whether to activate/promote the candidate.
 6. Retest after model, prompt, procedure, tool or provider changes.
 
-Inspect the detail screen's supported lifecycle actions before pausing or promoting an agent. A kill switch or paused state must be accompanied by a check of workflows and integrations that call it; changing an agent does not necessarily cancel work already accepted elsewhere.
+Inspect the detail screen's supported lifecycle actions before pausing or promoting an agent. An operator override or paused state must be accompanied by a check of workflows and integrations that call it; changing an agent does not necessarily cancel work already accepted elsewhere.
 
 ## Common mistakes
 

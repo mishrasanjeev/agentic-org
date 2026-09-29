@@ -26,7 +26,7 @@ At this initial validation checkpoint, no production deployment, DNS update,
 HTTPS host binding, cloud resource change or production database change had
 been performed. Local validation is not evidence of production deployment.
 
-## Verification Results
+## Validation Results
 
 | Check | Result |
 | --- | --- |
