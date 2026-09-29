@@ -2,9 +2,10 @@
 
 ## Scope And Status
 
-Initial local validation snapshot, based on main `5099d43e`, then rebased onto
-`3e513d7f`. Release validation
-against the final main branch is recorded separately below when completed.
+Local validation started on main `5099d43e`, then rebased onto `3e513d7f`.
+The final complete Docker gate validated implementation commit `dd8d4e65`.
+CI, merge and production rollout evidence are attached to the release PR after
+completion; local results alone do not establish production deployment.
 
 The manual contains 29 source Markdown guides, approximately 14,400 words and
 five BFSI playbooks: business onboarding/KYB, reconciliation, customer service,
@@ -32,7 +33,7 @@ been performed. Local validation is not evidence of production deployment.
 | --- | --- |
 | UI unit/component suite | 52 files, 341 tests passed |
 | Documentation and SEO generator suite | 24 tests, including packaging and cross-platform generation regressions |
-| Playwright documentation suite | 14 tests passed against the actual Cloud Run image across desktop and mobile projects before the final full-suite corrections; replay required after them |
+| Playwright documentation suite | 14 tests passed against the rebuilt Cloud Run image with production analytics configuration, including the final corrections |
 | TypeScript and production UI build | Passed |
 | SEO output verification | Passed for 109 route descriptors and 98 canonical sitemap URLs |
 | ESLint | No errors; 23 existing warnings in unrelated application pages |
@@ -40,6 +41,10 @@ been performed. Local validation is not evidence of production deployment.
 | Docker nginx configuration | Passed |
 | Tracked diff whitespace check | Passed |
 | New-file ASCII and scoped credential-literal/bidi scans | Passed |
+| Complete Docker `make check` | Passed |
+| Complete Docker preflight | 10,344 passed, 16 skipped, five expected failures; 78.96% coverage and all gates passed |
+| Docker `make test` unit gate | 7,931 passed, seven skipped; 62.81% coverage cleared the 55% floor |
+| Docker `make test` integration/regression gate | 2,645 passed, 13 skipped, five expected failures against isolated Postgres/Redis; combined coverage 83% |
 
 Playwright loaded every guide and checked HTTP status, title/canonical/TechArticle
 metadata, rendered images, page overflow and browser exceptions. It also covered
@@ -142,11 +147,17 @@ also exposed an invalid harness assumption: globally exporting Git metadata
 environment variables broke tests that create their own temporary repositories.
 Those setup failures are not documentation/product fixes. The harness now uses
 a read-only worktree metadata link instead; the affected denylist test module
-then passed all 84 tests. The complete gate must still finish before release.
+then passed all 84 tests.
 The first complete corrected-harness run finished with 10,341 passing tests,
 16 skips, five expected failures and the three release-contract failures above.
-The release remains pending the corrected full gate; a partial suite is not a
-passing release verdict.
+The corrected complete run passed `make check`, the full preflight, all 24
+documentation/SEO generator tests and both `make test` gates. The harness used
+Python 3.12.14 and the production-pinned Node 26 image in Docker's Linux
+filesystem, with read-only Git metadata and a committed source snapshot. The
+`COMPOSE=true` argument reused already-healthy isolated Postgres/Redis services;
+database reset, unit coverage and integration/regression tests still ran. No
+test assertions, security gate or required check was disabled. Live external
+provider opt-in cases remained skipped by their existing policy.
 
 ## Release And Registrar Handoff
 
