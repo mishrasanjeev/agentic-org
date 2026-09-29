@@ -197,6 +197,9 @@ local screenshots and a working Docker preview are not production evidence.
 
 ## Production Verification
 
+This section records the initial documentation rollout. Subsequent response-type
+hardening and its final rollout evidence are recorded in the follow-up PR.
+
 PR #1454 merged at `e7f59095f4176dac17f30235e12500c2f6d0aec5`.
 The exact merge commit's CI/CD, CodeQL Advanced, Local Stack, RAG quality,
 container scan, secret scan and vendor denylist workflows completed successfully
@@ -240,3 +243,23 @@ No migration, backup/PITR change, provider action or secret setting change ran.
 `docs.agenticorg.ai` still returns DNS NXDOMAIN as of this verification. Its
 registrar record and HTTPS host binding are outstanding; the live manual does
 not depend on that alias. See the hosting runbook before adding the subdomain.
+
+### Text Response Follow-Up
+
+The post-release discovery check confirmed that all 29 guide titles were present
+in `llms-full.txt`, but found a pre-existing nginx MIME defect. `/llms.txt` and
+`/llms-full.txt` each sent two `Content-Type: text/plain` headers. `/health` sent
+both `application/octet-stream` and `text/plain`; `robots.txt` was unaffected.
+A strict client treated the ambiguous text responses as binary data.
+
+Both UI nginx configurations now use `default_type text/plain` and UTF-8 charset
+selection rather than manually appending the Content-Type header. The new HTTP
+regression reproduces the original failure on the unchanged local release
+image. It checks one correctly declared text MIME type for health, robots and
+both LLM files, plus the complete manual in LLM discovery content. A source
+regression covers both nginx recipes. Existing security/cache, guide, image,
+no-JavaScript and accessibility assertions remain in place.
+With the corrected production nginx template mounted into the released local
+image, all 18 browser checks passed. All 25 documentation/SEO generator tests
+also passed. These local results do not by themselves prove deployment of the
+MIME correction; the follow-up PR records the final commit and rollout checks.

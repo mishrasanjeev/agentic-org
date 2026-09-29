@@ -139,6 +139,21 @@ test("both nginx targets reject unknown guides and redirect only the documentati
   }
 });
 
+test("both nginx targets declare one text MIME type instead of appending duplicate headers", () => {
+  for (const file of ["../nginx.conf", "../nginx.cloudrun.conf.template"]) {
+    const config = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(config, /add_header\s+Content-Type\b/i);
+    const blocks = [...config.matchAll(
+      /location = \/(?:health|llms(?:-full)?\.txt)\s*\{[^}]*\}/g,
+    )];
+    assert.equal(blocks.length, 3);
+    for (const [block] of blocks) {
+      assert.match(block, /default_type text\/plain;/);
+      assert.match(block, /charset utf-8;/);
+    }
+  }
+});
+
 test("hosted screen shortcuts point to implemented application routes", () => {
   const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   const guide = loadUserGuides().articles.find(

@@ -15,6 +15,24 @@ async function expectLoadedImage(image: Locator) {
     .toBe(true);
 }
 
+test("public text discovery files use one MIME type and include every guide", async ({ request }) => {
+  for (const path of ["/health", "/robots.txt", "/llms.txt", "/llms-full.txt"]) {
+    const response = await request.get(path);
+    expect(response.status()).toBe(200);
+    expect(response.headersArray().filter((header) =>
+      header.name.toLowerCase() === "content-type",
+    )).toHaveLength(1);
+    expect(response.headers()["content-type"]).toMatch(/^text\/plain(?:; charset=utf-8)?$/i);
+  }
+  const index = await request.get("/llms.txt");
+  expect(await index.text()).toContain("https://agenticorg.ai/docs");
+  const full = await request.get("/llms-full.txt");
+  const content = await full.text();
+  for (const article of manual.articles) {
+    expect(content).toContain(article.title);
+  }
+});
+
 test("public guide routes preserve security headers and deliberate cache policy", async ({ request }) => {
   for (const path of ["/", "/docs", "/docs/first-agent", "/docs/not-a-real-guide"]) {
     const response = await request.get(path);

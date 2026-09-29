@@ -108,15 +108,18 @@ server {
     location = /health {
         access_log off;
         return 200 "ok";
-        add_header Content-Type text/plain;
+        default_type text/plain;
+        charset utf-8;
     }
 
     location = /llms.txt {
-        add_header Content-Type text/plain;
+        default_type text/plain;
+        charset utf-8;
         try_files /llms.txt =404;
     }
     location = /llms-full.txt {
-        add_header Content-Type text/plain;
+        default_type text/plain;
+        charset utf-8;
         try_files /llms-full.txt =404;
     }
 
