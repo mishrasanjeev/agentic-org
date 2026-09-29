@@ -8,7 +8,7 @@ import asyncio
 import logging
 import os
 import weakref
-from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping
+from collections.abc import AsyncGenerator, Awaitable, Callable, MutableMapping, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -470,7 +470,8 @@ async def get_database_alembic_versions(conn: AsyncConnection) -> frozenset[str]
         raise _schema_error("Database is not Alembic-managed: missing `alembic_version` table.")
 
     result = await conn.execute(text("SELECT version_num FROM alembic_version"))
-    versions = frozenset(str(version) for version in result.scalars().all() if version)
+    version_nums: Sequence[str] = result.scalars().all()
+    versions = frozenset(str(version) for version in version_nums if version)
     if not versions:
         raise _schema_error("Database is not Alembic-managed: `alembic_version` has no rows.")
     return versions

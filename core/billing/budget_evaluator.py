@@ -73,7 +73,7 @@ async def _spend_since(
             q += " AND agent_id IN (SELECT id FROM agents WHERE cost_center_id = :ccid)"
             params["ccid"] = str(cost_center_id)
         result = await session.execute(text(q), params)
-        total = result.scalar_one()
+        total: float | None = result.scalar_one()
         return Decimal(str(total or 0))
 
 

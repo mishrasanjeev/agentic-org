@@ -118,7 +118,7 @@ class EncryptedMigrationContext:
         # Table name comes from the migration author, not user input —
         # safe to interpolate.
         sql = f"SELECT COUNT(*) FROM {self.table}"  # noqa: S608  # nosec B608 — table from migration author
-        n = self.connection.execute(text(sql)).scalar_one()
+        n: int = self.connection.execute(text(sql)).scalar_one()
         self.audit.setdefault("row_counts", {})[self.table] = int(n)
         return int(n)
 
