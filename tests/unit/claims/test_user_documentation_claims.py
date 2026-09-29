@@ -29,3 +29,12 @@ def test_preflight_enforces_claims_after_building_public_assets() -> None:
     claims = 'run_step "public claims"          python scripts/lint_public_claims.py'
     assert claims in script
     assert script.index(claims) > script.index(build)
+
+
+def test_preflight_checks_tracked_llm_artifacts_before_public_claims() -> None:
+    script = (ROOT / "scripts/preflight.sh").read_text(encoding="utf-8")
+    build = 'run_step "ui build"'
+    tracked = 'run_step "ui tracked LLM artifacts" ui_llms_artifact_sync'
+    claims = 'run_step "public claims"'
+    assert 'node scripts/generate-llms.mjs --check' in script
+    assert script.index(build) < script.index(tracked) < script.index(claims)

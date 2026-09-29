@@ -15,11 +15,14 @@ host only, `/` redirects to `/docs`. Canonical links still point to
 `agenticorg.ai/docs/...` to avoid duplicate search results. A future canonical
 host move must update metadata, sitemap, LLM assets and links together.
 
-Read-only DNS inspection on 2026-09-29 found no `docs.agenticorg.ai` record. This
-change does not provision DNS, TLS, a load balancer or a Cloud Run domain mapping.
-The owner confirmed that DNS is managed at the domain registrar.
-The deployment helper defaults to Cloud Run `asia-southeast1`; verify the actual
-deployed region and hosting before choosing a domain-binding method.
+The approved hostname setup on 2026-09-29 created a Cloud Run domain mapping to
+`agenticorg-ui` in `asia-southeast1`, project `perfect-period-305406`. Google
+returned `docs.agenticorg.ai. CNAME ghs.googlehosted.com.`; the record was added
+with TTL 300 in the existing Cloud DNS zone `agenticorg-ai`. The domain mapping
+and managed certificate are Ready. Namecheap is the registrar, but the
+authoritative nameservers are `ns-cloud-e1.googledomains.com` through
+`ns-cloud-e4.googledomains.com`: DNS edits belong in Cloud DNS, not Namecheap
+Advanced DNS. No nameserver transfer or apex/app/email record change is needed.
 
 ## Maintain And Verify The Manual
 
@@ -36,6 +39,14 @@ deployed region and hosting before choosing a domain-binding method.
 5. Inspect desktop/mobile screenshots, search results, article anchors, images,
    print view, keyboard navigation, metadata and no-JavaScript article content.
 6. Confirm unknown `/docs/<slug>` addresses return HTTP 404, not the homepage.
+7. Verify the alias root behind HTTP upstream/TLS termination: its Location must
+   be exactly `/docs`, never `http://docs.agenticorg.ai:8080/docs`. Both nginx
+   root locations use `absolute_redirect off`; forwarded headers must not change
+   the destination. Checking only that a Location ends in `/docs` is insufficient.
+8. For an approved public recheck, set
+   `DOCS_HOST_BASE_URL=https://docs.agenticorg.ai` alongside `DOCS_BASE_URL`.
+   The dedicated HTTPS alias test follows the real root redirect, searches and
+   opens a guide, checks its canonical URL and verifies unknown-guide 404.
 
 Generated `ui/src/content/userDocs.generated.json` is checked in so a fresh
 checkout can typecheck before running the generator. Markdown remains the sole
@@ -68,6 +79,10 @@ including the first-agent exercise, OCR guide and BFSI business-onboarding flow.
 Confirm the app-sidebar link reaches the same maintained manual. Check that static
 metadata has one title/canonical and that articles appear in `sitemap.xml`,
 `llms.txt` and `llms-full.txt`.
+Also open `https://docs.agenticorg.ai/` in desktop and mobile browsers with normal
+certificate verification. A working `/docs` URL does not prove the hostname's
+root redirect works. If a UI-only routing regression occurs, roll UI traffic
+back to the recorded previous revision; do not remove a healthy DNS/TLS binding.
 
 ## Add docs.agenticorg.ai
 
@@ -95,7 +110,27 @@ create duplicate infrastructure without inspecting the current host binding.
 Rollback removes the new host routing/DNS record only; the manual remains on
 `agenticorg.ai/docs`. Never remove the application's existing domain bindings.
 
-### Registrar Handoff Checklist
+### Authoritative DNS And Host Checks
+
+The current deployment uses the existing approved direct Cloud Run domain
+mapping. Its limited/preview status remains an infrastructure consideration;
+this routing repair does not create a new load balancer or change that hosting
+decision. Inspect the mapping and authoritative DNS with:
+
+```powershell
+gcloud beta run domain-mappings describe --domain docs.agenticorg.ai --region asia-southeast1 --project perfect-period-305406 --platform managed --format=json
+gcloud dns record-sets describe docs.agenticorg.ai. --type=CNAME --zone=agenticorg-ai --project=perfect-period-305406
+Resolve-DnsName docs.agenticorg.ai -Type CNAME -Server 8.8.8.8
+curl.exe -I https://docs.agenticorg.ai/
+curl.exe -L --fail https://docs.agenticorg.ai/
+```
+
+Ready certificate/mapping conditions and a successful HTTPS redirect are
+separate checks. Use the following registrar checklist only if a future DNS
+provider change makes the registrar authoritative; it does not apply to the
+current Google Cloud DNS zone.
+
+### Conditional Registrar Handoff Checklist
 
 In the registrar console, open the DNS zone for `agenticorg.ai`, not its
 nameserver-transfer page. Add the record supplied by the configured HTTPS host:

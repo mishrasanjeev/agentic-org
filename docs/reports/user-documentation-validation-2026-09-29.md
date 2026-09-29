@@ -184,10 +184,11 @@ provider opt-in cases remained skipped by their existing policy.
 
 ## Release And Registrar Handoff
 
-The owner confirmed DNS is managed at the domain registrar. Publishing the
-manual requires the normal UI release. Activating `docs.agenticorg.ai` additionally
-requires an approved HTTPS host binding and the exact DNS record supplied by that
-hosting configuration. It is a subdomain, not a nameserver transfer.
+At the initial handoff the owner identified Namecheap as the registrar. Subsequent
+authoritative DNS inspection confirmed Google Cloud DNS hosts the active zone.
+Publishing the manual requires the normal UI release; activating its alias
+requires an approved HTTPS host binding and the exact DNS record supplied by
+that hosting configuration. It is a subdomain, not a nameserver transfer.
 
 Do not guess a CNAME, alter apex/app records, broaden authentication cookies or
 expose private APIs. See [the hosting and registrar runbook](../runbooks/documentation-site.md).
@@ -240,9 +241,9 @@ API revision `agenticorg-api-00195-9wn`, worker revision
 remained unchanged. This was a UI-only release, not a backend deployment.
 No migration, backup/PITR change, provider action or secret setting change ran.
 
-`docs.agenticorg.ai` still returns DNS NXDOMAIN as of this verification. Its
-registrar record and HTTPS host binding are outstanding; the live manual does
-not depend on that alias. See the hosting runbook before adding the subdomain.
+At that initial rollout checkpoint, `docs.agenticorg.ai` returned DNS NXDOMAIN
+and the host binding was outstanding. This is historical, not its current DNS
+status; see the later alias correction below and the maintained hosting runbook.
 
 ### Text Response Follow-Up
 
@@ -263,3 +264,47 @@ With the corrected production nginx template mounted into the released local
 image, all 18 browser checks passed. All 25 documentation/SEO generator tests
 also passed. These local results do not by themselves prove deployment of the
 MIME correction; the follow-up PR records the final commit and rollout checks.
+
+### HTTPS Alias Root Redirect Correction
+
+After approved GCP CLI setup, `docs.agenticorg.ai` resolves to the actual Google
+target `ghs.googlehosted.com.` in Cloud DNS zone `agenticorg-ai`, TTL 300.
+Namecheap remains the registrar; the authoritative nameservers are Google's
+`ns-cloud-e1` through `ns-cloud-e4`. The Cloud Run mapping and managed certificate
+became Ready on 2026-09-29. No registrar nameserver change is required.
+
+The user's failed homepage was reproduced with valid HTTPS: root returned
+`302 Location: http://docs.agenticorg.ai:8080/docs`, while direct `/docs` returned
+200. nginx's default absolute redirect used the internal HTTP listener behind
+Cloud Run TLS termination. This was a routing bug, not continued certificate
+provisioning. The old suffix-only `/docs` assertion falsely passed this response.
+The strengthened desktop/mobile regression failed against the unchanged released
+Cloud Run image with the same HTTP/8080 destination.
+
+Both nginx root locations now disable absolute redirects, preserving the exact
+relative `/docs` Location. Tests also cover absent/correct/spoofed forwarded
+headers and unchanged apex/app roots. A separate opt-in browser regression
+starts at the real HTTPS alias root, follows to the reader, searches/opens a
+guide, checks the canonical URL and rejects an unknown guide. The runbook now
+requires root verification separately from direct guide URLs and records the
+actual DNS authority.
+
+With the corrected template mounted into the released Cloud Run image, all 18
+local documentation browser checks passed; the two real-host tests were
+explicitly skipped before rollout. Six targeted desktop/mobile HTTP checks also
+passed against the corrected local nginx recipe, including MIME/security
+contracts and root/forwarded-header routing. All 11 manual source/generator
+tests and both nginx configuration checks passed. These are local results.
+
+PR, merged-main and staged/public rollout results for this correction
+are recorded on its release PR after each check completes. Code changes alone
+are not production sign-off. The correction is UI-only: no API, worker, beat,
+migration, backup/PITR, credentials, DNS binding or provider changes are needed.
+
+The first correction PR's frontend-quality job caught a stale tracked
+`llms-full.txt` after the README hosting text changed. The UI build correctly
+generated the new content, but the tracked discovery copy had not been synced.
+The discovery files were regenerated from source with the existing generator.
+Local preflight now runs its fail-closed `--check` after the UI build and before
+public-claims validation, mirroring the existing CI boundary. A regression keeps
+that ordering in place; no CI comparison or security assertion was weakened.
