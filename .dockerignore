@@ -94,8 +94,40 @@ celerybeat.pid
 # ── Documentation that doesn't belong in runtime ──────────────────
 # Keep README.md (the Dockerfile copies it for product_facts), but
 # block other docs (large, mutable, audit reports, etc.)
-docs/
+docs/**
+!docs/
 !docs/api/
+# Public manual and reviewed source references used by the UI documentation build.
+!docs/user-guide/
+!docs/user-guide/*.md
+!docs/user-guide/index.json
+!docs/PRODUCT_STATUS.md
+!docs/connector_production_readiness.md
+!docs/data-classification.md
+!docs/deployment-airgap.md
+!docs/deployment.md
+!docs/hitl-conditions.md
+!docs/knowledge-ingestion.md
+!docs/mcp-product-model.md
+!docs/quickstart-local.md
+!docs/rpa-runtime.md
+!docs/voice-runtime.md
+!docs/agents/
+!docs/agents/business-underwriter.md
+!docs/console/
+!docs/console/governed-cases.md
+!docs/governance/
+!docs/governance/case-hand-off.md
+!docs/governance/decision-requests.md
+!docs/governance/README.md
+!docs/oacp/
+!docs/oacp/end-user-flow.md
+!docs/oacp/merchant-commerce-configuration.md
+!docs/oacp/offline-pos-bridge.md
+!docs/oacp/plural-pine-p3p-capability-verifier.md
+!docs/oacp/truth-inventory.md
+!docs/readiness/
+!docs/readiness/DOMAIN_READINESS_STANDARD.md
 
 # ── Tests — runtime image doesn't need them ───────────────────────
 tests/
@@ -108,11 +140,13 @@ scripts/install_hooks.sh
 scripts/check_critical_path_tags.py
 .cloudbuild-ui-deploy.yaml
 docker-compose*.yml
+!docker-compose.yml
 # Development-only services (identity and model stubs); built from tools/ as
 # their own images and never shipped in the API image.
 tools/
 
 # ── Claude Code session artifacts ─────────────────────────────────
 .claude/
+.tmp/
 push_*.log
 pytest_out.log

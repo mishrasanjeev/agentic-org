@@ -71,7 +71,7 @@ export function loadUserGuides(root = UI_ROOT) {
   const repo = resolve(root, "..");
   const directory = join(repo, "docs/user-guide");
   if (!existsSync(join(directory, "index.json")))
-    return { groups: [], reviewed: "", articles: [] };
+    throw new Error("Missing user-guide manifest; refusing to build an empty manual.");
   const manifest = JSON.parse(
     readFileSync(join(directory, "index.json"), "utf8"),
   );

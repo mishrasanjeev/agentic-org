@@ -9,6 +9,20 @@ import {
 } from "./generate-static-seo.mjs";
 import { buildSitemap } from "./generate-sitemap.mjs";
 
+test("missing authored sources cannot silently overwrite the manual with an empty build", () => {
+  assert.throws(() => loadUserGuides(new URL("./missing-build-root/ui", import.meta.url).pathname),
+    /Missing user-guide manifest/);
+});
+
+test("both production UI images preserve the repository layout and include authored guides", () => {
+  for (const file of ["../../Dockerfile.ui", "../../Dockerfile.ui.cloudrun"]) {
+    const dockerfile = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(dockerfile, /WORKDIR \/app\/ui/);
+    assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
+    assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
+  }
+});
+
 test("the complete manual has maintained source references and five BFSI playbooks", () => {
   const manual = loadUserGuides();
   assert.equal(manual.articles.length, 29);

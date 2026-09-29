@@ -48,6 +48,21 @@ or assume a local preview is public. The standard UI image includes the guides,
 screenshots, static HTML, public discovery files and nginx routing. No API schema,
 database migration or external model/provider call is required to read the manual.
 
+For a documentation-only release, use the existing `Dockerfile.ui.cloudrun` to
+build and push a commit-tagged UI image from the CI-green merged commit. Keep
+the existing UI runtime configuration and API origin unchanged. Stage the image
+with `gcloud run services update --no-traffic`, verify the new ready revision
+through a temporary revision tag, then route UI traffic to that exact revision.
+Retain the previous UI revision for traffic rollback. Do not redeploy the API,
+workers, beat service or migration job merely to publish guides. The full
+`scripts/deploy_cloud_run.sh` remains the migration-first procedure when backend
+changes are deliberately part of a release.
+
+Both UI Dockerfiles preserve the repository layout for source validation and
+copy only the public manual and reviewed documentation references allowed by
+`.dockerignore`. A missing manual must fail the build, not produce zero guides.
+Only built HTML/assets are copied into the final nginx UI image.
+
 After deployment, verify `/docs` and representative guides on the public domain,
 including the first-agent exercise, OCR guide and BFSI business-onboarding flow.
 Confirm the app-sidebar link reaches the same maintained manual. Check that static

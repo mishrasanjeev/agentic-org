@@ -2,7 +2,8 @@
 
 ## Scope And Status
 
-Initial local validation snapshot, based on main `5099d43e`. Release validation
+Initial local validation snapshot, based on main `5099d43e`, then rebased onto
+`3e513d7f`. Release validation
 against the final main branch is recorded separately below when completed.
 
 The manual contains 29 source Markdown guides, approximately 14,400 words and
@@ -30,7 +31,7 @@ been performed. Local validation is not evidence of production deployment.
 | Check | Result |
 | --- | --- |
 | UI unit/component suite | 52 files, 341 tests passed |
-| Documentation and SEO generator suite | 21 tests passed |
+| Documentation and SEO generator suite | 23 tests passed, including Docker-source packaging regressions |
 | Playwright documentation suite | 10 tests passed across desktop and mobile projects |
 | TypeScript and production UI build | Passed |
 | SEO output verification | Passed for 109 route descriptors and 98 canonical sitemap URLs |
@@ -87,6 +88,15 @@ layout and muted text contrast were also corrected before final verification.
 `markdown-it` is pinned to the reviewed patched version 14.3.2. The existing
 `undici` override was advanced one patch from 7.29.0 to 7.29.1; the final local
 npm audit reports zero vulnerabilities.
+
+Production packaging review found that the previous UI image layout omitted
+authored manual sources. Both UI Dockerfiles now preserve the source layout,
+include the public manual and its reviewed references, and copy only built
+assets to the final nginx image. Generation now fails if the manifest is
+missing rather than silently producing an empty reader. `.dockerignore` keeps
+historical/internal reports and scratch artifacts excluded while allowing the
+specific public build inputs. Tests cover both Dockerfile paths and the
+missing-manifest failure.
 
 The locally installed frontend skill commands and deterministic design detector
 were unavailable. The upstream audit, critique and polish checklists were
