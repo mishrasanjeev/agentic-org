@@ -323,6 +323,14 @@ services:
       DECISION_STEP_UP_ACR: urn:agenticorg:acr:step-up
       DECISION_STEP_UP_AMR: mfa,hwk
       DECISION_MIN_DWELL_MS: "${AGENTICORG_DEV_DECISION_MIN_DWELL_MS:-2000}"
+      # The revocation endpoints (`/v1/revocations`, `/v1/revocations/status`,
+      # `/v1/revocations/stream`), which this image serves only when enabled
+      # and otherwise answers 404. From grantex 0.7 the SDK's enforce() asks
+      # `/v1/revocations/status` about every grant before allowing a tool call
+      # and refuses the call when it cannot get an answer, so without them
+      # every governed tool call in this stack is refused (grant_revoked,
+      # status_unavailable). The SDK's check stays on; the stack answers it.
+      REVOCATION_FEED_ENABLED: "true"
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
       # oidc-approvers shares this network namespace (see below), so its port
