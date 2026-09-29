@@ -139,7 +139,7 @@ dependencies = [
     "authlib>=1.8.0",
     "reportlab>=4.5.1",
     "google-cloud-kms>=3.17.0",
-    "fastembed>=0.8.0",
+    "fastembed>=0.8.1",
     # SECURITY 2026-06-13: Pillow is transitively required by fastembed.
     # Keep the patched floor direct so dependency resolution cannot drift
     # back to the vulnerable 10.x/11.x lines.
