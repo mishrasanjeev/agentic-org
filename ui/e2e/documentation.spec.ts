@@ -1,7 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import manual from "../src/content/userDocs.generated.json" with { type: "json" };
+
+async function expectLoadedImage(image: Locator) {
+  await expect(image).toBeVisible();
+  await expect
+    .poll(
+      () => image.evaluate(
+        (element: HTMLImageElement) => element.complete && element.naturalWidth > 0,
+      ),
+      { timeout: 10_000, message: "Guide image must finish loading successfully" },
+    )
+    .toBe(true);
+}
 
 test("public guide routes preserve security headers and deliberate cache policy", async ({ request }) => {
   for (const path of ["/", "/docs", "/docs/first-agent", "/docs/not-a-real-guide"]) {
@@ -50,13 +62,7 @@ test("all guide routes, source images, canonical metadata and narrow layouts wor
       ),
     ).toBe(true);
     for (const image of await page.locator(".docs-prose img").all()) {
-      await expect(image).toBeVisible();
-      expect(
-        await image.evaluate(
-          (element: HTMLImageElement) =>
-            element.complete && element.naturalWidth > 0,
-        ),
-      ).toBe(true);
+      await expectLoadedImage(image);
     }
   }
   await page.goto("/docs/bfsi-business-onboarding");
@@ -66,6 +72,20 @@ test("all guide routes, source images, canonical metadata and narrow layouts wor
     fullPage: true,
   });
   expect(errors).toEqual([]);
+});
+
+test("guide screenshots remain verifiable over a delayed download", async ({ page }) => {
+  let downloadRequested = false;
+  await page.route("**/screenshots/agents.webp", async (route) => {
+    downloadRequested = true;
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await route.fulfill({ response });
+  });
+  await page.goto("/docs/create-agents", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("h1")).toHaveText("Create and manage agents");
+  await expectLoadedImage(page.locator(".docs-prose img"));
+  expect(downloadRequested).toBe(true);
 });
 
 test("full-text search, empty state, guide navigation and mobile menu work", async ({
