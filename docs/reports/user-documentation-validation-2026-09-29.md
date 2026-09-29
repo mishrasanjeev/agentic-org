@@ -119,6 +119,13 @@ regressions cover the published manual and preflight ordering. The preflight now
 runs the same public-claims command as CI after the UI build; no claim exception,
 unearned evidence record or weakened scanner was added.
 
+Remote Local Stack CI exposed an existing OIDC stub test race: the response body
+is sent before the server thread writes its audit line, so immediate captured-log
+inspection could see no entry. The test now waits for the original logger to
+finish the relevant request using a bounded event. Its OAuth error and
+secret-redaction assertions remain intact; development stub and authentication
+runtime code are unchanged.
+
 `markdown-it` is pinned to the reviewed patched version 14.3.2. The existing
 `undici` override was advanced one patch from 7.29.0 to 7.29.1; the final local
 npm audit reports zero vulnerabilities.
