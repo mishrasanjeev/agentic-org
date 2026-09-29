@@ -529,6 +529,9 @@
   flex-basis: 100%;
   margin: 0;
 }
+.docs-ownership {
+  flex-basis: 100%;
+}
 .docs-skip {
   position: fixed;
   top: -100px;

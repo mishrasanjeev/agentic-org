@@ -32,7 +32,7 @@ been performed. Local validation is not evidence of production deployment.
 | --- | --- |
 | UI unit/component suite | 52 files, 341 tests passed |
 | Documentation and SEO generator suite | 24 tests, including packaging and cross-platform generation regressions |
-| Playwright documentation suite | 12 tests passed against the actual Cloud Run image across desktop and mobile projects |
+| Playwright documentation suite | 14 tests passed against the actual Cloud Run image across desktop and mobile projects before the final full-suite corrections; replay required after them |
 | TypeScript and production UI build | Passed |
 | SEO output verification | Passed for 109 route descriptors and 98 canonical sitemap URLs |
 | ESLint | No errors; 23 existing warnings in unrelated application pages |
@@ -85,6 +85,19 @@ as visible text. It was corrected to parse the actual script JSON and verify the
 TechArticle URL for each guide; the entire suite then passed. Responsive diagram
 layout and muted text contrast were also corrected before final verification.
 
+The full Python preflight reproduced three release-contract failures: the new
+documentation overview lacked `primaryQuestion`, the reader duplicated ownership
+markup instead of using `ProductOwnership`, and the security-alert regression
+still asserted Undici 7.29.0 after the patched 7.29.1 update. The overview now
+includes the answer-oriented metadata, the reader uses the shared ownership
+component (with a component assertion), and the version assertion matches the
+reviewed lockfile. Existing whole-registry and whole-public-footer tests cover
+sibling surfaces; no backend runtime or security assertion was removed.
+
+The local-only Host-header alias assertion is a separate browser test. It skips
+explicitly on hosted targets until registrar/HTTPS setup is complete, while
+no-JavaScript reading and unknown-guide HTTP 404 remain tested in production.
+
 `markdown-it` is pinned to the reviewed patched version 14.3.2. The existing
 `undici` override was advanced one patch from 7.29.0 to 7.29.1; the final local
 npm audit reports zero vulnerabilities.
@@ -130,6 +143,10 @@ environment variables broke tests that create their own temporary repositories.
 Those setup failures are not documentation/product fixes. The harness now uses
 a read-only worktree metadata link instead; the affected denylist test module
 then passed all 84 tests. The complete gate must still finish before release.
+The first complete corrected-harness run finished with 10,341 passing tests,
+16 skips, five expected failures and the three release-contract failures above.
+The release remains pending the corrected full gate; a partial suite is not a
+passing release verdict.
 
 ## Release And Registrar Handoff
 

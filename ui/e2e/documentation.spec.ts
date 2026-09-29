@@ -149,6 +149,14 @@ test("guides are readable without JavaScript and invalid slugs return 404", asyn
   await context.close();
   const missing = await request.get("/docs/not-a-real-guide");
   expect(missing.status()).toBe(404);
+});
+
+test("local documentation-host alias redirects to the manual", async ({ request, baseURL }) => {
+  const hostname = new URL(baseURL ?? "https://agenticorg.ai").hostname;
+  test.skip(
+    !["127.0.0.1", "localhost", "[::1]"].includes(hostname),
+    "The documentation hostname needs registrar/HTTPS setup; test alias routing on local nginx only.",
+  );
   const alias = await request.get("/", {
     headers: { Host: "docs.agenticorg.ai" },
     maxRedirects: 0,

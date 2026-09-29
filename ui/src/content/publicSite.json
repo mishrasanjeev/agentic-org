@@ -28,6 +28,7 @@
       "title": "AgenticOrg Documentation | User Guides and BFSI Playbooks",
       "description": "Learn AgenticOrg from first agent to team rollout: setup, knowledge and OCR, connectors, workflows, human review, voice, RPA, integrations and BFSI examples.",
       "summary": "The public user manual includes task-based setup and operating guides, source-verified product boundaries, troubleshooting and five end-to-end BFSI reference workflows.",
+      "primaryQuestion": "How do I build, operate and govern agents with AgenticOrg?",
       "section": "Documentation",
       "schemaType": "CollectionPage",
       "index": true,

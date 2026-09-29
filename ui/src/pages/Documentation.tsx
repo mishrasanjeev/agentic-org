@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import manual from "../content/userDocs.generated.json";
 import publicSite from "../content/publicSite.json";
+import ProductOwnership from "../components/ProductOwnership";
 import { buildDocumentationSchema } from "../lib/documentation-schema.mjs";
 
 type Guide = (typeof manual.articles)[number];
@@ -423,14 +424,7 @@ export default function Documentation() {
           <footer className="docs-footer">
             <Link to="/">AgenticOrg home</Link>
             <a href="https://agenticorg.ai/support">Support</a>
-            <a href="mailto:sanjeev@orchestrum.in">sanjeev@orchestrum.in</a>
-            <p>
-              Owned by Orchestrum Technologies LLP. Inventor / Owner: Sanjeev
-              Kumar.
-            </p>
-            <a href="mailto:mishra.sanjeev@gmail.com">
-              mishra.sanjeev@gmail.com
-            </a>
+            <ProductOwnership tone="light" compact className="docs-ownership" />
           </footer>
         </main>
         {guide && !searching && (

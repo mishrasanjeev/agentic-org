@@ -47,6 +47,11 @@ describe("public documentation", () => {
     expect(
       within(directory).getAllByRole("heading", { level: 3 }),
     ).toHaveLength(29);
+    const ownership = screen.getByTestId("product-ownership");
+    expect(ownership).toHaveTextContent("Orchestrum Technologies LLP");
+    expect(ownership).toHaveTextContent("Sanjeev Kumar");
+    expect(within(ownership).getByRole("link", { name: "sanjeev@orchestrum.in" }))
+      .toHaveAttribute("href", "mailto:sanjeev@orchestrum.in");
   });
 
   it("searches article body and requires every token, not just guide titles", () => {
