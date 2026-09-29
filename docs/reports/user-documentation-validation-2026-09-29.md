@@ -121,6 +121,16 @@ These tests validate the documentation and its built reader, not every product
 workflow in a production tenant. No bank decision, real call, email, merchant
 operation, live model/provider execution or payment was exercised by this suite.
 
+## Local Harness Corrections
+
+The workstation bind-mount full-suite attempts were stopped and replaced with
+a committed source snapshot in Docker's Linux filesystem. A first snapshot run
+also exposed an invalid harness assumption: globally exporting Git metadata
+environment variables broke tests that create their own temporary repositories.
+Those setup failures are not documentation/product fixes. The harness now uses
+a read-only worktree metadata link instead; the affected denylist test module
+then passed all 84 tests. The complete gate must still finish before release.
+
 ## Release And Registrar Handoff
 
 The owner confirmed DNS is managed at the domain registrar. Publishing the
