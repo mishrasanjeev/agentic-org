@@ -672,14 +672,27 @@ def test_an_oversized_chunked_body_is_refused(running: str) -> None:
         assert response.json()["error"] == "invalid_request"
 
 
-def test_a_refusal_is_logged_with_its_oauth_error(running: str, capfd: pytest.CaptureFixture[str]) -> None:
+def test_a_refusal_is_logged_with_its_oauth_error(
+    running: str, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A development stub that refuses without saying why costs an afternoon."""
+    request_logged = threading.Event()
+    original_log = oidc._log
+
+    def observed_log(event: str, **fields: Any) -> None:
+        original_log(event, **fields)
+        if event == "oidc_stub_request" and fields.get("path") == "/token" and fields.get("status") == 400:
+            request_logged.set()
+
+    monkeypatch.setattr(oidc, "_log", observed_log)
     with httpx.Client(base_url=running, follow_redirects=False, timeout=10) as client:
         assert client.post(
             "/token",
             content="grant_type=client_credentials",
             headers={"Content-Type": "application/x-www-form-urlencoded"},
         ).status_code == 400
+    # The response body is sent before the server thread writes the audit line.
+    assert request_logged.wait(timeout=5), "The HTTP refusal was not logged."
     logged = [json.loads(line) for line in capfd.readouterr().err.splitlines() if line.startswith("{")]
     refusals = [entry for entry in logged if entry.get("path") == "/token" and entry.get("status") == 400]
     assert refusals and refusals[-1]["error"] == "unsupported_grant_type"

@@ -32,8 +32,17 @@ Service health comes from
 
 ## Product Guides
 
+For end users, begin with the [user manual](user-guide/README.md), not a release
+report or the historical complete-guide HTML files. The same maintained articles
+are rendered on the public site's `/docs` routes after the UI release. The manual
+includes step-by-step setup, troubleshooting, visual workflows and five BFSI
+playbooks. Administrators can publish the optional docs subdomain using the
+[documentation hosting runbook](runbooks/documentation-site.md).
+
 | Need | Start here |
 | --- | --- |
+| Learn the product as a user | [First agent](user-guide/first-agent.md), [learning paths](user-guide/start-here.md), [team adoption](user-guide/adoption-checklist.md) |
+| Run a bank/fintech pilot | [Business onboarding](user-guide/bfsi-business-onboarding.md), [reconciliation](user-guide/bfsi-reconciliation.md), [customer service](user-guide/bfsi-customer-service.md), [insurance](user-guide/bfsi-insurance.md), [merchant services](user-guide/bfsi-merchant-services.md) |
 | Understand the platform | [Current product status](PRODUCT_STATUS.md), [why AgenticOrg](why-agenticorg.md) |
 | Verify ownership and contact | [Ownership and contact](OWNERSHIP.md), [repository notice](../NOTICE) |
 | Build and govern agents | [Agents](agents.md), [agent workflows](agent-workflows.md), [testing](TEST_PLAN.md) |

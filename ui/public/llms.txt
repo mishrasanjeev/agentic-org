@@ -66,6 +66,18 @@ Pricing comes from core/billing/catalog.py. Infrastructure, model, provider, and
 - [Blog](https://agenticorg.ai/blog): The AgenticOrg blog covers implementation patterns, operating practices, governance decisions, and protocol boundaries for enterprise AI agents.
 - [Resource Library](https://agenticorg.ai/resources): The resource library provides educational guides for teams assessing, designing, integrating, governing, and operating enterprise AI agents.
 
+## User documentation
+
+- [User manual](https://agenticorg.ai/docs): task-based setup and operating guides, glossary, troubleshooting and five BFSI playbooks.
+- [Your first useful agent](https://agenticorg.ai/docs/first-agent): a bounded document-review exercise.
+- [Knowledge and OCR](https://agenticorg.ai/docs/knowledge-and-ocr): supported documents, extraction quality and source verification.
+- [BFSI business onboarding](https://agenticorg.ai/docs/bfsi-business-onboarding): evidence, screening review, human decision and signed handoff.
+- [BFSI reconciliation](https://agenticorg.ai/docs/bfsi-reconciliation): synthetic bank/ledger examples and reviewed exceptions.
+- [BFSI customer service](https://agenticorg.ai/docs/bfsi-customer-service): procedural support across chat and configured voice.
+- [BFSI insurance assistance](https://agenticorg.ai/docs/bfsi-insurance): claim-file completeness and OCR quality review.
+- [BFSI merchant services](https://agenticorg.ai/docs/bfsi-merchant-services): Shopify evidence, OACP and provider-owned execution boundaries.
+- [Troubleshooting](https://agenticorg.ai/docs/troubleshooting): isolate configuration, authority, knowledge and provider failures.
+
 ## Developer access
 
 - [Python SDK and CLI](https://github.com/mishrasanjeev/agentic-org/tree/main/sdk)

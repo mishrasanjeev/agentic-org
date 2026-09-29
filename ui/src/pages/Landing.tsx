@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
+import { ArrowRight, BookOpen, Building2, FileText, Network } from "lucide-react";
 import publicSite from "../content/publicSite.json";
 import AgentActivityTicker from "../components/AgentActivityTicker";
 import AgentsInAction from "../components/AgentsInAction";
@@ -426,13 +427,14 @@ export default function Landing() {
           </div>
 
           {/* Desktop links */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden xl:flex items-center gap-5">
             <a href="#platform" className="text-slate-300 hover:text-white text-sm transition-colors">Platform</a>
             <a href="#open-commerce" className="text-slate-300 hover:text-white text-sm transition-colors">OACP</a>
             <a href="#solutions" className="text-slate-300 hover:text-white text-sm transition-colors">Solutions</a>
             <Link to="/pricing" className="text-slate-300 hover:text-white text-sm transition-colors">Pricing</Link>
             <Link to="/playground" className="text-slate-300 hover:text-white text-sm transition-colors">Playground</Link>
             <Link to="/blog" className="text-slate-300 hover:text-white text-sm transition-colors">Blog</Link>
+            <Link to="/docs" className="text-slate-300 hover:text-white text-sm transition-colors">Docs</Link>
             <a href="#how-it-works" className="text-slate-300 hover:text-white text-sm transition-colors">Resources</a>
             <a href="#developers" className="text-slate-300 hover:text-white text-sm transition-colors">Developers</a>
           </div>
@@ -451,7 +453,7 @@ export default function Landing() {
             >
               Book a Demo
             </button>
-            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="md:hidden text-white p-2" aria-label="Toggle navigation menu" aria-expanded={mobileMenuOpen}>
+            <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} className="xl:hidden text-white p-2" aria-label="Toggle navigation menu" aria-expanded={mobileMenuOpen}>
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {mobileMenuOpen
                   ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -463,13 +465,14 @@ export default function Landing() {
 
         {/* Mobile dropdown */}
         {mobileMenuOpen && (
-          <div className="md:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
+          <div className="xl:hidden bg-slate-900 border-t border-slate-700/50 px-4 py-4 space-y-3" role="navigation" aria-label="Mobile navigation">
             <a href="#platform" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Platform</a>
             <a href="#open-commerce" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">OACP</a>
             <a href="#solutions" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Solutions</a>
             <Link to="/pricing" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Pricing</Link>
             <Link to="/playground" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Playground</Link>
             <Link to="/blog" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Blog</Link>
+            <Link to="/docs" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Docs</Link>
             <a href="#how-it-works" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Resources</a>
             <a href="#developers" onClick={closeMobile} className="block text-slate-300 hover:text-white text-sm">Developers</a>
             <Link to="/login" onClick={closeMobile} className="block border border-slate-500 text-slate-300 px-4 py-2 rounded-lg text-sm font-medium text-center mt-2">Sign In</Link>
@@ -1201,6 +1204,28 @@ export default function Landing() {
       </section>
 
       {/* ============================================================ */}
+      {/* User documentation */}
+      <section id="documentation" className="py-20 bg-emerald-50/50 border-y border-emerald-100 scroll-mt-16" aria-labelledby="documentation-heading">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <p className="text-xs font-semibold text-emerald-800 mb-3">USER DOCUMENTATION</p>
+          <h2 id="documentation-heading" className="text-3xl font-bold text-slate-900">Make AgenticOrg part of everyday work.</h2>
+          <p className="text-slate-600 mt-4 max-w-2xl">Step-by-step setup, everyday operating guides and end-to-end banking, financial-services and insurance examples. Start with one useful agent, then build a working team.</p>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-9">
+            {[
+              { icon: BookOpen, title: "Your first agent", text: "A complete document-review exercise, from setup to tested answers.", href: "/docs/first-agent" },
+              { icon: FileText, title: "Documents and OCR", text: "Upload, inspect extraction quality and verify source-grounded retrieval.", href: "/docs/knowledge-and-ocr" },
+              { icon: Network, title: "Connect and orchestrate", text: "Models, business systems, workflows, voice and browser automation.", href: "/docs/workflows" },
+              { icon: Building2, title: "BFSI playbooks", text: "Onboarding, reconciliation, customer service, claims and merchant enablement.", href: "/docs/bfsi-business-onboarding" },
+            ].map(({ icon: Icon, title, text, href }) => <Link key={href} to={href} className="border-t-2 border-emerald-700 pt-5 group">
+              <Icon size={22} className="text-emerald-800 mb-4" aria-hidden="true" />
+              <h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{title}<ArrowRight size={16} className="shrink-0" aria-hidden="true" /></h3>
+              <p className="text-sm text-slate-600 mt-2 leading-relaxed">{text}</p>
+            </Link>)}
+          </div>
+          <Link to="/docs" className="inline-flex items-center gap-2 text-emerald-800 font-semibold text-sm mt-9">Browse the complete user manual <ArrowRight size={17} aria-hidden="true" /></Link>
+        </div>
+      </section>
+
       {/* 8. LIVE DEMO                                                  */}
       {/* ============================================================ */}
       <section id="demo" className="py-24 bg-slate-900 scroll-mt-16">
@@ -1887,6 +1912,7 @@ $ agenticorg sop deploy \\
                 <li><a href="#product-facts-heading" className="text-slate-400 hover:text-white text-sm transition-colors">Runtime Facts</a></li>
                 <li><a href="#demo" className="text-slate-400 hover:text-white text-sm transition-colors">Interactive Simulation</a></li>
                 <li><Link to="/blog" className="text-slate-400 hover:text-white text-sm transition-colors">Blog</Link></li>
+                <li><Link to="/docs" className="text-slate-400 hover:text-white text-sm transition-colors">User documentation</Link></li>
                 <li>
                   <a href="https://github.com/mishrasanjeev/agentic-org" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white text-sm transition-colors">
                     GitHub

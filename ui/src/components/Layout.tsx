@@ -127,6 +127,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         ))}
       </nav>
       <div className="border-t pt-3 mt-3">
+        <Link to="/docs" target="_blank" rel="noopener noreferrer" className="block px-3 py-2 rounded text-sm hover:bg-muted">User documentation</Link>
         {auth.user && (
           <div className="px-3 py-1 mb-2">
             <p className="text-sm font-medium truncate">{auth.user.name || auth.user.email}</p>

@@ -2,7 +2,7 @@
 # scripts/refresh_image_digests.sh after a Renovate/Dependabot bump.
 # node:26-slim @ 2026-05-01
 FROM node:26-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 AS builder
-WORKDIR /app
+WORKDIR /app/ui
 COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 ARG CACHE_BUST=1
@@ -12,6 +12,12 @@ COPY core/billing/limits.py ../core/billing/limits.py
 COPY core/billing/catalog.py ../core/billing/catalog.py
 COPY core/agents/ ../core/agents/
 COPY connectors/ ../connectors/
+COPY docs/ ../docs/
+COPY SECURITY.md docker-compose.yml ../
+COPY core/rbac.py ../core/rbac.py
+COPY sdk/README.md ../sdk/README.md
+COPY sdk-ts/README.md ../sdk-ts/README.md
+COPY mcp-server/README.md ../mcp-server/README.md
 ARG VITE_GA4_ID=""
 ENV VITE_GA4_ID=$VITE_GA4_ID
 RUN npm run build
@@ -22,7 +28,7 @@ FROM nginx:alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc
 # carries the fix yet. Upgrade in place, and fail the build if the fixed
 # package is unavailable. Drop this once the base digest carries 2.8.5-r0.
 RUN apk add --no-cache --upgrade 'libexpat>=2.8.5-r0'
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/ui/dist /usr/share/nginx/html
 COPY ui/nginx.cloudrun.conf.template /etc/nginx/templates/default.conf.template
 ENV NGINX_ENVSUBST_FILTER='^(API_BACKEND_HOST|PORT)$'
 ENV PORT=8080

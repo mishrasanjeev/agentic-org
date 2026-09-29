@@ -15,6 +15,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadUserGuides } from "./generate-user-docs.mjs";
+import { buildDocumentationSchema } from "../src/lib/documentation-schema.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 export const UI_ROOT = resolve(SCRIPT_DIR, "..");
@@ -232,7 +234,30 @@ export function loadRouteDescriptors(root = UI_ROOT) {
     sections: parseSections(block),
   }));
 
-  const routes = [...staticRoutes, ...blogs, ...resources];
+  const manual = loadUserGuides(root);
+  const docs = manual.articles.map((article) => ({
+    path: "/docs/" + article.slug,
+    name: article.title,
+    title: article.title + " | AgenticOrg Docs",
+    description: article.description,
+    summary: article.description,
+    section: article.group,
+    schemaType: "TechArticle",
+    index: true,
+    kind: "docs",
+    lastmod: article.reviewed,
+    author: manifest.site.name,
+    bodyHtml: article.html,
+  }));
+  const overview = staticRoutes.find((route) => route.path === "/docs");
+  if (overview && docs.length) {
+    overview.lastmod = manual.reviewed;
+    overview.bodyHtml = manual.groups.map((group) => "<section><h2>" + escapeHtml(group) + "</h2><ul>" +
+      manual.articles.filter((article) => article.group === group).map((article) =>
+        '<li><a href="/docs/' + article.slug + '">' + escapeHtml(article.title) + "</a>: " + escapeHtml(article.description) + "</li>",
+      ).join("") + "</ul></section>").join("");
+  }
+  const routes = [...staticRoutes, ...blogs, ...resources, ...docs];
   if (!routes.some((route) => route.path === "/")) {
     routes.unshift({
       path: "/",
@@ -268,6 +293,8 @@ function breadcrumbs(route, site) {
     crumbs.push({ name: "Blog", url: canonicalUrl(site, "/blog") });
   } else if (route.kind === "resource") {
     crumbs.push({ name: "Resources", url: canonicalUrl(site, "/resources") });
+  } else if (route.kind === "docs") {
+    crumbs.push({ name: "Documentation", url: canonicalUrl(site, "/docs") });
   }
   if (route.path !== "/") {
     crumbs.push({
@@ -291,6 +318,11 @@ function compact(value) {
 }
 
 function buildJsonLd(route, manifest) {
+  if (route.kind === "docs" || route.path === "/docs") {
+    return buildDocumentationSchema(manifest.site, route.kind === "docs" ? {
+      slug: route.path.slice("/docs/".length), title: route.name, description: route.description,
+    } : undefined, route.lastmod);
+  }
   const site = manifest.site;
   const url = canonicalUrl(site, route.path);
   const crumbs = breadcrumbs(route, site);
@@ -489,10 +521,10 @@ export function renderStaticHtml(baseHtml, route, manifest) {
     '<a href="' + escapeHtml(crumb.url) + '">' + escapeHtml(crumb.name) + "</a>",
   ).join(" / ");
   const noscript =
-    '<noscript><main data-static-seo="true"><nav aria-label="Breadcrumb">' +
+    '<noscript><main data-static-seo="true"' + (route.bodyHtml ? ' class="docs-site docs-prose" style="max-width:850px;margin:32px auto;padding:20px"' : "") + '><nav aria-label="Breadcrumb">' +
     crumbHtml + "</nav><h1>" + escapeHtml(route.name || route.title) +
     "</h1><p>" + escapeHtml(route.summary || route.description) + "</p>" +
-    sectionHtml + faqHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
+    (route.bodyHtml || "") + sectionHtml + faqHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
     escapeHtml(site.name) + "</a></p></main></noscript>";
   return html.replace(
     '<div id="root"></div>',
