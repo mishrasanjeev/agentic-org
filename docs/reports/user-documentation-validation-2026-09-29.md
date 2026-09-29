@@ -300,3 +300,11 @@ PR, merged-main and staged/public rollout results for this correction
 are recorded on its release PR after each check completes. Code changes alone
 are not production sign-off. The correction is UI-only: no API, worker, beat,
 migration, backup/PITR, credentials, DNS binding or provider changes are needed.
+
+The first correction PR's frontend-quality job caught a stale tracked
+`llms-full.txt` after the README hosting text changed. The UI build correctly
+generated the new content, but the tracked discovery copy had not been synced.
+The discovery files were regenerated from source with the existing generator.
+Local preflight now runs its fail-closed `--check` after the UI build and before
+public-claims validation, mirroring the existing CI boundary. A regression keeps
+that ordering in place; no CI comparison or security assertion was weakened.
