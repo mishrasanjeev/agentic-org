@@ -4,6 +4,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - the local stack answers the Grantex SDK's revocation check
+- From grantex 0.7 the Python SDK's `enforce()` asks the auth service's
+  `GET /v1/revocations/status` about every grant before it allows a tool call
+  (`revocation_check="online"`, the new default) and refuses the call when it
+  gets no answer. `pyproject.toml` allows `grantex>=0.5.1`, so CI and the
+  images picked up 0.7.0 without a change here, and the checks broke:
+  - the dev stack's auth service image serves the revocation endpoints only
+    with `REVOCATION_FEED_ENABLED=true` and answered 404, so every governed
+    tool call was refused (`grant_revoked`, `status_unavailable`), the
+    underwriter runs failed and `make e2e-decisions` failed;
+  - two unit test modules build a real SDK client against
+    `https://grantex.invalid`, so the check failed name resolution, was
+    retried with blocking sleeps and ran past the test timeout.
+- `docker-compose.dev.yml` sets `REVOCATION_FEED_ENABLED=true` on the
+  `grantex` service. The tests answer the status endpoint with a live grant,
+  and new tests check that a grant the service reports revoked, suspended or
+  unknown, or cannot report on (404, unreachable), is refused on every tool in
+  the legacy and deny modes. Revocation checking is unchanged: production
+  clients use the SDK default and fail closed.
 ### Fixed - global feature-flag rows are read by a role subject to row-level security
 - `feature_flags` is FORCE ROW LEVEL SECURITY with a policy that compares
   `tenant_id` with the session's tenant, so a global row (`tenant_id` NULL)

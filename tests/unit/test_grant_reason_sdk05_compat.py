@@ -13,8 +13,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import httpx
 import jwt
 import pytest
+import respx
 from grantex import Grantex
 from grantex.manifest import ToolManifest
 
@@ -23,8 +25,25 @@ from auth.grant_enforcement import DenialReason, classify_enforce_result
 API_KEY = "placeholder-api-key"  # noqa: S105 - not a credential
 
 
+BASE_URL = "https://grantex.invalid"
+
+
+@pytest.fixture(autouse=True)
+def _grant_is_live():
+    """The auth service's answer to the SDK's revocation check (online by default from grantex 0.7).
+
+    The check runs before the scope checks these tests exercise, so the grant is live here; that a
+    grant whose status is unknown is refused is covered in test_sanctions_screening_connector.py.
+    """
+    with respx.mock(assert_all_called=False) as service:
+        service.get(f"{BASE_URL}/v1/revocations/status").mock(
+            return_value=httpx.Response(200, json={"status": "active", "revoked": False})
+        )
+        yield
+
+
 def _client() -> Grantex:
-    client = Grantex(api_key=API_KEY, base_url="https://grantex.invalid")
+    client = Grantex(api_key=API_KEY, base_url=BASE_URL)
     client.load_manifest(ToolManifest("hubspot", {"list_contacts": "read", "create_contact": "write"}))
     return client
 

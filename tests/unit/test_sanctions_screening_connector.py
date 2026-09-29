@@ -17,11 +17,15 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+import respx
 import structlog
 from grantex import Grantex
 from langchain_core.messages import AIMessage
@@ -164,12 +168,40 @@ BINDINGS = {"old id": ["sanctions_api"], "new id": ["sanctions_screening"], "no 
 BOUND_TOOLS = {"old id": LEGACY_TOOLS, "new id": TOOLS, "no connectors": LEGACY_TOOLS | TOOLS}
 
 
+GRANTEX_TEST_URL = "https://grantex.invalid"
+REVOCATION_STATUS_URL = f"{GRANTEX_TEST_URL}/v1/revocations/status"
+# What the auth service answers for a grant that is neither revoked nor suspended.
+LIVE_GRANT_STATUS = {"status": "active", "revoked": False, "grantId": "grnt_placeholder"}
+
+
 def _grantex_client(monkeypatch: pytest.MonkeyPatch) -> Grantex:
     """A real SDK client with the manifests production loads; only token verification is stubbed."""
     monkeypatch.setenv("GRANTEX_MANIFESTS_DIR", str(REPO_ROOT / "manifests"))
-    client = Grantex(api_key="placeholder-api-key", base_url="https://grantex.invalid")
+    client = Grantex(api_key="placeholder-api-key", base_url=GRANTEX_TEST_URL)
     grantex_auth._load_all_manifests(client)
     return client
+
+
+@contextmanager
+def _auth_service(revocation_status: httpx.Response | Exception | None = None) -> Iterator[respx.MockRouter]:
+    """The auth service's revocation status endpoint, which the SDK's online check calls.
+
+    The grant is live unless ``revocation_status`` gives another answer (or an error). No other
+    request to the service is expected; one would fail the test rather than reach the network.
+    """
+    status = revocation_status if revocation_status is not None else httpx.Response(200, json=LIVE_GRANT_STATUS)
+    with respx.mock(assert_all_called=False) as service:
+        route = service.get(REVOCATION_STATUS_URL)
+        if isinstance(status, Exception):
+            route.mock(side_effect=status)
+        else:
+            route.mock(return_value=status)
+        yield service
+
+
+def _sdk_checks_revocation_by_default() -> bool:
+    """grantex 0.7 asks the auth service about every grant before ``enforce()`` allows it."""
+    return getattr(Grantex(api_key="placeholder-api-key"), "_revocation_check", "offline") != "offline"
 
 
 async def _check(
@@ -178,8 +210,13 @@ async def _check(
     tools: list[str],
     connector_names: list[str] | None,
     mode: EnforcementMode,
+    revocation_status: httpx.Response | Exception | None = None,
 ) -> dict[str, dict]:
-    """Run every tool the agent gets through the scope check; tool name -> the check's result."""
+    """Run every tool the agent gets through the scope check; tool name -> the check's result.
+
+    The SDK's online revocation check reaches the auth service's status endpoint, answered here:
+    by default the grant is live, and ``revocation_status`` replaces that answer.
+    """
     client = _grantex_client(monkeypatch)
     monkeypatch.setattr(agent_graph, "get_grantex_client", lambda: client)
     built = build_tools_for_agent(tools, connector_names=connector_names)
@@ -188,7 +225,7 @@ async def _check(
     run_grant = None if mode is EnforcementMode.OFF else RunGrant(mode=mode, token="placeholder", source="minted")
     grant = SimpleNamespace(grant_id="grnt_placeholder", agent_did="did:placeholder", scopes=scopes)
     results: dict[str, dict] = {}
-    with patch("grantex._client.verify_grant_token", return_value=grant):
+    with patch("grantex._client.verify_grant_token", return_value=grant), _auth_service(revocation_status):
         for tool in built:
             call = {"name": tool.name, "args": {"name": CLEAN_NAME}, "id": f"call-{tool.name}"}
             state = {"messages": [AIMessage(content="", tool_calls=[call])], "grant_token": "placeholder"}
@@ -302,6 +339,41 @@ async def test_a_grant_for_neither_id_is_still_denied(
         assert result["status"] == "failed"
 
 
+# ── Revocation ──────────────────────────────────────────────────────────────
+#
+# A grant that covers every tool is still refused, on every tool and in every mode, when the auth
+# service says it is revoked or suspended, or cannot say: grantex 0.7 checks revocation online by
+# default and fails closed, and nothing here may turn that off.
+
+REVOCATION_UNKNOWN_OR_NOT_LIVE = {
+    "revoked": httpx.Response(200, json={"status": "revoked", "revoked": True, "grantId": "grnt_placeholder"}),
+    "suspended": httpx.Response(200, json={"status": "suspended", "revoked": True, "grantId": "grnt_placeholder"}),
+    "unknown to the service": httpx.Response(200, json={"status": "unknown", "revoked": True}),
+    "status endpoint not served": httpx.Response(404, json={"message": "Not found", "code": "NOT_FOUND"}),
+    "service unreachable": httpx.ConnectError("Name or service not known"),
+}
+
+
+@pytest.mark.skipif(
+    not _sdk_checks_revocation_by_default(), reason="the installed grantex SDK does not check revocation by default"
+)
+@pytest.mark.parametrize("mode", [EnforcementMode.OFF, EnforcementMode.DENY], ids=["legacy", "deny"])
+@pytest.mark.parametrize("answer", list(REVOCATION_UNKNOWN_OR_NOT_LIVE))
+async def test_a_grant_not_known_to_be_live_is_refused(
+    monkeypatch: pytest.MonkeyPatch, answer: str, mode: EnforcementMode
+) -> None:
+    # An unreachable service is retried; the retries need not wait here.
+    monkeypatch.setattr("grantex._http.HttpClient._retry_delay", lambda _self, _attempt: 0.0)
+    tools = sorted(TOOLS)
+    scopes = grantex_auth._tools_to_scopes(tools)
+    results = await _check(
+        monkeypatch, scopes, tools, ["sanctions_screening"], mode, REVOCATION_UNKNOWN_OR_NOT_LIVE[answer]
+    )
+    assert [result.get("status") for result in results.values()] == ["failed"] * len(tools)
+    # The same grant is allowed when the service says it is live.
+    assert await _check(monkeypatch, scopes, tools, ["sanctions_screening"], mode) == dict.fromkeys(tools, {})
+
+
 # ── Grants under either id on every dispatch path ───────────────────────────
 #
 # Each path gets connector-qualified tools, as an agent's ``authorized_tools`` name them: LangGraph
@@ -361,7 +433,11 @@ async def _dispatch(
     authorized_tools = [f"{connector}:{tool}" for tool in tools]
     grant = SimpleNamespace(grant_id="grnt_placeholder", agent_did="did:placeholder", scopes=scopes)
     passed: dict[str, bool] = {}
-    with patch("grantex._client.verify_grant_token", return_value=grant), structlog.testing.capture_logs() as logs:
+    with (
+        patch("grantex._client.verify_grant_token", return_value=grant),
+        _auth_service(),
+        structlog.testing.capture_logs() as logs,
+    ):
         for tool in tools:
             params = {"name": CLEAN_NAME}
             if path == "base_agent":
