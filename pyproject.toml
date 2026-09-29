@@ -60,7 +60,7 @@ classifiers = [
 ]
 dependencies = [
     "fastapi>=0.141.1",
-    "uvicorn[standard]>=0.53.0",
+    "uvicorn[standard]>=0.54.0",
     # Held to the 2.1 series to match requirements.txt: the tools image installs
     # these ranges, and 2.1.0's typing changes failed mypy until the code was
     # annotated for them (FINDINGS A-70), so the next minor moves deliberately.
