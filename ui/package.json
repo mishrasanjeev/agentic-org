@@ -6,17 +6,19 @@
   "homepage": "https://agenticorg.ai",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/generate-user-docs.mjs",
     "dev": "vite",
-    "build": "tsc && vite build && node scripts/generate-static-seo.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs && node scripts/verify-seo.mjs",
+    "build": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs && node scripts/verify-seo.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/generate-user-docs.mjs && tsc --noEmit",
+    "pretest": "node scripts/generate-user-docs.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:seo": "node --test scripts/seo-generators.test.mjs",
-    "seo:sync": "tsc && vite build && node scripts/generate-static-seo.mjs --sync-csp && node scripts/generate-sitemap.mjs --sync-public && node scripts/generate-llms.mjs --sync-public && node scripts/verify-seo.mjs",
+    "test:seo": "node --test scripts/seo-generators.test.mjs scripts/user-docs.test.mjs",
+    "seo:sync": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs --sync-csp && node scripts/generate-sitemap.mjs --sync-public && node scripts/generate-llms.mjs --sync-public && node scripts/verify-seo.mjs",
     "seo:verify": "node scripts/verify-seo.mjs && node scripts/generate-llms.mjs --check"
   },
   "dependencies": {
@@ -54,7 +56,7 @@
     "follow-redirects": ">=1.16.0",
     "brace-expansion": ">=5.0.7",
     "browserslist": ">=4.28.7",
-    "undici": "7.29.0"
+    "undici": "7.29.1"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -75,6 +77,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
     "jsdom": "^30.1.1",
+    "markdown-it": "14.3.2",
     "picomatch": "^4.0.7",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",

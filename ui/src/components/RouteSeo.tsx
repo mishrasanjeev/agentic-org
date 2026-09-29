@@ -53,7 +53,7 @@ const LANDING_FAQS = content.landingFaqs;
 const INDEX_ROBOTS =
   "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1";
 const NOINDEX_ROBOTS = "noindex, nofollow, noarchive";
-const OWN_METADATA_PATTERN = /^\/(?:blog|resources)\/[^/]+$/;
+const OWN_METADATA_PATTERN = /^(?:\/(?:blog|resources)\/[^/]+|\/docs(?:\/[^/]+)?)$/;
 const PRIVATE_PATHS = new Set([
   "/login",
   "/signup",

@@ -10,7 +10,7 @@ AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, 
 >
 > See the canonical [ownership and contact statement](docs/OWNERSHIP.md) and [NOTICE](NOTICE).
 
-[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](docs/README.md) | [Current product status](docs/PRODUCT_STATUS.md) | [Security policy](SECURITY.md)
+[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [User manual](docs/user-guide/README.md) | [Technical documentation](docs/README.md) | [Current product status](docs/PRODUCT_STATUS.md) | [Security policy](SECURITY.md)
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
@@ -377,6 +377,8 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 ## Documentation
 
+- [End-user manual: first agent, everyday operations and BFSI playbooks](docs/user-guide/README.md). The UI serves this same Markdown content at `/docs`, with full-text search, visual process flows, print-friendly guides and mobile navigation. Publication follows the normal UI release; the optional `docs.agenticorg.ai` hostname needs separate DNS/TLS setup.
+- [Documentation site publishing and subdomain runbook](docs/runbooks/documentation-site.md)
 - [Documentation home](docs/README.md)
 - [Current product status](docs/PRODUCT_STATUS.md)
 - [Architecture](docs/architecture.md)

@@ -1,0 +1,351 @@
+{
+  "reviewed": "2026-09-29",
+  "groups": [
+    "Start Here",
+    "Build And Run",
+    "Govern And Operate",
+    "Connect And Extend",
+    "BFSI Playbooks"
+  ],
+  "articles": [
+    {
+      "slug": "start-here",
+      "title": "Start here",
+      "description": "Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.",
+      "group": "Start Here",
+      "audience": "Everyone",
+      "sources": ["docs/PRODUCT_STATUS.md", "ui/src/components/Layout.tsx"]
+    },
+    {
+      "slug": "first-agent",
+      "title": "Your first useful agent",
+      "description": "Create a document-review agent, upload a sample procedure, run a bounded task, inspect evidence, and prepare a pilot.",
+      "group": "Start Here",
+      "audience": "New users",
+      "sources": [
+        "ui/src/pages/AgentCreate.tsx",
+        "ui/src/pages/KnowledgeBase.tsx",
+        "ui/src/pages/AgentDetail.tsx"
+      ]
+    },
+    {
+      "slug": "workspace-and-roles",
+      "title": "Workspace, companies and roles",
+      "description": "Set up your organization, invite colleagues, choose the right company, and understand why different users see different controls.",
+      "group": "Start Here",
+      "audience": "Administrators and team leads",
+      "sources": [
+        "ui/src/pages/Onboarding.tsx",
+        "ui/src/pages/Settings.tsx",
+        "ui/src/lib/roles.ts",
+        "core/rbac.py"
+      ]
+    },
+    {
+      "slug": "concepts",
+      "title": "Core concepts and glossary",
+      "description": "A plain-language guide to agents, tools, prompts, workflows, grants, knowledge, shadow mode, cases and OACP artifacts.",
+      "group": "Start Here",
+      "audience": "Everyone",
+      "sources": ["docs/PRODUCT_STATUS.md", "docs/governance/README.md"]
+    },
+    {
+      "slug": "model-setup",
+      "title": "AI providers and model setup",
+      "description": "Configure provider credentials, select models, control routing and costs, and diagnose tenant or company credential problems.",
+      "group": "Build And Run",
+      "audience": "Administrators",
+      "sources": [
+        "ui/src/pages/AICredentials.tsx",
+        "ui/src/pages/AIConfig.tsx",
+        "ui/src/pages/AgentCreate.tsx"
+      ]
+    },
+    {
+      "slug": "create-agents",
+      "title": "Create and manage agents",
+      "description": "Use natural-language drafts or manual setup; configure persona, tools, prompts, behavior, visibility and shadow evaluation.",
+      "group": "Build And Run",
+      "audience": "Agent builders",
+      "sources": [
+        "ui/src/pages/AgentCreate.tsx",
+        "ui/src/pages/SOPUpload.tsx",
+        "ui/src/pages/AgentDetail.tsx"
+      ]
+    },
+    {
+      "slug": "run-and-chat",
+      "title": "Run agents and use chat",
+      "description": "Supply clear inputs, preserve company context, read run outcomes and handle refusals without assuming an external action happened.",
+      "group": "Build And Run",
+      "audience": "Operators",
+      "sources": [
+        "ui/src/pages/AgentDetail.tsx",
+        "ui/src/components/ChatPanel.tsx",
+        "ui/src/components/NLQueryBar.tsx"
+      ]
+    },
+    {
+      "slug": "knowledge-and-ocr",
+      "title": "Knowledge Base and scanned documents",
+      "description": "Upload supported documents, understand OCR and extraction quality, handle duplicates, and validate source-grounded search.",
+      "group": "Build And Run",
+      "audience": "Content owners and operators",
+      "sources": [
+        "docs/knowledge-ingestion.md",
+        "ui/src/pages/KnowledgeBase.tsx"
+      ]
+    },
+    {
+      "slug": "connectors",
+      "title": "Connect business systems",
+      "description": "Register a connector, bind credentials to the correct scope, verify health and permissions, and grant only the tools your agent needs.",
+      "group": "Build And Run",
+      "audience": "Administrators and integration owners",
+      "sources": [
+        "ui/src/pages/ConnectorCreate.tsx",
+        "ui/src/pages/ConnectorDetail.tsx",
+        "docs/connector_production_readiness.md"
+      ]
+    },
+    {
+      "slug": "workflows",
+      "title": "Build and run workflows",
+      "description": "Turn a process into reviewed steps, conditions, approvals and durable runs; test failures before enabling schedules.",
+      "group": "Build And Run",
+      "audience": "Process owners",
+      "sources": [
+        "ui/src/pages/WorkflowCreate.tsx",
+        "ui/src/pages/WorkflowDetail.tsx",
+        "ui/src/pages/WorkflowRun.tsx"
+      ]
+    },
+    {
+      "slug": "voice",
+      "title": "Voice, speech-to-text and text-to-speech",
+      "description": "Configure the signed Twilio runtime, validate speech turns and call history, and test calls only with approved destinations.",
+      "group": "Build And Run",
+      "audience": "Voice administrators",
+      "sources": ["docs/voice-runtime.md", "ui/src/pages/VoiceSetup.tsx"]
+    },
+    {
+      "slug": "rpa",
+      "title": "Browser RPA and schedules",
+      "description": "Run reviewed browser scripts with approved domains, inspect durable history, and recover safely from target-site changes.",
+      "group": "Build And Run",
+      "audience": "Automation administrators",
+      "sources": [
+        "docs/rpa-runtime.md",
+        "ui/src/pages/RPAScripts.tsx",
+        "ui/src/pages/RPASchedules.tsx"
+      ]
+    },
+    {
+      "slug": "industry-packs",
+      "title": "Industry packs and business dashboards",
+      "description": "Use available packs as reviewed starting points and understand the finance, HR, marketing, operations and partner workspaces.",
+      "group": "Build And Run",
+      "audience": "Department leads",
+      "sources": [
+        "ui/src/pages/IndustryPacks.tsx",
+        "ui/src/pages/CFODashboard.tsx",
+        "ui/src/pages/CompanyDashboard.tsx"
+      ]
+    },
+    {
+      "slug": "approvals",
+      "title": "Approvals and human review",
+      "description": "Review evidence and permissions before a decision, handle escalations, and distinguish workflow approvals from governed-case decisions.",
+      "group": "Govern And Operate",
+      "audience": "Reviewers and approvers",
+      "sources": [
+        "ui/src/pages/Approvals.tsx",
+        "docs/hitl-conditions.md",
+        "docs/governance/decision-requests.md"
+      ]
+    },
+    {
+      "slug": "governed-cases",
+      "title": "Governed business onboarding cases",
+      "description": "Investigate a business, inspect cited evidence and deterministic policy scores, review screening proposals, and request a human decision.",
+      "group": "Govern And Operate",
+      "audience": "BFSI analysts and authorized approvers",
+      "sources": [
+        "docs/console/governed-cases.md",
+        "docs/governance/README.md",
+        "docs/governance/case-hand-off.md"
+      ]
+    },
+    {
+      "slug": "audit-and-monitoring",
+      "title": "Audit, monitoring and run history",
+      "description": "Read agent and workflow evidence, understand dashboard limits, investigate failures, and measure your own service outcomes.",
+      "group": "Govern And Operate",
+      "audience": "Operators and auditors",
+      "sources": [
+        "ui/src/pages/Audit.tsx",
+        "ui/src/pages/Observatory.tsx",
+        "docs/PRODUCT_STATUS.md"
+      ]
+    },
+    {
+      "slug": "evaluate-and-rollout",
+      "title": "Evaluate and roll out safely",
+      "description": "Build representative tests, compare quality and cost, validate refusals, and promote a bounded pilot with a rollback plan.",
+      "group": "Govern And Operate",
+      "audience": "Product owners and administrators",
+      "sources": [
+        "ui/src/pages/Evals.tsx",
+        "docs/readiness/DOMAIN_READINESS_STANDARD.md",
+        "docs/PRODUCT_STATUS.md"
+      ]
+    },
+    {
+      "slug": "security-and-data",
+      "title": "Security, privacy and data handling",
+      "description": "Choose appropriate data, review provider retention and access, protect credentials, and organize evidence deletion and incident response.",
+      "group": "Govern And Operate",
+      "audience": "Security teams and data owners",
+      "sources": [
+        "SECURITY.md",
+        "docs/data-classification.md",
+        "docs/governance/README.md"
+      ]
+    },
+    {
+      "slug": "billing-and-support",
+      "title": "Billing, limits and support",
+      "description": "Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.",
+      "group": "Govern And Operate",
+      "audience": "Account owners",
+      "sources": [
+        "core/billing/catalog.py",
+        "ui/src/pages/Billing.tsx",
+        "ui/src/pages/legal/Support.tsx"
+      ]
+    },
+    {
+      "slug": "troubleshooting",
+      "title": "Troubleshooting by symptom",
+      "description": "Resolve access, model, connector, OCR, workflow, voice, RPA and commerce problems using concrete checks and safe recovery steps.",
+      "group": "Govern And Operate",
+      "audience": "Everyone",
+      "sources": [
+        "docs/PRODUCT_STATUS.md",
+        "docs/knowledge-ingestion.md",
+        "docs/voice-runtime.md",
+        "docs/rpa-runtime.md"
+      ]
+    },
+    {
+      "slug": "commerce",
+      "title": "Seller and buyer commerce with OACP",
+      "description": "Follow merchant configuration, Shopify sync, Grantex authority, artifact-backed buyer answers and provider or POS handoffs.",
+      "group": "Connect And Extend",
+      "audience": "Merchants and bank merchant-service teams",
+      "sources": [
+        "docs/oacp/end-user-flow.md",
+        "docs/oacp/truth-inventory.md",
+        "docs/oacp/merchant-commerce-configuration.md"
+      ]
+    },
+    {
+      "slug": "api-sdk-mcp",
+      "title": "API, SDK, MCP and A2A integration",
+      "description": "Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.",
+      "group": "Connect And Extend",
+      "audience": "Developers and integration owners",
+      "sources": [
+        "ui/src/pages/Settings.tsx",
+        "sdk/README.md",
+        "sdk-ts/README.md",
+        "mcp-server/README.md",
+        "docs/mcp-product-model.md"
+      ]
+    },
+    {
+      "slug": "self-hosting",
+      "title": "Self-hosting and deployment handoff",
+      "description": "Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.",
+      "group": "Connect And Extend",
+      "audience": "IT and platform teams",
+      "sources": [
+        "docs/quickstart-local.md",
+        "docs/deployment.md",
+        "docs/deployment-airgap.md",
+        "docker-compose.yml"
+      ]
+    },
+    {
+      "slug": "bfsi-business-onboarding",
+      "title": "BFSI: business onboarding and KYB review",
+      "description": "A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.",
+      "group": "BFSI Playbooks",
+      "audience": "Banks, NBFCs and fintech operations",
+      "sources": [
+        "docs/console/governed-cases.md",
+        "docs/governance/README.md",
+        "docs/agents/business-underwriter.md"
+      ]
+    },
+    {
+      "slug": "bfsi-reconciliation",
+      "title": "BFSI: reconciliation and finance exceptions",
+      "description": "Configure a read-only reconciliation assistant for synthetic bank and ledger data, review discrepancies, and hand approved corrections to finance.",
+      "group": "BFSI Playbooks",
+      "audience": "Finance and treasury operations",
+      "sources": [
+        "core/agents/finance/recon_agent.py",
+        "ui/src/pages/CFODashboard.tsx",
+        "ui/src/pages/WorkflowCreate.tsx"
+      ]
+    },
+    {
+      "slug": "bfsi-customer-service",
+      "title": "BFSI: customer service across chat and voice",
+      "description": "Build a source-grounded service assistant, classify complaints, prepare responses and escalate sensitive account actions to authorized staff.",
+      "group": "BFSI Playbooks",
+      "audience": "Contact-center and service teams",
+      "sources": [
+        "core/agents/ops/support_triage.py",
+        "docs/voice-runtime.md",
+        "ui/src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "slug": "bfsi-insurance",
+      "title": "BFSI: insurance document and claims assistance",
+      "description": "Use OCR, policy knowledge and reviewed workflows to prepare claim-file checklists without automating coverage or payout decisions.",
+      "group": "BFSI Playbooks",
+      "audience": "Insurers and claims operations",
+      "sources": [
+        "docs/knowledge-ingestion.md",
+        "ui/src/pages/AgentCreate.tsx",
+        "ui/src/pages/WorkflowCreate.tsx"
+      ]
+    },
+    {
+      "slug": "bfsi-merchant-services",
+      "title": "BFSI: merchant enablement and agentic commerce",
+      "description": "A bank-led merchant pilot using Seller Commerce Agents, Shopify, OACP artifacts, buyer channels and provider-owned payment capability evidence.",
+      "group": "BFSI Playbooks",
+      "audience": "Acquiring banks and merchant-service teams",
+      "sources": [
+        "docs/oacp/end-user-flow.md",
+        "docs/oacp/plural-pine-p3p-capability-verifier.md",
+        "docs/oacp/offline-pos-bridge.md"
+      ]
+    },
+    {
+      "slug": "adoption-checklist",
+      "title": "Team adoption and launch checklist",
+      "description": "Assign owners, select a first use case, train operators and reviewers, measure outcomes and expand without skipping real integration work.",
+      "group": "Start Here",
+      "audience": "Sponsors and rollout leads",
+      "sources": [
+        "docs/PRODUCT_STATUS.md",
+        "docs/readiness/DOMAIN_READINESS_STANDARD.md"
+      ]
+    }
+  ]
+}

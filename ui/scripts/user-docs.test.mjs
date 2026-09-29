@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: Apache-2.0
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { loadUserGuides, renderGuide } from "./generate-user-docs.mjs";
+import {
+  loadRouteDescriptors,
+  renderStaticHtml,
+} from "./generate-static-seo.mjs";
+import { buildSitemap } from "./generate-sitemap.mjs";
+
+test("the complete manual has maintained source references and five BFSI playbooks", () => {
+  const manual = loadUserGuides();
+  assert.equal(manual.articles.length, 29);
+  assert.equal(
+    manual.articles.filter((article) => article.group === "BFSI Playbooks")
+      .length,
+    5,
+  );
+  assert.equal(manual.groups.length, 5);
+  assert.ok(
+    manual.articles.every(
+      (article) => article.sources.length && article.headings.length >= 3,
+    ),
+  );
+  for (const article of manual.articles.filter(
+    (item) => item.group === "BFSI Playbooks",
+  )) {
+    assert.match(article.markdown, /example|fictional|synthetic/i);
+    assert.match(article.html, /docs-flow/);
+  }
+});
+
+test("tracked reader data matches the authored Markdown and manifest", () => {
+  const { articles, ...manifest } = loadUserGuides();
+  const generated = JSON.parse(
+    readFileSync(
+      new URL("../src/content/userDocs.generated.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const expected = {
+    ...manifest,
+    articles: articles.map(({ markdown: _markdown, ...article }) => article),
+  };
+  assert.deepEqual(
+    generated,
+    expected,
+    "Run node scripts/generate-user-docs.mjs after editing guides.",
+  );
+});
+
+test("Markdown escapes raw HTML, unsafe links and diagram labels", () => {
+  const { html } = renderGuide(
+    "<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))\n\n```flow\n<img src=x onerror=alert(1)> | <script>unsafe</script>\n```",
+  );
+  assert.doesNotMatch(html, /<script>|<img|href="javascript:/);
+  assert.match(html, /&lt;script&gt;/);
+  assert.match(html, /&lt;img/);
+  assert.match(html, /aria-label="Workflow"/);
+});
+
+test("heading anchors are stable and tables have independent keyboard scroll regions", () => {
+  const rendered = renderGuide(
+    "## Next steps\n\n## Next steps\n\n| Field | Value |\n| --- | --- |\n| Test | Good |\n",
+  );
+  assert.deepEqual(
+    rendered.headings.map((heading) => heading.id),
+    ["next-steps", "next-steps-2"],
+  );
+  assert.match(
+    rendered.html,
+    /tabindex="0" role="region" aria-label="Reference table"/,
+  );
+});
+
+test("all guides have crawlable complete text, canonical URLs and sitemap entries", () => {
+  const { manifest, routes } = loadRouteDescriptors();
+  const sitemap = buildSitemap(routes, manifest.site.url);
+  const base =
+    '<html><head><title>Old title</title></head><body><div id="root"></div></body></html>';
+  const manual = loadUserGuides();
+  for (const article of manual.articles) {
+    const route = routes.find((item) => item.path === `/docs/${article.slug}`);
+    assert.ok(route, article.slug);
+    const html = renderStaticHtml(base, route, manifest);
+    assert.ok(html.includes(article.html), article.slug);
+    assert.match(html, /<noscript>/);
+    assert.match(html, /"@type":"TechArticle"/);
+    assert.ok(sitemap.includes(`https://agenticorg.ai/docs/${article.slug}`));
+    assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
+  }
+  assert.ok(
+    routes
+      .find((item) => item.path === "/docs")
+      .bodyHtml.includes("BFSI Playbooks"),
+  );
+});
+
+test("both nginx targets reject unknown guides and redirect only the documentation host root", () => {
+  for (const file of ["../nginx.conf", "../nginx.cloudrun.conf.template"]) {
+    const config = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.match(
+      config,
+      /location \^~ \/docs\/ \{[^}]*try_files \$uri \$uri\.html =404;/,
+    );
+    assert.match(
+      config,
+      /if \(\$host = docs\.agenticorg\.ai\) \{ return 302 \/docs; \}/,
+    );
+  }
+});
+
+test("hosted screen shortcuts point to implemented application routes", () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  const guide = loadUserGuides().articles.find(
+    (article) => article.slug === "start-here",
+  );
+  const paths = [
+    ...guide.markdown.matchAll(
+      /https:\/\/app\.agenticorg\.ai(\/dashboard[^)\s]*)/g,
+    ),
+  ].map((match) => match[1]);
+  assert.ok(paths.length >= 16);
+  for (const path of paths) assert.ok(app.includes(`path="${path}"`), path);
+});

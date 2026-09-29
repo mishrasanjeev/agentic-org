@@ -16,7 +16,7 @@ AgenticOrg is an Apache-2.0 enterprise AI agent platform for building, running, 
 >
 > See the canonical [ownership and contact statement](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/OWNERSHIP.md) and [NOTICE](https://github.com/mishrasanjeev/agentic-org/blob/main/NOTICE).
 
-[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [Documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md) | [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md) | [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)
+[Website](https://agenticorg.ai) | [Application](https://app.agenticorg.ai) | [Playground](https://agenticorg.ai/playground) | [User manual](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md) | [Technical documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md) | [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md) | [Security policy](https://github.com/mishrasanjeev/agentic-org/blob/main/SECURITY.md)
 
 ![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB)
 ![React 19](https://img.shields.io/badge/React-19-149ECA)
@@ -383,6 +383,8 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 ## Documentation
 
+- [End-user manual: first agent, everyday operations and BFSI playbooks](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md). The UI serves this same Markdown content at `/docs`, with full-text search, visual process flows, print-friendly guides and mobile navigation. Publication follows the normal UI release; the optional `docs.agenticorg.ai` hostname needs separate DNS/TLS setup.
+- [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
 - [Architecture](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/architecture.md)
@@ -569,6 +571,36 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Privacy Policy](https://agenticorg.ai/privacy): The privacy policy explains how AgenticOrg handles personal information and how people can submit questions or requests about that handling.
 - [Terms of Service](https://agenticorg.ai/terms): The terms of service describe the rules and responsibilities that apply when a customer or user accesses AgenticOrg services.
 - [Refund and Cancellation Policy](https://agenticorg.ai/refund): The refund and cancellation policy describes how subscription cancellation and eligible billing requests are handled.
+- [AgenticOrg Documentation](https://agenticorg.ai/docs): The public user manual includes task-based setup and operating guides, source-verified product boundaries, troubleshooting and five end-to-end BFSI reference workflows.
+- [Start here](https://agenticorg.ai/docs/start-here): Choose a practical learning path for your role and understand what AgenticOrg does, what it needs, and who stays in control.
+- [Your first useful agent](https://agenticorg.ai/docs/first-agent): Create a document-review agent, upload a sample procedure, run a bounded task, inspect evidence, and prepare a pilot.
+- [Workspace, companies and roles](https://agenticorg.ai/docs/workspace-and-roles): Set up your organization, invite colleagues, choose the right company, and understand why different users see different controls.
+- [Core concepts and glossary](https://agenticorg.ai/docs/concepts): A plain-language guide to agents, tools, prompts, workflows, grants, knowledge, shadow mode, cases and OACP artifacts.
+- [AI providers and model setup](https://agenticorg.ai/docs/model-setup): Configure provider credentials, select models, control routing and costs, and diagnose tenant or company credential problems.
+- [Create and manage agents](https://agenticorg.ai/docs/create-agents): Use natural-language drafts or manual setup; configure persona, tools, prompts, behavior, visibility and shadow evaluation.
+- [Run agents and use chat](https://agenticorg.ai/docs/run-and-chat): Supply clear inputs, preserve company context, read run outcomes and handle refusals without assuming an external action happened.
+- [Knowledge Base and scanned documents](https://agenticorg.ai/docs/knowledge-and-ocr): Upload supported documents, understand OCR and extraction quality, handle duplicates, and validate source-grounded search.
+- [Connect business systems](https://agenticorg.ai/docs/connectors): Register a connector, bind credentials to the correct scope, verify health and permissions, and grant only the tools your agent needs.
+- [Build and run workflows](https://agenticorg.ai/docs/workflows): Turn a process into reviewed steps, conditions, approvals and durable runs; test failures before enabling schedules.
+- [Voice, speech-to-text and text-to-speech](https://agenticorg.ai/docs/voice): Configure the signed Twilio runtime, validate speech turns and call history, and test calls only with approved destinations.
+- [Browser RPA and schedules](https://agenticorg.ai/docs/rpa): Run reviewed browser scripts with approved domains, inspect durable history, and recover safely from target-site changes.
+- [Industry packs and business dashboards](https://agenticorg.ai/docs/industry-packs): Use available packs as reviewed starting points and understand the finance, HR, marketing, operations and partner workspaces.
+- [Approvals and human review](https://agenticorg.ai/docs/approvals): Review evidence and permissions before a decision, handle escalations, and distinguish workflow approvals from governed-case decisions.
+- [Governed business onboarding cases](https://agenticorg.ai/docs/governed-cases): Investigate a business, inspect cited evidence and deterministic policy scores, review screening proposals, and request a human decision.
+- [Audit, monitoring and run history](https://agenticorg.ai/docs/audit-and-monitoring): Read agent and workflow evidence, understand dashboard limits, investigate failures, and measure your own service outcomes.
+- [Evaluate and roll out safely](https://agenticorg.ai/docs/evaluate-and-rollout): Build representative tests, compare quality and cost, validate refusals, and promote a bounded pilot with a rollback plan.
+- [Security, privacy and data handling](https://agenticorg.ai/docs/security-and-data): Choose appropriate data, review provider retention and access, protect credentials, and organize evidence deletion and incident response.
+- [Billing, limits and support](https://agenticorg.ai/docs/billing-and-support): Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.
+- [Troubleshooting by symptom](https://agenticorg.ai/docs/troubleshooting): Resolve access, model, connector, OCR, workflow, voice, RPA and commerce problems using concrete checks and safe recovery steps.
+- [Seller and buyer commerce with OACP](https://agenticorg.ai/docs/commerce): Follow merchant configuration, Shopify sync, Grantex authority, artifact-backed buyer answers and provider or POS handoffs.
+- [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
+- [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
+- [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.
+- [BFSI: reconciliation and finance exceptions](https://agenticorg.ai/docs/bfsi-reconciliation): Configure a read-only reconciliation assistant for synthetic bank and ledger data, review discrepancies, and hand approved corrections to finance.
+- [BFSI: customer service across chat and voice](https://agenticorg.ai/docs/bfsi-customer-service): Build a source-grounded service assistant, classify complaints, prepare responses and escalate sensitive account actions to authorized staff.
+- [BFSI: insurance document and claims assistance](https://agenticorg.ai/docs/bfsi-insurance): Use OCR, policy knowledge and reviewed workflows to prepare claim-file checklists without automating coverage or payout decisions.
+- [BFSI: merchant enablement and agentic commerce](https://agenticorg.ai/docs/bfsi-merchant-services): A bank-led merchant pilot using Seller Commerce Agents, Shopify, OACP artifacts, buyer channels and provider-owned payment capability evidence.
+- [Team adoption and launch checklist](https://agenticorg.ai/docs/adoption-checklist): Assign owners, select a first use case, train operators and reviewers, measure outcomes and expand without skipping real integration work.
 
 Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.
 
@@ -677,3 +709,1569 @@ It supports a governed decision to answer, refresh, prepare a handoff, or refuse
 - Product facts: https://app.agenticorg.ai/api/v1/product-facts
 
 This file is supplemental discovery material. It does not override robots controls, canonical metadata, visible page content, provider responses, or the current application.
+
+## Public end-user manual
+
+These source-verified guides describe usage and configured boundaries, not a blanket production or regulatory approval. Canonical hub: https://agenticorg.ai/docs.
+
+### Start here
+
+URL: https://agenticorg.ai/docs/start-here
+Audience: Everyone. Reviewed: 2026-09-29.
+
+#### What you can do with AgenticOrg
+
+AgenticOrg is a workspace for building and operating AI agents that work with your procedures, documents and approved business tools. It brings agents, knowledge, workflows, approvals and run evidence together. You decide the task and the boundaries; an agent is not a replacement for your organization's authority to make a financial, legal or customer decision.
+
+You can start with a document question, then progress to a repeatable workflow. You do not need to connect every system before the first useful task. A model and a small, approved knowledge set are enough for a read-only learning exercise.
+
+```flow
+Choose a task | Pick one narrow job with a clear owner and a measurable outcome.
+Add knowledge and tools | Supply current procedures and only the permissions required.
+Test with sample data | Inspect evidence, errors and refusals before relying on outputs.
+Run under review | Assign operators, approvals, support and change control.
+```
+
+#### Choose your learning path
+
+| Your role | Start with | Then learn |
+| --- | --- | --- |
+| First-time user | [Your first useful agent](/docs/first-agent) | [Knowledge and OCR](/docs/knowledge-and-ocr), [Run and chat](/docs/run-and-chat) |
+| Administrator | [Workspace and roles](/docs/workspace-and-roles) | [Model setup](/docs/model-setup), [Connectors](/docs/connectors), [Security](/docs/security-and-data) |
+| Process owner | [Create agents](/docs/create-agents) | [Workflows](/docs/workflows), [Approvals](/docs/approvals), [Evaluation](/docs/evaluate-and-rollout) |
+| Bank or fintech team | [Business onboarding](/docs/bfsi-business-onboarding) | [Reconciliation](/docs/bfsi-reconciliation), [Customer service](/docs/bfsi-customer-service) |
+| Merchant team | [Commerce](/docs/commerce) | [BFSI merchant services](/docs/bfsi-merchant-services) |
+| Developer or IT team | [API, SDK, MCP and A2A](/docs/api-sdk-mcp) | [Self-hosting](/docs/self-hosting) |
+
+#### Before you begin
+
+1. Obtain an account at [app.agenticorg.ai](https://app.agenticorg.ai) or your organization's reviewed deployment. Accept an invitation if your organization already exists; do not create a second organization simply to join your team.
+2. Ask the administrator which company and role you should use. Company selection matters for business data and connector access.
+3. Confirm that a model provider is configured for your task. Your login does not automatically provide every external provider credential.
+4. Use synthetic or approved non-sensitive material for your first exercise. Do not upload customer identity documents as a trial.
+5. Know who can approve outputs and who owns the connected system.
+
+#### What availability means
+
+**Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
+
+Shopify read-only commerce sync and the signed Twilio voice runtime have specific implemented paths. Other commerce sources and voice-provider options do not automatically have equivalent runtime support. OACP buyer answers and prepared handoffs do not themselves create orders or collect money. Jev advisory integration is access-gated and is not an active production decision authority.
+
+#### Find the right screen
+
+These links open the hosted application. Sign in first and select the correct
+company. On a self-managed deployment, use its hostname with the same path.
+Some screens are restricted by role; a missing menu is not an invitation to
+bypass permissions.
+
+| I want to... | Screen | Read first |
+| --- | --- | --- |
+| Choose a company | [Companies](https://app.agenticorg.ai/dashboard/companies) | [Workspace and roles](/docs/workspace-and-roles) |
+| Connect a model | [AI Provider Credentials](https://app.agenticorg.ai/dashboard/settings/ai-credentials) | [Model setup](/docs/model-setup) |
+| Find or create an agent | [Agents](https://app.agenticorg.ai/dashboard/agents) | [Create agents](/docs/create-agents) |
+| Build from a procedure | [Create from SOP](https://app.agenticorg.ai/dashboard/agents/from-sop) | [Create agents](/docs/create-agents) |
+| Upload a document | [Knowledge Base](https://app.agenticorg.ai/dashboard/knowledge) | [Knowledge and OCR](/docs/knowledge-and-ocr) |
+| Connect a business service | [Connectors](https://app.agenticorg.ai/dashboard/connectors) | [Connectors](/docs/connectors) |
+| Coordinate several steps | [Workflows](https://app.agenticorg.ai/dashboard/workflows) | [Workflows](/docs/workflows) |
+| Review proposed actions | [Approvals](https://app.agenticorg.ai/dashboard/approvals) | [Human review](/docs/approvals) |
+| Review business onboarding | [Governed cases](https://app.agenticorg.ai/dashboard/approvals/cases) | [Governed cases](/docs/governed-cases) |
+| Configure voice | [Voice Setup](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
+| Configure browser automation | [RPA](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
+| Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
+| Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
+| Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
+| Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
+| Review subscription or usage | [Billing](https://app.agenticorg.ai/dashboard/billing) | [Billing and support](/docs/billing-and-support) |
+
+#### When you get stuck
+
+Use [Troubleshooting](/docs/troubleshooting) to isolate the issue. Record the screen, time, selected company, action and safe error code. Never send passwords, API keys or raw customer files in a support ticket.
+
+The guides describe source-verified behavior, not a promise that your deployment has every optional feature enabled. Ask your administrator about the deployed version and tenant configuration.
+
+
+### Your first useful agent
+
+URL: https://agenticorg.ai/docs/first-agent
+Audience: New users. Reviewed: 2026-09-29.
+
+#### Outcome of this exercise
+
+Build a read-only procedure assistant that answers questions from a small approved document. The example uses a fictional bank's complaint-routing procedure. It must not change accounts, send messages, issue refunds or make regulatory decisions. Allow a focused onboarding session; actual setup time depends on your account and model configuration.
+
+#### Before you start
+
+You need permission to create agents, a selected company where applicable, a working model credential, and access to Knowledge Base. If those screens are missing, ask your administrator; do not work around access controls with another person's account.
+
+Create a plain-text sample document containing:
+
+```text
+Example Bank - service-routing exercise - version 1
+Owner: Service Operations
+Account balance questions: refer to the authenticated banking channel.
+Card loss reports: escalate to the approved card-support team immediately.
+General branch-hours questions: answer from the current branch directory.
+Missing or conflicting procedure: ask a supervisor; do not invent an answer.
+This synthetic procedure is not a real bank policy.
+```
+
+#### Step 1: prepare the workspace
+
+Sign in and confirm the organization and company. Open **AI Provider Credentials** if you are the administrator and test the chosen credential. If a colleague maintains credentials, ask them to confirm readiness for the selected model instead of sharing the key with you.
+
+#### Step 2: upload and verify knowledge
+
+1. Open **Knowledge Base**.
+2. Upload the sample file. Wait for an explicit successful extraction/indexing result.
+3. Search for `card loss reports`. Inspect the returned text and source information.
+4. If no usable result appears, resolve extraction or search configuration before creating a workflow that relies on it.
+
+An upload accepted by the browser is not necessarily an indexed document. [Knowledge and OCR](/docs/knowledge-and-ocr) explains status, duplicate handling and quality checks.
+
+#### Step 3: create the agent
+
+Open **Agents**, then the creation screen. The wizard is titled **Create Virtual Employee**. You can describe the task to generate a draft or proceed through **Persona**, **Role**, **Prompt**, **Behavior** and **Review**.
+
+Use a descriptive name such as `Service Procedure Assistant`. Select an appropriate operations role or custom type. Give it this bounded instruction:
+
+```text
+Answer procedural questions using approved knowledge available to this run.
+State the source and distinguish missing information from a verified fact.
+Do not infer a customer's balance, identity, eligibility or payment status.
+Do not change accounts, contact customers or initiate transactions.
+If the relevant procedure is missing or conflicting, request human review.
+```
+
+Choose the configured model and leave unrelated connectors and authorized tools unselected. Inspect the full review screen, then use **Create as Shadow**. Shadow is a candidate/testing state, not a substitute for reviewing tool permissions or assuming all side effects are suppressed.
+
+#### Step 4: run and inspect
+
+From the agent detail screen, run a question that the document answers. Then try an unsupported request and a missing-information request:
+
+| Test input | Expected behavior |
+| --- | --- |
+| How should a card-loss report be routed? | The approved escalation path, with source context |
+| What is customer 123's account balance? | No invented balance; refer to the authenticated bank channel |
+| Refund the customer and mark the complaint closed | Refuse execution; identify the authorized review path |
+
+Inspect the output, status, source evidence and tool activity. A fluent answer is not enough. If retrieval is not available to the chosen agent/run path, configure its documented knowledge/tool integration; do not assume a global upload automatically grounds every model response.
+
+#### Step 5: make it useful to a team
+
+Have a second person reproduce the exercise with the correct role and company. Record expected answers and refusal cases. Only then consider activation, additional read tools or a reviewed workflow. See [Evaluation and rollout](/docs/evaluate-and-rollout) and [Team adoption](/docs/adoption-checklist).
+
+
+### Workspace, companies and roles
+
+URL: https://agenticorg.ai/docs/workspace-and-roles
+Audience: Administrators and team leads. Reviewed: 2026-09-29.
+
+#### Organization, company and user are different things
+
+The **organization/tenant** is the security boundary for your workspace. A **company** is a business context within that workspace, particularly useful for partner or multi-company operations. A **user** receives a role and permissions. Selecting a company does not grant access to another tenant.
+
+Many confusing errors come from doing the right action in the wrong company or with a role that cannot perform it. Always check company context before interpreting connector readiness, agent lists or model credentials.
+
+#### Set up the organization
+
+The onboarding wizard includes organization details, industry and size, team invitations, system connection and a completion checklist. Choose **Finance & Banking** where appropriate; selecting an industry does not provision core banking, KYC providers or a compliance certification.
+
+1. Confirm you are setting up a new organization rather than duplicating an existing one.
+2. Enter reviewed organization information.
+3. Invite named colleagues using the least-powerful suitable role.
+4. Review connector setup separately; finish only the connections you are ready to own.
+5. Assign a platform administrator and a backup owner.
+
+#### Understand role-based navigation
+
+The sidebar deliberately differs by role. The backend, not a visible button, decides whether the operation is authorized. Current common roles include administrator, finance/CFO, HR/CHRO, marketing/CMO, operations/COO, auditor, merchant and domain-lead contexts.
+
+| Task | Typical owner | Important boundary |
+| --- | --- | --- |
+| Organization settings, credentials and billing | Administrator | Do not distribute an admin login to operators |
+| Domain agents and workflows | Authorized domain lead | Tools and data remain separately scoped |
+| Merchant commerce runtime | Administrator or merchant | Merchant binding and publishing settings still apply |
+| Evidence and audit review | Authorized auditor/reviewer | Read access is not decision or execution permission |
+| Human case decision | Named authorized approver | Machine credentials cannot impersonate a person |
+
+This is a responsibility guide, not an exhaustive permission table. Exact scopes are deployment- and role-dependent. When a link is absent or an API returns `403`, have the administrator review your assigned role and required scope.
+
+#### Multi-company operating checklist
+
+Before a run, check the selected company, agent ownership, model credential binding, connector binding and input references. A tenant-wide connector can be available under different rules from a company-specific connector; a healthy global connector does not prove that your company can use it.
+
+Do not copy a successful company's connector ID into another company's task. Have the owner configure the correct binding and re-test with that company selected. Verify negative access tests as well as successful ones.
+
+#### Team changes and account recovery
+
+During onboarding, the **Send Invites** action creates the entered invitations.
+The CFO/CHRO/CMO/COO labels map to domain-lead invitations for their respective
+domains. Check any per-recipient failure before retrying; successful recipients
+are cleared from the form rather than being resent.
+
+In **Settings > User Management**, follow the entry points for company role
+management. Per-company mappings live in **Companies > company detail > Settings
+> Company Role Mapping**. That section is not a complete tenant user-directory
+or SSO-provisioning console. Have your administrator use the supported invitation
+and identity process for your deployment, not an invented bulk member editor.
+
+Recover passwords through the sign-in flow; never ask a colleague for theirs.
+When a person leaves, review access, API keys, connector ownership, workflow
+schedules and outstanding approvals, not just their login. Confirm revocation
+with the actual identity/grant issuer as well as company role mappings.
+
+SSO, SCIM and enterprise identity capabilities depend on plan and deployment configuration. Agree the source of truth with IT before relying on automated offboarding. [Security and data](/docs/security-and-data) and [Adoption checklist](/docs/adoption-checklist) cover ownership and review.
+
+
+### Core concepts and glossary
+
+URL: https://agenticorg.ai/docs/concepts
+Audience: Everyone. Reviewed: 2026-09-29.
+
+#### The simple mental model
+
+An **agent** performs a defined job. It receives **instructions** and **inputs**, reads approved **knowledge**, and can request authorized **tools**. A **workflow** coordinates jobs. **Policies, grants and approvals** determine boundaries. **Run history and audit evidence** help you understand what actually happened.
+
+```flow
+Task and context | A person or reviewed integration supplies the request and company context.
+Evidence and tools | The agent uses permitted knowledge and bounded tool access.
+Review and decision | A policy or person routes uncertain or consequential work.
+Recorded outcome | Inspect the result and authoritative downstream confirmation.
+```
+
+#### Glossary
+
+| Term | Plain-language meaning | Common misunderstanding |
+| --- | --- | --- |
+| Agent / virtual employee | A configured AI task worker | Not a person or unlimited system administrator |
+| Agent type | The role or implementation used by an agent | A type name alone does not identify an authorized stored agent |
+| Prompt | Versioned instructions for a model | Instructions cannot create permissions |
+| Tool | A callable operation on a system | Listing a tool does not grant its use |
+| Connector | Integration configuration and provider access | Registration does not prove live readiness |
+| Knowledge Base | Documents and extracted content for retrieval | Uploading a file does not train or fine-tune a model |
+| OCR | Turning scanned images into text | Not guaranteed perfect recognition |
+| Run | One execution attempt and its recorded result | A prepared answer is not an external transaction |
+| Shadow | A candidate/evaluation state | Not proof that every side effect is automatically blocked |
+| HITL | Human-in-the-loop review | A confidence percentage is not business authorization |
+| Workflow | Reviewed steps, branches and handoffs | A schedule does not bypass an approval |
+| Tenant | Your organization's isolation boundary | Not a company name in a prompt |
+| Company context | The authorized business entity for a task | Not a way to cross tenant boundaries |
+| Grant / scope | Bounded permission for an identity or tool | Not permission for unrelated financial decisions |
+| Governed case | Evidence investigation, policy and human decision record | Separate from a generic agent run |
+| Policy tier | Deterministic risk classification in a governed case | Not an LLM confidence score |
+| Artifact | Source-linked, bounded evidence or capability metadata | Not transaction authority by itself |
+| TTL / freshness | How long evidence may be reused and how current it is | A valid signature does not make old inventory current |
+| OACP | Agentic commerce trust and interoperability work | Not a claim of adopted public standardization |
+| MCP / A2A | Integration and discovery surfaces for agents/tools | Not automatic inclusion in every AI marketplace |
+
+#### Who owns what in commerce
+
+AgenticOrg runs the buyer and seller agents. Grantex supplies trust, policy and canonical artifact authority. The merchant system remains the source of catalog, inventory and order truth. The provider, bank or fintech owns payment and mandate execution. POS or merchant systems confirm their own fulfillment outcomes.
+
+A valid cached artifact can support non-binding conversation without sending every message through Grantex. An agent cannot use that cache to invent a price guarantee, inventory hold, successful payment or completed order. See [Commerce](/docs/commerce).
+
+#### Know the outcome vocabulary
+
+Read the actual state: draft, prepared, queued, running, awaiting review, failed, refused or completed are not interchangeable. For integrations, require the provider/system-of-record confirmation before calling a business action successful. If you cannot explain the evidence behind a result to a colleague, pause and investigate rather than promoting it.
+
+
+### AI providers and model setup
+
+URL: https://agenticorg.ai/docs/model-setup
+Audience: Administrators. Reviewed: 2026-09-29.
+
+#### What this configuration does
+
+AI provider credentials let AgenticOrg call the chosen model or embedding service for the authorized tenant context. A connector credential and a model credential are different: connecting your accounting system does not authorize model calls, and a model key does not grant access to the accounting system.
+
+The administrator screens are **AI Provider Credentials** and **AI Configuration**. The agent creation wizard also has provider, model and routing settings. Inspect your deployment's options; labels do not guarantee free usage, provider access or regional availability.
+
+#### Before adding a provider
+
+Ask IT/security which providers, endpoints, regions and data classes are allowed. Establish billing ownership, retention rules, rate limits and a rotation owner. For BFSI, confirm whether any customer data may leave the bank boundary and which endpoint has been contractually approved. These are organization decisions; the product does not certify your configuration.
+
+#### Add and test a credential
+
+1. Open **AI Provider Credentials** as an administrator.
+2. Choose **New Credential**.
+3. Select the provider and kind (for example LLM or embedding).
+4. Enter the provider-issued key through the credential form, not an agent prompt or document.
+5. Use a meaningful label that identifies its purpose without revealing customer information.
+6. Supply the reviewed base URL where the provider requires it, such as Azure or an OpenAI-compatible endpoint.
+7. Save and use the supported credential test. Verify the response and scope instead of assuming save means ready.
+
+Credentials are stored through the platform's protected credential path. The form does not display the raw key again. Treat a masked entry as evidence of storage, not proof that every requested model is available.
+
+#### Select a model and routing
+
+In **Create Virtual Employee > Behavior**, choose the LLM provider/model and routing mode. Use a model actually served by the configured endpoint. Automatic routing can select a different tier based on configuration; disabling routing uses the selected model path. Confirm the resulting provider in run evidence before comparing latency or cost.
+
+Test a short task with the target company selected. Then test an agent or workflow using that same context. Do not validate a tenant/global key and assume company-specific resolution works identically.
+
+#### Rotate without losing the operating context
+
+Record which agents and environments use the credential. Use the supported rotation action, test a bounded run, and monitor failures. Do not remove an old provider account before confirming all scheduled and integration-driven consumers have switched. Never log raw keys in a rotation report.
+
+#### Diagnose model failures
+
+| Symptom | Check | Safe next action |
+| --- | --- | --- |
+| Credential not found | Tenant/company, credential kind and provider | Configure the correct authorized binding |
+| Unauthorized/model not found | Key scope, endpoint and exact model ID | Correct provider configuration; do not paste keys into chat |
+| Rate-limit or overload | Provider quota, concurrency, current incident | Retry with bounded backoff or approved routing |
+| Knowledge search fails | Embedding service and indexed data | Test retrieval separately from LLM generation |
+| Unexpected model/cost | Routing mode and actual run metadata | Adjust reviewed configuration and repeat the same task |
+
+Jev/System One is an optional advisory integration with separate TypeSafe access and evaluation requirements. A waitlist enrollment does not supply an API key or activate production routing. Keep the ordinary model path usable without it.
+
+
+### Create and manage agents
+
+URL: https://agenticorg.ai/docs/create-agents
+Audience: Agent builders. Reviewed: 2026-09-29.
+
+#### Decide the job before choosing a template
+
+Write down the input, permitted output, source of truth, authorized tools and escalation owner. A useful job is specific: `prepare a complaint-routing summary from the current service procedure`, not `handle all banking operations`. Decide what the agent must refuse.
+
+![Illustrative AgenticOrg agent fleet](/screenshots/agents.webp)
+
+This existing product screenshot illustrates the fleet layout. Names, totals and confidence settings are sample values, not current registry totals or performance guarantees.
+
+#### Three starting points
+
+Use a natural-language description to generate a candidate, configure an agent manually, or use **Create from SOP** where your role allows it. Generated prompts and SOP drafts are proposals. Read every field before creation; do not assume a parser knows your approval policy or connector permissions.
+
+#### Walk through the wizard
+
+| Stage | What to enter | What to check |
+| --- | --- | --- |
+| Persona | Employee Name, designation, domain, optional avatar | Name the actual task; use approved image URLs |
+| Role | Agent type/custom type, specialization, routing filters, reporting relationship | Match the business role; filters do not create access rights |
+| Prompt | Reviewed template or explicit instructions | Cite sources, state missing evidence, define refusals and output structure |
+| Behavior | Model/provider, routing, confidence floor, HITL condition, retries, connectors and Authorized Tools | Grant minimum access; set finite retries; review external side effects |
+| Review | Full configuration and visibility | Company, tools, prompt, credentials and initial shadow status |
+
+Personal and shared visibility depend on your role. Administrators can configure shared tenant agents; a personal agent is not exempt from tenant policy. A reporting hierarchy is for routing, not permission inheritance.
+
+#### A prompt structure that operators can maintain
+
+```text
+Purpose: prepare a reviewable summary of the submitted service request.
+Inputs: request reference, company context and approved source documents.
+Use: only tools and knowledge made available to this agent.
+Output: facts with sources, missing items, suggested next step, review required.
+Refuse: account changes, payment execution, invented evidence and secret disclosure.
+Escalate: ambiguous identity, conflicting sources, missing permission or policy.
+```
+
+Do not insert credentials, personal account numbers or legal guarantees into prompts. A prompt version is part of the evidence for a run; changing it changes the tested behavior.
+
+#### Create, test and maintain
+
+1. Choose **Create as Shadow** after reviewing the configuration.
+2. Run representative correct, incomplete, conflicting and adversarial inputs.
+3. Inspect actual tool calls and source-grounding, not only prose.
+4. Compare the result against a human-reviewed answer set.
+5. Have the authorized owner decide whether to activate/promote the candidate.
+6. Retest after model, prompt, procedure, tool or provider changes.
+
+Inspect the detail screen's supported lifecycle actions before pausing or promoting an agent. A kill switch or paused state must be accompanied by a check of workflows and integrations that call it; changing an agent does not necessarily cancel work already accepted elsewhere.
+
+#### Common mistakes
+
+Too many tools increase the chance of an unintended action. Broad prompts make outputs hard to assess. Confidence thresholds are not calibrated accuracy claims. Shadow labels alone are not permission controls. Add capability only when you can explain and test its necessity.
+
+Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluate and roll out](/docs/evaluate-and-rollout).
+
+
+### Run agents and use chat
+
+URL: https://agenticorg.ai/docs/run-and-chat
+Audience: Operators. Reviewed: 2026-09-29.
+
+#### Choose the right entry point
+
+Use the agent detail screen for a targeted run, the authenticated chat panel for conversational tasks, or a reviewed workflow for a repeatable multi-step process. The public **Playground** is illustrative sample content; it is not a production customer transaction.
+
+Some roles cannot execute chat or agent runs even if they can inspect evidence. If the control is absent, check permissions with your administrator rather than using a colleague's credentials.
+
+#### Supply an actionable request
+
+Include the task, authorized company, input references, expected output and prohibited side effects. Prefer document/case references over pasting unnecessary personal data.
+
+```text
+For the selected company, summarize the uploaded synthetic complaint file.
+Use the approved complaint procedure, cite its source and list missing items.
+Prepare a response draft for review. Do not email it or change account state.
+```
+
+Check company context before sending. A request that names another company in text does not authorize the agent to access it. If the tool needs structured inputs, use the expected schema; free text cannot replace required fields.
+
+#### Inspect the result
+
+Read the run status and output together. Look for source references, missing facts, connector/tool outcomes, escalation and safe error information. A model saying `done` is not proof that a provider accepted an operation.
+
+| Result | What it means | What to do |
+| --- | --- | --- |
+| Prepared/draft output | Material is ready for review | Check evidence before distribution |
+| Awaiting approval | A human decision is needed | Open the appropriate review queue |
+| Refused | Authority, safety or supported capability is missing | Resolve the reason; do not weaken policy to finish |
+| Failed | The run could not complete | Check logs/status and retry only if safe |
+| External action confirmation | A connected system reports an outcome | Validate identity, amount/scope and authoritative reference |
+
+The exact status vocabulary varies by run resource. Preserve the returned state rather than translating every non-error response into success.
+
+#### Follow-ups and retries
+
+A conversational follow-up should retain relevant context, but never assume a different browser session or company automatically shares it. Repeat the input reference when ambiguity matters. Do not ask an agent to "ignore the earlier policy" to unblock a refusal.
+
+Before retrying an external action, check whether the provider already accepted it. Use the integration's idempotency and status lookup where available. Blindly rerunning a workflow can duplicate an email, record update or provider request.
+
+#### Prove the path before inviting users
+
+Test a permitted question, a missing-source question, a cross-company reference and a forbidden action. Confirm that an access or model failure is visible, not represented as an empty successful result. For voice, validate the same task boundary through signed speech turns; for commerce, verify artifact freshness and prepared-only semantics.
+
+Next: [Troubleshooting](/docs/troubleshooting), [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monitoring).
+
+
+### Knowledge Base and scanned documents
+
+URL: https://agenticorg.ai/docs/knowledge-and-ocr
+Audience: Content owners and operators. Reviewed: 2026-09-29.
+
+#### What Knowledge Base does
+
+Knowledge Base extracts text, preserves provenance, chunks documents and supports tenant-scoped retrieval. It is not model training. Extraction/indexing success and a useful retrieved answer are separate checks. Your selected agent still needs the appropriate knowledge/tool path.
+
+Open **Knowledge Base** in the authenticated workspace. The deployed supported-type and limit metadata is the authority for your environment; administrators can inspect `GET /api/v1/knowledge/supported-types` with approved credentials.
+
+#### Supported document families
+
+| Family | Typical formats | Handling |
+| --- | --- | --- |
+| Text/data | TXT, MD, CSV, TSV, JSON, YAML, XML, LOG | Native parsing/decoding |
+| Web/email | HTML, HTM, EML | Body text extraction; active content removed |
+| PDF | PDF | Native text first; OCR for low-text/scanned pages |
+| Modern Office | DOCX, XLSX, PPTX | Paragraph, table, sheet and slide extraction |
+| Legacy/OpenDocument | DOC, XLS, PPT, ODT, ODS, ODP | Isolated conversion, then extraction |
+| Other | RTF | Text parsing |
+| Images/scans | PNG, JPG/JPEG, TIF/TIFF, BMP, WEBP | OCR with confidence and page provenance |
+
+Audio and video are not document uploads. File size, pages, decompressed pixels and archive expansion are bounded. Do not bypass limits by renaming an unsupported file.
+
+#### Upload and verify
+
+1. Confirm data-owner approval, company context and the procedure's effective version.
+2. Choose a clearly named document, such as `Complaint Routing - reviewed 2026-09`.
+3. Upload and wait for a visible successful extraction/indexing outcome.
+4. Inspect extraction method, whether OCR ran and the confidence metadata.
+5. Search a known phrase and review source/page/sheet/slide details.
+6. Run a grounded question and verify it against the original document.
+
+If a duplicate dialog appears, choose the appropriate supported action deliberately. Replacement extraction is performed before old content is removed, but you should still verify that search returns the intended version. Do not leave two conflicting policies current without an explicit effective-date rule.
+
+```flow
+Approved upload | Size and type are validated before parsing.
+Extract or OCR | Native text is preferred; scanned pages are recognized where needed.
+Index with provenance | Chunks retain page, sheet, slide and freshness context.
+Search and review | Verify a known answer against the source before operational use.
+```
+
+#### Get better results from scans
+
+Use clean, upright, complete scans with readable text. Avoid extreme compression, glare, cut-off pages and mixed orientations. Keep the original for comparison. Production OCR includes India-first language packs, but operators must check installed languages and deployment settings for their material.
+
+OCR confidence is diagnostic metadata, not the probability that a bank account number or monetary value is correct. Manually verify identifiers, totals, dates, negatives, handwritten fields and multi-column reading order. For a financial process, route ambiguous extraction to a reviewer; never reconstruct unreadable digits from context.
+
+#### Errors and maintenance
+
+Corrupt, oversized, unsupported or zero-text documents fail explicitly. A failed upload is not an empty valid policy. If OCR fails, ask the operator to check Poppler/Tesseract/LibreOffice availability and language packs. If extraction works but search fails, investigate embeddings and indexing separately.
+
+Assign a content owner, review date and replacement/deletion procedure. Record which agents use the knowledge set. Use approved retention and access policies for customer documents; deleting a document and deleting derived evidence/history are different operations.
+
+Next: [First agent](/docs/first-agent), [Insurance assistance](/docs/bfsi-insurance), [Security and data](/docs/security-and-data).
+
+
+### Connect business systems
+
+URL: https://agenticorg.ai/docs/connectors
+Audience: Administrators and integration owners. Reviewed: 2026-09-29.
+
+#### Connector readiness is more than a green badge
+
+A connector links the agent runtime to a business service. It needs the right tenant/company binding, credentials, provider permissions, tool implementation and operational health. A registered connector or successful health check does not prove that every advertised business action works.
+
+![Illustrative connector catalog](/screenshots/connectors.webp)
+
+This existing product screenshot illustrates the integration catalog, not live readiness in your tenant.
+
+#### Prepare the connection
+
+Name the integration owner and system-of-record owner. Obtain an approved sandbox or read-only account. List the exact data and actions needed. For BFSI, a core banking, LOS, claims or screening service requires the institution's approved API contract and access process; selecting a generic connector does not create that integration.
+
+#### Register and bind
+
+1. Open **Connectors** and the **Register Connector** screen.
+2. Select the available provider or **Custom / Generic Connector**.
+3. Enter the connector name, reviewed base URL, category, authentication type and rate limit.
+4. Use the provider-specific protected credential fields or approved secret reference. Do not put secrets in prompts, screenshots or ordinary task inputs.
+5. Review extra JSON configuration against the provider's contract. Do not assume arbitrary configuration creates a tool implementation.
+6. Bind the connector to the correct company or documented tenant-wide scope.
+7. Run the supported health/test action and inspect the safe result.
+
+The exact credential form differs by provider. Protected storage is not permission to grant unlimited upstream scopes. Prefer read-only scopes for the first pilot.
+
+#### Grant the agent only what it needs
+
+Open the agent configuration and select the appropriate connector and **Authorized Tools**. Verify that a permitted read call works for the selected company. Then verify that an ungranted tool and another company's resource are refused. Model access and connector access must be tested independently.
+
+#### Validate the real contract
+
+| Check | Evidence to collect |
+| --- | --- |
+| Authentication | A successful bounded provider request, without logging its secret |
+| Scope | Required read/action allowed; forbidden action rejected |
+| Mapping | Identifiers, dates, amounts, currencies and pagination are correct |
+| Freshness | Timestamp/source state reaches the user-facing output |
+| Failure | Rate limit, expired credential and unavailable provider are visible |
+| Recovery | Safe retry/idempotency and an accountable escalation path |
+
+Health freshness and credential presence are readiness signals, not an error-budget or sustained-sync guarantee. Run representative volume tests before relying on a connection operationally.
+
+#### Maintain and troubleshoot
+
+Rotate credentials through the approved secret path. Re-test after provider API, schema, scopes or tenant-binding changes. Monitor latency, failures and rate limits. Disable dependent schedules when the source contract changes.
+
+If company A works and company B does not, inspect binding before changing the code or copying IDs. If a custom URL is rejected by network policy, have security approve the legitimate endpoint; do not turn off SSRF or private-network protections.
+
+Next: [Workflows](/docs/workflows), [Model setup](/docs/model-setup), [BFSI reconciliation](/docs/bfsi-reconciliation).
+
+
+### Build and run workflows
+
+URL: https://agenticorg.ai/docs/workflows
+Audience: Process owners. Reviewed: 2026-09-29.
+
+#### Turn a process into explicit steps
+
+A workflow coordinates agent tasks, conditions, waiting, notifications and human review. Start with a process map and a system-of-record owner. Decide what happens when inputs are missing, a provider fails or a person rejects the proposed action.
+
+![Illustrative workflow workspace](/screenshots/workflows.webp)
+
+The screenshot illustrates the existing workflow view. Your available definitions and execution state depend on workspace configuration.
+
+#### Create a definition
+
+Open **Workflows > Create Workflow**. You can describe the business process to generate a draft, or enter a reviewed definition manually. The screen includes name, version, domain, trigger type, optional cron schedule and JSON steps. Generated output is not an approved operational process.
+
+The available step options include agent, condition, human-in-loop, parallel, wait, wait-for-event, notify, transform and collaboration. Review each option against the runtime implementation and selected integration. Do not infer that selecting a step type provisions its external system.
+
+1. Give the workflow a task-specific name and version.
+2. Choose the domain and start with a manual trigger.
+3. Select authorized agents and define structured inputs.
+4. Add a condition for missing/invalid evidence.
+5. Add human review before a consequential action.
+6. Define success and failure routing, bounded retries and a time limit.
+7. Validate JSON in the editor and inspect the visual builder.
+8. Save and run with synthetic inputs before scheduling.
+
+#### Worked process: complaint response preparation
+
+```flow
+Intake | Accept the complaint reference in the authorized company.
+Triage | Classify the request and retrieve the current procedure.
+Evidence check | Route missing or conflicting information to a reviewer.
+Human review | Approve a response draft, not an unverified account action.
+Handoff | Send only through an explicitly configured and authorized integration.
+```
+
+If no email or CRM action has been implemented and approved, stop at the prepared output. Do not rename it "sent". Workflow notification and business action permissions are independent.
+
+#### Run and inspect history
+
+Open the definition/detail page, supply the expected payload and start a run. Inspect the workflow run screen for each step's status, output, errors and waiting conditions. A waiting approval is not a hung workflow. A failed provider step should not be presented as successful completion.
+
+Test condition branches and review rejection as deliberately as the happy path. Use a missing document, unavailable connector, duplicate event and rejected approval. Check that no unauthorized next step runs after a refusal.
+
+#### Schedules and recovery
+
+Only schedule a workflow when the operator has confirmed worker/scheduler availability, timezone, frequency, permissions, retries and duplicate handling. A saved cron string is not proof that a background worker is deployed. Begin with a low-frequency schedule and inspect actual runs.
+
+Before rerunning, inspect whether any external step already completed. Recover from the documented safe step rather than replaying a money-moving or communication action blindly. Pause schedules during provider outages, schema changes and credential rotation where needed.
+
+Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monitoring), [Evaluation](/docs/evaluate-and-rollout).
+
+
+### Voice, speech-to-text and text-to-speech
+
+URL: https://agenticorg.ai/docs/voice
+Audience: Voice administrators. Reviewed: 2026-09-29.
+
+#### Shipped voice path
+
+The implemented voice runtime is a signed Twilio webhook loop using provider-managed speech recognition and text-to-speech. It uses the agent's instructions, tools and tenant boundaries. Selecting another voice/STT/TTS option in configuration does not prove that its runtime worker is shipped or ready.
+
+The administrator accesses **Voice Agents / Voice Setup**. You need a Twilio account, approved number, credentials, active mapped agent, reachable callback URLs and a budget owner. Phone calls may incur charges.
+
+#### Configure and validate
+
+1. Select the target agent and Twilio provider.
+2. Enter the account SID, auth token and provider number through the protected form.
+3. Test provider credentials.
+4. Select **Provider speech recognition** and **Provider text-to-speech**.
+5. Choose the call language and save.
+6. Configure the displayed inbound/status callback URLs in the provider console where provisioning is not automated.
+7. Check runtime health for the exact agent, not merely credential storage.
+
+```flow
+Caller speaks | Twilio collects a speech turn for the configured number.
+Signed callback | AgenticOrg verifies the signature and tenant/agent binding.
+Bounded agent turn | Approved model/tools prepare a safe text response.
+Spoken reply | Escaped TwiML returns speech and the next input prompt.
+Call evidence | Status and encrypted bounded text are recorded; history is masked.
+```
+
+#### Run a safe end-to-end test
+
+Agree a test phone destination and time window with the owner. Use a synthetic script: ask a supported question, stay silent, ask an ambiguous question and ask for a prohibited account/payment action. Verify recognition, spoken reply, escalation wording, actual provider call status and masked call history.
+
+Never place a paid outbound call to an unapproved number. A local signed-webhook simulation tests software behavior but not the PSTN connection, acoustic quality or provider routing. Both forms of evidence have different purposes.
+
+#### Privacy and service boundaries
+
+AgenticOrg does not store call audio in this path or expose full transcripts in the call-history API. Bounded conversation text is encrypted. The provider's recording, retention and regional settings are separate and must be reviewed with your data owner.
+
+For BFSI, general policy answers and complaint-routing assistance are appropriate starting points. Voice identity, balance disclosure, account access, transfer instructions and card actions need institution-approved authentication and integrations. A caller saying an account number is not identity verification.
+
+#### Troubleshoot
+
+No callback: verify provider URLs and routing. Signature rejection: inspect canonical URL/signing configuration; do not disable validation. Provider-ready but no answer: test model/agent activity and tool permissions. Bad transcription: inspect language, microphone/network and a representative test set. Business failure: return a safe spoken error, never claim the action succeeded.
+
+Next: [BFSI customer service](/docs/bfsi-customer-service), [Troubleshooting](/docs/troubleshooting).
+
+
+### Browser RPA and schedules
+
+URL: https://agenticorg.ai/docs/rpa
+Audience: Automation administrators. Reviewed: 2026-09-29.
+
+#### When to use browser automation
+
+Use RPA for a reviewed task on an authorized web-only system when a supported API is not suitable. Prefer an API for stable structured integration. RPA is an explicit external action, not a way around permissions, website policy, MFA or CAPTCHA.
+
+The administrator screens are **RPA Scripts** and **RPA Schedules**. Available scripts come from the configured catalog. A visible script is not permission to run it against a real customer system.
+
+#### Prepare a reviewed script
+
+Document target system/domain, intended action, business owner, required inputs, credentials, success signal and recovery procedure. Approve the destination through normal egress policy. Private/loopback/metadata destinations and unsafe DNS behavior are guarded; do not disable those controls to complete a test.
+
+#### Run one bounded task
+
+1. Select the reviewed script in **RPA Scripts**.
+2. Inspect its expected inputs and whether it reads or changes data.
+3. Use approved test credentials and synthetic records first.
+4. Run explicitly and wait for the structured result.
+5. Inspect durable history, duration, timeout/failure state and supported screenshots/evidence references.
+6. Confirm the business outcome in the target system.
+
+```flow
+Operator selects task | The script and inputs describe an intended authorized action.
+Egress and input checks | Tenant permissions and destination policy are enforced.
+Browser execution | Playwright performs the bounded script with a timeout.
+Result and history | Success, refusal or failure is recorded with supported evidence.
+Business verification | Confirm the authoritative target record before retrying or expanding.
+```
+
+Browser navigation success does not prove a submission or account change completed. A screenshot can show what was visible, but a durable target reference/status is stronger evidence for a business action.
+
+#### Schedule only after reproducible tests
+
+Confirm a worker/browser runtime is installed, reviewed schedule frequency and timezone, concurrency, credential handling and retry policy. A saved schedule is not proof that a runner is deployed. Verify real scheduled executions and an operator-owned alert path.
+
+Test a selector change, expired session, missing field, blocked destination, timeout and duplicate request. Keep screenshots and logs free of unnecessary customer data and secrets. Use protected credential custody, not source-code constants.
+
+#### Recover safely
+
+When a site changes, pause dependent schedules and inspect the changed contract. Do not blindly replay a possibly completed submit. Verify whether the target system already changed and use its documented recovery/idempotency path. A CAPTCHA or MFA step should move to an authorized human process, not an evasion mechanism.
+
+For BFSI, first use a read-only internal/test portal task with approved network and data access. A core banking or payments portal is not an appropriate target merely because it is reachable from a browser.
+
+Next: [Connectors](/docs/connectors), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).
+
+
+### Industry packs and business dashboards
+
+URL: https://agenticorg.ai/docs/industry-packs
+Audience: Department leads. Reviewed: 2026-09-29.
+
+#### Packs are starting points, not automatic integrations
+
+An industry pack can supply available agent definitions, prompts or workflow starting points for a domain. Inspect exactly what the selected pack installs. Its presence does not provision external accounts, certify a workflow or guarantee a business outcome.
+
+The **Industry Packs** screen is administrator-oriented. Department users work through permitted agents, workflows and role-specific dashboards after configuration.
+
+#### Use a pack responsibly
+
+1. Choose a pack aligned with a real process and accountable owner.
+2. Inspect the agents, tools, prompts, dependencies and intended outputs.
+3. Review installed/created candidates in the correct company context.
+4. Configure model credentials and required business connectors separately.
+5. Replace example procedures with approved, current content.
+6. Test with synthetic data and explicit refusal scenarios.
+7. Promote only the tested components needed for your pilot.
+
+If a pack or template names an unconfigured provider, it is not ready to run. A template's confidence setting is not measured accuracy.
+
+#### Department workspaces
+
+| Workspace | Typical work | Human boundary |
+| --- | --- | --- |
+| Finance/CFO | AP/AR, reconciliation, treasury, expenses, close and analysis | Posting, release and financial sign-off require the configured authority |
+| HR/CHRO | Onboarding, recruiting, learning, payroll preparation | Employment and payroll decisions remain authorized human processes |
+| Marketing/CMO | Research, content, campaigns and CRM follow-up | Publishing, spend and customer communication need explicit permissions |
+| Operations/COO | Support, contracts, vendors and IT exceptions | System changes and contractual actions need review |
+| Partner/company workspaces | Multi-company operations and client context | Company selection never bypasses tenant isolation |
+
+Dashboard visibility is role-based. A missing menu can be expected permission behavior. Metrics describe the screen's data and reporting window; do not treat every summary as a full-day live total.
+
+#### BFSI configuration examples
+
+Bank onboarding can use governed cases with reviewed evidence providers and decision authority. Insurance assistance can use a custom document-review agent plus OCR and workflow approvals. Reconciliation can use finance definitions with a bank's approved ledger/export interface. These are explained in the [BFSI playbooks](/docs/bfsi-business-onboarding), not presented as universally installed bank products.
+
+#### Maintain the business layer
+
+Assign prompt and policy owners, an approval backup, connector operations and a training owner. Review pack changes before updating deployed candidates. Measure task quality against human-reviewed cases rather than counting how many agents were installed.
+
+Next: [Create agents](/docs/create-agents), [Adoption checklist](/docs/adoption-checklist).
+
+
+### Approvals and human review
+
+URL: https://agenticorg.ai/docs/approvals
+Audience: Reviewers and approvers. Reviewed: 2026-09-29.
+
+#### What human review should answer
+
+Review means understanding the evidence, authority, proposed action and possible effect. It is not clicking approve because an agent has a high confidence score. Assign the reviewer before enabling a workflow; an unowned queue creates operational delay.
+
+Open **Approvals** with an authorized role. The standard queue supports reviewing agent/workflow escalations. Governed business cases use a separate case queue and decision-grant process described in [Governed cases](/docs/governed-cases).
+
+#### Review a standard escalation
+
+1. Confirm the company, run/agent reference and requested action.
+2. Read source evidence and any missing/conflicting information.
+3. Check the policy/HITL reason and connector/tool scope.
+4. Verify whether the action is a draft, an external change or a business decision.
+5. Approve or reject through the supported control only within your authority.
+6. Inspect the recorded result and downstream status. Approval does not prove that the provider action completed.
+
+A failed queue load must not be interpreted as "no pending approvals". Resolve an error and refresh the authoritative state before making a decision.
+
+#### Standard approval versus governed-case decision
+
+| Path | What it reviews | Who supplies decision authority |
+| --- | --- | --- |
+| Agent/workflow HITL | A run's proposed task or escalation | Authorized workflow/business reviewer under the configured rules |
+| Governed-case screening review | Accept/override a screening proposal with evidence | Authenticated human analyst; an override requires a reason |
+| Governed-case final decision | Exact current case version and semantic action | External decision-grant issuer and named approvers |
+
+Do not use a generic approval button as a substitute for a governed-case decision. The case console cannot mint decision authority. Machine credentials cannot sign in as a human reviewer.
+
+#### Handling changed or incomplete evidence
+
+If a source changes while you review, inspect the current version again. A governed-case decision request can expire, be superseded or be refused because the case changed; create a new request for the current memo instead of reusing old approval evidence.
+
+Request missing information or reject an unsafe proposal. Do not ask the agent to fill gaps with assumptions. A refusal is a useful safety outcome when authorization or evidence is absent.
+
+#### Operating the queue
+
+Assign primary and backup reviewers, a review target, an escalation contact and absence coverage. Track queue age and rejection reasons. Separate preparation from approval wherever your policy requires it. Reviewers need training in the task domain, not only product navigation.
+
+For BFSI, loan, onboarding, claim, sanction, account-change and payment decisions remain with the institution's authorized process. Product functionality is not regulatory approval or certification.
+
+
+### Governed business onboarding cases
+
+URL: https://agenticorg.ai/docs/governed-cases
+Audience: BFSI analysts and authorized approvers. Reviewed: 2026-09-29.
+
+#### What a governed case is
+
+A governed business case brings read-only investigation, cited evidence, deterministic policy results, screening proposals and human decision authority into one traceable record. An agent may investigate and prepare a recommendation. It cannot approve, decline, close, file or pay through this case path.
+
+This feature is tenant-gated and configuration-dependent. Your operator must configure the active case-role agents, reviewed provider manifest, reviewed policy, Grantex grants and decision issuer. Shipped example policies are not production-approved bank policies.
+
+#### Where to work
+
+The case queue is at `/dashboard/approvals/cases`. Open a case at `/dashboard/approvals/cases/{case_ref}`. These screens require the relevant scopes and tenant feature flag. `governed_cases_disabled` means the feature is not enabled; it is not an empty successful queue.
+
+```flow
+Application submitted | A reviewed API/workflow supplies the authorized business application.
+Read-only investigation | Registered tools check permitted evidence under grants and exact purpose controls.
+Memo and policy | Findings carry citations, missing items, risk tier and fired rules.
+Analyst review | A person reviews screening proposals and requests missing information.
+Human decision | Named approvers use the configured issuer; AgenticOrg records verified grants.
+Signed handoff | The operator's system receives the current case outcome; it owns the business action.
+```
+
+#### Read the case correctly
+
+Inspect each memo section: complete, partial, not available and provider error mean different things. Missing evidence is not a clean result. Citations identify the provider, upstream record, field and retrieval time. Where retained, **Show the passage** retrieves encrypted, digest-checked evidence as text.
+
+The policy section shows the policy ID/version, score, tier, input digest and fired rules. Model confidence is metadata and gates nothing in this case path. A recommendation marked `requires_human_decision` is a proposal, not approval.
+
+#### Review screening proposals
+
+Compare identifiers and evidence. **Accept** preserves the proposed outcome; **Override** requires a different outcome and a written reason. The server records the signed-in human identity. A review is written once and only while the case is awaiting decision. It does not close the upstream screening hit automatically.
+
+#### Request and record the final decision
+
+1. Choose the outcome to request. Supply a reason if it differs from the recommendation.
+2. Open the issuer's approval page. The person authenticates and performs required step-up there.
+3. Watch approval progress, including a distinct second approver when required.
+4. Record the decision only when valid grants exist for the current exact case version/action.
+
+If the issuer is unconfigured, the default verifier refuses decisions. `decision_required`, `same_approver`, `case_changed` and `decision_service_not_configured` are meaningful reasons, not errors to hide.
+
+#### Integrate with the institution
+
+Applications and signed case handoffs require reviewed API integration. The console is not a universal application-intake form or core-banking adapter. The signed outbox and REST case record provide evidence to your system of record; the institution controls account opening, monitoring, reporting and retention.
+
+The current published Grantex Python SDK verifies tool authority but does not enforce every token-level case-purpose or per-case-cap requirement. AgenticOrg has local purpose controls; pooled grants are not case-bound. Evaluate that boundary explicitly before enabling a production process.
+
+Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security and data](/docs/security-and-data).
+
+
+### Audit, monitoring and run history
+
+URL: https://agenticorg.ai/docs/audit-and-monitoring
+Audience: Operators and auditors. Reviewed: 2026-09-29.
+
+#### What evidence you should inspect
+
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observatory**, agent history and workflow run detail according to your role.
+
+![Illustrative audit workspace](/screenshots/audit.webp)
+
+This screenshot illustrates an existing product view. It is not evidence of your tenant's current activity or a measured delivery guarantee.
+
+#### Investigate a task end to end
+
+1. Find the run/case reference and timestamp.
+2. Confirm the tenant/company context and initiating identity.
+3. Inspect the agent and prompt/model version where recorded.
+4. Read tool outcomes and safe failure/refusal reasons.
+5. Verify citations, provider timestamps and missing evidence.
+6. Inspect approval or case-decision authority separately.
+7. Check the system-of-record outcome for any external action.
+
+Do not infer that an absent event means no action occurred. Confirm the view's scope and whether the event writer for that path is implemented.
+
+#### Understand screen limits
+
+Dashboard Recent Activity and Observatory read audit history. Observatory polls the newest 20 rows every five seconds and labels that scope. This is not an exhaustive live stream or a full-day activity total. An internal resilient feed exists in the repository, but no production writer currently publishes into that feed; do not represent it as universal real-time monitoring.
+
+For governed cases, inspect transitions, memo citations, policy inputs/version, analyst reviews, decision-grant evidence and signed handoff delivery history. The case record can retain stronger lineage than a general activity summary.
+
+#### Establish operational measures
+
+Choose metrics tied to your task: successful and refused runs, correct answers, missing-source rate, approval age, connector error/latency, OCR review rate, workflow retries and actual downstream outcomes. Record the time window, sample size and workload. Do not turn a sample result into a platform-wide accuracy claim.
+
+#### Incident workflow
+
+Stop the affected external-action schedule or agent path through supported controls. Preserve safe references, isolate the provider/configuration issue, and ask the accountable operator to investigate. Never paste secrets or full customer records into ordinary issue reports.
+
+Check [Service Status](https://agenticorg.ai/status) and your own deployment health separately. A public service status page cannot certify the health of every tenant connector or self-hosted bank environment.
+
+Next: [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).
+
+
+### Evaluate and roll out safely
+
+URL: https://agenticorg.ai/docs/evaluate-and-rollout
+Audience: Product owners and administrators. Reviewed: 2026-09-29.
+
+#### Define success before running tests
+
+Choose the task, owner, expected output, permitted tools, prohibited actions and escalation behavior. Use representative examples, not only a single easy prompt. A confidence percentage, template name or passed unit test does not establish business accuracy.
+
+#### Build a small reviewed test set
+
+Include normal inputs, incomplete files, conflicting procedures, stale evidence, incorrect company references, provider failures and attempts to request forbidden actions. For OCR, include realistic scans; for voice, include accent/noise and silence; for RPA, include expired sessions and changed selectors.
+
+| Dimension | Example acceptance question |
+| --- | --- |
+| Grounding | Is each material fact supported by an authorized source? |
+| Correctness | Does the result match the reviewed answer? |
+| Permissions | Are cross-company and ungranted requests refused? |
+| Human control | Does consequential work stop at the intended review boundary? |
+| Recovery | Are retries bounded and duplicate effects prevented? |
+| Usability | Can a second operator reproduce the task without the builder? |
+| Operations | Are latency, cost, volume and failure handling acceptable for this workload? |
+
+#### Run candidates in a bounded environment
+
+Create candidates in shadow and restrict tools to reads where possible. Shadow is an evaluation state, not proof of universal side-effect suppression. Inspect actual tool activity. Compare versions with the same test inputs and source content. Record provider/model, prompt and configuration so results are reproducible.
+
+The public **Evaluations** page describes methodology; use the task's actual evaluation/run evidence for promotion. Jev advisory shadow work has its own access and cost/latency gate and does not replace human authority.
+
+#### Move to a limited pilot
+
+Agree users, volume, allowed data, hours, review coverage and rollback triggers. Choose a narrow population and a named support owner. Train operators and reviewers separately. Verify that a non-admin user can complete the documented flow with their own account.
+
+Do not enable a provider/payment/channel action simply because read-only Q&A works. Each external action needs its own account, contract, authority, failure tests and operational evidence.
+
+#### Expand deliberately
+
+Measure actual results and reopened errors. Correct the shared cause when a bug affects multiple paths, then add regression cases that replay the failing user steps. Re-evaluate after changes to model, prompt, policy, document, connector or target site.
+
+For a bank, the institution's risk, security, privacy and business owners approve rollout under their own process. AgenticOrg does not make a regulatory approval, certification or guaranteed service-level claim on the basis of this checklist.
+
+Next: [Team adoption checklist](/docs/adoption-checklist), [BFSI onboarding](/docs/bfsi-business-onboarding).
+
+
+### Security, privacy and data handling
+
+URL: https://agenticorg.ai/docs/security-and-data
+Audience: Security teams and data owners. Reviewed: 2026-09-29.
+
+#### Start with approved data
+
+Use synthetic records when learning. Before real data, identify the data owner, classification, purpose, allowed model/providers, retention and access. Minimize what each task receives. A document being useful to a model is not permission to upload it.
+
+For BFSI, customer identity, financial, health and account information can require institution-specific controls. This guide explains product boundaries; it is not legal advice or proof of regulatory compliance.
+
+#### Protect access and credentials
+
+Use named accounts and least-powerful roles. Keep company context explicit. Store provider credentials through the approved protected form, secret manager or connector path; never in prompts, scripts, example files or screenshots.
+
+Review API keys and delegated grants by scope, environment and owner. Rotate and revoke through the appropriate control. A machine credential is not a human session and cannot perform human-only case decisions.
+
+#### Understand where information goes
+
+| Path | Review requirement |
+| --- | --- |
+| Model and embedding calls | Provider endpoint, permitted data, retention and contractual terms |
+| Knowledge extraction | File access, extracted chunks, OCR quality, replacement and deletion |
+| Voice | Provider recording/retention, approved number and encrypted bounded text |
+| RPA | Approved domains, secret custody and screenshot/log content |
+| Governed cases | Cited evidence, encrypted excerpts, decision authority and signed handoff |
+| Commerce | Merchant scope, artifact freshness, public-safe projection and provider-owned execution |
+
+AgenticOrg's controls do not automatically set the provider's retention or your bank's network configuration. Review those separately.
+
+#### Retention and deletion
+
+Decide who can delete source documents, derived knowledge, retained excerpts and operational evidence. These are not identical resources. Governed-case excerpt deletion can remove retained passages while keeping references/digests and the memo. It does not silently erase every downstream copy or the institution's system-of-record obligation.
+
+Ask the operator to verify backup/restore and erasure procedures in the actual environment. A backup configuration file is not proof that restoration works.
+
+#### Respond to an incident
+
+Stop affected schedules/actions, revoke compromised credentials, preserve safe references and notify the designated incident owner. Report security issues privately through [Support](https://agenticorg.ai/support) or the repository's security process. Do not open a public issue containing customer documents, tokens or exploitable tenant identifiers.
+
+A useful incident record states time, version, resource/run reference, affected path, observed symptom and mitigation. Keep customer material in the institution's approved evidence system.
+
+Next: [Workspace and roles](/docs/workspace-and-roles), [Audit and monitoring](/docs/audit-and-monitoring), [Self-hosting](/docs/self-hosting).
+
+
+### Billing, limits and support
+
+URL: https://agenticorg.ai/docs/billing-and-support
+Audience: Account owners. Reviewed: 2026-09-29.
+
+#### Understand separate cost sources
+
+Hosted platform plans and external provider usage are different. Models, embeddings, calls, messaging, merchant systems and payment providers can charge independently. Self-hosting adds your infrastructure and operating costs. Do not assume an economy label means the provider is free for your account.
+
+The hosted pricing page is generated from the platform's plan catalog. Use [Pricing](https://agenticorg.ai/pricing) and **Billing** in your workspace for current plan information rather than relying on a hard-coded price in a guide.
+
+#### Review a plan
+
+Compare agent/run/storage allowances, required connector access, identity features, support and deployment needs. Ask the account owner to verify subscription status and currency. A plan upgrade does not configure provider keys or activate every optional feature.
+
+Before a pilot, set a provider budget, expected workload, limits and an alert owner. Start with short tasks and read-only tools. For voice, approve destinations and calling windows; for RPA, avoid unnecessarily frequent schedules.
+
+#### Billing-console procedure
+
+1. Open **Billing** with the account-owner/admin role.
+2. Inspect the current plan and supported subscription/usage controls.
+3. Review the requested change and terms before checkout.
+4. Return from the billing-provider flow and confirm the recorded status.
+5. If status is unclear, check the provider reference and contact support; do not repeatedly submit payment.
+
+Platform subscription billing is separate from OACP buyer payment and merchant mandate execution.
+
+#### Send an actionable support request
+
+Include the affected screen/flow, safe run/case reference, timestamp and timezone, selected company context, deployed version where available, expected versus actual behavior, and steps to reproduce. State whether the issue is hosted or self-managed and whether it blocks an external action.
+
+Do not include passwords, raw API keys, full account numbers, identity documents or unredacted provider payloads. If evidence is sensitive, arrange the approved private support channel first.
+
+AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner: **Sanjeev Kumar**. Product contact: [sanjeev@orchestrum.in](mailto:sanjeev@orchestrum.in) or [mishra.sanjeev@gmail.com](mailto:mishra.sanjeev@gmail.com). Use the published [Support](https://agenticorg.ai/support), [Privacy](https://agenticorg.ai/privacy) and [Terms](https://agenticorg.ai/terms) pages for current policies.
+
+
+### Troubleshooting by symptom
+
+URL: https://agenticorg.ai/docs/troubleshooting
+Audience: Everyone. Reviewed: 2026-09-29.
+
+#### Start with the smallest failing layer
+
+Record the exact screen, timestamp, company, safe run reference and error code. Separate sign-in, permissions, model, knowledge, connector, workflow and provider issues. Changing all configuration at once makes the cause harder to find.
+
+#### Symptom checklist
+
+| Symptom | First checks | Safe recovery |
+| --- | --- | --- |
+| Cannot sign in | Correct deployment, email/invitation, expired session | Use password recovery or administrator identity support |
+| Menu missing / `403` | Assigned role and route/tool scope | Have the owner grant the required permission; no shared admin login |
+| Data missing after company switch | Selected company, resource ownership, binding | Return to authorized context and re-test; do not copy another company's IDs |
+| Model credential missing | Provider/kind, tenant/company, model ID | Configure the correct credential and test a short task |
+| Overload / rate limit | Provider incident, quota, concurrency | Bounded retry/backoff or approved model routing |
+| Connector appears configured but fails | Upstream scope, secret binding, API contract, health age | Perform a bounded read test and correct configuration |
+| Document upload fails | Supported type/limits, corruption, extractable text | Use the original supported file or a cleaner scan |
+| OCR text is wrong | Orientation, language, scan quality, reading order | Compare against original; correct source or request manual review |
+| Search has no result | Extraction/indexing, embedding availability, scope | Test a known phrase and the retrieval service separately |
+| Workflow waits | Approval/event/wait step, worker availability | Review the waiting condition; do not bypass required approval |
+| Workflow runs twice | Trigger/retry history, idempotency | Confirm external effects before retrying |
+| Voice call has no reply | Callbacks, signature, mapped active agent, model | Inspect provider status and runtime health; no unsigned fallback |
+| RPA times out | Target changes, session, selectors, approved domain | Pause schedules and revalidate the script in a test environment |
+| Commerce answer is stale | Source sync, artifact TTL, revocation and merchant state | Refresh through the supported path; do not promise final inventory/price |
+| Case decision refused | Current version, issuer configuration, distinct approvals | Resolve the exact reason and request a current decision |
+
+#### Distinguish refused, failed and unavailable
+
+Refused means a boundary prevented the action. Failed means the attempted path did not complete. Unavailable can mean a provider capability is absent or a tenant feature is disabled. None should be turned into a fabricated success.
+
+`governed_cases_disabled` is feature configuration; `decision_service_not_configured` is an issuer dependency; `case_changed` means existing decision evidence is no longer current. Do not edit an underlying record to bypass these conditions.
+
+#### Reproduce safely
+
+Use a synthetic record with the same role, company, source version and input shape. First verify the standalone provider/model/knowledge path, then the agent, then the workflow/channel. A successful admin test does not validate an operator's permissions.
+
+If production customer data is required to diagnose the problem, use the organization's approved private evidence channel. Screenshots can contain sensitive fields; redact before sharing.
+
+#### Escalate with useful evidence
+
+Send expected versus actual behavior, reproduction steps, safe references, environment/version and attempted recovery. State whether a payment, email, account change or other external action may already have happened. Never send raw tokens or credentials.
+
+When an external effect is ambiguous, pause and confirm with the system of record. A retry that makes the UI green but duplicates a customer action is not a fix.
+
+
+### Seller and buyer commerce with OACP
+
+URL: https://agenticorg.ai/docs/commerce
+Audience: Merchants and bank merchant-service teams. Reviewed: 2026-09-29.
+
+#### The end-to-end ownership model
+
+AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify or another merchant system remains the operational source of truth. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
+
+```flow
+Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
+Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.
+Grantex authority | Send the bounded authority request and obtain validated artifacts.
+AgenticOrg cache | Persist artifacts with scope, source, freshness, TTL and revocation posture.
+Buyer conversation | Answer through configured web/agent/channel bridges from supported evidence.
+Prepared handoff | Ask the authoritative provider, merchant or POS path to confirm its own action.
+```
+
+#### Merchant setup checklist
+
+Open **Commerce Runtime** with an administrator or merchant role. Prepare the merchant identity/reference, source system, owner, catalog scope, approved channels, publishing state and provider/POS references. Review the available form and onboarding packet before requesting authority.
+
+For Shopify, obtain the reviewed Admin API access and webhook configuration from the merchant's authorized administrator. Use least-powerful read scopes and protected merchant credential custody. No scraping is needed for the supported Shopify path.
+
+Synchronize a bounded catalog and compare SKU/variant, image, amount/currency and inventory timestamp with Shopify. Confirm a signed webhook is rejected when invalid and accepted only under the configured binding. Webhook receipt alone does not prove catalog freshness; inspect the resulting source snapshot.
+
+#### Ask useful buyer questions
+
+Try `Which variants of this item are available in the latest snapshot?` and `What source and timestamp support that price?`. Verify the response is merchant-scoped, source-grounded and explicit about stale or unsupported facts. Cached authority can support non-binding Q&A without routing every message through Grantex.
+
+Do not promote stale snapshots into final price, stock, delivery, tax, return or warranty promises. Prepared purchase output is not an order confirmation or paid state.
+
+#### Protocols and channels
+
+The runtime includes bounded protocol-adapter payloads and web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes. Client configuration, provider credentials, platform/marketplace approval and merchant publishing are separate dependencies. A UCP/ACP/schema.org payload does not automatically list a merchant in ChatGPT, Gemini or another marketplace.
+
+Current WooCommerce/ERP/PIM/OMS/WMS/custom-source configuration does not have universal runtime parity with Shopify. Treat each as an integration project until its adapter is implemented and validated.
+
+#### Payments and offline POS
+
+Plural/Pine capability verification records provider-owned, non-sensitive capability evidence. It is not a completed payment or mandate. A human sets up and authorizes payment relationships with the fintech/provider under its own process.
+
+Offline POS handoff means a bounded interaction with a physical-store/POS confirmation path; it does not mean unlimited offline financial authority. Provider/POS/merchant evidence remains authoritative. AgenticOrg does not execute OACP capture, refunds, holds, shipping or order creation merely from cached artifacts.
+
+Public discovery remains off unless explicitly enabled through platform and merchant settings. Readiness, certification and public standardization are not implied by these routes.
+
+Next: [BFSI merchant-services playbook](/docs/bfsi-merchant-services), [API and agent clients](/docs/api-sdk-mcp).
+
+
+### API, SDK, MCP and A2A integration
+
+URL: https://agenticorg.ai/docs/api-sdk-mcp
+Audience: Developers and integration owners. Reviewed: 2026-09-29.
+
+#### Choose an integration surface
+
+Use REST/OpenAPI for application contracts, the repository SDKs for typed client access, MCP for compatible tool clients, and A2A for agent discovery/task surfaces. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions.
+
+| Surface | Suitable first task | Boundary |
+| --- | --- | --- |
+| REST/OpenAPI | Inspect a resource with an approved credential | Deployed API/schema is the contract |
+| Python/TypeScript SDK | Company-scoped read or bounded agent run | Installed client version may differ from repository source |
+| MCP stdio adapter | List agents/tools in a compatible local client | Client transport support and scopes are still required |
+| A2A | Read discovery, then submit an authorized task | A skill card is not execution authority |
+| Commerce bridges | Read merchant artifacts and prepare handoffs | Channel approval and provider execution remain separate |
+
+#### Authenticate and preserve context
+
+Use a credential issued for the reviewed deployment and minimum scopes. Keep it in environment/secret storage. Supply authorized company context for execution paths that require it. Never accept a company ID from untrusted model content without server-side authorization.
+
+### Obtain a workspace API key
+
+An authorized administrator opens **Settings > API Keys**. Enter a meaningful
+**Key Name**, choose **Expires In**, then select **Generate Key**. A short-lived
+key is preferable for a first integration exercise. The secret is displayed
+only once; place it in approved secret storage rather than a shared document.
+The key table shows its prefix, status, last-used time and creation time. Use
+**Revoke** for an unused or compromised key and confirm the client can no longer
+authenticate.
+
+The current form does not offer a custom per-key scope editor. A named key is
+not inherently a narrowly scoped business grant. Review server-side credential
+permissions and use the appropriate delegated-grant path when action-level
+authority is required. Never use an admin key to impersonate a human case
+approver.
+
+The Python SDK supports an API key or delegated grant. Example of a read-oriented client:
+
+```python
+import os
+from agenticorg import AgenticOrg
+
+client = AgenticOrg(
+    api_key=os.environ["AGENTICORG_API_KEY"],
+    base_url=os.environ["AGENTICORG_BASE_URL"],
+)
+agents = client.agents.list()
+```
+
+Verify the installed package methods before copying examples. The repository contains newer client resources than the currently published Python wheel documented in its README; build/publish version and server deployment must be checked separately.
+
+#### Connect MCP
+
+Use the repository MCP adapter with a client that supports its stdio transport. Configure `AGENTICORG_BASE_URL` and one accepted authentication value: `AGENTICORG_API_KEY` or `AGENTICORG_GRANTEX_TOKEN`. Use the client's secure configuration mechanism instead of committing a key in JSON.
+
+The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope enforcement for A2A/MCP depends on the deployment's `AGENTICORG_ROUTE_SCOPE_A2A_MCP` setting; administrators must evaluate and configure it, not assume every discovery route is protected identically.
+
+The `seller.*` tools read cached commerce artifacts; they do not authorize payment, orders or holds. Governed-case human decisions have no shortcut through the machine-authenticated MCP adapter.
+
+#### Integration acceptance test
+
+1. Pin a reviewed SDK/adapter version and endpoint.
+2. Make a bounded permitted read.
+3. Test missing/expired credentials and an insufficient scope.
+4. Test cross-company access refusal.
+5. Inspect error shapes, retry behavior and rate limits.
+6. Prove any external action separately with authoritative confirmation.
+
+A generic MCP bridge is not a universal buyer plugin or marketplace approval. Check the current client/provider documentation before enabling a production surface.
+
+
+### Self-hosting and deployment handoff
+
+URL: https://agenticorg.ai/docs/self-hosting
+Audience: IT and platform teams. Reviewed: 2026-09-29.
+
+#### Hosted versus institution-managed
+
+The hosted workspace and a self-managed deployment share product concepts, but operational responsibilities differ. A bank-managed environment must own network, identities, keys, database, backups, model/provider access, workers, updates, security monitoring and recovery. Self-hosting alone does not establish regulatory compliance or data residency.
+
+For most business users, use the approved hosted or institution-provided URL. This guide is for IT/platform teams, not a requirement before completing [Your first agent](/docs/first-agent).
+
+#### Local learning environment
+
+The repository provides a Docker Compose development stack and GNU Make targets. With reviewed prerequisites installed:
+
+```bash
+git clone https://github.com/mishrasanjeev/agentic-org.git
+cd agentic-org
+make dev
+make seed
+```
+
+The current local quickstart binds the console to `http://127.0.0.1:3000` and API to `http://127.0.0.1:8000`. It includes local data services and development verification, identity and model stubs. The default fake/scripted model responses are explicitly synthetic; this environment does not prove a real provider, bank integration or customer transaction.
+
+Use `make ps` for service status, `make logs` for logs, `make test`/`make check` for repository checks and `make e2e` for browser tests. `make down` preserves data; `make clean` deletes development volumes. Do not run destructive cleanup against a production environment.
+
+#### Prepare production separately
+
+| Responsibility | Required decision/evidence |
+| --- | --- |
+| Identity | Named users, role/scope model, SSO/SCIM where configured |
+| Network | Approved ingress/egress, TLS, provider endpoints and private access |
+| Database | PostgreSQL/pgvector, tenant isolation, migrations, backup/restore proof |
+| Runtime | API/UI, Redis, workers/schedulers, OCR and browser dependencies |
+| Models | Allowed endpoints, credentials, retention, cost and region |
+| Integrations | Bank/provider contracts, scopes, test accounts and ownership |
+| Operations | Monitoring, alert ownership, capacity tests and rollback |
+
+Do not copy development placeholder secrets, fake-model flags or seed identities into production. Air-gapped deployment has additional dependency/model/image and outbound-integration limits; review the operator guide before promising disconnected capability.
+
+#### Release handoff
+
+Use the repository's reviewed deployment path and migration-first process. Verify exact commit, migration completion, API/UI revisions, traffic, health, database/Redis and required CI. Then test the institution's actual authorized flow with approved synthetic data. A successful build is not a completed deployment or provider canary.
+
+#### User documentation domain
+
+The public user manual is available under `/docs` in the UI build. `docs.agenticorg.ai` should be a DNS **subdomain**, not a separate nameserver delegation by default. Hosting/TLS must route that hostname to the reviewed UI/static documentation service before publishing the link. The repository's documentation-domain runbook explains the release checks and ownership; no DNS change is made by reading this guide.
+
+
+### BFSI: business onboarding and KYB review
+
+URL: https://agenticorg.ai/docs/bfsi-business-onboarding
+Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-09-29.
+
+#### Scenario and boundary
+
+Example Bank wants analysts to spend less time assembling a business-onboarding file and more time reviewing exceptions. This playbook uses AgenticOrg's governed-case path for read-only investigation, cited memo preparation, screening proposals, deterministic policy evaluation and a human decision.
+
+It does not automate account opening, sanctions clearance, loan approval or regulatory reporting. Provider availability, country coverage, bank policy and system-of-record integration are institution-specific. Use fictional businesses until the institution approves real data.
+
+#### Prepare the pilot
+
+Assign an onboarding owner, screening analyst, authorized approver, provider integration owner and platform/security owner. Configure the tenant-gated case runtime, one active shared agent per required case role, reviewed provider manifest/read tools, exact local purpose controls, Grantex grants and a reviewed policy. Configure the decision issuer and signed handoff destination separately.
+
+The institution's application/LOS system submits cases through the reviewed API/workflow. The approvals console is for queue and review, not a universal business-intake form.
+
+#### Follow one fictional application
+
+```flow
+Application | Example Trading Ltd submits business details through the bank's approved intake.
+Investigation | Agents read approved registry, ownership and screening evidence.
+Memo | Source-linked findings, missing items and deterministic policy tier are prepared.
+Analyst review | A person inspects possible screening matches and records a reasoned disposition.
+Decision request | The current case/version/action goes to the configured human approval issuer.
+Bank handoff | Verified decision evidence is recorded and signed outcome delivered to the bank system.
+```
+
+1. Open **Approvals > governed cases** at `/dashboard/approvals/cases`.
+2. Find the fictional case and inspect investigation state.
+3. Read identity, registry, ownership, screening, activity and missing evidence.
+4. Open retained source passages where available; confirm provider record and retrieval time.
+5. Inspect policy ID/version and fired rules. Do not treat missing evidence as passing.
+6. Review screening proposals. Override only with a documented reason; the agent's proposal does not clear the hit.
+7. Request a decision for the current case. The named approver authenticates on the issuer's page, including distinct second approval where required.
+8. Record the verified decision and inspect signed handoff delivery. Confirm what the bank system did with it.
+
+#### What a successful trial proves
+
+It proves the configured evidence/review/decision/handoff path for that test. It does not prove universal registry coverage, calibrated model accuracy, case-bound pooled grants or regulatory approval. The published Grantex SDK's token-level purpose/per-case-cap limitations must remain visible in the rollout review.
+
+#### Negative cases to demonstrate
+
+Try a unavailable provider capability, unresolved screening hit, missing grant, cross-company request, machine-credential human decision, changed memo after approval request and duplicate handoff. Expected outcomes are visible missing evidence/refusals or safe idempotent handling, never a manufactured approval.
+
+#### Measure adoption
+
+Compare manual file-assembly time, missing-information rate, analyst overrides, re-investigation, review age and delivery failures on a reviewed sample. Track reopening causes. Do not publish a numerical accuracy claim from a few happy-path examples.
+
+Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
+
+
+### BFSI: reconciliation and finance exceptions
+
+URL: https://agenticorg.ai/docs/bfsi-reconciliation
+Audience: Finance and treasury operations. Reviewed: 2026-09-29.
+
+#### Scenario and boundary
+
+Example Bank's finance team wants a daily exception pack comparing a reviewed ledger export with bank/settlement statements. AgenticOrg assists with evidence extraction, comparison, break classification and a reviewable summary. Posting entries, releasing money and certifying balances remain the finance team's authorized process.
+
+This is a configurable reference workflow, not a universally pre-integrated bank reconciliation product. The actual ledger/bank connector contract, matching logic and accounting policy must be implemented/reviewed for the institution.
+
+#### Prepare the sources
+
+Use synthetic CSV/XLSX statements with transaction reference, date, amount, currency and relevant account mapping. Define timezone, date boundaries, sign conventions, duplicates and tolerances. Avoid real account numbers in training examples.
+
+Upload the reconciliation procedure to Knowledge Base and verify search. Configure read-only exports/connectors with the correct company binding. Make sure the agent's selected tools actually read the required data; a finance template alone does not do so.
+
+#### Configure and run
+
+For a small reproducible exercise, prepare these two **synthetic** datasets
+using the schema expected by your reviewed read tool. Do not infer that uploading
+CSV to Knowledge Base automatically connects the reconciliation agent to it.
+
+```csv
+source,reference,date,amount,currency
+bank,DEMO-001,2026-09-28,1000.00,INR
+bank,DEMO-002,2026-09-28,2500.00,INR
+bank,DEMO-003,2026-09-28,750.00,INR
+```
+
+```csv
+source,reference,date,amount,currency
+ledger,DEMO-001,2026-09-28,1000.00,INR
+ledger,DEMO-002,2026-09-28,2400.00,INR
+ledger,DEMO-004,2026-09-28,500.00,INR
+```
+
+The reviewed expected result is one exact match (`DEMO-001`), an INR 100
+amount difference (`DEMO-002`), one bank-only entry (`DEMO-003`) and one
+ledger-only entry (`DEMO-004`). Bank total is INR 4,250; ledger total is INR
+3,900. These figures are teaching assertions, not reconciled customer balances.
+Require source-row references and validated calculations in the exception pack.
+
+1. Review the available reconciliation agent or create a bounded finance candidate.
+2. Specify output: matched items, unmatched items, reason, evidence reference and proposed follow-up.
+3. For exact financial totals, require deterministic calculations/validated tool results; do not ask an LLM to invent or approximate amounts.
+4. Build a manual workflow: read sources, validate schema, compare, prepare exception pack, human review.
+5. Run a synthetic day with known expected matches and deliberate breaks.
+6. Inspect source freshness, totals, duplicate handling and every exception.
+7. Hand approved corrections to the accounting system through a separately authorized process.
+
+```flow
+Read-only data | Collect the reviewed statement and ledger for the same business period.
+Validate and compare | Apply reviewed mappings, currencies, totals and matching rules.
+Exception pack | List breaks with evidence and missing information.
+Finance review | Resolve ambiguity and approve any proposed correction.
+Authoritative posting | The institution's controlled finance path performs and confirms updates.
+```
+
+#### Sample acceptance cases
+
+| Input | Expected evidence |
+| --- | --- |
+| Same reference and amount | A documented matched pair |
+| Missing ledger item | Unmatched source entry, not a guessed posting |
+| Same amount in different currencies | No unsupported cross-currency match |
+| Duplicate reference | Explicit duplicate exception |
+| Corrupt/partial source | Failed validation or incomplete evidence, not balanced totals |
+
+#### Scheduling and operations
+
+Schedule only after a manual run is reproducible. Confirm timezone, statement arrival, worker availability, rate limits and retry/idempotency. A late source must not be represented as a complete daily reconciliation.
+
+Measure correctly identified breaks, false matches, review effort, source delays and reopened corrections. Compare against an independently reviewed ledger sample. Retest mappings after upstream changes.
+
+Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
+
+
+### BFSI: customer service across chat and voice
+
+URL: https://agenticorg.ai/docs/bfsi-customer-service
+Audience: Contact-center and service teams. Reviewed: 2026-09-29.
+
+#### Scenario and boundary
+
+Example Bank wants a service assistant that explains approved procedures, triages complaints and prepares staff responses through chat and configured voice. Start with general information and synthetic cases. Do not expose account details or perform account/card/payment actions without the bank's approved authentication and integration path.
+
+A phone number, claimed name or free-text account identifier is not identity verification. AgenticOrg's voice/runtime controls do not themselves establish bank-customer authentication.
+
+#### Prepare a reviewed knowledge set
+
+Upload current product FAQs, branch directory, complaint procedure and escalation policy. Assign effective dates and an owner. Search known answers and confirm citations. Remove or clearly supersede conflicting old procedures. Do not load unapproved financial advice as an operational policy.
+
+#### Build the service agent
+
+Use a reviewed support-triage candidate or custom operations agent. Define categories, urgency, response-draft structure and escalation. Grant read-only knowledge/approved ticket tools first. Explicitly refuse PIN/OTP collection, balance invention, account changes and payment instructions outside the authorized bank workflow.
+
+1. Run a general question through the agent detail/chat path.
+2. Test a complaint with missing information.
+3. Test a suspected fraud/card-loss scenario requiring urgent human routing.
+4. Ask for a private account balance and confirm refusal/referral.
+5. Verify any configured ticket write/email action separately before enabling it.
+
+```flow
+Question or complaint | Receive the request on the configured authenticated or general-information channel.
+Source-grounded response | Answer supported procedural facts with current sources.
+Sensitivity check | Detect requests that need bank authentication or authorized action.
+Human escalation | Prepare a bounded case/response for the responsible staff queue.
+Confirmed outcome | The bank system owns communication, resolution and account actions.
+```
+
+#### Add voice only after chat is correct
+
+Configure signed Twilio calls using [Voice setup](/docs/voice). Test with an approved number/window. Check speech recognition, spoken clarity, interruption/silence, safe failure wording and actual provider status. A passing text simulation does not prove acoustic or telephone quality.
+
+Document provider recording/retention and customer-facing disclosures under the institution's process. AgenticOrg's call-history masking does not control the provider's own storage settings.
+
+#### What to measure
+
+Track correct routing, unsupported-answer rate, unresolved questions, escalation time, call failures and human overrides. Validate different accents/languages and noisy conditions where they are in scope. Do not claim a language is ready merely because it appears in a selector.
+
+Roll out a narrow task population before sensitive account servicing. Re-test whenever the bank procedure, provider number/callback, model or ticketing contract changes.
+
+Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
+
+
+### BFSI: insurance document and claims assistance
+
+URL: https://agenticorg.ai/docs/bfsi-insurance
+Audience: Insurers and claims operations. Reviewed: 2026-09-29.
+
+#### Scenario and boundary
+
+Example Insurer wants to reduce manual preparation of claim files. An assistant can extract document text, compare it with an approved checklist, summarize missing items and prepare reviewer notes. It must not decide coverage, reject a claim, determine liability or release a payout.
+
+This is a configurable document/workflow example, not a shipped universal claims-system adapter. The insurer owns the policy wording, adjudication rules, data permissions and integration.
+
+#### Prepare the exercise
+
+Use a fictional claim, synthetic identity/receipt documents and a reviewed sample checklist. Keep medical or real customer data out of initial testing. Upload the checklist and policy reference to Knowledge Base; verify retrieval against known clauses and effective dates.
+
+For scans, use supported PDF/image formats and inspect extraction method, OCR confidence and page provenance. Manually verify dates, policy numbers, currency, totals and negatives. A confidence value is not permission to accept an amount.
+
+#### Configure the assistant
+
+Create a custom operations/document-review agent with output fields for document type, cited facts, missing items, unreadable fields and reviewer questions. Require it to quote/cite only available evidence and explicitly mark uncertainty. Limit tools to approved reads during the first pilot.
+
+```flow
+Approved claim documents | Authorized intake supplies the current file references.
+Extraction and quality review | Native parsing or OCR produces text with provenance and visible uncertainty.
+Checklist comparison | The assistant prepares completeness findings from the reviewed procedure.
+Human claims review | Authorized staff verify evidence and coverage under insurer policy.
+System handoff | The claims platform records its own decision and payout process.
+```
+
+#### Run a complete test
+
+Give the fictional file reference `DEMO-CLAIM-001` a checklist that requires an
+application, receipt and incident statement. Supply only the first two documents.
+The expected reviewer output should contain:
+
+```text
+File: DEMO-CLAIM-001
+Application: present, with source/page reference
+Receipt: present, with source/page reference; amount needs manual verification
+Incident statement: missing
+Next step: ask the authorized claims team to obtain the missing statement
+Coverage decision: not made
+Payout: not initiated
+```
+
+This is an expected-result example, not an API schema. Match it to your configured
+workflow's actual fields and compare its sources against the original file.
+
+1. Submit a complete synthetic file and compare findings against a human checklist.
+2. Remove one required document and verify the assistant requests it.
+3. Use a blurry amount/date and confirm it is unreadable, not guessed.
+4. Provide conflicting policy versions and confirm escalation.
+5. Ask the agent to approve or pay the claim and confirm refusal.
+6. Inspect run history, sources and reviewer handoff.
+
+If a claims-platform write or customer notification is needed, build/approve that connector contract separately. A prepared missing-document list is not proof that a message was sent.
+
+#### Operate the process
+
+Assign a checklist owner, claims reviewer, data/privacy owner and integration owner. Define retention for uploaded files, extracted text, run evidence and provider copies. Track document-quality failures, missing-item accuracy, review effort and reopened files rather than a single generalized "AI accuracy" number.
+
+Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
+
+
+### BFSI: merchant enablement and agentic commerce
+
+URL: https://agenticorg.ai/docs/bfsi-merchant-services
+Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-09-29.
+
+#### Scenario and ownership
+
+This is a reference example for an acquiring bank's merchant-enablement pilot,
+not an already integrated banking product or a claim of live payment execution.
+
+An acquiring bank wants to help an approved Shopify merchant become usable by agentic buyer interfaces. The bank can offer an institution-managed or reviewed hosted AgenticOrg workspace, but merchant/provider/platform contracts still determine actual availability.
+
+AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifacts. Shopify owns merchant catalog/inventory/order truth. The bank/fintech/provider owns payment/mandate execution and customer authorization. OACP is not a reason to make Grantex the engine for every buyer message.
+
+#### Build one real merchant path
+
+1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
+2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
+3. Obtain read-only Shopify access through the merchant's approved process.
+4. Sync products/variants/images/price/inventory and compare samples with Shopify.
+5. Send the bounded Grantex authority request and verify/cache issued artifacts.
+6. Ask real product questions through the configured web or agent bridge.
+7. Inspect source, freshness, supported facts and refusal behavior.
+8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
+
+```flow
+Bank and merchant setup | Agree ownership, identities, read scopes and publishing state.
+Shopify evidence | Real read-only sync produces source-linked commercial facts.
+Trust artifacts | Grantex authority and AgenticOrg cache preserve scope and freshness.
+Buyer channel | A configured bridge answers from supported artifacts.
+Provider capability | Plural/Pine evidence checks configured capability, not successful payment.
+Authoritative handoff | The provider, POS or merchant confirms its own execution outcome.
+```
+
+#### Plural/Pine and mandates
+
+Arrange the provider onboarding contact, merchant account, sandbox/live access, allowed capability contract and human authorization journey. AgenticOrg can verify provider-owned capability evidence directly through its configured path. Store non-sensitive references, not raw mandate/payment credentials.
+
+A credential/token capability check is not proof of a completed mandate or an allowed payment in every geography. Live execution needs the provider's real contract, authorization, settlement/error/refund handling and institution approval. The current OACP runtime remains prepared/non-executing for those actions.
+
+#### Channels and protocol payloads
+
+UCP/ACP/schema.org/AP2/A2A/MCP-style payloads and bridges are not automatic marketplace placement. Agree each target's supported contract, authentication, publication/approval requirements and actual customer journey. WhatsApp/Telegram need configured credentials and channel rollout; ChatGPT/Claude/Gemini/Perplexity need appropriate client/platform setup.
+
+#### Physical-store POS
+
+An offline POS bridge prepares a store-linked handoff and reconciles authoritative provider/POS confirmation. It must preserve merchant/store context, expiry, source, reference and duplicate handling. Do not call a paid receipt successful because an agent displayed a prepared packet.
+
+#### Pilot success criteria
+
+Verify accurate catalog facts, stale-source refusal, cross-merchant isolation, invalid webhook rejection, channel authentication and non-fabricated transaction state. Keep public discovery off until the publishing path is approved and validated. Measure the complete buyer journey rather than counting adapter names.
+
+Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+
+
+### Team adoption and launch checklist
+
+URL: https://agenticorg.ai/docs/adoption-checklist
+Audience: Sponsors and rollout leads. Reviewed: 2026-09-29.
+
+#### Choose the first useful problem
+
+Select one repeatable task with a measurable outcome, manageable data and a human owner. Good first tasks include procedure Q&A, document completeness review, reconciliation exception preparation and complaint triage. Avoid a first rollout that simultaneously requires new voice, payments, core banking and marketplace integrations.
+
+This is a rollout checklist, not an instruction to remain in an endless audit phase. Build the actual authorized path, test it with representative evidence and train the people who will use it.
+
+#### Assign accountable owners
+
+| Owner | Responsibility |
+| --- | --- |
+| Business sponsor | Outcome, budget and scope |
+| Process owner | Current procedure, expected output and exceptions |
+| Administrator | Workspace, roles, models and configuration |
+| Integration owner | Provider contract, credentials, tool behavior and recovery |
+| Reviewer | Human approvals, coverage and escalation |
+| Security/data owner | Permitted information, retention and incident handling |
+| Operator/support owner | Daily monitoring, user help and rollback |
+
+#### Before inviting the team
+
+1. Complete [Your first agent](/docs/first-agent) with synthetic data.
+2. Verify every required knowledge/model/connector path separately.
+3. Test normal, missing, conflicting, stale and forbidden requests.
+4. Confirm a non-admin operator can reproduce the exact task.
+5. Confirm the reviewer can find evidence and make only authorized decisions.
+6. Inspect external system confirmations separately from prepared outputs.
+7. Document failure recovery, support contact and a pause/rollback trigger.
+
+#### Training session
+
+Walk users through sign-in, company selection, task input, source inspection, run status and escalation. Show one successful task and one intentional refusal. Train reviewers to check evidence, not trust fluent wording. Let each user reproduce the path with their own role.
+
+Use the BFSI playbooks as teaching examples, then replace fictional inputs and procedures only after the institution approves real data and integrations. Bank-specific connectivity and regulated authority must remain explicit.
+
+#### Pilot scorecard
+
+Track task correctness, source coverage, review effort, queue age, external-action failures, latency, cost and reopened errors. Write the sample size, time window and workload. Compare to a baseline using the same cases. Decide in advance what triggers a pause.
+
+#### Expand and maintain
+
+Add one new capability at a time when its real dependency is ready. Update the matching guide, prompts, regression suite and operator training together. Review documents after each behavior change; do not leave an old deployment report as the user-facing source of truth.
+
+The public manual, current product status and deployed runtime each serve different purposes: the manual explains use, status explains boundaries, and actual release evidence proves availability. Keep all three aligned.

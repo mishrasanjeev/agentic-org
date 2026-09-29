@@ -11,6 +11,7 @@ import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES } from "./lib/role
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
 import NotFound from "./pages/NotFound";
+import "./pages/documentation.css";
 
 /* -- Lazy import with auto-reload on chunk failure -- */
 function lazyRetry(factory: () => Promise<{ default: React.ComponentType }>) {
@@ -117,6 +118,7 @@ const AdsLanding = lazyRetry(() => import("./pages/ads/AdsLanding"));
 /* -- Resource / SEO content pages -- */
 const Resources = lazyRetry(() => import("./pages/resources/Resources"));
 const ResourcePage = lazyRetry(() => import("./pages/resources/ResourcePage"));
+const Documentation = lazyRetry(() => import("./pages/Documentation"));
 
 /* -- Explainer pages -- */
 const HowGrantexWorks = lazyRetry(() => import("./pages/HowGrantexWorks"));
@@ -187,6 +189,8 @@ export default function App() {
       <Route path="/blog/:slug" element={<BlogPost />} />
 
       {/* Resource / SEO content pages */}
+      <Route path="/docs" element={<Documentation />} />
+      <Route path="/docs/:slug" element={<Documentation />} />
       <Route path="/resources" element={<Resources />} />
       <Route path="/resources/:slug" element={<ResourcePage />} />
 

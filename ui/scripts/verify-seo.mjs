@@ -192,7 +192,7 @@ export function verifySeo(root = UI_ROOT) {
           fail("expected exactly one of each social metadata field in " + label);
         }
       }
-      if (!/<noscript><main data-static-seo="true">/.test(html)) {
+      if (!/<noscript><main\b[^>]*\bdata-static-seo="true"[^>]*>/.test(html)) {
         fail("missing static noscript summary: " + label);
       }
 

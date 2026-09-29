@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadUserGuides } from "./generate-user-docs.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const UI_ROOT = join(SCRIPT_DIR, "..");
@@ -251,6 +252,10 @@ function pages() {
     : [];
   const merged = new Map(DEFAULT_PAGES.map((page) => [page.path, page]));
   for (const page of configured) merged.set(page.path, { ...merged.get(page.path), ...page });
+  for (const article of loadUserGuides(UI_ROOT).articles) {
+    const path = "/docs/" + article.slug;
+    merged.set(path, { path, name: article.title, summary: article.description });
+  }
   return [...merged.values()];
 }
 
@@ -367,6 +372,18 @@ function summary(data) {
     "## Key public pages",
     "",
     ...data.pages.slice(0, 15).map(pageLine),
+    "",
+    "## User documentation",
+    "",
+    "- [User manual](" + SITE + "/docs): task-based setup and operating guides, glossary, troubleshooting and five BFSI playbooks.",
+    "- [Your first useful agent](" + SITE + "/docs/first-agent): a bounded document-review exercise.",
+    "- [Knowledge and OCR](" + SITE + "/docs/knowledge-and-ocr): supported documents, extraction quality and source verification.",
+    "- [BFSI business onboarding](" + SITE + "/docs/bfsi-business-onboarding): evidence, screening review, human decision and signed handoff.",
+    "- [BFSI reconciliation](" + SITE + "/docs/bfsi-reconciliation): synthetic bank/ledger examples and reviewed exceptions.",
+    "- [BFSI customer service](" + SITE + "/docs/bfsi-customer-service): procedural support across chat and configured voice.",
+    "- [BFSI insurance assistance](" + SITE + "/docs/bfsi-insurance): claim-file completeness and OCR quality review.",
+    "- [BFSI merchant services](" + SITE + "/docs/bfsi-merchant-services): Shopify evidence, OACP and provider-owned execution boundaries.",
+    "- [Troubleshooting](" + SITE + "/docs/troubleshooting): isolate configuration, authority, knowledge and provider failures.",
     "",
     "## Developer access",
     "",
@@ -544,6 +561,15 @@ function full(data) {
       absoluteReadme().replace(/^# AgenticOrg\s*/, ""),
       "",
       ...appendix,
+      "",
+      "## Public end-user manual",
+      "",
+      "These source-verified guides describe usage and configured boundaries, not a blanket production or regulatory approval. Canonical hub: " + SITE + "/docs.",
+      ...loadUserGuides(UI_ROOT).articles.flatMap((article) => [
+        "", "### " + article.title, "", "URL: " + SITE + "/docs/" + article.slug,
+        "Audience: " + article.audience + ". Reviewed: " + article.reviewed + ".",
+        "", article.markdown.replace(/^## /gm, "#### "),
+      ]),
     ].join("\n"),
   );
 }
