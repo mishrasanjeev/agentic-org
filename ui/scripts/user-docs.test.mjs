@@ -65,13 +65,22 @@ test("tracked reader data matches the authored Markdown and manifest", () => {
 });
 
 test("Markdown escapes raw HTML, unsafe links and diagram labels", () => {
-  const { html } = renderGuide(
-    "<script>alert(1)</script>\n\n[unsafe](javascript:alert(1))\n\n```flow\n<img src=x onerror=alert(1)> | <script>unsafe</script>\n```",
-  );
-  assert.doesNotMatch(html, /<script>|<img|href="javascript:/);
-  assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /&lt;img/);
-  assert.match(html, /aria-label="Workflow"/);
+  for (const [script, image, scheme] of [
+    ["script", "img", "javascript"],
+    ["SCRIPT", "IMG", "JAVASCRIPT"],
+    ["ScRiPt", "ImG", "JaVaScRiPt"],
+  ]) {
+    const { html } = renderGuide(
+      `<${script}>alert(1)</${script}>\n\n[unsafe](${scheme}:alert(1))\n\n\`\`\`flow\n<${image} src=x onerror=alert(1)> | <${script}>unsafe</${script}>\n\`\`\``,
+    );
+    assert.doesNotMatch(
+      html,
+      /<\s*script\b|<\s*img\b|href\s*=\s*["']?\s*javascript:/i,
+    );
+    assert.ok(html.includes(`&lt;${script}&gt;`));
+    assert.ok(html.includes(`&lt;${image}`));
+    assert.match(html, /aria-label="Workflow"/);
+  }
 });
 
 test("Windows and Linux checkouts generate identical reader data", () => {

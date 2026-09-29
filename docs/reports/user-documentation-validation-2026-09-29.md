@@ -103,6 +103,12 @@ The local-only Host-header alias assertion is a separate browser test. It skips
 explicitly on hosted targets until registrar/HTTPS setup is complete, while
 no-JavaScript reading and unknown-guide HTTP 404 remain tested in production.
 
+PR CodeQL review found that the Markdown safety test's tag assertion matched
+lowercase only. The assertion now checks HTML tags and unsafe URL schemes
+case-insensitively, with lowercase, uppercase and mixed-case input probes. All
+24 documentation/SEO generator tests passed again. This is a test-only change;
+the renderer's existing `html: false` boundary and published assets are unchanged.
+
 `markdown-it` is pinned to the reviewed patched version 14.3.2. The existing
 `undici` override was advanced one patch from 7.29.0 to 7.29.1; the final local
 npm audit reports zero vulnerabilities.
