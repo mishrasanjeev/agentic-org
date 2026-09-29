@@ -38,7 +38,7 @@ Search and review | Verify a known answer against the source before operational 
 
 ## Get better results from scans
 
-Use clean, upright, complete scans with readable text. Avoid extreme compression, glare, cut-off pages and mixed orientations. Keep the original for comparison. Production OCR includes India-first language packs, but operators must check installed languages and deployment settings for their material.
+Use clean, upright, complete scans with readable text. Avoid extreme compression, glare, truncated pages and mixed orientations. Keep the original for comparison. The OCR image includes India-first language packs, but operators must check installed languages and deployment settings for their material.
 
 OCR confidence is diagnostic metadata, not the probability that a bank account number or monetary value is correct. Manually verify identifiers, totals, dates, negatives, handwritten fields and multi-column reading order. For a financial process, route ambiguous extraction to a reviewer; never reconstruct unreadable digits from context.
 

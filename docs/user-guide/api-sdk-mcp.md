@@ -27,8 +27,8 @@ authenticate.
 The current form does not offer a custom per-key scope editor. A named key is
 not inherently a narrowly scoped business grant. Review server-side credential
 permissions and use the appropriate delegated-grant path when action-level
-authority is required. Never use an admin key to impersonate a human case
-approver.
+authority is required. Human case decisions require the named approver's
+authenticated session; an admin key must not substitute for it.
 
 The Python SDK supports an API key or delegated grant. Example of a read-oriented client:
 

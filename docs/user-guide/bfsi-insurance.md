@@ -1,6 +1,6 @@
 ## Scenario and boundary
 
-Example Insurer wants to reduce manual preparation of claim files. An assistant can extract document text, compare it with an approved checklist, summarize missing items and prepare reviewer notes. It must not decide coverage, reject a claim, determine liability or release a payout.
+Example Insurer needs help preparing claim files for manual review. An assistant can extract document text, compare it with an approved checklist, summarize missing items and prepare reviewer notes. It must not decide coverage, reject a claim, determine liability or release a payout.
 
 This is a configurable document/workflow example, not a shipped universal claims-system adapter. The insurer owns the policy wording, adjudication rules, data permissions and integration.
 

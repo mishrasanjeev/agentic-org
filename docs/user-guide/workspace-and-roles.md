@@ -47,7 +47,7 @@ management. Per-company mappings live in **Companies > company detail > Settings
 or SSO-provisioning console. Have your administrator use the supported invitation
 and identity process for your deployment, not an invented bulk member editor.
 
-Recover passwords through the sign-in flow; never ask a colleague for theirs.
+Reset forgotten passwords through the sign-in flow; never ask a colleague for theirs.
 When a person leaves, review access, API keys, connector ownership, workflow
 schedules and outstanding approvals, not just their login. Confirm revocation
 with the actual identity/grant issuer as well as company role mappings.

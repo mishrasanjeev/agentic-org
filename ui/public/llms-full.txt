@@ -583,7 +583,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Connect business systems](https://agenticorg.ai/docs/connectors): Register a connector, bind credentials to the correct scope, verify health and permissions, and grant only the tools your agent needs.
 - [Build and run workflows](https://agenticorg.ai/docs/workflows): Turn a process into reviewed steps, conditions, approvals and durable runs; test failures before enabling schedules.
 - [Voice, speech-to-text and text-to-speech](https://agenticorg.ai/docs/voice): Configure the signed Twilio runtime, validate speech turns and call history, and test calls only with approved destinations.
-- [Browser RPA and schedules](https://agenticorg.ai/docs/rpa): Run reviewed browser scripts with approved domains, inspect durable history, and recover safely from target-site changes.
+- [Browser RPA and schedules](https://agenticorg.ai/docs/rpa): Run reviewed browser scripts with approved domains, inspect durable history, and resume from a reviewed step after target-site changes.
 - [Industry packs and business dashboards](https://agenticorg.ai/docs/industry-packs): Use available packs as reviewed starting points and understand the finance, HR, marketing, operations and partner workspaces.
 - [Approvals and human review](https://agenticorg.ai/docs/approvals): Review evidence and permissions before a decision, handle escalations, and distinguish workflow approvals from governed-case decisions.
 - [Governed business onboarding cases](https://agenticorg.ai/docs/governed-cases): Investigate a business, inspect cited evidence and deterministic policy scores, review screening proposals, and request a human decision.
@@ -721,7 +721,7 @@ Audience: Everyone. Reviewed: 2026-09-29.
 
 #### What you can do with AgenticOrg
 
-AgenticOrg is a workspace for building and operating AI agents that work with your procedures, documents and approved business tools. It brings agents, knowledge, workflows, approvals and run evidence together. You decide the task and the boundaries; an agent is not a replacement for your organization's authority to make a financial, legal or customer decision.
+AgenticOrg is a workspace for building and operating AI agents around your procedures, documents and approved business tools. It brings agents, knowledge, workflows, approvals and run evidence together. You decide the task and the boundaries; an agent is not a replacement for your organization's authority to make a financial, legal or customer decision.
 
 You can start with a document question, then progress to a repeatable workflow. You do not need to connect every system before the first useful task. A model and a small, approved knowledge set are enough for a read-only learning exercise.
 
@@ -915,7 +915,7 @@ management. Per-company mappings live in **Companies > company detail > Settings
 or SSO-provisioning console. Have your administrator use the supported invitation
 and identity process for your deployment, not an invented bulk member editor.
 
-Recover passwords through the sign-in flow; never ask a colleague for theirs.
+Reset forgotten passwords through the sign-in flow; never ask a colleague for theirs.
 When a person leaves, review access, API keys, connector ownership, workflow
 schedules and outstanding approvals, not just their login. Confirm revocation
 with the actual identity/grant issuer as well as company role mappings.
@@ -1080,7 +1080,7 @@ Inspect the detail screen's supported lifecycle actions before pausing or promot
 
 #### Common mistakes
 
-Too many tools increase the chance of an unintended action. Broad prompts make outputs hard to assess. Confidence thresholds are not calibrated accuracy claims. Shadow labels alone are not permission controls. Add capability only when you can explain and test its necessity.
+Too many tools can lead to unintended actions. Broad prompts make outputs hard to assess. Confidence thresholds are not calibrated accuracy claims. Shadow labels alone are not permission controls. Add capability only when you can explain and test its necessity.
 
 Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluate and roll out](/docs/evaluate-and-rollout).
 
@@ -1180,7 +1180,7 @@ Search and review | Verify a known answer against the source before operational 
 
 #### Get better results from scans
 
-Use clean, upright, complete scans with readable text. Avoid extreme compression, glare, cut-off pages and mixed orientations. Keep the original for comparison. Production OCR includes India-first language packs, but operators must check installed languages and deployment settings for their material.
+Use clean, upright, complete scans with readable text. Avoid extreme compression, glare, truncated pages and mixed orientations. Keep the original for comparison. The OCR image includes India-first language packs, but operators must check installed languages and deployment settings for their material.
 
 OCR confidence is diagnostic metadata, not the probability that a bank account number or monetary value is correct. Manually verify identifiers, totals, dates, negatives, handwritten fields and multi-column reading order. For a financial process, route ambiguous extraction to a reviewer; never reconstruct unreadable digits from context.
 
@@ -1298,7 +1298,7 @@ Test condition branches and review rejection as deliberately as the happy path. 
 
 Only schedule a workflow when the operator has confirmed worker/scheduler availability, timezone, frequency, permissions, retries and duplicate handling. A saved cron string is not proof that a background worker is deployed. Begin with a low-frequency schedule and inspect actual runs.
 
-Before rerunning, inspect whether any external step already completed. Recover from the documented safe step rather than replaying a money-moving or communication action blindly. Pause schedules during provider outages, schema changes and credential rotation where needed.
+Before rerunning, inspect whether any external step already completed. Resume at the documented safe step rather than replaying a money-moving or communication action blindly. Pause schedules during provider outages, schema changes and credential rotation where needed.
 
 Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monitoring), [Evaluation](/docs/evaluate-and-rollout).
 
@@ -1843,8 +1843,8 @@ authenticate.
 The current form does not offer a custom per-key scope editor. A named key is
 not inherently a narrowly scoped business grant. Review server-side credential
 permissions and use the appropriate delegated-grant path when action-level
-authority is required. Never use an admin key to impersonate a human case
-approver.
+authority is required. Human case decisions require the named approver's
+authenticated session; an admin key must not substitute for it.
 
 The Python SDK supports an API key or delegated grant. Example of a read-oriented client:
 
@@ -2115,7 +2115,7 @@ Audience: Insurers and claims operations. Reviewed: 2026-09-29.
 
 #### Scenario and boundary
 
-Example Insurer wants to reduce manual preparation of claim files. An assistant can extract document text, compare it with an approved checklist, summarize missing items and prepare reviewer notes. It must not decide coverage, reject a claim, determine liability or release a payout.
+Example Insurer needs help preparing claim files for manual review. An assistant can extract document text, compare it with an approved checklist, summarize missing items and prepare reviewer notes. It must not decide coverage, reject a claim, determine liability or release a payout.
 
 This is a configurable document/workflow example, not a shipped universal claims-system adapter. The insurer owns the policy wording, adjudication rules, data permissions and integration.
 

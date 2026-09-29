@@ -131,7 +131,7 @@
     {
       "slug": "rpa",
       "title": "Browser RPA and schedules",
-      "description": "Run reviewed browser scripts with approved domains, inspect durable history, and recover safely from target-site changes.",
+      "description": "Run reviewed browser scripts with approved domains, inspect durable history, and resume from a reviewed step after target-site changes.",
       "group": "Build And Run",
       "audience": "Automation administrators",
       "sources": [

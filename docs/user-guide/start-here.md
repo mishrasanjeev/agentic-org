@@ -1,6 +1,6 @@
 ## What you can do with AgenticOrg
 
-AgenticOrg is a workspace for building and operating AI agents that work with your procedures, documents and approved business tools. It brings agents, knowledge, workflows, approvals and run evidence together. You decide the task and the boundaries; an agent is not a replacement for your organization's authority to make a financial, legal or customer decision.
+AgenticOrg is a workspace for building and operating AI agents around your procedures, documents and approved business tools. It brings agents, knowledge, workflows, approvals and run evidence together. You decide the task and the boundaries; an agent is not a replacement for your organization's authority to make a financial, legal or customer decision.
 
 You can start with a document question, then progress to a repeatable workflow. You do not need to connect every system before the first useful task. A model and a small, approved knowledge set are enough for a read-only learning exercise.
 

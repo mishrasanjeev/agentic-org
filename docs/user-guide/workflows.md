@@ -43,6 +43,6 @@ Test condition branches and review rejection as deliberately as the happy path. 
 
 Only schedule a workflow when the operator has confirmed worker/scheduler availability, timezone, frequency, permissions, retries and duplicate handling. A saved cron string is not proof that a background worker is deployed. Begin with a low-frequency schedule and inspect actual runs.
 
-Before rerunning, inspect whether any external step already completed. Recover from the documented safe step rather than replaying a money-moving or communication action blindly. Pause schedules during provider outages, schema changes and credential rotation where needed.
+Before rerunning, inspect whether any external step already completed. Resume at the documented safe step rather than replaying a money-moving or communication action blindly. Pause schedules during provider outages, schema changes and credential rotation where needed.
 
 Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monitoring), [Evaluation](/docs/evaluate-and-rollout).

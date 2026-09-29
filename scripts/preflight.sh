@@ -316,6 +316,7 @@ run_step "ui eslint"              ui_lint
 run_step "ui tsc"                 ui_check
 run_step "ui vitest"              ui_test
 run_step "ui build"               ui_build
+run_step "public claims"          python scripts/lint_public_claims.py
 run_step "consistency sweep"      consistency_sweep
 run_step "module coverage floor"  module_coverage_check
 run_step "critical-path tags"     critical_tag_check

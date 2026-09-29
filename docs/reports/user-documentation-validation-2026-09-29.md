@@ -109,6 +109,16 @@ case-insensitively, with lowercase, uppercase and mixed-case input probes. All
 24 documentation/SEO generator tests passed again. This is a test-only change;
 the renderer's existing `html: false` boundary and published assets are unchanged.
 
+The first remote CI pass also rejected eight guide sentences in generated
+`llms-full.txt` under the existing public-claims policy. These included ambiguous
+availability wording, a hypothetical benefit and operational instructions that
+looked like outcome assertions. The authored sentences were clarified without
+removing their safety guidance, then reader data, LLM assets and CSP hashes were
+regenerated. The complete public-claims scanner passed locally, and three new
+regressions cover the published manual and preflight ordering. The preflight now
+runs the same public-claims command as CI after the UI build; no claim exception,
+unearned evidence record or weakened scanner was added.
+
 `markdown-it` is pinned to the reviewed patched version 14.3.2. The existing
 `undici` override was advanced one patch from 7.29.0 to 7.29.1; the final local
 npm audit reports zero vulnerabilities.

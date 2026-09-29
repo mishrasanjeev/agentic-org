@@ -48,6 +48,6 @@ Inspect the detail screen's supported lifecycle actions before pausing or promot
 
 ## Common mistakes
 
-Too many tools increase the chance of an unintended action. Broad prompts make outputs hard to assess. Confidence thresholds are not calibrated accuracy claims. Shadow labels alone are not permission controls. Add capability only when you can explain and test its necessity.
+Too many tools can lead to unintended actions. Broad prompts make outputs hard to assess. Confidence thresholds are not calibrated accuracy claims. Shadow labels alone are not permission controls. Add capability only when you can explain and test its necessity.
 
 Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluate and roll out](/docs/evaluate-and-rollout).
