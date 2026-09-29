@@ -3,7 +3,7 @@
 ## Scope And Status
 
 Local validation started on main `5099d43e`, then rebased onto `3e513d7f`.
-The final complete Docker gate validated implementation commit `dd8d4e65`.
+The final complete Docker gate validated implementation commit `ea5cf37e`.
 CI, merge and production rollout evidence are attached to the release PR after
 completion; local results alone do not establish production deployment.
 
@@ -42,7 +42,7 @@ been performed. Local validation is not evidence of production deployment.
 | Tracked diff whitespace check | Passed |
 | New-file ASCII and scoped credential-literal/bidi scans | Passed |
 | Complete Docker `make check` | Passed |
-| Complete Docker preflight | 10,344 passed, 16 skipped, five expected failures; 78.96% coverage and all gates passed |
+| Complete Docker preflight | 10,347 passed, 16 skipped, five expected failures; 78.97% coverage and all gates passed |
 | Docker `make test` unit gate | 7,931 passed, seven skipped; 62.81% coverage cleared the 55% floor |
 | Docker `make test` integration/regression gate | 2,645 passed, 13 skipped, five expected failures against isolated Postgres/Redis; combined coverage 83% |
 
@@ -194,3 +194,72 @@ expose private APIs. See [the hosting and registrar runbook](../runbooks/documen
 The canonical address remains `https://agenticorg.ai/docs` until a coordinated
 host migration is deliberately made. Verify both public URLs after release;
 local screenshots and a working Docker preview are not production evidence.
+
+## Production Verification
+
+This section records the initial documentation rollout. Subsequent response-type
+hardening and its final rollout evidence are recorded in the follow-up PR.
+
+PR #1454 merged at `e7f59095f4176dac17f30235e12500c2f6d0aec5`.
+The exact merge commit's CI/CD, CodeQL Advanced, Local Stack, RAG quality,
+container scan, secret scan and vendor denylist workflows completed successfully
+before the production rollout. All 14 original browser checks passed against the
+clean, exact-merge local UI image.
+
+The UI image was built from a Git archive, not the dirty workstation checkout.
+Its registry index digest is
+`sha256:dfb9759e45ae615a38fad090842fbed1b49e04c287e48838b0d7651e66a8cfb8`.
+Cloud Run resolved its amd64 manifest to
+`sha256:d9e878efe3def8fb3cd1000bd8d97ead3edc2bdd7a719bc6a57119ab94066527`.
+Revision `agenticorg-ui-00145-4jn` was staged with zero traffic and a temporary
+review tag, checked, then promoted to 100% UI traffic. The temporary tag was
+removed. Revision `agenticorg-ui-00144-79r` remains the rollback target.
+The configured public analytics ID, API origin, remaining runtime environment
+and resource settings were preserved.
+
+The first staged browser run exposed a test timing defect: an image element can
+be visible before its network response finishes. The screenshot returned HTTP
+200; the trace recorded a 151 ms download. The test now polls within a bounded
+ten-second deadline for both `complete` and a positive `naturalWidth`, retaining
+the failure condition for missing/broken images. A delayed-download regression
+also exercises the real screenshot response. No image, reader or runtime code
+was changed for this correction.
+
+The corrected browser suite passed all 16 local checks. Staged and public
+production runs each passed 14 checks with two explicit skips for the local-only
+documentation-host alias. These runs covered every guide, loaded screenshots,
+desktop/mobile reading and search, no-JavaScript content, unknown-guide 404,
+security/cache headers, metadata, selected accessibility checks and narrow layouts.
+
+`https://agenticorg.ai/docs` is live. The apex and application hosts returned HTTP
+200 for the landing page, manual, first-agent guide, OCR guide, BFSI onboarding
+guide and UI health. The existing API health remained healthy at backend commit
+`05eaa69b7264318f9d1ff710bee7cd65ec5b5318`, with healthy DB and Redis.
+API revision `agenticorg-api-00195-9wn`, worker revision
+`agenticorg-worker-00028-rx2` and beat revision `agenticorg-beat-00028-bx4`
+remained unchanged. This was a UI-only release, not a backend deployment.
+No migration, backup/PITR change, provider action or secret setting change ran.
+
+`docs.agenticorg.ai` still returns DNS NXDOMAIN as of this verification. Its
+registrar record and HTTPS host binding are outstanding; the live manual does
+not depend on that alias. See the hosting runbook before adding the subdomain.
+
+### Text Response Follow-Up
+
+The post-release discovery check confirmed that all 29 guide titles were present
+in `llms-full.txt`, but found a pre-existing nginx MIME defect. `/llms.txt` and
+`/llms-full.txt` each sent two `Content-Type: text/plain` headers. `/health` sent
+both `application/octet-stream` and `text/plain`; `robots.txt` was unaffected.
+A strict client treated the ambiguous text responses as binary data.
+
+Both UI nginx configurations now use `default_type text/plain` and UTF-8 charset
+selection rather than manually appending the Content-Type header. The new HTTP
+regression reproduces the original failure on the unchanged local release
+image. It checks one correctly declared text MIME type for health, robots and
+both LLM files, plus the complete manual in LLM discovery content. A source
+regression covers both nginx recipes. Existing security/cache, guide, image,
+no-JavaScript and accessibility assertions remain in place.
+With the corrected production nginx template mounted into the released local
+image, all 18 browser checks passed. All 25 documentation/SEO generator tests
+also passed. These local results do not by themselves prove deployment of the
+MIME correction; the follow-up PR records the final commit and rollout checks.
