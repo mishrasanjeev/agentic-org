@@ -158,7 +158,7 @@
     "public_exempt_reason": null,
     "rate_limit": "abm-read",
     "scope": "abm.accounts.sensitive.list",
-    "source_line": 500,
+    "source_line": 501,
     "tenant_required": true
   },
   {
@@ -176,7 +176,7 @@
     "public_exempt_reason": null,
     "rate_limit": "abm-write",
     "scope": "abm.accounts.sensitive.write",
-    "source_line": 556,
+    "source_line": 557,
     "tenant_required": true
   },
   {
@@ -194,7 +194,7 @@
     "public_exempt_reason": null,
     "rate_limit": "bulk-import",
     "scope": "abm.accounts.sensitive.bulk_import",
-    "source_line": 301,
+    "source_line": 302,
     "tenant_required": true
   },
   {
@@ -212,7 +212,7 @@
     "public_exempt_reason": null,
     "rate_limit": "abm-read",
     "scope": "abm.accounts.sensitive.read",
-    "source_line": 607,
+    "source_line": 608,
     "tenant_required": true
   },
   {
@@ -230,7 +230,7 @@
     "public_exempt_reason": null,
     "rate_limit": "abm-campaign-launch",
     "scope": "abm.campaigns.external_action.launch",
-    "source_line": 727,
+    "source_line": 728,
     "tenant_required": true
   },
   {
@@ -248,7 +248,7 @@
     "public_exempt_reason": null,
     "rate_limit": "external-intent-aggregation",
     "scope": "abm.accounts.external_intent.sensitive.read",
-    "source_line": 635,
+    "source_line": 636,
     "tenant_required": true
   },
   {
@@ -266,7 +266,7 @@
     "public_exempt_reason": null,
     "rate_limit": "business-metrics-read",
     "scope": "abm.dashboard.sensitive.read",
-    "source_line": 787,
+    "source_line": 788,
     "tenant_required": true
   },
   {
