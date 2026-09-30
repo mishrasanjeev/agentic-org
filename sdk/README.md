@@ -49,7 +49,10 @@ list agents or `agents:write` (or its alias `agents:run`) to start a run by
 agent id. A grant with only tool scopes is refused with `403`.
 
 A2A and MCP calls are scope-checked only when the deployment sets
-`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`. Then an API key or grant needs:
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true` for the legacy routes. The new A2A v1
+`send_message` route always requires `a2a:write` (or admin) for generic agent
+runs. A merchant-issued buyer token is limited to non-binding seller questions
+and does not grant generic agent execution. Then an API key or grant needs:
 
 | Call | Route | Scope (or `agenticorg:admin`) |
 |---|---|---|
@@ -59,7 +62,35 @@ A2A and MCP calls are scope-checked only when the deployment sets
 API keys created with the default scopes carry `mcp:call`, so `client.mcp.call`
 keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
 key is replaced. `client.a2a` and `client.mcp.tools` read public discovery
-routes and need no scope.
+routes and need no scope. The new `extended_agent_card` is private.
+
+### A2A v1 seller access (repository source)
+
+The tenant admin issues a one-time buyer credential, then hands it to the
+approved buyer agent using a protected channel. An external agent can run on
+any platform that sends A2A v1 HTTP+JSON; vendor-specific client enrollment
+is separate. The SDK method is available in repository source and requires
+the matching server migration and ingress release; it is not in the currently
+published `0.3.0` wheel.
+
+```python
+from agenticorg import AgenticOrg
+
+admin = AgenticOrg(api_key="tenant-admin-key", base_url="https://your-reviewed-endpoint.example")
+approval = admin.a2a.create_buyer_access(
+    merchant_id="merchant-123", seller_agent_id="seller-123",
+    buyer_agent_id="external-buyer-123", expires_days=7,
+)
+# Deliver approval["token"] securely. It is returned only once.
+buyer = AgenticOrg(api_key=approval["token"], base_url="https://your-reviewed-endpoint.example")
+card = buyer.a2a.extended_agent_card()
+reply = buyer.a2a.send_message("Is the canvas tote available?")
+admin.a2a.revoke_buyer_access(approval["id"])
+```
+
+`standard_agent_card()` is public; `send_message(text, agent_type=...,
+company_id=...)` runs a non-commerce agent only with a tenant credential and
+explicit `a2a:write`. See the [A2A guide](../docs/a2a-interoperability.md).
 
 ## Company-scoped shadow candidate
 

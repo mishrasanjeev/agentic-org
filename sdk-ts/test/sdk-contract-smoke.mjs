@@ -63,6 +63,27 @@ globalThis.fetch = async (url, init = {}) => {
   if (parsed.pathname === "/api/v1/a2a/agents") {
     return json({ agents: [{ id: "commerce_sales_agent" }] });
   }
+  if (parsed.pathname === "/.well-known/agent-card.json") {
+    return json({ supportedInterfaces: [{ protocolBinding: "HTTP+JSON", protocolVersion: "1.0" }] });
+  }
+  if (parsed.pathname === "/api/v1/a2a/extendedAgentCard") {
+    return json({ skills: [{ id: "seller_commerce_query" }] });
+  }
+  if (parsed.pathname === "/api/v1/a2a/message:send") {
+    assert.equal(body.message.role, "ROLE_USER");
+    assert.equal(body.message.parts[0].text, "Canvas Tote");
+    assert.ok(body.message.messageId);
+    assert.equal(init.headers["Content-Type"], "application/a2a+json");
+    assert.equal(init.headers["A2A-Version"], "1.0");
+    return json({ message: { role: "ROLE_AGENT", parts: [{ text: "Canvas Tote snapshot" }] } });
+  }
+  if (parsed.pathname === "/api/v1/a2a/commerce/buyer-access" && init.method === "POST") {
+    assert.equal(body.buyer_agent_id, "outside-agent-1");
+    return json({ id: "access-ts-1", token: "issued-once" });
+  }
+  if (parsed.pathname === "/api/v1/a2a/commerce/buyer-access/access-ts-1" && init.method === "DELETE") {
+    return json({ id: "access-ts-1", status: "revoked" });
+  }
   if (parsed.pathname === "/api/v1/mcp/tools") {
     return json({ tools: [{ name: "agenticorg_commerce_sales_agent", inputSchema: { type: "object" } }] });
   }
@@ -186,6 +207,13 @@ assert.equal((await client.connectors.health("connector_ts_1")).status, "healthy
 assert.equal((await client.connectors.test("connector_ts_1")).ok, true);
 assert.equal((await client.a2a.agentCard()).skills[0].id, "commerce_sales_agent");
 assert.equal((await client.a2a.agents())[0].id, "commerce_sales_agent");
+assert.equal((await client.a2a.standardAgentCard()).supportedInterfaces[0].protocolVersion, "1.0");
+assert.equal((await client.a2a.extendedAgentCard()).skills[0].id, "seller_commerce_query");
+assert.equal((await client.a2a.sendMessage("Canvas Tote")).message.parts[0].text, "Canvas Tote snapshot");
+assert.equal((await client.a2a.createBuyerAccess({
+  merchantId: "merchant-ts-1", sellerAgentId: "seller-ts-1", buyerAgentId: "outside-agent-1",
+})).token, "issued-once");
+assert.equal((await client.a2a.revokeBuyerAccess("access-ts-1")).status, "revoked");
 assert.equal((await client.mcp.tools())[0].name, "agenticorg_commerce_sales_agent");
 
 const generatedAgent = await client.agents.generate("Create a contract intelligence agent.", { deploy: true });

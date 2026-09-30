@@ -16,6 +16,15 @@ NGINX_CONFIGS = (
 )
 
 
+@pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda path: path.name)
+def test_standard_a2a_card_reaches_api_before_static_json_handler(config: Path) -> None:
+    text = config.read_text(encoding="utf-8")
+    card = text.index("location = /.well-known/agent-card.json")
+    static_json = text.index("location ~* ^/(?!api/|ws/).*\\.(svg|ico|json|txt|xml)$")
+    assert card < static_json
+    assert "proxy_pass" in text[card:static_json]
+
+
 def _noindex_patterns(config: Path) -> list[re.Pattern[str]]:
     text = config.read_text(encoding="utf-8")
     map_block = re.search(

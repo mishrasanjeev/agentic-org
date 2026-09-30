@@ -348,6 +348,61 @@ class _A2AResource:
         resp.raise_for_status()
         return resp.json().get("agents", [])
 
+    def standard_agent_card(self) -> dict[str, Any]:
+        """Read the A2A v1 public card; merchant skills require approved access."""
+        resp = self._http.get("/.well-known/agent-card.json", headers={"A2A-Version": "1.0"})
+        resp.raise_for_status()
+        return resp.json()
+
+    def extended_agent_card(self) -> dict[str, Any]:
+        """Read the seller card using a merchant-issued buyer credential."""
+        resp = self._http.get("/api/v1/a2a/extendedAgentCard", headers={"A2A-Version": "1.0"})
+        resp.raise_for_status()
+        return resp.json()
+
+    def send_message(
+        self, text: str, *, agent_type: str | None = None, company_id: str | None = None,
+    ) -> dict[str, Any]:
+        """A2A v1 synchronous text turn. Buyer scope comes from the credential."""
+        from uuid import uuid4
+
+        metadata = {}
+        if agent_type is not None or company_id is not None:
+            if not agent_type or not company_id:
+                raise ValueError("agent_type and company_id must be provided together")
+            metadata = {"agentType": agent_type, "companyId": company_id}
+        resp = self._http.post(
+            "/api/v1/a2a/message:send",
+            json={"message": {
+                "messageId": str(uuid4()), "role": "ROLE_USER",
+                "parts": [{"text": text}], "metadata": metadata,
+            }},
+            headers={
+                "Content-Type": "application/a2a+json",
+                "Accept": "application/a2a+json",
+                "A2A-Version": "1.0",
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def create_buyer_access(
+        self, *, merchant_id: str, seller_agent_id: str, buyer_agent_id: str,
+        expires_days: int = 7,
+    ) -> dict[str, Any]:
+        """Tenant admin: mint one revocable credential, returned only once."""
+        resp = self._http.post("/api/v1/a2a/commerce/buyer-access", json={
+            "merchant_id": merchant_id, "seller_agent_id": seller_agent_id,
+            "buyer_agent_id": buyer_agent_id, "expires_days": expires_days,
+        })
+        resp.raise_for_status()
+        return resp.json()
+
+    def revoke_buyer_access(self, access_id: str) -> dict[str, Any]:
+        resp = self._http.delete(f"/api/v1/a2a/commerce/buyer-access/{access_id}")
+        resp.raise_for_status()
+        return resp.json()
+
 
 class _MCPResource:
     def __init__(self, http: httpx.Client):

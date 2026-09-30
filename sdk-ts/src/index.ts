@@ -166,23 +166,23 @@ class HttpClient {
     this.timeout = timeout;
   }
 
-  async get(path: string, params?: Record<string, string>): Promise<unknown> {
+  async get(path: string, params?: Record<string, string>, extraHeaders: Record<string, string> = {}): Promise<unknown> {
     const url = new URL(path, this.baseUrl);
     if (params) {
       Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     }
     const resp = await fetch(url.toString(), {
-      headers: this.headers,
+      headers: { ...this.headers, ...extraHeaders },
       signal: AbortSignal.timeout(this.timeout),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
     return resp.json();
   }
 
-  async post(path: string, body?: unknown): Promise<unknown> {
+  async post(path: string, body?: unknown, contentType = "application/json", extraHeaders: Record<string, string> = {}): Promise<unknown> {
     const resp = await fetch(new URL(path, this.baseUrl).toString(), {
       method: "POST",
-      headers: this.headers,
+      headers: { ...this.headers, "Content-Type": contentType, ...extraHeaders },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(this.timeout),
     });
@@ -326,6 +326,45 @@ class A2AResource {
   async agents(): Promise<AgentSkill[]> {
     const data = (await this.http.get("/api/v1/a2a/agents")) as any;
     return data.agents ?? [];
+  }
+
+  async standardAgentCard(): Promise<Record<string, unknown>> {
+    return (await this.http.get("/.well-known/agent-card.json", undefined, { "A2A-Version": "1.0" })) as Record<string, unknown>;
+  }
+
+  async extendedAgentCard(): Promise<Record<string, unknown>> {
+    return (await this.http.get("/api/v1/a2a/extendedAgentCard", undefined, { "A2A-Version": "1.0" })) as Record<string, unknown>;
+  }
+
+  async sendMessage(
+    text: string,
+    options: { agentType?: string; companyId?: string } = {},
+  ): Promise<Record<string, unknown>> {
+    if (!!options.agentType !== !!options.companyId) {
+      throw new Error("agentType and companyId must be provided together");
+    }
+    const metadata = options.agentType
+      ? { agentType: options.agentType, companyId: options.companyId }
+      : {};
+    return (await this.http.post("/api/v1/a2a/message:send", {
+      message: {
+        messageId: crypto.randomUUID(), role: "ROLE_USER",
+        parts: [{ text }], metadata,
+      },
+    }, "application/a2a+json", { "A2A-Version": "1.0" })) as Record<string, unknown>;
+  }
+
+  async createBuyerAccess(input: {
+    merchantId: string; sellerAgentId: string; buyerAgentId: string; expiresDays?: number;
+  }): Promise<Record<string, unknown>> {
+    return (await this.http.post("/api/v1/a2a/commerce/buyer-access", {
+      merchant_id: input.merchantId, seller_agent_id: input.sellerAgentId,
+      buyer_agent_id: input.buyerAgentId, expires_days: input.expiresDays ?? 7,
+    })) as Record<string, unknown>;
+  }
+
+  async revokeBuyerAccess(accessId: string): Promise<Record<string, unknown>> {
+    return (await this.http.delete(`/api/v1/a2a/commerce/buyer-access/${encodeURIComponent(accessId)}`)) as Record<string, unknown>;
   }
 }
 

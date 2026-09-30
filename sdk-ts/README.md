@@ -101,7 +101,10 @@ new AgenticOrg();
 ```
 
 A2A and MCP calls are scope-checked only when the deployment sets
-`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`. Then an API key or grant needs:
+`AGENTICORG_ROUTE_SCOPE_A2A_MCP=true` for the legacy routes. The new A2A v1
+`sendMessage` route always requires `a2a:write` (or admin) for generic agent
+runs; merchant-issued buyer credentials permit only non-binding seller Q&A.
+Then an API key or grant needs:
 
 | Call | Route | Scope (or `agenticorg:admin`) |
 |---|---|---|
@@ -111,7 +114,30 @@ A2A and MCP calls are scope-checked only when the deployment sets
 API keys created with the default scopes carry `mcp:call`, so `client.mcp.call`
 keeps working, but not `a2a:write`, so a run by agent type gets `403` until the
 key is replaced. `client.a2a` and `client.mcp.tools()` read public discovery
-routes and need no scope.
+routes and need no scope. The new `extendedAgentCard()` is private.
+
+### A2A v1 seller access (repository source)
+
+```typescript
+import { AgenticOrg } from "agenticorg-sdk";
+
+const admin = new AgenticOrg({ apiKey: "tenant-admin-key" });
+const approval = await admin.a2a.createBuyerAccess({
+  merchantId: "merchant-123", sellerAgentId: "seller-123",
+  buyerAgentId: "external-buyer-123", expiresDays: 7,
+});
+// Deliver approval.token securely; it is returned only once.
+const buyer = new AgenticOrg({ apiKey: approval.token as string });
+const card = await buyer.a2a.extendedAgentCard();
+const reply = await buyer.a2a.sendMessage("Is the canvas tote available?");
+await admin.a2a.revokeBuyerAccess(approval.id as string);
+```
+
+`standardAgentCard()` is public. `sendMessage(text, { agentType,
+companyId })` runs a non-commerce agent only with an explicit `a2a:write`
+tenant credential. These methods need the matching server migration and
+ingress release and are not in the currently published `0.3.0` package. See
+the [A2A guide](../docs/a2a-interoperability.md).
 
 ## Resources
 
@@ -120,7 +146,7 @@ routes and need no scope.
 | `client.agents` | `list()`, `get(id)`, `run(type, opts)`, `create(data)`, `generate(description, opts?)` |
 | `client.connectors` | `list(category?)`, `get(id)` |
 | `client.sop` | `parseText(text, domain?)`, `deploy(config)` |
-| `client.a2a` | `agentCard()`, `agents()` |
+| `client.a2a` | Legacy `agentCard()`, `agents()`; source-only `standardAgentCard()`, `extendedAgentCard()`, `sendMessage()`, `createBuyerAccess()`, `revokeBuyerAccess()` |
 | `client.mcp` | `tools()`, `call(name, args?)` |
 | `client.cases` | `submit(application, purpose, policyId?)`, `list({state?, limit?})`, `get(caseRef)`, `investigate(caseRef)`; repository source only |
 | `client.workflows` | `templates()`, `list()`, `generate(description)`, `create(opts)`, `get(id)`, `run(id, opts?)`, `getRun(id)` |

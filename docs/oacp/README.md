@@ -8,6 +8,9 @@
 
 Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closure source of truth: [OACP Runtime Launch Closure PRD](runtime-launch-closure-prd.md).
 
+For merchant-approved external buyer agents and the synchronous A2A v1
+HTTP+JSON interface, see [A2A interoperability](../a2a-interoperability.md).
+
 Current cross-product capability status: [AgenticOrg product status](../PRODUCT_STATUS.md).
 
 AgenticOrg owns the buyer and seller AI-agent runtime for OACP-backed commerce, including purchase preparation and Offline POS handoff orchestration. Grantex owns OACP trust authority, protocol/policy governance, canonical artifacts, artifact verification, and protocol adapter authority. Shopify, POS, and merchant systems remain source of record. Pine Labs Plural/P3P, POS, and payment providers own mandate/payment/POS execution.

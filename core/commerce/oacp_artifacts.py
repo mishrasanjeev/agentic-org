@@ -976,6 +976,7 @@ class OacpArtifactCacheRepositoryQuery:
     merchant_id: str | None = None
     seller_agent_id: str | None = None
     buyer_agent_id: str | None = None
+    shared_only: bool = False
     artifact_type: ArtifactType | None = None
     authority: str | None = None
 
@@ -4443,6 +4444,7 @@ def _c6x3_query_matches(
         and (query.merchant_id is None or record.merchant_id == query.merchant_id)
         and (query.seller_agent_id is None or record.seller_agent_id == query.seller_agent_id)
         and (query.buyer_agent_id is None or record.buyer_agent_id == query.buyer_agent_id)
+        and (not query.shared_only or record.buyer_agent_id is None)
         and (query.artifact_type is None or record.artifact_type == query.artifact_type)
         and (query.authority is None or record.authority == query.authority)
     )
@@ -4695,6 +4697,8 @@ class DurableOacpArtifactCacheRepository:
             statement = statement.where(OacpArtifactCacheRecordRow.seller_agent_id == query.seller_agent_id)
         if query.buyer_agent_id is not None:
             statement = statement.where(OacpArtifactCacheRecordRow.buyer_agent_id == query.buyer_agent_id)
+        if query.shared_only:
+            statement = statement.where(OacpArtifactCacheRecordRow.buyer_agent_id.is_(None))
         if query.artifact_type is not None:
             statement = statement.where(OacpArtifactCacheRecordRow.artifact_type == query.artifact_type)
         if query.authority is not None:

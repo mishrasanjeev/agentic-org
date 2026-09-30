@@ -1,13 +1,13 @@
 ## Choose an integration surface
 
-Use REST/OpenAPI for application contracts, the repository SDKs for typed client access, MCP for compatible tool clients, and A2A for agent discovery/task surfaces. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions.
+Use REST/OpenAPI for application contracts, the repository SDKs for client access, MCP for compatible tool clients, and A2A v1 HTTP+JSON for synchronous text between agents after merchant or tenant authorization. Older AgenticOrg A2A-shaped card/task routes are proprietary; they are not the v1 wire contract. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions. See [external A2A buyer access](../a2a-interoperability.md).
 
 | Surface | Suitable first task | Boundary |
 | --- | --- | --- |
 | REST/OpenAPI | Inspect a resource with an approved credential | Deployed API/schema is the contract |
 | Python/TypeScript SDK | Company-scoped read or bounded agent run | Installed client version may differ from repository source |
 | MCP stdio adapter | List agents/tools in a compatible local client | Client transport support and scopes are still required |
-| A2A | Read discovery, then submit an authorized task | A skill card is not execution authority |
+| A2A v1 HTTP+JSON | Read generic card, obtain scoped credential, send synchronous text | Merchant buyer credential permits non-binding seller Q&A only |
 | Commerce bridges | Read merchant artifacts and prepare handoffs | Channel approval and provider execution remain separate |
 
 ## Authenticate and preserve context
@@ -63,3 +63,9 @@ The `seller.*` tools read cached commerce artifacts; they do not authorize payme
 6. Prove any external action separately with authoritative confirmation.
 
 A generic MCP bridge is not a universal buyer plugin or marketplace approval. Check the current client/provider documentation before enabling a production surface.
+
+An external A2A buyer agent needs a credential issued by the merchant's tenant
+admin. This is a bearer capability, not proof that the client belongs to a
+named third-party vendor. Revocation, artifact freshness, and tenant/merchant
+binding are checked by the server on each request. No purchase is executed by
+the synchronous A2A message path.

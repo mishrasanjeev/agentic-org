@@ -94,7 +94,7 @@ production controls.
 | Governance | Tenant and role boundaries, scoped tools, human-in-the-loop queues, shadow evaluation, policy checks, and kill-switch patterns |
 | Integrations | Native connector registry plus optional integration gateways; actual availability depends on credentials, scopes, provider access, and tenant configuration |
 | Knowledge and channels | Native and OCR document ingestion/search, reports, notifications, signed Twilio voice calls, RPA, and other configured channels |
-| Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces |
+| Developer access | REST API, Python SDK and CLI, TypeScript SDK, MCP server, legacy A2A-shaped task APIs, and source-implemented A2A v1 HTTP+JSON synchronous text |
 | Commerce | Merchant-scoped Shopify read-only sync, OACP artifact intake/cache, buyer-safe answers, public catalog surfaces, and prepared provider or POS handoffs |
 | Operations | PostgreSQL, Redis, object storage, observability hooks, migrations, security checks, and Cloud Run deployment tooling |
 
@@ -226,18 +226,30 @@ Optional Compose profiles include local CPU/GPU model runtimes and supporting RA
 
 ## Public API and protocols
 
-All application API routes are mounted below /api/v1.
+Application API routes are mounted below /api/v1, except the standard root
+A2A Agent Card discovery path.
 
 | Surface | Purpose | Authentication posture |
 | --- | --- | --- |
 | GET /api/v1/health | Service health | Public |
 | GET /api/v1/product-facts | Live version and registry totals | Public |
-| GET /api/v1/a2a/agent-card | A2A discovery card | Public |
-| GET /api/v1/a2a/.well-known/agent.json | A2A discovery alias | Public |
+| GET /.well-known/agent-card.json | A2A v1 generic Agent Card (after release and ingress configuration) | Public |
+| GET /api/v1/a2a/extendedAgentCard | Merchant-specific seller card | Merchant-issued buyer credential |
+| POST /api/v1/a2a/message:send | A2A v1 synchronous text request | Buyer credential for seller Q&A, or scoped tenant credential for non-commerce agents |
+| GET /api/v1/a2a/agent-card | Legacy AgenticOrg discovery card; not A2A v1 | Public |
+| GET /api/v1/a2a/.well-known/agent.json | Legacy discovery alias; not A2A v1 | Public |
 | GET /api/v1/mcp/tools | MCP-compatible agent discovery | Public |
 | Agent, workflow, tool, billing, and commerce mutations | Tenant operations | Authenticated and scoped |
 
 Interactive OpenAPI documentation is available from the API service when enabled by the deployment. The detailed route inventory is maintained in [docs/route_inventory.json](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/route_inventory.json), and narrative API documentation is in [docs/api-reference.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/api-reference.md).
+
+An external buyer agent need not run on AgenticOrg. The merchant can issue a
+revocable, scope-bound buyer credential for any A2A v1 HTTP+JSON client, while
+seller answers remain non-binding and sourced from the OACP cache. See the
+[A2A interoperability guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/a2a-interoperability.md) for the exact
+identity limits, SDK calls, migration/ingress requirements, and unsupported
+transports. This repository implementation does not imply that a named buyer
+platform has installed or endorsed AgenticOrg.
 
 ### Python SDK and CLI
 
@@ -395,6 +407,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [Voice runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/voice-runtime.md)
 - [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md)
 - [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
+- [External A2A buyer and seller access](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/a2a-interoperability.md)
 - [Production smoke runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/production_smoke.md)
 - [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
 - [Python SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md)
@@ -1816,14 +1829,14 @@ Audience: Developers and integration owners. Reviewed: 2026-09-29.
 
 #### Choose an integration surface
 
-Use REST/OpenAPI for application contracts, the repository SDKs for typed client access, MCP for compatible tool clients, and A2A for agent discovery/task surfaces. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions.
+Use REST/OpenAPI for application contracts, the repository SDKs for client access, MCP for compatible tool clients, and A2A v1 HTTP+JSON for synchronous text between agents after merchant or tenant authorization. Older AgenticOrg A2A-shaped card/task routes are proprietary; they are not the v1 wire contract. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions. See [external A2A buyer access](../a2a-interoperability.md).
 
 | Surface | Suitable first task | Boundary |
 | --- | --- | --- |
 | REST/OpenAPI | Inspect a resource with an approved credential | Deployed API/schema is the contract |
 | Python/TypeScript SDK | Company-scoped read or bounded agent run | Installed client version may differ from repository source |
 | MCP stdio adapter | List agents/tools in a compatible local client | Client transport support and scopes are still required |
-| A2A | Read discovery, then submit an authorized task | A skill card is not execution authority |
+| A2A v1 HTTP+JSON | Read generic card, obtain scoped credential, send synchronous text | Merchant buyer credential permits non-binding seller Q&A only |
 | Commerce bridges | Read merchant artifacts and prepare handoffs | Channel approval and provider execution remain separate |
 
 #### Authenticate and preserve context
@@ -1879,6 +1892,12 @@ The `seller.*` tools read cached commerce artifacts; they do not authorize payme
 6. Prove any external action separately with authoritative confirmation.
 
 A generic MCP bridge is not a universal buyer plugin or marketplace approval. Check the current client/provider documentation before enabling a production surface.
+
+An external A2A buyer agent needs a credential issued by the merchant's tenant
+admin. This is a bearer capability, not proof that the client belongs to a
+named third-party vendor. Revocation, artifact freshness, and tenant/merchant
+binding are checked by the server on each request. No purchase is executed by
+the synchronous A2A message path.
 
 
 ### Self-hosting and deployment handoff

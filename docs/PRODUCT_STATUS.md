@@ -1,6 +1,6 @@
 # Current Product Status
 
-Last source-verified: 2026-09-24 (repository source; confirm the deployed SHA
+Last source-verified: 2026-09-30 (repository source; confirm the deployed SHA
 separately). Production deployment and SLOs require separate operational
 evidence.
 
@@ -36,7 +36,7 @@ records product behavior and availability, not deployment state.
 | Voice | Signed Twilio webhook runtime, provider-managed STT/TTS, encrypted bounded transcripts, masked call history, runtime health, and explicit outbound-call API | Twilio account, number, credentials, mapped active agent, callback configuration, and call charges | No unsigned webhook; no paid call without an approved destination; other voice providers remain configuration-only until their workers ship |
 | RPA | Built-in Playwright script discovery, tenant-scoped execution, schedules, durable history, screenshots/results, timeout handling, and approved-domain egress controls | Browser runtime, tenant-approved domains, credentials, and target-site stability | RPA runs are explicit external actions; catalog presence does not authorize a run or bypass anti-bot/provider policy |
 | Connectors | Native connector registry, tenant/company-scoped credential-presence and health-freshness projection, scoped tool gateway, optional integration gateways, and merchant-scoped Shopify credential custody | Provider accounts, scopes, secrets, rate limits, and tenant approval | Registration and a recent health check do not verify scopes, API contracts, sustained sync, or an error budget; no credentials are returned in the readiness projection |
-| Developer surfaces | REST, OpenAPI, Python SDK and CLI, TypeScript SDK, MCP server, and A2A discovery/task surfaces | Compatible client, authentication, tenant/company context, and server version | Discovery metadata does not create tool or transaction authority |
+| Developer surfaces | REST, OpenAPI, Python SDK and CLI, TypeScript SDK, MCP server, legacy A2A-shaped task APIs, and source-implemented A2A v1 HTTP+JSON synchronous text/card routes | Migration, ingress, compatible client, authentication, tenant/company context, and deployed server version | Legacy task APIs and adapter previews are not standard A2A; A2A transport alone is not transaction authority |
 | Governed cases | Tenant-gated business onboarding cases, read-only provider investigation, local exact-purpose allowlists, strict grant checks, cited memos, policy scores, screening dispositions, human review, and case hand-off | Exactly one active shared agent per case role, a reviewed provider manifest and policy, Grantex root grant, and a tenant feature flag | Published Python Grantex SDK 0.5.1 does not enforce token-level case purpose or per-case caps; pooled grants are not case-bound. Machine credentials cannot perform human-only decisions. Confirm deployment before calling this live. |
 | Jev/System One | Type-safe Jev adapter, offline synthetic evaluator, and bounded advisory shadow hook | TypeSafe enrollment, a TypeSafe-issued `TYPESAFE_API_KEY`, approved cost/latency gates, and human review | Current enrollment is closed / waitlist; production mode is `off`, live evaluation is not run, and Jev cannot authorize or execute actions |
 | OACP commerce | Merchant config, Seller Commerce Agent onboarding, real Shopify read-only Admin GraphQL sync, signed Shopify webhook rejection, Grantex authority request, durable OACP cache, buyer-safe Q&A, protocol payloads, web/MCP/OpenAPI/A2A/WhatsApp/Telegram bridge routes, Plural/Pine capability verification, purchase preparation, and Offline POS handoff/reconciliation | Shopify, Grantex, channel, provider, and POS credentials or approvals; merchant publishing setting | AgenticOrg does not invent paid/order state or own provider/POS execution |
@@ -64,6 +64,13 @@ non-binding buyer message when a valid cached artifact exists.
 OACP does not make AgenticOrg the payment processor, merchant system, or order
 system. Provider, POS, bank, and merchant callbacks remain authoritative for
 their outcomes.
+
+Repository source now includes merchant-issued, revocable buyer credentials
+for an external A2A v1 HTTP+JSON client, a private seller card, and scoped
+non-binding Q&A. The new migration and root Agent Card ingress must be
+deployed and verified separately. This is not a claim that a particular
+external buyer platform has onboarded or that vendor identity is federated.
+See [A2A interoperability](a2a-interoperability.md).
 
 ## Not Universal Or Not Shipped
 

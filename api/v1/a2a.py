@@ -1,13 +1,13 @@
-"""A2A (Agent-to-Agent) Protocol endpoints.
+"""Legacy AgenticOrg agent discovery and task execution endpoints.
 
-Implements the A2A spec for agent discovery and task execution:
+These predate the A2A v1 binding in ``api.v1.a2a_interop``:
 - GET  /a2a/.well-known/agent.json  -- Agent Card (discovery)
-- POST /a2a/tasks                    -- Execute task via JSON-RPC
+- POST /a2a/tasks                    -- Execute a proprietary AgenticOrg task
 - GET  /a2a/tasks/{id}               -- Get task status
 
-External agents (ChatGPT, Claude, partner systems) discover our agents
-via the Agent Card, then send tasks via JSON-RPC with a Grantex grant
-token for authorization.
+These routes do not accept A2A SendMessage or JSON-RPC envelopes. New
+interoperable clients use ``/.well-known/agent-card.json`` and
+``POST /api/v1/a2a/message:send`` with an approved bearer credential.
 
 Tasks are persisted to PostgreSQL via the A2ATask ORM model.
 """
@@ -65,7 +65,7 @@ async def agent_card():
         "50+ agents, 1000+ integrations, 54 native connectors. HITL governance on every critical decision.",
         "url": f"{base_url}/api/v1/a2a",
         "version": "4.0.0",
-        "protocol": "a2a/1.0",
+        "protocol": "agenticorg-legacy-task-api",
         "capabilities": {
             "tasks": True,
             "streaming": False,

@@ -481,10 +481,27 @@ def test_empty_db_bootstraps_baseline_then_upgrades_to_head():
     assert "alembic_version" in tables
     assert _READINESS_TABLES <= tables
     assert _REPAIRED_RUNTIME_TABLES <= tables
+    assert "commerce_a2a_buyer_access" in tables
 
     with create_engine(_SYNC_URL).connect() as conn:
         version = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        rls = conn.execute(text(
+            "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
+            "WHERE oid = 'commerce_a2a_buyer_access'::regclass"
+        )).one()
+        policy = conn.execute(text(
+            "SELECT count(*) FROM pg_policies WHERE tablename = 'commerce_a2a_buyer_access' "
+            "AND policyname = 'commerce_a2a_buyer_access_tenant_isolation'"
+        )).scalar_one()
+        status_check = conn.execute(text(
+            "SELECT count(*) FROM pg_constraint "
+            "WHERE conrelid = 'commerce_a2a_buyer_access'::regclass "
+            "AND conname = 'ck_commerce_a2a_buyer_access_status'"
+        )).scalar_one()
     assert version == _current_head()
+    assert rls == (True, True)
+    assert policy == 1
+    assert status_check == 1
     _assert_readiness_controls()
     _assert_connector_config_controls()
     _assert_database_index_health()
