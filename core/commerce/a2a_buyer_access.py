@@ -17,6 +17,10 @@ from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess
 from core.models.commerce_c6z_runtime import C6ZSellerOnboardingPacketRow
 
 _TOKEN_RE = re.compile(r"^ao_buyer_([0-9a-f]{32})_([A-Za-z0-9_-]{40,64})$")
+_QUERYABLE_SELLER_STATES = frozenset({
+    "received", "sync_ready", "synced", "authority_requested",
+    "artifacts_cached", "cache_refresh_needed",
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,9 +59,7 @@ async def resolve_buyer_token(token: str) -> BuyerAccessIdentity | None:
             C6ZSellerOnboardingPacketRow.merchant_id == row.merchant_id,
             C6ZSellerOnboardingPacketRow.seller_agent_id == row.seller_agent_id,
         ))
-        if seller is None or seller.status in {
-            "draft", "rejected", "blocked_missing_credentials", "blocked_grantex_unavailable",
-        }:
+        if seller is None or seller.status not in _QUERYABLE_SELLER_STATES:
             return None
         return BuyerAccessIdentity(
             access_id=str(row.id),

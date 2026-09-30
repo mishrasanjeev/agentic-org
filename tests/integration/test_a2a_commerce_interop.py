@@ -178,6 +178,13 @@ async def test_external_buyer_is_scoped_revocable_and_receives_sourced_answer(cl
     async with get_tenant_session(uuid.UUID(TEST_TENANT_ID)) as session:
         seller = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
         assert seller is not None
+        seller.status = "future_unknown_state"
+    assert (await client.post(
+        "/api/v1/a2a/message:send", json=_message("Canvas Tote"), headers=buyer_headers,
+    )).status_code == 401
+    async with get_tenant_session(uuid.UUID(TEST_TENANT_ID)) as session:
+        seller = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
+        assert seller is not None
         seller.status = "received"
 
     revoked = await client.delete(

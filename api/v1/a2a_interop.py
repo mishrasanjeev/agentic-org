@@ -18,7 +18,7 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from api.v1 import a2a as legacy_a2a
 from api.v1.commerce_runtime import _answer_buyer_question_for_scope
-from core.commerce.a2a_buyer_access import mint_buyer_token
+from core.commerce.a2a_buyer_access import _QUERYABLE_SELLER_STATES, mint_buyer_token
 from core.database import get_tenant_session
 from core.models.commerce_a2a_buyer_access import CommerceA2ABuyerAccess
 from core.models.commerce_c6z_runtime import C6ZSellerOnboardingPacketRow
@@ -119,9 +119,7 @@ async def extended_agent_card(request: Request) -> dict[str, Any] | JSONResponse
             C6ZSellerOnboardingPacketRow.merchant_id == state.buyer_merchant_id,
             C6ZSellerOnboardingPacketRow.seller_agent_id == state.buyer_seller_agent_id,
         ))
-        if packet is None or packet.status in {
-            "draft", "rejected", "blocked_missing_credentials", "blocked_grantex_unavailable",
-        }:
+        if packet is None or packet.status not in _QUERYABLE_SELLER_STATES:
             raise HTTPException(404, "Seller Commerce Agent not found")
         return _card(merchant_name=packet.merchant_display_name)
 
@@ -151,9 +149,7 @@ async def create_buyer_access(
             C6ZSellerOnboardingPacketRow.merchant_id == body.merchant_id,
             C6ZSellerOnboardingPacketRow.seller_agent_id == body.seller_agent_id,
         ))
-        if packet is None or packet.status in {
-            "draft", "rejected", "blocked_missing_credentials", "blocked_grantex_unavailable",
-        }:
+        if packet is None or packet.status not in _QUERYABLE_SELLER_STATES:
             raise HTTPException(404, "Seller Commerce Agent not found")
         session.add(CommerceA2ABuyerAccess(
             id=access_id, tenant_id=tenant_id, merchant_id=body.merchant_id,
