@@ -1,60 +1,11 @@
 {
   "schema_version": "agenticorg.claim-registry.v1",
-  "registry_version": "2026-08-21.1",
+  "registry_version": "2026-09-30.1",
   "product_version": "4.8.0",
-  "generated_at": "2026-08-21T00:00:00Z",
-  "capabilities": [
-    {
-      "capability_id": "PLAT-C12",
-      "domain": "Platform Safety",
-      "title": "Capability evidence and claim control",
-      "maturity": "Scaffolded",
-      "gate_result": "Blocked",
-      "public_availability": "Preview",
-      "claim_treatment": "Illustrative",
-      "owner": "PLAT-O (unassigned; W0-05)",
-      "expires_at": "2026-09-30T00:00:00Z",
-      "evidence_ids": [],
-      "permitted_claim_ids": ["PLAT-CLAIM-CONTROL-PREVIEW"],
-      "limitations": ["Seed control record only; no production-readiness claim is authorized."]
-    }
-  ],
+  "generated_at": "2026-09-30T12:00:00Z",
+  "capabilities": [],
   "evidence": [],
   "claims": [
-    {
-      "claim_id": "PLAT-CLAIM-CONTROL-PREVIEW",
-      "kind": "availability",
-      "treatment": "Illustrative",
-      "approved_text": ["Illustrative example: capability claim control preview."],
-      "capability_ids": ["PLAT-C12"],
-      "evidence_ids": [],
-      "required_evidence_state": null,
-      "asserted_availability": "Preview",
-      "owner": "PLAT-O (unassigned; W0-05)",
-      "approver": "Unassigned pending W0-05",
-      "product_version": "4.8.0",
-      "expires_at": "2026-09-30T00:00:00Z",
-      "surfaces": ["README.md"],
-      "inventory_source": null,
-      "limitations": ["Must be visibly labeled illustrative; it is not evidence-backed."]
-    },
-    {
-      "claim_id": "PLAT-INVENTORY-PRODUCT-FACTS",
-      "kind": "inventory",
-      "treatment": "EvidenceBacked",
-      "approved_text": ["Current product inventory is served by /api/v1/product-facts."],
-      "capability_ids": [],
-      "evidence_ids": [],
-      "required_evidence_state": null,
-      "asserted_availability": null,
-      "owner": "PLAT-O (unassigned; W0-05)",
-      "approver": "Unassigned pending W0-05",
-      "product_version": "4.8.0",
-      "expires_at": "2026-09-30T00:00:00Z",
-      "surfaces": ["README.md", "ui/src/pages/Landing.*", "ui/src/pages/Pricing.*"],
-      "inventory_source": "api/v1/product_facts.py:/api/v1/product-facts",
-      "limitations": ["Counts must be fetched or build-pinned from the canonical endpoint."]
-    },
     {
       "claim_id": "BILLING-CATALOG-PUBLIC-PLANS",
       "kind": "inventory",
@@ -74,7 +25,7 @@
       "owner": "Billing catalog contract",
       "approver": "Automated billing catalog release gate",
       "product_version": "4.8.0",
-      "expires_at": "2026-09-30T00:00:00Z",
+      "expires_at": "2026-12-29T00:00:00Z",
       "surfaces": ["README.md", "ui/public/llms*.txt", "ui/dist/llms*.txt"],
       "inventory_source": "core/billing/catalog.py:PUBLIC_PLAN_CATALOG",
       "limitations": ["Prices and limits are list-offer facts; checkout availability is reported separately by the billing API."]

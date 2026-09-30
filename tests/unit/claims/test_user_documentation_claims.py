@@ -9,7 +9,6 @@ import pytest
 from core.claims import scan_surfaces
 
 ROOT = Path(__file__).resolve().parents[3]
-REVIEWED_AT = datetime(2026, 9, 29, tzinfo=UTC)
 
 
 @pytest.mark.parametrize("surface", ["ui/public/llms.txt", "ui/public/llms-full.txt"])
@@ -18,7 +17,7 @@ def test_published_manual_passes_public_claim_governance(surface: str) -> None:
         ROOT,
         ROOT / "config/public_claim_registry.json",
         paths=[surface],
-        now=REVIEWED_AT,
+        now=datetime.now(UTC),
     )
     assert report.valid, report.issues
 
