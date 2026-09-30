@@ -408,6 +408,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [RPA runtime](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/rpa-runtime.md)
 - [OACP runtime documentation](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/oacp/README.md)
 - [External A2A buyer and seller access](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/a2a-interoperability.md)
+- [Local synthetic seller and independent A2A buyer demo](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/a2a-commerce-demo.md)
 - [Production smoke runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/production_smoke.md)
 - [Testing guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/TEST_PLAN.md)
 - [Python SDK](https://github.com/mishrasanjeev/agentic-org/blob/main/sdk/README.md)
@@ -606,6 +607,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Billing, limits and support](https://agenticorg.ai/docs/billing-and-support): Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.
 - [Troubleshooting by symptom](https://agenticorg.ai/docs/troubleshooting): Resolve access, model, connector, OCR, workflow, voice, RPA and commerce problems using concrete checks and safe recovery steps.
 - [Seller and buyer commerce with OACP](https://agenticorg.ai/docs/commerce): Follow merchant configuration, Shopify sync, Grantex authority, artifact-backed buyer answers and provider or POS handoffs.
+- [External buyer and seller A2A demo](https://agenticorg.ai/docs/external-buyer-a2a-demo): See a standalone buyer discover a synthetic seller, browse a scoped catalog, inspect source freshness, and test purchase refusal and credential revocation.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
 - [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.
@@ -730,7 +732,7 @@ These source-verified guides describe usage and configured boundaries, not a bla
 ### Start here
 
 URL: https://agenticorg.ai/docs/start-here
-Audience: Everyone. Reviewed: 2026-09-29.
+Audience: Everyone. Reviewed: 2026-09-30.
 
 #### What you can do with AgenticOrg
 
@@ -806,7 +808,7 @@ The guides describe source-verified behavior, not a promise that your deployment
 ### Your first useful agent
 
 URL: https://agenticorg.ai/docs/first-agent
-Audience: New users. Reviewed: 2026-09-29.
+Audience: New users. Reviewed: 2026-09-30.
 
 #### Outcome of this exercise
 
@@ -877,7 +879,7 @@ Have a second person reproduce the exercise with the correct role and company. R
 ### Workspace, companies and roles
 
 URL: https://agenticorg.ai/docs/workspace-and-roles
-Audience: Administrators and team leads. Reviewed: 2026-09-29.
+Audience: Administrators and team leads. Reviewed: 2026-09-30.
 
 #### Organization, company and user are different things
 
@@ -939,7 +941,7 @@ SSO, SCIM and enterprise identity capabilities depend on plan and deployment con
 ### Core concepts and glossary
 
 URL: https://agenticorg.ai/docs/concepts
-Audience: Everyone. Reviewed: 2026-09-29.
+Audience: Everyone. Reviewed: 2026-09-30.
 
 #### The simple mental model
 
@@ -991,7 +993,7 @@ Read the actual state: draft, prepared, queued, running, awaiting review, failed
 ### AI providers and model setup
 
 URL: https://agenticorg.ai/docs/model-setup
-Audience: Administrators. Reviewed: 2026-09-29.
+Audience: Administrators. Reviewed: 2026-09-30.
 
 #### What this configuration does
 
@@ -1041,7 +1043,7 @@ Jev/System One is an optional advisory integration with separate TypeSafe access
 ### Create and manage agents
 
 URL: https://agenticorg.ai/docs/create-agents
-Audience: Agent builders. Reviewed: 2026-09-29.
+Audience: Agent builders. Reviewed: 2026-09-30.
 
 #### Decide the job before choosing a template
 
@@ -1101,7 +1103,7 @@ Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluat
 ### Run agents and use chat
 
 URL: https://agenticorg.ai/docs/run-and-chat
-Audience: Operators. Reviewed: 2026-09-29.
+Audience: Operators. Reviewed: 2026-09-30.
 
 #### Choose the right entry point
 
@@ -1151,7 +1153,7 @@ Next: [Troubleshooting](/docs/troubleshooting), [Approvals](/docs/approvals), [A
 ### Knowledge Base and scanned documents
 
 URL: https://agenticorg.ai/docs/knowledge-and-ocr
-Audience: Content owners and operators. Reviewed: 2026-09-29.
+Audience: Content owners and operators. Reviewed: 2026-09-30.
 
 #### What Knowledge Base does
 
@@ -1209,7 +1211,7 @@ Next: [First agent](/docs/first-agent), [Insurance assistance](/docs/bfsi-insura
 ### Connect business systems
 
 URL: https://agenticorg.ai/docs/connectors
-Audience: Administrators and integration owners. Reviewed: 2026-09-29.
+Audience: Administrators and integration owners. Reviewed: 2026-09-30.
 
 #### Connector readiness is more than a green badge
 
@@ -1264,7 +1266,7 @@ Next: [Workflows](/docs/workflows), [Model setup](/docs/model-setup), [BFSI reco
 ### Build and run workflows
 
 URL: https://agenticorg.ai/docs/workflows
-Audience: Process owners. Reviewed: 2026-09-29.
+Audience: Process owners. Reviewed: 2026-09-30.
 
 #### Turn a process into explicit steps
 
@@ -1319,7 +1321,7 @@ Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monit
 ### Voice, speech-to-text and text-to-speech
 
 URL: https://agenticorg.ai/docs/voice
-Audience: Voice administrators. Reviewed: 2026-09-29.
+Audience: Voice administrators. Reviewed: 2026-09-30.
 
 #### Shipped voice path
 
@@ -1367,7 +1369,7 @@ Next: [BFSI customer service](/docs/bfsi-customer-service), [Troubleshooting](/d
 ### Browser RPA and schedules
 
 URL: https://agenticorg.ai/docs/rpa
-Audience: Automation administrators. Reviewed: 2026-09-29.
+Audience: Automation administrators. Reviewed: 2026-09-30.
 
 #### When to use browser automation
 
@@ -1416,7 +1418,7 @@ Next: [Connectors](/docs/connectors), [Security and data](/docs/security-and-dat
 ### Industry packs and business dashboards
 
 URL: https://agenticorg.ai/docs/industry-packs
-Audience: Department leads. Reviewed: 2026-09-29.
+Audience: Department leads. Reviewed: 2026-09-30.
 
 #### Packs are starting points, not automatic integrations
 
@@ -1462,7 +1464,7 @@ Next: [Create agents](/docs/create-agents), [Adoption checklist](/docs/adoption-
 ### Approvals and human review
 
 URL: https://agenticorg.ai/docs/approvals
-Audience: Reviewers and approvers. Reviewed: 2026-09-29.
+Audience: Reviewers and approvers. Reviewed: 2026-09-30.
 
 #### What human review should answer
 
@@ -1507,7 +1509,7 @@ For BFSI, loan, onboarding, claim, sanction, account-change and payment decision
 ### Governed business onboarding cases
 
 URL: https://agenticorg.ai/docs/governed-cases
-Audience: BFSI analysts and authorized approvers. Reviewed: 2026-09-29.
+Audience: BFSI analysts and authorized approvers. Reviewed: 2026-09-30.
 
 #### What a governed case is
 
@@ -1559,7 +1561,7 @@ Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security a
 ### Audit, monitoring and run history
 
 URL: https://agenticorg.ai/docs/audit-and-monitoring
-Audience: Operators and auditors. Reviewed: 2026-09-29.
+Audience: Operators and auditors. Reviewed: 2026-09-30.
 
 #### What evidence you should inspect
 
@@ -1603,7 +1605,7 @@ Next: [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/securi
 ### Evaluate and roll out safely
 
 URL: https://agenticorg.ai/docs/evaluate-and-rollout
-Audience: Product owners and administrators. Reviewed: 2026-09-29.
+Audience: Product owners and administrators. Reviewed: 2026-09-30.
 
 #### Define success before running tests
 
@@ -1647,7 +1649,7 @@ Next: [Team adoption checklist](/docs/adoption-checklist), [BFSI onboarding](/do
 ### Security, privacy and data handling
 
 URL: https://agenticorg.ai/docs/security-and-data
-Audience: Security teams and data owners. Reviewed: 2026-09-29.
+Audience: Security teams and data owners. Reviewed: 2026-09-30.
 
 #### Start with approved data
 
@@ -1692,7 +1694,7 @@ Next: [Workspace and roles](/docs/workspace-and-roles), [Audit and monitoring](/
 ### Billing, limits and support
 
 URL: https://agenticorg.ai/docs/billing-and-support
-Audience: Account owners. Reviewed: 2026-09-29.
+Audience: Account owners. Reviewed: 2026-09-30.
 
 #### Understand separate cost sources
 
@@ -1728,7 +1730,7 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner: **Sanj
 ### Troubleshooting by symptom
 
 URL: https://agenticorg.ai/docs/troubleshooting
-Audience: Everyone. Reviewed: 2026-09-29.
+Audience: Everyone. Reviewed: 2026-09-30.
 
 #### Start with the smallest failing layer
 
@@ -1776,7 +1778,7 @@ When an external effect is ambiguous, pause and confirm with the system of recor
 ### Seller and buyer commerce with OACP
 
 URL: https://agenticorg.ai/docs/commerce
-Audience: Merchants and bank merchant-service teams. Reviewed: 2026-09-29.
+Audience: Merchants and bank merchant-service teams. Reviewed: 2026-09-30.
 
 #### The end-to-end ownership model
 
@@ -1801,6 +1803,12 @@ Synchronize a bounded catalog and compare SKU/variant, image, amount/currency an
 
 #### Ask useful buyer questions
 
+To watch a buyer agent that is **not** hosted on AgenticOrg talk to a
+synthetic seller over real A2A HTTP+JSON, use the
+[external buyer demo](/docs/external-buyer-a2a-demo). It shows catalogue
+browsing, source/freshness labels, purchase refusal, and token revocation.
+It does not process a payment.
+
 Try `Which variants of this item are available in the latest snapshot?` and `What source and timestamp support that price?`. Verify the response is merchant-scoped, source-grounded and explicit about stale or unsupported facts. Cached authority can support non-binding Q&A without routing every message through Grantex.
 
 Do not promote stale snapshots into final price, stock, delivery, tax, return or warranty promises. Prepared purchase output is not an order confirmation or paid state.
@@ -1822,10 +1830,80 @@ Public discovery remains off unless explicitly enabled through platform and merc
 Next: [BFSI merchant-services playbook](/docs/bfsi-merchant-services), [API and agent clients](/docs/api-sdk-mcp).
 
 
+### External buyer and seller A2A demo
+
+URL: https://agenticorg.ai/docs/external-buyer-a2a-demo
+Audience: Merchants, developers and partner integrators. Reviewed: 2026-09-30.
+
+#### See an outside buyer talk to a seller
+
+This walkthrough uses a synthetic local merchant. The buyer is a standalone
+Python process, not an AgenticOrg buyer agent. It speaks the A2A v1 HTTP+JSON
+message protocol to an AgenticOrg Seller Commerce Agent. A real external
+client needs merchant-issued access; knowing an Agent Card URL is not enough.
+
+```flow
+Create a local seller | Three synthetic products and their price/inventory snapshots are placed in a development database.
+Add source evidence | A local catalog cache record is linked to the exact connector evidence reference.
+Approve one buyer | A tenant/merchant/seller/buyer-scoped credential is issued to a separate process.
+Ask over A2A | The buyer discovers the card and sends catalog and product questions over HTTP.
+Respect the boundary | A purchase request is refused; no order, payment or hold is created.
+Revoke and clean up | The buyer receives HTTP 401 after revocation and temporary rows are removed.
+```
+
+#### What the buyer sees
+
+| Synthetic product | Price snapshot | Quantity snapshot |
+| --- | ---: | ---: |
+| Canvas Tote | INR 1299 | 7 |
+| Ceramic Mug | INR 499 | 12 |
+| Pocket Notebook | INR 249 | 20 |
+
+The buyer asks to see this catalogue, then asks
+about the tote. The seller gives a price and inventory **snapshot** with a
+freshness label and says that final price needs merchant confirmation. These
+are local teaching fixtures, not merchant offers.
+
+When the buyer asks to buy two totes, the seller refuses transaction
+execution. That is the correct result for this A2A question route. An answer
+cannot reserve stock, collect money, or create a confirmed order. For a real
+purchase, the merchant system and authorized fintech/payment rail must
+confirm their own outcomes through separate approved integration steps.
+
+#### Try it on a development stack
+
+Apply local migrations and start the development API with local PostgreSQL
+and Redis. From the repository root, with local `AGENTICORG_ENV`,
+`AGENTICORG_DB_URL`, and `AGENTICORG_REDIS_URL` configured, run:
+
+```powershell
+python -m examples.a2a_commerce_demo.run_demo `
+  --base-url http://127.0.0.1:8000 `
+  --confirm-local-synthetic
+```
+
+The runner rejects production or non-local targets. It keeps the buyer token
+out of output, revokes it after the questions, and removes its synthetic
+seller, evidence, and cache records. Read the [full local demo guide](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/a2a-commerce-demo.md)
+for setup and expected results.
+
+#### Taking a real merchant further
+
+The real path uses authorized Shopify read-only sync, Grantex-issued and
+verified OACP artifacts, an AgenticOrg cache, merchant-scoped buyer access,
+and an external A2A client configured for the endpoint. Do not substitute
+this synthetic record for signed authority. A2A interoperability is not a
+promise that every vendor automatically discovers this seller. Payment and
+mandate execution are owned by their fintech/provider; AgenticOrg's current
+A2A seller conversation is non-binding.
+
+Next: [Commerce guide](/docs/commerce), [API and A2A integration](/docs/api-sdk-mcp).
+
+
 ### API, SDK, MCP and A2A integration
 
 URL: https://agenticorg.ai/docs/api-sdk-mcp
-Audience: Developers and integration owners. Reviewed: 2026-09-29.
+Audience: Developers and integration owners. Reviewed: 2026-09-30.
 
 #### Choose an integration surface
 
@@ -1899,11 +1977,16 @@ named third-party vendor. Revocation, artifact freshness, and tenant/merchant
 binding are checked by the server on each request. No purchase is executed by
 the synchronous A2A message path.
 
+For a working external client and a temporary synthetic seller catalog, follow
+the [local A2A demo](/docs/external-buyer-a2a-demo). The buyer process imports
+no AgenticOrg runtime code and exercises discovery, sourced questions, purchase
+refusal, and revocation over HTTP.
+
 
 ### Self-hosting and deployment handoff
 
 URL: https://agenticorg.ai/docs/self-hosting
-Audience: IT and platform teams. Reviewed: 2026-09-29.
+Audience: IT and platform teams. Reviewed: 2026-09-30.
 
 #### Hosted versus institution-managed
 
@@ -1952,7 +2035,7 @@ The public user manual is available under `/docs` in the UI build. `docs.agentic
 ### BFSI: business onboarding and KYB review
 
 URL: https://agenticorg.ai/docs/bfsi-business-onboarding
-Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-09-29.
+Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-09-30.
 
 #### Scenario and boundary
 
@@ -2004,7 +2087,7 @@ Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Ado
 ### BFSI: reconciliation and finance exceptions
 
 URL: https://agenticorg.ai/docs/bfsi-reconciliation
-Audience: Finance and treasury operations. Reviewed: 2026-09-29.
+Audience: Finance and treasury operations. Reviewed: 2026-09-30.
 
 #### Scenario and boundary
 
@@ -2082,7 +2165,7 @@ Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and m
 ### BFSI: customer service across chat and voice
 
 URL: https://agenticorg.ai/docs/bfsi-customer-service
-Audience: Contact-center and service teams. Reviewed: 2026-09-29.
+Audience: Contact-center and service teams. Reviewed: 2026-09-30.
 
 #### Scenario and boundary
 
@@ -2130,7 +2213,7 @@ Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-an
 ### BFSI: insurance document and claims assistance
 
 URL: https://agenticorg.ai/docs/bfsi-insurance
-Audience: Insurers and claims operations. Reviewed: 2026-09-29.
+Audience: Insurers and claims operations. Reviewed: 2026-09-30.
 
 #### Scenario and boundary
 
@@ -2194,7 +2277,7 @@ Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows)
 ### BFSI: merchant enablement and agentic commerce
 
 URL: https://agenticorg.ai/docs/bfsi-merchant-services
-Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-09-29.
+Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-09-30.
 
 #### Scenario and ownership
 
@@ -2249,7 +2332,7 @@ Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mc
 ### Team adoption and launch checklist
 
 URL: https://agenticorg.ai/docs/adoption-checklist
-Audience: Sponsors and rollout leads. Reviewed: 2026-09-29.
+Audience: Sponsors and rollout leads. Reviewed: 2026-09-30.
 
 #### Choose the first useful problem
 

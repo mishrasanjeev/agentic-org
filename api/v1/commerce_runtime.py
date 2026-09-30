@@ -49,6 +49,7 @@ from core.commerce.c6z_runtime_vertical import (
 from core.commerce.oacp_artifacts import (
     DurableOacpArtifactCacheRepository,
     OacpArtifactCacheRepositoryQuery,
+    evaluate_oacp_persistent_artifact_cache_record,
 )
 from core.commerce.oacp_merchant_config import (
     MerchantCommerceConfigError,
@@ -1485,6 +1486,25 @@ async def _answer_buyer_question_for_scope(
                 record for record in shared_records
                 if record.cache_record_id not in seen_cache_ids
             )
+        now_iso = _now_iso()
+        catalog_source_refs: set[str] = set()
+        for record in cache_records:
+            if record.artifact_type != "catalog_snapshot" or record.buyer_agent_id not in (None, buyer_agent_id):
+                continue
+            validation = evaluate_oacp_persistent_artifact_cache_record(
+                record=record,
+                now_iso=now_iso,
+                action_intent=cast(Any, action_intent),
+                grantex_available=grantex_available,
+                expected_scope={
+                    "tenant_id": tenant_id,
+                    "merchant_id": merchant_id,
+                    "seller_agent_id": seller_agent_id or record.seller_agent_id,
+                    "buyer_agent_id": record.buyer_agent_id,
+                },
+            )
+            if validation.get("status") in ("usable_for_non_binding_cache", "prepared_only_for_commitment_boundary"):
+                catalog_source_refs.update(record.source_refs)
         evidence_query = select(C6ZConnectorEvidenceRow).where(
             C6ZConnectorEvidenceRow.tenant_id == tenant_id,
             C6ZConnectorEvidenceRow.merchant_id == merchant_id,
@@ -1493,15 +1513,30 @@ async def _answer_buyer_question_for_scope(
             evidence_query = evidence_query.where(C6ZConnectorEvidenceRow.seller_agent_id == seller_agent_id)
         evidence_rows = (await session.scalars(evidence_query.order_by(C6ZConnectorEvidenceRow.synced_at.desc()))).all()
         products: list[dict[str, Any]] = []
+        matched_sources: set[str] = set()
+        seen_refs: set[str] = set()
         for evidence_row in evidence_rows:
+            if (
+                evidence_row.source_evidence_ref not in catalog_source_refs
+                or evidence_row.source_evidence_ref in seen_refs
+            ):
+                continue
+            seen_refs.add(evidence_row.source_evidence_ref)
+            matched_sources.add(evidence_row.source_system)
             products.extend(list(evidence_row.products or []))
+        source_label = "Source: Shopify via Grantex artifact"
+        if matched_sources == {"synthetic_demo"}:
+            source_label = "Source: synthetic local demo catalog; not externally verified"
+        elif matched_sources != {"shopify"} and matched_sources:
+            source_label = "Source: mixed cached catalog evidence; confirm with merchant"
         answer = answer_product_question_from_cache(
             cache_records=cache_records,
             products=products,
             question=question,
-            now_iso=_now_iso(),
+            now_iso=now_iso,
             grantex_available=grantex_available,
             action_intent=cast(Any, action_intent),
+            source_label=source_label,
         )
     return (
         {

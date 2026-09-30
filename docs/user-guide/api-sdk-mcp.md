@@ -69,3 +69,8 @@ admin. This is a bearer capability, not proof that the client belongs to a
 named third-party vendor. Revocation, artifact freshness, and tenant/merchant
 binding are checked by the server on each request. No purchase is executed by
 the synchronous A2A message path.
+
+For a working external client and a temporary synthetic seller catalog, follow
+the [local A2A demo](/docs/external-buyer-a2a-demo). The buyer process imports
+no AgenticOrg runtime code and exercises discovery, sourced questions, purchase
+refusal, and revocation over HTTP.

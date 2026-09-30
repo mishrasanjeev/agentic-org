@@ -89,9 +89,22 @@ async def test_external_buyer_is_scoped_revocable_and_receives_sourced_answer(cl
             tenant_id=TEST_TENANT_ID, merchant_id=merchant, seller_agent_id=seller_agent,
             source_evidence_ref="agenticorg:shopify:evidence:a2a:redacted",
             source_observed_at=now, synced_at=now,
-            products=[{"title": "Canvas Tote", "vendor": "A2A Test Store", "variants": [{
-                "sku": "TOTE-1", "price": "1299", "currency": "INR", "inventory_quantity_snapshot": 7,
-            }]}], product_count=1, variant_count=1,
+            products=[
+                {"title": "Canvas Tote", "vendor": "A2A Test Store", "variants": [{
+                    "sku": "TOTE-1", "price": "1299", "currency": "INR", "inventory_quantity_snapshot": 7,
+                }]},
+                {"title": "Ceramic Mug", "vendor": "A2A Test Store", "variants": [{
+                    "sku": "MUG-1", "price": "499", "currency": "INR", "inventory_quantity_snapshot": 12,
+                }]},
+            ], product_count=2, variant_count=2,
+        ))
+        session.add(C6ZConnectorEvidenceRow(
+            evidence_id=f"unlinked_evidence_{suffix}", packet_id=packet_id,
+            tenant_id=TEST_TENANT_ID, merchant_id=merchant, seller_agent_id=seller_agent,
+            source_evidence_ref="agenticorg:shopify:evidence:unlinked:redacted",
+            source_observed_at=now, synced_at=now + timedelta(seconds=1),
+            products=[{"title": "Unlinked Widget", "variants": [{"price": "1", "currency": "INR"}]}],
+            product_count=1, variant_count=1,
         ))
         repo = DurableOacpArtifactCacheRepository(session)
         shared_record = OacpPersistentArtifactCacheRecord(
@@ -134,6 +147,18 @@ async def test_external_buyer_is_scoped_revocable_and_receives_sourced_answer(cl
     assert payload["metadata"]["status"] == "answered"
     assert payload["metadata"]["freshnessLabel"].startswith("Freshness:")
     assert payload["metadata"]["nonAuthoritativeForTransaction"] is True
+
+    catalogue = await client.post(
+        "/api/v1/a2a/message:send", json=_message("Show me your product catalogue"), headers=buyer_headers,
+    )
+    assert catalogue.status_code == 200
+    catalog_text = catalogue.json()["message"]["parts"][0]["text"]
+    assert "Canvas Tote" in catalog_text and "Ceramic Mug" in catalog_text
+    assert "Unlinked Widget" not in catalog_text
+    unlinked = await client.post(
+        "/api/v1/a2a/message:send", json=_message("Unlinked Widget"), headers=buyer_headers,
+    )
+    assert unlinked.json()["message"]["metadata"]["status"] == "not_found"
 
     for wrong in (
         _message("Canvas Tote", merchantId="another-merchant"),
@@ -178,7 +203,7 @@ async def test_external_buyer_is_scoped_revocable_and_receives_sourced_answer(cl
     async with get_tenant_session(uuid.UUID(TEST_TENANT_ID)) as session:
         seller = await session.get(C6ZSellerOnboardingPacketRow, packet_id)
         assert seller is not None
-        seller.status = "future_unknown_state"
+        seller.status = "draft"
     assert (await client.post(
         "/api/v1/a2a/message:send", json=_message("Canvas Tote"), headers=buyer_headers,
     )).status_code == 401
