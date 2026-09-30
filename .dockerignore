@@ -101,6 +101,7 @@ docs/**
 !docs/user-guide/
 !docs/user-guide/*.md
 !docs/user-guide/index.json
+!docs/a2a-commerce-demo.md
 !docs/PRODUCT_STATUS.md
 !docs/connector_production_readiness.md
 !docs/data-classification.md

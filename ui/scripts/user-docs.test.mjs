@@ -21,6 +21,8 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
     assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
   }
+  const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
+  assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);
 });
 
 test("the complete manual has maintained source references and five BFSI playbooks", () => {

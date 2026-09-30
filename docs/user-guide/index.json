@@ -257,8 +257,8 @@
       "audience": "Merchants, developers and partner integrators",
       "sources": [
         "docs/a2a-commerce-demo.md",
-        "api/v1/a2a_interop.py",
-        "examples/a2a_commerce_demo/buyer_agent.py"
+        "docs/PRODUCT_STATUS.md",
+        "docs/oacp/end-user-flow.md"
       ]
     },
     {
