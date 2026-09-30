@@ -80,6 +80,7 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "ai-generation": (20, 60),
     "agent-execution": (60, 60),
     "a2a-task-execute": (60, 60),
+    "commerce-a2a-buyer": (60, 60),
     "workflow-execution": (60, 60),
     "chat-query": (60, 60),
     "sales-agent-trigger": (20, 60),
@@ -107,7 +108,7 @@ _DEFAULT_RATE = (300, 60)
 # Rate-limit classes where a Redis outage in strict env must fail closed
 # (credential-guessing and unauthenticated spend paths). Everything else
 # stays available with a warning — a rate limiter must not become the outage.
-_FAIL_CLOSED_CLASS_PREFIXES = ("auth-", "public-", "demo-")
+_FAIL_CLOSED_CLASS_PREFIXES = ("auth-", "public-", "demo-", "commerce-a2a-buyer")
 # Bug sheet 2026-09-14 row 7: SSO initiation and the OIDC callback accept no
 # credentials (the IdP owns password brute-force protection) and their flow
 # state is signed + browser-bound, so a limiter outage degrades to
@@ -161,7 +162,7 @@ LEGACY_SCOPE_ALIASES: dict[str, str] = {
 }
 
 # The modes ``auth.grantex_middleware`` sets once it has verified a credential.
-KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy"})
+KNOWN_AUTH_MODES = frozenset({"api_key", "grantex", "legacy", "commerce_buyer"})
 
 
 # Scopes an operator may attach to an agent's Grantex registration so its
@@ -264,7 +265,11 @@ async def _check_rate_limit(request: Request, meta: dict[str, Any]) -> None:
         return
     limit, window = RATE_LIMIT_CLASSES.get(rate_class, _DEFAULT_RATE)
     tenant_id = getattr(request.state, "tenant_id", None)
-    principal = f"t:{tenant_id}" if (meta.get("auth_required") and tenant_id) else f"ip:{_client_ip(request)}"
+    buyer_access_id = getattr(request.state, "buyer_access_id", None)
+    principal = (
+        f"buyer:{buyer_access_id}" if buyer_access_id else
+        f"t:{tenant_id}" if (meta.get("auth_required") and tenant_id) else f"ip:{_client_ip(request)}"
+    )
 
     from core.auth_state import check_window_rate
 
@@ -307,6 +312,10 @@ def _check_scope(request: Request, meta: dict[str, Any]) -> None:
         if settings.route_refuse_unknown_auth_mode:
             raise HTTPException(status_code=403, detail="Unrecognised authentication mode; request refused")
     required = required_scopes_for(meta.get("scope"), request.method)
+    if auth_mode == "commerce_buyer":
+        if request.url.path not in {"/api/v1/a2a/message:send", "/api/v1/a2a/extendedAgentCard"}:
+            _deny(request, 403, "Buyer credential is A2A-only", declared=meta.get("scope"))
+        return
     if not required:
         return
     granted = _expand_granted(getattr(request.state, "scopes", None) or [])

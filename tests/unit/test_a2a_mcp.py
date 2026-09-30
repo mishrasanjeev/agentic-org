@@ -26,7 +26,7 @@ class TestA2AAgentCard:
         monkeypatch.delenv(COMMERCE_PUBLIC_DISCOVERY_ENV, raising=False)
         card = await agent_card()
         assert card["name"] == "AgenticOrg Agent Platform"
-        assert card["protocol"] == "a2a/1.0"
+        assert card["protocol"] == "agenticorg-legacy-task-api"
         assert card["capabilities"]["tasks"] is True
         assert card["authentication"]["scheme"] == "grantex"
         assert len(card["skills"]) == 36  # Commerce discovery is disabled by default.

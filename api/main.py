@@ -14,6 +14,7 @@ from api.middleware.request_id import RequestIDMiddleware
 from api.route_enforcement import enforce_route_metadata
 from api.v1 import (
     a2a,
+    a2a_interop,
     aa_callback,
     abm,
     agent_teams,
@@ -246,6 +247,8 @@ app.include_router(workflows.router, prefix="/api/v1", tags=["Workflows"])
 app.include_router(workflow_variants.router, prefix="/api/v1", tags=["Workflows"])
 app.include_router(sop.router, prefix="/api/v1", tags=["SOP"])
 app.include_router(a2a.router, prefix="/api/v1", tags=["A2A"])
+app.include_router(a2a_interop.discovery_router)
+app.include_router(a2a_interop.router, prefix="/api/v1", tags=["A2A"])
 app.include_router(mcp.router, prefix="/api/v1", tags=["MCP"])
 app.include_router(approvals.router, prefix="/api/v1", tags=["Approvals"])
 app.include_router(approval_policies.router, prefix="/api/v1", tags=["Approvals"])

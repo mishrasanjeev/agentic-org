@@ -1467,8 +1467,24 @@ async def _answer_buyer_question_for_scope(
                 merchant_id=merchant_id,
                 seller_agent_id=seller_agent_id,
                 buyer_agent_id=buyer_agent_id,
+                shared_only=buyer_agent_id is None,
             )
         )
+        if buyer_agent_id:
+            shared_records = await repo.list_for_scope(
+                OacpArtifactCacheRepositoryQuery(
+                    tenant_id=tenant_id,
+                    merchant_id=merchant_id,
+                    seller_agent_id=seller_agent_id,
+                    buyer_agent_id=None,
+                    shared_only=True,
+                )
+            )
+            seen_cache_ids = {record.cache_record_id for record in cache_records}
+            cache_records = tuple(cache_records) + tuple(
+                record for record in shared_records
+                if record.cache_record_id not in seen_cache_ids
+            )
         evidence_query = select(C6ZConnectorEvidenceRow).where(
             C6ZConnectorEvidenceRow.tenant_id == tenant_id,
             C6ZConnectorEvidenceRow.merchant_id == merchant_id,
@@ -1518,16 +1534,23 @@ async def _load_runtime_scope(
                 merchant_id=merchant_id,
                 seller_agent_id=seller_agent_id,
                 buyer_agent_id=buyer_agent_id,
+                shared_only=buyer_agent_id is None,
             )
         )
-        if not cache_records and buyer_agent_id:
-            cache_records = await repo.list_for_scope(
+        if buyer_agent_id:
+            shared_records = await repo.list_for_scope(
                 OacpArtifactCacheRepositoryQuery(
                     tenant_id=tenant_id,
                     merchant_id=merchant_id,
                     seller_agent_id=seller_agent_id,
                     buyer_agent_id=None,
+                    shared_only=True,
                 )
+            )
+            seen_cache_ids = {record.cache_record_id for record in cache_records}
+            cache_records = tuple(cache_records) + tuple(
+                record for record in shared_records
+                if record.cache_record_id not in seen_cache_ids
             )
         evidence_query = select(C6ZConnectorEvidenceRow).where(
             C6ZConnectorEvidenceRow.tenant_id == tenant_id,

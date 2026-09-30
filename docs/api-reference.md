@@ -441,8 +441,8 @@ create a replacement and revoke the old key.
 | `mcp:read` | Reserved for MCP reads; tool discovery (`GET /mcp/tools`) is public |
 | `mcp:call` | Execute MCP tool calls (`POST /mcp/call`); accepted as `mcp:write` |
 | `mcp:write` | Execute MCP tool calls (`POST /mcp/call`) |
-| `a2a:read` | Read A2A task status (`GET /a2a/tasks/{id}`); agent cards are public |
-| `a2a:write` | Run an agent by type (`POST /a2a/tasks`) |
+| `a2a:read` | Read legacy AgenticOrg task status (`GET /a2a/tasks/{id}`); generic cards are public |
+| `a2a:write` | Run a non-commerce agent by type through the legacy task API or A2A v1 `message:send` |
 
 A key may also carry any other route family scope listed in
 `docs/operations/grant-enforcement.md`, or `agenticorg:admin` for an
@@ -450,6 +450,13 @@ administrator key. The A2A and MCP scopes are checked only when the deployment
 sets `AGENTICORG_ROUTE_SCOPE_A2A_MCP=true`; until then any authenticated key
 reaches those routes. The default key scopes include `mcp:call` and `a2a:read`
 but not `a2a:write`.
+
+The A2A v1 `POST /api/v1/a2a/message:send` enforces the generic-agent
+`a2a:write` or admin scope independently of that legacy feature switch.
+Merchant-issued buyer credentials are accepted only for seller-specific,
+non-binding A2A text answers and a private extended card. See
+[A2A interoperability](a2a-interoperability.md) for the wire format,
+credential issuance/revocation, and supported subset.
 
 ---
 
@@ -2310,13 +2317,15 @@ inputs, outputs, confidence, and errors.
 
 ### SDK, CLI, and MCP launch contract
 
-The Python SDK, TypeScript SDK, direct `agenticorg` CLI, and MCP server are
-expected to cover this end-to-end path:
+The Python SDK, TypeScript SDK, direct `agenticorg` CLI, and MCP server cover
+the following legacy AgenticOrg integration path. These legacy task/card
+routes are not A2A v1 protocol endpoints:
 
 1. Discover launchable agents through `GET /api/v1/a2a/agent-card`,
    `GET /api/v1/a2a/agents`, and `GET /api/v1/mcp/tools`.
-2. Launch `commerce_sales_agent` through `POST /api/v1/a2a/tasks` or MCP for
-   buyer/seller discovery.
+2. Launch an internal agent through `POST /api/v1/a2a/tasks` or MCP within
+   the tenant's grants. Merchant-approved external buyer agents instead use
+   the A2A v1 `message:send` seller path.
 3. List connectors, search knowledge, generate an agent, generate a workflow,
    create the workflow, run it, and poll the run status.
 

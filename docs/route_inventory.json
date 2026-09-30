@@ -2,6 +2,24 @@
   {
     "audit_event": "none-public-discovery",
     "auth_required": false,
+    "function": "standard_agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/.well-known/agent-card.json api/v1/a2a_interop.py:standard_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/.well-known/agent-card.json",
+    "public_exempt_reason": "generic-card-no-merchant-data",
+    "rate_limit": "a2a-discovery",
+    "scope": "public:a2a.discovery",
+    "source_line": 100,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "none-public-discovery",
+    "auth_required": false,
     "function": "agent_card",
     "idempotency": "read-only",
     "key": "GET /api/v1/a2a/.well-known/agent.json api/v1/a2a.py:agent_card",
@@ -52,6 +70,96 @@
     "scope": "public:a2a.agent_discovery",
     "source_line": 95,
     "tenant_required": false
+  },
+  {
+    "audit_event": "a2a.commerce_buyer_access.list",
+    "auth_required": true,
+    "function": "list_buyer_access",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/commerce/buyer-access api/v1/a2a_interop.py:list_buyer_access",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/a2a/commerce/buyer-access",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "a2a.commerce_buyer_access.read",
+    "source_line": 176,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "a2a.commerce_buyer_access.create",
+    "auth_required": true,
+    "function": "create_buyer_access",
+    "idempotency": "one-time-credential-issuance",
+    "key": "POST /api/v1/a2a/commerce/buyer-access api/v1/a2a_interop.py:create_buyer_access",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/a2a/commerce/buyer-access",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "a2a.commerce_buyer_access.write",
+    "source_line": 142,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "a2a.commerce_buyer_access.revoke",
+    "auth_required": true,
+    "function": "revoke_buyer_access",
+    "idempotency": "idempotent-revocation",
+    "key": "DELETE /api/v1/a2a/commerce/buyer-access/{access_id} api/v1/a2a_interop.py:revoke_buyer_access",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/a2a/commerce/buyer-access/{access_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-runtime-write",
+    "scope": "a2a.commerce_buyer_access.write",
+    "source_line": 197,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "a2a.extended_card.read",
+    "auth_required": true,
+    "function": "extended_agent_card",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/a2a/extendedAgentCard api/v1/a2a_interop.py:extended_agent_card",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/a2a/extendedAgentCard",
+    "public_exempt_reason": null,
+    "rate_limit": "a2a-task-read",
+    "scope": "a2a.extended_card.read",
+    "source_line": 110,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "a2a.message.send",
+    "auth_required": true,
+    "function": "send_message",
+    "idempotency": "read-only-synchronous-message",
+    "key": "POST /api/v1/a2a/message:send api/v1/a2a_interop.py:send_message",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/a2a_interop.py",
+    "path": "/api/v1/a2a/message:send",
+    "public_exempt_reason": null,
+    "rate_limit": "commerce-a2a-buyer",
+    "scope": "a2a.message.send",
+    "source_line": 236,
+    "tenant_required": true
   },
   {
     "audit_event": "a2a.task.create",

@@ -18,6 +18,13 @@ OACP and provider evidence exists.
 | WhatsApp | `POST /api/v1/commerce/runtime/bridges/whatsapp/webhook` with `X-Hub-Signature-256` |
 | Telegram | `POST /api/v1/commerce/runtime/bridges/telegram/webhook` with `X-Telegram-Bot-Api-Secret-Token` |
 
+The channel names above describe possible integration styles, not automatic
+marketplace enrollment or vendor-supported plugins. For a protocol-native
+external buyer, use the merchant-approved A2A v1 HTTP+JSON flow in
+[A2A interoperability](a2a-interoperability.md). The older A2A card/task
+routes are proprietary AgenticOrg APIs; a protocol adapter preview is not a
+live A2A transport or transaction authority.
+
 ## Public Catalog Publishing
 
 Public catalog publishing is a separate read-only surface from the authenticated

@@ -338,6 +338,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         "/api/v1/a2a/.well-known/agent.json",  # A2A discovery (public)
         "/api/v1/a2a/agent-card",  # A2A discovery alias (nginx-safe)
         "/api/v1/a2a/agents",  # A2A agent list (public)
+        "/.well-known/agent-card.json",  # Standard A2A v1 generic discovery
         "/api/v1/mcp/tools",  # MCP tool discovery (public)
         "/api/v1/push/vapid-key",  # VAPID public key (browser needs before login)
         "/api/v1/billing/callback",  # Plural redirect callback (browser returning from gateway)
@@ -388,6 +389,12 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method == "OPTIONS":
             return await call_next(request)
+        # Buyer credentials are never tenant API credentials.
+        buyer_auth = request.headers.get("Authorization", "").startswith("Bearer ao_buyer_")
+        if buyer_auth and request.url.path not in {
+            "/api/v1/a2a/message:send", "/api/v1/a2a/extendedAgentCard",
+        }:
+            return JSONResponse(status_code=403, content={"detail": "Buyer credential is A2A-only"})
         if request.url.path in self.EXEMPT_PATHS or request.url.path.startswith(self.EXEMPT_PREFIXES):
             return await call_next(request)
 
@@ -419,6 +426,12 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
                 status_code=401,
                 content={"detail": "Missing session cookie or Authorization header"},
             )
+        if token.startswith("ao_buyer_") and (
+            not auth_header or request.url.path not in {
+                "/api/v1/a2a/message:send", "/api/v1/a2a/extendedAgentCard",
+            }
+        ):
+            return JSONResponse(status_code=403, content={"detail": "Buyer credential is A2A-only"})
 
         # Downstream handlers must operate on the exact credential this
         # middleware authenticated. Re-reading cookies or headers in a route
@@ -429,10 +442,36 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         # Triple-mode: detect token type
         if token.startswith("ao_sk_"):
             return await self._handle_api_key(request, call_next, token, client_ip)
+        elif token.startswith("ao_buyer_"):
+            return await self._handle_commerce_buyer(request, call_next, token, client_ip)
         elif _is_grantex_token(token):
             return await self._handle_grantex_token(request, call_next, token, client_ip)
         else:
             return await self._handle_legacy_token(request, call_next, token, client_ip)
+
+    async def _handle_commerce_buyer(
+        self, request: Request, call_next, token: str, client_ip: str,
+    ) -> Response:
+        from core.commerce.a2a_buyer_access import resolve_buyer_token
+
+        try:
+            identity = await resolve_buyer_token(token)
+        except Exception:  # enterprise-gate: broad-except-ok reason=deny-buyer-auth-on-database-failure
+            logger.exception("commerce_buyer_credential_lookup_failed")
+            return JSONResponse(status_code=503, content={"detail": "Buyer authentication unavailable"})
+        if identity is None:
+            return await self._credential_failure_response(client_ip, "Invalid or expired buyer credential")
+        request.state.claims = {"sub": f"commerce-buyer:{identity.access_id}"}
+        request.state.tenant_id = identity.tenant_id
+        request.state.scopes = ["commerce:a2a:ask"]
+        request.state.agent_id = identity.buyer_agent_id
+        request.state.buyer_access_id = identity.access_id
+        request.state.buyer_agent_id = identity.buyer_agent_id
+        request.state.buyer_merchant_id = identity.merchant_id
+        request.state.buyer_seller_agent_id = identity.seller_agent_id
+        request.state.auth_mode = "commerce_buyer"
+        await clear_auth_failures(client_ip)
+        return await call_next(request)
 
     async def _handle_api_key(
         self, request: Request, call_next, token: str, client_ip: str

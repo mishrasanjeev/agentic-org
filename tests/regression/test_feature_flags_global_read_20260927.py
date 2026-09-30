@@ -34,7 +34,7 @@ class _Recorder:
         self.statements.append(statement)
 
 
-def test_revision_is_the_single_head_after_admin_scope_compat() -> None:
+def test_revision_remains_in_the_single_head_migration_chain() -> None:
     from alembic.config import Config
     from alembic.script import ScriptDirectory
 
@@ -43,7 +43,7 @@ def test_revision_is_the_single_head_after_admin_scope_compat() -> None:
     assert len(module.revision) <= 32
     assert module.down_revision == "v6z29_admin_scope_compat"
     heads = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini"))).get_heads()
-    assert heads == ["v6z30_flag_global_read"]
+    assert heads == ["v6z31_a2a_buyers"]
 
 
 def test_upgrade_adds_only_a_select_policy_for_global_rows() -> None:
