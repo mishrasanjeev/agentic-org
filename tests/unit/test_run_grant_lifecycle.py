@@ -441,6 +441,7 @@ async def test_the_revocation_listener_restarts_after_a_redis_failure(monkeypatc
 
     monkeypatch.setattr(tp, "_REVOCATION_RETRY_MIN_SECONDS", 0.0)
     attempts: list[int] = []
+    closes: list[int] = []
     stop = asyncio.Event()
 
     class _PubSub:
@@ -449,10 +450,14 @@ async def test_the_revocation_listener_restarts_after_a_redis_failure(monkeypatc
             if len(attempts) < 3:
                 raise aioredis.ConnectionError("redis down")
 
-        async def listen(self):
+        async def get_message(self, *, ignore_subscribe_messages: bool, timeout: float):
+            assert ignore_subscribe_messages is True
+            assert timeout == 1.0
             stop.set()
             await asyncio.sleep(3600)
-            yield {}
+
+        async def aclose(self) -> None:
+            closes.append(1)
 
     pool = TokenPool()
     pool.redis = MagicMock()
@@ -463,3 +468,35 @@ async def test_the_revocation_listener_restarts_after_a_redis_failure(monkeypatc
     with pytest.raises(asyncio.CancelledError):
         await task
     assert len(attempts) == 3
+    assert len(closes) == 3
+
+
+async def test_revocation_listener_keeps_idle_subscription_and_removes_revoked_token():
+    from auth.token_pool import TokenPool
+
+    received = asyncio.Event()
+    calls: list[tuple[bool, float]] = []
+
+    class _PubSub:
+        async def get_message(self, *, ignore_subscribe_messages: bool, timeout: float):
+            calls.append((ignore_subscribe_messages, timeout))
+            if len(calls) < 3:
+                return None
+            if len(calls) == 3:
+                return {"type": "message", "data": "agent-1"}
+            await asyncio.sleep(3600)
+
+    pool = TokenPool()
+    pool.redis = MagicMock()
+
+    async def delete(key: str) -> None:
+        assert key == "agent:agent-1:token"
+        received.set()
+
+    pool.redis.delete = delete
+    task = asyncio.create_task(pool._listen_revocations(_PubSub()))
+    await asyncio.wait_for(received.wait(), timeout=2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert calls[:3] == [(True, 1.0)] * 3

@@ -151,7 +151,12 @@ class TokenPool:
     def _new_redis_client() -> aioredis.Redis:
         from core.config import redis_socket_timeout_kwargs
 
-        return aioredis.from_url(settings.redis_url, decode_responses=True, **redis_socket_timeout_kwargs())
+        return aioredis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            health_check_interval=30,
+            **redis_socket_timeout_kwargs(),
+        )
 
     def _redis_client(self) -> aioredis.Redis | None:
         if self.redis is not None:
@@ -173,6 +178,7 @@ class TokenPool:
         """
         delay = _REVOCATION_RETRY_MIN_SECONDS
         while self.redis is not None:
+            pubsub = None
             try:
                 pubsub = self.redis.pubsub()
                 await pubsub.subscribe("agenticorg:token:revoke")
@@ -185,6 +191,12 @@ class TokenPool:
                 logger.warning(
                     "token_pool_revocation_listener_failed", error_type=type(exc).__name__, retry_in_seconds=delay
                 )
+            finally:
+                if pubsub is not None:
+                    try:
+                        await pubsub.aclose()
+                    except (aioredis.RedisError, OSError) as exc:
+                        logger.debug("token_pool_revocation_listener_close_failed", error_type=type(exc).__name__)
             await asyncio.sleep(delay)
             delay = min(delay * 2, _REVOCATION_RETRY_MAX_SECONDS)
 
@@ -512,8 +524,11 @@ class TokenPool:
                 )
 
     async def _listen_revocations(self, pubsub) -> None:
-        async for message in pubsub.listen():
-            if message["type"] == "message":
+        while True:
+            # An explicit finite poll returns None on an idle channel instead
+            # of tripping the client's ordinary socket read timeout.
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message is not None and message["type"] == "message":
                 agent_id = message["data"]
                 await self.redis.delete(f"agent:{agent_id}:token")
 
