@@ -54,8 +54,9 @@
     "@hono/node-server": ">=2.0.5",
     "hono": ">=4.13.5",
     "qs": ">=6.16.0",
-    "fast-uri": "3.1.6",
-    "ip-address": ">=10.3.1",
+    "fast-uri": "3.1.8",
+    "ip-address": "10.7.2",
+    "express-rate-limit": "8.7.0",
     "body-parser": ">=2.3.0"
   }
 }
