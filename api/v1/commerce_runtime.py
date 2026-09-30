@@ -1525,7 +1525,9 @@ async def _answer_buyer_question_for_scope(
             matched_sources.add(evidence_row.source_system)
             products.extend(list(evidence_row.products or []))
         source_label = "Source: Shopify via Grantex artifact"
-        if matched_sources == {"synthetic_demo"}:
+        if not matched_sources:
+            source_label = "Source: no matched catalog evidence"
+        elif matched_sources == {"synthetic_demo"}:
             source_label = "Source: synthetic local demo catalog; not externally verified"
         elif matched_sources != {"shopify"} and matched_sources:
             source_label = "Source: mixed cached catalog evidence; confirm with merchant"

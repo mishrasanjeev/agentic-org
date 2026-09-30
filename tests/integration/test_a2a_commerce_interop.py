@@ -67,6 +67,7 @@ async def test_external_buyer_is_scoped_revocable_and_receives_sourced_answer(cl
     no_cache = await client.post("/api/v1/a2a/message:send", json=_message("Canvas Tote"), headers=buyer_headers)
     assert no_cache.status_code == 200, no_cache.text
     assert no_cache.json()["message"]["metadata"]["status"] == "needs_refresh"
+    assert no_cache.json()["message"]["metadata"]["sourceLabel"] == "Source: no matched catalog evidence"
     assert no_cache.json()["message"]["metadata"]["allowedToExecute"] is False
     unsupported = await client.post(
         "/api/v1/a2a/message:send", json=_message("Canvas Tote"),
