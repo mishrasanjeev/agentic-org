@@ -46,6 +46,7 @@ Cloud DNS/managed HTTPS checks. The canonical manual is
 
 - [Commerce, OACP and merchant onboarding](commerce.md)
 - [External buyer and seller A2A demo](external-buyer-a2a-demo.md)
+- [Seller commerce with an outside A2A buyer: guided journey](seller-a2a-commerce-journey.md)
 - [API, SDK, MCP and A2A integrations](api-sdk-mcp.md)
 - [Self-hosting and local learning](self-hosting.md)
 

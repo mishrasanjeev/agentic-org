@@ -21,6 +21,8 @@ Synchronize a bounded catalog and compare SKU/variant, image, amount/currency an
 
 ## Ask useful buyer questions
 
+For merchant setup through a third-party buyer app and the Plural payment
+boundary, follow the [guided seller A2A journey](/docs/seller-a2a-commerce-journey).
 To watch a buyer agent that is **not** hosted on AgenticOrg talk to a
 synthetic seller over real A2A HTTP+JSON, use the
 [external buyer demo](/docs/external-buyer-a2a-demo). It shows catalogue

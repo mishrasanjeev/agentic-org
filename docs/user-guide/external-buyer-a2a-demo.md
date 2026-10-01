@@ -60,4 +60,5 @@ promise that every vendor automatically discovers this seller. Payment and
 mandate execution are owned by their fintech/provider; AgenticOrg's current
 A2A seller conversation is non-binding.
 
-Next: [Commerce guide](/docs/commerce), [API and A2A integration](/docs/api-sdk-mcp).
+Next: [Guided seller-to-buyer integration](/docs/seller-a2a-commerce-journey),
+[Commerce guide](/docs/commerce), [API and A2A integration](/docs/api-sdk-mcp).

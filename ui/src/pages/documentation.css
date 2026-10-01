@@ -365,6 +365,251 @@
   margin: 8px 0 0;
   color: #51665a;
 }
+.docs-commerce-journey {
+  border: 1px solid #cbded4;
+  border-radius: 6px;
+  background: #fbfdfb;
+  padding: 22px;
+  margin: 24px 0 36px;
+}
+.docs-commerce-journey-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.docs-commerce-journey-head h2 {
+  margin: 4px 0;
+  color: #193a30;
+  font-size: 20px;
+  line-height: 1.3;
+}
+.docs-commerce-journey-head p:last-child {
+  margin: 5px 0 0;
+  color: #556b60;
+  font-size: 13px;
+}
+.docs-commerce-journey-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #245d46;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  padding-top: 3px;
+}
+.docs-commerce-journey-progress {
+  height: 5px;
+  background: #dbe9e1;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 18px 0 20px;
+}
+.docs-commerce-journey-progress span {
+  display: block;
+  height: 100%;
+  background: #16815d;
+  transition: width 180ms ease;
+}
+.docs-commerce-journey-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid #dce5e1;
+  border-left: 1px solid #dce5e1;
+}
+.docs-commerce-journey-stage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 66px;
+  padding: 9px;
+  color: #354f43;
+  border: 0;
+  border-right: 1px solid #dce5e1;
+  border-bottom: 1px solid #dce5e1;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.docs-commerce-journey-stage:hover,
+.docs-commerce-journey-stage.is-active {
+  background: #eaf5ef;
+}
+.docs-commerce-journey-stage.is-active {
+  box-shadow: inset 3px 0 #16815d;
+}
+.docs-commerce-journey-stage-icon {
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #147253;
+  background: #e7f4ec;
+  border-radius: 4px;
+}
+.docs-commerce-journey-stage:nth-child(3n + 2) .docs-commerce-journey-stage-icon {
+  color: #266b9c;
+  background: #e9f3f9;
+}
+.docs-commerce-journey-stage:nth-child(3n) .docs-commerce-journey-stage-icon {
+  color: #956020;
+  background: #f9f0df;
+}
+.docs-commerce-journey-stage-label {
+  min-width: 0;
+}
+.docs-commerce-journey-stage-label small {
+  display: block;
+  font-size: 10px;
+  color: #526458;
+}
+.docs-commerce-journey-stage-label strong {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.docs-commerce-journey-detail {
+  padding: 20px 0 4px;
+}
+.docs-commerce-journey-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #176348;
+}
+.docs-commerce-journey-detail-title span {
+  color: #687970;
+  font-size: 11px;
+}
+.docs-commerce-journey-detail-title h3 {
+  margin: 2px 0 0;
+  color: #1f4032;
+  font-size: 17px;
+}
+.docs-commerce-journey-detail dl {
+  margin: 14px 0;
+}
+.docs-commerce-journey-detail dl div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid #e4ece7;
+  padding: 9px 0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.docs-commerce-journey-detail dt {
+  color: #466f59;
+  font-weight: 700;
+}
+.docs-commerce-journey-detail dd {
+  margin: 0;
+  color: #405349;
+}
+.docs-commerce-journey-question {
+  border: 0;
+  border-top: 1px solid #dce5e1;
+  margin: 10px 0 16px;
+  padding: 15px 0 0;
+}
+.docs-commerce-journey-question legend {
+  float: left;
+  width: 100%;
+  color: #274737;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.docs-commerce-journey-question > div {
+  clear: both;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.docs-commerce-journey-question label {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  border: 1px solid #d8e3dc;
+  border-radius: 4px;
+  background: #fff;
+  padding: 9px;
+  min-height: 44px;
+  color: #43584b;
+  font-size: 12px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+.docs-commerce-journey-question label:has(input:checked) {
+  border-color: #16815d;
+  background: #edf8f1;
+}
+.docs-commerce-journey-question input {
+  margin: 2px 0 0;
+  accent-color: #16815d;
+}
+.docs-commerce-journey-question p {
+  clear: both;
+  margin: 9px 0 0;
+  color: #4e6958;
+  font-size: 12px;
+}
+.docs-commerce-journey-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.docs-commerce-journey-detail-actions a,
+.docs-commerce-journey-detail-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.docs-commerce-journey-detail-actions button {
+  border: 1px solid #12684e;
+  border-radius: 4px;
+  color: #fff;
+  background: #12684e;
+  padding: 8px 11px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.docs-commerce-journey-detail-actions button:hover {
+  background: #0c513d;
+}
+.docs-commerce-journey-detail-actions button:disabled {
+  background: #638778;
+  border-color: #638778;
+  cursor: default;
+}
+.docs-commerce-journey-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  color: #627369;
+  font-size: 11px;
+}
+.docs-commerce-journey-foot p { margin: 0; }
+.docs-commerce-journey-foot button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  color: #49675a;
+  background: transparent;
+  min-height: 44px;
+  cursor: pointer;
+}
 .docs-start {
   display: flex;
   gap: 20px;
@@ -631,6 +876,35 @@
   .docs-start {
     gap: 14px;
   }
+  .docs-commerce-journey {
+    padding: 16px;
+  }
+  .docs-commerce-journey-stages {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .docs-commerce-journey-head {
+    display: block;
+  }
+  .docs-commerce-journey-count {
+    margin-top: 10px;
+  }
+}
+@media (max-width: 460px) {
+  .docs-commerce-journey-stages {
+    grid-template-columns: 1fr;
+  }
+  .docs-commerce-journey-stage {
+    min-height: 52px;
+  }
+  .docs-commerce-journey-detail-actions {
+    align-items: stretch;
+  }
+  .docs-commerce-journey-detail-actions button {
+    justify-content: center;
+  }
+  .docs-commerce-journey-question > div {
+    grid-template-columns: 1fr;
+  }
 }
 @media print {
   .docs-header,
@@ -673,6 +947,9 @@
   .docs-flow li,
   table tr {
     break-inside: avoid;
+  }
+  .docs-commerce-journey {
+    display: none;
   }
 }
 @media (max-width: 800px) {
