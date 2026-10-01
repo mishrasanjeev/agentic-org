@@ -10,6 +10,8 @@ Canonical end-to-end flow: [OACP end-user flow](end-user-flow.md). Launch closur
 
 For merchant-approved external buyer agents and the synchronous A2A v1
 HTTP+JSON interface, see [A2A interoperability](../a2a-interoperability.md).
+For a runnable synthetic local seller and standalone external buyer, see the
+[A2A commerce demo](../a2a-commerce-demo.md). It does not execute purchases.
 
 Current cross-product capability status: [AgenticOrg product status](../PRODUCT_STATUS.md).
 

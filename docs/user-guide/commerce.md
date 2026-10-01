@@ -21,6 +21,12 @@ Synchronize a bounded catalog and compare SKU/variant, image, amount/currency an
 
 ## Ask useful buyer questions
 
+To watch a buyer agent that is **not** hosted on AgenticOrg talk to a
+synthetic seller over real A2A HTTP+JSON, use the
+[external buyer demo](/docs/external-buyer-a2a-demo). It shows catalogue
+browsing, source/freshness labels, purchase refusal, and token revocation.
+It does not process a payment.
+
 Try `Which variants of this item are available in the latest snapshot?` and `What source and timestamp support that price?`. Verify the response is merchant-scoped, source-grounded and explicit about stale or unsupported facts. Cached authority can support non-binding Q&A without routing every message through Grantex.
 
 Do not promote stale snapshots into final price, stock, delivery, tax, return or warranty promises. Prepared purchase output is not an order confirmation or paid state.

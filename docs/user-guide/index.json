@@ -1,5 +1,5 @@
 {
-  "reviewed": "2026-09-29",
+  "reviewed": "2026-09-30",
   "groups": [
     "Start Here",
     "Build And Run",
@@ -247,6 +247,18 @@
         "docs/oacp/end-user-flow.md",
         "docs/oacp/truth-inventory.md",
         "docs/oacp/merchant-commerce-configuration.md"
+      ]
+    },
+    {
+      "slug": "external-buyer-a2a-demo",
+      "title": "External buyer and seller A2A demo",
+      "description": "See a standalone buyer discover a synthetic seller, browse a scoped catalog, inspect source freshness, and test purchase refusal and credential revocation.",
+      "group": "Connect And Extend",
+      "audience": "Merchants, developers and partner integrators",
+      "sources": [
+        "docs/a2a-commerce-demo.md",
+        "docs/PRODUCT_STATUS.md",
+        "docs/oacp/end-user-flow.md"
       ]
     },
     {

@@ -46,7 +46,7 @@ describe("public documentation", () => {
       ).toBeInTheDocument();
     expect(
       within(directory).getAllByRole("heading", { level: 3 }),
-    ).toHaveLength(29);
+    ).toHaveLength(manual.articles.length);
     const ownership = screen.getByTestId("product-ownership");
     expect(ownership).toHaveTextContent("Orchestrum Technologies LLP");
     expect(ownership).toHaveTextContent("Sanjeev Kumar");

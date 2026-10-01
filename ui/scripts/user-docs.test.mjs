@@ -21,11 +21,14 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
     assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
   }
+  const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
+  assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);
 });
 
 test("the complete manual has maintained source references and five BFSI playbooks", () => {
   const manual = loadUserGuides();
-  assert.equal(manual.articles.length, 29);
+  assert.ok(manual.articles.length >= 30);
+  assert.ok(manual.articles.some((article) => article.slug === "external-buyer-a2a-demo"));
   assert.equal(
     manual.articles.filter((article) => article.group === "BFSI Playbooks")
       .length,

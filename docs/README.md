@@ -53,6 +53,7 @@ playbooks. Administrators can publish the optional docs subdomain using the
 | Simulate voice, email, OCR, and RPA locally | [Local multichannel simulation](local-multichannel-simulation.md) |
 | Integrate through APIs | [API reference](api-reference.md), generated OpenAPI, [Python SDK](../sdk/README.md), [TypeScript SDK](../sdk-ts/README.md) |
 | Connect an external A2A buyer agent | [A2A interoperability and seller access](a2a-interoperability.md) |
+| Run a local seller and outside buyer demo | [Independent-buyer A2A commerce demo](a2a-commerce-demo.md), [visual user guide](user-guide/external-buyer-a2a-demo.md) |
 | Connect an MCP client | [MCP server](../mcp-server/README.md) |
 | Implement agentic commerce | [OACP documentation](oacp/README.md) |
 | Operate production | [Deployment](deployment.md), [runbooks](RUNBOOKS.md), [backup and recovery](BACKUP_AND_DR.md), [secrets rotation](SECRETS_ROTATION.md), [vault key rotation](runbooks/vault-key-rotation.md) |
@@ -73,6 +74,7 @@ Current runtime guides:
 - [Artifact cache](oacp/artifact-cache-guide.md)
 - [Buyer surfaces](oacp/buyer-surface-bridge-guide.md)
 - [External A2A buyer access](a2a-interoperability.md)
+- [Local synthetic seller and independent A2A buyer](a2a-commerce-demo.md)
 - [Protocol adapter payloads](oacp/protocol-adapter-consumption-guide.md)
 - [Provider capability evidence](oacp/plural-pine-p3p-capability-verifier.md)
 - [Purchase handoff](oacp/purchase-mandate-handoff.md)

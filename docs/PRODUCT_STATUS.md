@@ -71,6 +71,8 @@ non-binding Q&A. The new migration and root Agent Card ingress must be
 deployed and verified separately. This is not a claim that a particular
 external buyer platform has onboarded or that vendor identity is federated.
 See [A2A interoperability](a2a-interoperability.md).
+The [local external-buyer demo](a2a-commerce-demo.md) exercises this boundary
+with a synthetic catalog; it does not create a paid transaction.
 
 ## Not Universal Or Not Shipped
 

@@ -1034,9 +1034,9 @@ def answer_product_question_from_cache(
     now_iso: str,
     grantex_available: bool,
     action_intent: PersistentCacheActionIntent = "non_binding_preview",
+    source_label: str = "Source: Shopify via Grantex artifact",
 ) -> C6ZBuyerAnswer:
     question_text = _require_text("question", question)
-    source_label = "Source: Shopify via Grantex artifact"
     if _looks_like_final_commitment(question_text):
         return C6ZBuyerAnswer(
             status="refused",
@@ -1052,6 +1052,8 @@ def answer_product_question_from_cache(
     usable_records = []
     blocked_reasons: list[str] = []
     for record in cache_records:
+        if record.artifact_type != "catalog_snapshot":
+            continue
         result = evaluate_oacp_persistent_artifact_cache_record(
             record=record,
             now_iso=now_iso,
@@ -1847,6 +1849,12 @@ def _parse_iso(value: str) -> datetime:
 
 
 def _match_products(products: Sequence[Mapping[str, Any]], question: str) -> list[Mapping[str, Any]]:
+    normalized = " ".join(question.casefold().split())
+    if any(phrase in normalized for phrase in (
+        "catalog", "catalogue", "list products", "show products",
+        "what do you sell", "what products", "your products",
+    )):
+        return list(products[:5])
     tokens = {token for token in question.lower().replace("?", " ").replace(",", " ").split() if len(token) > 2}
     if not tokens:
         return list(products[:5])

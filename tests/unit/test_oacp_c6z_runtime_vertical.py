@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -583,6 +584,28 @@ def test_buyer_answer_uses_valid_cache_and_refuses_commitment() -> None:
     )
     assert refusal.status == "refused"
     assert refusal.refusal_reason == "final_commitment_refused"
+
+
+def test_catalogue_browse_requires_catalog_authority() -> None:
+    products = [
+        {"title": "Canvas Tote", "variants": [{"price": "1299", "currency": "INR"}]},
+        {"title": "Ceramic Mug", "variants": [{"price": "499", "currency": "INR"}]},
+    ]
+    browse = answer_product_question_from_cache(
+        cache_records=[_cache_record()], products=products,
+        question="Show me your product catalogue", now_iso=_iso(_now()),
+        grantex_available=False,
+    )
+    assert browse.status == "answered"
+    assert "Canvas Tote" in browse.answer and "Ceramic Mug" in browse.answer
+
+    policy_only = answer_product_question_from_cache(
+        cache_records=[replace(_cache_record(), artifact_type="policy")],
+        products=products, question="Show your catalogue", now_iso=_iso(_now()),
+        grantex_available=False,
+    )
+    assert policy_only.status == "needs_refresh"
+    assert "Canvas Tote" not in policy_only.answer
 
 
 def test_bridge_contract_wraps_buyer_answer_without_execution_authority() -> None:

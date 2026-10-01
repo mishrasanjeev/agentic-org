@@ -4,6 +4,11 @@ For product ownership and contact, see [the canonical notice](OWNERSHIP.md).
 This guide describes repository source as of 2026-09-30; verify the deployed
 commit before using these routes in production.
 
+For a runnable local synthetic seller with three catalog products and a
+standalone external buyer process, see the [A2A commerce demo](a2a-commerce-demo.md).
+It demonstrates the real protocol exchange and refusal boundary, not a paid
+transaction or public merchant listing.
+
 AgenticOrg hosts the seller and buyer agent runtime. A buyer agent may run on
 AgenticOrg or on another platform. The platform name is not the authorization
 decision: the merchant must approve a scoped credential, and AgenticOrg binds
