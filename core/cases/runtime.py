@@ -33,6 +33,7 @@ from core.agents.business_underwriter import UnderwriterConfig, UnderwriterDepen
 from core.agents.screening_disposition import DispositionConfig, DispositionDependencies, run_screening_disposition
 from core.cases import excerpts as case_excerpts
 from core.cases.decisions import DecisionVerifier, RequireDecisionGrant, record_decision
+from core.cases.evidence import record_run_evidence
 from core.cases.grant_authorizer import case_authorizer
 from core.cases.states import CaseError, CaseState
 from core.cases.store import CASE_REF_RE, get_case, record_update, transition
@@ -118,6 +119,8 @@ class CaseRuntime:
     decision_verifier: DecisionVerifier = field(default_factory=_default_decision_verifier)
     #: Returns the decision-grant service the decision-request routes use, or ``None``.
     decision_service: Callable[[], Any] = _default_decision_service
+    #: Returns the evidence sink each agent run is recorded to, or ``None`` (off by default).
+    evidence_service: Callable[[], Any] = field(default=lambda: _default_evidence_service())
     clock: Callable[[], datetime] = _utc_now
     llm_model: str = field(default_factory=lambda: _settings().case_llm_model)
     pseudonym_store: Any = None
@@ -223,6 +226,12 @@ async def _cap_idle_in_transaction(session: AsyncSession, seconds: int = 15) -> 
         logger.warning("case_idle_timeout_cap_failed", error=type(exc).__name__)
 
 
+def _default_evidence_service() -> Any:
+    from core.cases.evidence import evidence_service  # noqa: PLC0415
+
+    return evidence_service()
+
+
 def _run_id(tenant: uuid.UUID, case_ref: str, kind: str) -> str:
     """Server-generated and tenant-prefixed: it keys the run's pseudonym map."""
     return f"tenant:{tenant}:case:{case_ref}:{kind}:{uuid.uuid4().hex}"
@@ -256,6 +265,7 @@ async def investigate_case(
         await transition(session, case, CaseState.IN_PROGRESS, actor=actor, reason=reason, now=runtime.clock())
         started_version = case.version
         application, provider_name, policy_id = dict(case.application), case.provider, case.policy_id
+        purpose, prior_records = case.purpose, list(case.agent_records or [])
 
     outcome = None
     failure = ""
@@ -294,6 +304,15 @@ async def investigate_case(
                 if outcome is None
                 else ("" if outcome.status == "completed" else outcome.failure_reason)
             )
+            if outcome is not None:
+                await record_run_evidence(
+                    runtime.evidence_service,
+                    case_ref=case_ref,
+                    purpose=purpose,
+                    run_record=outcome.case_record(),
+                    prior_records=prior_records,
+                    memo=outcome.memo,
+                )
 
     result = await _store_investigation(
         tenant,
@@ -401,6 +420,7 @@ async def dispose_screening_hits(
         results, parties, application = list(case.screening_results), list(case.parties), dict(case.application)
         existing = {d["hit_id"] for d in case.screening_dispositions or []}
         provider_name, purpose = case.provider, case.purpose
+        prior_records = list(case.agent_records or [])
 
     # Before the provider is built: no disposition run starts without its grant check.
     authorizer = runtime.authorizer_for(str(tenant), case_ref, "screening_disposition", purpose)
@@ -436,6 +456,14 @@ async def dispose_screening_hits(
                 failures.append(outcome.failure_reason)
             else:
                 proposed.append(outcome.disposition)
+            await record_run_evidence(
+                runtime.evidence_service,
+                case_ref=case_ref,
+                purpose=purpose,
+                run_record=records[-1],
+                prior_records=[*prior_records, *records[:-1]],
+                disposition=outcome.disposition,
+            )
 
     kek = await case_excerpts.tenant_key(tenant) if excerpts else None
     async with runtime.session_factory(tenant) as session:

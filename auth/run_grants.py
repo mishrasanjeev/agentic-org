@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
@@ -31,10 +31,13 @@ from typing import Any, Final
 import structlog
 
 from auth.grant_enforcement import (
+    Denial,
+    DenialReason,
     EnforcementMode,
     GrantCallContext,
     GrantCheck,
     check_tool_grant,
+    record_denial,
     resolve_enforcement_mode,
 )
 
@@ -365,6 +368,33 @@ async def refresh_run_grant(run_grant: RunGrant) -> RunGrant:
     )
 
 
+def tool_scope_denial(scopes: Sequence[str], *, connector: str, tool: str) -> Denial | None:
+    """The denial a tool-qualified scope set carries for ``tool``, or ``None``.
+
+    An agent is registered with per-tool scopes, ``tool:<connector>:<permission>:<tool>``
+    (``auth.scope_registry``), and the run grant delegated to it carries exactly those. The
+    Grantex SDK's ``enforce`` reads a scope as ``tool:<connector>:<permission>`` and ignores
+    the tool segment (FINDINGS A-109), so on its own it would allow every tool of that
+    permission on the connector. This check is the narrower reading: when every scope the
+    grant holds for ``connector`` names a tool, a call to a tool none of them names is
+    ``tool_not_granted`` (``tool_scope_missing``). A connector-level scope without a tool
+    segment keeps the SDK's reading; the SDK check still runs after this one.
+    """
+    named: set[str] = set()
+    connector_level = False
+    for scope in scopes:
+        parts = scope.split(":")
+        if len(parts) < 3 or parts[0] not in ("tool", "agenticorg") or parts[1] != connector:
+            continue
+        if len(parts) >= 4 and parts[3]:
+            named.add(parts[3])
+        else:
+            connector_level = True
+    if connector_level or not named or tool in named:
+        return None
+    return Denial(DenialReason.TOOL_NOT_GRANTED, "tool_scope_missing", detail=f"{connector}:{tool}")
+
+
 async def check_run_grant(
     run_grant: RunGrant,
     *,
@@ -380,8 +410,16 @@ async def check_run_grant(
     first - always strictly, because the legacy path enforced caller tokens
     strictly - and then by the run agent's grant in the run's mode. A run
     whose caller token is required but unavailable is refused
-    (``grant_missing``/``caller_token_unavailable``).
+    (``grant_missing``/``caller_token_unavailable``). A grant whose scopes
+    for the connector all name tools covers only those tools
+    (:func:`tool_scope_denial`), before the SDK's own check.
     """
+    if run_grant.call_mode is not EnforcementMode.OFF:
+        scope_denial = tool_scope_denial(run_grant.scopes, connector=connector, tool=tool)
+        if scope_denial is not None:
+            record_denial(run_grant.call_mode, scope_denial, connector=connector, tool=tool, context=context)
+            if run_grant.call_mode is not EnforcementMode.WARN:
+                return GrantCheck(dispatch_allowed=False, denial=scope_denial)
     if run_grant.caller_token_unavailable and not run_grant.caller_token:
         return await check_tool_grant(
             mode=EnforcementMode.DENY,

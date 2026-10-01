@@ -88,6 +88,7 @@ INTEGRATION_ENV = $(TEST_ENV) \
 E2E_CONFIG ?= e2e/dev-stack.config.ts
 # Where `make seed-cases` writes the case references the browser suite reads.
 GOVERNED_CASES_SEED ?= ui/test-results/governed-cases-seed.json
+DEMO_CASE_OUTPUT ?= ui/test-results/demo-case
 E2E_ARGS ?=
 
 # The stack's own database and the placeholder key from docker-compose.dev.yml.
@@ -98,7 +99,7 @@ DEV_SECRET_KEY ?= agenticorg-dev-only-do-not-use-in-production
 # uses it: a sandbox developer's root grant needs no principal's passkey.
 DEV_GRANTEX_SANDBOX_KEY ?= agenticorg-dev-grantex-sandbox-key
 
-.PHONY: help dev seed seed-cases down clean logs ps \
+.PHONY: help dev seed seed-cases down clean logs ps \ demo-case
 	tools-image test test-unit test-contract test-integration test-db coverage-gate \
 	check check-ruff check-mypy check-bandit check-secrets check-licence-headers check-schemas check-denylist check-pip-audit check-cross-loop-baseline check-ambient-redis-allowlist \
 	e2e e2e-decisions
@@ -106,6 +107,7 @@ DEV_GRANTEX_SANDBOX_KEY ?= agenticorg-dev-grantex-sandbox-key
 help:
 	@echo "make dev     build and start the local stack and smoke-test it"
 	@echo "make seed    development tenant, users, agents and sample data (needs make dev)"
+	@echo "make demo-case   governed case under a run grant, evidence package exported and verified (needs make dev, make seed)"
 	@echo "make seed-cases  sample governed cases and their case agents for the approvals console (needs make seed)"
 	@echo "make down    stop the stack (keeps data)"
 	@echo "make clean   stop the stack and delete its data volumes"
@@ -154,6 +156,23 @@ seed: tools-image
 # held for the run only), submits new cases from the mock provider's fixtures
 # and runs the reference agents against the stack's mock provider and model
 # stub. The summary names the new cases for the browser suite.
+# Demo 3: one governed case under a run grant against the mock provider, with
+# grants.enforce_closed=deny and the evidence sink on: the grant, the case,
+# each provider call authorised, one out-of-scope call denied, the evidence
+# package exported from the stack's Grantex service and verified with the
+# grantex-evidence CLI. Needs make dev and make seed (the stack's Grantex is
+# started with EVIDENCE_EXPORT_ENABLED). Every step prints live or fixture.
+demo-case: tools-image
+	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
+		{ echo "make demo-case: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }
+	$(TOOLS) env AGENTICORG_ENV=development AGENTICORG_SECRET_KEY=$(DEV_SECRET_KEY) \
+		AGENTICORG_DB_URL=postgresql+asyncpg://agenticorg:agenticorg_dev@$(TEST_DB_HOST)/$(DEV_DB_NAME) \
+		AGENTICORG_REDIS_URL=redis://$(TEST_REDIS_HOST)/0 \
+		AGENTICORG_MOCK_PROVIDER_URL=http://mock-provider:8080 VLLM_BASE_URL=http://model-stub:8080 \
+		AGENTICORG_GRANTS_ENFORCE_CLOSED=deny AGENTICORG_CASE_EVIDENCE_SERVICE=grantex \
+		GRANTEX_BASE_URL=http://grantex:$(or $(AGENTICORG_DEV_GRANTEX_PORT),3001) GRANTEX_API_KEY=$(DEV_GRANTEX_SANDBOX_KEY) \
+		$(PY) -m scripts.demo_case --output $(DEMO_CASE_OUTPUT)
+
 seed-cases: tools-image
 	@SMOKE_ATTEMPTS=3 bash scripts/dev_stack_smoke.sh >/dev/null || \
 		{ echo "make seed-cases: the dev stack is not healthy; start it with 'make dev'" >&2; exit 1; }

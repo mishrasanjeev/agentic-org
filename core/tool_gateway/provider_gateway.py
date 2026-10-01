@@ -98,6 +98,8 @@ class ToolDecision:
     allowed: bool
     reason: str = ""
     sub_reason: str = ""
+    #: The grant the decision was taken under, when the authorizer resolved one.
+    grant_id: str = ""
 
 
 class ToolAuthorizer(Protocol):
@@ -157,6 +159,8 @@ class ToolCallRecord:
     output_sha256: str | None
     record_ids: tuple[str, ...]
     started_at: str
+    #: The grant the authorizer resolved for this call (``grnt_...``), or "" when it had none.
+    grant_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -170,6 +174,7 @@ class ToolCallRecord:
             "output_sha256": self.output_sha256,
             "record_ids": list(self.record_ids),
             "started_at": self.started_at,
+            "grant_id": self.grant_id,
         }
 
 
@@ -324,7 +329,9 @@ class ProviderToolGateway:
     def connector(self) -> str:
         return self.provider.name
 
-    def _record(self, tool: str, outcome: str, reason: str, request: Any, response: Any, started: datetime) -> None:
+    def _record(
+        self, tool: str, outcome: str, reason: str, request: Any, response: Any, started: datetime, grant_id: str = ""
+    ) -> None:
         self.records.append(
             ToolCallRecord(
                 sequence=len(self.records) + 1,
@@ -337,6 +344,7 @@ class ProviderToolGateway:
                 output_sha256=None if response is None else canonical_sha256(response),
                 record_ids=() if response is None else cited_record_ids(response),
                 started_at=started.isoformat(),
+                grant_id=grant_id,
             )
         )
 
@@ -365,10 +373,11 @@ class ProviderToolGateway:
                     "provider_tool_authorization_failed", agent=self.agent, tool=tool, error=type(exc).__name__
                 )
                 decision = ToolDecision(allowed=False, reason=AUTHORIZATION_UNAVAILABLE)
+        grant_id = decision.grant_id if isinstance(decision, ToolDecision) else ""
         if not isinstance(decision, ToolDecision) or not decision.allowed:
             reason = decision.reason if isinstance(decision, ToolDecision) and decision.reason else "grant_denied"
             sub_reason = decision.sub_reason if isinstance(decision, ToolDecision) else ""
-            self._record(tool, "denied", reason, request, None, started)
+            self._record(tool, "denied", reason, request, None, started, grant_id)
             _provider_calls_total.labels(capability=capability.value, outcome="denied").inc()
             logger.warning(
                 "provider_tool_refused", agent=self.agent, tool=tool, reason=reason, sub_reason=sub_reason
@@ -381,11 +390,11 @@ class ProviderToolGateway:
         except ProviderError as exc:
             _provider_call_seconds.labels(capability=capability.value).observe(time.monotonic() - begun)
             _provider_calls_total.labels(capability=capability.value, outcome="error").inc()
-            self._record(tool, "error", exc.reason, request, None, started)
+            self._record(tool, "error", exc.reason, request, None, started, grant_id)
             raise
         if isinstance(result, NotAvailable):
             _provider_calls_total.labels(capability=capability.value, outcome="not_available").inc()
-            self._record(tool, "not_available", result.reason, request, None, started)
+            self._record(tool, "not_available", result.reason, request, None, started, grant_id)
             return result
         _provider_call_seconds.labels(capability=capability.value).observe(time.monotonic() - begun)
         self.retrieved_evidence.update(cited_evidence(result))
@@ -393,7 +402,7 @@ class ProviderToolGateway:
             self.excerpts.setdefault(excerpt.excerpt_ref, excerpt)
         outcome = "pending" if isinstance(result, Pending) else "ok"
         _provider_calls_total.labels(capability=capability.value, outcome=outcome).inc()
-        self._record(tool, outcome, "", request, result, started)
+        self._record(tool, outcome, "", request, result, started, grant_id)
         return result
 
     # --- typed tools ---------------------------------------------------------------------------

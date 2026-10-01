@@ -4,6 +4,31 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Evidence sink for governed cases, and `make demo-case`
+- `AGENTICORG_CASE_EVIDENCE_SERVICE=grantex` (default `off`) records each
+  governed-case agent run into the Grantex evidence service
+  (`POST /v1/evidence/cases/{case}/records`): the run context (model, prompt
+  and policy versions), every provider tool call with the run grant it was
+  authorised under and the upstream records it returned, the policy
+  evaluation (inputs recorded unsourced: the engine keeps no per-path
+  provenance), the recommendation with each memo section's citations
+  resolved to the call that retrieved them, and each proposed screening
+  disposition with its hit and comparisons. The service exports the signed
+  package. Recording is best effort for the case: a failure is logged and
+  counted (`agenticorg_case_evidence_records_total`) and never changes the
+  case. `AGENTICORG_CASE_EVIDENCE_TIMEOUT_SECONDS` (default 10).
+- The grant a tool call was authorised under now travels with it:
+  `ToolDecision.grant_id` from the case authorizer, `ToolCallRecord.grant_id`
+  in the case record and `GET .../case-record`.
+- `make demo-case` (`scripts/demo_case.py`): one governed case under a run
+  grant against the mock provider with `grants.enforce_closed=deny` and the
+  sink on: root grant, case, every provider call authorised, an out-of-scope
+  call denied with its reason, the package exported, its root and anchor read
+  from the tenant audit log and verified with the `grantex-evidence` CLI.
+  Every step prints `live` or `fixture`. The dev stack's Grantex service is
+  started with `EVIDENCE_EXPORT_ENABLED`; the Local Stack workflow runs the
+  demo after `make seed-cases`.
+
 ### Changed - OpenTelemetry 1.45
 - `requirements.txt` and `pyproject.toml` move `opentelemetry-api`,
   `opentelemetry-sdk` and `opentelemetry-exporter-otlp` to 1.45.0 and
