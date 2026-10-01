@@ -403,6 +403,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 - [OACP runtime documentation](docs/oacp/README.md)
 - [External A2A buyer and seller access](docs/a2a-interoperability.md)
 - [Local synthetic seller and independent A2A buyer demo](docs/a2a-commerce-demo.md)
+- [Guided merchant-to-external-buyer A2A commerce journey](docs/user-guide/seller-a2a-commerce-journey.md)
 - [Production smoke runbook](docs/runbooks/production_smoke.md)
 - [Testing guide](docs/TEST_PLAN.md)
 - [Python SDK](sdk/README.md)

@@ -262,6 +262,20 @@
       ]
     },
     {
+      "slug": "seller-a2a-commerce-journey",
+      "title": "Seller commerce with an outside A2A buyer",
+      "description": "An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.",
+      "group": "Connect And Extend",
+      "audience": "Merchants and third-party buyer-agent integrators",
+      "reviewed": "2026-10-01",
+      "sources": [
+        "docs/a2a-commerce-demo.md",
+        "docs/a2a-interoperability.md",
+        "docs/oacp/end-user-flow.md",
+        "docs/oacp/plural-pine-p3p-capability-verifier.md"
+      ]
+    },
+    {
       "slug": "api-sdk-mcp",
       "title": "API, SDK, MCP and A2A integration",
       "description": "Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.",

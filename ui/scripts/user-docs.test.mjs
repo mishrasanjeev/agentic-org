@@ -23,12 +23,20 @@ test("both production UI images preserve the repository layout and include autho
   }
   const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
   assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);
+  assert.match(dockerignore, /^!docs\/a2a-interoperability\.md$/m);
 });
 
 test("the complete manual has maintained source references and five BFSI playbooks", () => {
   const manual = loadUserGuides();
   assert.ok(manual.articles.length >= 30);
   assert.ok(manual.articles.some((article) => article.slug === "external-buyer-a2a-demo"));
+  const journey = manual.articles.find((article) => article.slug === "seller-a2a-commerce-journey");
+  assert.ok(journey);
+  assert.equal(journey.reviewed, "2026-10-01");
+  assert.match(journey.html, /Pine Labs Plural/);
+  assert.match(journey.html, /allowedToExecute/);
+  assert.match(journey.html, /Transaction map: from question to a real sale/);
+  assert.match(journey.html, /Requires verified callbacks, merchant execution and reconciliation/);
   assert.equal(
     manual.articles.filter((article) => article.group === "BFSI Playbooks")
       .length,

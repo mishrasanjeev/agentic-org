@@ -110,7 +110,7 @@ export function loadUserGuides(root = UI_ROOT) {
       ...article,
       markdown,
       ...renderGuide(markdown),
-      reviewed: manifest.reviewed,
+      reviewed: article.reviewed ?? manifest.reviewed,
     };
   });
   for (const article of articles) {

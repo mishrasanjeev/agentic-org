@@ -17,6 +17,8 @@ import {
 import manual from "../content/userDocs.generated.json";
 import publicSite from "../content/publicSite.json";
 import ProductOwnership from "../components/ProductOwnership";
+import CommerceA2AJourney from "../components/docs/CommerceA2AJourney";
+import CommerceA2ATransaction from "../components/docs/CommerceA2ATransaction";
 import { buildDocumentationSchema } from "../lib/documentation-schema.mjs";
 
 type Guide = (typeof manual.articles)[number];
@@ -318,6 +320,12 @@ export default function Documentation() {
                   ))}
                 </nav>
               </details>
+              {guide.slug === "seller-a2a-commerce-journey" && (
+                <>
+                  <CommerceA2ATransaction />
+                  <CommerceA2AJourney />
+                </>
+              )}
               <article
                 className="docs-prose"
                 dangerouslySetInnerHTML={{ __html: guide.html }}

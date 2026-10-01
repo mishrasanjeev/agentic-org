@@ -111,6 +111,42 @@ describe("public documentation", () => {
     );
   });
 
+  it("guides an outside A2A buyer without presenting learning progress as live commerce", () => {
+    open("/docs/seller-a2a-commerce-journey");
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("heading", { level: 1, name: "Seller commerce with an outside A2A buyer" })).toBeInTheDocument();
+    expect(within(main).getByRole("list", { name: "Workflow" })).toBeInTheDocument();
+    expect(main).toHaveTextContent("Muse, Instinct or Dots");
+    expect(main).toHaveTextContent("A2A-Version: 1.0");
+    expect(main).toHaveTextContent("cannot create an order, hold stock, collect money or create a Pine Labs Plural mandate");
+    expect(main).toHaveTextContent("role can manage merchant configuration, but it cannot perform those admin-only actions");
+    const transaction = within(main).getByRole("region", { name: "Third-party buyer transaction map" });
+    expect(transaction).toHaveTextContent("Outside buyer");
+    fireEvent.change(within(transaction).getByRole("combobox", { name: "Illustrative buyer app" }), {
+      target: { value: "Dots-style buyer" },
+    });
+    expect(transaction).toHaveTextContent("Dots-style buyer");
+    fireEvent.click(within(transaction).getByRole("button", { name: "Step 3: Buyer asks to purchase" }));
+    expect(transaction).toHaveTextContent("A2A intent is not an order");
+    expect(transaction).toHaveTextContent("refuses execution");
+    fireEvent.click(within(transaction).getByRole("button", { name: "Step 5: Authorize with the provider" }));
+    expect(transaction).toHaveTextContent("not wired into the current external seller A2A route");
+    fireEvent.click(within(transaction).getByRole("button", { name: "Step 6: Confirm order and receipt" }));
+    expect(transaction).toHaveTextContent("Without both authorities, the result stays pending or blocked");
+    const journey = within(main).getByRole("region", { name: "Seller A2A commerce learning journey" });
+    expect(within(journey).getByRole("progressbar", { name: "Learning checkpoints reviewed" })).toHaveAttribute("aria-valuenow", "0");
+    expect(within(journey).getByRole("button", { name: "Mark reviewed" })).toBeDisabled();
+    fireEvent.click(within(journey).getByRole("radio", { name: "Turn on public catalog immediately" }));
+    expect(journey).toHaveTextContent("Not yet. Recheck the boundary");
+    expect(within(journey).getByRole("button", { name: "Mark reviewed" })).toBeDisabled();
+    fireEvent.click(within(journey).getByRole("radio", { name: "Confirm scope and approvals before publishing" }));
+    fireEvent.click(within(journey).getByRole("button", { name: "Mark reviewed" }));
+    expect(within(journey).getByRole("progressbar", { name: "Learning checkpoints reviewed" })).toHaveAttribute("aria-valuenow", "1");
+    expect(journey).toHaveTextContent("not a connection test or launch approval");
+    fireEvent.click(within(journey).getByRole("button", { name: "View checkpoint 6: Hand off payment" }));
+    expect(journey).toHaveTextContent("does not create a Plural mandate, checkout or payment");
+  });
+
   it("prints the guide and copies only its canonical address", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     const writeText = vi.fn().mockResolvedValue(undefined);
