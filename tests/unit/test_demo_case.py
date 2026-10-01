@@ -204,7 +204,7 @@ def test_the_demo_runs_every_step_and_verifies_the_package(
     assert demo_case.main(["--output", str(tmp_path)], environ=ENV) == 0
     out = capsys.readouterr().out
     lines = [line for line in out.splitlines() if line.startswith("[")]
-    titles = [re.sub(r"^\[\d+\] (.*?)\s{2,}(live|fixture).*$", r"", line) for line in lines]
+    titles = [re.sub(r"^\[\d+\] (.*?)\s+(live|fixture)\b.*$", r"\1", line) for line in lines]
     assert titles == [
         "root grant issued (purpose, tools, caps)",
         "case agent ready: business_underwriter",
