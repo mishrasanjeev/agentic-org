@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from packaging.version import Version
 
 
 def test_ui_lockfile_uses_patched_security_alert_versions() -> None:
@@ -13,7 +14,8 @@ def test_ui_lockfile_uses_patched_security_alert_versions() -> None:
 
     assert packages["node_modules/form-data"]["version"] == "4.0.6"
     assert packages["node_modules/@babel/core"]["version"] == "7.29.6"
-    assert packages["node_modules/dompurify"]["version"] == "3.4.13"
+    assert Version(packages["node_modules/dompurify"]["version"]) >= Version("3.4.16")
+    assert Version(packages["node_modules/brace-expansion"]["version"]) >= Version("5.0.12")
     assert packages["node_modules/undici"]["version"] == "7.29.1"
 
 
