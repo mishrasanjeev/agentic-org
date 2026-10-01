@@ -126,6 +126,7 @@ class CaseGrantAuthorizer:
             allowed=check.dispatch_allowed,
             reason=denial.reason.value if denial is not None else "",
             sub_reason=denial.sub_reason if denial is not None else "",
+            grant_id=grant.grant_id or (denial.grant_id if denial is not None and denial.grant_id else ""),
         )
 
 

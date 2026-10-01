@@ -137,6 +137,37 @@ the request body.
 
 Errors are `{"error": {"reason": "<code>", "detail": "..."}}`.
 
+## Evidence
+
+With `AGENTICORG_CASE_EVIDENCE_SERVICE=grantex`, every agent run of a case is
+recorded into the Grantex evidence service as it completes: a `run_context`
+(model, prompt and policy versions), one `tool_call` per provider call with
+the run grant it was authorised under, its outcome (`allowed`, `denied` with
+the reason, or `error`) and the upstream records it returned, the
+`policy_evaluation` (score, tier, fired rules, every input value; inputs are
+marked `unsourced` because the policy engine does not keep per-path
+provenance), the `recommendation` with each memo section's citations resolved
+to the call that retrieved the cited record, and a `disposition` for each
+proposed screening disposition. The service checks every tool call against
+its grant's validity and the case's delegation chain, and exports the whole
+case as a hash-chained package it anchors in the tenant's audit log and
+signs.
+
+The sink is off by default and uses the explicit `GRANTEX_BASE_URL` and the
+platform's `GRANTEX_API_KEY`. It never changes a case: a refused or
+unreachable service is logged (`governed_case_evidence_failed`) and counted
+(`agenticorg_case_evidence_records_total`), and the case continues.
+
+`make demo-case` runs one case this way against the development stack and
+verifies the exported package with the `grantex-evidence` CLI, taking the
+package root and anchor from the tenant audit log rather than from the
+exporter. Settings:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `AGENTICORG_CASE_EVIDENCE_SERVICE` | `off` | `grantex` records each agent run to the evidence service |
+| `AGENTICORG_CASE_EVIDENCE_TIMEOUT_SECONDS` | `10` | Per-request timeout to the service (1 to 60) |
+
 ## Decisions
 
 Decisions are refused unless a `DecisionVerifier` confirms decision grants naming the approvers for

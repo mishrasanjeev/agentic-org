@@ -1507,3 +1507,30 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** bound the SDK in `pyproject.toml` to the minor version tested
   (`grantex>=0.7,<0.8` once this change is in) and keep `requirements.txt` at
   the same version, so an SDK upgrade arrives as a reviewed dependency PR.
+
+## A-109 — A tool-qualified scope is read by the SDK as the whole connector permission
+
+- **Found:** running `make demo-case` (2026-10-01): the `screening_disposition`
+  role, whose run grant carried only `tool:mock:read:screen_business` and
+  `tool:mock:read:screen_person`, was allowed `ownership` on `mock`.
+- **What:** agents are registered with per-tool scopes,
+  `tool:<connector>:<permission>:<tool>` (`auth/scope_registry.py`), and the
+  token pool delegates exactly those. The Grantex Python SDK's `enforce`
+  (`_resolve_granted_permission`) splits a scope and reads `parts[2]` as the
+  permission for `parts[1]`, ignoring a fourth segment, so any read scope on
+  a connector covers every read tool of it. The TypeScript and Go SDKs read
+  scopes the same way.
+- **Impact:** the per-tool attenuation the governed-case design relies on
+  ("each role with only its reference agent's read tools") was not enforced
+  at the tool gateway: a run grant for one tool passed any tool of the same
+  permission on the same connector. Purpose, caps and revocation were
+  unaffected.
+- **Fix (this change):** `auth.run_grants.tool_scope_denial` refuses, before
+  the SDK is asked, a tool none of the grant's tool-qualified scopes for the
+  connector names (`tool_not_granted` / `tool_scope_missing`; recorded and
+  passed in `warn`). A connector-level scope keeps the SDK's reading.
+- **Remaining:** the SDKs should honour the tool segment themselves (grantex
+  FINDINGS G-144), behind a flag until the next major; the registry should
+  refuse a grant request for a tool-qualified scope the agent did not
+  register.
+

@@ -331,6 +331,10 @@ services:
       # every governed tool call in this stack is refused (grant_revoked,
       # status_unavailable). The SDK's check stays on; the stack answers it.
       REVOCATION_FEED_ENABLED: "true"
+      # Evidence packages for governed cases (make demo-case). The
+      # pseudonymisation secret is a development placeholder, as the keys above.
+      EVIDENCE_EXPORT_ENABLED: "true"
+      EVIDENCE_PSEUDONYMISATION_SECRET: agenticorg-dev-grantex-evidence-pseudonymisation-secret
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_GRANTEX_PORT:-3001}:${AGENTICORG_DEV_GRANTEX_PORT:-3001}"
       # oidc-approvers shares this network namespace (see below), so its port

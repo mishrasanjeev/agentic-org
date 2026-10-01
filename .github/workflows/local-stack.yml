@@ -97,6 +97,8 @@ jobs:
         run: make seed
       - name: make seed-cases
         run: make seed-cases
+      - name: make demo-case
+        run: make demo-case
       - name: make e2e
         run: make e2e
       - name: Stack status and logs

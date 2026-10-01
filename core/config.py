@@ -253,6 +253,16 @@ class Settings(BaseSettings):
     # max(120 s, 10%) left, so a shorter lifetime would mint on nearly every
     # call. Env: AGENTICORG_GRANTS_RUN_TOKEN_TTL_SECONDS.
     grants_run_token_ttl_seconds: int = Field(default=900, ge=300, le=86_400)
+
+    # Evidence sink for governed cases: ``off`` records nothing; ``grantex`` posts each agent
+    # run's run context, tool calls (with the grant they were authorised under), policy
+    # evaluation, recommendation and dispositions to the Grantex evidence service
+    # (``POST /v1/evidence/cases/{case}/records``), which exports the signed package. Uses the
+    # explicit ``GRANTEX_BASE_URL`` and ``GRANTEX_API_KEY`` only; off by default. A failure to
+    # record is logged and counted and never changes the case. Env:
+    # AGENTICORG_CASE_EVIDENCE_SERVICE, AGENTICORG_CASE_EVIDENCE_TIMEOUT_SECONDS.
+    case_evidence_service: Literal["off", "grantex"] = "off"
+    case_evidence_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
     # HITL conditions outside the grammar (core/langgraph/hitl_condition.py)
     # when an agent or SOP config is saved: "off" accepts them as before,
     # "warn" accepts them but logs and counts them, "reject" answers 422 with
