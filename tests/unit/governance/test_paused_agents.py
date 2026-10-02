@@ -43,13 +43,8 @@ class _PassedStatusCheckError(Exception):
 
 def _paused_agent():
     return _Row(
-        id=uuid.uuid4(),
-        domain="finance",
-        name="probe",
-        agent_type="finance",
-        status="paused",
-        authorized_tools=[],
-        connector_ids=[],
+        id=uuid.uuid4(), domain="finance", name="probe", agent_type="finance", status="paused",
+        authorized_tools=[], connector_ids=[],
     )
 
 

@@ -560,6 +560,9 @@ class LLMResponse:
     cost_usd: float = 0.0
     latency_ms: int = 0
     raw: dict[str, Any] = field(default_factory=dict)
+    # The provider's split, when it reports one; ``tokens_used`` is their sum.
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class LLMRouter:
@@ -681,6 +684,8 @@ class LLMRouter:
                     if response is not None
                     else int((time.monotonic() - started) * 1000),
                     tokens=response.tokens_used if response is not None else 0,
+                    input_tokens=response.input_tokens if response is not None else None,
+                    output_tokens=response.output_tokens if response is not None else None,
                     cost_usd=response.cost_usd if response is not None else 0.0,
                     error_type=type(exc).__name__ if exc is not None else None,
                     fallback_from=fallback_from,
@@ -881,6 +886,8 @@ class LLMRouter:
             tokens_used=total_tokens,
             cost_usd=cost,
             latency_ms=latency,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             raw={"candidates": str(response.candidates)},
         )
 
@@ -934,6 +941,8 @@ class LLMRouter:
             cost_usd=cost,
             latency_ms=latency,
             raw=response.model_dump(),
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
         )
 
     async def _call_openai(
@@ -968,6 +977,8 @@ class LLMRouter:
             cost_usd=cost,
             latency_ms=latency,
             raw=response.model_dump(),
+            input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+            output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
         )
 
 

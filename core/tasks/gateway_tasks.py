@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 
 async def _prune_model_gateway_records_async(days: int | None = None) -> dict:
-    """Delete each tenant's routing records older than the retention period; a tenant's failure is isolated."""
+    """Delete every tenant's routing records older than the retention period; a tenant's failure is isolated."""
     from sqlalchemy import delete, select, text
 
     from core.config import settings
@@ -25,10 +25,12 @@ async def _prune_model_gateway_records_async(days: int | None = None) -> dict:
     retention = settings.model_gateway_records_retention_days if days is None else days
     cutoff = datetime.now(UTC) - timedelta(days=max(int(retention), 1))
     # model_gateway_records is tenant-scoped under row-level security:
-    # enumerate the tenant catalogue, then prune each tenant through its own session.
+    # enumerate the whole tenant catalogue, deleted tenants included (their
+    # rows have no cascade and must still age out), then prune each tenant
+    # through its own session.
     async with async_session_factory() as session:
         await session.execute(text("SET LOCAL row_security = off"))
-        tenant_ids = list((await session.scalars(select(Tenant.id).where(Tenant.deleted_at.is_(None)))).all())
+        tenant_ids = list((await session.scalars(select(Tenant.id))).all())
     deleted = 0
     errors = 0
     for tenant_id in tenant_ids:

@@ -32,6 +32,13 @@ def _catalogue(tenant_ids):
     return factory, statements
 
 
+def test_the_catalogue_query_includes_deleted_tenants():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[3] / "core" / "tasks" / "gateway_tasks.py").read_text(encoding="utf-8")
+    assert "select(Tenant.id)" in src and "deleted_at" not in src.split("select(Tenant.id)")[1].split("\n")[0]
+
+
 def test_prunes_each_tenant_past_the_cutoff_and_isolates_a_failing_tenant(monkeypatch):
     monkeypatch.setattr("core.config.settings.model_gateway_records_retention_days", 30)
     factory, statements = _catalogue([T1, T2])

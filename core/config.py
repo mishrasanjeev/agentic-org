@@ -165,7 +165,8 @@ class Settings(BaseSettings):
     model_gateway_lease_seconds: int = 600
     # Routing records: one signed row per model call while the gateway is on
     # for the tenant, pruned after the retention period by the daily task.
-    model_gateway_records_enabled: bool = True
+    # Off by default: turning it on adds a write to every routed model call.
+    model_gateway_records_enabled: bool = False
     model_gateway_records_retention_days: int = 90
     # Cost-aware routing reads each model's observed failure rate over this
     # window from the routing records (cached briefly) and skips a model above

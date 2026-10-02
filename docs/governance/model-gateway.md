@@ -141,15 +141,16 @@ router, is metered by provider and model once it ends:
 | `agenticorg_model_fallbacks_total{provider,from_model,to_model}` | Calls answered by a fallback model. |
 | `agenticorg_model_admission_wait_seconds{provider,model}` | Time spent at admission under the per-model limits. |
 
-While the gateway is on for the tenant each call also writes a routing record
-(`model_gateway_records`): the correlation id, the use case and agent, the
-routing and access policies evaluated, what was requested and what was chosen,
-the model it fell back from, the outcome and error type, latency, admission
-wait, tokens and cost. Each row is signed with the platform's audit key; the
-list endpoint reports whether a row's signature still matches its fields.
-Records older than `AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS` (90) are
-pruned daily; `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED=false` keeps the
-metrics and stops the rows.
+With `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED=true` (off by default: it adds
+a write to every routed model call) each call made while the gateway is on for
+the tenant also writes a routing record (`model_gateway_records`): the
+correlation id, the use case and agent, the routing and access policies
+evaluated, what was requested and what was chosen, the model it fell back
+from, the outcome and error type, latency, admission wait, tokens and cost.
+Each row is signed with the platform's audit key; the list endpoint reports
+whether a row's signature still matches its fields. Records older than
+`AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS` (90) are pruned daily, for
+every tenant including ones since deleted.
 
 The correlation id is the request id the platform binds for every request and
 propagates into its worker tasks, so one id links the request, each routing

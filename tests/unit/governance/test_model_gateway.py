@@ -866,7 +866,15 @@ class TestRouterRecords:
         from core.llm.router import LLMResponse
 
         router = self._router()
-        response = LLMResponse(content="ok", model="gemini-2.5-pro", tokens_used=42, cost_usd=0.002, latency_ms=350)
+        response = LLMResponse(
+            content="ok",
+            model="gemini-2.5-pro",
+            tokens_used=42,
+            cost_usd=0.002,
+            latency_ms=350,
+            input_tokens=30,
+            output_tokens=12,
+        )
         with (
             patch("core.llm.router.gateway_decide", AsyncMock(return_value=self._decision())),
             patch("core.llm.router.gateway_admit", AsyncMock(return_value=None)),
@@ -882,6 +890,7 @@ class TestRouterRecords:
             kwargs["model"] == "gemini-2.5-pro" and kwargs["provider"] == "gemini" and kwargs["outcome"] == "completed"
         )
         assert kwargs["tokens"] == 42 and kwargs["cost_usd"] == 0.002 and kwargs["latency_ms"] == 350
+        assert kwargs["input_tokens"] == 30 and kwargs["output_tokens"] == 12
         assert isinstance(kwargs["admission_wait_ms"], int) and kwargs["use_case"] == "completion"
         assert kwargs["fallback_from"] is None and kwargs["error_type"] is None
 
