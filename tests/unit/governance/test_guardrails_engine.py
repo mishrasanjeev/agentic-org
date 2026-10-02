@@ -181,6 +181,60 @@ class TestEnforced:
             with pytest.raises(GuardrailBlocked):
                 asyncio.run(engine.evaluate("output", "some text", tenant_id=TENANT))
 
+    def test_a_failing_detector_fails_closed_for_an_enforced_rule_in_a_strict_runtime(self, monkeypatch):
+        monkeypatch.setattr(engine.settings, "env", "production")
+        failing = SimpleNamespace(detect=MagicMock(side_effect=RuntimeError("boom")))
+        with (
+            _with([_rule(detector="pattern", options={"patterns": ["x"]})]),
+            _enforce(True),
+            patch.object(engine, "_meter", lambda *a: None),
+            patch.dict(engine.REGISTRY, {"pattern": failing}),
+        ):
+            with pytest.raises(GuardrailBlocked, match="could not be evaluated"):
+                asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT))
+            dry = asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT, dry_run=True))
+            assert dry.outcomes == [] and dry.allowed
+        with (
+            _with([_rule(detector="pattern", action="flag", options={"patterns": ["x"]})]),
+            _enforce(True),
+            patch.object(engine, "_meter", lambda *a: None),
+            patch.dict(engine.REGISTRY, {"pattern": failing}),
+        ):
+            assert asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT)).outcomes == []
+        with (
+            _with([_rule(detector="pattern", options={"patterns": ["x"]})]),
+            _enforce(False),
+            patch.object(engine, "_meter", lambda *a: None),
+            patch.dict(engine.REGISTRY, {"pattern": failing}),
+        ):
+            assert asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT)).outcomes == []
+        with (
+            _with([_rule(detector="magic")]),
+            _enforce(True),
+            patch.object(engine, "_meter", lambda *a: None),
+        ):
+            with pytest.raises(GuardrailBlocked, match="unknown detector"):
+                asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT))
+
+    def test_a_detector_past_its_time_budget_is_a_failure(self, monkeypatch):
+        import time
+
+        monkeypatch.setattr(engine.settings, "env", "production")
+        monkeypatch.setattr(engine.settings, "guardrails_detector_timeout_seconds", 0.05)
+
+        def slow(text, options, *, threshold):
+            time.sleep(0.3)
+            return []
+
+        with (
+            _with([_rule(detector="pattern", options={"patterns": ["x"]})]),
+            _enforce(True),
+            patch.object(engine, "_meter", lambda *a: None),
+            patch.dict(engine.REGISTRY, {"pattern": SimpleNamespace(detect=slow)}),
+        ):
+            with pytest.raises(GuardrailBlocked, match="TimeoutError"):
+                asyncio.run(engine.evaluate("output", "x", tenant_id=TENANT))
+
     def test_a_failing_or_unknown_detector_is_skipped(self):
         broken = _rule(detector="pattern", options={"patterns": ["x"]})
         with (

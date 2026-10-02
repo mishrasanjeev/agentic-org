@@ -118,12 +118,18 @@ class PatternDetector:
     name = "pattern"
 
     def detect(self, text: str, options: dict[str, Any], *, threshold: float) -> list[Finding]:
+        from core.config import settings
+
         flags = re.IGNORECASE if options.get("ignore_case", True) else 0
         kind = str(options.get("kind") or "pattern")
+        # Patterns are validated against catastrophic shapes when the rule is
+        # written; the scan is bounded in length too, and the engine runs it
+        # under a time budget off the event loop.
+        scanned = text[: settings.guardrails_pattern_max_chars]
         findings = [
             Finding(self.name, kind, match.start(), match.end(), 1.0, f"matched {pattern!r}")
             for pattern in options.get("patterns") or []
-            for match in re.compile(pattern, flags).finditer(text)
+            for match in re.compile(pattern, flags).finditer(scanned)
         ]
         return _without_overlaps(findings)
 

@@ -19,6 +19,22 @@ from typing import Any
 
 STAGES: tuple[str, ...] = ("input", "retrieval", "output", "action")
 DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern")
+# The options each detector takes; anything else is refused at the boundary.
+DETECTOR_OPTIONS: dict[str, tuple[str, ...]] = {
+    "sensitive_data": ("entities",),
+    "toxicity": (),
+    "pattern": ("patterns", "kind", "ignore_case"),
+}
+SENSITIVE_ENTITIES: tuple[str, ...] = ("CREDIT_CARD", "AADHAAR", "PAN", "GSTIN", "EMAIL", "UPI", "PHONE")
+MAX_PATTERN_LENGTH = 512
+MAX_PATTERNS = 32
+# Nested or adjacent unbounded quantifiers and backreferences are the shapes
+# that backtrack catastrophically; a pattern carrying one is refused.
+_UNSAFE_PATTERN_SHAPES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\([^()]*[+*][^()]*\)\s*[+*{]"),  # (x+)+, (x*)*, (x+){n,}
+    re.compile(r"[+*]\s*[+*]"),  # a++, a*+ (possessive forms are not supported by re either)
+    re.compile(r"\\[1-9]"),  # backreferences
+)
 ACTIONS: tuple[str, ...] = ("flag", "mask", "redact", "tokenise", "block")
 TRANSFORMS: tuple[str, ...] = ("mask", "redact", "tokenise")
 RISK_TIERS: tuple[str, ...] = ("low", "medium", "high", "critical")
@@ -169,38 +185,60 @@ class GuardrailBlocked(RuntimeError):  # noqa: N818 - surface name used in error
         }
 
 
+def safe_pattern(text: str) -> str:
+    """A pattern that compiles, stays short and carries no shape known to backtrack catastrophically."""
+    if len(text) > MAX_PATTERN_LENGTH:
+        raise ValueError(f"a pattern is at most {MAX_PATTERN_LENGTH} characters")
+    for shape in _UNSAFE_PATTERN_SHAPES:
+        if shape.search(text):
+            raise ValueError(f"pattern {text!r} nests or repeats unbounded quantifiers, or uses a backreference")
+    try:
+        re.compile(text)
+    except re.error as exc:
+        raise ValueError(f"pattern {text!r} does not compile: {exc}") from None
+    return text
+
+
 def _clean_options(detector: str, raw: Any) -> dict[str, Any]:
     if raw is not None and not isinstance(raw, dict):
         raise ValueError("options must be an object")
     options = dict(raw or {})
+    allowed = DETECTOR_OPTIONS.get(detector, ())
+    unknown = sorted(set(options) - set(allowed))
+    if unknown:
+        raise ValueError(f"options not taken by {detector}: {', '.join(unknown)}")
     out: dict[str, Any] = {}
     if detector == "sensitive_data":
         entities = options.get("entities")
         if entities is not None:
-            cleaned = sorted({str(e).strip().upper() for e in entities if str(e).strip()})
-            if not cleaned:
+            if not isinstance(entities, list):
+                raise ValueError("entities must be a list of entity types")
+            names = [e.strip().upper() for e in entities if isinstance(e, str) and e.strip()]
+            if not names:
                 raise ValueError("entities must name at least one entity type when given")
-            out["entities"] = cleaned
+            if len(names) != len(entities):
+                raise ValueError("entities must be a list of entity type names")
+            unsupported = sorted(set(names) - set(SENSITIVE_ENTITIES))
+            if unsupported:
+                raise ValueError(f"entities must be among {', '.join(SENSITIVE_ENTITIES)}")
+            out["entities"] = sorted(set(names))
     elif detector == "pattern":
         patterns = options.get("patterns")
         if not isinstance(patterns, list) or not patterns:
             raise ValueError("a pattern rule needs a non-empty list of patterns")
+        if len(patterns) > MAX_PATTERNS:
+            raise ValueError(f"a pattern rule takes at most {MAX_PATTERNS} patterns")
         cleaned_patterns: list[str] = []
         for item in patterns:
-            text = str(item or "").strip()
-            if not text:
-                raise ValueError("a pattern must not be empty")
-            try:
-                re.compile(text)
-            except re.error as exc:
-                raise ValueError(f"pattern {text!r} does not compile: {exc}") from None
-            cleaned_patterns.append(text)
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError("a pattern must be a non-empty string")
+            cleaned_patterns.append(safe_pattern(item.strip()))
         out["patterns"] = cleaned_patterns
-        out["kind"] = _clean(options.get("kind")) or "pattern"
+        kind = options.get("kind")
+        if kind is not None and not isinstance(kind, str):
+            raise ValueError("kind must be a string")
+        out["kind"] = _clean(kind) or "pattern"
         out["ignore_case"] = bool(options.get("ignore_case", True))
-    unknown = set(options) - set(out) - {"entities", "patterns", "kind", "ignore_case"}
-    if unknown:
-        raise ValueError(f"unknown options for {detector}: {', '.join(sorted(unknown))}")
     return out
 
 

@@ -13,6 +13,12 @@ outcome does depends on enforcement:
   it travels on, ``block`` refuses the stage with ``E1016``, and each applied
   action writes a signed audit row.
 
+Each detector runs off the event loop under a time budget
+(``guardrails_detector_timeout_seconds``). A detector that fails or runs out
+of time cannot say what it would have found: with enforcement on in a strict
+runtime its stage is refused rather than let through unchecked; otherwise the
+failure is logged and the rule records no outcome.
+
 A dry run (the evaluation endpoint) applies the rules to the returned text so
 an administrator sees the effect, and meters, logs and audits nothing.
 
@@ -25,6 +31,7 @@ the audit row share one id.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from dataclasses import dataclass
@@ -297,14 +304,19 @@ async def evaluate(
         detector = REGISTRY.get(rule.detector)
         if detector is None:
             logger.warning("guardrail_detector_unknown", detector=rule.detector, rule_id=rule.id)
+            _unverifiable(rule, scope, enforced, dry_run, "unknown detector")
             continue
         try:
-            findings = detector.detect(result.text, rule.options, threshold=rule.threshold)
-        # enterprise-gate: broad-except-ok reason=a-failing-detector-is-logged-and-its-rule-records-no-outcome
+            findings = await asyncio.wait_for(
+                asyncio.to_thread(detector.detect, result.text, rule.options, threshold=rule.threshold),
+                timeout=settings.guardrails_detector_timeout_seconds,
+            )
+        # enterprise-gate: broad-except-ok reason=a-failing-detector-fails-closed-when-enforced-in-strict-else-logged
         except Exception as exc:
             logger.error(
                 "guardrail_detector_failed", detector=rule.detector, rule_id=rule.id, error_type=type(exc).__name__
             )
+            _unverifiable(rule, scope, enforced, dry_run, type(exc).__name__)
             continue
         if not findings:
             continue
@@ -357,6 +369,18 @@ async def evaluate(
             rule_name=blocker.name,
         )
     return result
+
+
+def _unverifiable(rule: Rule, scope: _Scope, enforced: bool, dry_run: bool, why: str) -> None:
+    """An enforced rule whose detector gave no answer refuses the stage in a strict runtime."""
+    if enforced and not dry_run and rule.action != "flag" and is_strict_runtime_env(settings.env):
+        raise GuardrailBlocked(
+            f"Guardrails: rule {rule.name} could not be evaluated ({why}); refusing the {scope.stage}.",
+            stage=scope.stage,
+            correlation_id=scope.correlation_id,
+            rule_id=rule.id,
+            rule_name=rule.name,
+        )
 
 
 async def _audit_outcome(scope: _Scope, outcome: Outcome) -> None:

@@ -70,7 +70,7 @@ class TestRuleValidation:
             ),
             (
                 {"name": "n", "stage": "output", "detector": "pattern", "options": {"patterns": [""]}},
-                "must not be empty",
+                "non-empty string",
             ),
             (
                 {"name": "n", "stage": "output", "detector": "sensitive_data", "options": {"entities": []}},
@@ -78,7 +78,7 @@ class TestRuleValidation:
             ),
             (
                 {"name": "n", "stage": "output", "detector": "sensitive_data", "options": {"colour": "red"}},
-                "unknown options",
+                "not taken by",
             ),
             ({"name": "n", "stage": "output", "detector": "sensitive_data", "options": "x"}, "must be an object"),
         ],
@@ -86,6 +86,47 @@ class TestRuleValidation:
     def test_unusable_rules_are_refused(self, fields, message):
         with pytest.raises(ValueError, match=message):
             schema.validate_rule_fields(fields)
+
+    @pytest.mark.parametrize(
+        "options, message",
+        [
+            ({"entities": 1}, "must be a list"),
+            ({"entities": "PAN"}, "must be a list"),
+            ({"entities": ["PASSPORT"]}, "must be among"),
+            ({"entities": ["PAN", 3]}, "entity type names"),
+            ({"kind": "x"}, "not taken by"),
+        ],
+    )
+    def test_sensitive_data_options_are_validated(self, options, message):
+        with pytest.raises(ValueError, match=message):
+            schema.validate_rule_fields(
+                {"name": "n", "stage": "output", "detector": "sensitive_data", "options": options}
+            )
+
+    @pytest.mark.parametrize(
+        "options, message",
+        [
+            ({"patterns": ["(a+)+$"]}, "nests or repeats"),
+            ({"patterns": ["(\d*)*"]}, "nests or repeats"),
+            ({"patterns": ["(x)\\1"]}, "backreference"),
+            ({"patterns": ["a" * 600]}, "at most 512"),
+            ({"patterns": [1]}, "non-empty string"),
+            ({"patterns": ["x"] * 33}, "at most 32"),
+            ({"patterns": ["x"], "kind": 3}, "kind must be"),
+            ({"patterns": ["x"], "entities": ["PAN"]}, "not taken by"),
+        ],
+    )
+    def test_pattern_options_are_validated(self, options, message):
+        with pytest.raises(ValueError, match=message):
+            schema.validate_rule_fields({"name": "n", "stage": "output", "detector": "pattern", "options": options})
+
+    def test_toxicity_takes_no_options_and_safe_patterns_pass(self):
+        with pytest.raises(ValueError, match="not taken by"):
+            schema.validate_rule_fields(
+                {"name": "n", "stage": "output", "detector": "toxicity", "options": {"patterns": ["secret"]}}
+            )
+        assert schema.safe_pattern("\\bAcme(Pay|Card)\\b") == "\\bAcme(Pay|Card)\\b"
+        assert schema.safe_pattern("[0-9]{4}-[0-9]{4}") == "[0-9]{4}-[0-9]{4}"
 
     def test_round_trip_and_matching(self):
         rule = _rule(agent_id="a1", use_case="agent_run", risk_tier="high", options={"entities": ["PAN"]})

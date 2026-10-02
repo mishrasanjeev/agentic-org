@@ -27,6 +27,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`v6z38_guardrail_rules`, tenant RLS). Docs: `docs/governance/guardrails.md`.
   The call-site hooks, the prompt-injection and output-policy detectors and the
   grounding checker follow in the package's next parts.
+- Each detector runs off the event loop under
+  `AGENTICORG_GUARDRAILS_DETECTOR_TIMEOUT_SECONDS` (2); a detector that fails or
+  runs out of time fails closed for an enforced transform or block in a strict
+  runtime. Pattern rules refuse expressions that nest or repeat unbounded
+  quantifiers or use backreferences, take at most 32 patterns of 512
+  characters, and scan at most `AGENTICORG_GUARDRAILS_PATTERN_MAX_CHARS`
+  (50,000) characters. A rule's options must belong to its detector and
+  `entities` must list supported kinds.
 
 ### Added - Model gateway: cost comparison and cost-aware routing
 - `core/governance/model_pricing.py`: list prices per million tokens for the

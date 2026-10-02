@@ -54,8 +54,20 @@ drafting agent's output must not mention a competitor's product names.
   whether it blocked or transformed).
 - Every matching rule applies; transforms compose in priority order (a later
   rule sees the earlier rule's text); a block wins over a transform.
-- A detector that fails is logged and its rule records no outcome; an unknown
-  detector is logged and skipped.
+- Each detector runs off the event loop under a time budget
+  (`AGENTICORG_GUARDRAILS_DETECTOR_TIMEOUT_SECONDS`, 2 seconds). A detector
+  that fails, runs out of time or is unknown cannot say what it would have
+  found: with enforcement on in a strict runtime, a rule that would transform
+  or block then refuses the stage rather than letting the text through
+  unchecked; otherwise the failure is logged and the rule records no outcome.
+- A pattern rule's expressions are refused when they are longer than 512
+  characters, nest or repeat unbounded quantifiers (`(a+)+`), or use
+  backreferences, the shapes that backtrack catastrophically; a rule takes at
+  most 32 patterns and scans at most
+  `AGENTICORG_GUARDRAILS_PATTERN_MAX_CHARS` (50,000) characters.
+- A rule's `options` must belong to its detector (`entities` for
+  `sensitive_data`, `patterns`, `kind` and `ignore_case` for `pattern`, none
+  for `toxicity`), and `entities` must be a list of the supported kinds.
 - Rules and the flag are read through a five-second shared cache and then the
   database. In a strict runtime an unreadable rule set or flag refuses the
   stage; a relaxed runtime lets the text through unguarded and logs it.
