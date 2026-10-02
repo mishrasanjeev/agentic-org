@@ -217,7 +217,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         )
         incident_count = incident_result.scalar() or 0
 
-    from core.governance import residency
+    from core.governance import infrastructure, residency
 
     data_residency = await residency.report_section(tid)
 
@@ -227,6 +227,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         "generated_at": now.isoformat(),
         "sections": {
             "data_residency": data_residency,
+            "infrastructure_controls": infrastructure.report_section(),
             "access_controls": {
                 "control_id": "CC6.1-access",
                 "event_count": access_count,
@@ -246,7 +247,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
             "encryption_in_transit": {
                 "control_id": "CC6.7-transit",
                 "protocol": os.getenv("AGENTICORG_TLS_VERSION", "TLS 1.3"),
-                "mtls_internal": os.getenv("AGENTICORG_MTLS", "true").lower() == "true",
+                "mtls_internal": os.getenv("AGENTICORG_MTLS", "false").lower() == "true",
                 "status": "collected",
             },
             "change_management": {

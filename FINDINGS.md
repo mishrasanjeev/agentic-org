@@ -1584,7 +1584,7 @@ Remove an entry in the pull request that fixes it.
   (residency enforcement with provider attestations) and links to
   `docs/governance/data-residency.md`.
 
-## A-114 — The compliance report claims internal mTLS by default
+## A-114 — The compliance report claims internal mTLS by default (fixed)
 
 - **Found:** same work.
 - **What:** `GET /compliance/evidence-package` reports
@@ -1594,4 +1594,7 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** default the flag to false and have the deployment set it when a
   mesh with mutual TLS is in place, with the attestation recorded the same
   way as the residency deployment profile.
+- **Fixed:** `AGENTICORG_MTLS` defaults to false; the deployment sets it when a
+  mesh with mutual TLS is in place, and the mesh item (NET-04) is attested in the
+  report's `infrastructure_controls` section like the other hosting controls.
 
