@@ -453,6 +453,20 @@ class TestAgentRunner:
         graph.assert_not_called()
 
 
+class TestErrorCode:
+    def test_the_override_refusal_and_the_pseudonymisation_refusal_carry_distinct_codes(self):
+        """A client reading the code can tell a halted agent from a refused tool argument."""
+        from core.pii import pseudonymiser
+        from core.schemas.errors import ERROR_META, ErrorCode
+
+        override = OperatorOverrideBlocked(_blocked("agent halted")).decision.to_error()
+        assert override["error"]["code"] == ERROR_CODE == ErrorCode.OPERATOR_OVERRIDE.value
+        assert ERROR_CODE != pseudonymiser.REFUSAL_CODE
+        assert ERROR_META[ERROR_CODE]["name"] == "OPERATOR_OVERRIDE"
+        values = [member.value for member in ErrorCode]
+        assert len(values) == len(set(values))
+
+
 class TestBaseAgent:
     def test_execute_returns_a_failed_result_with_the_override_code(self):
         from core.agents.base import BaseAgent
