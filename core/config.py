@@ -167,6 +167,15 @@ class Settings(BaseSettings):
     # for the tenant, pruned after the retention period by the daily task.
     model_gateway_records_enabled: bool = True
     model_gateway_records_retention_days: int = 90
+    # Cost-aware routing reads each model's observed failure rate over this
+    # window from the routing records (cached briefly) and skips a model above
+    # the failure rate a policy sets, or this default.
+    model_gateway_quality_window_hours: int = 24
+    model_gateway_max_failure_rate: float = 0.05
+    model_gateway_health_cache_seconds: int = 60
+    # JSON object keyed provider/model with input and output USD per million
+    # tokens; a negotiated rate replaces the list price.
+    model_price_overrides_json: str = ""
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30

@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, Boolean, CheckConstraint, Index, Integer, String, Text, func
+from sqlalchemy import TIMESTAMP, Boolean, CheckConstraint, Float, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,10 @@ class ModelRoutingPolicy(BaseModel):
         ),
         CheckConstraint("tier IS NULL OR tier IN ('tier1','tier2','tier3')", name="ck_model_routing_policies_tier"),
         CheckConstraint("priority >= 0", name="ck_model_routing_policies_priority"),
+        CheckConstraint(
+            "max_failure_rate IS NULL OR (max_failure_rate >= 0 AND max_failure_rate <= 1)",
+            name="ck_model_routing_policies_max_failure_rate",
+        ),
         Index("ix_model_routing_policies_tenant_enabled", "tenant_id", "enabled", "priority"),
     )
 
@@ -52,6 +56,9 @@ class ModelRoutingPolicy(BaseModel):
     tier: Mapped[str | None] = mapped_column(String(8), nullable=True)
     # Weighted split: a list of {provider, model, weight}; set instead of provider, model or tier.
     targets: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Cost-aware: pick the cheapest target whose observed failure rate stays under max_failure_rate.
+    cost_aware: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_failure_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     allowed_providers: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     in_region_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")

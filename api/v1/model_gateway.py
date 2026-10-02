@@ -54,6 +54,10 @@ class PolicyIn(BaseModel):
     )
     allowed_providers: list[str] | None = Field(None, max_length=32)
     in_region_only: bool = False
+    cost_aware: bool = Field(False, description="choose the cheapest healthy target")
+    max_failure_rate: float | None = Field(
+        None, ge=0, le=1, description="a target above this observed failure rate is skipped"
+    )
     reason: str = Field("", max_length=2000)
 
     @model_validator(mode="after")
@@ -80,6 +84,8 @@ class PolicyUpdate(BaseModel):
     targets: list[dict[str, object]] | None = Field(None, max_length=16)
     allowed_providers: list[str] | None = Field(None, max_length=32)
     in_region_only: bool | None = None
+    cost_aware: bool | None = None
+    max_failure_rate: float | None = Field(None, ge=0, le=1)
     reason: str | None = Field(None, max_length=2000)
 
 
@@ -99,6 +105,8 @@ class PolicyOut(BaseModel):
     targets: list[dict[str, object]] | None
     allowed_providers: list[str] | None
     in_region_only: bool
+    cost_aware: bool
+    max_failure_rate: float | None
     reason: str
     created_by: str
     created_at: datetime
@@ -298,6 +306,8 @@ def _out(row: ModelRoutingPolicy) -> PolicyOut:
         targets=[dict(t) for t in row.targets] if getattr(row, "targets", None) is not None else None,
         allowed_providers=list(row.allowed_providers) if row.allowed_providers is not None else None,
         in_region_only=row.in_region_only,
+        cost_aware=bool(getattr(row, "cost_aware", False)),
+        max_failure_rate=getattr(row, "max_failure_rate", None),
         reason=row.reason or "",
         created_by=row.created_by,
         created_at=row.created_at,
@@ -708,6 +718,55 @@ async def delete_limit(
     if not await gateway.delete_limit(tid, limit_id, actor_id=actor_id):
         raise HTTPException(404, "Limit not found")
     return Response(status_code=204)
+
+
+@router.get("/costs")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="model_gateway.costs",
+)
+async def compare_costs(
+    window_hours: Annotated[
+        int | None, Query(ge=1, le=720, description="observation window; the quality window by default")
+    ] = None,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, object]:
+    """Every catalogue model, and every model seen in the records, with its list price and what the records observed."""
+    from core.ai_providers.catalog import LLM_CATALOG
+    from core.governance.model_gateway_records import model_health
+    from core.governance.model_pricing import price_for
+
+    tid = uuid.UUID(tenant_id)
+    hours = window_hours or gateway.settings.model_gateway_quality_window_hours
+    health = await model_health(tid, window_hours=hours)
+    names: list[tuple[str, str]] = [(entry.provider, entry.model) for entry in LLM_CATALOG if entry.model != "*"]
+    names += [key for key in health if key not in names]
+    rows = []
+    for provider, model in names:
+        price = price_for(provider, model)
+        observed = health.get((provider, model))
+        rows.append(
+            {
+                "provider": provider,
+                "model": model,
+                "list_price": price.to_dict() if price is not None else None,
+                "blended_per_million_usd": round(price.blended_per_million, 4) if price is not None else None,
+                "observed": observed.to_dict() if observed is not None else None,
+            }
+        )
+    rows.sort(
+        key=lambda r: (
+            r["blended_per_million_usd"] is None,
+            r["blended_per_million_usd"] or 0.0,
+            r["provider"],
+            r["model"],
+        )
+    )
+    return {"window_hours": hours, "models": rows}
 
 
 @router.get("/records", response_model=list[RecordOut])

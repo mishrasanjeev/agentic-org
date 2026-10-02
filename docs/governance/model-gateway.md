@@ -21,6 +21,7 @@ deployment. Off, the gateway returns the caller's own choice and reads nothing.
 | `agent_id`, `business_unit`, `language` | Further match fields; `business_unit` is matched against the agent's domain. Empty matches everything. |
 | `provider`, `model`, `tier` | What a match gets: a provider (with a model, or the provider's first catalogue model), a model, or a cost tier (`tier1`, `tier2`, `tier3`, resolved like the smart router's tiers). |
 | `targets` | Instead of one provider, model or tier: a weighted split, `[{"provider", "model", "weight"}, ...]`. Each call lands on one target, stable for its correlation id and proportional to the weights over many calls; every target is checked against the catalogue and must sit inside `allowed_providers` when that is set. |
+| `cost_aware`, `max_failure_rate` | With `cost_aware`, the targets are candidates and each call gets the cheapest one (by list price, see below) whose observed failure rate over the quality window stays at or under `max_failure_rate` (`AGENTICORG_MODEL_GATEWAY_MAX_FAILURE_RATE`, 0.05, when unset). A candidate with no observations counts as healthy; an unpriced candidate ranks last. When the records cannot be read the choice is by price alone; when no candidate is healthy the least failing one is chosen; both are logged and named in the decision's reason. |
 | `allowed_providers` | A fence: a provider outside the list is refused, with the policy named, rather than replaced. |
 | `in_region_only` | The call may only use a provider inside the deployment or one attested for the tenant's data region. |
 | `reason` | Why the policy exists; recorded in the audit row. |
@@ -95,6 +96,35 @@ control, and a cache outage must not stop every model call.
 {"provider": "ollama", "max_concurrency": 4, "reason": "one in-house inference node"}
 ```
 
+## Cost comparison and cost-aware routing
+
+`core/governance/model_pricing.py` carries the published list price of every
+catalogue model the platform can price (the Gemini rows are the router's own
+table), prices models inside the deployment (`ollama`, `vllm`) at nothing per
+token, prices an Azure deployment as its base model, and leaves
+`openai_compatible` unpriced. `AGENTICORG_MODEL_PRICE_OVERRIDES_JSON`, a JSON
+object keyed `provider/model` with `input` and `output` per million tokens,
+replaces list prices with negotiated ones. The direct router and the routing
+records cost each call at its model's price when one is known (the direct
+router used a flat rate for every OpenAI model before, FINDINGS A-116).
+
+`GET /api/v1/model-gateway/costs?window_hours=24` lists every catalogue model
+and every model seen in the records with its list price, a blended per-million
+rate (input weighted three to one against output) and what the records
+observed over the window: calls, failures, failure rate, average latency,
+average and total cost. The same observations drive cost-aware routing.
+
+Example: a drafting use case may use any of three models; each call gets the
+cheapest one that has not been failing.
+
+```json
+{"name": "drafting-cheapest", "priority": 30, "use_case": "agent_run", "business_unit": "marketing",
+ "cost_aware": true, "max_failure_rate": 0.02,
+ "targets": [{"provider": "openai", "model": "gpt-4o-mini"}, {"provider": "gemini", "model": "gemini-2.5-flash"},
+             {"provider": "openai", "model": "gpt-4o"}],
+ "reason": "drafts take the cheapest model that is behaving"}
+```
+
 ## Metrics and routing records
 
 Every model call, on the agent path (the graph's reasoning node) and the direct
@@ -162,7 +192,7 @@ platform's model calls do not use yet.
 Not yet routed through the gateway: the sidecar model calls that build a model
 without a prefetched decision (explanations, SOP parsing, feedback analysis). They
 keep the tenant's default model and are covered by residency enforcement.
-Planned next: cost comparison and cost-aware routing, and the console pages.
+Planned next: the console pages.
 
 ## Observing it
 
@@ -199,6 +229,7 @@ Planned next: cost comparison and cost-aware routing, and the console pages.
 | `DELETE /api/v1/model-gateway/limits/{id}` | Delete a limit (204). |
 | `POST /api/v1/model-gateway/evaluate` | Dry-run a described request (with `application` and `principal` for the access policies): the decision the routing and access policies would make, or the refusal, as data, whether or not the gateway is on (`enabled` says whether it currently applies). Limits are not applied and nothing is metered or logged. |
 | `GET /api/v1/model-gateway/records` | Routing records, newest first; filter by `correlation_id`, `agent_id`, `outcome`, `before`; `limit` up to 1000. `signed` says the row's signature still matches. |
+| `GET /api/v1/model-gateway/costs` | Every catalogue model and every model seen in the records, with its list price, blended rate and the observations over `window_hours`, cheapest first. |
 
 ## Runbook: move a business unit to one provider
 

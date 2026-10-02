@@ -388,7 +388,9 @@ class TestHaltedWorkflowRetry:
         monkeypatch.setattr(wf.settings, "operator_halt_retry_seconds", 9)
         db_run.context[HALT_RETRY_KEY]["heartbeat"] = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
         fresh = SimpleNamespace(
-            id=uuid.uuid4(), tenant_id=tenant_id, status="running",
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            status="running",
             context={
                 HALT_RETRY_KEY: {"engine_run_id": "eng-2", "owner": "api", "heartbeat": datetime.now(UTC).isoformat()}
             },
@@ -552,8 +554,13 @@ class TestChatOverride:
                 return None
 
         agent = _Row(
-            id=uuid.uuid4(), domain="finance", name="TDS", agent_type="tds_compliance", status="active",
-            authorized_tools=[], connector_ids=[],
+            id=uuid.uuid4(),
+            domain="finance",
+            name="TDS",
+            agent_type="tds_compliance",
+            status="active",
+            authorized_tools=[],
+            connector_ids=[],
         )
         result = MagicMock()
         result.scalar_one_or_none.return_value = agent

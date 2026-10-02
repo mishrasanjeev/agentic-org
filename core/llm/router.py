@@ -49,6 +49,7 @@ from core.governance.model_gateway import decide as gateway_decide
 from core.governance.model_gateway import normalise_provider as gateway_provider
 from core.governance.model_gateway import release as gateway_release
 from core.governance.model_gateway_records import record_model_call
+from core.governance.model_pricing import price_for
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
 
@@ -214,6 +215,17 @@ GEMINI_PRICE_PER_1M: dict[str, dict[str, float]] = {
     "gemini-2.5-pro": {"input": 1.25, "output": 5.00},
     "gemini-2.0-flash": {"input": 0.10, "output": 0.40},
 }
+
+
+def priced_cost_usd(
+    provider: str, model: str, *, input_tokens: int | None, output_tokens: int | None, tokens: int, fallback: float
+) -> float:
+    """The call's cost at the model's price when one is known, else ``fallback`` (the historical flat rate)."""
+    price = price_for(provider, model)
+    if price is None:
+        logger.warning("model_unknown_pricing", provider=provider, model=model)
+        return fallback
+    return price.cost_usd(input_tokens=input_tokens, output_tokens=output_tokens, tokens=tokens)
 
 
 def gemini_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -907,7 +919,14 @@ class LLMRouter:
         response = await client.messages.create(**request)
         latency = int((time.monotonic() - start) * 1000)
         tokens = response.usage.input_tokens + response.usage.output_tokens
-        cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1_000_000
+        cost = priced_cost_usd(
+            "anthropic",
+            model,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            tokens=tokens,
+            fallback=(response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1_000_000,
+        )
         return LLMResponse(
             content=response.content[0].text,
             model=model,
@@ -932,8 +951,16 @@ class LLMRouter:
             max_tokens=max_tokens,
         )
         latency = int((time.monotonic() - start) * 1000)
-        tokens = response.usage.total_tokens if response.usage else 0
-        cost = tokens * 10 / 1_000_000
+        usage = response.usage
+        tokens = usage.total_tokens if usage else 0
+        cost = priced_cost_usd(
+            "openai",
+            model,
+            input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+            output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
+            tokens=tokens,
+            fallback=tokens * 10 / 1_000_000,
+        )
         return LLMResponse(
             content=response.choices[0].message.content or "",
             model=model,

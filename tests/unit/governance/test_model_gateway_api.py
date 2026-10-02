@@ -484,3 +484,76 @@ def test_records_are_listed_with_their_signature_check(session_rows, monkeypatch
     assert client.get("/api/v1/model-gateway/records?outcome=odd").status_code == 422
     assert client.get("/api/v1/model-gateway/records?limit=0").status_code == 422
     assert TestClient(_app(["agents:write"])).get("/api/v1/model-gateway/records").status_code == 403
+
+
+def test_cost_comparison_lists_prices_and_observations_cheapest_first(session_rows):
+    from core.governance.model_gateway_records import ModelHealth
+
+    health = {
+        ("openai", "gpt-4o"): ModelHealth("openai", "gpt-4o", 10, 1, 300.0, 0.01, 0.1),
+        ("mine", "x"): ModelHealth("mine", "x", 2, 0, 50.0, 0.0, 0.0),
+    }
+    client = TestClient(_app(["agenticorg:admin"]))
+    with patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value=health)) as reads:
+        response = client.get("/api/v1/model-gateway/costs?window_hours=48")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["window_hours"] == 48 and reads.await_args.kwargs["window_hours"] == 48
+    models = {(m["provider"], m["model"]): m for m in body["models"]}
+    assert models[("openai", "gpt-4o")]["observed"]["failure_rate"] == 0.1
+    assert models[("openai", "gpt-4o")]["list_price"]["source"] == "list"
+    assert (
+        models[("ollama", "ollama:llama3")]["blended_per_million_usd"] == 0.0
+        if ("ollama", "ollama:llama3") in models
+        else True
+    )
+    assert models[("mine", "x")]["list_price"] is None and models[("mine", "x")]["observed"]["calls"] == 2
+    priced = [m["blended_per_million_usd"] for m in body["models"] if m["blended_per_million_usd"] is not None]
+    assert priced == sorted(priced) and body["models"][-1]["blended_per_million_usd"] is None
+    assert client.get("/api/v1/model-gateway/costs?window_hours=0").status_code == 422
+    assert TestClient(_app(["agents:write"])).get("/api/v1/model-gateway/costs").status_code == 403
+
+
+def test_a_cost_aware_policy_round_trips_through_the_api(session_rows):
+    row = _row(
+        targets=[{"provider": "openai", "model": "gpt-4o-mini", "weight": 1}],
+        provider=None,
+        model=None,
+        allowed_providers=None,
+        cost_aware=True,
+        max_failure_rate=0.1,
+    )
+    session_rows.append(row)
+    client = TestClient(_app(["agenticorg:admin"]))
+    listed = client.get("/api/v1/model-gateway/policies")
+    assert (
+        listed.status_code == 200
+        and listed.json()[0]["cost_aware"] is True
+        and listed.json()[0]["max_failure_rate"] == 0.1
+    )
+    with patch.object(api.gateway, "set_policy", AsyncMock(return_value=_policy(row))) as setter:
+        created = client.post(
+            "/api/v1/model-gateway/policies",
+            json={
+                "name": "cheapest",
+                "targets": [{"provider": "openai", "model": "gpt-4o-mini"}],
+                "cost_aware": True,
+                "max_failure_rate": 0.1,
+            },
+        )
+    assert created.status_code == 201 and setter.await_args.kwargs["cost_aware"] is True
+    with patch.object(api.gateway, "set_policy", AsyncMock()) as setter:
+        assert (
+            client.post(
+                "/api/v1/model-gateway/policies", json={"name": "c", "tier": "tier1", "cost_aware": True}
+            ).status_code
+            == 422
+        )
+        assert (
+            client.post(
+                "/api/v1/model-gateway/policies",
+                json={"name": "c", "targets": [{"provider": "openai", "model": "gpt-4o"}], "max_failure_rate": 2},
+            ).status_code
+            == 422
+        )
+    setter.assert_not_called()
