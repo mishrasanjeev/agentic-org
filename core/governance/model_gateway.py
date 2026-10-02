@@ -349,7 +349,7 @@ def _meter(outcome: str) -> None:
 
 def _passthrough(request: RouteRequest, correlation_id: str, reason: str) -> RouteDecision:
     return RouteDecision(
-        provider=normalise_provider(request.requested_provider),
+        provider=provider_for_model(request.requested_model, request.requested_provider),
         model=request.requested_model,
         correlation_id=correlation_id,
         reason=reason,
@@ -363,10 +363,8 @@ def tier_model(tier: str) -> str:
     return _tier_model(tier)
 
 
-def _apply(policy: Policy, request: RouteRequest) -> tuple[str | None, str]:
-    """The provider and model a matched policy gives the request."""
-    provider = normalise_provider(request.requested_provider)
-    model = request.requested_model
+def _apply(policy: Policy, provider: str | None, model: str) -> tuple[str | None, str]:
+    """The provider and model a matched policy gives a request that asked for ``provider`` and ``model``."""
     if policy.provider:
         provider = policy.provider
         if policy.model:
@@ -388,15 +386,18 @@ def _apply(policy: Policy, request: RouteRequest) -> tuple[str | None, str]:
     return provider, model
 
 
-def _refuse(reason: str, *, correlation_id: str, policy: Policy | None, request: RouteRequest) -> ModelGatewayRefused:
-    _meter("refused")
-    logger.warning(
-        "model_gateway_refused",
-        correlation_id=correlation_id,
-        use_case=request.use_case,
-        policy_id=policy.id if policy else None,
-        reason=reason,
-    )
+def _refuse(
+    reason: str, *, correlation_id: str, policy: Policy | None, request: RouteRequest, dry_run: bool = False
+) -> ModelGatewayRefused:
+    if not dry_run:
+        _meter("refused")
+        logger.warning(
+            "model_gateway_refused",
+            correlation_id=correlation_id,
+            use_case=request.use_case,
+            policy_id=policy.id if policy else None,
+            reason=reason,
+        )
     return ModelGatewayRefused(
         reason,
         correlation_id=correlation_id,
@@ -405,16 +406,19 @@ def _refuse(reason: str, *, correlation_id: str, policy: Policy | None, request:
     )
 
 
-async def _decide(request: RouteRequest, policies: list[Policy], correlation_id: str) -> RouteDecision:
+async def _decide(
+    request: RouteRequest, policies: list[Policy], correlation_id: str, *, dry_run: bool = False
+) -> RouteDecision:
     tid = _as_uuid(request.tenant_id)
     policy = next((p for p in policies if p.matches(request)), None)
     restricted = (request.sensitivity or "").strip().lower() == "restricted" or bool(policy and policy.in_region_only)
+    # A caller that pinned no provider (legacy agent rows) still names one through its model.
+    provider = provider_for_model(request.requested_model, request.requested_provider)
+    model = request.requested_model
     if policy is None:
-        provider = normalise_provider(request.requested_provider)
-        model = request.requested_model
         reason = "no policy matched; the caller's choice stands"
     else:
-        provider, model = _apply(policy, request)
+        provider, model = _apply(policy, provider, model)
         reason = f"policy {policy.name}"
         if policy.allowed_providers is not None and (provider or "") not in policy.allowed_providers:
             raise _refuse(
@@ -423,18 +427,31 @@ async def _decide(request: RouteRequest, policies: list[Policy], correlation_id:
                 correlation_id=correlation_id,
                 policy=policy,
                 request=request,
+                dry_run=dry_run,
             )
     if restricted:
         from core.governance.residency import check_provider
 
         target = provider or provider_for_model(model) or ""
-        residency = await check_provider(tid, target, kind="llm", enforce=True)
-        if residency.blocked:
+        if not target:
+            # Nothing to check against: a restricted request whose provider
+            # cannot be named is refused, never waved through.
             raise _refuse(
-                f"Model gateway: restricted data may not reach provider {target or 'unknown'}. {residency.reason}",
+                "Model gateway: restricted data needs a provider the gateway can name; "
+                "the request named neither a provider nor a model.",
                 correlation_id=correlation_id,
                 policy=policy,
                 request=request,
+                dry_run=dry_run,
+            )
+        residency = await check_provider(tid, target, kind="llm", enforce=True)
+        if residency.blocked:
+            raise _refuse(
+                f"Model gateway: restricted data may not reach provider {target}. {residency.reason}",
+                correlation_id=correlation_id,
+                policy=policy,
+                request=request,
+                dry_run=dry_run,
             )
     decision = RouteDecision(
         provider=provider,
@@ -446,6 +463,8 @@ async def _decide(request: RouteRequest, policies: list[Policy], correlation_id:
         policy_name=policy.name if policy else None,
         restricted=restricted,
     )
+    if dry_run:
+        return decision
     _meter("applied" if policy is not None else "passthrough")
     logger.info(
         "model_gateway_decision",
@@ -458,6 +477,35 @@ async def _decide(request: RouteRequest, policies: list[Policy], correlation_id:
         reason=reason,
     )
     return decision
+
+
+@dataclass(frozen=True)
+class Evaluation:
+    """A dry run: what the policies would decide, and whether the gateway is on for the tenant."""
+
+    enabled: bool
+    decision: RouteDecision | None = None
+    refusal: ModelGatewayRefused | None = None
+
+
+async def evaluate(request: RouteRequest) -> Evaluation:
+    """Evaluate the policies for a request whether or not the gateway is on; nothing is metered or logged.
+
+    An administrator uses this before enabling the gateway to see what the
+    policies would do. A read failure propagates: a dry run has nothing to
+    fall back to.
+    """
+    tid = _as_uuid(request.tenant_id)
+    if tid is None:
+        raise ValueError("a dry run needs a tenant")
+    correlation_id = request.correlation_id or uuid.uuid4().hex
+    on = await enabled(tid)
+    policies = await active_policies(tid)
+    try:
+        decision = await _decide(request, policies, correlation_id, dry_run=True)
+    except ModelGatewayRefused as exc:
+        return Evaluation(enabled=on, refusal=exc)
+    return Evaluation(enabled=on, decision=decision)
 
 
 async def _policies_or_passthrough(

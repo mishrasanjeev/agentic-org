@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from api.deps import get_current_tenant
 from api.route_enforcement import enforce_route_metadata
 from api.v1 import model_gateway as api
-from core.governance.model_gateway import ModelGatewayRefused, Policy, RouteDecision
+from core.governance.model_gateway import Evaluation, ModelGatewayRefused, Policy, RouteDecision
 
 TENANT = uuid.uuid4()
 
@@ -222,20 +222,22 @@ def test_the_actor_is_the_authenticated_principal(session_rows):
 def test_evaluate_returns_the_decision_or_the_refusal_as_data(session_rows):
     client = TestClient(_app(["agenticorg:admin"]))
     decision = RouteDecision(provider="openai", model="gpt-4o", correlation_id="c1", reason="finance", applied=True)
-    with patch.object(api.gateway, "decide", AsyncMock(return_value=decision)) as ask:
+    evaluation = Evaluation(enabled=False, decision=decision)
+    with patch.object(api.gateway, "evaluate", AsyncMock(return_value=evaluation)) as ask:
         response = client.post(
             "/api/v1/model-gateway/evaluate",
             json={"use_case": "agent_run", "business_unit": "finance", "sensitivity": "Internal"},
         )
     assert response.status_code == 200
-    assert response.json() == {"refused": False, "decision": decision.to_dict()}
+    assert response.json() == {"refused": False, "enabled": False, "decision": decision.to_dict()}
     request = ask.await_args.args[0]
     assert str(request.tenant_id) == str(TENANT) and request.sensitivity == "internal"
 
     refusal = ModelGatewayRefused("Model gateway: refused", correlation_id="c2", policy_id="p1", policy_name="fence")
-    with patch.object(api.gateway, "decide", AsyncMock(side_effect=refusal)):
+    with patch.object(api.gateway, "evaluate", AsyncMock(return_value=Evaluation(enabled=True, refusal=refusal))):
         response = client.post("/api/v1/model-gateway/evaluate", json={"use_case": "agent_run"})
     assert response.status_code == 200
-    assert response.json()["refused"] is True and response.json()["model_gateway"]["policy_name"] == "fence"
+    assert response.json()["refused"] is True and response.json()["enabled"] is True
+    assert response.json()["model_gateway"]["policy_name"] == "fence"
     unknown = client.post("/api/v1/model-gateway/evaluate", json={"use_case": "x", "sensitivity": "secret"})
     assert unknown.status_code == 422

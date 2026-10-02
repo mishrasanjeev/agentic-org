@@ -43,12 +43,15 @@ tagged restricted stays in region.
 - The first enabled policy in priority order whose match fields all equal the
   request's decides. A request no policy matches keeps what the caller asked for
   and is logged as a pass-through.
+- A caller that pinned no provider still names one through its model (a legacy
+  agent row with `llm_provider` empty is matched and fenced by its model's provider).
 - A request tagged `restricted`, or matched by a policy with `in_region_only`,
   may only use a provider inside the deployment (`ollama`, `vllm`, the local
   embedding and speech models) or one with an active residency attestation for
   the tenant's region (in-region processing and no training). This is checked
   whether or not residency enforcement is on. Otherwise the call is refused with
-  `E1014`; it is never re-routed to an outside provider.
+  `E1014`; it is never re-routed to an outside provider. A restricted request
+  that names neither a provider nor a model is refused too.
 - A policy's `allowed_providers` is a hard fence: a provider outside it refuses
   the call with the policy named, so a misconfigured policy fails loudly.
 - Policies and the flag are read through a five-second shared cache and then the
@@ -61,7 +64,7 @@ tagged restricted stays in region.
 |---|---|---|
 | Agent runner, `run_agent` | `agent_run` | Decided before the credential prefetch; a refusal returns a run result with status `model_gateway_refused`. |
 | Agent runner, `resume_agent` | `agent_resume` | Same, for a run resumed after a human decision. |
-| `LLMRouter.complete` | `completion` | Workflow generation, the replanner and the other direct callers that pass a tenant. A gateway-chosen model is an explicit selection: failover stays within its provider. |
+| `LLMRouter.complete` | `completion` | Workflow generation, the replanner and the other direct callers that pass a tenant. A gateway-chosen model is an explicit selection: failover stays within its provider. This router dispatches by model family (`gemini`, `claude`, `gpt`); a policy that names another catalogue provider (`openai_compatible`, `azure_openai`) for a completion is refused rather than sent to the family's public API. |
 
 Not yet routed through the gateway: the sidecar model calls that build a model
 without a prefetched decision (explanations, SOP parsing, feedback analysis). They
@@ -89,12 +92,12 @@ cost-aware routing.
 | `POST /api/v1/model-gateway/policies` | Create a policy (201). |
 | `PATCH /api/v1/model-gateway/policies/{id}` | Change a policy; the merged policy is re-validated. |
 | `DELETE /api/v1/model-gateway/policies/{id}` | Delete a policy (204). |
-| `POST /api/v1/model-gateway/evaluate` | Dry-run a described request: the decision it would get, or the refusal, as data. |
+| `POST /api/v1/model-gateway/evaluate` | Dry-run a described request: the decision the policies would make, or the refusal, as data, whether or not the gateway is on (`enabled` says whether it currently applies). Nothing is metered or logged. |
 
 ## Runbook: move a business unit to one provider
 
 1. Create the policy with `business_unit`, `provider` and `allowed_providers`.
-2. `POST /api/v1/model-gateway/evaluate` with a representative request; confirm the decision.
+2. `POST /api/v1/model-gateway/evaluate` with a representative request while the gateway is still off; confirm the decision.
 3. Turn `model_gateway.enabled` on for the tenant; watch
    `agenticorg_model_gateway_decisions_total{outcome="applied"}` rise and the
    `model_gateway_decision` log lines name the policy.

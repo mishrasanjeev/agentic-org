@@ -157,6 +157,19 @@ class TestRouting:
 
 
 class TestFenceAndRestriction:
+    def test_a_fence_reads_the_provider_from_the_model_when_none_is_pinned(self, gateway_on):
+        with _with([_policy(name="fence", allowed_providers=("openai",))]):
+            legacy = asyncio.run(decide(_req(requested_provider=None, requested_model="gpt-4o")))
+            with pytest.raises(ModelGatewayRefused):
+                asyncio.run(decide(_req(requested_provider=None, requested_model="gemini-2.5-flash")))
+        assert legacy.applied and legacy.provider == "openai" and legacy.model == "gpt-4o"
+
+    def test_a_restricted_request_that_names_no_provider_is_refused(self, gateway_on):
+        with _with([]), patch("core.governance.residency.check_provider", AsyncMock()) as residency:
+            with pytest.raises(ModelGatewayRefused, match="named neither a provider nor a model"):
+                asyncio.run(decide(_req(sensitivity="restricted", requested_provider=None, requested_model="")))
+        residency.assert_not_called()
+
     def test_a_provider_outside_the_fence_is_refused_with_the_policy_named(self, gateway_on):
         fence = _policy(name="fence", allowed_providers=("openai",))
         with _with([fence]):
@@ -200,6 +213,37 @@ class TestFenceAndRestriction:
             assert asyncio.run(res.check_provider(TENANT, "gemini", enforce=True)).blocked is True
             assert asyncio.run(res.check_provider(TENANT, "gemini", enforce=False)).blocked is False
             assert asyncio.run(res.check_provider(TENANT, "ollama", enforce=True)).blocked is False
+
+
+class TestEvaluate:
+    def test_a_dry_run_evaluates_the_policies_while_the_gateway_is_off(self, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_enabled", False)
+        monkeypatch.setattr(gw.settings, "env", "test")
+        meter = patch.object(gw, "_meter")
+        with (
+            patch.object(gw, "enabled", AsyncMock(return_value=False)),
+            _with([_policy(name="fence", provider="openai", model="gpt-4o", allowed_providers=("openai",))]),
+            meter as metered,
+        ):
+            evaluation = asyncio.run(gw.evaluate(_req()))
+            refused = asyncio.run(gw.evaluate(_req(requested_provider="gemini", requested_model="gemini-2.5-pro")))
+        assert evaluation.enabled is False and evaluation.decision is not None
+        assert evaluation.decision.applied and evaluation.decision.model == "gpt-4o"
+        assert refused.decision is None and refused.refusal is None or refused.decision is not None
+        metered.assert_not_called()
+
+    def test_a_dry_run_reports_a_refusal_as_data(self, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_enabled", False)
+        monkeypatch.setattr(gw.settings, "env", "test")
+        with (
+            patch.object(gw, "enabled", AsyncMock(return_value=True)),
+            _with([_policy(name="fence", allowed_providers=("openai",))]),
+        ):
+            evaluation = asyncio.run(gw.evaluate(_req()))
+        assert evaluation.enabled is True and evaluation.decision is None
+        assert evaluation.refusal is not None and evaluation.refusal.policy_name == "fence"
+        with pytest.raises(ValueError, match="needs a tenant"):
+            asyncio.run(gw.evaluate(_req(tenant_id=None)))
 
 
 class TestValidation:
@@ -328,6 +372,21 @@ class TestEnforcementPoints:
         assert called == ["gpt-4o"]
         request = ask.await_args.args[0]
         assert request.use_case == "completion" and request.requested_model == "gemini-2.5-flash"
+
+    def test_the_router_refuses_a_provider_it_cannot_dispatch(self):
+        from core.llm.router import LLMRouter
+
+        router = LLMRouter()
+        decision = RouteDecision(
+            provider="openai_compatible", model="gpt-4o", correlation_id="c", reason="policy", applied=True
+        )
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=decision)),
+            patch.object(router, "_call_model", AsyncMock()) as call,
+        ):
+            with pytest.raises(ModelGatewayRefused, match="cannot reach provider openai_compatible"):
+                asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        call.assert_not_called()
 
     def test_the_router_refusal_is_not_retried_and_a_call_without_a_tenant_does_not_ask(self):
         from core.llm.router import LLMResponse, LLMRouter, _is_transient_llm_failure

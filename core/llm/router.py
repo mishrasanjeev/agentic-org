@@ -45,6 +45,7 @@ import structlog
 from core.config import external_keys, is_relaxed_env, settings
 from core.governance.model_gateway import ModelGatewayRefused, RouteRequest
 from core.governance.model_gateway import decide as gateway_decide
+from core.governance.model_gateway import normalise_provider as gateway_provider
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
 
@@ -624,6 +625,19 @@ class LLMRouter:
                     )
                 )
                 if decision.applied:
+                    # This router dispatches by model family (gemini, claude, gpt)
+                    # and has no endpoint for the other catalogue providers; a
+                    # policy that names one is refused here rather than being
+                    # sent to the family's public API.
+                    family = gateway_provider(_model_provider(decision.model))
+                    if decision.provider and decision.provider != family:
+                        raise ModelGatewayRefused(
+                            f"Model gateway: the direct router cannot reach provider {decision.provider} "
+                            f"for model {decision.model}; route this use case through an agent run.",
+                            correlation_id=decision.correlation_id,
+                            policy_id=decision.policy_id,
+                            policy_name=decision.policy_name,
+                        )
                     model = decision.model
                     model_override = model
             temp = temperature if temperature is not None else self.temperature

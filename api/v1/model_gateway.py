@@ -288,10 +288,14 @@ async def delete_policy(
     audit_event="model_gateway.evaluate",
 )
 async def evaluate(body: EvaluateIn, tenant_id: str = Depends(get_current_tenant)) -> dict[str, object]:
-    """Dry-run the gateway for a described request: the decision it would make, or the refusal, as data."""
+    """Dry-run the policies for a described request, whether or not the gateway is on.
+
+    The answer is the decision the policies would make, or the refusal, as data,
+    with ``enabled`` saying whether the gateway currently applies it.
+    """
     request = gateway.RouteRequest(tenant_id=uuid.UUID(tenant_id), **body.model_dump())
-    try:
-        decision = await gateway.decide(request)
-    except gateway.ModelGatewayRefused as exc:
-        return {"refused": True, **exc.to_error()}
-    return {"refused": False, "decision": decision.to_dict()}
+    evaluation = await gateway.evaluate(request)
+    if evaluation.refusal is not None:
+        return {"refused": True, "enabled": evaluation.enabled, **evaluation.refusal.to_error()}
+    assert evaluation.decision is not None
+    return {"refused": False, "enabled": evaluation.enabled, "decision": evaluation.decision.to_dict()}
