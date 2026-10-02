@@ -1555,7 +1555,7 @@ Remove an entry in the pull request that fixes it.
   message, and a direct run returns HTTP 500 when it escapes. Callers cannot
   tell a spend cap from a model outage.
 - **Fix:** map `DailyBudgetExceeded` and `OperatorOverrideBlocked` to typed
-  results (`E2008` budget, `E1012` override) in the runner and to 429 / 423 in
+  results (`E2008` budget, `E1013` override) in the runner and to 429 / 423 in
   the API error handlers.
 
 ## A-112 — The workflow replanner calls the model provider directly
@@ -1568,15 +1568,3 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** route the replanner through `LLMRouter.complete` with the run's
   tenant, behind a flag, and delete the direct SDK call.
 
-
-## A-115 — Two refusals share error code E1012
-
-- **Found:** wiring the model gateway's error code (2026-10-02).
-- **What:** `core/schemas/errors.py` registers `E1012` as `OPERATOR_OVERRIDE`,
-  and `core/pii/pseudonymiser.py` has carried `E1012` for
-  `pseudonym_restore_failed` since the pseudonymisation change. A client reading
-  the code cannot tell a halted agent from a refused tool argument, and the
-  catalogue entry describes only one of them.
-- **Fix (this change):** the operator override moves to `E1013`; the
-  pseudonymisation refusal keeps `E1012`, which its documentation and tests
-  already name.
