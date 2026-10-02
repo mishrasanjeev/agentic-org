@@ -40,6 +40,7 @@
     "rpaSchedules": "RPA Schedules",
     "aiCredentials": "AI Credentials",
     "aiConfig": "AI Configuration",
+    "modelGateway": "Model Gateway",
     "packs": "Industry Packs",
     "sla": "SLA Monitor",
     "billing": "Billing",
