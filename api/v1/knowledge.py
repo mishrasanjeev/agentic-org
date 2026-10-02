@@ -1280,6 +1280,18 @@ async def _native_semantic_search(
         raise RuntimeError("knowledge filename fallback failed") from exc
 
 
+async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[SearchResult]:
+    """Retrieved chunks pass the guardrail retrieval stage: a blocked chunk is withheld, a transformed one replaced."""
+    from core.governance.guardrails.hooks import guard_retrieval_texts
+
+    texts = await guard_retrieval_texts(
+        [r.chunk_text for r in results], tenant_id=tenant_id, use_case="knowledge_search"
+    )
+    return [
+        r.model_copy(update={"chunk_text": text}) for r, text in zip(results, texts, strict=True) if text is not None
+    ]
+
+
 @router.post("/knowledge/search", response_model=SearchResponse)
 @route_meta(
     auth_required=True,
@@ -1306,13 +1318,13 @@ async def search_knowledge(
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
-            return SearchResponse(results=[SearchResult(**c) for c in chunks])
+            return SearchResponse(results=await _guard_results(tenant_id, [SearchResult(**c) for c in chunks]))
         except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
         results = await _native_semantic_search(tenant_id, req.query, req.top_k)
-        return SearchResponse(results=results)
+        return SearchResponse(results=await _guard_results(tenant_id, results))
     except HTTPException:
         raise
     except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:

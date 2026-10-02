@@ -18,13 +18,19 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 STAGES: tuple[str, ...] = ("input", "retrieval", "output", "action")
-DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern")
+DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern", "injection", "output_policy")
 # The options each detector takes; anything else is refused at the boundary.
 DETECTOR_OPTIONS: dict[str, tuple[str, ...]] = {
     "sensitive_data": ("entities",),
     "toxicity": (),
     "pattern": ("patterns", "kind", "ignore_case"),
+    "injection": ("patterns",),
+    "output_policy": ("max_length", "require_json", "required_keys", "forbidden_phrases", "no_urls"),
 }
+# Detectors whose findings describe the whole text rather than spans: they flag or block, never transform.
+STRUCTURAL_DETECTORS: tuple[str, ...] = ("toxicity", "output_policy")
+MAX_PHRASES = 64
+MAX_PHRASE_LENGTH = 200
 SENSITIVE_ENTITIES: tuple[str, ...] = ("CREDIT_CARD", "AADHAAR", "PAN", "GSTIN", "EMAIL", "UPI", "PHONE")
 MAX_PATTERN_LENGTH = 512
 MAX_PATTERNS = 32
@@ -222,6 +228,46 @@ def _clean_options(detector: str, raw: Any) -> dict[str, Any]:
             if unsupported:
                 raise ValueError(f"entities must be among {', '.join(SENSITIVE_ENTITIES)}")
             out["entities"] = sorted(set(names))
+    elif detector == "injection":
+        patterns = options.get("patterns")
+        if patterns is not None:
+            if not isinstance(patterns, list) or len(patterns) > MAX_PATTERNS:
+                raise ValueError(f"patterns must be a list of at most {MAX_PATTERNS} expressions")
+            cleaned_extra: list[str] = []
+            for item in patterns:
+                if not isinstance(item, str) or not item.strip():
+                    raise ValueError("a pattern must be a non-empty string")
+                cleaned_extra.append(safe_pattern(item.strip()))
+            out["patterns"] = cleaned_extra
+    elif detector == "output_policy":
+        max_length = options.get("max_length")
+        if max_length is not None:
+            if isinstance(max_length, bool) or not isinstance(max_length, int) or max_length < 1:
+                raise ValueError("max_length must be a positive integer")
+            out["max_length"] = max_length
+        for flag in ("require_json", "no_urls"):
+            if flag in options:
+                if not isinstance(options[flag], bool):
+                    raise ValueError(f"{flag} must be true or false")
+                out[flag] = options[flag]
+        for name in ("required_keys", "forbidden_phrases"):
+            items = options.get(name)
+            if items is None:
+                continue
+            if not isinstance(items, list) or not items or len(items) > MAX_PHRASES:
+                raise ValueError(f"{name} must be a non-empty list of at most {MAX_PHRASES} strings")
+            cleaned_items: list[str] = []
+            for item in items:
+                if not isinstance(item, str) or not item.strip() or len(item) > MAX_PHRASE_LENGTH:
+                    raise ValueError(
+                        f"each entry of {name} is a non-empty string of at most {MAX_PHRASE_LENGTH} characters"
+                    )
+                cleaned_items.append(item.strip())
+            out[name] = cleaned_items
+        if "required_keys" in out and not out.get("require_json", False):
+            out["require_json"] = True
+        if not out:
+            raise ValueError("an output_policy rule needs at least one check")
     elif detector == "pattern":
         patterns = options.get("patterns")
         if not isinstance(patterns, list) or not patterns:
@@ -262,6 +308,12 @@ def validate_rule_fields(fields: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"action must be one of {', '.join(ACTIONS)}")
     if action == "tokenise" and detector != "sensitive_data":
         raise ValueError("tokenise applies to sensitive data only")
+    if action in TRANSFORMS and detector in STRUCTURAL_DETECTORS:
+        raise ValueError(f"{detector} findings describe the whole text; the rule flags or blocks")
+    if action in TRANSFORMS and stage == "action":
+        raise ValueError("an action-stage rule flags or blocks; tool arguments are never rewritten")
+    if detector == "output_policy" and stage != "output":
+        raise ValueError("output_policy applies to the output stage")
     out["action"] = action
     threshold = fields.get("threshold", 0.5)
     if isinstance(threshold, bool) or not isinstance(threshold, int | float) or not 0 <= float(threshold) <= 1:

@@ -327,6 +327,16 @@ async def _execute_connector_tool(
             "message": override.reason,
             "override": override.override.to_dict() if override.override else None,
         }
+    # Guardrails: the call's arguments pass the action stage (flagged or
+    # blocked, never rewritten) before any provider side effect.
+    from core.governance.guardrails.hooks import guard_action
+    from core.governance.guardrails.schema import GuardrailBlocked
+
+    try:
+        await guard_action(connector_name, tool_name, params, tenant_id=tenant_id, agent_id=agent_id or None)
+    except GuardrailBlocked as exc:
+        logger.warning("connector_call_refused_guardrail", connector=connector_name, tool=tool_name, rule=exc.rule_name)
+        return {"error": "guardrail_blocked", "message": exc.reason, "guardrail": exc.to_error()["guardrail"]}
 
     if is_strict_runtime_env(settings.env) or tenant_id is not None or company_id is not None or domain is not None:
         decision = await evaluate_action(

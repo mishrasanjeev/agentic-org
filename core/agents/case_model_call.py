@@ -37,7 +37,7 @@ logger = structlog.get_logger()
 class CaseModelResult:
     #: The parsed JSON object the model answered with, or ``None`` when no call succeeded.
     output: Mapping[str, Any] | None
-    #: ``""`` on success, else ``pseudonymisation_unavailable`` or ``model_call_failed``.
+    #: ``""`` on success, else ``pseudonymisation_unavailable``, ``guardrail_blocked`` or ``model_call_failed``.
     failure: str
     pseudonymised: bool
     #: Restores pseudonyms in model text; the identity when pseudonymisation was off.
@@ -74,6 +74,20 @@ async def call_case_model(
         logger.warning("case_model_call_skipped", agent=agent, reason="pseudonymisation_unavailable", detail=exc.reason)
         return CaseModelResult(None, "pseudonymisation_unavailable", False, _identity)
 
+    # Guardrails: the rendered evidence passes the retrieval stage before the
+    # model sees it (an injected instruction inside a document is caught here).
+    from core.governance.guardrails.hooks import guard_text
+    from core.governance.guardrails.schema import GuardrailBlocked
+
+    try:
+        guarded = await guard_text(
+            "retrieval", context, tenant_id=tenant_id or None, agent_id=agent, use_case="governed_case"
+        )
+    except GuardrailBlocked as exc:
+        logger.warning("case_model_call_skipped", agent=agent, reason="guardrail_blocked", detail=exc.reason)
+        return CaseModelResult(None, "guardrail_blocked", False, _identity)
+    if guarded is not None:
+        context = guarded.text
     graph = build_agent_graph(
         system_prompt=system_prompt,
         authorized_tools=[],

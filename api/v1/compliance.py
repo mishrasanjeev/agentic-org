@@ -152,9 +152,7 @@ async def dsar_status(
         raise HTTPException(status_code=404, detail="DSAR request not found") from None
     async with get_tenant_session(tid) as session:
         result = await session.execute(
-            select(DSARRequestRecord).where(
-                DSARRequestRecord.id == rid, DSARRequestRecord.tenant_id == tid
-            )
+            select(DSARRequestRecord).where(DSARRequestRecord.id == rid, DSARRequestRecord.tenant_id == tid)
         )
         record = result.scalar_one_or_none()
         if record is None:
@@ -218,6 +216,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         incident_count = incident_result.scalar() or 0
 
     from core.governance import infrastructure, residency
+    from core.governance.guardrails.engine import report_section as guardrails_section
 
     data_residency = await residency.report_section(tid)
 
@@ -228,6 +227,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         "sections": {
             "data_residency": data_residency,
             "infrastructure_controls": infrastructure.report_section(),
+            "guardrails": await guardrails_section(tid),
             "access_controls": {
                 "control_id": "CC6.1-access",
                 "event_count": access_count,

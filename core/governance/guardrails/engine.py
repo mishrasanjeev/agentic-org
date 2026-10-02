@@ -64,10 +64,12 @@ __all__ = [
     "GuardrailBlocked",
     "GuardrailResult",
     "active_rules",
+    "blocked_run_result",
     "delete_rule",
     "enforcing",
     "evaluate",
     "invalidate",
+    "report_section",
     "set_rule",
     "update_rule",
 ]
@@ -369,6 +371,79 @@ async def evaluate(
             rule_name=blocker.name,
         )
     return result
+
+
+def blocked_run_result(exc: GuardrailBlocked) -> dict[str, Any]:
+    """Runner result for a run a guardrail blocked (the shape of a failed run)."""
+    return {
+        "status": "guardrail_blocked",
+        "output": {},
+        "confidence": 0.0,
+        "reasoning_trace": [exc.reason],
+        "tool_calls_log": [],
+        "tool_calls": [],
+        "hitl_trigger": "",
+        "error": exc.reason,
+        "error_code": ERROR_CODE,
+        "guardrail": exc.to_error()["guardrail"],
+        "performance": {"total_latency_ms": 0, "llm_tokens_used": 0, "llm_cost_usd": 0.0},
+    }
+
+
+async def report_section(tenant_id: uuid.UUID, *, days: int = 30) -> dict[str, Any]:
+    """The guardrail section of the compliance evidence package: mode, rules in effect, outcomes over the window."""
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from core.database import get_tenant_session
+    from core.models.audit import AuditLog
+
+    section: dict[str, Any] = {
+        "control_id": "AI-GR-1",
+        "hooks_enabled": bool(settings.guardrails_hooks_enabled),
+        "status": "collected",
+    }
+    try:
+        section["enforcing"] = await enforcing(tenant_id)
+    # enterprise-gate: broad-except-ok reason=unreadable-flag-degrades-to-unknown-in-the-evidence-package-logged
+    except Exception as exc:
+        logger.warning("guardrail_evidence_flag_unreadable", error_type=type(exc).__name__)
+        section["enforcing"] = None
+        section["enforcing_error"] = type(exc).__name__
+    try:
+        # The evidence describes the stored rules, so this read bypasses the shared cache.
+        rules = await _load_rules(tenant_id)
+        section["rules"] = len(rules)
+        section["rules_by_stage"] = {
+            stage: sum(1 for r in rules if r.stage == stage) for stage in sorted({r.stage for r in rules})
+        }
+    # enterprise-gate: broad-except-ok reason=unreadable-rules-degrade-to-unknown-in-the-evidence-package-logged
+    except Exception as exc:
+        logger.warning("guardrail_evidence_rules_unreadable", error_type=type(exc).__name__)
+        section["rules"] = None
+        section["rules_error"] = type(exc).__name__
+    since = datetime.now(UTC) - timedelta(days=days)
+    try:
+        async with get_tenant_session(tenant_id) as session:
+            rows = (
+                await session.execute(
+                    select(AuditLog.outcome, func.count())
+                    .where(
+                        AuditLog.tenant_id == tenant_id,
+                        AuditLog.event_type == "guardrail.outcome",
+                        AuditLog.created_at >= since,
+                    )
+                    .group_by(AuditLog.outcome)
+                )
+            ).all()
+        section["outcomes"] = {"window_days": days, **{str(row[0]): int(row[1]) for row in rows}}
+    # enterprise-gate: broad-except-ok reason=unreadable-audit-rows-degrade-to-unknown-in-the-evidence-package-logged
+    except Exception as exc:
+        logger.warning("guardrail_evidence_outcomes_unreadable", error_type=type(exc).__name__)
+        section["outcomes"] = None
+        section["outcomes_error"] = type(exc).__name__
+    return section
 
 
 def _unverifiable(rule: Rule, scope: _Scope, enforced: bool, dry_run: bool, why: str) -> None:

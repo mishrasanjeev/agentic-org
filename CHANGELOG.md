@@ -4,6 +4,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Runtime guardrails: call-site hooks, injection and output-policy detectors
+- Behind `AGENTICORG_GUARDRAILS_HOOKS_ENABLED` (off by default; on, every
+  stage is evaluated in flag-only mode until `guardrails.enforce` is on for
+  the tenant): the reasoning node passes the newest message of each turn
+  through the `input` stage and the model's answer through the `output`
+  stage; knowledge search results and a governed case's rendered evidence
+  pass the `retrieval` stage (a blocked chunk is withheld, a blocked case
+  context skips the model call); a tool call's connector, tool and arguments
+  pass the `action` stage at the dispatch boundary (flag or block only). A
+  block ends an agent run with status `guardrail_blocked` and `E1016`, or
+  returns `{"error": "guardrail_blocked"}` from the tool.
+- Detectors `injection` (instruction overrides, system-prompt disclosure,
+  persona switches, jailbreak markers, fake system blocks, standing orders,
+  false authority and invisible characters, each with its own confidence,
+  plus an administrator's own patterns) and `output_policy` (`max_length`,
+  `require_json`, `required_keys`, `forbidden_phrases`, `no_urls`; output
+  stage, flag or block). Transform actions are refused for structural
+  detectors and for action-stage rules.
+- The compliance evidence package gains a `guardrails` section: hooks and
+  enforcement state, rules by stage, blocked and transformed outcomes over
+  thirty days.
+
 ### Added - Runtime guardrails: engine, rules and the first detectors
 - `core/governance/guardrails`: a tenant's rules say which detector runs at
   which stage of a call (`input`, `retrieval`, `output`, `action`) and what

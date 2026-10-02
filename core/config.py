@@ -164,6 +164,10 @@ class Settings(BaseSettings):
     # Off by default; the authority flag ``guardrails.enforce`` turns it on per
     # tenant, this switch for the whole deployment.
     guardrails_enforce: bool = False
+    # The call-site hooks (every model call's input and output, retrieved
+    # documents, tool arguments). Off by default: on, every stage is evaluated
+    # in flag-only mode until guardrails.enforce is on for the tenant.
+    guardrails_hooks_enabled: bool = False
     # A detector runs off the event loop under this budget; past it the rule
     # cannot say what it found (an enforced rule then fails closed in a strict
     # runtime). Pattern rules scan at most this many characters.
