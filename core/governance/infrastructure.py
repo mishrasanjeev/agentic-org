@@ -99,19 +99,32 @@ def _read_attestations(path: str) -> dict[str, dict[str, Any]]:
     return out
 
 
+# The report names the source by a stable label and a failure by a code: the
+# configured path and the raw exception text (which repeats the path) stay in
+# the operator log, not in a package a tenant administrator can fetch.
+SOURCE_LABEL = "attestations_file"
+REASON_UNREADABLE = "unreadable"
+REASON_INVALID = "invalid"
+
+
+def _failure_reason(exc: Exception) -> str:
+    return REASON_INVALID if isinstance(exc, ValueError) else REASON_UNREADABLE
+
+
 def report_section() -> dict[str, Any]:
     """The ``infrastructure_controls`` section of the compliance report; never raises."""
     path = settings.infrastructure_attestations_file
-    section: dict[str, Any] = {"control_id": "INFRA-1", "status": "collected", "source": path or None}
+    section: dict[str, Any] = {"control_id": "INFRA-1", "status": "collected", "source": SOURCE_LABEL if path else None}
     recorded: dict[str, dict[str, Any]] = {}
     if path:
         try:
             recorded = _read_attestations(path)
         # enterprise-gate: broad-except-ok reason=unreadable-file-degrades-to-section-unavailable
         except Exception as exc:
-            logger.warning("infrastructure_attestations_unreadable", error_type=type(exc).__name__)
+            logger.warning("infrastructure_attestations_unreadable", error_type=type(exc).__name__, error=str(exc))
             section["status"] = "unavailable"
-            section["reason"] = f"{type(exc).__name__}: {exc}"
+            section["reason"] = _failure_reason(exc)
+            section["error_type"] = type(exc).__name__
     controls = []
     for control_id, title in CONTROLS:
         entry = recorded.get(control_id, {})

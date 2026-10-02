@@ -42,7 +42,8 @@ def test_recorded_attestations_are_merged_in_order(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(infra.settings, "infrastructure_attestations_file", str(path))
     section = infra.report_section()
-    assert section["status"] == "collected" and section["source"] == str(path)
+    assert section["status"] == "collected" and section["source"] == "attestations_file"
+    assert str(tmp_path) not in json.dumps(section)
     by_id = {c["id"]: c for c in section["controls"]}
     assert by_id["INF-01"]["status"] == "verified" and by_id["INF-01"]["verified_by"] == "platform-ops"
     assert by_id["DATA-02"]["status"] == "not_applicable"
@@ -55,12 +56,14 @@ def test_recorded_attestations_are_merged_in_order(monkeypatch, tmp_path):
 def test_an_unreadable_or_invalid_file_reports_unavailable(monkeypatch, tmp_path):
     monkeypatch.setattr(infra.settings, "infrastructure_attestations_file", str(tmp_path / "missing.json"))
     section = infra.report_section()
-    assert section["status"] == "unavailable" and "FileNotFoundError" in section["reason"]
+    assert section["status"] == "unavailable" and section["reason"] == "unreadable"
+    assert section["error_type"] == "FileNotFoundError" and str(tmp_path) not in json.dumps(section)
     bad = tmp_path / "bad.json"
     bad.write_text(json.dumps({"attestations": [{"id": "INF-01", "status": "maybe"}]}), encoding="utf-8")
     monkeypatch.setattr(infra.settings, "infrastructure_attestations_file", str(bad))
     section = infra.report_section()
-    assert section["status"] == "unavailable" and "status must be one of" in section["reason"]
+    assert section["status"] == "unavailable" and section["reason"] == "invalid"
+    assert section["error_type"] == "ValueError" and str(tmp_path) not in json.dumps(section)
     assert {c["status"] for c in section["controls"]} == {"not_verified"}
 
 

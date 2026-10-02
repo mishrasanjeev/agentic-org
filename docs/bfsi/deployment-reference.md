@@ -61,7 +61,9 @@ operator keeps the record in a JSON file named by `AGENTICORG_INFRASTRUCTURE_ATT
 ```
 
 The report states what was recorded; it does not verify the hosting platform itself. An
-unreadable file makes the section `unavailable` with the reason, never a silent pass.
+unreadable or invalid file makes the section `unavailable` with a reason code (`unreadable`
+or `invalid`) and the error type, never a silent pass; the configured path and the error
+text stay in the operator log, not in the package (`source` is the label `attestations_file`).
 
 ## Platform settings that consume these controls
 
