@@ -18,8 +18,6 @@ import tempfile
 from pathlib import Path
 from types import ModuleType
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -42,9 +40,11 @@ def test_the_multiprocess_probe_still_proves_aggregation() -> None:
     env = os.environ.copy()
     env["METRICS_PORT"] = str(_free_port())
     env.pop("PORT", None)
-    with tempfile.TemporaryDirectory(prefix="agenticorg-prometheus-test-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="agenticorg-prometheus-test-", dir=tempfile.gettempdir()
+    ) as directory:
         env["PROMETHEUS_MULTIPROC_DIR"] = directory
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603 - fixed repository-owned probe script
             [sys.executable, str(ROOT / "scripts" / "probe_metrics_multiprocess.py")],
             cwd=ROOT,
             env=env,
