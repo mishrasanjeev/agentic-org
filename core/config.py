@@ -171,6 +171,9 @@ class Settings(BaseSettings):
     tenancy_profile: Literal["shared", "dedicated"] = "shared"
     dr_standby_region: str | None = None
     dr_last_drill_at: str | None = None
+    # Operator-recorded verifications of the infrastructure controls the
+    # compliance report lists (core/governance/infrastructure.py).
+    infrastructure_attestations_file: str | None = None
     # A paused agent is refused by the run endpoint, chat and workflow agent
     # steps, not only left out of routing (FINDINGS A-110). Off by default
     # until the next minor.

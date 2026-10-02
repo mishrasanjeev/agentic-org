@@ -23,6 +23,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Off by default: the authority flag `model_gateway.enabled` (operator
   managed) or `AGENTICORG_MODEL_GATEWAY_ENABLED` turns it on. Docs:
   `docs/governance/model-gateway.md`.
+### Added - Infrastructure attestations in the compliance report
+- `GET /compliance/evidence-package` gains `infrastructure_controls`: every hosting
+  control of the BFSI deployment reference with the status an operator recorded in
+  the JSON file named by `AGENTICORG_INFRASTRUCTURE_ATTESTATIONS_FILE` (`verified`,
+  `not_applicable`, or `not_verified` when nothing is recorded), with a summary and
+  the ids the file names that the reference does not. An unreadable file reports the
+  section `unavailable`.
+
+### Changed - The compliance report no longer claims internal mTLS by default
+- `encryption_in_transit.mtls_internal` is false unless `AGENTICORG_MTLS=true` is set
+  by a deployment with a mesh (FINDINGS A-114).
 ### Changed - A paused agent can be refused, not only left out of routing
 - `AGENTICORG_PAUSED_AGENTS_REFUSED` (default off): `POST /agents/{id}/run` and a
   chat that names the agent refuse a `paused` agent with 409, and a workflow
