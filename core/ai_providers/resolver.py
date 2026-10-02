@@ -288,6 +288,12 @@ async def get_provider_credential(
         except (TypeError, ValueError):
             tid_obj = None
 
+    # Residency: a provider outside the data region is refused before any
+    # credential is read, with or without a tenant context.
+    from core.governance.residency import assert_provider_allowed
+
+    await assert_provider_allowed(tid_obj, provider, kind=kind)
+
     # Platform-only contexts go straight to env.
     if tid_obj is None:
         env_secret = _env_fallback(provider, kind)

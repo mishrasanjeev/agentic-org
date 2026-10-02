@@ -359,11 +359,20 @@ async def _execute_connector_tool(
     if not connector_cls:
         return {"error": f"Connector '{connector_name}' not found in registry"}
 
+    # Residency: a connector that hands the call to an external provider (the
+    # third-party tool hub) declares that provider, and the tenant's attestation
+    # for it is checked here, where the authenticated tenant is known.
+    residency_provider = getattr(connector_cls, "residency_provider", None)
+    if residency_provider:
+        from core.governance.residency import check_provider
+
+        residency = await check_provider(tenant_id, residency_provider, kind="tool")
+        if residency.blocked:
+            logger.warning("connector_call_refused_residency", connector=connector_name, reason=residency.reason)
+            return residency.to_error()
+
     config_fingerprint = json.dumps(config or {}, sort_keys=True)
-    cache_key = (
-        f"{tenant_id or '_global'}:{company_id or '_global'}:"
-        f"{connector_name}:{config_fingerprint}"
-    )
+    cache_key = f"{tenant_id or '_global'}:{company_id or '_global'}:{connector_name}:{config_fingerprint}"
     if cache_key not in _connector_cache:
         instance = await _build_connector(connector_cls, config, connector_name)
         if instance is None:
@@ -1203,9 +1212,7 @@ def _build_tool_index(
     # moving to the replacement is explicit (link it, or name its tools
     # connector-qualified).
     live_names = ConnectorRegistry.all_names()
-    deprecated_names = [
-        name for name in ConnectorRegistry.all_names(include_deprecated=True) if name not in live_names
-    ]
+    deprecated_names = [name for name in ConnectorRegistry.all_names(include_deprecated=True) if name not in live_names]
     for connector_name in [*deprecated_names, *live_names]:
         # Skip the composio meta-connector; its tools are handled below
         if connector_name == "composio":

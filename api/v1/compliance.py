@@ -217,11 +217,16 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         )
         incident_count = incident_result.scalar() or 0
 
+    from core.governance import residency
+
+    data_residency = await residency.report_section(tid)
+
     return {
         "package_id": package_id,
         "tenant_id": tenant_id,
         "generated_at": now.isoformat(),
         "sections": {
+            "data_residency": data_residency,
             "access_controls": {
                 "control_id": "CC6.1-access",
                 "event_count": access_count,

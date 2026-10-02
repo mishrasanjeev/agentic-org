@@ -57,6 +57,7 @@ class ErrorCode(StrEnum):
     INSUFFICIENT_SCOPE = "E4003"
     TENANT_MISMATCH = "E4004"
     MFA_REQUIRED = "E4005"
+    RESIDENCY_REFUSED = "E4006"
     # LLM errors (E5xxx)
     LLM_API_ERROR = "E5001"
     LLM_CONTEXT_OVERFLOW = "E5002"
@@ -286,6 +287,12 @@ ERROR_META: dict[str, dict] = {
     "E4005": {
         "name": "MFA_REQUIRED",
         "severity": "info",
+        "retryable": False,
+        "escalate_after_retries": False,
+    },
+    "E4006": {
+        "name": "RESIDENCY_REFUSED",
+        "severity": "warn",
         "retryable": False,
         "escalate_after_retries": False,
     },
