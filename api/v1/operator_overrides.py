@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
@@ -73,9 +73,23 @@ class OverrideOut(BaseModel):
     active: bool
 
 
-def _actor(caller: Caller | None) -> str:
+def _actor(request: Request, caller: Caller | None) -> str:
+    """The authenticated principal an override change is attributed to.
+
+    A human administrator is recorded by user id; a machine caller (API key or
+    agent grant) by its authenticated subject, prefixed with its auth mode. A
+    request with neither is refused: a control-plane action with no attributable
+    actor is not performed.
+    """
     user_id = getattr(caller, "user_id", None)
-    return str(user_id) if user_id else "admin"
+    if user_id:
+        return f"user:{user_id}"
+    claims = getattr(request.state, "claims", None) or {}
+    subject = str(claims.get("sub") or "").strip()
+    auth_mode = str(getattr(request.state, "auth_mode", None) or "").strip()
+    if subject and auth_mode:
+        return f"{auth_mode}:{subject}"
+    raise HTTPException(403, "An operator override needs an attributable caller")
 
 
 def _out(row: OperatorOverride) -> OverrideOut:
@@ -147,10 +161,12 @@ async def override_status(tenant_id: str = Depends(get_current_tenant)) -> dict[
 )
 async def set_override(
     body: OverrideIn,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ) -> OverrideOut:
     tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
     try:
         placed = await overrides.set_override(
             tid,
@@ -159,7 +175,7 @@ async def set_override(
             mode=body.mode,
             limit_per_minute=body.limit_per_minute,
             reason=body.reason,
-            actor_id=_actor(caller),
+            actor_id=actor_id,
             expires_at=body.expires_at,
         )
     except ValueError as exc:
@@ -182,11 +198,12 @@ async def set_override(
 )
 async def release_override(
     override_id: uuid.UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ) -> OverrideOut:
     tid = uuid.UUID(tenant_id)
-    released = await overrides.release_override(tid, override_id, actor_id=_actor(caller))
+    released = await overrides.release_override(tid, override_id, actor_id=_actor(request, caller))
     if released is None:
         raise HTTPException(404, "No active override with that id")
     async with get_tenant_session(tid) as session:

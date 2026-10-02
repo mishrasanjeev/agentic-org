@@ -260,7 +260,7 @@ async def run_agent(
     from core.governance.operator_override import blocked_run_result
     from core.governance.operator_override import check as check_operator_override
 
-    override = await check_operator_override(tenant_id, agent_id=agent_id)
+    override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
     if override.blocked:
         logger.warning("agent_run_refused_operator_override", agent_id=agent_id, reason=override.reason)
         return blocked_run_result(override)
@@ -750,7 +750,7 @@ async def resume_agent(
     from core.governance.operator_override import blocked_run_result
     from core.governance.operator_override import check as check_operator_override
 
-    override = await check_operator_override(tenant_id, agent_id=agent_id)
+    override = await check_operator_override(tenant_id, agent_id=agent_id, throttle_unit="agent")
     if override.blocked:
         logger.warning("agent_resume_refused_operator_override", agent_id=agent_id, reason=override.reason)
         return blocked_run_result(override)

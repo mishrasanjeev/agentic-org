@@ -652,7 +652,9 @@ class LLMRouter:
         # before any provider call, and never falls back to another model.
         from core.governance.operator_override import check as check_operator_override
 
-        override = await check_operator_override(tenant_id, provider=_model_provider(model), model=model)
+        override = await check_operator_override(
+            tenant_id, provider=_model_provider(model), model=model, throttle_unit="model"
+        )
         if override.blocked:
             logger.warning("llm_call_refused_operator_override", model=model, reason=override.reason)
             raise OperatorOverrideBlocked(override)

@@ -476,9 +476,10 @@ def build_agent_graph(
         # mid-run stops the next call of a cached model too.
         override = await check_operator_override(
             tenant_id,
-            agent_id=agent_id,
+            agent_id=agent_id or str(state.get("agent_id") or ""),
             provider=_llm_provider_name(llm, llm_provider),
             model=_llm_model_name(llm, llm_model),
+            throttle_unit="model",
         )
         if override.blocked:
             trace.append(override.reason)

@@ -343,7 +343,7 @@ async def generate_workflow(
                 # Production path — use the existing LLM router
                 from core.llm.router import llm_router
 
-                llm_response = await llm_router.complete(messages)
+                llm_response = await llm_router.complete(messages, tenant_id=tenant_id)
                 raw_response = llm_response.content
 
             logger.info(

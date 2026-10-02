@@ -4766,7 +4766,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 957,
+    "source_line": 947,
     "tenant_required": true
   },
   {
@@ -4784,7 +4784,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1056,
+    "source_line": 1046,
     "tenant_required": true
   },
   {
@@ -4802,7 +4802,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1342,
+    "source_line": 1332,
     "tenant_required": false
   },
   {
@@ -4820,7 +4820,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1284,
+    "source_line": 1274,
     "tenant_required": true
   },
   {
@@ -4838,7 +4838,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1455,
+    "source_line": 1445,
     "tenant_required": true
   },
   {
@@ -4856,7 +4856,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 545,
+    "source_line": 535,
     "tenant_required": true
   },
   {
@@ -4874,7 +4874,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 571,
+    "source_line": 561,
     "tenant_required": true
   },
   {
@@ -5054,7 +5054,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "feature_flags.operator_override.read",
-    "source_line": 109,
+    "source_line": 123,
     "tenant_required": true
   },
   {
@@ -5072,7 +5072,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "feature_flags.operator_override.write",
-    "source_line": 148,
+    "source_line": 162,
     "tenant_required": true
   },
   {
@@ -5090,7 +5090,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "feature_flags.operator_override.read",
-    "source_line": 131,
+    "source_line": 145,
     "tenant_required": true
   },
   {
@@ -5108,7 +5108,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "feature_flags.operator_override.write",
-    "source_line": 183,
+    "source_line": 199,
     "tenant_required": true
   },
   {
@@ -5937,78 +5937,6 @@
     "rate_limit": "manual-report-trigger",
     "scope": "report_schedules.external_action.run",
     "source_line": 764,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "residency.attestations.list",
-    "auth_required": true,
-    "function": "list_attestations",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/residency/attestations api/v1/residency.py:list_attestations",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/residency.py",
-    "path": "/api/v1/residency/attestations",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "governance.residency.sensitive.read",
-    "source_line": 129,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "residency.attestations.set",
-    "auth_required": true,
-    "function": "set_attestation",
-    "idempotency": "non-idempotent-create",
-    "key": "POST /api/v1/residency/attestations api/v1/residency.py:set_attestation",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/residency.py",
-    "path": "/api/v1/residency/attestations",
-    "public_exempt_reason": null,
-    "rate_limit": "security-admin-write",
-    "scope": "governance.residency.sensitive.write",
-    "source_line": 151,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "residency.attestations.revoke",
-    "auth_required": true,
-    "function": "revoke_attestation",
-    "idempotency": "idempotent-lifecycle-state",
-    "key": "POST /api/v1/residency/attestations/{attestation_id}/revoke api/v1/residency.py:revoke_attestation",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/residency.py",
-    "path": "/api/v1/residency/attestations/{attestation_id}/revoke",
-    "public_exempt_reason": null,
-    "rate_limit": "security-admin-write",
-    "scope": "governance.residency.sensitive.write",
-    "source_line": 188,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "residency.status",
-    "auth_required": true,
-    "function": "residency_status",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/residency/status api/v1/residency.py:residency_status",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/residency.py",
-    "path": "/api/v1/residency/status",
-    "public_exempt_reason": null,
-    "rate_limit": "standard",
-    "scope": "governance.residency.sensitive.read",
-    "source_line": 114,
     "tenant_required": true
   },
   {

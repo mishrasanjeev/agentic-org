@@ -37,6 +37,14 @@ def _override(kind: str, target: str = "", mode: str = "halt", limit: int | None
     )
 
 
+def _rows(enabled: bool):
+    """A flag store answer: the global row enables the control, or no rows at all."""
+    from core.feature_flags import FlagRows
+
+    row = {"enabled": True, "rollout_percentage": 100} if enabled else None
+    return FlagRows(global_row=row, tenant_row=None)
+
+
 @pytest.fixture
 def control_on(monkeypatch):
     monkeypatch.setattr(oo.settings, "operator_override_enabled", True)
@@ -55,18 +63,18 @@ class TestDecision:
     def test_off_by_default_reads_nothing(self, monkeypatch):
         monkeypatch.setattr(oo.settings, "operator_override_enabled", False)
         loader = AsyncMock(return_value=[_override("all_agents")])
-        with (
-            patch.object(oo, "active_overrides", loader),
-            patch.object(oo, "is_enabled", AsyncMock(return_value=False), create=True),
-        ):
-            with patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)):
+        with patch.object(oo, "active_overrides", loader):
+            with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))):
                 decision = asyncio.run(check(TENANT, agent_id=AGENT))
         assert decision.blocked is False
         loader.assert_not_called()
 
     def test_authority_flag_turns_the_control_on(self, monkeypatch):
         monkeypatch.setattr(oo.settings, "operator_override_enabled", False)
-        with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)), _with([_override("all_agents")]):
+        with (
+            patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(True))),
+            _with([_override("all_agents")]),
+        ):
             decision = asyncio.run(check(TENANT, agent_id=AGENT))
         assert decision.blocked is True
 
@@ -112,7 +120,7 @@ class TestDecision:
         throttle = _override("all_agents", mode="throttle", limit=1000)
         halt = _override("agent", AGENT)
         with _with([throttle, halt]), patch.object(oo, "_throttled", AsyncMock(return_value=False)):
-            decision = asyncio.run(check(TENANT, agent_id=AGENT))
+            decision = asyncio.run(check(TENANT, agent_id=AGENT, throttle_unit="agent"))
         assert decision.blocked and decision.override is halt
 
     def test_throttle_blocks_above_the_window_limit(self, control_on):
@@ -122,9 +130,9 @@ class TestDecision:
             _with([throttle]),
             patch("core.auth_state.check_window_rate", AsyncMock(side_effect=lambda *a, **k: next(calls))),
         ):
-            first = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
-            second = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
-            third = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
+            first = asyncio.run(check(TENANT, connector="mock", tool="ownership", throttle_unit="tool"))
+            second = asyncio.run(check(TENANT, connector="mock", tool="ownership", throttle_unit="tool"))
+            third = asyncio.run(check(TENANT, connector="mock", tool="ownership", throttle_unit="tool"))
         assert not first.blocked and not second.blocked and third.blocked
         assert "throttled to 2 calls per minute" in third.reason
 
@@ -134,11 +142,14 @@ class TestDecision:
             _with([throttle]),
             patch("core.auth_state.check_window_rate", AsyncMock(side_effect=RuntimeError("redis down"))),
         ):
-            assert asyncio.run(check(TENANT, connector="mock", tool="ownership")).blocked is True
+            assert asyncio.run(check(TENANT, connector="mock", tool="ownership", throttle_unit="tool")).blocked is True
 
     def test_zero_limit_throttle_blocks_everything(self, control_on):
         with _with([_override("provider", "gemini", mode="throttle", limit=0)]):
-            assert asyncio.run(check(TENANT, provider="gemini", model="gemini-2.5-flash")).blocked is True
+            assert (
+                asyncio.run(check(TENANT, provider="gemini", model="gemini-2.5-flash", throttle_unit="model")).blocked
+                is True
+            )
 
     def test_read_failure_fails_closed_in_strict_runtime(self, control_on, monkeypatch):
         monkeypatch.setattr(oo.settings, "env", "production")
@@ -181,6 +192,32 @@ class TestDecision:
         assert normalise_provider("GPT") == "openai"
         assert normalise_provider("azure_openai") == "openai"
         assert normalise_provider("gemini") == "gemini"
+
+    def test_a_throttle_counts_only_at_its_dispatch_unit(self, control_on):
+        agent_throttle = _override("all_agents", mode="throttle", limit=0)
+        tool_throttle = _override("tool_pipeline", mode="throttle", limit=0)
+        with _with([agent_throttle, tool_throttle]):
+            # The HTTP pre-check passes no unit: halts only.
+            assert asyncio.run(check(TENANT, agent_id=AGENT)).blocked is False
+            # The agent run is the agent throttle's unit; the model boundary is not.
+            assert asyncio.run(check(TENANT, agent_id=AGENT, throttle_unit="agent")).blocked is True
+            assert asyncio.run(check(TENANT, agent_id=AGENT, throttle_unit="model")).blocked is False
+            tool = asyncio.run(check(TENANT, agent_id=AGENT, connector="mock", tool="t", throttle_unit="tool"))
+            assert tool.blocked is True and tool.override is tool_throttle
+
+    def test_authority_flag_lookup_failure_fails_closed_in_strict_runtime(self, monkeypatch):
+        from core.feature_flags import FeatureFlagLookupError
+
+        monkeypatch.setattr(oo.settings, "operator_override_enabled", False)
+        loader = AsyncMock(return_value=[_override("all_agents")])
+        with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(side_effect=FeatureFlagLookupError("down"))):
+            with patch.object(oo, "active_overrides", loader):
+                monkeypatch.setattr(oo.settings, "env", "test")
+                assert asyncio.run(check(TENANT, agent_id=AGENT)).blocked is False
+                monkeypatch.setattr(oo.settings, "env", "production")
+                decision = asyncio.run(check(TENANT, agent_id=AGENT))
+        assert decision.blocked is True and "could not be read" in decision.reason
+        loader.assert_not_called()
 
 
 class TestCache:
@@ -246,7 +283,7 @@ class TestModelRouter:
                         )
                     )
         chk.assert_awaited_once()
-        assert chk.await_args.kwargs == {"provider": "gemini", "model": "gemini-2.5-flash"}
+        assert chk.await_args.kwargs == {"provider": "gemini", "model": "gemini-2.5-flash", "throttle_unit": "model"}
         provider.assert_not_called()
         # A block never triggers the fallback model.
         assert _is_transient_llm_failure(OperatorOverrideBlocked(_blocked())) is False
@@ -324,7 +361,12 @@ class TestToolDispatch:
                         )
                     )
         assert result["error"] == "operator_override" and result["message"] == "tool halted"
-        assert chk.await_args.kwargs == {"agent_id": AGENT, "connector": "mock", "tool": "ownership"}
+        assert chk.await_args.kwargs == {
+            "agent_id": AGENT,
+            "connector": "mock",
+            "tool": "ownership",
+            "throttle_unit": "tool",
+        }
         audit.assert_awaited_once()
         registry.assert_not_called()
 
@@ -365,7 +407,7 @@ class TestWorkflowEngine:
             "error": "workflow halted",
             "step_results": {"a": {}},
         }
-        assert chk.await_args.kwargs == {"workflow_id": "wf-1"}
+        assert chk.await_args.kwargs == {"workflow_id": "wf-1", "throttle_unit": "workflow"}
         with patch("core.governance.operator_override.check", AsyncMock(return_value=oo.ALLOWED)):
             assert asyncio.run(engine._operator_halt(state, "b")) is None
 
