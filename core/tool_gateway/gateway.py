@@ -126,6 +126,28 @@ class ToolGateway:
                     )
                 return refusal(exc)
 
+        # Operator override: a halted or throttled agent, connector, tool or
+        # the whole pipeline is refused before any other check.
+        from core.governance.operator_override import check as check_operator_override
+
+        override = await check_operator_override(
+            tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name, throttle_unit="tool"
+        )
+        if override.blocked:
+            if self.audit:
+                await self.audit.log(
+                    tenant_id=tenant_id,
+                    agent_id=agent_id,
+                    tool_name=tool_name,
+                    action="operator_override",
+                    outcome="blocked",
+                    details={
+                        "reason": override.reason,
+                        "override": override.override.to_dict() if override.override else None,
+                    },
+                )
+            return override.to_error()
+
         # In strict runtimes every tool dispatch must carry exact company and
         # domain context. Relaxed runtimes preserve legacy callers unless they
         # opt into governance context, which keeps local/unit fixtures usable

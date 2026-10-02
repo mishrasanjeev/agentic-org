@@ -30,6 +30,8 @@ from langgraph.types import interrupt
 from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant, refresh_run_grant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
+from core.governance.operator_override import OperatorOverrideBlocked
+from core.governance.operator_override import check as check_operator_override
 from core.langgraph.grantex_auth import get_grantex_client
 from core.langgraph.llm_factory import (
     create_chat_model,
@@ -327,6 +329,33 @@ async def _enforce_tool_grants(
     return {}
 
 
+_LLM_CLASS_PROVIDERS = {
+    "ChatGoogleGenerativeAI": "gemini",
+    "ChatVertexAI": "gemini",
+    "ChatAnthropic": "anthropic",
+    "ChatOpenAI": "openai",
+    "AzureChatOpenAI": "openai",
+    "ChatOllama": "ollama",
+}
+
+
+def _llm_provider_name(llm: Any, declared: str | None) -> str:
+    """Provider of a built chat model: the declared catalogue id, else its class."""
+    if declared:
+        return str(declared)
+    return _LLM_CLASS_PROVIDERS.get(type(llm).__name__, "")
+
+
+def _llm_model_name(llm: Any, declared: str) -> str:
+    if declared:
+        return declared
+    for attr in ("model", "model_name"):
+        value = getattr(llm, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 def build_agent_graph(
     system_prompt: str,
     authorized_tools: list[str],
@@ -341,6 +370,7 @@ def build_agent_graph(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     llm_provider: str | None = None,
+    agent_id: str = "",
     context_guard: Callable[[Sequence[Any]], None] | None = None,
     pseudonymiser: PseudonymSession | None = None,
     *,
@@ -392,6 +422,7 @@ def build_agent_graph(
         capability_authorization=capability_authorization,
         pii_token_map=pii_token_map,
         pseudonymiser=pseudonymiser,
+        agent_id=agent_id,
     )
 
     # Bug sheet #14 (2026-09-14): ``ToolNode`` dispatches by exact name. A
@@ -440,7 +471,20 @@ def build_agent_graph(
             # messages (runner, tool results, a resumed checkpoint), no raw
             # value leaves in the request.
             messages = await pseudonymiser.pseudonymise_messages(messages)
-        response = await _get_llm().ainvoke(messages)
+        llm = _get_llm()
+        # Operator override: checked on every model call, so a halt placed
+        # mid-run stops the next call of a cached model too.
+        override = await check_operator_override(
+            tenant_id,
+            agent_id=agent_id or str(state.get("agent_id") or ""),
+            provider=_llm_provider_name(llm, llm_provider),
+            model=_llm_model_name(llm, llm_model),
+            throttle_unit="model",
+        )
+        if override.blocked:
+            trace.append(override.reason)
+            raise OperatorOverrideBlocked(override)
+        response = await llm.ainvoke(messages)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")

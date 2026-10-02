@@ -80,6 +80,11 @@ grant_enforcement_denials_total = Counter(
     "Agent tool calls denied, or that would be denied in warn mode, by grant enforcement",
     ["mode", "reason"],
 )
+operator_override_blocks_total = Counter(
+    "agenticorg_operator_override_blocks_total",
+    "Model, agent, workflow and tool calls refused by an operator override",
+    ["target_kind", "mode"],
+)
 grant_enforcement_mode_fallbacks_total = Counter(
     "agenticorg_grant_enforcement_mode_fallbacks_total",
     "Runs whose grants.enforce_closed mode could not be read from the flag store",

@@ -92,6 +92,7 @@ from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as 
 from core.models.oacp_retention_disposition_decision import (
     OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
 )
+from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration

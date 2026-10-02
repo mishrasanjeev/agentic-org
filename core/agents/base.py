@@ -127,6 +127,26 @@ class BaseAgent:
         msg_id = f"msg_{uuid.uuid4().hex[:12]}"
 
         try:
+            # 0. Operator override: a halted or throttled agent does no work.
+            from core.governance.operator_override import ERROR_CODE as OVERRIDE_ERROR_CODE
+            from core.governance.operator_override import check as check_operator_override
+
+            override = await check_operator_override(self.tenant_id, agent_id=self.agent_id, throttle_unit="agent")
+            if override.blocked:
+                logger.warning("agent_execute_refused_operator_override", agent=self.agent_id, reason=override.reason)
+                trace.append(override.reason)
+                return self._make_result(
+                    task,
+                    msg_id,
+                    "failed",
+                    {},
+                    0.0,
+                    trace,
+                    tool_calls,
+                    error={"code": OVERRIDE_ERROR_CODE, "message": override.reason},
+                    start=start,
+                )
+
             # 1. Build context with available tool descriptions
             context: dict[str, Any] = {
                 "task": task.task.model_dump(),

@@ -151,6 +151,10 @@ class Settings(BaseSettings):
     # a2a:write or mcp:write (or agenticorg:admin) like every mapped family.
     # Env: AGENTICORG_ROUTE_SCOPE_A2A_MCP.
     route_scope_a2a_mcp: bool = False
+    # Operator override (halt or throttle a model, agent, workflow or the tool
+    # pipeline). Off by default; the authority flag ``operator_override.enabled``
+    # turns it on per tenant, this switch for the whole deployment.
+    operator_override_enabled: bool = False
     # Authenticated routes reached with an auth_mode the auth middleware does
     # not set (FINDINGS A-95). Off, such a request is logged as
     # route_enforcement_unknown_auth_mode and then checked on whatever scopes

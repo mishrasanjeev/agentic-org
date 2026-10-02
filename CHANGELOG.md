@@ -4,6 +4,25 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Operator override (halt or throttle a model, agent, workflow or the tool pipeline)
+- `core/governance/operator_override.py`: an administrator places an override
+  on a provider, a model, one agent, every agent, a workflow definition, a
+  connector, one tool or the whole tool pipeline, in `halt` or `throttle`
+  (calls per minute) mode, with a reason and an optional expiry. Enforced at
+  the model router and the LangGraph reason node (never falls back to another
+  model), the agent runner and resume path, `BaseAgent.execute`, the workflow
+  engine before every step (the run waits and retries once released), the
+  connector dispatch boundary and `ToolGateway.execute`; the agent and workflow
+  run endpoints refuse early with 423. Halt beats throttle; a throttle counts
+  in Redis across replicas and fails closed in a strict runtime; blocks are
+  counted in `agenticorg_operator_override_blocks_total`.
+- `POST/GET /api/v1/operator-overrides`, `GET .../status`,
+  `POST .../{id}/release` (tenant admin); every change writes a signed audit
+  row. Table `operator_overrides` (`v6z32_operator_overrides`, tenant RLS).
+- Off by default: the authority flag `operator_override.enabled` (operator
+  managed) or `AGENTICORG_OPERATOR_OVERRIDE_ENABLED` turns it on. Docs:
+  `docs/governance/operator-override.md`.
+
 ### Added - Evidence sink for governed cases, and `make demo-case`
 - `AGENTICORG_CASE_EVIDENCE_SERVICE=grantex` (default `off`) records each
   governed-case agent run into the Grantex evidence service
