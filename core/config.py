@@ -160,6 +160,10 @@ class Settings(BaseSettings):
     # ``model_gateway.enabled`` turns it on per tenant, this switch for the
     # whole deployment.
     model_gateway_enabled: bool = False
+    # Runtime guardrails enforce (transform or block) instead of only flagging.
+    # Off by default; the authority flag ``guardrails.enforce`` turns it on per
+    # tenant, this switch for the whole deployment.
+    guardrails_enforce: bool = False
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600

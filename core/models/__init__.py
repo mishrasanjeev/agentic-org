@@ -84,6 +84,7 @@ from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
+from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord
 from core.models.model_limit import ModelLimit as ModelLimit

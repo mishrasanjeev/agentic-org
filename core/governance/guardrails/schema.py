@@ -1,0 +1,249 @@
+# SPDX-License-Identifier: Apache-2.0
+"""The guardrail policy model: rules, findings, outcomes and the result of one evaluation.
+
+A rule says, for one stage of a model or tool call (``input``, ``retrieval``,
+``output``, ``action``), which detector runs and what happens when it finds
+something at or above the rule's threshold: ``flag`` records the finding,
+``mask``, ``redact`` and ``tokenise`` transform the text before it travels on,
+``block`` refuses the stage. A rule may be narrowed to an agent, a use case or
+a risk tier; a rule with none of those applies to every call at its stage.
+Every matching rule applies, in priority order; a block wins over a transform.
+"""
+
+from __future__ import annotations
+
+import re
+import uuid
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+STAGES: tuple[str, ...] = ("input", "retrieval", "output", "action")
+DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern")
+ACTIONS: tuple[str, ...] = ("flag", "mask", "redact", "tokenise", "block")
+TRANSFORMS: tuple[str, ...] = ("mask", "redact", "tokenise")
+RISK_TIERS: tuple[str, ...] = ("low", "medium", "high", "critical")
+MATCH_FIELDS: tuple[str, ...] = ("agent_id", "use_case", "risk_tier")
+ERROR_CODE = "E1016"
+
+
+def _clean(value: object) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+@dataclass(frozen=True)
+class Rule:
+    id: str
+    name: str
+    stage: str
+    detector: str
+    action: str = "flag"
+    priority: int = 100
+    enabled: bool = True
+    threshold: float = 0.5
+    agent_id: str | None = None
+    use_case: str | None = None
+    risk_tier: str | None = None
+    options: dict[str, Any] = field(default_factory=dict)
+    reason: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        data = asdict(self)
+        data["options"] = dict(self.options)
+        return data
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Rule:
+        return cls(**{**data, "options": dict(data.get("options") or {})})
+
+    def matches(self, stage: str, *, agent_id: str | None, use_case: str | None, risk_tier: str | None) -> bool:
+        if self.stage != stage:
+            return False
+        actual = {"agent_id": agent_id, "use_case": use_case, "risk_tier": risk_tier}
+        for name in MATCH_FIELDS:
+            wanted = getattr(self, name)
+            if wanted is None:
+                continue
+            value = actual[name]
+            if value is None or str(value).strip().lower() != str(wanted).strip().lower():
+                return False
+        return True
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One thing a detector found: a span of the text, what kind, how sure."""
+
+    detector: str
+    kind: str
+    start: int
+    end: int
+    score: float = 1.0
+    detail: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Outcome:
+    """What one rule did with the text at its stage."""
+
+    rule_id: str
+    rule_name: str
+    stage: str
+    detector: str
+    action: str
+    findings: int
+    score: float
+    kinds: list[str]
+    # ``applied`` says the action took effect (enforcement on, or a dry run);
+    # off, the rule only recorded what it would have done.
+    applied: bool
+    blocked: bool = False
+    transformed: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class GuardrailResult:
+    """The text after the stage's rules, whether the stage may continue, and what each rule did."""
+
+    stage: str
+    text: str
+    allowed: bool
+    enforced: bool
+    correlation_id: str
+    outcomes: list[Outcome] = field(default_factory=list)
+    token_map: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def findings(self) -> int:
+        return sum(outcome.findings for outcome in self.outcomes)
+
+    @property
+    def flagged(self) -> bool:
+        return bool(self.outcomes)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "stage": self.stage,
+            "text": self.text,
+            "allowed": self.allowed,
+            "enforced": self.enforced,
+            "correlation_id": self.correlation_id,
+            "findings": self.findings,
+            "outcomes": [outcome.to_dict() for outcome in self.outcomes],
+            "token_map": dict(self.token_map),
+        }
+
+
+class GuardrailBlocked(RuntimeError):  # noqa: N818 - surface name used in error payloads
+    """Raised when a rule with action ``block`` matched at a stage with enforcement on."""
+
+    def __init__(
+        self, reason: str, *, stage: str, correlation_id: str, rule_id: str | None, rule_name: str | None
+    ) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.stage = stage
+        self.correlation_id = correlation_id
+        self.rule_id = rule_id
+        self.rule_name = rule_name
+
+    @property
+    def code(self) -> str:
+        return ERROR_CODE
+
+    def to_error(self) -> dict[str, Any]:
+        return {
+            "error": {"code": ERROR_CODE, "message": self.reason},
+            "guardrail": {
+                "stage": self.stage,
+                "correlation_id": self.correlation_id,
+                "rule_id": self.rule_id,
+                "rule_name": self.rule_name,
+            },
+        }
+
+
+def _clean_options(detector: str, raw: Any) -> dict[str, Any]:
+    if raw is not None and not isinstance(raw, dict):
+        raise ValueError("options must be an object")
+    options = dict(raw or {})
+    out: dict[str, Any] = {}
+    if detector == "sensitive_data":
+        entities = options.get("entities")
+        if entities is not None:
+            cleaned = sorted({str(e).strip().upper() for e in entities if str(e).strip()})
+            if not cleaned:
+                raise ValueError("entities must name at least one entity type when given")
+            out["entities"] = cleaned
+    elif detector == "pattern":
+        patterns = options.get("patterns")
+        if not isinstance(patterns, list) or not patterns:
+            raise ValueError("a pattern rule needs a non-empty list of patterns")
+        cleaned_patterns: list[str] = []
+        for item in patterns:
+            text = str(item or "").strip()
+            if not text:
+                raise ValueError("a pattern must not be empty")
+            try:
+                re.compile(text)
+            except re.error as exc:
+                raise ValueError(f"pattern {text!r} does not compile: {exc}") from None
+            cleaned_patterns.append(text)
+        out["patterns"] = cleaned_patterns
+        out["kind"] = _clean(options.get("kind")) or "pattern"
+        out["ignore_case"] = bool(options.get("ignore_case", True))
+    unknown = set(options) - set(out) - {"entities", "patterns", "kind", "ignore_case"}
+    if unknown:
+        raise ValueError(f"unknown options for {detector}: {', '.join(sorted(unknown))}")
+    return out
+
+
+def validate_rule_fields(fields: dict[str, Any]) -> dict[str, Any]:
+    """Normalise and check a rule's fields; raise ``ValueError`` on an unusable rule."""
+    out: dict[str, Any] = {}
+    name = _clean(fields.get("name"))
+    if not name:
+        raise ValueError("a rule needs a name")
+    out["name"] = name
+    stage = (_clean(fields.get("stage")) or "").lower()
+    if stage not in STAGES:
+        raise ValueError(f"stage must be one of {', '.join(STAGES)}")
+    out["stage"] = stage
+    detector = (_clean(fields.get("detector")) or "").lower()
+    if detector not in DETECTORS:
+        raise ValueError(f"detector must be one of {', '.join(DETECTORS)}")
+    out["detector"] = detector
+    action = (_clean(fields.get("action")) or "flag").lower()
+    if action not in ACTIONS:
+        raise ValueError(f"action must be one of {', '.join(ACTIONS)}")
+    if action == "tokenise" and detector != "sensitive_data":
+        raise ValueError("tokenise applies to sensitive data only")
+    out["action"] = action
+    threshold = fields.get("threshold", 0.5)
+    if isinstance(threshold, bool) or not isinstance(threshold, int | float) or not 0 <= float(threshold) <= 1:
+        raise ValueError("threshold is a fraction between 0 and 1")
+    out["threshold"] = float(threshold)
+    priority = fields.get("priority", 100)
+    if isinstance(priority, bool) or not isinstance(priority, int) or priority < 0:
+        raise ValueError("priority must be a non-negative integer")
+    out["priority"] = priority
+    out["enabled"] = bool(fields.get("enabled", True))
+    out["agent_id"] = _clean(fields.get("agent_id"))
+    out["use_case"] = (_clean(fields.get("use_case")) or "").lower() or None
+    risk_tier = (_clean(fields.get("risk_tier")) or "").lower() or None
+    if risk_tier is not None and risk_tier not in RISK_TIERS:
+        raise ValueError(f"risk_tier must be one of {', '.join(RISK_TIERS)}")
+    out["risk_tier"] = risk_tier
+    out["options"] = _clean_options(detector, fields.get("options"))
+    out["reason"] = (fields.get("reason") or "").strip()
+    return out
+
+
+def new_rule_id() -> str:
+    return str(uuid.uuid4())
