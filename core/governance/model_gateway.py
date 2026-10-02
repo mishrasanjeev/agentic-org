@@ -732,7 +732,11 @@ async def cheapest_healthy(policy: Policy, tenant_id: uuid.UUID | None) -> CostC
         stat = health.get((normalise_provider(target.get("provider")) or "", str(target.get("model") or "")))
         return None if stat is None else float(stat.failure_rate)
 
-    healthy = [t for t in ranked if _rate(t) is None or _rate(t) <= threshold]
+    def _healthy(target: dict[str, Any]) -> bool:
+        rate = _rate(target)
+        return rate is None or rate <= threshold
+
+    healthy = [t for t in ranked if _healthy(t)]
     if healthy:
         chosen = healthy[0]
         how = "price only, health unavailable" if degraded else f"cheapest healthy of {len(targets)}"
