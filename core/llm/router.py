@@ -48,6 +48,7 @@ from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import decide as gateway_decide
 from core.governance.model_gateway import normalise_provider as gateway_provider
 from core.governance.model_gateway import release as gateway_release
+from core.governance.model_gateway_records import record_model_call
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
 
@@ -167,6 +168,7 @@ def _load_routellm_controller_cls() -> type[Any] | None:
     _ROUTELLM_AVAILABLE = True
     return RouteLLMControllerClass
 
+
 # ---------------------------------------------------------------------------
 # Tier model definitions
 # ---------------------------------------------------------------------------
@@ -193,9 +195,9 @@ LOCAL_TIERS: dict[str, str] = {
 # ``GEMINI_PRICE_PER_1M`` below and is used by the per-call cost
 # write to agent_task_results.
 TIER_COST_PER_1K: dict[str, float] = {
-    "tier1": 0.000_10,    # gemini-2.5-flash-lite output
-    "tier2": 0.000_30,    # gemini-2.5-flash output
-    "tier3": 0.005_00,    # gemini-2.5-pro output
+    "tier1": 0.000_10,  # gemini-2.5-flash-lite output
+    "tier2": 0.000_30,  # gemini-2.5-flash output
+    "tier3": 0.005_00,  # gemini-2.5-pro output
 }
 
 # Pricing matrix — per 1M tokens, USD. Keep this in sync with
@@ -228,9 +230,7 @@ def gemini_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float:
     else:
         logger.warning("gemini_unknown_model_pricing", model=model)
         rates = GEMINI_PRICE_PER_1M["gemini-2.5-flash"]
-    return (
-        input_tokens * rates["input"] + output_tokens * rates["output"]
-    ) / 1_000_000
+    return (input_tokens * rates["input"] + output_tokens * rates["output"]) / 1_000_000
 
 
 # ---------------------------------------------------------------------------
@@ -327,9 +327,7 @@ async def _todays_gemini_spend_usd(tenant_id: str | None = None) -> float:
         ) from exc
 
 
-async def assert_under_gemini_cap(
-    estimated_cost_usd: float = 0.0, tenant_id: str | None = None
-) -> None:
+async def assert_under_gemini_cap(estimated_cost_usd: float = 0.0, tenant_id: str | None = None) -> None:
     """Refuse the call when today's spend + estimate would exceed a cap.
 
     Two caps apply: ``AGENTICORG_GEMINI_DAILY_USD_CAP`` is per tenant
@@ -378,7 +376,7 @@ class SmartLLMRouter:
 
     def __init__(self) -> None:
         self._routing_mode: str = settings.llm_routing  # auto|tier1|tier2|tier3|disabled
-        self._llm_mode: str = settings.llm_mode          # cloud|local|auto
+        self._llm_mode: str = settings.llm_mode  # cloud|local|auto
         self._routellm_controller: Any | None = None
         self._routellm_init_attempted: bool = False
 
@@ -550,6 +548,9 @@ class LLMResponse:
     cost_usd: float = 0.0
     latency_ms: int = 0
     raw: dict[str, Any] = field(default_factory=dict)
+    # The provider's split, when it reports one; ``tokens_used`` is their sum.
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class LLMRouter:
@@ -615,6 +616,8 @@ class LLMRouter:
                 messages = await pseudonymiser.pseudonymise_router_messages(messages)
             model = model_override or self.primary_model
             lease = None
+            decision = None
+            admission_wait_ms = None
             if tenant_id:
                 # The model gateway may replace the model from the tenant's routing
                 # policy; its choice is an explicit selection, so failover below
@@ -645,18 +648,50 @@ class LLMRouter:
                     model_override = model
                 # Per-model limits apply just before the call; the concurrency
                 # slot is released when the call (or its fallback) ends.
+                admitted_at = time.monotonic()
                 lease = await gateway_admit(decision)
+                admission_wait_ms = int((time.monotonic() - admitted_at) * 1000)
             temp = temperature if temperature is not None else self.temperature
             # Only forward tenant_id when set so existing _call_model call shapes stay stable.
             scope = {"tenant_id": tenant_id} if tenant_id else {}
 
+            async def _record(
+                called: str,
+                outcome: str,
+                started: float,
+                response: LLMResponse | None,
+                exc: Exception | None,
+                fallback_from: str | None,
+            ) -> None:
+                await record_model_call(
+                    decision,
+                    provider=_model_provider(called),
+                    model=called,
+                    outcome=outcome,
+                    latency_ms=response.latency_ms
+                    if response is not None
+                    else int((time.monotonic() - started) * 1000),
+                    tokens=response.tokens_used if response is not None else 0,
+                    input_tokens=response.input_tokens if response is not None else None,
+                    output_tokens=response.output_tokens if response is not None else None,
+                    cost_usd=response.cost_usd if response is not None else 0.0,
+                    error_type=type(exc).__name__ if exc is not None else None,
+                    fallback_from=fallback_from,
+                    admission_wait_ms=admission_wait_ms if fallback_from is None else None,
+                    use_case="completion",
+                )
+
+            started = time.monotonic()
             try:
                 async with asyncio.timeout(
                     settings.llm_complete_timeout_seconds * settings.llm_primary_timeout_fraction
                 ):
-                    return await self._call_model(model, messages, temp, max_tokens, **scope)
+                    response = await self._call_model(model, messages, temp, max_tokens, **scope)
+                await _record(model, "completed", started, response, None, None)
+                return response
             # enterprise-gate: broad-except-ok reason=llm-transient-primary-failure-only-may-fall-back
             except Exception as exc:
+                await _record(model, "failed", started, None, exc, None)
                 logger.warning(
                     "llm_primary_failed",
                     model=model,
@@ -676,7 +711,15 @@ class LLMRouter:
                     # agent's data to a different provider.
                     raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
-                return await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
+                started = time.monotonic()
+                try:
+                    response = await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
+                # enterprise-gate: broad-except-ok reason=a-failed-fallback-is-recorded-then-raised-unchanged
+                except Exception as fallback_exc:
+                    await _record(self.fallback_model, "failed", started, None, fallback_exc, model)
+                    raise
+                await _record(self.fallback_model, "completed", started, response, None, model)
+                return response
             finally:
                 await gateway_release(lease)
 
@@ -762,17 +805,11 @@ class LLMRouter:
         tenant_id: str | None,
     ) -> LLMResponse:
         if "gemini" in model:
-            return await self._call_gemini(
-                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
-            )
+            return await self._call_gemini(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
         elif "claude" in model:
-            return await self._call_claude(
-                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
-            )
+            return await self._call_claude(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
         else:  # gpt
-            return await self._call_openai(
-                model, messages, temperature, max_tokens, start, tenant_id=tenant_id
-            )
+            return await self._call_openai(model, messages, temperature, max_tokens, start, tenant_id=tenant_id)
 
     async def _call_gemini(
         self, model, messages, temperature, max_tokens, start, tenant_id: str | None = None
@@ -837,6 +874,8 @@ class LLMRouter:
             tokens_used=total_tokens,
             cost_usd=cost,
             latency_ms=latency,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             raw={"candidates": str(response.candidates)},
         )
 
@@ -866,9 +905,7 @@ class LLMRouter:
         # Anthropic 0.x accepts temperature directly; 1.x removed that keyword.
         # Preserve caller control when the installed SDK advertises support.
         try:
-            supports_temperature = "temperature" in inspect.signature(
-                client.messages.create
-            ).parameters
+            supports_temperature = "temperature" in inspect.signature(client.messages.create).parameters
         except (TypeError, ValueError):
             supports_temperature = False
         if supports_temperature:
@@ -885,6 +922,8 @@ class LLMRouter:
             cost_usd=cost,
             latency_ms=latency,
             raw=response.model_dump(),
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
         )
 
     async def _call_openai(
@@ -902,7 +941,8 @@ class LLMRouter:
             max_tokens=max_tokens,
         )
         latency = int((time.monotonic() - start) * 1000)
-        tokens = response.usage.total_tokens if response.usage else 0
+        usage = response.usage
+        tokens = usage.total_tokens if usage else 0
         cost = tokens * 10 / 1_000_000
         return LLMResponse(
             content=response.choices[0].message.content or "",
@@ -911,6 +951,8 @@ class LLMRouter:
             cost_usd=cost,
             latency_ms=latency,
             raw=response.model_dump(),
+            input_tokens=getattr(usage, "prompt_tokens", None) if usage else None,
+            output_tokens=getattr(usage, "completion_tokens", None) if usage else None,
         )
 
 

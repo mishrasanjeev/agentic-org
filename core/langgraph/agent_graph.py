@@ -17,6 +17,7 @@ from __future__ import annotations
 import ast
 import json
 import math
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from typing import Any
@@ -33,6 +34,7 @@ from core.governance.action_policy import ActionDomain, CapabilityAuthorization
 from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import current_route
 from core.governance.model_gateway import release as gateway_release
+from core.governance.model_gateway_records import message_tokens, record_model_call
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.operator_override import check as check_operator_override
 from core.langgraph.grantex_auth import get_grantex_client
@@ -491,11 +493,43 @@ def build_agent_graph(
         # is admitted on its own against the run's routing decision and gives
         # its concurrency slot back when the model returns.
         route = current_route()
+        admitted_at = time.monotonic()
         lease = await gateway_admit(route.decision) if route is not None else None
+        admission_wait_ms = int((time.monotonic() - admitted_at) * 1000)
+        # Every turn is metered and, under a routed run, recorded with its
+        # routing decision; recording never changes the call's outcome.
+        called_provider = _llm_provider_name(llm, llm_provider)
+        called_model = _llm_model_name(llm, llm_model) or (route.decision.model if route is not None else "")
+        called_agent = agent_id or str(state.get("agent_id") or "") or None
+        started = time.monotonic()
         try:
             response = await llm.ainvoke(messages)
+        # enterprise-gate: broad-except-ok reason=a-failed-model-call-is-recorded-then-raised-unchanged
+        except Exception as exc:
+            await record_model_call(
+                provider=called_provider,
+                model=called_model,
+                outcome="failed",
+                latency_ms=int((time.monotonic() - started) * 1000),
+                error_type=type(exc).__name__,
+                admission_wait_ms=admission_wait_ms,
+                agent_id=called_agent,
+            )
+            raise
         finally:
             await gateway_release(lease)
+        input_tokens, output_tokens, total_tokens = message_tokens(response)
+        await record_model_call(
+            provider=called_provider,
+            model=called_model,
+            outcome="completed",
+            latency_ms=int((time.monotonic() - started) * 1000),
+            tokens=total_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            admission_wait_ms=admission_wait_ms,
+            agent_id=called_agent,
+        )
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")

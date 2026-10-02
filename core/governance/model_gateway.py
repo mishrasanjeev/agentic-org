@@ -309,6 +309,9 @@ class RouteDecision:
     gated: bool = False
     tenant_id: str | None = None
     use_case: str = ""
+    # What the caller asked for, kept for the routing record.
+    requested_provider: str | None = None
+    requested_model: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -626,7 +629,24 @@ def _passthrough(request: RouteRequest, correlation_id: str, reason: str) -> Rou
         reason=reason,
         tenant_id=str(tid) if tid is not None else None,
         use_case=request.use_case,
+        requested_provider=request.requested_provider,
+        requested_model=request.requested_model,
     )
+
+
+def request_correlation_id() -> str | None:
+    """The request id bound for the current request or task, so one id links the request to its model calls."""
+    try:
+        value = structlog.contextvars.get_contextvars().get("request_id")
+    # enterprise-gate: broad-except-ok reason=a-missing-log-context-degrades-to-a-fresh-correlation-id
+    except Exception:
+        return None
+    text = str(value or "").strip()
+    return text[:128] or None
+
+
+def _correlation_id(request: RouteRequest) -> str:
+    return request.correlation_id or request_correlation_id() or uuid.uuid4().hex
 
 
 def _with_identity(request: RouteRequest) -> RouteRequest:
@@ -831,6 +851,8 @@ async def _decide(
         gated=True,
         tenant_id=str(tid) if tid is not None else None,
         use_case=request.use_case,
+        requested_provider=request.requested_provider,
+        requested_model=request.requested_model,
     )
     if dry_run:
         return decision
@@ -870,7 +892,7 @@ async def evaluate(request: RouteRequest) -> Evaluation:
     tid = _as_uuid(request.tenant_id)
     if tid is None:
         raise ValueError("a dry run needs a tenant")
-    correlation_id = request.correlation_id or uuid.uuid4().hex
+    correlation_id = _correlation_id(request)
     on = await enabled(tid)
     policy_set = await active_policy_set(tid)
     try:
@@ -912,7 +934,7 @@ async def decide(request: RouteRequest) -> RouteDecision:
     Raises ``ModelGatewayRefused`` when a policy fence or a restriction refuses
     the call, or when the policies cannot be read in a strict runtime.
     """
-    correlation_id = request.correlation_id or uuid.uuid4().hex
+    correlation_id = _correlation_id(request)
     request = _with_identity(request)
     policies, passthrough = await _policies_or_passthrough(request, correlation_id)
     if passthrough is not None:
@@ -1004,7 +1026,7 @@ async def route_for_agent(
     requested_model: str,
 ) -> RouteDecision:
     """The runner's entry point: the agent's recorded sensitivity is read only when the gateway is on."""
-    correlation_id = uuid.uuid4().hex
+    correlation_id = request_correlation_id() or uuid.uuid4().hex
     request = _with_identity(
         RouteRequest(
             tenant_id=tenant_id,

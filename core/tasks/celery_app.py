@@ -43,6 +43,7 @@ app = Celery(
         "core.cron.tasks",
         "core.tasks.budget_tasks",
         "core.tasks.case_push_tasks",
+        "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
         "core.tasks.report_tasks",
@@ -111,6 +112,12 @@ app.conf.beat_schedule = {
     "cleanup-old-reports": {
         "task": "core.tasks.report_tasks.cleanup_old_reports",
         "schedule": crontab(hour=2, minute=0),  # daily at 2:00 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "prune-model-gateway-records": {
+        # Routing records past AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS (core/tasks/gateway_tasks.py).
+        "task": "core.tasks.gateway_tasks.prune_model_gateway_records",
+        "schedule": crontab(hour=3, minute=0),  # daily at 3:00 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-budget-evaluator": {

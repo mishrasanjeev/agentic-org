@@ -839,3 +839,133 @@ class TestAccessAndLimitsMigration:
         entry = ERROR_META["E1015"]
         assert entry["name"] == "MODEL_GATEWAY_LIMIT" and entry["retryable"] is True
         assert ERROR_META["E1014"]["retryable"] is False
+
+
+class TestRouterRecords:
+    def _router(self):
+        from core.llm.router import LLMRouter
+
+        router = LLMRouter()
+        router.primary_model = "gemini-2.5-flash"
+        router.fallback_model = "gemini-2.5-flash"
+        return router
+
+    def _decision(self) -> RouteDecision:
+        return RouteDecision(
+            provider="gemini",
+            model="gemini-2.5-pro",
+            correlation_id="c9",
+            reason="p",
+            applied=True,
+            gated=True,
+            tenant_id=str(TENANT),
+            use_case="completion",
+        )
+
+    def test_a_completed_call_is_recorded_with_its_response_and_admission_wait(self):
+        from core.llm.router import LLMResponse
+
+        router = self._router()
+        response = LLMResponse(
+            content="ok",
+            model="gemini-2.5-pro",
+            tokens_used=42,
+            cost_usd=0.002,
+            latency_ms=350,
+            input_tokens=30,
+            output_tokens=12,
+        )
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=self._decision())),
+            patch("core.llm.router.gateway_admit", AsyncMock(return_value=None)),
+            patch("core.llm.router.gateway_release", AsyncMock()),
+            patch("core.llm.router.record_model_call", AsyncMock()) as record,
+            patch.object(router, "_call_model", AsyncMock(return_value=response)),
+        ):
+            asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        record.assert_awaited_once()
+        kwargs = record.await_args.kwargs
+        assert record.await_args.args[0].model == "gemini-2.5-pro"
+        assert (
+            kwargs["model"] == "gemini-2.5-pro" and kwargs["provider"] == "gemini" and kwargs["outcome"] == "completed"
+        )
+        assert kwargs["tokens"] == 42 and kwargs["cost_usd"] == 0.002 and kwargs["latency_ms"] == 350
+        assert kwargs["input_tokens"] == 30 and kwargs["output_tokens"] == 12
+        assert isinstance(kwargs["admission_wait_ms"], int) and kwargs["use_case"] == "completion"
+        assert kwargs["fallback_from"] is None and kwargs["error_type"] is None
+
+    def test_a_failed_primary_and_its_fallback_are_both_recorded(self):
+        from core.llm.router import LLMResponse
+
+        router = self._router()
+        response = LLMResponse(content="ok", model="gemini-2.5-flash", tokens_used=1, cost_usd=0.0, latency_ms=1)
+        calls: list[str] = []
+
+        async def fake_call(model, _messages, _temperature, _max_tokens, **_scope):
+            calls.append(model)
+            if len(calls) == 1:
+                raise TimeoutError("transient")
+            return response
+
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=self._decision())),
+            patch("core.llm.router.gateway_admit", AsyncMock(return_value=None)),
+            patch("core.llm.router.gateway_release", AsyncMock()),
+            patch("core.llm.router.record_model_call", AsyncMock()) as record,
+            patch.object(router, "_call_model", fake_call),
+        ):
+            asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        outcomes = [
+            (c.kwargs["model"], c.kwargs["outcome"], c.kwargs["error_type"], c.kwargs["fallback_from"])
+            for c in record.await_args_list
+        ]
+        assert outcomes == [
+            ("gemini-2.5-pro", "failed", "TimeoutError", None),
+            ("gemini-2.5-flash", "completed", None, "gemini-2.5-pro"),
+        ]
+        assert record.await_args_list[1].kwargs["admission_wait_ms"] is None
+
+    def test_a_failed_fallback_is_recorded_then_raised(self):
+        router = self._router()
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=self._decision())),
+            patch("core.llm.router.gateway_admit", AsyncMock(return_value=None)),
+            patch("core.llm.router.gateway_release", AsyncMock()),
+            patch("core.llm.router.record_model_call", AsyncMock()) as record,
+            patch.object(router, "_call_model", AsyncMock(side_effect=TimeoutError("down"))),
+        ):
+            with pytest.raises(TimeoutError):
+                asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        assert [c.kwargs["outcome"] for c in record.await_args_list] == ["failed", "failed"]
+        assert record.await_args_list[1].kwargs["fallback_from"] == "gemini-2.5-pro"
+
+    def test_a_call_without_a_tenant_is_still_metered_without_a_decision(self):
+        from core.llm.router import LLMResponse
+
+        router = self._router()
+        response = LLMResponse(content="ok", model="gemini-2.5-flash", tokens_used=3, cost_usd=0.0, latency_ms=2)
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock()) as ask,
+            patch("core.llm.router.record_model_call", AsyncMock()) as record,
+            patch.object(router, "_call_model", AsyncMock(return_value=response)),
+        ):
+            asyncio.run(router.complete([{"role": "user", "content": "hi"}]))
+        ask.assert_not_called()
+        assert record.await_args.args[0] is None and record.await_args.kwargs["tokens"] == 3
+
+
+class TestRecordsMigration:
+    def test_revision_chain_and_rls(self):
+        import importlib.util
+
+        path = ROOT / "migrations" / "versions" / "v6_z36_model_gateway_records.py"
+        spec = importlib.util.spec_from_file_location("v6_z36_model_gateway_records", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.revision == "v6z36_model_gateway_records" and len(module.revision) <= 32
+        assert module.down_revision == "v6z35_model_access_limits"
+        src = path.read_text(encoding="utf-8")
+        assert "CREATE TABLE IF NOT EXISTS model_gateway_records" in src
+        assert "ALTER TABLE model_gateway_records ENABLE ROW LEVEL SECURITY" in src
+        assert "FORCE ROW LEVEL SECURITY" in src and "WITH CHECK" in src
+        assert "ix_model_gateway_records_tenant_correlation" in src

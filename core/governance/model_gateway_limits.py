@@ -165,7 +165,8 @@ async def admit(
     released again, so a refused call holds nothing.
     """
     applicable = [limit for limit in limits if limit.enabled and limit.applies_to(provider, model)]
-    lease_id = correlation_id or uuid.uuid4().hex
+    # One lease per admission: several calls of one request each hold their own slot.
+    lease_id = uuid.uuid4().hex
     if not applicable:
         return Admission(lease=Lease(lease_id=lease_id, outcome="unlimited"))
     from core.async_redis import get_async_redis

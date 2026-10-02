@@ -163,6 +163,11 @@ class Settings(BaseSettings):
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600
+    # Routing records: one signed row per model call while the gateway is on
+    # for the tenant, pruned after the retention period by the daily task.
+    # Off by default: turning it on adds a write to every routed model call.
+    model_gateway_records_enabled: bool = False
+    model_gateway_records_retention_days: int = 90
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30
