@@ -275,16 +275,21 @@ def test_tc_exec_006_only_retired_status_blocks_run_at_api_layer() -> None:
     gates the pause-state button. Pin the EXACT status check
     so a refactor that adds 'paused' here without updating the
     UI flow doesn't silently break the kill-switch UX."""
+    from core.governance import agent_status
+
     src = (REPO / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
     run_block = src.split('@router.post("/agents/{agent_id}/run")', 1)[1].split(
         "@router.", 1
     )[0]
-    assert 'if agent_row.status == "retired":' in run_block
-    assert 'HTTPException(409, "Cannot run a retired agent")' in run_block
-    # Paused is NOT explicitly blocked here. If a future change
-    # adds it, this test should be updated AND the kill-switch
-    # UI flow re-evaluated.
+    # The status check goes through core.governance.agent_status, whose
+    # default (paused_agents_refused off) refuses retired agents only; the
+    # setting adds paused (FINDINGS A-110), and the pause-state button in the
+    # UI keeps gating the rest. Pin the default here.
+    assert "agent_status_refusal(agent_row.status)" in run_block
     assert 'if agent_row.status == "paused"' not in run_block
+    assert agent_status.settings.paused_agents_refused is False
+    assert agent_status.refusal_for("retired") == "Cannot run a retired agent"
+    assert agent_status.refusal_for("paused") is None
 
 
 # ─────────────────────────────────────────────────────────────────
