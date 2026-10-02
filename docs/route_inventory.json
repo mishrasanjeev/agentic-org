@@ -3420,42 +3420,6 @@
     "tenant_required": true
   },
   {
-    "audit_event": "compliance.evidence_package.read",
-    "auth_required": true,
-    "function": "evidence_package",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/compliance/evidence-package api/v1/compliance.py:evidence_package",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/compliance/evidence-package",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-evidence-export",
-    "scope": "compliance.evidence.sensitive.export",
-    "source_line": 175,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "compliance.evidence_package.read",
-    "auth_required": true,
-    "function": "evidence_package",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/compliance/evidence-package api/v1/compliance.py:evidence_package",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/compliance/evidence-package",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-evidence-export",
-    "scope": "compliance.evidence.sensitive.export",
-    "source_line": 175,
-    "tenant_required": true
-  },
-  {
     "audit_event": "composio.apps.list",
     "auth_required": true,
     "function": "list_apps",
@@ -4122,78 +4086,6 @@
     "tenant_required": true
   },
   {
-    "audit_event": "dsar.access.request",
-    "auth_required": true,
-    "function": "dsar_access",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/access api/v1/compliance.py:dsar_access",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/access",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.sensitive.write",
-    "source_line": 86,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.access.request",
-    "auth_required": true,
-    "function": "dsar_access",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/access api/v1/compliance.py:dsar_access",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/access",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.sensitive.write",
-    "source_line": 86,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.erase.request",
-    "auth_required": true,
-    "function": "dsar_erase",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/erase api/v1/compliance.py:dsar_erase",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/erase",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.high_risk.write",
-    "source_line": 105,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.erase.request",
-    "auth_required": true,
-    "function": "dsar_erase",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/erase api/v1/compliance.py:dsar_erase",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/erase",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.high_risk.write",
-    "source_line": 105,
-    "tenant_required": true
-  },
-  {
     "audit_event": "dsar.erase.request",
     "auth_required": true,
     "function": "dsar_erase",
@@ -4227,78 +4119,6 @@
     "rate_limit": "compliance-dsar-export",
     "scope": "compliance.dsar.sensitive.export",
     "source_line": 124,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.export.request",
-    "auth_required": true,
-    "function": "dsar_export",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/export api/v1/compliance.py:dsar_export",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/export",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-export",
-    "scope": "compliance.dsar.sensitive.export",
-    "source_line": 124,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.export.request",
-    "auth_required": true,
-    "function": "dsar_export",
-    "idempotency": "not_idempotent-new-dsar-request-id",
-    "key": "POST /api/v1/dsar/export api/v1/compliance.py:dsar_export",
-    "metadata_present": true,
-    "methods": [
-      "POST"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/export",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-export",
-    "scope": "compliance.dsar.sensitive.export",
-    "source_line": 124,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.request.read",
-    "auth_required": true,
-    "function": "dsar_status",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/dsar/{request_id} api/v1/compliance.py:dsar_status",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/{request_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.sensitive.read",
-    "source_line": 143,
-    "tenant_required": true
-  },
-  {
-    "audit_event": "dsar.request.read",
-    "auth_required": true,
-    "function": "dsar_status",
-    "idempotency": "read-only",
-    "key": "GET /api/v1/dsar/{request_id} api/v1/compliance.py:dsar_status",
-    "metadata_present": true,
-    "methods": [
-      "GET"
-    ],
-    "module": "api/v1/compliance.py",
-    "path": "/api/v1/dsar/{request_id}",
-    "public_exempt_reason": null,
-    "rate_limit": "compliance-dsar-request",
-    "scope": "compliance.dsar.sensitive.read",
-    "source_line": 143,
     "tenant_required": true
   },
   {
