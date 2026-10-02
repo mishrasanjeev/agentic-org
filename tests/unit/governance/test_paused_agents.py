@@ -71,7 +71,7 @@ def _run_endpoint(agent):
         patch.object(agents, "_active_agent_below_production_floor", side_effect=_PassedStatusCheckError),
     ):
         try:
-            payload = {"inputs": {"query": "x"}}
+            payload = {"inputs": {"task": "Summarise the open invoices for this quarter"}}
             asyncio.run(agents.run_agent(agent.id, MagicMock(), payload=payload, tenant_id=str(uuid.uuid4())))
         except HTTPException as exc:
             return exc
