@@ -4,6 +4,38 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Runtime guardrails: engine, rules and the first detectors
+- `core/governance/guardrails`: a tenant's rules say which detector runs at
+  which stage of a call (`input`, `retrieval`, `output`, `action`) and what
+  happens at or above the rule's threshold: `flag`, `mask`, `redact`,
+  `tokenise` or `block`, narrowed to an agent, use case or risk tier. Every
+  matching rule applies in priority order; a block wins over a transform.
+  Detectors: `sensitive_data` (the PII analyser where installed, the regex
+  recognisers otherwise, plus a Luhn-checked card-number check), `toxicity`
+  (the content-safety classifier with its keyword fallback) and `pattern`
+  (an administrator's regular expressions).
+- Behind the authority flag `guardrails.enforce` (off by default;
+  `AGENTICORG_GUARDRAILS_ENFORCE` for the deployment): off, every rule runs in
+  flag-only mode, metered and logged with the text unchanged; on, transforms
+  apply, a block refuses the stage with the new `E1016`, and each applied
+  action writes a signed audit row. Outcomes are metered in
+  `agenticorg_guardrail_outcomes_total{stage,detector,action,mode}` and logged
+  with the request's correlation id.
+- `GET /api/v1/guardrails/status`, `GET/POST /api/v1/guardrails/rules`,
+  `PATCH/DELETE .../rules/{id}`, `POST .../evaluate` (dry run); tenant admin;
+  each change writes a signed audit row. Table `guardrail_rules`
+  (`v6z38_guardrail_rules`, tenant RLS). Docs: `docs/governance/guardrails.md`.
+  The call-site hooks, the prompt-injection and output-policy detectors and the
+  grounding checker follow in the package's next parts.
+- Each detector runs off the event loop under
+  `AGENTICORG_GUARDRAILS_DETECTOR_TIMEOUT_SECONDS` (2); a detector that fails or
+  runs out of time fails closed for an enforced transform or block in a strict
+  runtime. Pattern rules refuse expressions that nest or repeat unbounded
+  quantifiers or use backreferences, take at most 32 patterns of 512
+  characters, and scan at most `AGENTICORG_GUARDRAILS_PATTERN_MAX_CHARS`
+  (50,000) characters. A rule's options must belong to its detector and
+  `entities` must list supported kinds.
+
 ### Added - Model gateway: cost comparison and cost-aware routing
 - `core/governance/model_pricing.py`: list prices per million tokens for the
   catalogue models (Gemini from the router's table), nothing per token for

@@ -96,6 +96,12 @@ model_gateway_limit_outcomes_total = Counter(
     ["limit", "outcome"],
 )
 
+guardrail_outcomes_total = Counter(
+    "agenticorg_guardrail_outcomes_total",
+    "Guardrail outcomes by stage, detector, action and mode (flag_only, enforced)",
+    ["stage", "detector", "action", "mode"],
+)
+
 # ── Model calls (agent path and direct router) ─────────────────────
 
 model_calls_total = Counter(

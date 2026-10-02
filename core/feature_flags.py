@@ -229,6 +229,7 @@ RESERVED_FLAG_KEYS: tuple[str, ...] = (
     "operator_override.enabled",
     "residency.enforce",
     "model_gateway.enabled",
+    "guardrails.enforce",
 )
 
 

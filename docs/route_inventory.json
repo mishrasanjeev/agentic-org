@@ -4644,6 +4644,114 @@
     "tenant_required": true
   },
   {
+    "audit_event": "guardrails.evaluate",
+    "auth_required": true,
+    "function": "evaluate",
+    "idempotency": "idempotent-read",
+    "key": "POST /api/v1/guardrails/evaluate api/v1/guardrails.py:evaluate",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/evaluate",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.guardrails.sensitive.read",
+    "source_line": 275,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.rules.list",
+    "auth_required": true,
+    "function": "list_rules",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/guardrails/rules api/v1/guardrails.py:list_rules",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/rules",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.guardrails.sensitive.read",
+    "source_line": 176,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.rules.set",
+    "auth_required": true,
+    "function": "create_rule",
+    "idempotency": "non-idempotent-create",
+    "key": "POST /api/v1/guardrails/rules api/v1/guardrails.py:create_rule",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/rules",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.guardrails.sensitive.write",
+    "source_line": 199,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.rules.delete",
+    "auth_required": true,
+    "function": "delete_rule",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/guardrails/rules/{rule_id} api/v1/guardrails.py:delete_rule",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/rules/{rule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.guardrails.sensitive.write",
+    "source_line": 253,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.rules.update",
+    "auth_required": true,
+    "function": "update_rule",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/guardrails/rules/{rule_id} api/v1/guardrails.py:update_rule",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/rules/{rule_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.guardrails.sensitive.write",
+    "source_line": 223,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.status",
+    "auth_required": true,
+    "function": "guardrail_status",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/guardrails/status api/v1/guardrails.py:guardrail_status",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/status",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.guardrails.sensitive.read",
+    "source_line": 155,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-readiness-probe",
     "auth_required": false,
     "function": "health_readiness",

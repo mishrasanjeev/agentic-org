@@ -31,6 +31,7 @@ class ErrorCode(StrEnum):
     OPERATOR_OVERRIDE = "E1013"
     MODEL_GATEWAY_REFUSED = "E1014"
     MODEL_GATEWAY_LIMIT = "E1015"
+    GUARDRAIL_BLOCKED = "E1016"
     # Validation errors (E2xxx)
     SCHEMA_VALIDATION_FAILED = "E2001"
     REQUIRED_FIELD_MISSING = "E2002"
@@ -151,6 +152,12 @@ ERROR_META: dict[str, dict] = {
         "severity": "warn",
         "retryable": True,
         "max_retries": 3,
+        "escalate_after_retries": False,
+    },
+    "E1016": {
+        "name": "GUARDRAIL_BLOCKED",
+        "severity": "warn",
+        "retryable": False,
         "escalate_after_retries": False,
     },
     "E2001": {
