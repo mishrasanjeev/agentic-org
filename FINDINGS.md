@@ -1534,7 +1534,7 @@ Remove an entry in the pull request that fixes it.
   refuse a grant request for a tool-qualified scope the agent did not
   register.
 
-## A-110 — A paused agent can still be run directly
+## A-110 — A paused agent can still be run directly (fixed, opt-in)
 
 - **Found:** mapping the enforcement points for the operator override (2026-10-02).
 - **What:** `POST /agents/{id}/run` refuses only `retired` agents; `paused`
@@ -1545,6 +1545,10 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** refuse `paused` at the run endpoint and in the runner's step 0, behind
   a flag until the next minor; the operator override (`all_agents` or `agent`
   halt) is the control that stops execution today.
+- **Fixed:** `AGENTICORG_PAUSED_AGENTS_REFUSED` (default off): the run endpoint
+  and a chat that names the agent refuse a paused agent with 409, and a
+  workflow agent step treats it as inactive (`core/governance/agent_status.py`).
+  A2A and MCP run agents by type, not by registry row, and are unaffected.
 
 ## A-111 — The provider daily spend cap is never surfaced as an error status
 

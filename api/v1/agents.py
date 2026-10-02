@@ -36,6 +36,7 @@ from auth.run_grants import (
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.approval_policy import ApprovalPolicy
@@ -3272,8 +3273,9 @@ async def run_agent(
             raise HTTPException(404, "Agent not found")
         # Bug sheet 2026-09-14 rows 19/22: domain RBAC + personal ownership.
         require_agent_visible(agent_row, effective_caller)
-        if agent_row.status == "retired":
-            raise HTTPException(409, "Cannot run a retired agent")
+        status_refusal = agent_status_refusal(agent_row.status)
+        if status_refusal is not None:
+            raise HTTPException(409, status_refusal)
         if _active_agent_below_production_floor(agent_row):
             raise HTTPException(
                 409,

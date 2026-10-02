@@ -169,6 +169,10 @@ class Settings(BaseSettings):
     # Operator-recorded verifications of the infrastructure controls the
     # compliance report lists (core/governance/infrastructure.py).
     infrastructure_attestations_file: str | None = None
+    # A paused agent is refused by the run endpoint, chat and workflow agent
+    # steps, not only left out of routing (FINDINGS A-110). Off by default
+    # until the next minor.
+    paused_agents_refused: bool = False
     # Authenticated routes reached with an auth_mode the auth middleware does
     # not set (FINDINGS A-95). Off, such a request is logged as
     # route_enforcement_unknown_auth_mode and then checked on whatever scopes
