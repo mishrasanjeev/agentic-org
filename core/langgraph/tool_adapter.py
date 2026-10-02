@@ -36,6 +36,7 @@ from core.governance.action_policy import (
     evaluate_action,
 )
 from core.pii.pseudonymiser import PseudonymisationError, PseudonymSession, refusal
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -289,7 +290,51 @@ async def _build_connector(
     return instance
 
 
+_TOOL_OUTCOMES = frozenset({"guardrail_blocked", "operator_override", "action_contained"})
+
+
+def _tool_outcome(result: Any) -> str:
+    """How a tool call ended, as its span records it: ok, a governance refusal by name, or error."""
+    if isinstance(result, dict) and result.get("error"):
+        error = str(result["error"])
+        return error if error in _TOOL_OUTCOMES else "error"
+    return "ok"
+
+
 async def _execute_connector_tool(
+    connector_name: str,
+    tool_name: str,
+    params: dict[str, Any],
+    config: dict[str, Any] | None = None,
+    *,
+    tenant_id: str | None = None,
+    company_id: str | None = None,
+    domain: ActionDomain | str | None = None,
+    capability_authorization: CapabilityAuthorization | None = None,
+    agent_id: str = "",
+) -> dict[str, Any]:
+    """Execute a connector tool inside its span (tracing is off by default); the dispatch itself follows."""
+    with tracing.span(
+        "agenticorg.tool.call",
+        kind=tracing.SpanKind.CLIENT,
+        **{"tool.name": tool_name, "connector.id": connector_name, "agent.id": agent_id, "tenant.id": tenant_id},
+    ):
+        result = await _dispatch_connector_tool(
+            connector_name,
+            tool_name,
+            params,
+            config,
+            tenant_id=tenant_id,
+            company_id=company_id,
+            domain=domain,
+            capability_authorization=capability_authorization,
+            agent_id=agent_id,
+        )
+        tracing.set_attributes(**{"tool.outcome": _tool_outcome(result)})
+        return result
+
+
+async def _dispatch_connector_tool(
     connector_name: str,
     tool_name: str,
     params: dict[str, Any],

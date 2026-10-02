@@ -46,6 +46,7 @@ from typing import Any
 import structlog
 
 from core.config import is_strict_runtime_env, settings
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -403,7 +404,7 @@ def _audit_entry(
         "action": action,
         "outcome": "success",
         "details": details,
-        "trace_id": "",
+        "trace_id": tracing.audit_trace_id(),
         "created_at": datetime.now(UTC),
     }
     entry["signature"] = sign_audit_record(entry, settings.secret_key.encode())

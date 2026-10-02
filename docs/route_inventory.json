@@ -4874,7 +4874,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 964,
+    "source_line": 965,
     "tenant_required": true
   },
   {
@@ -4892,7 +4892,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1063,
+    "source_line": 1064,
     "tenant_required": true
   },
   {
@@ -4910,7 +4910,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1362,
+    "source_line": 1371,
     "tenant_required": false
   },
   {
@@ -4928,7 +4928,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1304,
+    "source_line": 1307,
     "tenant_required": true
   },
   {
@@ -4946,7 +4946,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1475,
+    "source_line": 1484,
     "tenant_required": true
   },
   {
@@ -4964,7 +4964,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 551,
+    "source_line": 552,
     "tenant_required": true
   },
   {
@@ -4982,7 +4982,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 577,
+    "source_line": 578,
     "tenant_required": true
   },
   {

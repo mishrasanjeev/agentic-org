@@ -73,6 +73,7 @@ from core.governance.caller_identity import current_identity
 from core.governance.model_gateway_limits import Lease, Limit, validate_limit_fields
 from core.governance.model_gateway_limits import admit as _admit_limits
 from core.governance.model_gateway_limits import release as _release_lease
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -942,6 +943,17 @@ async def _decide(
         principal=request.principal,
         reason=reason,
     )
+    tracing.add_event(
+        "model_gateway.decision",
+        correlation_id=correlation_id,
+        use_case=request.use_case,
+        policy_id=decision.policy_id,
+        access_policy_id=decision.access_policy_id,
+        provider=provider,
+        model=model,
+        restricted=restricted,
+        reason=reason,
+    )
     return decision
 
 
@@ -1338,7 +1350,7 @@ def _audit_entry(
         "action": action,
         "outcome": "success",
         "details": details,
-        "trace_id": "",
+        "trace_id": tracing.audit_trace_id(),
         "created_at": datetime.now(UTC),
     }
     entry["signature"] = sign_audit_record(entry, settings.secret_key.encode())
