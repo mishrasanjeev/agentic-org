@@ -28,7 +28,7 @@ class ErrorCode(StrEnum):
     TOOL_CAP_EXCEEDED = "E1008"
     CONNECTOR_UNAVAILABLE = "E1009"
     DUPLICATE_TOOL_CALL = "E1010"
-    OPERATOR_OVERRIDE = "E1012"
+    OPERATOR_OVERRIDE = "E1013"
     # Validation errors (E2xxx)
     SCHEMA_VALIDATION_FAILED = "E2001"
     REQUIRED_FIELD_MISSING = "E2002"
@@ -132,7 +132,7 @@ ERROR_META: dict[str, dict] = {
         "retryable": False,
         "escalate_after_retries": False,
     },
-    "E1012": {
+    "E1013": {
         "name": "OPERATOR_OVERRIDE",
         "severity": "warn",
         "retryable": False,
