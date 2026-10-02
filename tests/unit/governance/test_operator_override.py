@@ -431,6 +431,81 @@ class TestHaltedWorkflowRetry:
         monkeypatch.setattr(settings, "operator_halt_recovery_sweep_enabled", False)
         assert wt.recover_halted_workflows.run() == {"status": "disabled"}
 
+    def test_the_queue_task_heartbeats_while_halted_and_clears_the_record_when_the_run_moves_on(self, monkeypatch):
+        from core.tasks import workflow_tasks as wt
+
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        state = {"status": "running", "tenant_id": str(tenant_id), "workflow_run_id": str(run_id)}
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=state))
+        monkeypatch.setattr(wt, "_state_store", lambda: store)
+        record, clear = AsyncMock(), AsyncMock()
+        with (
+            patch("workflows.run_sync.record_halt_retry", record),
+            patch("workflows.run_sync.clear_halt_retry", clear),
+            patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"halted": True, "status": "running"})),
+        ):
+            assert asyncio.run(wt._resume_halted_workflow_async("eng-1")) == {"status": "halted"}
+        record.assert_awaited_once_with(tenant_id, run_id, "eng-1", owner="queue")
+        clear.assert_not_called()
+        with (
+            patch("workflows.run_sync.record_halt_retry", record),
+            patch("workflows.run_sync.clear_halt_retry", clear),
+            patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"status": "completed"})),
+        ):
+            assert asyncio.run(wt._resume_halted_workflow_async("eng-1"))["status"] == "resumed"
+        clear.assert_awaited_once_with(tenant_id, run_id)
+
+    def test_record_failures_never_fail_the_retry_and_odd_state_is_tolerated(self, monkeypatch):
+        from core.tasks import workflow_tasks as wt
+
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        state = {"status": "running", "tenant_id": str(tenant_id), "workflow_run_id": str(run_id)}
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=state))
+        monkeypatch.setattr(wt, "_state_store", lambda: store)
+        with (
+            patch("workflows.run_sync.record_halt_retry", AsyncMock(side_effect=RuntimeError("db down"))),
+            patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"halted": True})),
+        ):
+            assert asyncio.run(wt._resume_halted_workflow_async("eng-1")) == {"status": "halted"}
+        with (
+            patch("workflows.run_sync.clear_halt_retry", AsyncMock(side_effect=RuntimeError("db down"))),
+            patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"status": "completed"})),
+        ):
+            assert asyncio.run(wt._resume_halted_workflow_async("eng-1"))["status"] == "resumed"
+        assert wt._run_identity({"tenant_id": "not-a-uuid", "workflow_run_id": str(run_id)}) == (None, None)
+        assert wt._run_identity({}) == (None, None)
+        assert wt._parse_heartbeat(None) is None and wt._parse_heartbeat("yesterday") is None
+        naive = wt._parse_heartbeat("2026-10-02T06:00:00")
+        assert naive is not None and naive.tzinfo is not None
+
+    def test_the_record_is_written_and_cleared_on_the_run(self):
+        from workflows.run_sync import HALT_RETRY_KEY, clear_halt_retry, record_halt_retry
+
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        db_run = SimpleNamespace(id=run_id, context={"_engine_run_id": "eng-1"})
+        result = MagicMock()
+        result.scalar_one.return_value = db_run
+
+        @contextlib.asynccontextmanager
+        async def _session(*_args, **_kwargs):
+            yield SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        with patch("core.database.get_tenant_session", _session):
+            asyncio.run(record_halt_retry(tenant_id, run_id, "eng-1", owner="api"))
+            assert db_run.context[HALT_RETRY_KEY]["owner"] == "api" and db_run.context["_engine_run_id"] == "eng-1"
+            asyncio.run(clear_halt_retry(tenant_id, run_id))
+            assert HALT_RETRY_KEY not in db_run.context and db_run.context["_engine_run_id"] == "eng-1"
+            asyncio.run(clear_halt_retry(tenant_id, run_id))  # already clear: a no-op
+
+    def test_the_sweep_runs_when_enabled(self, monkeypatch):
+        from core.config import settings
+        from core.tasks import workflow_tasks as wt
+
+        monkeypatch.setattr(settings, "operator_halt_recovery_sweep_enabled", True)
+        outcome = {"status": "ok", "recovered": []}
+        with patch.object(wt, "_recover_halted_workflows_async", AsyncMock(return_value=outcome)):
+            assert wt.recover_halted_workflows.run() == outcome
+
     def test_the_background_executor_queues_the_retry_and_returns(self):
         from api.v1 import workflows as wf
 
