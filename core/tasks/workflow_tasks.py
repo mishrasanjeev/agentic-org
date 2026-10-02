@@ -8,6 +8,8 @@ keys as authoritative.
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -283,12 +285,109 @@ async def _resume_halted_workflow_async(run_id: str) -> dict:
         if state.get("status") != "running":
             return {"status": "noop", "reason": f"run_status_{state.get('status')}"}
         result = await _drive_engine_and_sync(store, run_id, "operator_halt", log)
+        tenant_id, workflow_run_id = _run_identity(state)
         if result.get("halted"):
             log.info("workflow_still_halted_by_operator_override")
+            if tenant_id is not None and workflow_run_id is not None:
+                await _record_halt_retry_best_effort(tenant_id, workflow_run_id, run_id, log)
             return {"status": "halted"}
+        if tenant_id is not None and workflow_run_id is not None:
+            await _clear_halt_retry_best_effort(tenant_id, workflow_run_id, log)
         return {"status": "resumed", "run_status": result.get("status")}
     finally:
         await store.close()
+
+
+def _run_identity(state: dict) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+    try:
+        tenant_id = uuid.UUID(str(state.get("tenant_id"))) if state.get("tenant_id") else None
+        workflow_run_id = uuid.UUID(str(state.get("workflow_run_id"))) if state.get("workflow_run_id") else None
+    except ValueError:
+        return None, None
+    return tenant_id, workflow_run_id
+
+
+async def _record_halt_retry_best_effort(
+    tenant_id: uuid.UUID, workflow_run_id: uuid.UUID, run_id: str, log: Any
+) -> None:
+    from workflows.run_sync import record_halt_retry
+
+    try:
+        await record_halt_retry(tenant_id, workflow_run_id, run_id, owner="queue")
+    # enterprise-gate: broad-except-ok reason=heartbeat-write-failure-degrades-to-a-stale-record-the-sweep-requeues
+    except Exception as exc:
+        log.warning("workflow_halt_retry_heartbeat_failed", error_type=type(exc).__name__)
+
+
+async def _clear_halt_retry_best_effort(tenant_id: uuid.UUID, workflow_run_id: uuid.UUID, log: Any) -> None:
+    from workflows.run_sync import clear_halt_retry
+
+    try:
+        await clear_halt_retry(tenant_id, workflow_run_id)
+    # enterprise-gate: broad-except-ok reason=cleanup-failure-degrades-to-a-stale-record-ignored-once-the-run-moved-on
+    except Exception as exc:
+        log.warning("workflow_halt_retry_clear_failed", error_type=type(exc).__name__)
+
+
+def _parse_heartbeat(value: Any) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+
+
+async def _recover_halted_workflows_async() -> dict:
+    """Re-queue every running run whose pending halt retry nobody is heartbeating for."""
+    from sqlalchemy import select, text
+
+    from core.config import settings
+    from core.database import async_session_factory, get_tenant_session
+    from core.models.tenant import Tenant
+    from core.models.workflow import WorkflowRun
+    from workflows.run_sync import HALT_RETRY_KEY, record_halt_retry
+
+    stale_after = timedelta(seconds=3 * max(1, int(settings.operator_halt_retry_seconds)))
+    now = datetime.now(UTC)
+    # workflow_runs is tenant-scoped under row-level security: enumerate the
+    # tenant catalogue, then read each tenant through its own session.
+    async with async_session_factory() as session:
+        await session.execute(text("SET LOCAL row_security = off"))
+        tenant_ids = list((await session.scalars(select(Tenant.id).where(Tenant.deleted_at.is_(None)))).all())
+    recovered: list[str] = []
+    for tenant_id in tenant_ids:
+        async with get_tenant_session(tenant_id) as session:
+            runs = (
+                await session.scalars(
+                    select(WorkflowRun).where(WorkflowRun.tenant_id == tenant_id, WorkflowRun.status == "running")
+                )
+            ).all()
+            candidates = [(run.id, (run.context or {}).get(HALT_RETRY_KEY)) for run in runs]
+        for run_id, marker in candidates:
+            if not isinstance(marker, dict) or not marker.get("engine_run_id"):
+                continue
+            heartbeat = _parse_heartbeat(marker.get("heartbeat"))
+            if heartbeat is not None and now - heartbeat < stale_after:
+                continue  # whoever holds the retry is alive
+            resume_halted_workflow.delay(str(marker["engine_run_id"]))
+            await record_halt_retry(tenant_id, run_id, str(marker["engine_run_id"]), owner="queue")
+            recovered.append(str(run_id))
+    if recovered:
+        logger.warning("workflow_halt_retries_recovered", runs=recovered)
+    return {"status": "ok", "recovered": recovered}
+
+
+@app.task(name="core.tasks.workflow_tasks.recover_halted_workflows")
+def recover_halted_workflows() -> dict:
+    """Beat sweep: re-queue halted runs whose retrying process went away (broker outage, then a restart).
+
+    A no-op unless ``AGENTICORG_OPERATOR_HALT_RECOVERY_SWEEP_ENABLED`` is true.
+    """
+    from core.config import settings
+
+    if not settings.operator_halt_recovery_sweep_enabled:
+        return {"status": "disabled"}
+    return run_async(_recover_halted_workflows_async())
 
 
 def _halt_retry_countdown() -> int:

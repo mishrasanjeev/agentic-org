@@ -158,6 +158,9 @@ class Settings(BaseSettings):
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30
+    # The beat sweep that re-queues a halted run whose retrying process went
+    # away (a broker outage followed by a restart). Off by default.
+    operator_halt_recovery_sweep_enabled: bool = False
     # Residency enforcement: refuse providers and destinations outside the
     # tenant's data region unless attested. Off by default; the authority
     # flag ``residency.enforce`` turns it on per tenant, this switch for the

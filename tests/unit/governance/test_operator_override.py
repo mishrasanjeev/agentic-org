@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -309,6 +310,7 @@ class TestHaltedWorkflowRetry:
         from api.v1 import workflows as wf
 
         monkeypatch.setattr(wf.settings, "operator_halt_retry_seconds", 9)
+        monkeypatch.setattr(wf.asyncio, "to_thread", _run_inline)
         tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
         db_run = SimpleNamespace(context={}, status="running")
         result = MagicMock()
@@ -326,11 +328,13 @@ class TestHaltedWorkflowRetry:
         )
         store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=None))
         sleep = AsyncMock()
+        recorded = AsyncMock()
         with (
             patch("workflows.state_store.WorkflowStateStore", return_value=store),
             patch("workflows.engine.WorkflowEngine", return_value=engine),
             patch.object(wf, "get_tenant_session", _session),
             patch("workflows.run_sync.schedule_halted_workflow_retry", side_effect=[False, False, True]) as schedule,
+            patch("workflows.run_sync.record_halt_retry", recorded),
             patch("workflows.run_sync.record_ab_outcome_if_terminal", AsyncMock()),
             patch.object(wf.asyncio, "sleep", sleep),
         ):
@@ -338,8 +342,94 @@ class TestHaltedWorkflowRetry:
         # Two passes retried here while the queue refused; the third pass handed the retry to the queue.
         assert schedule.call_count == 3 and engine.execute_next.await_count == 3
         assert sleep.await_args_list == [call(9), call(9)]
+        # The pending retry was recorded before each sleep, so a restart can recover it.
+        assert recorded.await_args_list == [call(tenant_id, run_id, "eng-1", owner="api")] * 2
         assert db_run.status == "running"
         store.close.assert_awaited_once()
+
+    def test_a_restart_during_a_broker_outage_is_recovered_by_the_sweep(self, monkeypatch):
+        """Broker down, the executor records the retry, the process dies; the sweep re-queues the run."""
+        from api.v1 import workflows as wf
+        from core.tasks import workflow_tasks as wt
+        from workflows.run_sync import HALT_RETRY_KEY, record_halt_retry
+
+        monkeypatch.setattr(wf.settings, "operator_halt_retry_seconds", 9)
+        monkeypatch.setattr(wf.asyncio, "to_thread", _run_inline)
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        db_run = SimpleNamespace(id=run_id, tenant_id=tenant_id, context={}, status="running")
+        result = MagicMock()
+        result.scalar_one.return_value = db_run
+        result.scalar_one_or_none.return_value = db_run
+
+        @contextlib.asynccontextmanager
+        async def _session(*_args, **_kwargs):
+            yield SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        engine = SimpleNamespace(
+            start_run=AsyncMock(return_value="eng-1"),
+            execute_next=AsyncMock(return_value={"status": "running", "halted": True, "error": "halted"}),
+        )
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=None))
+        with (
+            patch("workflows.state_store.WorkflowStateStore", return_value=store),
+            patch("workflows.engine.WorkflowEngine", return_value=engine),
+            patch.object(wf, "get_tenant_session", _session),
+            patch("core.database.get_tenant_session", _session),
+            patch("workflows.run_sync.schedule_halted_workflow_retry", return_value=False),
+            patch("workflows.run_sync.record_ab_outcome_if_terminal", AsyncMock()),
+            patch.object(wf.asyncio, "sleep", AsyncMock(side_effect=asyncio.CancelledError)),
+        ):
+            with pytest.raises(asyncio.CancelledError):  # the process goes away mid-sleep
+                asyncio.run(wf._execute_workflow_bg(tenant_id, run_id, {"steps": []}, None, workflow_id="wf-1"))
+        marker = db_run.context[HALT_RETRY_KEY]
+        assert marker["engine_run_id"] == "eng-1" and marker["owner"] == "api" and marker["heartbeat"]
+
+        # Later, the sweep: the record is stale (nobody heartbeated it), so the run is re-queued once.
+        monkeypatch.setattr(wf.settings, "operator_halt_retry_seconds", 9)
+        db_run.context[HALT_RETRY_KEY]["heartbeat"] = (datetime.now(UTC) - timedelta(seconds=60)).isoformat()
+        fresh = SimpleNamespace(
+            id=uuid.uuid4(), tenant_id=tenant_id, status="running",
+            context={
+                HALT_RETRY_KEY: {"engine_run_id": "eng-2", "owner": "api", "heartbeat": datetime.now(UTC).isoformat()}
+            },
+        )
+        unmarked = SimpleNamespace(id=uuid.uuid4(), tenant_id=tenant_id, status="running", context={})
+
+        class _Scalars:
+            def __init__(self, items):
+                self._items = items
+
+            def all(self):
+                return list(self._items)
+
+        @contextlib.asynccontextmanager
+        async def _catalogue():
+            yield SimpleNamespace(execute=AsyncMock(), scalars=AsyncMock(return_value=_Scalars([tenant_id])))
+
+        @contextlib.asynccontextmanager
+        async def _tenant(*_args, **_kwargs):
+            yield SimpleNamespace(
+                execute=AsyncMock(return_value=result),
+                scalars=AsyncMock(return_value=_Scalars([db_run, fresh, unmarked])),
+            )
+
+        with (
+            patch("core.database.async_session_factory", _catalogue),
+            patch("core.database.get_tenant_session", _tenant),
+            patch("core.tasks.workflow_tasks.resume_halted_workflow.delay") as delay,
+        ):
+            outcome = asyncio.run(wt._recover_halted_workflows_async())
+        delay.assert_called_once_with("eng-1")
+        assert outcome["recovered"] == [str(run_id)]
+        assert db_run.context[HALT_RETRY_KEY]["owner"] == "queue"
+        assert record_halt_retry is not None
+
+    def test_the_sweep_is_off_by_default(self, monkeypatch):
+        from core.config import settings
+        from core.tasks import workflow_tasks as wt
+
+        monkeypatch.setattr(settings, "operator_halt_recovery_sweep_enabled", False)
+        assert wt.recover_halted_workflows.run() == {"status": "disabled"}
 
     def test_the_background_executor_queues_the_retry_and_returns(self):
         from api.v1 import workflows as wf
@@ -426,6 +516,11 @@ class TestChatOverride:
         exc, check, agent_id = self._query(None, blocked=True)
         assert exc.status_code == 423
         check.assert_awaited_once_with(str(TENANT), agent_id=agent_id, throttle_unit=None)
+
+
+async def _run_inline(func, *args, **kwargs):
+    """asyncio.to_thread stand-in: run the call on this thread."""
+    return func(*args, **kwargs)
 
 
 def _blocked(reason: str = "Operator override: agent halted (drill).") -> OverrideDecision:
@@ -585,7 +680,8 @@ class TestWorkflowEngine:
 
     def test_background_loop_queues_the_retry_while_halted(self):
         src = (ROOT / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-        assert 'step_result.get("halted")' in src and "schedule_halted_workflow_retry(engine_run_id)" in src
+        assert 'step_result.get("halted")' in src
+        assert "to_thread(schedule_halted_workflow_retry, engine_run_id)" in src
         assert "OPERATOR_HALT_POLL_SECONDS" not in src and "workflow_halt_retry_in_process" in src
 
 

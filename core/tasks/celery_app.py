@@ -95,6 +95,14 @@ app.conf.beat_schedule = {
         "schedule": 30.0,
         "options": {"queue": "delivery"},
     },
+    "recover-halted-workflows": {
+        # Runs held by an operator override whose retrying process went away
+        # (core/tasks/workflow_tasks.py). A no-op unless
+        # AGENTICORG_OPERATOR_HALT_RECOVERY_SWEEP_ENABLED is true.
+        "task": "core.tasks.workflow_tasks.recover_halted_workflows",
+        "schedule": 60.0,
+        "options": {"queue": "workflows"},
+    },
     "generate-scheduled-reports": {
         "task": "core.tasks.report_tasks.generate_scheduled_reports",
         "schedule": 300.0,  # every 5 minutes

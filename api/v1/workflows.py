@@ -713,14 +713,18 @@ async def _execute_workflow_bg(
                 # worker task so a restart of this process cannot strand the
                 # run; the durable status stays ``running`` until the override
                 # is released or the run is cancelled.
-                from workflows.run_sync import schedule_halted_workflow_retry
+                from workflows.run_sync import record_halt_retry, schedule_halted_workflow_retry
 
-                if schedule_halted_workflow_retry(engine_run_id):
+                # Publishing reaches the broker synchronously (and retries its
+                # connection when the broker is down), so it runs off the event loop.
+                if await asyncio.to_thread(schedule_halted_workflow_retry, engine_run_id):
                     break
-                # The queue is unavailable: keep the run recoverable from this
-                # process by retrying here, and offer it to the queue again on
-                # every pass, until the override is released, the run is
+                # The queue is unavailable: record the pending retry on the run
+                # (durable; the recovery sweep re-queues it if this process goes
+                # away), then keep retrying here and offer it to the queue again
+                # on every pass, until the override is released, the run is
                 # cancelled or the queue takes the retry.
+                await record_halt_retry(tenant_id, run_id, engine_run_id, owner="api")
                 _log.warning("workflow_halt_retry_in_process", run_id=str(run_id))
                 await asyncio.sleep(max(1, int(settings.operator_halt_retry_seconds)))
                 continue
