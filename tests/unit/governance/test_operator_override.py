@@ -305,6 +305,42 @@ class TestHaltedWorkflowRetry:
         assert wt.resume_halted_workflow.run("run-1")["status"] == "error"
         assert store.close.await_count == 4
 
+    def test_the_background_executor_retries_in_process_while_the_queue_is_unavailable(self, monkeypatch):
+        from api.v1 import workflows as wf
+
+        monkeypatch.setattr(wf.settings, "operator_halt_retry_seconds", 9)
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        db_run = SimpleNamespace(context={}, status="running")
+        result = MagicMock()
+        result.scalar_one.return_value = db_run
+        result.scalar_one_or_none.return_value = db_run
+        session = SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        @contextlib.asynccontextmanager
+        async def _session(*_args, **_kwargs):
+            yield session
+
+        engine = SimpleNamespace(
+            start_run=AsyncMock(return_value="eng-1"),
+            execute_next=AsyncMock(return_value={"status": "running", "halted": True, "error": "halted"}),
+        )
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=None))
+        sleep = AsyncMock()
+        with (
+            patch("workflows.state_store.WorkflowStateStore", return_value=store),
+            patch("workflows.engine.WorkflowEngine", return_value=engine),
+            patch.object(wf, "get_tenant_session", _session),
+            patch("workflows.run_sync.schedule_halted_workflow_retry", side_effect=[False, False, True]) as schedule,
+            patch("workflows.run_sync.record_ab_outcome_if_terminal", AsyncMock()),
+            patch.object(wf.asyncio, "sleep", sleep),
+        ):
+            asyncio.run(wf._execute_workflow_bg(tenant_id, run_id, {"steps": []}, None, workflow_id="wf-1"))
+        # Two passes retried here while the queue refused; the third pass handed the retry to the queue.
+        assert schedule.call_count == 3 and engine.execute_next.await_count == 3
+        assert sleep.await_args_list == [call(9), call(9)]
+        assert db_run.status == "running"
+        store.close.assert_awaited_once()
+
     def test_the_background_executor_queues_the_retry_and_returns(self):
         from api.v1 import workflows as wf
 
@@ -550,7 +586,7 @@ class TestWorkflowEngine:
     def test_background_loop_queues_the_retry_while_halted(self):
         src = (ROOT / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
         assert 'step_result.get("halted")' in src and "schedule_halted_workflow_retry(engine_run_id)" in src
-        assert "OPERATOR_HALT_POLL_SECONDS" not in src and "asyncio.sleep" not in src
+        assert "OPERATOR_HALT_POLL_SECONDS" not in src and "workflow_halt_retry_in_process" in src
 
 
 class TestMigration:

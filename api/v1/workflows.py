@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import uuid as _uuid
 from collections.abc import Awaitable, Callable
@@ -24,6 +25,7 @@ from auth.run_grants import (
     bind_caller_grant,
     caller_grant_from_request,
 )
+from core.config import settings
 from core.database import get_tenant_session
 from core.governance.operator_override import check as check_operator_override
 from core.models.company import Company
@@ -713,8 +715,15 @@ async def _execute_workflow_bg(
                 # is released or the run is cancelled.
                 from workflows.run_sync import schedule_halted_workflow_retry
 
-                schedule_halted_workflow_retry(engine_run_id)
-                break
+                if schedule_halted_workflow_retry(engine_run_id):
+                    break
+                # The queue is unavailable: keep the run recoverable from this
+                # process by retrying here, and offer it to the queue again on
+                # every pass, until the override is released, the run is
+                # cancelled or the queue takes the retry.
+                _log.warning("workflow_halt_retry_in_process", run_id=str(run_id))
+                await asyncio.sleep(max(1, int(settings.operator_halt_retry_seconds)))
+                continue
 
             state = await state_store.load(engine_run_id)
             if not state:

@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - A halted workflow stays recoverable when the task queue is unavailable
+- When `resume_halted_workflow` cannot be queued (broker down), the background
+  executor no longer leaves the run at `running` with nobody retrying it: it
+  retries in process every `AGENTICORG_OPERATOR_HALT_RETRY_SECONDS` and offers
+  the retry to the queue again on every pass, until the override is released,
+  the run is cancelled or the queue takes it.
+
 ### Added - Residency enforcement and provider attestations
 - `core/governance/residency.py`: with enforcement on, a provider is refused
   unless an administrator has attested, for the tenant's data region, that
