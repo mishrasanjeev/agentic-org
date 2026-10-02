@@ -4,6 +4,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Model gateway: routing policies in front of every provider
+- `core/governance/model_gateway.py`: tenant routing policies decide the
+  provider and model of a model call from its use case, data sensitivity,
+  agent, business unit and language; a policy routes (provider, model or cost
+  tier), fences (`allowed_providers`, a refusal rather than a substitution) or
+  restricts (`in_region_only`). A request tagged `restricted` may only use a
+  provider inside the deployment or one attested for the tenant's region,
+  whether or not residency enforcement is on; otherwise it is refused with
+  `E1014`. Applied at the agent runner (run and resume, with the sensitivity
+  recorded on the agent) and `LLMRouter.complete`; every decision is logged
+  with a correlation id and counted in
+  `agenticorg_model_gateway_decisions_total{outcome}`.
+- `GET /api/v1/model-gateway/status`, `GET/POST /api/v1/model-gateway/policies`,
+  `PATCH/DELETE .../policies/{id}`, `POST .../evaluate` (dry run); tenant
+  admin; each change writes a signed audit row. Table `model_routing_policies`
+  (`v6z34_model_routing_policies`, tenant RLS).
+- Off by default: the authority flag `model_gateway.enabled` (operator
+  managed) or `AGENTICORG_MODEL_GATEWAY_ENABLED` turns it on. Docs:
+  `docs/governance/model-gateway.md`.
+
 ### Added - Residency enforcement and provider attestations
 - `core/governance/residency.py`: with enforcement on, a provider is refused
   unless an administrator has attested, for the tenant's data region, that
