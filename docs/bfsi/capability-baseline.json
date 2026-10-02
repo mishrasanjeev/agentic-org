@@ -510,7 +510,7 @@
           "core/models/provider_attestation.py",
           "docs/governance/data-residency.md"
         ],
-        "note": "No training pipeline exists; a provider is usable in a region only with an attestation that records a written no-training commitment and its evidence reference, revocable and audited."
+        "note": "No training pipeline exists; with residency enforcement on for the tenant, a provider is usable in its region only with an attestation that records a written no-training commitment and its evidence reference, revocable and audited; with enforcement off (the default) the attestation is not consulted."
       },
       "grantex": {
         "status": "none",
@@ -4318,7 +4318,7 @@
       "domain": "AIGOV",
       "title": "Regulatory risk tiers",
       "expectation": "AI workloads categorised into risk tiers with stricter validation and oversight for high-risk models.",
-      "status": "covered",
+      "status": "partial",
       "agenticorg": {
         "status": "partial",
         "evidence": [
@@ -4329,14 +4329,14 @@
         "note": "Action risk classes, case tiers and maturity labels; no regulatory risk tiers for AI workloads (the authority layer now carries tool risk tiers on manifests)."
       },
       "grantex": {
-        "status": "covered",
+        "status": "partial",
         "evidence": [
           "spec/manifest-0.6.schema.json",
           "packages/sdk-ts/src/manifest.ts",
           "packages/sdk-py/src/grantex/manifest.py",
           "packages/mcp-auth/src/resource/tool-policy.ts"
         ],
-        "note": "Tool manifests declare a risk tier; a high-risk tool needs a decision grant on every call in both SDKs and the MCP tool policy, and lower tiers are reported for platform policies."
+        "note": "Tool manifests declare a risk tier and a high-risk tool needs a decision grant on every call in both SDKs and the MCP tool policy; the tiers classify tools, not AI workloads or models."
       },
       "group": "WP-08"
     },
