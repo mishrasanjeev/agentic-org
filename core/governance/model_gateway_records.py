@@ -91,15 +91,123 @@ def message_tokens(message: Any) -> tuple[int | None, int | None, int]:
 def estimate_cost_usd(
     provider: str | None, model: str, *, input_tokens: int | None, output_tokens: int | None, tokens: int
 ) -> float:
-    """The call's cost: the provider's list price when it is known, otherwise the platform's blended estimate."""
+    """The call's cost: the model's price when one is known, otherwise the platform's blended estimate."""
+    from core.governance.model_pricing import price_for
+
     name = (model or "").strip()
     if (provider == "gemini" or name.startswith("gemini")) and input_tokens is not None and output_tokens is not None:
         from core.llm.router import gemini_cost_usd
 
         return round(gemini_cost_usd(name, input_tokens, output_tokens), 6)
+    price = price_for(provider, name)
+    if price is not None:
+        return price.cost_usd(input_tokens=input_tokens, output_tokens=output_tokens, tokens=tokens)
     from core.langgraph.runner import _BLENDED_COST_PER_1K_TOKENS_USD
 
     return round(tokens * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens else 0.0
+
+
+@dataclass(frozen=True)
+class ModelHealth:
+    """What the routing records say about one model over the quality window."""
+
+    provider: str
+    model: str
+    calls: int
+    failures: int
+    avg_latency_ms: float
+    avg_cost_usd: float
+    total_cost_usd: float
+
+    @property
+    def failure_rate(self) -> float:
+        return self.failures / self.calls if self.calls else 0.0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**asdict(self), "failure_rate": round(self.failure_rate, 4)}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ModelHealth:
+        return cls(
+            **{
+                k: data[k]
+                for k in ("provider", "model", "calls", "failures", "avg_latency_ms", "avg_cost_usd", "total_cost_usd")
+            }
+        )
+
+
+def _health_key(tenant_id: uuid.UUID, hours: int) -> str:
+    return f"model_gateway:health:{tenant_id}:{hours}"
+
+
+async def _load_health(tenant_id: uuid.UUID, hours: int) -> list[ModelHealth]:
+    from datetime import timedelta
+
+    from sqlalchemy import case, func, select
+
+    from core.database import get_tenant_session
+    from core.models.model_gateway_record import ModelGatewayRecord as R
+
+    since = datetime.now(UTC) - timedelta(hours=hours)
+    failed = func.sum(case((R.outcome == "failed", 1), else_=0))
+    statement = (
+        select(
+            R.provider,
+            R.model,
+            func.count(),
+            failed,
+            func.avg(R.latency_ms),
+            func.avg(R.cost_usd),
+            func.sum(R.cost_usd),
+        )
+        .where(R.tenant_id == tenant_id, R.created_at >= since)
+        .group_by(R.provider, R.model)
+    )
+    async with get_tenant_session(tenant_id) as session:
+        rows = (await session.execute(statement)).all()
+    return [
+        ModelHealth(
+            provider=str(row[0]),
+            model=str(row[1]),
+            calls=int(row[2] or 0),
+            failures=int(row[3] or 0),
+            avg_latency_ms=round(float(row[4] or 0.0), 1),
+            avg_cost_usd=round(float(row[5] or 0.0), 6),
+            total_cost_usd=round(float(row[6] or 0.0), 6),
+        )
+        for row in rows
+    ]
+
+
+async def model_health(tenant_id: uuid.UUID, *, window_hours: int | None = None) -> dict[tuple[str, str], ModelHealth]:
+    """Per-model observations over the quality window, keyed by (provider, model); cached briefly."""
+    from core.async_redis import get_async_redis
+
+    hours = int(window_hours or settings.model_gateway_quality_window_hours)
+    redis = None
+    try:
+        redis = await get_async_redis()
+        if redis is not None:
+            cached = await redis.get(_health_key(tenant_id, hours))
+            if cached:
+                items = [ModelHealth.from_dict(item) for item in json.loads(cached)]
+                return {(item.provider, item.model): item for item in items}
+    # enterprise-gate: broad-except-ok reason=health-cache-miss-falls-through-to-the-database
+    except Exception as exc:
+        logger.warning("model_gateway_health_cache_read_failed", error_type=type(exc).__name__)
+        redis = None
+    items = await _load_health(tenant_id, hours)
+    if redis is not None:
+        try:
+            await redis.set(
+                _health_key(tenant_id, hours),
+                json.dumps([item.to_dict() for item in items]),
+                ex=settings.model_gateway_health_cache_seconds,
+            )
+        # enterprise-gate: broad-except-ok reason=health-cache-write-is-best-effort-ttl-bounds-staleness
+        except Exception as exc:
+            logger.warning("model_gateway_health_cache_write_failed", error_type=type(exc).__name__)
+    return {(item.provider, item.model): item for item in items}
 
 
 @dataclass(frozen=True)

@@ -57,13 +57,18 @@ class TestTokens:
         assert rec.message_tokens(SimpleNamespace()) == (None, None, 0)
 
     def test_cost_uses_the_list_price_where_known_and_the_blended_estimate_otherwise(self):
+        from core.governance.model_pricing import price_for
         from core.langgraph.runner import _BLENDED_COST_PER_1K_TOKENS_USD
         from core.llm.router import gemini_cost_usd
 
         gemini = rec.estimate_cost_usd("gemini", "gemini-2.5-flash", input_tokens=1000, output_tokens=500, tokens=1500)
         assert gemini == round(gemini_cost_usd("gemini-2.5-flash", 1000, 500), 6) and gemini > 0
-        blended = rec.estimate_cost_usd("openai", "gpt-4o", input_tokens=None, output_tokens=None, tokens=2000)
-        assert blended == round(2000 * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6)
+        priced = rec.estimate_cost_usd("openai", "gpt-4o", input_tokens=None, output_tokens=None, tokens=2000)
+        assert priced == price_for("openai", "gpt-4o").cost_usd(input_tokens=None, output_tokens=None, tokens=2000)
+        unpriced = rec.estimate_cost_usd(
+            "openai_compatible", "my-model", input_tokens=None, output_tokens=None, tokens=2000
+        )
+        assert unpriced == round(2000 * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6)
         assert (
             rec.estimate_cost_usd("gemini", "gemini-2.5-flash", input_tokens=None, output_tokens=None, tokens=0) == 0.0
         )
@@ -331,3 +336,64 @@ class TestCorrelationId:
             )
         assert len(fresh.correlation_id) == 32
         assert gw.request_correlation_id() is None
+
+
+class TestModelHealth:
+    def _rows(self):
+        return [
+            ("openai", "gpt-4o-mini", 100, 1, 420.0, 0.0004, 0.04),
+            ("gemini", "gemini-2.5-flash", 50, 10, 900.5, 0.0002, 0.01),
+        ]
+
+    def test_rows_aggregate_to_health_with_a_failure_rate(self, monkeypatch):
+        executed: list = []
+
+        class _Session:
+            async def execute(self, statement):
+                executed.append(str(statement))
+                return SimpleNamespace(all=lambda: self_rows)
+
+        self_rows = self._rows()
+
+        @contextlib.asynccontextmanager
+        async def _ctx(_tid):
+            yield _Session()
+
+        monkeypatch.setattr("core.database.get_tenant_session", _ctx)
+        tid = uuid.uuid4()
+        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=None)):
+            health = asyncio.run(rec.model_health(tid, window_hours=6))
+        mini = health[("openai", "gpt-4o-mini")]
+        assert mini.calls == 100 and mini.failures == 1 and mini.failure_rate == 0.01 and mini.avg_latency_ms == 420.0
+        flash = health[("gemini", "gemini-2.5-flash")]
+        assert flash.failure_rate == 0.2 and flash.total_cost_usd == 0.01
+        assert "model_gateway_records" in executed[0] and "GROUP BY" in executed[0].upper()
+        assert rec.ModelHealth.from_dict(mini.to_dict()) == mini and mini.to_dict()["failure_rate"] == 0.01
+
+    def test_health_is_served_from_the_cache_and_written_with_the_configured_ttl(self, monkeypatch):
+        store: dict[str, str] = {}
+        redis = AsyncMock()
+        redis.get = AsyncMock(side_effect=lambda key: store.get(key))
+        redis.set = AsyncMock(side_effect=lambda key, value, ex=None: store.__setitem__(key, value))
+        tid = uuid.uuid4()
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(
+                rec, "_load_health", AsyncMock(return_value=[rec.ModelHealth("openai", "gpt-4o", 3, 0, 1.0, 0.0, 0.0)])
+            ) as load,
+        ):
+            first = asyncio.run(rec.model_health(tid))
+            second = asyncio.run(rec.model_health(tid))
+        assert first == second and ("openai", "gpt-4o") in first
+        load.assert_awaited_once()
+        assert redis.set.await_args.kwargs["ex"] == rec.settings.model_gateway_health_cache_seconds
+        assert next(iter(store)).startswith(f"model_gateway:health:{tid}:")
+
+    def test_a_cache_failure_falls_through_to_the_database(self):
+        redis = AsyncMock()
+        redis.get = AsyncMock(side_effect=RuntimeError("redis down"))
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(rec, "_load_health", AsyncMock(return_value=[])),
+        ):
+            assert asyncio.run(rec.model_health(uuid.uuid4())) == {}

@@ -969,3 +969,160 @@ class TestRecordsMigration:
         assert "ALTER TABLE model_gateway_records ENABLE ROW LEVEL SECURITY" in src
         assert "FORCE ROW LEVEL SECURITY" in src and "WITH CHECK" in src
         assert "ix_model_gateway_records_tenant_correlation" in src
+
+
+CANDIDATES = (
+    {"provider": "openai", "model": "gpt-4o", "weight": 1},
+    {"provider": "openai", "model": "gpt-4o-mini", "weight": 1},
+    {"provider": "gemini", "model": "gemini-2.5-flash", "weight": 1},
+)
+
+
+def _health(rates: dict[tuple[str, str], float] | None = None):
+    from core.governance.model_gateway_records import ModelHealth
+
+    return {
+        key: ModelHealth(
+            key[0],
+            key[1],
+            calls=100,
+            failures=int(rate * 100),
+            avg_latency_ms=1.0,
+            avg_cost_usd=0.0,
+            total_cost_usd=0.0,
+        )
+        for key, rate in (rates or {}).items()
+    }
+
+
+class TestCostAware:
+    def test_the_cheapest_healthy_candidate_wins(self, gateway_on):
+        policy = _policy(targets=CANDIDATES, cost_aware=True)
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value=_health())),
+        ):
+            decision = asyncio.run(decide(_req()))
+        # gemini-2.5-flash is the cheapest by list price, then gpt-4o-mini, then gpt-4o.
+        assert (decision.provider, decision.model) == ("gemini", "gemini-2.5-flash")
+        assert decision.applied and "cost-aware: cheapest healthy of 3" in decision.reason
+
+    def test_a_failing_candidate_is_skipped_at_the_policy_threshold(self, gateway_on):
+        policy = _policy(targets=CANDIDATES, cost_aware=True, max_failure_rate=0.02)
+        health = _health({("gemini", "gemini-2.5-flash"): 0.1, ("openai", "gpt-4o-mini"): 0.02})
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value=health)),
+        ):
+            decision = asyncio.run(decide(_req()))
+        assert (decision.provider, decision.model) == ("openai", "gpt-4o-mini")
+
+    def test_the_default_threshold_comes_from_the_settings(self, gateway_on, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_max_failure_rate", 0.5)
+        policy = _policy(targets=CANDIDATES, cost_aware=True)
+        health = _health({("gemini", "gemini-2.5-flash"): 0.4})
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value=health)),
+        ):
+            assert asyncio.run(decide(_req())).model == "gemini-2.5-flash"
+
+    def test_no_healthy_candidate_gives_the_least_failing_one(self, gateway_on):
+        policy = _policy(targets=CANDIDATES, cost_aware=True, max_failure_rate=0.01)
+        health = _health(
+            {("gemini", "gemini-2.5-flash"): 0.5, ("openai", "gpt-4o-mini"): 0.3, ("openai", "gpt-4o"): 0.2}
+        )
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value=health)),
+        ):
+            decision = asyncio.run(decide(_req()))
+        assert decision.model == "gpt-4o" and "least failing" in decision.reason
+
+    def test_unreadable_health_degrades_to_price_alone(self, gateway_on):
+        policy = _policy(targets=CANDIDATES, cost_aware=True)
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(side_effect=RuntimeError("db down"))),
+        ):
+            decision = asyncio.run(decide(_req()))
+        assert decision.model == "gemini-2.5-flash" and "health unavailable" in decision.reason
+
+    def test_the_fence_narrows_the_candidates_and_refuses_a_policy_whose_targets_all_stray(self, gateway_on):
+        # The cheapest target is outside the fence: the cheapest inside it wins.
+        policy = _policy(targets=CANDIDATES, cost_aware=True, allowed_providers=("openai",))
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            assert asyncio.run(decide(_req())).model == "gpt-4o-mini"
+        # A stored policy whose targets all stray outside its fence fails closed.
+        strayed = _policy(targets=CANDIDATES[2:], cost_aware=True, allowed_providers=("openai",))
+        with (
+            _with([strayed]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            with pytest.raises(ModelGatewayRefused, match="outside the providers"):
+                asyncio.run(decide(_req()))
+
+    def test_an_unpriced_candidate_ranks_last_and_the_fence_still_applies(self, gateway_on):
+        targets = (
+            {"provider": "openai_compatible", "model": "in-house", "weight": 1},
+            {"provider": "openai", "model": "gpt-4o", "weight": 1},
+        )
+        policy = _policy(targets=targets, cost_aware=True)
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            assert asyncio.run(decide(_req())).model == "gpt-4o"
+        fenced = _policy(targets=targets, cost_aware=True, allowed_providers=("openai", "openai_compatible"))
+        with (
+            _with([fenced]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            assert asyncio.run(decide(_req())).model == "gpt-4o"
+
+    def test_the_dry_run_reports_the_cost_aware_choice(self, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_enabled", False)
+        monkeypatch.setattr(gw.settings, "env", "test")
+        policy = _policy(targets=CANDIDATES, cost_aware=True)
+        with (
+            patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))),
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            evaluation = asyncio.run(gw.evaluate(_req()))
+        assert evaluation.decision is not None and "cost-aware" in evaluation.decision.reason
+
+    def test_validation(self):
+        clean = gw.validate_policy_fields(
+            {"name": "c", "targets": list(CANDIDATES), "cost_aware": True, "max_failure_rate": 0.1}
+        )
+        assert clean["cost_aware"] is True and clean["max_failure_rate"] == 0.1
+        assert gw.validate_policy_fields({"name": "c", "targets": list(CANDIDATES)})["cost_aware"] is False
+        with pytest.raises(ValueError, match="needs targets"):
+            gw.validate_policy_fields({"name": "c", "tier": "tier1", "cost_aware": True})
+        with pytest.raises(ValueError, match="needs targets"):
+            gw.validate_policy_fields({"name": "c", "tier": "tier1", "max_failure_rate": 0.1})
+        for bad in (-0.1, 1.5, True, "x"):
+            with pytest.raises(ValueError):
+                gw.validate_policy_fields({"name": "c", "targets": list(CANDIDATES), "max_failure_rate": bad})
+        policy = _policy(targets=CANDIDATES, cost_aware=True, max_failure_rate=0.2)
+        assert Policy.from_dict(policy.to_dict()) == policy
+
+
+class TestCostAwareMigration:
+    def test_revision_chain_and_columns(self):
+        import importlib.util
+
+        path = ROOT / "migrations" / "versions" / "v6_z37_cost_aware_routing.py"
+        spec = importlib.util.spec_from_file_location("v6_z37_cost_aware_routing", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.revision == "v6z37_cost_aware_routing" and len(module.revision) <= 32
+        assert module.down_revision == "v6z36_model_gateway_records"
+        src = path.read_text(encoding="utf-8")
+        assert "ADD COLUMN IF NOT EXISTS cost_aware BOOLEAN NOT NULL DEFAULT false" in src
+        assert "ADD COLUMN IF NOT EXISTS max_failure_rate DOUBLE PRECISION" in src
+        assert "ck_model_routing_policies_max_failure_rate" in src

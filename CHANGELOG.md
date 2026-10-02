@@ -4,6 +4,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Model gateway: cost comparison and cost-aware routing
+- `core/governance/model_pricing.py`: list prices per million tokens for the
+  catalogue models (Gemini from the router's table), nothing per token for
+  models inside the deployment, Azure deployments priced as their base model;
+  `AGENTICORG_MODEL_PRICE_OVERRIDES_JSON` replaces list prices with negotiated
+  ones (a negative or non-finite override is rejected). The routing records
+  cost each call at its model's price when one is known; the direct router
+  does so behind `AGENTICORG_MODEL_PRICING_FOR_ROUTER_COSTS` (off by default)
+  and otherwise keeps its historical flat rates (FINDINGS A-116).
+- `GET /api/v1/model-gateway/costs`: every catalogue model and every model seen
+  in the records with its list price, blended rate and the observations over
+  the window (calls, failures, failure rate, latency, cost), cheapest first.
+- Routing policies gain `cost_aware` and `max_failure_rate`
+  (migration `v6z37_cost_aware_routing`): with `cost_aware`, each call gets the
+  cheapest of the policy's `targets` whose observed failure rate over
+  `AGENTICORG_MODEL_GATEWAY_QUALITY_WINDOW_HOURS` (24) stays under the policy's
+  threshold or `AGENTICORG_MODEL_GATEWAY_MAX_FAILURE_RATE` (0.05); no
+  observations count as healthy, an unpriced target ranks last, unreadable
+  records degrade to price alone, and the choice is named in the decision's
+  reason. Observations are cached for
+  `AGENTICORG_MODEL_GATEWAY_HEALTH_CACHE_SECONDS` (60).
+
 ### Added - Model gateway: model-level metrics, correlation ids and routing records
 - Every model call on the agent path (the reasoning node) and the direct
   router is metered once it ends: `agenticorg_model_calls_total`,

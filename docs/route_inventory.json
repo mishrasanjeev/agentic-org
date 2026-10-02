@@ -5036,7 +5036,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 524,
+    "source_line": 534,
     "tenant_required": true
   },
   {
@@ -5054,7 +5054,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 548,
+    "source_line": 558,
     "tenant_required": true
   },
   {
@@ -5072,7 +5072,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 602,
+    "source_line": 612,
     "tenant_required": true
   },
   {
@@ -5090,7 +5090,25 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 572,
+    "source_line": 582,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.costs",
+    "auth_required": true,
+    "function": "compare_costs",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/model-gateway/costs api/v1/model_gateway.py:compare_costs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/costs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.model_gateway.sensitive.read",
+    "source_line": 732,
     "tenant_required": true
   },
   {
@@ -5108,7 +5126,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 757,
+    "source_line": 816,
     "tenant_required": true
   },
   {
@@ -5126,7 +5144,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 624,
+    "source_line": 634,
     "tenant_required": true
   },
   {
@@ -5144,7 +5162,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 646,
+    "source_line": 656,
     "tenant_required": true
   },
   {
@@ -5162,7 +5180,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 700,
+    "source_line": 710,
     "tenant_required": true
   },
   {
@@ -5180,7 +5198,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 670,
+    "source_line": 680,
     "tenant_required": true
   },
   {
@@ -5198,7 +5216,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 416,
+    "source_line": 426,
     "tenant_required": true
   },
   {
@@ -5216,7 +5234,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 442,
+    "source_line": 452,
     "tenant_required": true
   },
   {
@@ -5234,7 +5252,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 502,
+    "source_line": 512,
     "tenant_required": true
   },
   {
@@ -5252,7 +5270,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 470,
+    "source_line": 480,
     "tenant_required": true
   },
   {
@@ -5270,7 +5288,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 722,
+    "source_line": 781,
     "tenant_required": true
   },
   {
@@ -5288,7 +5306,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 394,
+    "source_line": 404,
     "tenant_required": true
   },
   {

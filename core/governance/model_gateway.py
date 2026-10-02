@@ -160,6 +160,10 @@ class Policy:
     allowed_providers: tuple[str, ...] | None = None
     in_region_only: bool = False
     reason: str = ""
+    # Cost-aware: the cheapest target whose observed failure rate stays under
+    # ``max_failure_rate`` (the deployment's default when None) is chosen.
+    cost_aware: bool = False
+    max_failure_rate: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -452,6 +456,8 @@ def _policy(row: Any) -> Policy:
         targets=tuple(dict(t) for t in targets) if targets is not None else None,
         in_region_only=bool(row.in_region_only),
         reason=row.reason or "",
+        cost_aware=bool(getattr(row, "cost_aware", False)),
+        max_failure_rate=getattr(row, "max_failure_rate", None),
     )
 
 
@@ -683,6 +689,68 @@ def pick_target(targets: tuple[dict[str, Any], ...], correlation_id: str) -> dic
     return targets[-1]
 
 
+@dataclass(frozen=True)
+class CostChoice:
+    provider: str | None
+    model: str
+    reason: str
+
+
+async def cheapest_healthy(policy: Policy, tenant_id: uuid.UUID | None) -> CostChoice:
+    """The cheapest of the policy's targets whose observed failure rate stays under the policy's threshold.
+
+    Prices come from the list (``core.governance.model_pricing``); an unpriced
+    target ranks last. Health comes from the tenant's routing records over the
+    quality window; a target with no observations counts as healthy. When the
+    records cannot be read the choice degrades to price alone and is logged;
+    when no target is healthy the least failing one is chosen and logged.
+    """
+    from core.governance.model_gateway_records import model_health
+    from core.governance.model_pricing import price_for, rank_key
+
+    # Only targets inside the policy's fence are candidates; a policy whose
+    # targets all stray outside it keeps them so the fence refuses the call.
+    targets = list(policy.targets or ())
+    if policy.allowed_providers is not None:
+        inside = [t for t in targets if (normalise_provider(t.get("provider")) or "") in policy.allowed_providers]
+        targets = inside or targets
+    threshold = (
+        policy.max_failure_rate if policy.max_failure_rate is not None else settings.model_gateway_max_failure_rate
+    )
+    health: dict[tuple[str, str], Any] = {}
+    degraded = False
+    if tenant_id is not None:
+        try:
+            health = await model_health(tenant_id)
+        # enterprise-gate: broad-except-ok reason=unreadable-health-degrades-to-a-price-only-choice-and-is-logged
+        except Exception as exc:
+            degraded = True
+            logger.warning("model_gateway_health_unavailable", error_type=type(exc).__name__, policy_id=policy.id)
+    ranked = sorted(targets, key=lambda t: rank_key(price_for(t.get("provider"), str(t.get("model") or ""))))
+
+    def _rate(target: dict[str, Any]) -> float | None:
+        stat = health.get((normalise_provider(target.get("provider")) or "", str(target.get("model") or "")))
+        return None if stat is None else float(stat.failure_rate)
+
+    def _healthy(target: dict[str, Any]) -> bool:
+        rate = _rate(target)
+        return rate is None or rate <= threshold
+
+    healthy = [t for t in ranked if _healthy(t)]
+    if healthy:
+        chosen = healthy[0]
+        how = "price only, health unavailable" if degraded else f"cheapest healthy of {len(targets)}"
+    else:
+        chosen = min(ranked, key=lambda t: _rate(t) or 0.0)
+        how = f"no target under a failure rate of {threshold:.0%}; least failing"
+        logger.warning("model_gateway_no_healthy_target", policy_id=policy.id, threshold=threshold)
+    return CostChoice(
+        provider=normalise_provider(chosen.get("provider")),
+        model=str(chosen.get("model") or ""),
+        reason=f"policy {policy.name} (cost-aware: {how})",
+    )
+
+
 def _apply(policy: Policy, provider: str | None, model: str, correlation_id: str = "") -> tuple[str | None, str]:
     """The provider and model a matched policy gives a request that asked for ``provider`` and ``model``."""
     if policy.targets:
@@ -798,18 +866,22 @@ async def _decide(
     model = request.requested_model
     if policy is None:
         reason = "no policy matched; the caller's choice stands"
+    elif policy.cost_aware and policy.targets:
+        choice = await cheapest_healthy(policy, tid)
+        provider, model, reason = choice.provider, choice.model, choice.reason
     else:
         provider, model = _apply(policy, provider, model, correlation_id)
         reason = f"policy {policy.name}"
-        if policy.allowed_providers is not None and (provider or "") not in policy.allowed_providers:
-            raise _refuse(
-                f"Model gateway: provider {provider or 'unknown'} is outside the providers policy "
-                f"{policy.name} allows.",
-                correlation_id=correlation_id,
-                policy=policy,
-                request=request,
-                dry_run=dry_run,
-            )
+    # The fence is checked after either selection, so a stored policy whose
+    # targets stray outside it still fails closed.
+    if policy is not None and policy.allowed_providers is not None and (provider or "") not in policy.allowed_providers:
+        raise _refuse(
+            f"Model gateway: provider {provider or 'unknown'} is outside the providers policy {policy.name} allows.",
+            correlation_id=correlation_id,
+            policy=policy,
+            request=request,
+            dry_run=dry_run,
+        )
     access_policy = _check_access(
         request, provider, model, policy_set.access, correlation_id=correlation_id, dry_run=dry_run
     )
@@ -1088,6 +1160,15 @@ def validate_policy_fields(fields: dict[str, Any]) -> dict[str, Any]:
         out["allowed_providers"] = None
     out["in_region_only"] = bool(fields.get("in_region_only", False))
     out["targets"] = _clean_targets(fields.get("targets"))
+    out["cost_aware"] = bool(fields.get("cost_aware", False))
+    rate = fields.get("max_failure_rate")
+    if rate is not None:
+        if isinstance(rate, bool) or not isinstance(rate, int | float) or not 0 <= float(rate) <= 1:
+            raise ValueError("max_failure_rate is a fraction between 0 and 1")
+        rate = float(rate)
+    out["max_failure_rate"] = rate
+    if (out["cost_aware"] or rate is not None) and not out["targets"]:
+        raise ValueError("a cost-aware policy needs targets to choose from")
     if out["targets"] is not None and (out["provider"] or out["model"] or out["tier"]):
         raise ValueError("a policy with targets names no single provider, model or tier")
     if out["provider"] and out["model"]:

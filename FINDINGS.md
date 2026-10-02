@@ -1598,3 +1598,19 @@ Remove an entry in the pull request that fixes it.
   mesh with mutual TLS is in place, and the mesh item (NET-04) is attested in the
   report's `infrastructure_controls` section like the other hosting controls.
 
+## A-116 — The direct router prices every OpenAI call at one flat rate (fixed)
+
+- **Found:** building cost-aware routing (2026-10-02).
+- **What:** `LLMRouter._call_openai` computed `cost_usd` as `total_tokens * 10 / 1_000_000`
+  whatever the model, so `gpt-4o-mini` (list price 0.15 and 0.60 per million)
+  was charged at roughly forty times its rate and `gpt-4o` output below its
+  rate; `_call_claude` charged every Anthropic model at the Sonnet rate. Budget
+  alerts and the cost counters read those figures.
+- **Reproduce:** call `_call_openai` with a `gpt-4o-mini` response of 1,000
+  prompt and 1,000 completion tokens: cost 0.02 instead of 0.00075.
+- **Fixed (opt-in):** with `AGENTICORG_MODEL_PRICING_FOR_ROUTER_COSTS=true`
+  both calls cost the response at the model's price from
+  `core/governance/model_pricing.py` (prompt and completion tokens split when the
+  response carries them) and keep the historical flat rate only for a model
+  without a price, with a warning. Off (the default) the flat rates stand, so a
+  deployment validates the priced figures before its budget controls change.
