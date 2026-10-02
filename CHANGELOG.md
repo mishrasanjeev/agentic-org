@@ -4,6 +4,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Tamper-evident audit: the hash chain and the model call digests
+- Behind `AGENTICORG_AUDIT_CHAIN_ENABLED` (off by default): the sealing task
+  (`core.tasks.audit_chain_tasks.seal_audit_chains`, every five minutes)
+  links each tenant's unsealed audit rows in write order with a sequence
+  number, the previous link and a SHA-256 link hash over the previous link,
+  the row's signed payload and its signature (migration
+  `v6z41_tamper_evident_audit`). The chain head is logged after every sealing
+  as the anchor. Verification recomputes every link and reports the first
+  break with its sequence number and reason (`sequence_gap` for a removed
+  row, `previous_link` for an inserted or reordered one, `link_hash` for an
+  edited one, `signature` for a forged one); the daily task verifies every
+  tenant and counts results in
+  `agenticorg_audit_chain_verifications_total{result}`.
+- `GET /api/v1/audit/chain` reports the head and the sealing backlog and
+  `GET /api/v1/audit/chain/verify?from_seq=&limit=` runs a verification; the
+  compliance evidence package's `audit_logs` section carries the head, the
+  backlog and a verification of the newest thousand links.
+- Routing records carry `prompt_digest`, `request_digest` and
+  `response_digest` (SHA-256 over the system prompt, every message the model
+  saw and its answer), signed with the record and never the content; records
+  written before verify unchanged. See `docs/operations/audit-chain.md`.
+
 ### Added - Observability: run timelines, the waterfall and the live workload console
 - Behind `AGENTICORG_TRACING_TIMELINE_ENABLED` (off by default; nothing
   while tracing is off): a span processor keeps the finished spans of each

@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import uuid as _uuid
 from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select
 
 from api.deps import get_current_tenant, get_user_role
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
+from core.governance import audit_chain
 from core.models.agent import Agent
 from core.models.audit import AuditLog
 from core.ownership import Caller, agent_visibility_clause, caller_from_request
@@ -144,9 +146,7 @@ async def query_audit(
 
         total = (await session.execute(count_base)).scalar() or 0
 
-        query = (
-            base.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
-        )
+        query = base.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
         result = await session.execute(query)
         entries = result.scalars().all()
 
@@ -244,11 +244,7 @@ async def query_enforce_audit(
     tid = _uuid.UUID(tenant_id)
 
     async with get_tenant_session(tid) as session:
-        base = (
-            select(AuditLog)
-            .where(AuditLog.tenant_id == tid)
-            .where(AuditLog.resource_type == "tool_call")
-        )
+        base = select(AuditLog).where(AuditLog.tenant_id == tid).where(AuditLog.resource_type == "tool_call")
         count_base = (
             select(func.count())
             .select_from(AuditLog)
@@ -280,12 +276,8 @@ async def query_enforce_audit(
             from sqlalchemy import cast  # noqa: PLC0415
             from sqlalchemy.dialects.postgresql import JSONB  # noqa: PLC0415
 
-            base = base.where(
-                cast(AuditLog.details, JSONB)["connector"].astext == connector
-            )
-            count_base = count_base.where(
-                cast(AuditLog.details, JSONB)["connector"].astext == connector
-            )
+            base = base.where(cast(AuditLog.details, JSONB)["connector"].astext == connector)
+            count_base = count_base.where(cast(AuditLog.details, JSONB)["connector"].astext == connector)
 
         if date_from:
             try:
@@ -305,20 +297,14 @@ async def query_enforce_audit(
 
         total = (await session.execute(count_base)).scalar() or 0
 
-        entries_q = (
-            base.order_by(AuditLog.created_at.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-        )
+        entries_q = base.order_by(AuditLog.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
         entries = (await session.execute(entries_q)).scalars().all()
 
         # Resolve agent_id → agent_name in one round-trip rather than per-row.
         agent_ids = {e.agent_id for e in entries if e.agent_id is not None}
         agent_name_by_id: dict[str, str] = {}
         if agent_ids:
-            name_rows = await session.execute(
-                select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids))
-            )
+            name_rows = await session.execute(select(Agent.id, Agent.name).where(Agent.id.in_(agent_ids)))
             for aid, name in name_rows.all():
                 agent_name_by_id[str(aid)] = name or ""
 
@@ -330,3 +316,39 @@ async def query_enforce_audit(
         per_page=per_page,
         pages=pages,
     )
+
+
+# ── GET /audit/chain ─────────────────────────────────────────────────────────
+
+
+@router.get("/audit/chain")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="audit.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="audit.chain.status",
+)
+async def audit_chain_status(tenant_id: str = Depends(get_current_tenant)) -> dict:
+    """The tenant's hash chain: whether sealing is on, the head, and how many rows wait for sealing."""
+    return await audit_chain.status(_uuid.UUID(tenant_id))
+
+
+@router.get("/audit/chain/verify")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="audit.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="audit.chain.verify",
+)
+async def audit_chain_verify(
+    from_seq: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100_000)] = 10_000,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict:
+    """Recompute the chain from ``from_seq`` over at most ``limit`` rows and report the first break."""
+    result = await audit_chain.verify(_uuid.UUID(tenant_id), from_seq=from_seq, limit=limit)
+    return result.to_dict()

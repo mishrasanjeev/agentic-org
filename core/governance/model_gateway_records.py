@@ -64,6 +64,9 @@ SIGNED_FIELDS: tuple[str, ...] = (
     "cost_usd",
     "created_at",
 )
+# Digests of the prompt, the request and the response (docs/operations/audit-chain.md).
+# Signed only when present, so records written before they existed verify unchanged.
+DIGEST_FIELDS: tuple[str, ...] = ("prompt_digest", "request_digest", "response_digest")
 
 
 def _usage_value(usage: Any, *names: str) -> int | None:
@@ -234,6 +237,9 @@ class ModelCallRecord:
     cost_usd: float
     tokens_per_second: float | None
     created_at: datetime
+    prompt_digest: str | None = None
+    request_digest: str | None = None
+    response_digest: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -257,7 +263,36 @@ def canonical_record_payload(record: Any) -> str:
     """The signed fields of a record (dataclass, dict or row), serialised the same way wherever they come from."""
     get = record.get if isinstance(record, dict) else lambda k, d=None: getattr(record, k, d)
     canonical = {name: _canonical(get(name)) for name in SIGNED_FIELDS}
+    for name in DIGEST_FIELDS:
+        value = get(name)
+        if value:
+            canonical[name] = str(value)
     return json.dumps(canonical, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def content_digest(value: Any) -> str | None:
+    """SHA-256 over the canonical JSON of a prompt, a message content or an answer; None for nothing."""
+    if value is None or value == "" or value == [] or value == {}:
+        return None
+    material = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
+def messages_digest(messages: Any) -> str | None:
+    """SHA-256 over what was sent to the model: each message's type and content, in order."""
+    items = [
+        {"type": str(getattr(m, "type", None) or type(m).__name__), "content": getattr(m, "content", "")}
+        for m in (messages or [])
+    ]
+    return content_digest(items) if items else None
+
+
+def prompt_digest_of(messages: Any) -> str | None:
+    """SHA-256 over the system prompt among ``messages`` (its version, in effect); None without one."""
+    for m in messages or []:
+        if str(getattr(m, "type", "") or "") == "system":
+            return content_digest(getattr(m, "content", None))
+    return None
 
 
 def sign_record(record: Any, secret: bytes) -> str:
@@ -319,6 +354,7 @@ async def _write(record: ModelCallRecord) -> bool:
             tenant_id=uuid.UUID(str(tid)),
             signature=signature,
             **{name: getattr(record, name) for name in SIGNED_FIELDS if name != "tenant_id"},
+            **{name: getattr(record, name) for name in DIGEST_FIELDS},
         )
         async with get_tenant_session(uuid.UUID(str(tid))) as session:
             session.add(row)
@@ -349,6 +385,9 @@ async def record_model_call(
     admission_wait_ms: int | None = None,
     use_case: str | None = None,
     agent_id: str | None = None,
+    prompt_digest: str | None = None,
+    request_digest: str | None = None,
+    response_digest: str | None = None,
 ) -> ModelCallRecord:
     """Meter one finished model call and, for a routed call, write its signed record.
 
@@ -391,6 +430,9 @@ async def record_model_call(
         cost_usd=float(cost_usd or 0.0),
         tokens_per_second=tokens_per_second,
         created_at=datetime.now(UTC),
+        prompt_digest=prompt_digest,
+        request_digest=request_digest,
+        response_digest=response_digest,
     )
     _meter(record)
     logger.info(

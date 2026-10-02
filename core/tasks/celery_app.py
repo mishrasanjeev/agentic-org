@@ -43,6 +43,7 @@ app = Celery(
     backend=_redis_url,
     include=[
         "core.cron.tasks",
+        "core.tasks.audit_chain_tasks",
         "core.tasks.budget_tasks",
         "core.tasks.case_push_tasks",
         "core.tasks.gateway_tasks",
@@ -127,6 +128,19 @@ app.conf.beat_schedule = {
         # Run spans past AGENTICORG_TRACING_TIMELINE_RETENTION_DAYS (core/tasks/timeline_tasks.py).
         "task": "core.tasks.timeline_tasks.prune_run_spans",
         "schedule": crontab(hour=3, minute=20),  # daily at 3:20 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "seal-audit-chains": {
+        # Links each tenant's new audit rows onto its hash chain; a no-op unless
+        # AGENTICORG_AUDIT_CHAIN_ENABLED is true (core/tasks/audit_chain_tasks.py).
+        "task": "core.tasks.audit_chain_tasks.seal_audit_chains",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "verify-audit-chains": {
+        # Recomputes every tenant's chain and reports the first break of each.
+        "task": "core.tasks.audit_chain_tasks.verify_audit_chains",
+        "schedule": crontab(hour=4, minute=0),  # daily at 4:00 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-budget-evaluator": {
