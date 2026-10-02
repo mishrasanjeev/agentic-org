@@ -107,7 +107,7 @@ class TestRuleValidation:
         "options, message",
         [
             ({"patterns": ["(a+)+$"]}, "nests or repeats"),
-            ({"patterns": ["(\d*)*"]}, "nests or repeats"),
+            ({"patterns": [r"(\d*)*"]}, "nests or repeats"),
             ({"patterns": ["(x)\\1"]}, "backreference"),
             ({"patterns": ["a" * 600]}, "at most 512"),
             ({"patterns": [1]}, "non-empty string"),

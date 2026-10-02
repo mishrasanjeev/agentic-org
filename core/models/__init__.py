@@ -78,13 +78,13 @@ from core.models.governed_case import GovernedCase as GovernedCase
 from core.models.governed_case import GovernedCaseTransition as GovernedCaseTransition
 from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
+from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.hitl import HITLQueue as HITLQueue
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
-from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
 from core.models.model_gateway_record import ModelGatewayRecord as ModelGatewayRecord
 from core.models.model_limit import ModelLimit as ModelLimit
