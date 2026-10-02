@@ -92,3 +92,66 @@ async def test_without_a_bound_route_no_turn_is_admitted(scripted_model):
         await _run_two_turns(scripted_model)
     admit.assert_not_called()
     assert [call.args[0] for call in release.await_args_list] == [None, None]
+
+
+async def test_each_turn_is_recorded_with_the_agent_and_its_admission_wait(scripted_model):
+    decision = gw.RouteDecision(
+        provider="gemini", model="gemini-2.5-flash", correlation_id="c-rec", reason="p", gated=True, tenant_id=TENANT
+    )
+    record = AsyncMock()
+    token = gw.bind_route(decision, use_case="agent_run", agent_id=AGENT)
+    try:
+        with (
+            patch("core.langgraph.agent_graph.gateway_admit", AsyncMock(return_value=None)),
+            patch("core.langgraph.agent_graph.gateway_release", AsyncMock()),
+            patch("core.langgraph.agent_graph.record_model_call", record),
+        ):
+            await _run_two_turns(scripted_model)
+    finally:
+        gw.reset_route(token)
+    assert record.await_count == 2
+    for call in record.await_args_list:
+        assert call.kwargs["outcome"] == "completed" and call.kwargs["agent_id"] == AGENT
+        assert isinstance(call.kwargs["latency_ms"], int) and isinstance(call.kwargs["admission_wait_ms"], int)
+        assert call.kwargs["model"] and call.kwargs["provider"] is not None
+
+
+async def test_a_failed_turn_is_recorded_with_its_error_and_the_slot_released(scripted_model):
+    from core.langgraph.agent_graph import build_agent_graph
+
+    def boom(_messages):
+        raise RuntimeError("provider down")
+
+    scripted_model([boom])
+    record = AsyncMock()
+    release = AsyncMock()
+    lease = Lease(lease_id="l1", keys=("k",))
+    token = gw.bind_route(
+        gw.RouteDecision(provider="gemini", model="m", correlation_id="c", reason="p", gated=True, tenant_id=TENANT),
+        use_case="agent_run",
+        agent_id=AGENT,
+    )
+    try:
+        with (
+            patch("core.langgraph.agent_graph.gateway_admit", AsyncMock(return_value=lease)),
+            patch("core.langgraph.agent_graph.gateway_release", release),
+            patch("core.langgraph.agent_graph.record_model_call", record),
+        ):
+            graph = build_agent_graph(
+                system_prompt="scripted",
+                authorized_tools=[],
+                connector_config={},
+                connector_names=[],
+                confidence_floor=0.5,
+                run_grant=RunGrant(mode=EnforcementMode.OFF, token="", source="minted"),
+            )
+            compiled = graph.compile(checkpointer=MemorySaver())
+            try:
+                await compiled.ainvoke(_state(), {"configurable": {"thread_id": "turns-2"}})
+            except RuntimeError:
+                pass
+    finally:
+        gw.reset_route(token)
+    assert record.await_count == 1 and record.await_args.kwargs["outcome"] == "failed"
+    assert record.await_args.kwargs["error_type"] == "RuntimeError"
+    release.assert_awaited_once_with(lease)

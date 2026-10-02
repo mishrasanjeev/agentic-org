@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
@@ -25,6 +26,7 @@ from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.governance import model_gateway as gateway
 from core.models.model_access_policy import ModelAccessPolicy
+from core.models.model_gateway_record import ModelGatewayRecord
 from core.models.model_limit import ModelLimit
 from core.models.model_routing_policy import ModelRoutingPolicy
 from core.ownership import Caller, caller_from_request
@@ -216,6 +218,31 @@ class LimitOut(BaseModel):
     updated_at: datetime | None
 
 
+class RecordOut(BaseModel):
+    id: uuid.UUID
+    correlation_id: str
+    use_case: str
+    agent_id: str | None
+    policy_id: str | None
+    access_policy_id: str | None
+    requested_provider: str | None
+    requested_model: str | None
+    provider: str
+    model: str
+    fallback_from: str | None
+    restricted: bool
+    outcome: str
+    error_type: str | None
+    latency_ms: int
+    admission_wait_ms: int | None
+    tokens: int
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float
+    signed: bool
+    created_at: datetime
+
+
 class EvaluateIn(BaseModel):
     use_case: str = Field(..., min_length=1, max_length=64)
     requested_provider: str | None = Field(None, max_length=64)
@@ -324,6 +351,35 @@ def _limit_out(row: ModelLimit) -> LimitOut:
 async def _fetch(tenant_id: uuid.UUID, model: type, row_id: uuid.UUID):
     async with get_tenant_session(tenant_id) as session:
         return (await session.execute(select(model).where(model.id == row_id))).scalar_one()
+
+
+def _record_out(row: ModelGatewayRecord) -> RecordOut:
+    from core.governance.model_gateway_records import verify_record
+
+    return RecordOut(
+        id=row.id,
+        correlation_id=row.correlation_id,
+        use_case=row.use_case,
+        agent_id=row.agent_id,
+        policy_id=row.policy_id,
+        access_policy_id=row.access_policy_id,
+        requested_provider=row.requested_provider,
+        requested_model=row.requested_model,
+        provider=row.provider,
+        model=row.model,
+        fallback_from=row.fallback_from,
+        restricted=row.restricted,
+        outcome=row.outcome,
+        error_type=row.error_type,
+        latency_ms=row.latency_ms,
+        admission_wait_ms=row.admission_wait_ms,
+        tokens=row.tokens,
+        input_tokens=row.input_tokens,
+        output_tokens=row.output_tokens,
+        cost_usd=row.cost_usd,
+        signed=verify_record(row),
+        created_at=row.created_at,
+    )
 
 
 @router.get("/status")
@@ -652,6 +708,41 @@ async def delete_limit(
     if not await gateway.delete_limit(tid, limit_id, actor_id=actor_id):
         raise HTTPException(404, "Limit not found")
     return Response(status_code=204)
+
+
+@router.get("/records", response_model=list[RecordOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="model_gateway.records.list",
+)
+async def list_records(
+    correlation_id: Annotated[str | None, Query(max_length=128)] = None,
+    agent_id: Annotated[str | None, Query(max_length=64)] = None,
+    outcome: Annotated[str | None, Query(pattern="^(completed|failed)$")] = None,
+    before: Annotated[datetime | None, Query(description="only records created before this instant")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    tenant_id: str = Depends(get_current_tenant),
+) -> list[RecordOut]:
+    """The routing records, newest first; ``signed`` says each row's signature still matches its fields."""
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(ModelGatewayRecord).where(ModelGatewayRecord.tenant_id == tid)
+        if correlation_id:
+            query = query.where(ModelGatewayRecord.correlation_id == correlation_id)
+        if agent_id:
+            query = query.where(ModelGatewayRecord.agent_id == agent_id)
+        if outcome:
+            query = query.where(ModelGatewayRecord.outcome == outcome)
+        if before is not None:
+            query = query.where(ModelGatewayRecord.created_at < before)
+        rows = (
+            (await session.execute(query.order_by(ModelGatewayRecord.created_at.desc()).limit(limit))).scalars().all()
+        )
+        return [_record_out(row) for row in rows]
 
 
 @router.post("/evaluate")

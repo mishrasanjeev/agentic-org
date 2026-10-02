@@ -101,16 +101,16 @@ class TestAdmit:
             admission = asyncio.run(
                 lim.admit(TENANT, "openai", "gpt-4o", [model_limit, provider_limit], correlation_id="c1")
             )
-            assert admission.rejected is None and admission.lease.held and admission.lease.lease_id == "c1"
+            assert admission.rejected is None and admission.lease.held and len(admission.lease.lease_id) == 32
             assert admission.lease.keys == (
                 f"model_gateway:leases:{TENANT}:{model_limit.id}",
                 f"model_gateway:leases:{TENANT}:{provider_limit.id}",
             )
             # The acquire script gets now, expiry, the maximum and the lease id.
             assert [args[3] for kind, args in redis.evals if kind == "acquire"] == ["2", "5"]
-            assert all(args[4] == "c1" for kind, args in redis.evals if kind == "acquire")
+            assert all(args[4] == admission.lease.lease_id for kind, args in redis.evals if kind == "acquire")
             asyncio.run(lim.release(admission.lease))
-        assert redis.removed == [(key, "c1") for key in admission.lease.keys]
+        assert redis.removed == [(key, admission.lease.lease_id) for key in admission.lease.keys]
 
     def test_the_concurrency_limit_refuses_above_the_maximum(self):
         redis = _Redis(acquire=(0, 2))
@@ -131,7 +131,7 @@ class TestAdmit:
             )
         assert admission.rejected is not None and admission.rejected.kind == "rate"
         assert admission.rejected.retry_after_seconds == 12.5
-        assert redis.removed == [(f"model_gateway:leases:{TENANT}:{provider_limit.id}", "c3")]
+        assert redis.removed == [(f"model_gateway:leases:{TENANT}:{provider_limit.id}", admission.lease.lease_id)]
         assert not admission.lease.held
 
     def test_the_rate_bucket_is_sized_from_requests_per_minute(self):
@@ -180,7 +180,7 @@ class TestAdmit:
                 )
             )
         assert admission.lease.outcome == "unavailable" and not admission.lease.held
-        assert len(redis.removed) == 1 and redis.removed[0][1] == "c6"
+        assert len(redis.removed) == 1 and redis.removed[0][1] == admission.lease.lease_id
 
     def test_a_failing_store_lookup_admits(self):
         with patch("core.async_redis.get_async_redis", AsyncMock(side_effect=RuntimeError("no pool"))):

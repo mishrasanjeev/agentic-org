@@ -435,3 +435,52 @@ def test_evaluate_passes_the_caller_to_the_access_policies(session_rows):
     assert response.status_code == 200 and response.json()["decision"]["gated"] is True
     request = ask.await_args.args[0]
     assert request.application == "advisory-app" and request.principal == "user:7"
+
+
+def _record_row(**over):
+    from core.governance.model_gateway_records import sign_record
+
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "correlation_id": "req-1",
+        "use_case": "agent_run",
+        "agent_id": "a1",
+        "policy_id": "p1",
+        "access_policy_id": None,
+        "requested_provider": "openai",
+        "requested_model": "gpt-4o",
+        "provider": "gemini",
+        "model": "gemini-2.5-flash",
+        "fallback_from": None,
+        "restricted": False,
+        "outcome": "completed",
+        "error_type": None,
+        "latency_ms": 120,
+        "admission_wait_ms": 2,
+        "tokens": 15,
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cost_usd": 0.0001,
+        "created_at": datetime.now(UTC),
+    }
+    base.update(over)
+    row = SimpleNamespace(**base)
+    row.signature = sign_record(row, b"ci-test-secret-key-minimum-16")
+    return row
+
+
+def test_records_are_listed_with_their_signature_check(session_rows, monkeypatch):
+    monkeypatch.setattr("core.config.settings.secret_key", "ci-test-secret-key-minimum-16")
+    good = _record_row()
+    tampered = _record_row(correlation_id="req-2")
+    tampered.cost_usd = 9.0
+    session_rows.extend([good, tampered])
+    client = TestClient(_app(["agenticorg:admin"]))
+    listed = client.get("/api/v1/model-gateway/records?limit=10&outcome=completed&correlation_id=req-1&agent_id=a1")
+    assert listed.status_code == 200
+    assert [item["signed"] for item in listed.json()] == [True, False]
+    assert listed.json()[0]["requested_model"] == "gpt-4o" and listed.json()[0]["provider"] == "gemini"
+    assert client.get("/api/v1/model-gateway/records?outcome=odd").status_code == 422
+    assert client.get("/api/v1/model-gateway/records?limit=0").status_code == 422
+    assert TestClient(_app(["agents:write"])).get("/api/v1/model-gateway/records").status_code == 403

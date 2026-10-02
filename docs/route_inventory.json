@@ -5036,7 +5036,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 468,
+    "source_line": 523,
     "tenant_required": true
   },
   {
@@ -5054,7 +5054,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 492,
+    "source_line": 547,
     "tenant_required": true
   },
   {
@@ -5072,7 +5072,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 546,
+    "source_line": 601,
     "tenant_required": true
   },
   {
@@ -5090,7 +5090,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 516,
+    "source_line": 571,
     "tenant_required": true
   },
   {
@@ -5108,7 +5108,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 666,
+    "source_line": 756,
     "tenant_required": true
   },
   {
@@ -5126,7 +5126,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 568,
+    "source_line": 623,
     "tenant_required": true
   },
   {
@@ -5144,7 +5144,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 590,
+    "source_line": 645,
     "tenant_required": true
   },
   {
@@ -5162,7 +5162,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 644,
+    "source_line": 699,
     "tenant_required": true
   },
   {
@@ -5180,7 +5180,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 614,
+    "source_line": 669,
     "tenant_required": true
   },
   {
@@ -5198,7 +5198,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 360,
+    "source_line": 415,
     "tenant_required": true
   },
   {
@@ -5216,7 +5216,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 386,
+    "source_line": 441,
     "tenant_required": true
   },
   {
@@ -5234,7 +5234,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 446,
+    "source_line": 501,
     "tenant_required": true
   },
   {
@@ -5252,7 +5252,25 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 414,
+    "source_line": 469,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.records.list",
+    "auth_required": true,
+    "function": "list_records",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/model-gateway/records api/v1/model_gateway.py:list_records",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/records",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.model_gateway.sensitive.read",
+    "source_line": 721,
     "tenant_required": true
   },
   {
@@ -5270,7 +5288,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 338,
+    "source_line": 393,
     "tenant_required": true
   },
   {

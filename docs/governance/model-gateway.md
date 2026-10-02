@@ -95,6 +95,38 @@ control, and a cache outage must not stop every model call.
 {"provider": "ollama", "max_concurrency": 4, "reason": "one in-house inference node"}
 ```
 
+## Metrics and routing records
+
+Every model call, on the agent path (the graph's reasoning node) and the direct
+router, is metered by provider and model once it ends:
+
+| Metric | What it counts |
+|---|---|
+| `agenticorg_model_calls_total{provider,model,outcome}` | Calls by outcome (`completed`, `failed`). |
+| `agenticorg_model_call_latency_seconds{provider,model}` | Latency histogram. |
+| `agenticorg_model_call_tokens_total{provider,model,direction}` | Tokens (`input`, `output`, `total`). |
+| `agenticorg_model_call_cost_usd_total{provider,model}` | Cost: the provider's list price where known, the platform's blended estimate otherwise. |
+| `agenticorg_model_call_output_tokens_per_second{provider,model}` | Throughput histogram. |
+| `agenticorg_model_call_errors_total{provider,model,error_type}` | Failures by error type. |
+| `agenticorg_model_fallbacks_total{provider,from_model,to_model}` | Calls answered by a fallback model. |
+| `agenticorg_model_admission_wait_seconds{provider,model}` | Time spent at admission under the per-model limits. |
+
+While the gateway is on for the tenant each call also writes a routing record
+(`model_gateway_records`): the correlation id, the use case and agent, the
+routing and access policies evaluated, what was requested and what was chosen,
+the model it fell back from, the outcome and error type, latency, admission
+wait, tokens and cost. Each row is signed with the platform's audit key; the
+list endpoint reports whether a row's signature still matches its fields.
+Records older than `AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS` (90) are
+pruned daily; `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED=false` keeps the
+metrics and stops the rows.
+
+The correlation id is the request id the platform binds for every request and
+propagates into its worker tasks, so one id links the request, each routing
+decision, each model call and the audit rows of that request; a call outside a
+request gets a fresh id. Time to first token needs streaming, which the
+platform's model calls do not use yet.
+
 ## Decision rules
 
 - The first enabled policy in priority order whose match fields all equal the
@@ -130,8 +162,7 @@ control, and a cache outage must not stop every model call.
 Not yet routed through the gateway: the sidecar model calls that build a model
 without a prefetched decision (explanations, SOP parsing, feedback analysis). They
 keep the tenant's default model and are covered by residency enforcement.
-Planned next: model-level metrics and routing records in the audit trail, and
-cost-aware routing.
+Planned next: cost comparison and cost-aware routing, and the console pages.
 
 ## Observing it
 
@@ -167,6 +198,7 @@ cost-aware routing.
 | `PATCH /api/v1/model-gateway/limits/{id}` | Change a limit. |
 | `DELETE /api/v1/model-gateway/limits/{id}` | Delete a limit (204). |
 | `POST /api/v1/model-gateway/evaluate` | Dry-run a described request (with `application` and `principal` for the access policies): the decision the routing and access policies would make, or the refusal, as data, whether or not the gateway is on (`enabled` says whether it currently applies). Limits are not applied and nothing is metered or logged. |
+| `GET /api/v1/model-gateway/records` | Routing records, newest first; filter by `correlation_id`, `agent_id`, `outcome`, `before`; `limit` up to 1000. `signed` says the row's signature still matches. |
 
 ## Runbook: move a business unit to one provider
 

@@ -95,6 +95,52 @@ model_gateway_limit_outcomes_total = Counter(
     "Model gateway per-model limit checks by limit (concurrency, rate) and outcome (allowed, rejected, unavailable)",
     ["limit", "outcome"],
 )
+
+# ── Model calls (agent path and direct router) ─────────────────────
+
+model_calls_total = Counter(
+    "agenticorg_model_calls_total",
+    "Model calls by provider, model and outcome (completed, failed)",
+    ["provider", "model", "outcome"],
+)
+model_call_latency_seconds = Histogram(
+    "agenticorg_model_call_latency_seconds",
+    "Model call latency by provider and model",
+    ["provider", "model"],
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 30.0, 60.0),
+)
+model_call_tokens_total = Counter(
+    "agenticorg_model_call_tokens_total",
+    "Tokens by provider, model and direction (input, output, total)",
+    ["provider", "model", "direction"],
+)
+model_call_cost_usd_total = Counter(
+    "agenticorg_model_call_cost_usd_total",
+    "Model call cost in USD by provider and model",
+    ["provider", "model"],
+)
+model_call_output_tokens_per_second = Histogram(
+    "agenticorg_model_call_output_tokens_per_second",
+    "Output tokens per second of model calls by provider and model",
+    ["provider", "model"],
+    buckets=(5, 10, 20, 40, 80, 160, 320),
+)
+model_call_errors_total = Counter(
+    "agenticorg_model_call_errors_total",
+    "Failed model calls by provider, model and error type",
+    ["provider", "model", "error_type"],
+)
+model_fallbacks_total = Counter(
+    "agenticorg_model_fallbacks_total",
+    "Model calls answered by a fallback model, by provider, from and to model",
+    ["provider", "from_model", "to_model"],
+)
+model_admission_wait_seconds = Histogram(
+    "agenticorg_model_admission_wait_seconds",
+    "Time a model call waited at admission under the per-model limits",
+    ["provider", "model"],
+    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0),
+)
 residency_refusals_total = Counter(
     "agenticorg_residency_refusals_total",
     "Providers refused by residency enforcement, by reason",
