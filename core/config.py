@@ -163,6 +163,9 @@ class Settings(BaseSettings):
     tenancy_profile: Literal["shared", "dedicated"] = "shared"
     dr_standby_region: str | None = None
     dr_last_drill_at: str | None = None
+    # Operator-recorded verifications of the infrastructure controls the
+    # compliance report lists (core/governance/infrastructure.py).
+    infrastructure_attestations_file: str | None = None
     # Authenticated routes reached with an auth_mode the auth middleware does
     # not set (FINDINGS A-95). Off, such a request is logged as
     # route_enforcement_unknown_auth_mode and then checked on whatever scopes

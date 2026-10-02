@@ -44,6 +44,25 @@ compliance report records the outcome of each verification in its infrastructure
 | GOV-03 | 24x7 enterprise support | Enterprise support plan with in-country account management. | Attach the support plan. |
 | FE-08 | Governed API exposure | Platform APIs published through the institution's API gateway with the platform's scoped keys and SDKs. | Call a scoped API through the gateway. |
 
+## Recording verifications
+
+The compliance evidence package (`GET /api/v1/compliance/evidence-package`) carries an
+`infrastructure_controls` section listing every item above with the status an operator
+recorded: `verified`, `not_applicable`, or `not_verified` when nothing is recorded. The
+operator keeps the record in a JSON file named by `AGENTICORG_INFRASTRUCTURE_ATTESTATIONS_FILE`:
+
+```json
+{
+  "attestations": [
+    {"id": "INF-01", "status": "verified", "verified_at": "2026-09-30", "verified_by": "platform-ops", "evidence_ref": "change CHG-1182"},
+    {"id": "DATA-02", "status": "not_applicable", "evidence_ref": "no analytics exports"}
+  ]
+}
+```
+
+The report states what was recorded; it does not verify the hosting platform itself. An
+unreadable file makes the section `unavailable` with the reason, never a silent pass.
+
 ## Platform settings that consume these controls
 
 - `data_region` and `storage_region` select the region; with residency enforcement on the platform refuses providers and storage outside it.
