@@ -12,22 +12,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `model_call_errors_total`, `model_fallbacks_total` and
   `model_admission_wait_seconds`, all by provider and model. The existing
   `agenticorg_llm_tokens_total` and `agenticorg_llm_cost_usd_total` are now fed.
-- While the gateway is on for the tenant each call writes a signed routing
+- With `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED=true` (off by default), each
+  call made while the gateway is on for the tenant writes a signed routing
   record (`model_gateway_records`, migration `v6z36_model_gateway_records`):
   correlation id, use case, agent, routing and access policies evaluated,
   requested and chosen provider and model, fallback, outcome, error type,
   latency, admission wait, tokens and cost. `GET /api/v1/model-gateway/records`
   lists them (filters: correlation id, agent, outcome, before) and reports
   whether each signature still matches. Pruned daily after
-  `AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS` (90);
-  `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED=false` keeps the metrics only.
+  `AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS` (90), deleted tenants
+  included. Off, the metrics are still fed.
 - The gateway's correlation id is the request id bound for the request (and
   propagated into worker tasks), so one id links the request, its routing
   decisions, its model calls and its audit rows. A per-model concurrency lease
   is now one per admission, not one per correlation id.
 - Cost on the agent path uses the provider's list price where it is known
   (Gemini) and the platform's blended estimate otherwise; time to first token
-  needs streaming, which the model calls do not use yet.
+  needs streaming, which the model calls do not use yet. `LLMResponse` now
+  carries the provider's input and output token counts, so direct-router
+  calls fill the directional token counters and the output-throughput
+  histogram is observed only when the output count is known.
 
 ### Added - Model gateway: access policies, per-model limits and weighted targets
 - Access policies (`model_access_policies`, `GET/POST /api/v1/model-gateway/access-policies`,

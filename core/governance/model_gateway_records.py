@@ -257,8 +257,9 @@ async def record_model_call(
         cost_usd = estimate_cost_usd(
             provider_name, model, input_tokens=input_tokens, output_tokens=output_tokens, tokens=tokens
         )
-    produced = output_tokens if output_tokens is not None else (tokens or None)
-    tokens_per_second = round(produced / (latency_ms / 1000.0), 2) if produced and latency_ms > 0 else None
+    # Throughput is output tokens over the call's duration; with no output
+    # count there is no observation (total tokens would overstate it).
+    tokens_per_second = round(output_tokens / (latency_ms / 1000.0), 2) if output_tokens and latency_ms > 0 else None
     record = ModelCallRecord(
         tenant_id=str(getattr(decision, "tenant_id", None) or "") or None,
         correlation_id=str(getattr(decision, "correlation_id", None) or uuid.uuid4().hex),

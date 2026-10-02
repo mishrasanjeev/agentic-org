@@ -158,6 +158,28 @@ class TestRecordModelCall:
         assert record.provider == "unknown" and record.tenant_id is None and record.tokens_per_second is None
         assert len(record.correlation_id) == 32
 
+    def test_throughput_needs_the_output_count_never_the_total(self, captured):
+        _metered, _written = captured
+        only_total = asyncio.run(
+            rec.record_model_call(
+                _decision(), provider="gemini", model="m", outcome="completed", latency_ms=1000, tokens=500
+            )
+        )
+        assert only_total.tokens_per_second is None and only_total.tokens == 500
+        split = asyncio.run(
+            rec.record_model_call(
+                _decision(),
+                provider="gemini",
+                model="m",
+                outcome="completed",
+                latency_ms=1000,
+                tokens=500,
+                input_tokens=400,
+                output_tokens=100,
+            )
+        )
+        assert split.tokens_per_second == 100.0
+
     def test_a_call_under_a_gateway_that_was_off_is_not_written(self, captured):
         _metered, written = captured
         asyncio.run(
@@ -236,6 +258,7 @@ class TestWrite:
 
     def test_the_row_is_added_with_a_verifying_signature(self, monkeypatch):
         monkeypatch.setattr(rec.settings, "secret_key", "ci-test-secret-key-minimum-16")
+        monkeypatch.setattr(rec.settings, "model_gateway_records_enabled", True)
         added: list = []
         session = SimpleNamespace(add=added.append)
 
@@ -249,8 +272,8 @@ class TestWrite:
         assert type(row).__name__ == "ModelGatewayRecord" and str(row.tenant_id) == TENANT
         assert rec.verify_record(row, b"ci-test-secret-key-minimum-16") is True
 
-    def test_disabled_records_or_no_tenant_write_nothing(self, monkeypatch):
-        monkeypatch.setattr(rec.settings, "model_gateway_records_enabled", False)
+    def test_records_are_off_by_default_and_a_call_without_a_tenant_writes_nothing(self, monkeypatch):
+        assert rec.settings.model_gateway_records_enabled is False
         with patch("core.database.get_tenant_session") as sessions:
             assert asyncio.run(rec._write(self._record())) is False
         sessions.assert_not_called()
@@ -258,6 +281,8 @@ class TestWrite:
         assert asyncio.run(rec._write(self._record(tenant=None))) is False
 
     def test_a_database_failure_is_logged_never_raised(self, monkeypatch):
+        monkeypatch.setattr(rec.settings, "model_gateway_records_enabled", True)
+
         @contextlib.asynccontextmanager
         async def _ctx(_tid):
             raise RuntimeError("db down")

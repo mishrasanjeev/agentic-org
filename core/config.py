@@ -165,7 +165,8 @@ class Settings(BaseSettings):
     model_gateway_lease_seconds: int = 600
     # Routing records: one signed row per model call while the gateway is on
     # for the tenant, pruned after the retention period by the daily task.
-    model_gateway_records_enabled: bool = True
+    # Off by default: turning it on adds a write to every routed model call.
+    model_gateway_records_enabled: bool = False
     model_gateway_records_retention_days: int = 90
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
