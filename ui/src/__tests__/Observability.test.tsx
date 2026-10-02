@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /**
  * Observability page: the stored runs, the waterfall of one run, and the live workload.
  */

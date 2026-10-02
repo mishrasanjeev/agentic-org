@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
