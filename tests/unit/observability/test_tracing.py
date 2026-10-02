@@ -18,8 +18,8 @@ import pytest
 import structlog
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry import trace
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.trace import NonRecordingSpan, SpanContext, SpanKind, StatusCode, TraceFlags
 
 from observability import tracing

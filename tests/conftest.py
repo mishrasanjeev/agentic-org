@@ -13,7 +13,7 @@ from core.test_doubles.ambient_redis_policy import declared_redis_url
 # Pytest capture and multiprocessing need reliable local filesystem semantics. In Docker,
 # the checkout may be a Windows bind mount, so keep scratch files on the container filesystem.
 _TEST_TMPDIR = (
-    Path("/tmp/agenticorg-pytest-temp")
+    Path("/tmp/agenticorg-pytest-temp")  # noqa: S108 - private container-local test scratch dir
     if Path("/.dockerenv").exists()
     else Path.cwd() / "codex-pytest-temp"
 )
