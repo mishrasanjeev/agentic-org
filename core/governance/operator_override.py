@@ -50,7 +50,7 @@ from core.config import is_strict_runtime_env, settings
 logger = structlog.get_logger()
 
 FLAG_KEY = "operator_override.enabled"
-ERROR_CODE = "E1012"
+ERROR_CODE = "E1013"
 CACHE_TTL_SECONDS = 5
 _CACHE_PREFIX = "operator_overrides:"
 

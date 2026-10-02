@@ -59,7 +59,7 @@ Request body for `POST`:
 | Target | Enforced at |
 |---|---|
 | `provider`, `model` | `LLMRouter._call_model` (agents and generators) and the LangGraph reason node before every model call. A block never falls back to another model. |
-| `agent`, `all_agents` | The HTTP run endpoint (423), the LangGraph runner and resume path (result status `operator_override`), `BaseAgent.execute` (failed result, code `E1012`), and the agent's tool calls. |
+| `agent`, `all_agents` | The HTTP run endpoint (423), the LangGraph runner and resume path (result status `operator_override`), `BaseAgent.execute` (failed result, code `E1013`), and the agent's tool calls. |
 | `workflow` | The HTTP run endpoint (423) and the workflow engine before every step: the run keeps status `running` and retries the step every five seconds until the override is released or the run is cancelled. |
 | `connector`, `tool`, `tool_pipeline` | The connector dispatch boundary, `ToolGateway.execute` and the agent tool path. The refusal is audited (`action=operator_override`, `outcome=blocked`). |
 

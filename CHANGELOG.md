@@ -4,6 +4,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Operator override error code (A-115)
+- The operator override refusal is `E1013`. It had been registered as `E1012`,
+  the code the pseudonymisation refusal (`pseudonym_restore_failed`) already
+  carried, so a client could not tell a halted agent from a refused tool
+  argument.
+
 ### Added - Operator override (halt or throttle a model, agent, workflow or the tool pipeline)
 - `core/governance/operator_override.py`: an administrator places an override
   on a provider, a model, one agent, every agent, a workflow definition, a
