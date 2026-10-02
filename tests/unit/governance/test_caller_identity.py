@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import uuid
 from types import SimpleNamespace
 
 from core.governance import caller_identity as ci
@@ -20,12 +21,25 @@ class TestIdentityFromState:
         state = _state(claims={"sub": "apikey:ak_12ab"}, auth_mode="api_key", api_key_name="Advisory App")
         identity = ci.identity_from_state(state)
         assert identity == ci.CallerIdentity(
-            principal="api_key:ak_12ab", application="advisory app", auth_mode="api_key"
+            principal="api_key:apikey:ak_12ab", application="advisory app", auth_mode="api_key"
         )
 
     def test_an_api_key_without_a_name_is_its_own_application(self):
         identity = ci.identity_from_state(_state(claims={"sub": "apikey:ak_12ab"}, auth_mode="api_key"))
-        assert identity.application == "api_key:ak_12ab" and identity.principal == "api_key:ak_12ab"
+        assert identity.application == "api_key:apikey:ak_12ab" and identity.principal == "api_key:apikey:ak_12ab"
+
+    def test_the_principal_is_spelled_exactly_as_the_audit_actor(self):
+        from api.v1.model_gateway import _actor
+        from core.ownership import Caller
+
+        key_state = _state(claims={"sub": "apikey:ak_12ab"}, auth_mode="api_key")
+        assert ci.identity_from_state(key_state).principal == _actor(SimpleNamespace(state=key_state), None)
+        user_id = "11111111-1111-1111-1111-111111111111"
+        user_state = _state(claims={"sub": "u@example.test", "agenticorg:user_id": user_id}, auth_mode="legacy")
+        caller = Caller(user_id=uuid.UUID(user_id), role="admin", domains=None, is_admin=True, is_machine=False)
+        assert ci.identity_from_state(user_state).principal == _actor(SimpleNamespace(state=user_state), caller)
+        passport_state = _state(claims={"sub": "did:example:1"}, auth_mode="grantex")
+        assert ci.identity_from_state(passport_state).principal == _actor(SimpleNamespace(state=passport_state), None)
 
     def test_a_passport_names_the_subject_and_the_agent(self):
         state = _state(claims={"sub": "did:example:1", "agenticorg:agent_id": "a-1"}, auth_mode="grantex")
@@ -44,13 +58,13 @@ class TestIdentityFromState:
         identity = ci.identity_from_state(state)
         assert identity.principal == "user:11111111-1111-1111-1111-111111111111" and identity.application == "console"
 
-    def test_a_human_session_without_a_user_id_uses_the_subject_and_an_authorised_party(self):
+    def test_a_human_session_without_a_user_id_uses_the_mode_and_subject_and_an_authorised_party(self):
         identity = ci.identity_from_state(_state(claims={"sub": "u@example.test", "azp": "Portal"}, auth_mode="legacy"))
-        assert identity.principal == "user:u@example.test" and identity.application == "portal"
+        assert identity.principal == "legacy:u@example.test" and identity.application == "portal"
 
     def test_a_buyer_credential_is_the_commerce_application(self):
         identity = ci.identity_from_state(_state(claims={"sub": "commerce-buyer:b1"}, auth_mode="commerce_buyer"))
-        assert identity.principal == "commerce-buyer:b1" and identity.application == "commerce"
+        assert identity.principal == "commerce_buyer:commerce-buyer:b1" and identity.application == "commerce"
 
     def test_an_unknown_or_missing_mode_carries_nothing_a_policy_matches(self):
         assert ci.identity_from_state(_state()) == ci.CallerIdentity(auth_mode=None)
@@ -86,7 +100,7 @@ class TestBinding:
         request = SimpleNamespace(state=_state(claims={"sub": "apikey:ak_1"}, auth_mode="api_key", api_key_name="Ops"))
         result = asyncio.run(GrantexAuthMiddleware._continue(request, call_next))
         assert result == "response"
-        assert seen == [ci.CallerIdentity(principal="api_key:ak_1", application="ops", auth_mode="api_key")]
+        assert seen == [ci.CallerIdentity(principal="api_key:apikey:ak_1", application="ops", auth_mode="api_key")]
         assert ci.current_identity() is None
 
     def test_the_middleware_clears_the_identity_when_the_request_fails(self):

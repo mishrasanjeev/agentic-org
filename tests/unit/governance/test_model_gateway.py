@@ -698,51 +698,45 @@ class TestAdmission:
             asyncio.run(gw.release(None))
         assert [call.args[0] for call in release.await_args_list] == [lease, None]
 
-    def test_the_runner_admits_just_before_the_graph_runs_and_releases_however_the_run_ends(self):
+    def test_the_runner_binds_the_route_for_the_run_and_the_reasoning_node_admits_each_turn(self):
         src = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
         run = src[src.index("async def run_agent(") : src.index("async def resume_agent(")]
         resume = src[src.index("async def resume_agent(") :]
         for body in (run, resume):
-            assert body.index("route_for_agent(") < body.index("graph.compile(") < body.index("admit_route(route)")
-            assert body.index("admit_route(route)") < body.index("t0 = time.perf_counter()")
-            assert body.count("await release_route(lease)") == 1
-            tail = body[body.index("await release_route(lease)") - 40 : body.index("await release_route(lease)")]
+            assert body.index("route_for_agent(") < body.index("graph.compile(") < body.index("bind_route(")
+            assert body.index("bind_route(") < body.index("t0 = time.perf_counter()")
+            assert body.count("reset_route(route_token)") == 1
+            tail = body[body.index("reset_route(route_token)") - 40 : body.index("reset_route(route_token)")]
             assert "finally:" in tail
+            assert "except ModelGatewayRefused as exc:" in body[body.index("t0 = time.perf_counter()") :]
+        graph = (ROOT / "core" / "langgraph" / "agent_graph.py").read_text(encoding="utf-8")
+        reason = graph[graph.index("async def reason(") : graph.index("async def evaluate(")]
+        assert reason.index("gateway_admit(route.decision)") < reason.index("llm.ainvoke(messages)")
+        assert "finally:" in reason and "await gateway_release(lease)" in reason
 
-    def _resume(self, admit_outcome):
+    def _resume(self, invoke_outcome):
         from unittest.mock import MagicMock
 
         from auth.grant_enforcement import EnforcementMode
         from auth.run_grants import RunGrant
         from core.langgraph import runner
 
-        order: list[str] = []
+        seen: dict[str, object] = {}
 
         class _Compiled:
             async def ainvoke(self, _command, config=None):
-                order.append("invoke")
+                seen["route"] = gw.current_route()
+                if isinstance(invoke_outcome, Exception):
+                    raise invoke_outcome
                 return {"status": "completed", "messages": []}
 
         graph = MagicMock()
         graph.compile.return_value = _Compiled()
         decision = self._decision(use_case="agent_resume")
-
-        async def admit(route):
-            order.append("admit")
-            assert route is decision
-            if isinstance(admit_outcome, Exception):
-                raise admit_outcome
-            return admit_outcome
-
-        async def release(lease):
-            order.append(f"release:{lease.lease_id if lease else None}")
-
         with (
             patch.object(runner, "build_agent_graph", MagicMock(return_value=graph)),
             patch.object(runner, "prefetch_llm_credential", AsyncMock(return_value=None)),
             patch.object(runner, "route_for_agent", AsyncMock(return_value=decision)),
-            patch.object(runner, "admit_route", admit),
-            patch.object(runner, "release_route", release),
         ):
             result = asyncio.run(
                 runner.resume_agent(
@@ -755,21 +749,22 @@ class TestAdmission:
                     run_grant=RunGrant(mode=EnforcementMode.OFF, token="", source="minted"),
                 )
             )
-        return result, order
+        return result, seen, decision
 
-    def test_the_resume_path_admits_before_the_graph_runs_and_releases_after(self):
-        from core.governance.model_gateway_limits import Lease
-
-        result, order = self._resume(Lease(lease_id="c9", keys=("k",)))
+    def test_the_resume_path_binds_the_route_while_the_graph_runs_and_clears_it_after(self):
+        result, seen, decision = self._resume(None)
         assert result["status"] == "completed"
-        assert order == ["admit", "invoke", "release:c9"]
+        route = seen["route"]
+        assert route is not None and route.decision is decision
+        assert route.use_case == "agent_resume" and route.agent_id == "a1"
+        assert gw.current_route() is None
 
-    def test_the_resume_path_returns_the_refused_result_when_a_limit_refuses(self):
+    def test_the_resume_path_returns_the_refused_result_when_a_turn_is_refused(self):
         refusal = ModelGatewayRefused("at its limit", correlation_id="c9", kind="limit", retry_after_seconds=2.0)
-        result, order = self._resume(refusal)
+        result, _seen, _decision = self._resume(refusal)
         assert result["status"] == "model_gateway_refused" and result["error_code"] == "E1015"
         assert result["model_gateway"]["retry_after_seconds"] == 2.0
-        assert order == ["admit"]
+        assert gw.current_route() is None
 
     def test_the_router_admits_after_the_decision_and_releases_after_the_call_and_its_fallback(self):
         from core.governance.model_gateway_limits import Lease

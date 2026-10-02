@@ -233,7 +233,7 @@ async def _release_keys(redis: Any, keys: list[str] | tuple[str, ...], lease_id:
     for key in keys:
         try:
             await redis.zrem(key, lease_id)
-        # enterprise-gate: broad-except-ok reason=an-unreleased-lease-expires-on-its-own-ttl
+        # enterprise-gate: broad-except-ok reason=release-failure-is-logged-the-lease-expires-on-its-ttl
         except Exception as exc:
             logger.warning("model_gateway_lease_release_failed", error_type=type(exc).__name__, key=key)
 
@@ -246,7 +246,7 @@ async def release(lease: Lease | None) -> None:
 
     try:
         redis = await get_async_redis()
-    # enterprise-gate: broad-except-ok reason=an-unreleased-lease-expires-on-its-own-ttl
+    # enterprise-gate: broad-except-ok reason=release-failure-is-logged-the-lease-expires-on-its-ttl
     except Exception as exc:
         logger.warning("model_gateway_lease_release_failed", error_type=type(exc).__name__)
         return

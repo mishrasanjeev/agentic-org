@@ -50,7 +50,7 @@ call will actually use.
 |---|---|
 | `name`, `priority`, `enabled` | Enabled access policies are evaluated in ascending `priority` (then name); the first match decides. A call no access policy matches is allowed. |
 | `use_case`, `sensitivity`, `agent_id`, `business_unit`, `language` | Match fields, as on a routing policy. |
-| `application`, `principal` | Who is calling. The auth middleware binds the caller's identity for every authenticated request: `application` is the API key's name, `agent:<id>` for an Agent Passport, `console` for a human session; `principal` is `user:<id>`, `api_key:<prefix>` or `grantex:<subject>`, as the audit rows name it. Work outside a request (a worker task, a schedule) carries no identity and is not matched by a policy that names either field. |
+| `application`, `principal` | Who is calling. The auth middleware binds the caller's identity for every authenticated request: `application` is the API key's name, `agent:<id>` for an Agent Passport, `console` for a human session; `principal` is exactly the actor the audit rows record, `user:<id>` for a session with a user id, otherwise the authentication mode and subject (`api_key:apikey:<prefix>`, `grantex:<subject>`, `commerce_buyer:<subject>`, `legacy:<subject>`), so a principal copied from an audit row matches. Work outside a request (a worker task, a schedule) carries no identity and is not matched by a policy that names either field. |
 | `provider`, `model` | Match the provider and model the routing chose. |
 | `effect` | `deny` refuses the call. `allow` lets it through, fenced to `allowed_providers` and `allowed_models` when those are set. |
 | `reason` | Why the policy exists; recorded in the audit row. |
@@ -75,10 +75,14 @@ may start per minute (a token bucket). A provider-wide limit and a model limit
 both apply to a call on that model. Limits apply to every call while the gateway
 is on, whether or not a routing policy matched it.
 
-The gateway admits a call just before its model work starts and releases its
-concurrency slot when the work ends, whichever way it ends; a slot a dead
-process never released expires after `AGENTICORG_MODEL_GATEWAY_LEASE_SECONDS`
-(600 by default). A call above a limit is refused with `E1015`, which is
+Every model call is one provider request, so every call is admitted on its
+own just before it is sent and gives its concurrency slot back when the model
+returns: each reasoning turn of an agent run (the runner binds the run's
+routing decision; the graph's reasoning node admits against it) and each direct
+completion. A turn refused mid-run ends the run with status
+`model_gateway_refused`. A slot a dead process never released expires after
+`AGENTICORG_MODEL_GATEWAY_LEASE_SECONDS` (600 by default), longer than any
+single model call. A call above a limit is refused with `E1015`, which is
 retryable and carries `retry_after_seconds`; nothing is held after a refusal.
 The limits live in Redis and are shared by every API and worker process. When
 Redis is unavailable the call is admitted and the check is metered as
@@ -119,7 +123,7 @@ control, and a cache outage must not stop every model call.
 
 | Call site | Use case | Notes |
 |---|---|---|
-| Agent runner, `run_agent` | `agent_run` | Decided before the credential prefetch; admitted under the limits just before the graph runs, with the slot released when the run ends. A refusal returns a run result with status `model_gateway_refused` and the error code (`E1014` or `E1015`). |
+| Agent runner, `run_agent` | `agent_run` | Decided before the credential prefetch; the decision stays bound for the run and each reasoning turn is admitted under the limits in the graph's reasoning node, with the slot released when the model returns. A refusal returns a run result with status `model_gateway_refused` and the error code (`E1014` or `E1015`). |
 | Agent runner, `resume_agent` | `agent_resume` | Same, for a run resumed after a human decision. |
 | `LLMRouter.complete` | `completion` | Workflow generation, the replanner and the other direct callers that pass a tenant. A gateway-chosen model is an explicit selection: failover stays within its provider, and the slot is held through the fallback call. This router dispatches by model family (`gemini`, `claude`, `gpt`); a policy that names another catalogue provider (`openai_compatible`, `azure_openai`) for a completion is refused rather than sent to the family's public API. |
 

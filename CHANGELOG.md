@@ -15,13 +15,15 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - The auth middleware binds the caller's identity for every authenticated
   request (`core/governance/caller_identity.py`): `application` is the API
   key's name, `agent:<id>` for an Agent Passport or `console` for a human
-  session; `principal` is `user:<id>`, `api_key:<prefix>` or
-  `grantex:<subject>`. Work outside a request carries none.
+  session; `principal` is exactly the audit actor (`user:<id>` for a session
+  with a user id, else mode and subject such as `api_key:apikey:<prefix>` or
+  `grantex:<subject>`). Work outside a request carries none.
 - Per-model limits (`model_limits`, `GET/POST /api/v1/model-gateway/limits`,
   `PATCH/DELETE .../limits/{id}`): `max_concurrency` and `requests_per_minute`
-  per provider or per model, enforced in Redis at admission just before the
-  model work starts (agent runner and direct router) and released when it ends;
-  a slot never released expires after `AGENTICORG_MODEL_GATEWAY_LEASE_SECONDS`
+  per provider or per model, enforced in Redis at admission just before each
+  model call is sent (every reasoning turn of an agent run, every direct
+  completion) and released when the model returns; a slot never released
+  expires after `AGENTICORG_MODEL_GATEWAY_LEASE_SECONDS`
   (600). A call above a limit is refused with the new retryable `E1015`
   carrying `retry_after_seconds`; every check is metered in
   `agenticorg_model_gateway_limit_outcomes_total{limit,outcome}`. An

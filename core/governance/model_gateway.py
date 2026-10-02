@@ -42,11 +42,13 @@ from the identity the auth middleware binds for the request
 A routing policy may split its matches across several provider and model
 pairs by weight (``targets``); the choice is stable per correlation id.
 
-Just before the model work starts the call is admitted under the tenant's
-per-model limits (``core.governance.model_gateway_limits``): a call above the
-concurrency or rate configured for its provider or model is refused with
-``E1015`` (retryable) and the refusal is metered. The caller releases the
-concurrency slot when the work ends.
+Each model call is admitted under the tenant's per-model limits
+(``core.governance.model_gateway_limits``) just before it is sent: every
+reasoning turn of an agent run (the runner binds the run's decision with
+:func:`bind_route` and the graph's reasoning node admits against it) and every
+direct completion. A call above the concurrency or rate configured for its
+provider or model is refused with ``E1015`` (retryable) and the refusal is
+metered; the concurrency slot is released when the call returns.
 
 Every decision is logged with its correlation id, the policy evaluated, the
 provider and model chosen and the reason, and metered
@@ -59,6 +61,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from contextvars import ContextVar, Token
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -309,6 +312,34 @@ class RouteDecision:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass
+class RouteContext:
+    """The routing decision bound for the current run, read at each model call."""
+
+    decision: RouteDecision
+    use_case: str = ""
+    agent_id: str | None = None
+
+
+_ROUTE: ContextVar[RouteContext | None] = ContextVar("agenticorg_model_route", default=None)
+
+
+def bind_route(
+    decision: RouteDecision, *, use_case: str = "", agent_id: str | None = None
+) -> Token[RouteContext | None]:
+    """Bind the run's routing decision for the span of the run; reset with :func:`reset_route`."""
+    return _ROUTE.set(RouteContext(decision=decision, use_case=use_case, agent_id=agent_id))
+
+
+def reset_route(token: Token[RouteContext | None]) -> None:
+    _ROUTE.reset(token)
+
+
+def current_route() -> RouteContext | None:
+    """The routing decision bound for the current run, or None outside a routed run."""
+    return _ROUTE.get()
 
 
 class ModelGatewayRefused(RuntimeError):  # noqa: N818 - surface name used in error payloads
@@ -890,10 +921,10 @@ async def decide(request: RouteRequest) -> RouteDecision:
 
 
 async def admit(decision: RouteDecision) -> Lease | None:
-    """Admit a decided call under the tenant's per-model limits, just before its model work starts.
+    """Admit one model call under the tenant's per-model limits, just before it is sent.
 
-    Returns the lease to hand to :func:`release` when the work ends (None when
-    the gateway was off for the call, which reads nothing). Raises
+    Returns the lease to hand to :func:`release` when the call returns (None
+    when the gateway was off for the call, which reads nothing). Raises
     ``ModelGatewayRefused`` with kind ``limit`` and ``E1015`` when a limit
     refuses the call; nothing is held after a refusal.
     """
