@@ -498,43 +498,6 @@ def _limit(row: Any) -> Limit:
     )
 
 
-def _access_policy(row: Any) -> AccessPolicy:
-    def _tuple(value: Any) -> tuple[str, ...] | None:
-        return tuple(str(v) for v in value) if value is not None else None
-
-    return AccessPolicy(
-        id=str(row.id),
-        name=row.name,
-        priority=int(row.priority),
-        enabled=bool(row.enabled),
-        use_case=row.use_case,
-        sensitivity=row.sensitivity,
-        agent_id=row.agent_id,
-        business_unit=row.business_unit,
-        language=row.language,
-        application=row.application,
-        principal=row.principal,
-        provider=row.provider,
-        model=row.model,
-        effect=row.effect or "allow",
-        allowed_providers=_tuple(row.allowed_providers),
-        allowed_models=_tuple(row.allowed_models),
-        reason=row.reason or "",
-    )
-
-
-def _limit(row: Any) -> Limit:
-    return Limit(
-        id=str(row.id),
-        provider=row.provider,
-        model=row.model,
-        enabled=bool(row.enabled),
-        max_concurrency=row.max_concurrency,
-        requests_per_minute=row.requests_per_minute,
-        reason=row.reason or "",
-    )
-
-
 async def _load_policies(tenant_id: uuid.UUID) -> list[Policy]:
     from sqlalchemy import select
 
