@@ -214,6 +214,14 @@ Planned next: the console pages.
   audit row (`model_gateway_policy.*`, `model_gateway_access_policy.*`,
   `model_gateway_limit.*`, each with `set`, `update` and `delete`).
 
+## Console
+
+`/dashboard/settings/model-gateway` (tenant administrators) shows the gateway's
+state and lets an administrator manage routing policies, access policies and
+per-model limits, dry-run a described request, read the routing records (with
+a correlation-id filter and the signature check) and compare costs. It uses
+the endpoints below.
+
 ## API (tenant administrators)
 
 | Method and path | Purpose |

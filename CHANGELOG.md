@@ -36,6 +36,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (50,000) characters. A rule's options must belong to its detector and
   `entities` must list supported kinds.
 
+### Added - Model gateway: console page
+- `/dashboard/settings/model-gateway` (tenant administrators): routing
+  policies, access policies and per-model limits with create, enable, disable
+  and delete; a dry run of a described request; the routing records with a
+  correlation-id filter and the signature check; and the cost comparison.
+  Everything reads and writes the `/api/v1/model-gateway` endpoints.
+
 ### Added - Model gateway: cost comparison and cost-aware routing
 - `core/governance/model_pricing.py`: list prices per million tokens for the
   catalogue models (Gemini from the router's table), nothing per token for
