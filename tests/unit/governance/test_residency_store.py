@@ -8,7 +8,7 @@ import contextlib
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -71,7 +71,8 @@ def session(monkeypatch):
     monkeypatch.setattr("core.database.get_tenant_session", _ctx)
     monkeypatch.setattr(res.settings, "secret_key", "ci-test-secret-key-minimum-16")
     res.invalidate()
-    yield sess
+    with patch("core.async_redis.get_async_redis", AsyncMock(return_value=None)):
+        yield sess
     res.invalidate()
 
 
@@ -89,9 +90,43 @@ class TestLoading:
         assert [a.provider for a in loaded] == ["gemini", "openai"]
         assert loaded[0].expires_at == expires.isoformat() and loaded[1].data_region == "US"
         session.rows = []
-        assert len(asyncio.run(res.active_attestations(TENANT))) == 2  # cached
-        res.invalidate(TENANT)
-        assert asyncio.run(res.active_attestations(TENANT)) == []
+        assert asyncio.run(res.active_attestations(TENANT)) == []  # no Redis: every read goes to the database
+
+    def test_an_expired_attestation_is_dropped_even_when_cached(self):
+        import json
+
+        expired = res.Attestation(
+            id="a1",
+            provider="gemini",
+            data_region="IN",
+            in_region=True,
+            no_training=True,
+            evidence_ref="",
+            attested_by="u",
+            expires_at=(datetime.now(UTC) - timedelta(seconds=1)).isoformat(),
+        )
+        live = res.Attestation(**{**expired.to_dict(), "id": "a2", "expires_at": None})
+        redis = AsyncMock()
+        redis.get = AsyncMock(return_value=json.dumps([expired.to_dict(), live.to_dict()]))
+        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)):
+            assert [a.id for a in asyncio.run(res.active_attestations(TENANT))] == ["a2"]
+
+    def test_the_shared_cache_is_filled_and_dropped(self, session):
+        import json
+
+        session.rows = [_row()]
+        store: dict[str, str] = {}
+        redis = AsyncMock()
+        redis.get = AsyncMock(side_effect=lambda key: store.get(key))
+        redis.set = AsyncMock(side_effect=lambda key, value, ex=None: store.__setitem__(key, value))
+        redis.delete = AsyncMock(side_effect=lambda key: store.pop(key, None))
+        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)):
+            assert len(asyncio.run(res.active_attestations(TENANT))) == 1
+            assert json.loads(next(iter(store.values())))[0]["provider"] == "gemini"
+            asyncio.run(res.invalidate_attestations(TENANT))
+            assert store == {}
+            redis.set.assert_awaited()
+            assert redis.set.await_args.kwargs["ex"] == res.ATTESTATION_CACHE_TTL_SECONDS
 
 
 class TestChanges:

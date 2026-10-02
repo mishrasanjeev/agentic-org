@@ -26,6 +26,7 @@ a relaxed one.
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -106,11 +107,13 @@ LOCAL_PROVIDERS: frozenset[str] = frozenset(
     {"ollama", "vllm", "local", "local_embeddings", "tei", "faster_whisper", "whisper_local", "piper", "piper_local"}
 )
 
-_REGION_CACHE_TTL_S = 60.0
+_REGION_CACHE_TTL_S = 15.0
+# Attestations are cached in Redis for a few seconds so every replica sees a
+# revocation at once; a replica without Redis reads the database each time.
+ATTESTATION_CACHE_TTL_SECONDS = 5
+_ATTESTATION_CACHE_PREFIX = "residency:attestations:"
 # enterprise-gate: process-local-ok reason=bounded-ttl-cache-of-governance-config-reads-refilled-from-the-database
 _region_cache: dict[str, tuple[str, float]] = {}
-# enterprise-gate: process-local-ok reason=bounded-ttl-cache-of-attestation-reads-refilled-from-the-database
-_attestation_cache: dict[str, tuple[list[Attestation], float]] = {}
 
 
 class ResidencyBlocked(RuntimeError):  # noqa: N818 - surface name used in error payloads
@@ -264,25 +267,69 @@ def _attestation(row: Any) -> Attestation:
     )
 
 
+def _unexpired(attestations: list[Attestation], now: datetime) -> list[Attestation]:
+    """Attestations whose expiry has not passed at ``now`` (re-checked on every decision)."""
+    live = []
+    for a in attestations:
+        if a.expires_at is not None and datetime.fromisoformat(a.expires_at) <= now:
+            continue
+        live.append(a)
+    return live
+
+
 async def active_attestations(tenant_id: uuid.UUID) -> list[Attestation]:
-    key = str(tenant_id)
-    cached = _attestation_cache.get(key)
-    now = time.monotonic()
-    if cached is not None and now - cached[1] < _REGION_CACHE_TTL_S:
-        return cached[0]
+    """Unrevoked, unexpired attestations: the shared Redis cache first, then the database.
+
+    Expiry is evaluated here, at decision time, so a cached attestation never
+    outlives its ``expires_at``; a revocation invalidates the shared cache, so
+    every replica sees it on its next read.
+    """
+    from core.async_redis import get_async_redis
+
+    key = f"{_ATTESTATION_CACHE_PREFIX}{tenant_id}"
+    redis = None
+    try:
+        redis = await get_async_redis()
+        if redis is not None:
+            cached = await redis.get(key)
+            if cached:
+                return _unexpired([Attestation(**item) for item in json.loads(cached)], datetime.now(UTC))
+    # enterprise-gate: broad-except-ok reason=cache-miss-falls-through-to-the-database
+    except Exception as exc:
+        logger.warning("residency_cache_read_failed", error_type=type(exc).__name__)
+        redis = None
     rows = await _load_attestations(tenant_id)
-    _attestation_cache[key] = (rows, now)
-    return rows
+    if redis is not None:
+        try:
+            await redis.set(key, json.dumps([a.to_dict() for a in rows]), ex=ATTESTATION_CACHE_TTL_SECONDS)
+        # enterprise-gate: broad-except-ok reason=cache-write-is-best-effort-ttl-bounds-staleness
+        except Exception as exc:
+            logger.warning("residency_cache_write_failed", error_type=type(exc).__name__)
+    return _unexpired(rows, datetime.now(UTC))
 
 
 def invalidate(tenant_id: uuid.UUID | None = None) -> None:
-    """Drop cached regions and attestations (all tenants when ``tenant_id`` is None)."""
+    """Drop the cached region (all tenants when ``tenant_id`` is None).
+
+    The shared attestation cache is dropped by ``invalidate_attestations``.
+    """
     if tenant_id is None:
         _region_cache.clear()
-        _attestation_cache.clear()
         return
     _region_cache.pop(str(tenant_id), None)
-    _attestation_cache.pop(str(tenant_id), None)
+
+
+async def invalidate_attestations(tenant_id: uuid.UUID) -> None:
+    """Drop the tenant's attestations from the shared cache so every replica re-reads them."""
+    from core.async_redis import get_async_redis
+
+    try:
+        redis = await get_async_redis()
+        if redis is not None:
+            await redis.delete(f"{_ATTESTATION_CACHE_PREFIX}{tenant_id}")
+    # enterprise-gate: broad-except-ok reason=cache-invalidation-is-best-effort-ttl-bounds-staleness
+    except Exception as exc:
+        logger.warning("residency_cache_invalidate_failed", error_type=type(exc).__name__)
 
 
 def is_local_provider(provider: str) -> bool:
@@ -402,6 +449,10 @@ async def report_section(tenant_id: uuid.UUID) -> dict[str, Any]:
         region = await tenant_data_region(tenant_id)
         section["data_region"] = region
         section["storage_region_conforms"] = cloud_region_conforms(region, settings.storage_region)
+        section["disaster_recovery"] = {
+            **section["disaster_recovery"],
+            "standby_conforms": cloud_region_conforms(region, settings.dr_standby_region),
+        }
         attestations = await active_attestations(tenant_id)
         section["provider_attestations"] = [a.to_dict() for a in attestations if a.data_region == region]
     # enterprise-gate: broad-except-ok reason=report-section-reports-unavailable-rather-than-failing-the-package
@@ -492,7 +543,7 @@ async def set_attestation(
             )
         )
         attestation = _attestation(row)
-    invalidate(tenant_id)
+    await invalidate_attestations(tenant_id)
     # Identifiers and the evidence reference stay in the signed audit row.
     logger.warning("residency_attestation_set", attestation_id=attestation.id, provider=key, data_region=region)
     return attestation
@@ -528,6 +579,6 @@ async def revoke_attestation(tenant_id: uuid.UUID, attestation_id: uuid.UUID, *,
             )
         )
         attestation = _attestation(row)
-    invalidate(tenant_id)
+    await invalidate_attestations(tenant_id)
     logger.warning("residency_attestation_revoked", attestation_id=str(attestation_id), provider=attestation.provider)
     return attestation
