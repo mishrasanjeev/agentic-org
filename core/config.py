@@ -166,6 +166,10 @@ class Settings(BaseSettings):
     tenancy_profile: Literal["shared", "dedicated"] = "shared"
     dr_standby_region: str | None = None
     dr_last_drill_at: str | None = None
+    # A paused agent is refused by the run endpoint, chat and workflow agent
+    # steps, not only left out of routing (FINDINGS A-110). Off by default
+    # until the next minor.
+    paused_agents_refused: bool = False
     # Authenticated routes reached with an auth_mode the auth middleware does
     # not set (FINDINGS A-95). Off, such a request is logged as
     # route_enforcement_unknown_auth_mode and then checked on whatever scopes
