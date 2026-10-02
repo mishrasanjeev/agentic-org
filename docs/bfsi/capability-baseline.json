@@ -30,22 +30,12 @@
     "FIN": "FinOps",
     "FE": "Front-end experience, workbenches and channel enablement"
   },
-  "packages": [
+  "groups": [
     {
       "key": "WP-00",
       "title": "In-country deployment reference architecture",
-      "repo": "agentic-org, grantex",
-      "phase": 0,
+      "repositories": "agentic-org, grantex",
       "summary": "Cloud-agnostic reference deployment that satisfies the infrastructure items through the hosting platform: three-zone regions, managed Kubernetes or serverless containers, HSM-backed key management, WAF and DDoS, posture management, SIEM export on an open schema, lakehouse and streaming services, private endpoints, service mesh, immutable backups, confidential compute and published service levels. Each item maps to a deployment control, a verification step and the platform setting that consumes it.",
-      "flag": "n/a (deployment)",
-      "acceptance": [
-        "Every infrastructure item has a named control, an owner and a verification command in the deployment reference.",
-        "The platform's compliance report lists the infrastructure controls it depends on and whether the deployment attests them."
-      ],
-      "prs": [
-        "docs: deployment reference with per-item control mapping",
-        "compliance report: infrastructure attestation section"
-      ],
       "items": [
         "INF-01",
         "INF-02",
@@ -88,22 +78,8 @@
     {
       "key": "WP-01",
       "title": "Operator override for models, agents, workflows and tools",
-      "repo": "agentic-org, grantex",
-      "phase": 1,
-      "summary": "One administrative control that halts or throttles a provider, a model, an agent, every agent, a workflow or the whole tool pipeline in real time. Enforced at the model router, the agent runner, the workflow engine and the tool gateway, with a live status surface and a tamper-evident audit entry per change. Grantex emergency stops are consumed by the tool gateway through the revocation feed so a stop takes effect before token expiry.",
-      "flag": "operator_override.enabled (default off)",
-      "acceptance": [
-        "A halt on a model, agent, workflow or tool refuses new work within one scheduler tick and records who, what and why.",
-        "A throttle applies a token bucket per target and reports rejections in metrics.",
-        "A grantex emergency stop on an agent is honoured by the tool gateway without waiting for token expiry.",
-        "The override state is visible in the console and exported in the compliance report."
-      ],
-      "prs": [
-        "core: override registry, policy checks at the four enforcement points, metrics",
-        "api and console: override endpoints and status panel",
-        "grantex: revocation-feed subscriber in the tool gateway",
-        "docs and runbook"
-      ],
+      "repositories": "agentic-org, grantex",
+      "summary": "One administrative control that halts or throttles a provider, a model, an agent, every agent, a workflow or the whole tool pipeline in real time. Enforced at the model router, the agent runner, the workflow engine and the tool gateway, with a live status surface and a tamper-evident audit entry per change. Grantex emergency stops are honoured by relying parties that verify current authority online.",
       "items": [
         "BASE-05",
         "AIINF-10",
@@ -113,23 +89,8 @@
     {
       "key": "WP-02",
       "title": "Model gateway: routing policy, access policy, limits, metrics and audit",
-      "repo": "agentic-org",
-      "phase": 1,
+      "repositories": "agentic-org",
       "summary": "A unified model gateway in front of every provider: policy-driven routing by use case, data sensitivity, cost, latency, throughput, language and residency; model access policies by application, identity and business unit; per-model concurrency and rate limits with traffic allocation; model-level metrics including time-to-first-token, tokens per second, errors and queue wait; an audit trail of every routing decision and failover; correlation ids propagated from the request into the model call; cost comparison and cost-aware routing within quality thresholds.",
-      "flag": "model_gateway.enabled (default off)",
-      "acceptance": [
-        "Consuming applications call one endpoint and the gateway selects the model from policy; changing policy needs no application change.",
-        "A request tagged restricted never leaves the in-country provider set; the refusal is audited.",
-        "Per-model limits reject above the configured concurrency and the rejection is metered.",
-        "Every invocation writes a routing record with correlation id, policy evaluated, model chosen, fallback taken and cost."
-      ],
-      "prs": [
-        "gateway core and routing policy model",
-        "access policy and limits",
-        "metrics, tracing and audit records",
-        "cost comparison and cost-aware routing",
-        "console pages"
-      ],
       "items": [
         "AIINF-01",
         "AIINF-09",
@@ -146,23 +107,8 @@
     {
       "key": "WP-03",
       "title": "Runtime guardrail pipeline",
-      "repo": "agentic-org",
-      "phase": 1,
+      "repositories": "agentic-org",
       "summary": "Configurable input, retrieval, output and action guardrails evaluated on every model call and tool call: prompt-injection and jailbreak detection (direct and indirect), sensitive-data detection with mask, redact, tokenise, block or flag, factual-consistency checks against retrieved sources, output policy checks, and configurable actions per tenant, agent and risk tier. Decisions are recorded with the correlation id.",
-      "flag": "guardrails.enforce (default off; flag-only mode stays the default behaviour)",
-      "acceptance": [
-        "An injected instruction inside a retrieved document is detected and the action configured for the agent is applied.",
-        "A card number in a model output is redacted before delivery and the event is audited.",
-        "An answer whose claims are not supported by the retrieved context is flagged or suppressed according to policy.",
-        "Guardrail outcomes appear in metrics and in the evidence package."
-      ],
-      "prs": [
-        "guardrail engine and policy schema",
-        "input and output detectors",
-        "grounding checker",
-        "console policy editor",
-        "adversarial evaluation set"
-      ],
       "items": [
         "AIINF-04",
         "TRUST-01",
@@ -174,25 +120,8 @@
     {
       "key": "WP-04",
       "title": "Knowledge retrieval v2",
-      "repo": "agentic-org",
-      "phase": 2,
+      "repositories": "agentic-org",
       "summary": "Layout-preserving extraction, configurable chunking strategies, query rewriting and decomposition, hybrid dense and sparse retrieval with rank fusion, metadata filtering, a re-ranking stage, citations with page and paragraph, excerpt navigation in the source, document-level access control, conflict flagging, faithfulness metrics, incremental re-indexing, agentic retrieval with visible traces and graph retrieval over extracted entities.",
-      "flag": "knowledge.v2 (default off)",
-      "acceptance": [
-        "A query returns chunks ranked by fused dense and sparse scores with filters on date, branch and segment.",
-        "Each answer carries citations with document, page and paragraph and the console opens the highlighted excerpt.",
-        "A user without access to a document never sees its chunks in retrieval or citations.",
-        "Retrieval quality metrics (context relevance, faithfulness, hallucination indicators) are computed per pipeline."
-      ],
-      "prs": [
-        "extraction and chunking strategies",
-        "hybrid search, filters and re-ranking",
-        "citations and excerpt navigation",
-        "document ACLs",
-        "query transformation and agentic retrieval traces",
-        "graph retrieval",
-        "retrieval metrics and re-indexing"
-      ],
       "items": [
         "AIINF-02",
         "AIINF-03",
@@ -221,23 +150,8 @@
     {
       "key": "WP-05",
       "title": "Agent registry, lifecycle and certification",
-      "repo": "agentic-org, grantex",
-      "phase": 2,
+      "repositories": "agentic-org, grantex",
       "summary": "Per-agent agent cards (purpose, models, tools, permissions, schemas, risk tier, owner), lifecycle states Draft, Review, Approved, Published, Deprecated and Retired with an approval workflow, environments (development, staging, production) with controlled promotion and traffic allocation between versions, a categorised searchable catalogue, banking agent templates, a dependency graph across agents, models, knowledge bases, tools and policies, and ratings plus reliability metrics. Grantex trust-registry attestations and passports are attached to the card so certification status is verifiable.",
-      "flag": "agent_registry.lifecycle (default off)",
-      "acceptance": [
-        "An agent cannot be published to production without passing the configured approval workflow and evaluation gate.",
-        "The catalogue filters by domain, use case, channel, risk tier and approval status.",
-        "The dependency graph renders the agent's models, tools, knowledge sources, prompts and policies.",
-        "Traffic can be split between two published versions and rolled back in one action."
-      ],
-      "prs": [
-        "agent card model and lifecycle states",
-        "approval workflow and environments",
-        "catalogue, templates and banking pack",
-        "dependency graph",
-        "ratings and reliability metrics"
-      ],
       "items": [
         "AIINF-11",
         "MLOPS-01",
@@ -255,22 +169,8 @@
     {
       "key": "WP-06",
       "title": "Prompt governance",
-      "repo": "agentic-org",
-      "phase": 2,
+      "repositories": "agentic-org",
       "summary": "Typed prompt parameters with defaults and validation, maker-checker approval before production, side-by-side comparison across models, prompt evaluation against reference datasets, token and context-window management with relevance prioritisation, and strict structured-output enforcement for every agent.",
-      "flag": "prompts.maker_checker (default off)",
-      "acceptance": [
-        "A prompt change cannot reach production without a second approver; the approval is recorded with the version.",
-        "The playground runs one prompt against several models and shows outputs, latency and cost side by side.",
-        "A prompt variant is scored against a reference dataset before release.",
-        "An agent with an output schema never returns a payload that fails validation; failures are retried then escalated."
-      ],
-      "prs": [
-        "typed parameters and validation",
-        "maker-checker workflow",
-        "side-by-side playground and prompt evaluation",
-        "context-window manager and structured output"
-      ],
       "items": [
         "PROMPT-01",
         "PROMPT-02",
@@ -288,22 +188,8 @@
     {
       "key": "WP-07",
       "title": "Evaluation framework",
-      "repo": "agentic-org",
-      "phase": 2,
+      "repositories": "agentic-org",
       "summary": "Dataset management with an API and console, model-graded scorers for faithfulness, relevance, instruction adherence and context recall, deterministic metrics (accuracy, precision, recall, F1, exact match, retrieval metrics), adversarial suites run in-product, feedback correlated with model and prompt versions, pre-promotion regression gates, comparative dashboards and scheduled synthetic checks.",
-      "flag": "evals.v2 (default off)",
-      "acceptance": [
-        "A dataset is created in the console, versioned and run against a model, prompt, agent or workflow.",
-        "An adversarial suite runs on a schedule and its results feed the guardrail dashboard.",
-        "Promotion to production is blocked when the regression suite regresses beyond the configured threshold.",
-        "The comparison dashboard ranks candidate models by accuracy, latency, throughput and token cost."
-      ],
-      "prs": [
-        "dataset API and console",
-        "scorers and metrics",
-        "adversarial and scheduled runs",
-        "promotion gates and dashboards"
-      ],
       "items": [
         "AIINF-07",
         "EVAL-01",
@@ -319,21 +205,8 @@
     {
       "key": "WP-08",
       "title": "AI governance inventory, risk tiers, policies and model cards",
-      "repo": "agentic-org, grantex",
-      "phase": 2,
+      "repositories": "agentic-org, grantex",
       "summary": "A live inventory of models, prompts, agents, knowledge assets, tools and their owners (an AI bill of materials), standardised model cards, regulatory risk tiers with stricter validation and oversight per tier, a unified policy console for model calls, data access, prompts, outputs, tool invocation and workflow execution, and the dependency graph shared with the registry.",
-      "flag": "governance.inventory (default off)",
-      "acceptance": [
-        "The inventory lists every model, prompt, agent, knowledge base and tool with owner, version and risk tier and exports as JSON.",
-        "A high-risk tier forces human approval and evaluation gates that cannot be bypassed by the agent owner.",
-        "Policies written in the console are evaluated at the enforcement points with violations blocked, flagged or routed."
-      ],
-      "prs": [
-        "inventory model and export",
-        "model cards",
-        "risk tiers",
-        "policy console"
-      ],
       "items": [
         "AIGOV-01",
         "AIGOV-02",
@@ -346,21 +219,8 @@
     {
       "key": "WP-09",
       "title": "Observability and tamper-evident audit",
-      "repo": "agentic-org",
-      "phase": 1,
+      "repositories": "agentic-org",
       "summary": "OpenTelemetry spans wired through models, retrieval, tools and workflows with waterfall traces in the console, correlation ids propagated end to end, streaming latency metrics, a live workload console with queue depths and service-level countdowns, scheduled synthetic checks, and a hash-chained audit log that records model requests and responses, prompt versions, policy decisions and approvals.",
-      "flag": "observability.tracing (default off)",
-      "acceptance": [
-        "A single correlation id links the request, each model call, retrieval, tool call, guardrail decision and audit row.",
-        "The console shows a waterfall of one agent run with model, tool and memory spans and their durations.",
-        "The audit chain verifies end to end and detects a modified row."
-      ],
-      "prs": [
-        "tracing wiring and correlation ids",
-        "waterfall and live console",
-        "hash-chained audit with model request and response records",
-        "synthetic checks"
-      ],
       "items": [
         "OPS-01",
         "OPS-02",
@@ -374,20 +234,8 @@
     {
       "key": "WP-10",
       "title": "FinOps",
-      "repo": "agentic-org",
-      "phase": 2,
+      "repositories": "agentic-org",
       "summary": "Use-case tags on every model and tool call, thresholds at organisation, application and use-case level with alerts, throttling or suspension, cost comparison across models and providers before and after deployment, and forecasting from history and growth assumptions.",
-      "flag": "finops.thresholds (default off)",
-      "acceptance": [
-        "Every cost ledger row carries business unit, department, application and use case.",
-        "A use-case threshold breach throttles or suspends that use case and notifies the owner.",
-        "The forecast page projects tokens and cost per use case for the next quarter."
-      ],
-      "prs": [
-        "use-case attribution",
-        "thresholds and actions",
-        "cost comparison and forecasting"
-      ],
       "items": [
         "OPS-04",
         "FIN-01",
@@ -399,22 +247,8 @@
     {
       "key": "WP-11",
       "title": "Conversational services for banking",
-      "repo": "agentic-org",
-      "phase": 3,
+      "repositories": "agentic-org",
       "summary": "Banking intent recognition with parameter extraction, multi-turn context, clarification before action, slot-filling with explicit confirmation before transaction tools run, graceful fallbacks, escalation hand-off with a summary and intent tag, supervisor live view and takeover, conversation summaries, feedback and satisfaction capture, and reference multi-step scenarios (dispute, loan enquiry, application status).",
-      "flag": "conversation.v2 (default off)",
-      "acceptance": [
-        "A transfer request collects and validates parameters, shows a confirmation and only then invokes the tool under a grant.",
-        "An ambiguous request yields a clarification question instead of an action.",
-        "An escalation creates a ticket carrying the summary, intent tag and transcript reference.",
-        "A supervisor can watch a live session and take it over."
-      ],
-      "prs": [
-        "intent and slot-filling runtime",
-        "context and clarification",
-        "escalation and supervisor console",
-        "scenario templates and feedback"
-      ],
       "items": [
         "CONV-01",
         "CONV-02",
@@ -435,19 +269,8 @@
     {
       "key": "WP-12",
       "title": "Content services",
-      "repo": "agentic-org",
-      "phase": 3,
+      "repositories": "agentic-org",
       "summary": "Reusable capability APIs for governed drafting, multi-document summarisation, obligation and deadline extraction, narrative-to-schema conversion (JSON and XML), policy-grounded response drafts from an approved source set, audience-adaptive tone, rule-driven clause assembly and document translation across Indian languages.",
-      "flag": "content_services.enabled (default off)",
-      "acceptance": [
-        "Each service is an API with a schema, an evaluation dataset and a guardrail profile.",
-        "Drafts carry the approved sources used and go through the approval queue when policy requires."
-      ],
-      "prs": [
-        "drafting, summarisation and extraction services",
-        "structuring and clause assembly",
-        "translation service"
-      ],
       "items": [
         "CONTENT-01",
         "CONTENT-02",
@@ -462,21 +285,8 @@
     {
       "key": "WP-13",
       "title": "Speech and conversation intelligence",
-      "repo": "agentic-org",
-      "phase": 4,
+      "repositories": "agentic-org",
       "summary": "Batch transcription, speaker separation, call summaries, sentiment and empathy analytics, live agent assist with knowledge surfacing, disclosure-script tracking, spoken sensitive-data redaction and speech synthesis controls.",
-      "flag": "speech.intelligence (default off)",
-      "acceptance": [
-        "A recording is transcribed with speaker labels and summarised with intent, key points and next actions.",
-        "A call missing a mandatory disclosure is flagged in real time.",
-        "Spoken card numbers and one-time codes are redacted from the recording and the transcript."
-      ],
-      "prs": [
-        "batch transcription and diarisation",
-        "summaries and analytics",
-        "agent assist and disclosure tracking",
-        "spoken-data redaction"
-      ],
       "items": [
         "SPEECH-01",
         "SPEECH-02",
@@ -491,21 +301,8 @@
     {
       "key": "WP-14",
       "title": "Intelligent document processing",
-      "repo": "agentic-org",
-      "phase": 3,
+      "repositories": "agentic-org",
       "summary": "Bundle splitting and classification, key-value and table extraction with bounding boxes and per-field confidence, review routing, cross-document reconciliation, stamp and seal verification, structured analysis reports, scanned statement line items and version comparison.",
-      "flag": "idp.enabled (default off)",
-      "acceptance": [
-        "A multi-document bundle is split and each part classified with a confidence score.",
-        "Extracted fields show bounding boxes in the review UI and low-confidence documents land in the review queue.",
-        "Fields that disagree across documents are listed with their sources."
-      ],
-      "prs": [
-        "classification and extraction",
-        "review UI with overlays and confidence routing",
-        "reconciliation, stamps and reports",
-        "statements and version comparison"
-      ],
       "items": [
         "IDP-01",
         "IDP-02",
@@ -524,20 +321,8 @@
     {
       "key": "WP-15",
       "title": "Transaction intelligence",
-      "repo": "agentic-org",
-      "phase": 4,
+      "repositories": "agentic-org",
       "summary": "Entity-centric aggregation of alerts and records, structuring and pass-through detection, interactive fund-flow graphs across hops, suspicious-transaction narrative drafting and consolidated evidence context, all under human disposition with the governed-case evidence chain.",
-      "flag": "transaction_intelligence.enabled (default off)",
-      "acceptance": [
-        "Deposits below a threshold across branches within a window raise a structuring finding with the supporting rows.",
-        "The fund-flow graph expands counterparties across hops and exports with the case evidence.",
-        "A narrative draft is produced from findings and sent to the investigator queue; nothing is filed automatically."
-      ],
-      "prs": [
-        "aggregation and detectors",
-        "fund-flow graph",
-        "narrative drafting and evidence export"
-      ],
       "items": [
         "TXN-01",
         "TXN-02",
@@ -550,19 +335,8 @@
     {
       "key": "WP-16",
       "title": "Data acquisition, provenance and lineage",
-      "repo": "agentic-org",
-      "phase": 4,
+      "repositories": "agentic-org",
       "summary": "Provenance metadata (source, timestamp, version or hash, processing history) on every ingested record, scheduled incremental synchronisation and lineage visualisation from ingestion through embeddings to model use.",
-      "flag": "lineage.enabled (default off)",
-      "acceptance": [
-        "Any chunk, record or embedding can be traced back to its source, version and processing steps.",
-        "A sync job processes only records changed since the last run and records what it processed."
-      ],
-      "prs": [
-        "provenance model",
-        "incremental sync",
-        "lineage graph"
-      ],
       "items": [
         "ACQ-01",
         "ACQ-02",
@@ -573,23 +347,8 @@
     {
       "key": "WP-17",
       "title": "Agent runtime: builder, limits, memory, sandbox and debugging",
-      "repo": "agentic-org",
-      "phase": 2,
+      "repositories": "agentic-org",
       "summary": "A visual workflow builder with branching and fallback, per-agent limits on steps and duration with loop detection, long-term memory with retention controls, schema-validated tool registration, sandboxed tool execution and a debugging console with step-through and variable inspection.",
-      "flag": "runtime.v2 (default off)",
-      "acceptance": [
-        "A workflow is drawn, saved and executed from the builder with human checkpoints.",
-        "An agent exceeding its step limit or repeating a tool call pattern is stopped and the reason audited.",
-        "Long-term memory entries have a retention policy and can be erased per subject.",
-        "A registered tool rejects inputs that fail its schema before any call leaves the gateway."
-      ],
-      "prs": [
-        "visual builder",
-        "limits and loop detection",
-        "long-term memory",
-        "tool registration and sandbox",
-        "debugging console"
-      ],
       "items": [
         "AIINF-05",
         "AIINF-06",
@@ -612,21 +371,8 @@
     {
       "key": "WP-18",
       "title": "Workbenches and business console",
-      "repo": "agentic-org",
-      "phase": 3,
+      "repositories": "agentic-org",
       "summary": "Role-based workbenches for review officers, relationship managers, investigators and supervisors, a unified review queue with edit before approval, a business configuration console for rules, thresholds and routing, faceted search across cases, documents, customers and accounts, and accessibility conformance.",
-      "flag": "workbench.v2 (default off)",
-      "acceptance": [
-        "Each workbench shows only the tabs and actions its role allows and hides sensitive views by role.",
-        "Facets and boolean filters work across cases, documents, customers and accounts.",
-        "The accessibility suite passes on every workbench page."
-      ],
-      "prs": [
-        "workbench shell and roles",
-        "review queue with edit",
-        "business console",
-        "search and accessibility"
-      ],
       "items": [
         "FE-09",
         "FE-11",
@@ -639,21 +385,8 @@
     {
       "key": "WP-19",
       "title": "Residency, isolation and no-training controls",
-      "repo": "agentic-org, grantex",
-      "phase": 1,
+      "repositories": "agentic-org, grantex",
       "summary": "Enforcement of the data-region setting (providers, storage, memory and exports outside the region are refused), an in-country default region, a single-tenant deployment profile, per-provider no-training attestation records, an activated disaster-recovery profile and verification of database high availability.",
-      "flag": "residency.enforce (default off)",
-      "acceptance": [
-        "With enforcement on, a provider or storage location outside the configured region cannot be selected or used.",
-        "The compliance report shows region, tenancy profile, DR status and each provider's no-training attestation.",
-        "Grantex grant tokens carrying a data region are refused by the relying party outside that region."
-      ],
-      "prs": [
-        "region enforcement and defaults",
-        "single-tenant profile and DR activation",
-        "no-training attestations",
-        "grantex data_region enforcement"
-      ],
       "items": [
         "BASE-01",
         "BASE-02",
@@ -664,16 +397,8 @@
     {
       "key": "WP-20",
       "title": "Personalisation service",
-      "repo": "agentic-org",
-      "phase": 4,
+      "repositories": "agentic-org",
       "summary": "Content personalised from authorised attributes, profiles and configurable rules as a reusable service with consent checks.",
-      "flag": "personalisation.enabled (default off)",
-      "acceptance": [
-        "Personalised content is generated only for subjects with a valid consent record and the attributes used are recorded."
-      ],
-      "prs": [
-        "personalisation service"
-      ],
       "items": [
         "LEAD-01"
       ]
@@ -681,22 +406,8 @@
     {
       "key": "WP-21",
       "title": "Authority layer hardening",
-      "repo": "grantex",
-      "phase": 1,
-      "summary": "Online revocation checks in the gateway so emergency stops take effect immediately, a credential-exchange mode that never returns raw credentials to the agent, agent lifecycle states and approval attestations in the trust registry, environment-scoped agent versions, workload risk tiers on manifests, and tool-qualified scope enforcement in the SDKs.",
-      "flag": "per feature, default off",
-      "acceptance": [
-        "An emergency-stopped agent is refused by the gateway on the next request.",
-        "An agent can hold credentials by reference only; the gateway injects them upstream.",
-        "A manifest can declare a risk tier that forces decision grants for high-risk tools."
-      ],
-      "prs": [
-        "gateway online revocation",
-        "credential-by-reference mode",
-        "lifecycle states and attestation types",
-        "risk tiers on manifests",
-        "SDK tool-qualified scopes"
-      ],
+      "repositories": "grantex",
+      "summary": "Current-authority verification (the gateway's `currentAuthorityCheck`) documented and recommended as the default for deployments where an emergency stop must take effect before token expiry, a credential-exchange mode that never returns raw credentials to the agent, agent lifecycle states and approval attestations in the trust registry, environment-scoped agent versions, workload risk tiers on manifests, and tool-qualified scope enforcement in the SDKs.",
       "items": [
         "TRUST-07"
       ]
@@ -729,7 +440,7 @@
         ],
         "note": "Self-hosting (Helm/Compose) lets the operator choose the region; the hosted service is pinned to one foreign region; data_region is carried in tokens but not enforced."
       },
-      "package": "WP-19"
+      "group": "WP-19"
     },
     {
       "id": "BASE-02",
@@ -757,7 +468,7 @@
         ],
         "note": "Self-hosting gives a dedicated instance; the hosted service is multi-tenant with application-level tenant scoping."
       },
-      "package": "WP-19"
+      "group": "WP-19"
     },
     {
       "id": "BASE-03",
@@ -783,7 +494,7 @@
         ],
         "note": "Single region, no secondary DR site; backup and restore runbook not written."
       },
-      "package": "WP-19"
+      "group": "WP-19"
     },
     {
       "id": "BASE-04",
@@ -805,7 +516,7 @@
         "evidence": [],
         "note": "No prompt processing or training; no written no-training control."
       },
-      "package": "WP-19"
+      "group": "WP-19"
     },
     {
       "id": "BASE-05",
@@ -817,7 +528,6 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/components/KillSwitch.tsx",
           "api/v1/agents.py",
           "core/governance/action_policy.py",
           "api/v1/workflows.py"
@@ -833,7 +543,7 @@
         ],
         "note": "Emergency stop by grant/agent/principal/developer with issuance freeze and revocation feed; off unless EMERGENCY_STOP_ENABLED; cannot halt models or pipelines; the gateway checks JWTs locally with no online revocation."
       },
-      "package": "WP-01"
+      "group": "WP-01"
     },
     {
       "id": "INF-01",
@@ -854,7 +564,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "INF-02",
@@ -879,7 +589,7 @@
         ],
         "note": "Backup guidance only."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "INF-03",
@@ -902,7 +612,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "INF-04",
@@ -927,7 +637,7 @@
         ],
         "note": "Helm chart with autoscaler and disruption budget for managed Kubernetes."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "INF-05",
@@ -954,7 +664,7 @@
         ],
         "note": "Deploys to serverless containers on one provider."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-01",
@@ -973,7 +683,7 @@
         "evidence": [],
         "note": "No HSM integration."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-02",
@@ -1001,7 +711,7 @@
         ],
         "note": "AES-256-GCM vault key and encrypted signing keys with publish-then-sign rotation; no KMS/HSM/BYOK."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-03",
@@ -1029,7 +739,7 @@
         ],
         "note": "Encrypted credential vault and secret-manager runtime secrets; no managed DB credential or certificate rotation."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-04",
@@ -1054,7 +764,7 @@
         ],
         "note": "Rate limiting only; no WAF ruleset."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-05",
@@ -1073,7 +783,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-06",
@@ -1100,7 +810,7 @@
         ],
         "note": "CI-time image scans, CodeQL, secret scanning; no runtime posture management."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-07",
@@ -1118,13 +828,10 @@
       },
       "grantex": {
         "status": "partial",
-        "evidence": [
-          "apps/auth-service/src/workers/anomalyDetection.ts",
-          "apps/auth-service/src/routes/anomalies.ts"
-        ],
+        "evidence": [],
         "note": "Irregularity detection on authorization events; no control-plane or network detection."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-08",
@@ -1152,7 +859,7 @@
         ],
         "note": "SIEM sinks and audit export; no open-schema security lake."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "SEC-09",
@@ -1180,7 +887,7 @@
         ],
         "note": "Scopes, short-lived DPoP-bound tokens, OIDC/SAML SSO with group mapping, SCIM, passkeys; no general role model; admin MFA delegated to the identity provider."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-01",
@@ -1201,7 +908,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-02",
@@ -1220,7 +927,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-03",
@@ -1239,7 +946,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-04",
@@ -1262,7 +969,7 @@
         ],
         "note": "Kafka sink and SSE/WebSocket streams only."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-05",
@@ -1283,7 +990,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-06",
@@ -1305,7 +1012,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-07",
@@ -1326,7 +1033,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "DATA-08",
@@ -1351,7 +1058,7 @@
         ],
         "note": "Managed Postgres without HA configuration."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "AIINF-01",
@@ -1375,7 +1082,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "AIINF-02",
@@ -1399,7 +1106,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "AIINF-03",
@@ -1422,7 +1129,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "AIINF-04",
@@ -1446,7 +1153,7 @@
         "evidence": [],
         "note": "No guardrails in code."
       },
-      "package": "WP-03"
+      "group": "WP-03"
     },
     {
       "id": "AIINF-05",
@@ -1473,7 +1180,7 @@
         ],
         "note": "Grant delegation and A2A auth only."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "AIINF-06",
@@ -1497,7 +1204,7 @@
         "evidence": [],
         "note": "No workflow builder."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "AIINF-07",
@@ -1521,7 +1228,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "AIINF-08",
@@ -1543,7 +1250,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "AIINF-09",
@@ -1569,7 +1276,7 @@
         ],
         "note": "Grant-token reverse proxy could front model endpoints; not model-aware."
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "AIINF-10",
@@ -1598,7 +1305,7 @@
         ],
         "note": "Grant-token proxy, MCP resource guard, credential exchange, MCP server registry; local JWT checks without online revocation."
       },
-      "package": "WP-01"
+      "group": "WP-01"
     },
     {
       "id": "AIINF-11",
@@ -1626,7 +1333,7 @@
         ],
         "note": "Agent registration, active/suspended, key rotation, passport issue/revoke; no versioning, traffic routing or rollback."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "AIINF-12",
@@ -1649,7 +1356,7 @@
         "evidence": [],
         "note": "No sandboxing."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "AIINF-13",
@@ -1668,7 +1375,7 @@
         "evidence": [],
         "note": "Not in scope."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "NET-01",
@@ -1689,7 +1396,7 @@
         ],
         "note": "Private VPC for data stores."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "NET-02",
@@ -1717,7 +1424,7 @@
         ],
         "note": "API-key auth, plan rate limits, WebSocket/SSE events, header-injecting proxy."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "NET-03",
@@ -1738,7 +1445,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "NET-04",
@@ -1759,7 +1466,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "OPS-01",
@@ -1786,7 +1493,7 @@
         ],
         "note": "OpenTelemetry in the auth service with agent and grant attributes."
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OPS-02",
@@ -1814,7 +1521,7 @@
         ],
         "note": "Structured logs, Prometheus metrics, Grafana dashboards."
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OPS-03",
@@ -1840,7 +1547,7 @@
         ],
         "note": "Terraform provider and Helm chart; no drift detection."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "OPS-04",
@@ -1864,7 +1571,7 @@
         "evidence": [],
         "note": "Only per-grant budgets."
       },
-      "package": "WP-10"
+      "group": "WP-10"
     },
     {
       "id": "OPS-05",
@@ -1889,7 +1596,7 @@
         ],
         "note": "Load scripts only."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "OPS-06",
@@ -1916,7 +1623,7 @@
         ],
         "note": "GitHub Actions CI/CD."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "OPS-07",
@@ -1941,7 +1648,7 @@
         ],
         "note": "Tamper-evident hash chain; no WORM backups."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "OPS-08",
@@ -1960,7 +1667,7 @@
         "evidence": [],
         "note": "Cloud infrastructure item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "GOV-01",
@@ -1981,7 +1688,7 @@
         "evidence": [],
         "note": "No published SLAs."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "GOV-02",
@@ -2000,7 +1707,7 @@
         "evidence": [],
         "note": "Cloud provider item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "GOV-03",
@@ -2022,7 +1729,7 @@
         "evidence": [],
         "note": "Cloud provider item."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "CONTENT-01",
@@ -2046,7 +1753,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-02",
@@ -2069,7 +1776,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-03",
@@ -2093,7 +1800,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-04",
@@ -2116,7 +1823,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-05",
@@ -2138,7 +1845,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-06",
@@ -2159,7 +1866,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-07",
@@ -2180,7 +1887,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "CONTENT-08",
@@ -2202,7 +1909,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-12"
+      "group": "WP-12"
     },
     {
       "id": "SPEECH-01",
@@ -2225,7 +1932,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-02",
@@ -2247,7 +1954,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-03",
@@ -2266,7 +1973,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-04",
@@ -2285,7 +1992,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-05",
@@ -2304,7 +2011,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-06",
@@ -2326,7 +2033,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-07",
@@ -2345,7 +2052,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "SPEECH-08",
@@ -2366,7 +2073,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-13"
+      "group": "WP-13"
     },
     {
       "id": "ACQ-01",
@@ -2395,7 +2102,7 @@
         ],
         "note": "Purpose-bound manifests for registry connectors; no acquisition engine."
       },
-      "package": "WP-16"
+      "group": "WP-16"
     },
     {
       "id": "ACQ-02",
@@ -2423,7 +2130,7 @@
         ],
         "note": "Evidence records carry keyed digests, provider, upstream record references, receipt time and chain hash."
       },
-      "package": "WP-16"
+      "group": "WP-16"
     },
     {
       "id": "ACQ-03",
@@ -2446,7 +2153,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-16"
+      "group": "WP-16"
     },
     {
       "id": "CONV-01",
@@ -2467,7 +2174,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "CONV-02",
@@ -2489,7 +2196,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "CONV-03",
@@ -2510,7 +2217,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "CONV-04",
@@ -2538,7 +2245,7 @@
         ],
         "note": "Human consent and action-bound decision grants before execution."
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "CONV-05",
@@ -2561,7 +2268,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "CONV-06",
@@ -2584,7 +2291,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "RAG-01",
@@ -2606,7 +2313,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-02",
@@ -2627,7 +2334,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-03",
@@ -2648,7 +2355,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-04",
@@ -2667,7 +2374,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-05",
@@ -2690,7 +2397,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-06",
@@ -2711,7 +2418,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-07",
@@ -2734,7 +2441,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-08",
@@ -2756,7 +2463,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-09",
@@ -2781,7 +2488,7 @@
         ],
         "note": "Per-connector and per-tool scope and purpose restriction; no document-level filtering."
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-10",
@@ -2802,7 +2509,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-11",
@@ -2825,7 +2532,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-12",
@@ -2844,7 +2551,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-13",
@@ -2866,7 +2573,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-14",
@@ -2885,7 +2592,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "RAG-15",
@@ -2904,7 +2611,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "IDP-01",
@@ -2923,7 +2630,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-02",
@@ -2944,7 +2651,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-03",
@@ -2966,7 +2673,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-04",
@@ -2987,7 +2694,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-05",
@@ -3006,7 +2713,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-06",
@@ -3029,7 +2736,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-07",
@@ -3051,7 +2758,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-08",
@@ -3070,7 +2777,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-09",
@@ -3091,7 +2798,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-10",
@@ -3113,7 +2820,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-11",
@@ -3135,7 +2842,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "IDP-12",
@@ -3154,7 +2861,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-14"
+      "group": "WP-14"
     },
     {
       "id": "TXN-01",
@@ -3180,7 +2887,7 @@
         ],
         "note": "Evidence grouped per case."
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "TXN-02",
@@ -3199,7 +2906,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "TXN-03",
@@ -3218,7 +2925,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "TXN-04",
@@ -3237,7 +2944,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "TXN-05",
@@ -3256,7 +2963,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "TXN-06",
@@ -3285,7 +2992,7 @@
         ],
         "note": "Signed hash-chained per-case evidence package with export and offline verification."
       },
-      "package": "WP-15"
+      "group": "WP-15"
     },
     {
       "id": "LEAD-01",
@@ -3308,7 +3015,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-20"
+      "group": "WP-20"
     },
     {
       "id": "GW-01",
@@ -3331,7 +3038,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-02",
@@ -3353,7 +3060,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-03",
@@ -3376,7 +3083,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-04",
@@ -3398,7 +3105,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-05",
@@ -3420,7 +3127,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-06",
@@ -3443,7 +3150,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-07",
@@ -3469,7 +3176,7 @@
         ],
         "note": "Grant-token proxy can restrict any upstream endpoint by agent and grant scope."
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "GW-08",
@@ -3493,7 +3200,7 @@
         ],
         "note": "Evidence entries record model versions and policy evaluations."
       },
-      "package": "WP-02"
+      "group": "WP-02"
     },
     {
       "id": "VEC-01",
@@ -3515,7 +3222,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "VEC-02",
@@ -3536,7 +3243,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "VEC-03",
@@ -3555,7 +3262,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "VEC-04",
@@ -3577,7 +3284,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "VEC-05",
@@ -3596,7 +3303,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-16"
+      "group": "WP-16"
     },
     {
       "id": "VEC-06",
@@ -3618,7 +3325,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-04"
+      "group": "WP-04"
     },
     {
       "id": "MLOPS-01",
@@ -3640,7 +3347,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "MLOPS-02",
@@ -3663,7 +3370,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "PROMPT-01",
@@ -3684,7 +3391,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-02",
@@ -3707,7 +3414,7 @@
         "evidence": [],
         "note": "Prompt version references in evidence only."
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-03",
@@ -3729,7 +3436,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-04",
@@ -3751,7 +3458,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-05",
@@ -3770,7 +3477,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-06",
@@ -3789,7 +3496,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-07",
@@ -3811,7 +3518,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-08",
@@ -3833,7 +3540,7 @@
         "evidence": [],
         "note": "Four-eyes exists for agent actions, not prompt changes."
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-09",
@@ -3855,7 +3562,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-10",
@@ -3877,7 +3584,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "PROMPT-11",
@@ -3899,7 +3606,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-06"
+      "group": "WP-06"
     },
     {
       "id": "REG-01",
@@ -3926,7 +3633,7 @@
         ],
         "note": "Agent list, registry lookup by DID and key, trust-registry search with category filter."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-02",
@@ -3953,7 +3660,7 @@
         ],
         "note": "A2A agent card, passport claims, per-tool permission manifests; no model or I/O schema fields."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-03",
@@ -3977,7 +3684,7 @@
         ],
         "note": "Only active and suspended."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-04",
@@ -4002,7 +3709,7 @@
         ],
         "note": "Prebuilt tool manifests, no agent templates."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-05",
@@ -4023,7 +3730,7 @@
         "evidence": [],
         "note": "No visual map."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-06",
@@ -4049,7 +3756,7 @@
         ],
         "note": "Accredited-issuer attestations and trust levels; no internal approval workflow."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-07",
@@ -4070,7 +3777,7 @@
         "evidence": [],
         "note": "Sandbox and live only."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "REG-08",
@@ -4093,7 +3800,7 @@
         "evidence": [],
         "note": "No ratings."
       },
-      "package": "WP-05"
+      "group": "WP-05"
     },
     {
       "id": "ORCH-01",
@@ -4116,7 +3823,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-02",
@@ -4139,7 +3846,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-03",
@@ -4167,7 +3874,7 @@
         ],
         "note": "Scoped delegation with depth limits; A2A calls."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-04",
@@ -4195,7 +3902,7 @@
         ],
         "note": "Schema-validated tool manifests and MCP server registration."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-05",
@@ -4224,7 +3931,7 @@
         ],
         "note": "enforce, the gateway and the MCP guard check scope, tool, purpose, caps and decisions fail-closed; no sandboxing."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-06",
@@ -4246,7 +3953,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-07",
@@ -4275,7 +3982,7 @@
         ],
         "note": "Decision grants with OIDC approver sign-in, step-up, four-eyes, dwell time, single-use consumption and audit."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-08",
@@ -4302,7 +4009,7 @@
         ],
         "note": "Per-tool caps and budgets; no step, duration or loop detection."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-09",
@@ -4330,7 +4037,7 @@
         ],
         "note": "Manifests map tools to read/write/delete/admin; agent and grant scopes enforce it."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-10",
@@ -4356,7 +4063,7 @@
         ],
         "note": "Audit and enforcement log viewers."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "ORCH-11",
@@ -4383,7 +4090,7 @@
         ],
         "note": "Agents exposed over A2A with grant auth."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "EVAL-01",
@@ -4406,7 +4113,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-02",
@@ -4427,7 +4134,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-03",
@@ -4449,7 +4156,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-04",
@@ -4472,7 +4179,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-05",
@@ -4494,7 +4201,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-06",
@@ -4517,7 +4224,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "EVAL-07",
@@ -4539,7 +4246,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "AIGOV-01",
@@ -4567,7 +4274,7 @@
         ],
         "note": "Inventory of agents, grants, MCP servers, manifests; software SBOM and provenance; no AIBOM."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "AIGOV-02",
@@ -4596,7 +4303,7 @@
         ],
         "note": "Allow/deny policies with OPA and Cedar backends, tool, purpose and caps rules; no model, prompt or output governance."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "AIGOV-03",
@@ -4623,7 +4330,7 @@
         ],
         "note": "Trust levels and per-tool requires_decision and four_eyes; no workload risk tiers."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "AIGOV-04",
@@ -4635,7 +4342,6 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/components/KillSwitch.tsx",
           "api/v1/agents.py",
           "core/governance/action_policy.py",
           "api/v1/workflows.py"
@@ -4651,7 +4357,7 @@
         ],
         "note": "Emergency stop for grant, agent, principal and developer; no model or pipeline throttling."
       },
-      "package": "WP-01"
+      "group": "WP-01"
     },
     {
       "id": "AIGOV-05",
@@ -4670,7 +4376,7 @@
         "evidence": [],
         "note": "No dependency graph."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "AIGOV-06",
@@ -4691,7 +4397,7 @@
         ],
         "note": "Software SBOM and provenance only."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "TRUST-01",
@@ -4715,7 +4421,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-03"
+      "group": "WP-03"
     },
     {
       "id": "TRUST-02",
@@ -4744,7 +4450,7 @@
         ],
         "note": "DPDP consent lifecycle, pseudonyms in evidence, SD-JWT selective disclosure; no PII detection in AI inputs and outputs."
       },
-      "package": "WP-03"
+      "group": "WP-03"
     },
     {
       "id": "TRUST-03",
@@ -4765,7 +4471,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-03"
+      "group": "WP-03"
     },
     {
       "id": "TRUST-04",
@@ -4788,7 +4494,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-03"
+      "group": "WP-03"
     },
     {
       "id": "TRUST-05",
@@ -4817,7 +4523,7 @@
         ],
         "note": "Access governed by agent, principal, tool, connector, purpose, caps, time, OPA and Cedar; no data-classification attribute."
       },
-      "package": "WP-08"
+      "group": "WP-08"
     },
     {
       "id": "TRUST-06",
@@ -4845,7 +4551,7 @@
         ],
         "note": "requires_decision and four_eyes tools need approval; fail closed."
       },
-      "package": "WP-17"
+      "group": "WP-17"
     },
     {
       "id": "TRUST-07",
@@ -4873,7 +4579,7 @@
         ],
         "note": "Encrypted vault and gateway upstreamHeaders; the credential exchange returns the raw credential to the agent."
       },
-      "package": "WP-21"
+      "group": "WP-21"
     },
     {
       "id": "OBS-01",
@@ -4895,7 +4601,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OBS-02",
@@ -4916,7 +4622,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OBS-03",
@@ -4939,7 +4645,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OBS-04",
@@ -4964,7 +4670,7 @@
         ],
         "note": "On-demand conformance runner only."
       },
-      "package": "WP-07"
+      "group": "WP-07"
     },
     {
       "id": "OBS-05",
@@ -4991,7 +4697,7 @@
         ],
         "note": "Request ids, OpenTelemetry spans, caseId linking evidence."
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "OBS-06",
@@ -5020,7 +4726,7 @@
         ],
         "note": "Hash-chained audit log and signed, anchored evidence packages."
       },
-      "package": "WP-09"
+      "group": "WP-09"
     },
     {
       "id": "FIN-01",
@@ -5048,7 +4754,7 @@
         ],
         "note": "Usage metering per developer and per-grant cost units."
       },
-      "package": "WP-10"
+      "group": "WP-10"
     },
     {
       "id": "FIN-02",
@@ -5075,7 +4781,7 @@
         ],
         "note": "Budget alerts at 50 and 80 percent, caps that deny, plan rate limits."
       },
-      "package": "WP-10"
+      "group": "WP-10"
     },
     {
       "id": "FIN-03",
@@ -5096,7 +4802,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-10"
+      "group": "WP-10"
     },
     {
       "id": "FIN-04",
@@ -5115,7 +4821,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-10"
+      "group": "WP-10"
     },
     {
       "id": "FE-01",
@@ -5139,7 +4845,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-02",
@@ -5160,7 +4866,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-03",
@@ -5182,7 +4888,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-04",
@@ -5201,7 +4907,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-05",
@@ -5220,7 +4926,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-06",
@@ -5241,7 +4947,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-07",
@@ -5260,7 +4966,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-08",
@@ -5287,7 +4993,7 @@
         ],
         "note": "Grant-token governance in front of any API."
       },
-      "package": "WP-00"
+      "group": "WP-00"
     },
     {
       "id": "FE-09",
@@ -5309,7 +5015,7 @@
         "evidence": [],
         "note": "Basic ARIA only."
       },
-      "package": "WP-18"
+      "group": "WP-18"
     },
     {
       "id": "FE-10",
@@ -5331,7 +5037,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-11"
+      "group": "WP-11"
     },
     {
       "id": "FE-11",
@@ -5355,7 +5061,7 @@
         "evidence": [],
         "note": "Developer portal only."
       },
-      "package": "WP-18"
+      "group": "WP-18"
     },
     {
       "id": "FE-12",
@@ -5381,7 +5087,7 @@
         ],
         "note": "Per-request approval page; no central queue."
       },
-      "package": "WP-18"
+      "group": "WP-18"
     },
     {
       "id": "FE-13",
@@ -5404,12 +5110,11 @@
         "status": "partial",
         "evidence": [
           "apps/portal/src/pages/policies/PolicyForm.tsx",
-          "apps/portal/src/pages/anomalies/RuleBuilder.tsx",
           "apps/portal/src/pages/budgets/BudgetList.tsx"
         ],
         "note": "Portal forms for policies, rules and budgets."
       },
-      "package": "WP-18"
+      "group": "WP-18"
     },
     {
       "id": "FE-14",
@@ -5431,7 +5136,7 @@
         "evidence": [],
         "note": ""
       },
-      "package": "WP-18"
+      "group": "WP-18"
     },
     {
       "id": "FE-15",
@@ -5457,7 +5162,7 @@
         ],
         "note": "Admin scope only; no per-tab roles."
       },
-      "package": "WP-18"
+      "group": "WP-18"
     }
   ]
 }

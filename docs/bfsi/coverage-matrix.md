@@ -1,8 +1,8 @@
 # Coverage matrix
 
 Status per capability for AgenticOrg and Grantex, with repository evidence (paths relative to each repository)
-and the work package in the [programme plan](programme-plan.md) that closes the gap. Combined status is the
-better of the two products.
+and the capability group (see the [README](README.md)) each item belongs to. Combined status is the better
+of the two products.
 
 | Section | Items | Covered | Partial | Gap |
 |---|---:|---:|---:|---:|
@@ -14,17 +14,17 @@ better of the two products.
 
 ## Baseline residency, isolation and control conditions
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | BASE-01 | In-country data residency | Partial | **Partial**. data_region and storage_region are settings that nothing routes or blocks on; in-country operation is possible with local inference and the air-gap guide, but the defaults use external model APIs and a foreign deploy region. (`core/config.py`, `core/models/governance_config.py`, `core/ai_providers/catalog.py`) | **Partial**. Self-hosting (Helm/Compose) lets the operator choose the region; the hosted service is pinned to one foreign region; data_region is carried in tokens but not enforced. (`docs/compliance/data-residency.md`, `deploy/gcp/setup.sh`, `deploy/helm/grantex/values.yaml`) | WP-19 |
 | BASE-02 | Isolated production instance | Partial | **Partial**. Shared-database multi-tenancy isolated by row-level security; a dedicated instance exists only through the self-host guide, with no single-tenant deployment profile. (`docs/adr/0002-multi-tenancy-via-rls.md`, `core/database.py`, `core/tool_gateway/gateway.py`) | **Partial**. Self-hosting gives a dedicated instance; the hosted service is multi-tenant with application-level tenant scoping. (`deploy/helm/grantex/values.yaml`, `docker-compose.prod.yml`, `docs/self-hosting.md`) | WP-19 |
 | BASE-03 | In-country disaster recovery | Partial | **Partial**. Warm-standby Terraform scaffold exists but every resource is commented out; DR is documented as not active. (`infra/terraform/multi_region/main.tf`, `infra/terraform/multi_region/README.md`, `docs/BACKUP_AND_DR.md`) | **Gap**. Single region, no secondary DR site; backup and restore runbook not written. (`docs/compliance/data-residency.md`, `docs/self-hosting.md`) | WP-19 |
 | BASE-04 | No training on institution data | Gap | **Gap**. No training pipeline, but no explicit no-training control or per-provider attestation. (`docs/user-guide/security-and-data.md`, `core/feedback/shadow_learning.py`) | **Gap**. No prompt processing or training; no written no-training control. | WP-19 |
-| BASE-05 | Emergency operator override | Partial | **Partial**. Per-agent pause, workflow cancel, force-shadow flag and budget blocks; no single control to halt or throttle a model, all agents or the tool pipeline. (`ui/src/components/KillSwitch.tsx`, `api/v1/agents.py`, `core/governance/action_policy.py`) | **Partial**. Emergency stop by grant/agent/principal/developer with issuance freeze and revocation feed; off unless EMERGENCY_STOP_ENABLED; cannot halt models or pipelines; the gateway checks JWTs locally with no online revocation. (`apps/auth-service/src/routes/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/issuance-freeze.ts`) | WP-01 |
+| BASE-05 | Emergency operator override | Partial | **Partial**. Per-agent pause, workflow cancel, force-shadow flag and budget blocks; no single control to halt or throttle a model, all agents or the tool pipeline. (`api/v1/agents.py`, `core/governance/action_policy.py`, `api/v1/workflows.py`) | **Partial**. Emergency stop by grant/agent/principal/developer with issuance freeze and revocation feed; off unless EMERGENCY_STOP_ENABLED; cannot halt models or pipelines; the gateway checks JWTs locally with no online revocation. (`apps/auth-service/src/routes/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/issuance-freeze.ts`) | WP-01 |
 
 ## Compute and infrastructure resilience
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | INF-01 | Multi-zone architecture | Gap | **Gap**. Cloud infrastructure item. (`infra/terraform/multi_region/README.md`) | **Gap**. Cloud infrastructure item. | WP-00 |
 | INF-02 | Native disaster recovery | Partial | **Partial**. DR scaffold and runbook, not deployed. (`infra/terraform/multi_region/main.tf`, `docs/BACKUP_AND_DR.md`, `docs/RUNBOOKS.md`) | **Gap**. Backup guidance only. (`docs/self-hosting.md`) | WP-00 |
@@ -34,7 +34,7 @@ better of the two products.
 
 ## Security, identity and key management
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | SEC-01 | Hardware security module | Gap | **Gap**. No HSM. | **Gap**. No HSM integration. | WP-00 |
 | SEC-02 | Key management and BYOK | Covered | **Covered**. Envelope encryption with a KMS key-encryption key, per-tenant BYOK, rotation and rewrap. (`core/crypto/envelope.py`, `core/crypto/tenant_secrets.py`, `core/crypto/rewrap.py`) | **Partial**. AES-256-GCM vault key and encrypted signing keys with publish-then-sign rotation; no KMS/HSM/BYOK. (`apps/auth-service/src/lib/vault-crypto.ts`, `apps/auth-service/src/lib/signing-keys.ts`, `apps/auth-service/src/cli/rotate-signing-key.ts`) | WP-00 |
@@ -42,13 +42,13 @@ better of the two products.
 | SEC-04 | Web application firewall | Partial | **Gap**. Application rate limits only. (`api/route_enforcement.py`, `core/tool_gateway/rate_limiter.py`) | **Partial**. Rate limiting only; no WAF ruleset. (`deploy/nginx/nginx.conf`, `apps/auth-service/src/plugins/dynamicRateLimit.ts`) | WP-00 |
 | SEC-05 | Managed DDoS protection | Gap | **Gap**. Cloud infrastructure item. | **Gap**. Cloud infrastructure item. | WP-00 |
 | SEC-06 | Security posture management | Partial | **Partial**. CI-time image scans, SBOM, CodeQL, dependency audit; no runtime posture management. (`.github/workflows/container-scan.yml`, `.github/workflows/security-scan.yml`, `.github/workflows/codeql.yml`) | **Partial**. CI-time image scans, CodeQL, secret scanning; no runtime posture management. (`.github/workflows/security-scan.yml`, `.github/workflows/codeql.yml`, `scripts/scan-container.sh`) | WP-00 |
-| SEC-07 | Threat detection | Partial | **Gap**. Grant-denial alerts only. (`observability/alerting.py`) | **Partial**. Irregularity detection on authorization events; no control-plane or network detection. (`apps/auth-service/src/workers/anomalyDetection.ts`, `apps/auth-service/src/routes/anomalies.ts`) | WP-00 |
+| SEC-07 | Threat detection | Partial | **Gap**. Grant-denial alerts only. (`observability/alerting.py`) | **Partial**. Irregularity detection on authorization events; no control-plane or network detection. | WP-00 |
 | SEC-08 | SIEM and security lake | Partial | **Partial**. Structured logs and audit query API; no open-schema export. (`core/logging_config.py`, `core/models/audit.py`, `api/v1/audit.py`) | **Partial**. SIEM sinks and audit export; no open-schema security lake. (`packages/destinations/src/destinations/splunk.ts`, `packages/destinations/src/destinations/datadog.ts`, `docs/guides/siem-splunk.mdx`) | WP-00 |
 | SEC-09 | Identity and access management | Partial | **Partial**. RBAC, scopes, OIDC SSO, API keys, time-bound delegations; MFA delegated to the identity provider. (`core/rbac.py`, `auth/scopes.py`, `auth/sso/oidc.py`) | **Partial**. Scopes, short-lived DPoP-bound tokens, OIDC/SAML SSO with group mapping, SCIM, passkeys; no general role model; admin MFA delegated to the identity provider. (`apps/auth-service/src/routes/sso.ts`, `apps/auth-service/src/routes/scim.ts`, `apps/auth-service/src/routes/webauthn.ts`) | WP-00 |
 
 ## Data management, lakehouse and storage
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | DATA-01 | Scalable object storage | Gap | **Gap**. Storage region setting only. (`core/config.py`) | **Gap**. Cloud infrastructure item. | WP-00 |
 | DATA-02 | Serverless SQL query engine | Gap | **Gap**. Cloud infrastructure item. | **Gap**. Cloud infrastructure item. | WP-00 |
@@ -61,7 +61,7 @@ better of the two products.
 
 ## AI infrastructure and foundation-model services
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | AIINF-01 | Multi-model foundation hub | Partial | **Partial**. Provider allowlist with cloud and local models and per-tenant credentials; no region pinning or multimodal hub. (`core/ai_providers/catalog.py`, `core/langgraph/llm_factory.py`, `core/llm/router.py`) | **Gap**. Not in scope. | WP-02 |
 | AIINF-02 | Managed RAG service | Partial | **Partial**. Native extract, chunk, embed and vector pipeline; no agentic or graph retrieval. (`core/rag/ingest.py`, `core/rag/extractors.py`, `api/v1/knowledge.py`) | **Gap**. Not in scope. | WP-04 |
@@ -79,7 +79,7 @@ better of the two products.
 
 ## Networking and integration
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | NET-01 | Private service endpoints | Partial | **Gap**. No private endpoint configuration. | **Partial**. Private VPC for data stores. (`deploy/gcp/setup.sh`) | WP-00 |
 | NET-02 | Enterprise API gateway | Partial | **Partial**. Application rate-limit classes, API keys, WebSocket feed, request ids. (`api/route_metadata.py`, `api/route_enforcement.py`, `api/websocket/feed.py`) | **Partial**. API-key auth, plan rate limits, WebSocket/SSE events, header-injecting proxy. (`packages/gateway/src/server.ts`, `apps/auth-service/src/plugins/dynamicRateLimit.ts`, `apps/auth-service/src/routes/events.ts`) | WP-00 |
@@ -88,7 +88,7 @@ better of the two products.
 
 ## DevOps, observability, resilience, data protection and FinOps
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | OPS-01 | Distributed tracing for AI | Partial | **Partial**. OpenTelemetry span catalogue defined but not wired; audit rows carry trace_id. (`observability/tracing.py`, `observability/langsmith.py`, `core/models/audit.py`) | **Partial**. OpenTelemetry in the auth service with agent and grant attributes. (`apps/auth-service/src/lib/tracing.ts`, `apps/auth-service/src/lib/traceAttributes.ts`, `docs/guides/opentelemetry.mdx`) | WP-09 |
 | OPS-02 | Centralised platform logging | Partial | **Partial**. Structured logs, Prometheus metrics, dashboards. (`core/logging_config.py`, `observability/metrics.py`, `monitoring/grafana/agenticorg-dashboard.json`) | **Partial**. Structured logs, Prometheus metrics, Grafana dashboards. (`apps/auth-service/src/lib/logger.ts`, `apps/auth-service/src/lib/metrics.ts`, `deploy/grafana/overview-dashboard.json`) | WP-09 |
@@ -101,7 +101,7 @@ better of the two products.
 
 ## Cloud governance, support and service levels
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | GOV-01 | Published per-service SLAs | Partial | **Partial**. SLA document with service credits for the hosted service. (`docs/SLA.md`) | **Gap**. No published SLAs. | WP-00 |
 | GOV-02 | Proven in-country track record | Gap | **Gap**. Cloud provider item. | **Gap**. Cloud provider item. | WP-00 |
@@ -109,7 +109,7 @@ better of the two products.
 
 ## Content generation, summarisation and structuring
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | CONTENT-01 | Governed drafting | Partial | **Partial**. Agents draft with approval gates; information requests render from approved templates; no notice or circular drafting service. (`core/agents/marketing/content_factory.py`, `core/agents/business_underwriter/information_request.py`, `core/agents/packs/legal/prompts/document_drafting.prompt.txt`) | **Gap** | WP-12 |
 | CONTENT-02 | Structured summarisation | Partial | **Partial**. Generic summaries and the cited underwriting memo; no multi-document summarisation service. (`core/agents/business_underwriter/memo.py`, `core/reports/generator.py`, `core/agents/ops/contract_intelligence.py`) | **Gap** | WP-12 |
@@ -122,7 +122,7 @@ better of the two products.
 
 ## Speech, audio/video intelligence and conversational insight
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | SPEECH-01 | Transcription | Partial | **Partial**. Real-time speech-to-text via telephony provider or local whisper; batch audio disabled. (`core/voice/pipeline.py`, `api/v1/voice_runtime.py`, `ui/src/pages/VoiceSetup.tsx`) | **Gap** | WP-13 |
 | SPEECH-02 | Speech synthesis | Partial | **Partial**. Several TTS engines with a language code; no accent or rate controls. (`core/voice/pipeline.py`, `core/voice/runtime.py`) | **Gap** | WP-13 |
@@ -135,7 +135,7 @@ better of the two products.
 
 ## Enterprise data acquisition and information collection
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | ACQ-01 | Lawful automated acquisition | Partial | **Partial**. Portal automations and registry connectors. (`rpa/scripts/mca_company_search.py`, `rpa/scripts/rbi_org_scraper.py`, `rpa/scripts/epfo_ecr_download.py`) | **Partial**. Purpose-bound manifests for registry connectors; no acquisition engine. (`packages/sdk-ts/src/manifests/epfo.ts`, `packages/sdk-ts/src/manifests/gstn.ts`, `packages/sdk-ts/src/manifests/mca_portal.ts`) | WP-16 |
 | ACQ-02 | Provenance metadata | Partial | **Partial**. Case evidence refs and chunk hashes; no general processing-history lineage. (`core/cases/evidence.py`, `core/rag/ingest.py`, `core/extraction/excerpts.py`) | **Partial**. Evidence records carry keyed digests, provider, upstream record references, receipt time and chain hash. (`spec/evidence-package.md`, `apps/auth-service/src/lib/evidence/build.ts`, `apps/auth-service/src/routes/evidence.ts`) | WP-16 |
@@ -143,7 +143,7 @@ better of the two products.
 
 ## Conversational AI and interaction services
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | CONV-01 | Banking intent recognition | Gap | **Gap**. Domain keyword routing; no banking intents or parameter extraction. (`api/v1/chat.py`) | **Gap** | WP-11 |
 | CONV-02 | Multi-turn context | Partial | **Partial**. History stored but not fed back on later turns. (`api/v1/chat.py`, `core/langgraph/checkpointer.py`) | **Gap** | WP-11 |
@@ -154,7 +154,7 @@ better of the two products.
 
 ## Enterprise knowledge retrieval
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | RAG-01 | Multi-format ingestion | Covered | **Covered**. PDF, Office, text, CSV, HTML, JSON, email and images via OCR. (`core/rag/extractors.py`, `api/v1/knowledge.py`) | **Gap** | WP-04 |
 | RAG-02 | Layout-preserving extraction | Partial | **Partial**. Plain text extraction; no layout preservation. (`core/rag/extractors.py`) | **Gap** | WP-04 |
@@ -174,7 +174,7 @@ better of the two products.
 
 ## Intelligent document processing and document intelligence
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | IDP-01 | Bundle splitting and classification | Gap | **Gap**. No bundle split or classification. | **Gap** | WP-14 |
 | IDP-02 | OCR across Indian languages | Partial | **Partial**. OCR with Indic script detection; no handwriting. (`core/rag/extractors.py`) | **Gap** | WP-14 |
@@ -191,7 +191,7 @@ better of the two products.
 
 ## Transaction intelligence and behavioural analytics
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | TXN-01 | Entity-centric aggregation | Partial | **Partial**. Governed case aggregates evidence for one subject; no entity-alert aggregation. (`core/cases/store.py`, `core/cases/runtime.py`, `api/v1/governed_cases.py`) | **Partial**. Evidence grouped per case. (`apps/auth-service/src/routes/evidence.ts`, `spec/evidence-package.md`) | WP-15 |
 | TXN-02 | Structuring detection | Gap | **Gap**. No transaction analytics. | **Gap** | WP-15 |
@@ -202,13 +202,13 @@ better of the two products.
 
 ## Lead intelligence and customer engagement
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | LEAD-01 | Personalised content | Partial | **Partial**. Personalisation in marketing agents only. (`core/agents/marketing/abm_agent.py`, `core/agents/marketing/content_factory.py`, `core/marketing/intent_aggregator.py`) | **Gap** | WP-20 |
 
 ## AI platform architecture and model gateway
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | GW-01 | Unified model abstraction | Partial | **Partial**. One model factory across cloud and local LLMs; no vision or multimodal routing. (`core/langgraph/llm_factory.py`, `core/llm/router.py`, `core/ai_providers/catalog.py`) | **Gap** | WP-02 |
 | GW-02 | Policy-driven routing | Partial | **Partial**. Complexity-tier routing and failover; no sensitivity, cost, latency or language policies. (`core/llm/router.py`, `ui/src/pages/AIConfig.tsx`) | **Gap** | WP-02 |
@@ -221,7 +221,7 @@ better of the two products.
 
 ## Knowledge and vector infrastructure
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | VEC-01 | Vector database | Partial | **Partial**. pgvector with local embeddings. (`core/embeddings.py`, `api/v1/knowledge.py`) | **Gap** | WP-04 |
 | VEC-02 | Hybrid retrieval | Gap | **Gap**. No hybrid search or rank fusion. (`api/v1/knowledge.py`) | **Gap** | WP-04 |
@@ -232,14 +232,14 @@ better of the two products.
 
 ## AI engineering, MLOps and LLMOps
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | MLOPS-01 | Governed model registry | Partial | **Partial**. Agent versions with rollback; no model registry. (`core/models/agent.py`, `api/v1/agents.py`) | **Gap** | WP-05 |
 | MLOPS-02 | Controlled promotion | Partial | **Partial**. Shadow-to-active promotion and workflow A/B; no environments. (`api/v1/agents.py`, `api/v1/workflow_variants.py`, `core/workflow_ab.py`) | **Gap** | WP-05 |
 
 ## Prompt engineering and context management
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | PROMPT-01 | Prompt playground | Partial | **Partial**. Single-agent playground; no side-by-side comparison. (`ui/src/pages/Playground.tsx`) | **Gap** | WP-06 |
 | PROMPT-02 | Prompt version history | Partial | **Partial**. Edit history and rollback; no approval tracking. (`api/v1/prompt_templates.py`, `core/models/prompt_template.py`, `api/v1/agents.py`) | **Gap**. Prompt version references in evidence only. | WP-06 |
@@ -255,7 +255,7 @@ better of the two products.
 
 ## Enterprise agent registry and marketplace
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | REG-01 | Searchable agent catalogue | Partial | **Partial**. Search and domain/status filters; no channel, use-case or approval categories. (`ui/src/pages/Agents.tsx`, `api/v1/agents.py`) | **Partial**. Agent list, registry lookup by DID and key, trust-registry search with category filter. (`apps/auth-service/src/routes/agents.ts`, `apps/auth-service/src/routes/registry-lookup.ts`, `apps/auth-service/src/routes/trust-registry.ts`) | WP-05 |
 | REG-02 | Agent card | Partial | **Partial**. Platform-level agent card and agent records; no per-agent standardised card. (`api/v1/a2a.py`, `core/models/agent.py`) | **Partial**. A2A agent card, passport claims, per-tool permission manifests; no model or I/O schema fields. (`packages/a2a/src/agent-card.ts`, `spec/agent-passport-1.0.md`, `packages/agent-passport/src/passport.ts`) | WP-05 |
@@ -268,7 +268,7 @@ better of the two products.
 
 ## Agentic development and workflow orchestration
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | ORCH-01 | Visual workflow builder | Partial | **Partial**. Condition, loop, parallel and human steps; authoring is JSON or natural language. (`ui/src/pages/WorkflowCreate.tsx`, `workflows/parser.py`, `ui/src/components/WorkflowBuilder.tsx`) | **Gap** | WP-17 |
 | ORCH-02 | Planning and re-planning | Partial | **Partial**. ReAct loop, replanning on failure, intent decomposition. (`core/orchestrator/nexus.py`, `workflows/replanner.py`, `core/langgraph/agent_graph.py`) | **Gap** | WP-17 |
@@ -284,7 +284,7 @@ better of the two products.
 
 ## AI evaluation framework and benchmarking
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | EVAL-01 | Evaluation datasets | Partial | **Partial**. Datasets are files; no management API or UI. (`evals/golden_datasets`, `evals/runner.py`, `core/rag/eval.py`) | **Gap** | WP-07 |
 | EVAL-02 | Model-graded evaluation | Gap | **Gap**. Deterministic scorers only. (`evals/scorer.py`) | **Gap** | WP-07 |
@@ -296,18 +296,18 @@ better of the two products.
 
 ## Cross-cutting AI governance and asset inventory
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | AIGOV-01 | Live asset inventory | Partial | **Partial**. Separate lists; no unified inventory. (`api/v1/agents.py`, `api/v1/prompt_templates.py`, `api/v1/connectors.py`) | **Partial**. Inventory of agents, grants, MCP servers, manifests; software SBOM and provenance; no AIBOM. (`apps/auth-service/src/routes/agents.ts`, `apps/auth-service/src/routes/mcp-servers.ts`, `.github/workflows/publish-auth-service-image.yml`) | WP-08 |
 | AIGOV-02 | Configurable AI policies | Partial | **Partial**. Action risk policy, approval policies, enforcement modes; no unified policy authoring. (`core/governance/action_policy.py`, `core/approvals/policy_engine.py`, `auth/grant_enforcement.py`) | **Partial**. Allow/deny policies with OPA and Cedar backends, tool, purpose and caps rules; no model, prompt or output governance. (`apps/auth-service/src/lib/policy.ts`, `apps/auth-service/src/lib/backends/opa.ts`, `apps/auth-service/src/lib/backends/cedar.ts`) | WP-08 |
 | AIGOV-03 | Regulatory risk tiers | Partial | **Partial**. Action risk classes, case tiers, maturity labels; no regulatory risk tiers. (`core/governance/action_policy.py`, `core/policy/engine.py`, `core/models/agent.py`) | **Partial**. Trust levels and per-tool requires_decision and four_eyes; no workload risk tiers. (`apps/auth-service/src/lib/registry/trust-level.ts`, `packages/mcp-auth/src/resource/tool-policy.ts`, `apps/auth-service/src/lib/decisions/policy.ts`) | WP-08 |
-| AIGOV-04 | Operator override | Partial | **Partial**. Same as the baseline override item. (`ui/src/components/KillSwitch.tsx`, `api/v1/agents.py`, `core/governance/action_policy.py`) | **Partial**. Emergency stop for grant, agent, principal and developer; no model or pipeline throttling. (`apps/auth-service/src/routes/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/emergency-stop.ts`, `apps/auth-service/src/routes/revocations.ts`) | WP-01 |
+| AIGOV-04 | Operator override | Partial | **Partial**. Same as the baseline override item. (`api/v1/agents.py`, `core/governance/action_policy.py`, `api/v1/workflows.py`) | **Partial**. Emergency stop for grant, agent, principal and developer; no model or pipeline throttling. (`apps/auth-service/src/routes/emergency-stop.ts`, `apps/auth-service/src/lib/revocation/emergency-stop.ts`, `apps/auth-service/src/routes/revocations.ts`) | WP-01 |
 | AIGOV-05 | Dependency graph | Gap | **Gap**. No dependency graph. | **Gap**. No dependency graph. | WP-08 |
 | AIGOV-06 | Model cards | Gap | **Gap**. No model cards. | **Gap**. Software SBOM and provenance only. (`.github/workflows/release.yml`) | WP-08 |
 
 ## Security, privacy and AI trust controls
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | TRUST-01 | Prompt-injection guardrails | Partial | **Partial**. Strong indirect-injection controls for governed cases only; elsewhere a regex check; not configurable. (`core/extraction/context.py`, `docs/security/untrusted-content.md`, `core/agent_generator.py`) | **Gap** | WP-03 |
 | TRUST-02 | Sensitive-data controls | Covered | **Covered**. PII detection with Aadhaar, PAN and GSTIN recognisers, reversible pre-model tokenisation, masking in audit. (`core/pii/redactor.py`, `core/pii/pseudonymiser.py`, `core/pii/india_recognizers.py`) | **Partial**. DPDP consent lifecycle, pseudonyms in evidence, SD-JWT selective disclosure; no PII detection in AI inputs and outputs. (`apps/auth-service/src/routes/dpdp.ts`, `packages/dpdp/src/index.ts`, `apps/auth-service/src/lib/decisions/personal-data.ts`) | WP-03 |
@@ -319,7 +319,7 @@ better of the two products.
 
 ## AI observability and distributed tracing
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | OBS-01 | Waterfall execution traces | Partial | **Partial**. Text trace only; no waterfall view. (`ui/src/pages/Playground.tsx`, `observability/tracing.py`) | **Gap** | WP-09 |
 | OBS-02 | Streaming latency metrics | Gap | **Gap**. Latency only; no time-to-first-token, tokens per second or queue wait. (`core/llm/router.py`) | **Gap** | WP-09 |
@@ -330,7 +330,7 @@ better of the two products.
 
 ## FinOps
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | FIN-01 | Usage attribution | Partial | **Partial**. Per-agent ledger with cost-centre and department attribution; no use-case tags. (`scaling/cost_ledger.py`, `api/v1/costs.py`, `api/v1/departments.py`) | **Partial**. Usage metering per developer and per-grant cost units. (`apps/auth-service/src/lib/usage.ts`, `apps/auth-service/src/routes/usage.ts`, `apps/auth-service/src/routes/budget.ts`) | WP-10 |
 | FIN-02 | Budget thresholds | Partial | **Partial**. Alerts, per-agent monthly cap, provider daily cap; no application or use-case thresholds. (`core/billing/budget_evaluator.py`, `api/v1/agents.py`, `core/llm/router.py`) | **Partial**. Budget alerts at 50 and 80 percent, caps that deny, plan rate limits. (`docs/guides/budget-controls.mdx`, `packages/sdk-ts/src/caps/index.ts`, `apps/auth-service/src/plugins/dynamicRateLimit.ts`) | WP-10 |
@@ -339,7 +339,7 @@ better of the two products.
 
 ## Front-end experience, workbenches and channel enablement
 
-| ID | Capability | Combined | AgenticOrg | Grantex | Work package |
+| ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | FE-01 | Configurable conversational interfaces | Partial | **Partial**. Web chat, telephony voice, Teams bot and WhatsApp connector. (`api/v1/chat.py`, `api/v1/voice_runtime.py`, `connectors/microsoft/teams_bot.py`) | **Gap** | WP-11 |
 | FE-02 | Intent, entity and context tracking | Partial | **Partial**. Keyword domain detection; no cross-turn context. (`api/v1/chat.py`) | **Gap** | WP-11 |
@@ -353,6 +353,6 @@ better of the two products.
 | FE-10 | Interaction feedback capture | Partial | **Partial**. Agent feedback only; no satisfaction or sentiment. (`core/feedback/collector.py`, `api/v1/agents.py`) | **Gap** | WP-11 |
 | FE-11 | Role-based workbenches | Partial | **Partial**. Dashboards, approvals and case queues; no RM or investigator workbench. (`ui/src/pages/CFODashboard.tsx`, `ui/src/pages/GovernedCases.tsx`, `ui/src/pages/Approvals.tsx`) | **Gap**. Developer portal only. | WP-18 |
 | FE-12 | Paused-task review queue | Covered | **Covered**. Approve or reject with notes, expiry, delegation, quorum; limited payload editing. (`ui/src/pages/Approvals.tsx`, `api/v1/approvals.py`, `ui/src/pages/GovernedCaseDetail.tsx`) | **Partial**. Per-request approval page; no central queue. (`apps/auth-service/src/routes/decision-page.ts`, `apps/auth-service/src/routes/prepaid-wallets.ts`) | WP-18 |
-| FE-13 | Business configuration console | Partial | **Partial**. Some settings in the UI; policies, flags and HITL conditions API-only. (`ui/src/pages/Settings.tsx`, `ui/src/pages/AIConfig.tsx`, `api/v1/approval_policies.py`) | **Partial**. Portal forms for policies, rules and budgets. (`apps/portal/src/pages/policies/PolicyForm.tsx`, `apps/portal/src/pages/anomalies/RuleBuilder.tsx`, `apps/portal/src/pages/budgets/BudgetList.tsx`) | WP-18 |
+| FE-13 | Business configuration console | Partial | **Partial**. Some settings in the UI; policies, flags and HITL conditions API-only. (`ui/src/pages/Settings.tsx`, `ui/src/pages/AIConfig.tsx`, `api/v1/approval_policies.py`) | **Partial**. Portal forms for policies, rules and budgets. (`apps/portal/src/pages/policies/PolicyForm.tsx`, `apps/portal/src/pages/budgets/BudgetList.tsx`) | WP-18 |
 | FE-14 | Workbench search | Gap | **Gap**. Simple filters and name search only. (`api/v1/governed_cases.py`, `ui/src/pages/Agents.tsx`) | **Gap** | WP-18 |
 | FE-15 | Workbench RBAC | Covered | **Covered**. Role mapping, scope-gated APIs, route guards. (`core/rbac.py`, `auth/scopes.py`, `ui/src/components/ProtectedRoute.tsx`) | **Gap**. Admin scope only; no per-tab roles. (`apps/auth-service/src/plugins/auth.ts`) | WP-18 |

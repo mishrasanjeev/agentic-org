@@ -1,7 +1,7 @@
 # Capability baseline
 
 Each capability has a stable identifier, a short title and the expectation in one or two sentences. The
-identifiers are referenced by the coverage matrix, the programme plan and the capability readiness report.
+identifiers are referenced by the coverage matrix and the capability readiness report.
 
 ## 1. Baseline conditions
 

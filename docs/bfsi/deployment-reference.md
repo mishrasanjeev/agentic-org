@@ -3,8 +3,7 @@
 The infrastructure items in the baseline belong to the hosting platform, not to application code. This
 reference maps each one to a deployment control that any major cloud or sovereign-cloud provider can
 supply, the verification a reviewer performs, and the platform setting or report that consumes it. The
-compliance report gains an infrastructure attestation section (WP-00) where the operator records the
-outcome of each verification.
+compliance report records the outcome of each verification in its infrastructure attestation section.
 
 | ID | Capability | Deployment control | Verification |
 |---|---|---|---|
@@ -47,7 +46,7 @@ outcome of each verification.
 
 ## Platform settings that consume these controls
 
-- `data_region` and `storage_region` select the region; with residency enforcement on (WP-19) the platform refuses providers and storage outside it.
+- `data_region` and `storage_region` select the region; with residency enforcement on the platform refuses providers and storage outside it.
 - The envelope-encryption key resource points at the HSM-backed key (SEC-01, SEC-02).
 - The audit and event exports target the streaming and SIEM services (SEC-08, DATA-04).
 - The DR profile records the standby region and the last drill (INF-02).
