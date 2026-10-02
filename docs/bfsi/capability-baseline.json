@@ -424,21 +424,22 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/config.py",
-          "core/models/governance_config.py",
-          "core/ai_providers/catalog.py",
+          "core/governance/residency.py",
+          "api/v1/residency.py",
+          "docs/governance/data-residency.md",
           "scripts/deploy_cloud_run.sh"
         ],
-        "note": "data_region and storage_region are settings that nothing routes or blocks on; in-country operation is possible with local inference and the air-gap guide, but the defaults use external model APIs and a foreign deploy region."
+        "note": "Residency enforcement refuses any provider without an active in-region attestation for the tenant region at the credential resolver, the retrieval service, the tool hub and tracing export (behind residency.enforce); the deploy script still defaults to a foreign region and the hosted stack uses external model APIs until attested."
       },
       "grantex": {
         "status": "partial",
         "evidence": [
-          "docs/compliance/data-residency.md",
-          "deploy/gcp/setup.sh",
-          "deploy/helm/grantex/values.yaml"
+          "apps/auth-service/src/lib/purpose.ts",
+          "packages/sdk-ts/src/client.ts",
+          "packages/sdk-py/src/grantex/_client.py",
+          "packages/gateway/src/region.ts"
         ],
-        "note": "Self-hosting (Helm/Compose) lets the operator choose the region; the hosted service is pinned to one foreign region; data_region is carried in tokens but not enforced."
+        "note": "A grant can be issued with a data region, and relying parties with the region check on refuse it elsewhere (both SDKs and the gateway, opt-in this release); the hosted service is still pinned to one foreign region."
       },
       "group": "WP-19"
     },
@@ -452,12 +453,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/residency.py",
           "docs/adr/0002-multi-tenancy-via-rls.md",
-          "core/database.py",
-          "core/tool_gateway/gateway.py",
           "docs/deployment-airgap.md"
         ],
-        "note": "Shared-database multi-tenancy isolated by row-level security; a dedicated instance exists only through the self-host guide, with no single-tenant deployment profile."
+        "note": "Shared-database multi-tenancy isolated by row-level security; the tenancy profile (shared or dedicated) is a reported deployment setting, and a dedicated instance is a self-host deployment rather than a packaged profile."
       },
       "grantex": {
         "status": "partial",
@@ -480,11 +480,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/residency.py",
           "infra/terraform/multi_region/main.tf",
-          "infra/terraform/multi_region/README.md",
           "docs/BACKUP_AND_DR.md"
         ],
-        "note": "Warm-standby Terraform scaffold exists but every resource is commented out; DR is documented as not active."
+        "note": "The disaster-recovery profile (standby region, conformance, last drill) is reported in the compliance package; the Terraform standby is still scaffolded, not deployed."
       },
       "grantex": {
         "status": "none",
@@ -502,14 +502,15 @@
       "domain": "BASE",
       "title": "No training on institution data",
       "expectation": "Institution data, prompts, outputs, embeddings and derived artefacts are never used to train, fine-tune, evaluate or improve any shared, multi-tenant, public or vendor foundation model without explicit written authorisation for an institution-exclusive use.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
+        "status": "partial",
         "evidence": [
-          "docs/user-guide/security-and-data.md",
-          "core/feedback/shadow_learning.py"
+          "core/governance/residency.py",
+          "core/models/provider_attestation.py",
+          "docs/governance/data-residency.md"
         ],
-        "note": "No training pipeline, but no explicit no-training control or per-provider attestation."
+        "note": "No training pipeline exists; a provider is usable in a region only with an attestation that records a written no-training commitment and its evidence reference, revocable and audited."
       },
       "grantex": {
         "status": "none",
@@ -524,15 +525,15 @@
       "domain": "BASE",
       "title": "Emergency operator override",
       "expectation": "Administrators have a real-time operator override to halt, disable or throttle any active model, agent or automated pipeline.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "api/v1/agents.py",
-          "core/governance/action_policy.py",
-          "api/v1/workflows.py"
+          "core/governance/operator_override.py",
+          "api/v1/operator_overrides.py",
+          "docs/governance/operator-override.md"
         ],
-        "note": "Per-agent pause, workflow cancel, force-shadow flag and budget blocks; no single control to halt or throttle a model, all agents or the tool pipeline."
+        "note": "Operator override halts or throttles a provider, a model, one agent, every agent, a workflow or the tool pipeline at every enforcement point, with a signed audit row per change; behind the authority flag operator_override.enabled."
       },
       "grantex": {
         "status": "partial",
@@ -551,13 +552,14 @@
       "domain": "INF",
       "title": "Multi-zone architecture",
       "expectation": "Hosting infrastructure offers at least three physically independent availability zones in-country with dedicated power, cooling and network.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
+        "status": "partial",
         "evidence": [
-          "infra/terraform/multi_region/README.md"
+          "core/governance/infrastructure.py",
+          "docs/bfsi/deployment-reference.md"
         ],
-        "note": "Cloud infrastructure item."
+        "note": "Cloud infrastructure item: the deployment reference names the control and the compliance package records the operator attestation; nothing in code provisions it."
       },
       "grantex": {
         "status": "none",
@@ -1262,12 +1264,12 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/model_gateway.py",
+          "api/v1/model_gateway.py",
           "core/llm/router.py",
-          "core/langgraph/llm_factory.py",
-          "core/ai_providers/resolver.py",
-          "api/v1/tenant_ai_settings.py"
+          "docs/governance/model-gateway.md"
         ],
-        "note": "Tiered routing with same-provider failover and tenant policy; no unified gateway endpoint, per-model limits or central API management."
+        "note": "Model gateway with tenant routing policies (use case, data sensitivity, agent, business unit, language) in front of the agent runner and the direct router, behind model_gateway.enabled; no per-model rate limits or usage controls yet."
       },
       "grantex": {
         "status": "none",
@@ -1299,11 +1301,11 @@
         "status": "partial",
         "evidence": [
           "packages/gateway/src/proxy.ts",
+          "packages/gateway/src/server.ts",
           "packages/mcp-auth/src/resource/guard.ts",
-          "apps/auth-service/src/routes/vault.ts",
-          "apps/auth-service/src/routes/mcp-servers.ts"
+          "apps/auth-service/src/routes/vault.ts"
         ],
-        "note": "Grant-token proxy, MCP resource guard, credential exchange, MCP server registry; local JWT checks without online revocation."
+        "note": "Grant-token proxy with audience and data-region checks, MCP resource guard, credential exchange and an MCP server registry; the gateway verifies tokens locally by default and against the issuer with currentAuthorityCheck on."
       },
       "group": "WP-01"
     },
@@ -1679,9 +1681,10 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "docs/SLA.md"
+          "docs/SLA.md",
+          "core/governance/infrastructure.py"
         ],
-        "note": "SLA document with service credits for the hosted service."
+        "note": "SLA document with service credits for the hosted service; the compliance package records the operator attestation of the hosting provider SLA."
       },
       "grantex": {
         "status": "none",
@@ -3028,10 +3031,10 @@
         "status": "partial",
         "evidence": [
           "core/langgraph/llm_factory.py",
-          "core/llm/router.py",
+          "core/governance/model_gateway.py",
           "core/ai_providers/catalog.py"
         ],
-        "note": "One model factory across cloud and local LLMs; no vision or multimodal routing."
+        "note": "One model factory across cloud and local LLMs behind a policy-driven gateway; no vision or multimodal routing."
       },
       "grantex": {
         "status": "none",
@@ -3050,10 +3053,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/model_gateway.py",
           "core/llm/router.py",
-          "ui/src/pages/AIConfig.tsx"
+          "docs/governance/model-gateway.md"
         ],
-        "note": "Complexity-tier routing and failover; no sensitivity, cost, latency or language policies."
+        "note": "Policies route by use case, data sensitivity, agent, business unit and language with same-provider failover and in-region restriction; no cost, latency or throughput routing yet."
       },
       "grantex": {
         "status": "none",
@@ -3162,11 +3166,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/ai_providers/catalog.py",
-          "api/v1/tenant_ai_settings.py",
-          "core/models/agent.py"
+          "core/governance/model_gateway.py",
+          "api/v1/model_gateway.py",
+          "core/models/model_routing_policy.py"
         ],
-        "note": "Provider and model pinned per tenant or agent; no per-user or business-unit policies."
+        "note": "Policies fence providers per agent and business unit (allowed_providers) and keep restricted data in region; no per-user or application identity policies yet."
       },
       "grantex": {
         "status": "partial",
@@ -3188,9 +3192,10 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/llm/router.py"
+          "core/governance/model_gateway.py",
+          "observability/metrics.py"
         ],
-        "note": "Routing decision logged only; not in the audit trail."
+        "note": "Every routing decision is logged with a correlation id, the policy, provider and model, and metered; not yet written to the audit trail."
       },
       "grantex": {
         "status": "partial",
@@ -3678,11 +3683,12 @@
         "note": "States shadow/active/paused/retired plus maturity label."
       },
       "grantex": {
-        "status": "none",
+        "status": "partial",
         "evidence": [
-          "apps/auth-service/src/routes/agents.ts"
+          "apps/auth-service/src/routes/agents.ts",
+          "docs/openapi.yaml"
         ],
-        "note": "Only active and suspended."
+        "note": "Lifecycle states draft, active, suspended and retired with a transition table and recorded reasons, behind AGENT_LIFECYCLE_STATES_ENABLED; no review, approved or published states and no approval attestation type in the registry."
       },
       "group": "WP-05"
     },
@@ -4033,9 +4039,10 @@
         "evidence": [
           "docs/concepts/tool-manifests.mdx",
           "packages/mcp-auth/src/resource/tool-policy.ts",
-          "spec/manifest-0.6.md"
+          "spec/manifest-0.6.md",
+          "packages/sdk-ts/src/client.ts"
         ],
-        "note": "Manifests map tools to read/write/delete/admin; agent and grant scopes enforce it."
+        "note": "Manifests map tools to read, write, delete or admin; agent and grant scopes enforce it, and with tool-qualified scopes on, a scope naming a tool covers that tool only."
       },
       "group": "WP-17"
     },
@@ -4311,7 +4318,7 @@
       "domain": "AIGOV",
       "title": "Regulatory risk tiers",
       "expectation": "AI workloads categorised into risk tiers with stricter validation and oversight for high-risk models.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
         "status": "partial",
         "evidence": [
@@ -4319,16 +4326,17 @@
           "core/policy/engine.py",
           "core/models/agent.py"
         ],
-        "note": "Action risk classes, case tiers, maturity labels; no regulatory risk tiers."
+        "note": "Action risk classes, case tiers and maturity labels; no regulatory risk tiers for AI workloads (the authority layer now carries tool risk tiers on manifests)."
       },
       "grantex": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "apps/auth-service/src/lib/registry/trust-level.ts",
-          "packages/mcp-auth/src/resource/tool-policy.ts",
-          "apps/auth-service/src/lib/decisions/policy.ts"
+          "spec/manifest-0.6.schema.json",
+          "packages/sdk-ts/src/manifest.ts",
+          "packages/sdk-py/src/grantex/manifest.py",
+          "packages/mcp-auth/src/resource/tool-policy.ts"
         ],
-        "note": "Trust levels and per-tool requires_decision and four_eyes; no workload risk tiers."
+        "note": "Tool manifests declare a risk tier; a high-risk tool needs a decision grant on every call in both SDKs and the MCP tool policy, and lower tiers are reported for platform policies."
       },
       "group": "WP-08"
     },
@@ -4338,15 +4346,15 @@
       "domain": "AIGOV",
       "title": "Operator override",
       "expectation": "Emergency operator override to halt, disable or throttle any model, agent, workflow or tool pipeline.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "api/v1/agents.py",
-          "core/governance/action_policy.py",
-          "api/v1/workflows.py"
+          "core/governance/operator_override.py",
+          "api/v1/operator_overrides.py",
+          "docs/governance/operator-override.md"
         ],
-        "note": "Same as the baseline override item."
+        "note": "Same control as the baseline override item: halt or throttle by target kind, re-checked at every boundary, throttles counted per dispatch."
       },
       "grantex": {
         "status": "partial",
@@ -4571,13 +4579,13 @@
         "note": "Credentials encrypted and resolved server-side."
       },
       "grantex": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
           "apps/auth-service/src/routes/vault.ts",
-          "apps/auth-service/src/lib/vault-crypto.ts",
-          "packages/gateway/gateway.example.yaml"
+          "packages/gateway/src/credentials.ts",
+          "docs/api-reference/vault/resolve.mdx"
         ],
-        "note": "Encrypted vault and gateway upstreamHeaders; the credential exchange returns the raw credential to the agent."
+        "note": "Encrypted vault; the exchange can hand out a short-lived credential reference (VAULT_CREDENTIAL_REFERENCES_ENABLED) that the gateway redeems with its own key and injects upstream (credentialReference: on), so the agent never holds the secret."
       },
       "group": "WP-21"
     },

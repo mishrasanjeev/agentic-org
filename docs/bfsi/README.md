@@ -17,10 +17,10 @@ part, and what it does not provide yet, with the repository evidence for each an
 
 | Section | Items | Covered | Partial | Gap |
 |---|---:|---:|---:|---:|
-| Baseline conditions | 5 | 0 | 4 | 1 |
-| Technical capabilities | 50 | 4 | 32 | 14 |
-| Functional capabilities | 150 | 14 | 101 | 35 |
-| Total | 205 | 18 | 137 | 50 |
+| Baseline conditions | 5 | 1 | 4 | 0 |
+| Technical capabilities | 50 | 4 | 33 | 13 |
+| Functional capabilities | 150 | 16 | 99 | 35 |
+| Total | 205 | 21 | 136 | 48 |
 
 Status rules: **Covered** means the capability exists in product form with tests; **Partial** means part of it
 exists or it exists for one domain only; **Gap** means nothing usable exists yet. A cloud-provider item counts
