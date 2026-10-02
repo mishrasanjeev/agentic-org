@@ -378,26 +378,33 @@ def _fail(provider: str, region: str, reason: str) -> ResidencyDecision:
     return ResidencyDecision(blocked=True, reason=reason, provider=provider, data_region=region)
 
 
-async def check_provider(tenant_id: uuid.UUID | str | None, provider: str, *, kind: str = "llm") -> ResidencyDecision:
+async def check_provider(
+    tenant_id: uuid.UUID | str | None, provider: str, *, kind: str = "llm", enforce: bool | None = None
+) -> ResidencyDecision:
     """Decide whether ``provider`` may process the tenant's data under residency enforcement.
 
     Allowed when enforcement is off, when the provider runs inside the deployment,
     or when an active attestation for the tenant's region says the provider stays
-    in region and does not train on the data. Blocked otherwise.
+    in region and does not train on the data. Blocked otherwise. ``enforce=True``
+    applies the attestation rules whether or not enforcement is on (the model
+    gateway asks this for restricted data); ``None`` reads the flag.
     """
     key = (provider or "").strip().lower()
     if not key:
         return ALLOWED
     tid = _as_uuid(tenant_id)
     strict = is_strict_runtime_env(settings.env)
-    try:
-        on = await enabled(tid)
-    # enterprise-gate: broad-except-ok reason=flag-read-failure-fails-closed-in-strict-runtime
-    except Exception as exc:
-        logger.error("residency_flag_read_failed", provider=key, error_type=type(exc).__name__)
-        if strict:
-            return _fail(key, "", "Residency: the enforcement flag could not be read; refusing the provider.")
-        return ALLOWED
+    if enforce is None:
+        try:
+            on = await enabled(tid)
+        # enterprise-gate: broad-except-ok reason=flag-read-failure-fails-closed-in-strict-runtime
+        except Exception as exc:
+            logger.error("residency_flag_read_failed", provider=key, error_type=type(exc).__name__)
+            if strict:
+                return _fail(key, "", "Residency: the enforcement flag could not be read; refusing the provider.")
+            return ALLOWED
+    else:
+        on = enforce
     if not on:
         return ALLOWED
     if is_local_provider(key):

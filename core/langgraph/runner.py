@@ -25,6 +25,7 @@ from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
+from core.governance.model_gateway import ModelGatewayRefused, refused_run_result, route_for_agent
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.checkpointer import (
     BACKEND_POSTGRES,
@@ -378,6 +379,22 @@ async def run_agent(
         if trusted_shadow_fixture_prompt and pii_mode in ("before_llm", "before_log"):
             logger.info("pii_redaction_skipped_for_shadow_fixture", agent_id=agent_id)
         user_message = _build_user_message(task_input)
+
+    # The model gateway applies the tenant's routing policy to the agent's
+    # model before the credential is resolved; a refusal ends the run here.
+    try:
+        route = await route_for_agent(
+            tenant_id,
+            use_case="agent_run",
+            agent_id=agent_id,
+            business_unit=domain,
+            requested_provider=llm_provider,
+            requested_model=llm_model,
+        )
+    except ModelGatewayRefused as exc:
+        logger.warning("agent_run_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
+        return refused_run_result(exc)
+    llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
 
     # Build the graph. The tool wrappers share ``pii_token_map`` so the
     # model's tokenized tool arguments are restored before the connector
@@ -789,6 +806,20 @@ async def resume_agent(
             supplied_token=grant_token,
             runtime="langgraph_resume",
         )
+
+    try:
+        route = await route_for_agent(
+            tenant_id,
+            use_case="agent_resume",
+            agent_id=agent_id,
+            business_unit=domain,
+            requested_provider=llm_provider,
+            requested_model=llm_model,
+        )
+    except ModelGatewayRefused as exc:
+        logger.warning("agent_resume_refused_model_gateway", agent_id=agent_id, reason=exc.reason)
+        return refused_run_result(exc)
+    llm_provider, llm_model = route.provider if route.applied else llm_provider, route.model
 
     credential_token = await prefetch_llm_credential(llm_model, llm_provider, tenant_id)
     try:

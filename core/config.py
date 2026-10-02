@@ -155,6 +155,11 @@ class Settings(BaseSettings):
     # pipeline). Off by default; the authority flag ``operator_override.enabled``
     # turns it on per tenant, this switch for the whole deployment.
     operator_override_enabled: bool = False
+    # Model gateway: tenant routing policies decide the provider and model of
+    # every tenant-scoped model call. Off by default; the authority flag
+    # ``model_gateway.enabled`` turns it on per tenant, this switch for the
+    # whole deployment.
+    model_gateway_enabled: bool = False
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30
