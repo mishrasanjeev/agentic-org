@@ -20,6 +20,7 @@ from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
+from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import (
@@ -653,6 +654,9 @@ async def chat_query(
             # Domain RBAC for shared agents, owner/admin for personal ones
             # (bug sheet 2026-09-14 rows 30/53); 404 either way.
             require_agent_visible(agent, caller)
+            status_refusal = agent_status_refusal(agent.status)
+            if status_refusal is not None:
+                raise HTTPException(409, status_refusal)
             domain = agent.domain or "general"
             agent_name = agent.employee_name or agent.name
             agent_id: str | None = str(agent.id)

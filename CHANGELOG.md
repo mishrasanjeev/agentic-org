@@ -4,6 +4,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Changed - A paused agent can be refused, not only left out of routing
+- `AGENTICORG_PAUSED_AGENTS_REFUSED` (default off): `POST /agents/{id}/run` and a
+  chat that names the agent refuse a `paused` agent with 409, and a workflow
+  agent step treats it as inactive, so the console's pause stops execution
+  (FINDINGS A-110). Routing already skipped paused agents.
+
 ### Added - Residency enforcement and provider attestations
 - `core/governance/residency.py`: with enforcement on, a provider is refused
   unless an administrator has attested, for the tenant's data region, that
