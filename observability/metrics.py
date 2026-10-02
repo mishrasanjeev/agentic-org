@@ -85,6 +85,11 @@ operator_override_blocks_total = Counter(
     "Model, agent, workflow and tool calls refused by an operator override",
     ["target_kind", "mode"],
 )
+model_gateway_decisions_total = Counter(
+    "agenticorg_model_gateway_decisions_total",
+    "Model gateway decisions by outcome (applied, passthrough, refused)",
+    ["outcome"],
+)
 residency_refusals_total = Counter(
     "agenticorg_residency_refusals_total",
     "Providers refused by residency enforcement, by reason",

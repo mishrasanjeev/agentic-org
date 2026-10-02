@@ -43,6 +43,9 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from core.config import external_keys, is_relaxed_env, settings
+from core.governance.model_gateway import ModelGatewayRefused, RouteRequest
+from core.governance.model_gateway import decide as gateway_decide
+from core.governance.model_gateway import normalise_provider as gateway_provider
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
 
@@ -72,6 +75,7 @@ def _is_transient_llm_failure(exc: Exception) -> bool:
         (
             DailyBudgetExceeded,
             LLMProviderConfigurationError,
+            ModelGatewayRefused,
             OperatorOverrideBlocked,
             ResidencyBlocked,
             ValueError,
@@ -105,6 +109,16 @@ def _is_transient_llm_failure(exc: Exception) -> bool:
         except (ImportError, AttributeError):
             continue
     return False
+
+
+def provider_of_model(model: str) -> str | None:
+    """The provider family a model name dispatches to (``gemini``, ``claude`` or ``gpt``), or None."""
+    return _model_provider(model)
+
+
+def tier_model(tier: str) -> str:
+    """The concrete model behind a cost tier in the deployment's current mode."""
+    return smart_router._resolve_tier_model(tier)
 
 
 def _model_provider(model: str) -> str | None:
@@ -598,6 +612,34 @@ class LLMRouter:
             if pseudonymiser is not None:
                 messages = await pseudonymiser.pseudonymise_router_messages(messages)
             model = model_override or self.primary_model
+            if tenant_id:
+                # The model gateway may replace the model from the tenant's routing
+                # policy; its choice is an explicit selection, so failover below
+                # stays within that provider. A refusal is not retried.
+                decision = await gateway_decide(
+                    RouteRequest(
+                        tenant_id=tenant_id,
+                        use_case="completion",
+                        requested_provider=_model_provider(model),
+                        requested_model=model,
+                    )
+                )
+                if decision.applied:
+                    # This router dispatches by model family (gemini, claude, gpt)
+                    # and has no endpoint for the other catalogue providers; a
+                    # policy that names one is refused here rather than being
+                    # sent to the family's public API.
+                    family = gateway_provider(_model_provider(decision.model))
+                    if decision.provider and decision.provider != family:
+                        raise ModelGatewayRefused(
+                            f"Model gateway: the direct router cannot reach provider {decision.provider} "
+                            f"for model {decision.model}; route this use case through an agent run.",
+                            correlation_id=decision.correlation_id,
+                            policy_id=decision.policy_id,
+                            policy_name=decision.policy_name,
+                        )
+                    model = decision.model
+                    model_override = model
             temp = temperature if temperature is not None else self.temperature
             # Only forward tenant_id when set so existing _call_model call shapes stay stable.
             scope = {"tenant_id": tenant_id} if tenant_id else {}
