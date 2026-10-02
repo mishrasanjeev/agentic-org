@@ -23,6 +23,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Off by default: the authority flag `model_gateway.enabled` (operator
   managed) or `AGENTICORG_MODEL_GATEWAY_ENABLED` turns it on. Docs:
   `docs/governance/model-gateway.md`.
+### Changed - A paused agent can be refused, not only left out of routing
+- `AGENTICORG_PAUSED_AGENTS_REFUSED` (default off): `POST /agents/{id}/run` and a
+  chat that names the agent refuse a `paused` agent with 409, and a workflow
+  agent step treats it as inactive, so the console's pause stops execution
+  (FINDINGS A-110). Routing already skipped paused agents.
 
 ### Fixed - Operator override error code
 - The operator override refusal is `E1013`. It had been registered as `E1012`,
