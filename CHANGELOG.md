@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - A halted workflow stays recoverable when the task queue is unavailable
+- When `resume_halted_workflow` cannot be queued (broker down), the background
+  executor no longer leaves the run at `running` with nobody retrying it: it
+  retries in process every `AGENTICORG_OPERATOR_HALT_RETRY_SECONDS` and offers
+  the retry to the queue again on every pass, until the override is released,
+  the run is cancelled or the queue takes it. The pending retry is recorded on
+  the run, and the `recover_halted_workflows` beat sweep
+  (`AGENTICORG_OPERATOR_HALT_RECOVERY_SWEEP_ENABLED`) re-queues a run whose
+  record nobody has heartbeated for three retry intervals, so a broker outage
+  followed by a restart of the retrying process cannot strand it either.
+  Publishing to the broker runs off the event loop.
+
 ### Added - Model gateway: routing policies in front of every provider
 - `core/governance/model_gateway.py`: tenant routing policies decide the
   provider and model of a model call from its use case, data sensitivity,

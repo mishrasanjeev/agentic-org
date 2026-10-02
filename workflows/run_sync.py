@@ -102,6 +102,50 @@ def hitl_timeout_hours(step_result: dict[str, Any], step_def: dict[str, Any]) ->
     return 4.0
 
 
+HALT_RETRY_KEY = "_halt_retry"
+
+
+async def record_halt_retry(
+    tenant_id: uuid.UUID, workflow_run_id: uuid.UUID, engine_run_id: str, *, owner: str
+) -> None:
+    """Record on the run that a retry of its operator halt is pending, and who is retrying it.
+
+    The record survives the process that wrote it: the recovery sweep
+    (``recover_halted_workflows``) re-queues a run whose ``heartbeat`` has gone
+    stale, so a broker outage followed by a restart of the retrying process
+    cannot strand the run at ``running``.
+    """
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.workflow import WorkflowRun
+
+    async with get_tenant_session(tenant_id) as session:
+        db_run = (await session.execute(select(WorkflowRun).where(WorkflowRun.id == workflow_run_id))).scalar_one()
+        db_run.context = {
+            **(db_run.context or {}),
+            HALT_RETRY_KEY: {
+                "engine_run_id": engine_run_id,
+                "owner": owner,
+                "heartbeat": datetime.now(UTC).isoformat(),
+            },
+        }
+
+
+async def clear_halt_retry(tenant_id: uuid.UUID, workflow_run_id: uuid.UUID) -> None:
+    """Drop the pending-retry record once the run is no longer held."""
+    from sqlalchemy import select
+
+    from core.database import get_tenant_session
+    from core.models.workflow import WorkflowRun
+
+    async with get_tenant_session(tenant_id) as session:
+        db_run = (await session.execute(select(WorkflowRun).where(WorkflowRun.id == workflow_run_id))).scalar_one()
+        context = dict(db_run.context or {})
+        if context.pop(HALT_RETRY_KEY, None) is not None:
+            db_run.context = context
+
+
 def schedule_halted_workflow_retry(engine_run_id: str) -> bool:
     """Queue ``resume_halted_workflow`` for a run held by an operator override.
 
