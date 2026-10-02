@@ -7,7 +7,7 @@ import asyncio
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -244,7 +244,30 @@ class TestEnforcementPoints:
 
     def test_ragflow_paths_are_gated(self):
         src = (ROOT / "api" / "v1" / "knowledge.py").read_text(encoding="utf-8")
-        assert src.count("_ragflow_available() and await _ragflow_allowed(tenant_id)") == 2
+        # upload, search, the two list sites and the statistics read
+        assert src.count("_ragflow_available() and await _ragflow_allowed(tenant_id)") == 5
+
+    def test_a_refused_tenant_reads_nothing_from_the_managed_retrieval_service(self):
+        from api.v1 import knowledge
+
+        reads = {
+            "list": AsyncMock(return_value=[{"document_id": "x"}]),
+            "stats": AsyncMock(return_value={"chunk_count": 1, "index_size_bytes": 1}),
+        }
+        with (
+            patch.object(knowledge, "_ragflow_available", return_value=True),
+            patch.object(knowledge, "_ragflow_allowed", AsyncMock(return_value=False)),
+            patch.object(knowledge, "_ragflow_list", reads["list"]),
+            patch.object(knowledge, "_ragflow_dataset_stats", reads["stats"]),
+            patch.object(knowledge, "_db_list_docs", AsyncMock(return_value=[])),
+            patch.object(knowledge, "_db_chunk_count", AsyncMock(return_value=0)),
+            patch("core.database.get_tenant_session", side_effect=RuntimeError("no database in this test")),
+        ):
+            listed = asyncio.run(knowledge.list_documents(page=1, per_page=20, tenant_id=str(TENANT)))
+            stats = asyncio.run(knowledge.knowledge_stats(tenant_id=str(TENANT)))
+        assert listed.total == 0 and stats.total_chunks == 0
+        reads["list"].assert_not_called()
+        reads["stats"].assert_not_called()
 
     def test_ragflow_allowed_follows_the_decision(self, enforce_on):
         from api.v1 import knowledge
@@ -276,6 +299,51 @@ class TestEnforcementPoints:
                         )
                     )
         assert result["error"]["code"] == "E4006" and result["residency"]["provider"] == "composio"
+
+    def test_sidecar_model_calls_carry_the_tenant(self):
+        seen: list[str | None] = []
+
+        def factory(*_args, **kwargs):
+            seen.append(kwargs.get("tenant_id"))
+            llm = MagicMock()
+            llm.ainvoke = AsyncMock(return_value=SimpleNamespace(content="{}"))
+            return llm
+
+        from core import explainer
+        from core.feedback import analyzer
+        from core.langgraph import sop_parser
+
+        with patch("core.langgraph.llm_factory.create_chat_model", side_effect=factory):
+            asyncio.run(explainer.generate_explanation(["step"], {}, [], tenant_id=str(TENANT)))
+            entries = [{"feedback_type": "thumbs_down", "text": "wrong"} for _ in range(10)]
+            with patch("core.feedback.collector.list_feedback", AsyncMock(return_value=entries)):
+                asyncio.run(analyzer.analyze_feedback("agent-1", str(TENANT)))
+        with patch.object(sop_parser, "create_chat_model", side_effect=factory):
+            asyncio.run(sop_parser.parse_sop_document("Process invoices daily", tenant_id=str(TENANT)))
+        assert seen == [str(TENANT)] * 3
+
+    def test_tracing_withholds_payloads_under_tenant_scoped_enforcement(self, monkeypatch):
+        from observability.trace_redaction import HIDDEN, REDACTED, _redact_payload
+
+        monkeypatch.setattr(res.settings, "residency_enforce", False)
+        monkeypatch.setattr(res.settings, "env", "test")
+        other = uuid.uuid4()
+        # Nothing enforcing: credentials are redacted and the rest is exported.
+        assert _redact_payload({"messages": ["m"], "grant_token": "t"}) == {"messages": ["m"], "grant_token": REDACTED}
+        a, b = _with([])
+        with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(True))), a, b:
+            asyncio.run(check_provider(TENANT, "openai"))
+        # The enforcing tenant's payloads, an unread tenant's and tenant-less ones are withheld.
+        assert _redact_payload({"tenant_id": str(TENANT), "messages": ["m"]}) == {**HIDDEN, "tenant_id": str(TENANT)}
+        assert _redact_payload({"tenant_id": str(other), "messages": ["m"]}) == {**HIDDEN, "tenant_id": str(other)}
+        assert _redact_payload({"messages": ["m"]}) == HIDDEN
+        # A tenant read as not enforcing keeps the credential-only redaction.
+        with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))), a, b:
+            asyncio.run(check_provider(other, "openai"))
+        exported = _redact_payload({"tenant_id": str(other), "grant_token": "t"})
+        assert exported == {"tenant_id": str(other), "grant_token": REDACTED}
+        assert res.enforcement_known(TENANT) is True and res.enforcement_known(other) is False
+        assert res.enforcement_known(uuid.uuid4()) is None and res.any_tenant_enforcing() is True
 
     def test_tracing_export_stays_off_under_deployment_enforcement(self, enforce_on, monkeypatch):
         from observability import trace_redaction

@@ -72,7 +72,7 @@ region is the deployment's.
 | AI credential resolver (`core/ai_providers/resolver.py`) | Every LLM, embedding, retrieval and speech credential is refused unless the provider is attested for the tenant's region (`ResidencyBlocked`, code `E4006`). The model router treats the refusal as final: no fallback to another model. |
 | Managed retrieval service (`api/v1/knowledge.py`) | Uploads and searches go to the external retrieval service only when `ragflow` is attested; otherwise the native in-database pipeline is used. |
 | Third-party tool hub (`connectors/composio/adapter.py`) | Tool execution is refused unless `composio` is attested. |
-| Tracing export (`observability/trace_redaction.py`) | With deployment-wide enforcement, external tracing stays off and its environment switches are cleared. |
+| Tracing export (`observability/trace_redaction.py`) | With deployment-wide enforcement, external tracing stays off and its environment switches are cleared. With tenant-scoped enforcement, the payload of a run whose tenant enforces residency (or whose enforcement has not been read yet) is withheld, as is any payload that names no tenant while some tenant in the process enforces; only `hidden: residency` and the tenant id are exported. |
 
 Without a tenant in context (platform probes, module-level configuration) the
 platform default region applies and no attestation exists, so an external

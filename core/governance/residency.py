@@ -112,6 +112,10 @@ _REGION_CACHE_TTL_S = 15.0
 # revocation at once; a replica without Redis reads the database each time.
 ATTESTATION_CACHE_TTL_SECONDS = 5
 _ATTESTATION_CACHE_PREFIX = "residency:attestations:"
+# enterprise-gate: process-local-ok reason=last-known-flag-cache-per-tenant-read-only-by-the-synchronous-tracing-hook
+_enforcing_tenants: set[str] = set()
+# enterprise-gate: process-local-ok reason=last-known-flag-cache-per-tenant-read-only-by-the-synchronous-tracing-hook
+_enforcement_read: set[str] = set()
 # enterprise-gate: process-local-ok reason=bounded-ttl-cache-of-governance-config-reads-refilled-from-the-database
 _region_cache: dict[str, tuple[str, float]] = {}
 
@@ -205,9 +209,37 @@ async def enabled(tenant_id: uuid.UUID | str | None) -> bool:
 
     rows = await load_flag_rows_strict(FLAG_KEY, tenant_id=tid)
     subject = str(tid)
-    return row_enabled(FLAG_KEY, rows.global_row, subject_id=subject) or row_enabled(
+    on = row_enabled(FLAG_KEY, rows.global_row, subject_id=subject) or row_enabled(
         FLAG_KEY, rows.tenant_row, subject_id=subject
     )
+    _enforcement_read.add(subject)
+    if on:
+        _enforcing_tenants.add(subject)
+    else:
+        _enforcing_tenants.discard(subject)
+    return on
+
+
+def enforcement_known(tenant_id: uuid.UUID | str | None) -> bool | None:
+    """The enforcement decision last read for the tenant in this process, or None when never read.
+
+    For synchronous hooks that cannot read the flag (the tracing exporter);
+    decisions use ``enabled``. A tenant never read is treated as enforcing.
+    """
+    if settings.residency_enforce:
+        return True
+    tid = _as_uuid(tenant_id)
+    if tid is None:
+        return None
+    key = str(tid)
+    if key not in _enforcement_read:
+        return None
+    return key in _enforcing_tenants
+
+
+def any_tenant_enforcing() -> bool:
+    """Whether residency is enforced deployment-wide or by any tenant read in this process."""
+    return bool(settings.residency_enforce) or bool(_enforcing_tenants)
 
 
 async def _load_region(tenant_id: uuid.UUID) -> str:
@@ -315,8 +347,12 @@ def invalidate(tenant_id: uuid.UUID | None = None) -> None:
     """
     if tenant_id is None:
         _region_cache.clear()
+        _enforcing_tenants.clear()
+        _enforcement_read.clear()
         return
     _region_cache.pop(str(tenant_id), None)
+    _enforcing_tenants.discard(str(tenant_id))
+    _enforcement_read.discard(str(tenant_id))
 
 
 async def invalidate_attestations(tenant_id: uuid.UUID) -> None:

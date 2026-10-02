@@ -21,6 +21,7 @@ from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
+from core.governance.operator_override import check as check_operator_override
 from core.models.agent import Agent
 from core.models.hitl import HITLQueue
 from core.ownership import (
@@ -762,6 +763,22 @@ async def chat_query(
         # The calculation already ran locally (pure math, no side effect), but
         # its answer is not returned; the LangGraph path below checks again.
         det = None
+    # An operator override on the agent: a halt refuses the chat here (423),
+    # before the deterministic route answers without the agent runner. The
+    # agent throttle is counted here only for that route; the runner counts
+    # the LangGraph run.
+    override = await check_operator_override(
+        tenant_id, agent_id=agent_id or None, throttle_unit="agent" if det is not None else None
+    )
+    if override.blocked:
+        raise HTTPException(
+            423,
+            detail={
+                "error": "operator_override",
+                "message": override.reason,
+                "override": override.override.to_dict() if override.override else None,
+            },
+        )
     if det is not None:
         hitl_trigger = det.get("hitl_trigger") or None
         det_confidence = float(det["confidence"])

@@ -78,7 +78,7 @@ def explanations(monkeypatch: pytest.MonkeyPatch) -> list[tuple[Any, Any]]:
 
     seen: list[tuple[Any, Any]] = []
 
-    async def fake_explanation(trace: Any, output: Any, tools: Any) -> dict[str, Any]:
+    async def fake_explanation(trace: Any, output: Any, tools: Any, **_: Any) -> dict[str, Any]:
         seen.append((trace, output))
         return {"bullets": [f"Summary: {json.dumps(output)}"]}
 

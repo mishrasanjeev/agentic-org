@@ -542,10 +542,10 @@ async def run_agent(
                 ]
                 if pseudonymiser is not None:
                     explanation = pseudonymiser.restore_value(
-                        await generate_explanation(masked_trace, masked_output, tools)
+                        await generate_explanation(masked_trace, masked_output, tools, tenant_id=tenant_id)
                     )
                 else:
-                    explanation = await generate_explanation(trace, out, tools)
+                    explanation = await generate_explanation(trace, out, tools, tenant_id=tenant_id)
             # enterprise-gate: broad-except-ok reason=explanation-sidecar-failure-does-not-change-run-status
             except Exception as exc:
                 logger.warning("explanation_generation_failed", error=str(exc))
@@ -675,7 +675,7 @@ async def run_agent(
         fail_trace = [f"Agent execution failed: {type(e).__name__}"]
         fail_explanation: dict[str, Any] = {}
         try:
-            fail_explanation = await generate_explanation(fail_trace, {}, [])
+            fail_explanation = await generate_explanation(fail_trace, {}, [], tenant_id=tenant_id)
         # enterprise-gate: broad-except-ok reason=failed-run-explanation-sidecar-remains-failed
         except Exception:
             logger.debug("fail_explanation_skipped", agent_id=agent_id)

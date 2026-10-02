@@ -60,7 +60,7 @@ Request body for `POST`:
 |---|---|
 | `provider`, `model` | `LLMRouter._call_model` (agents and generators) and the LangGraph reason node before every model call. A block never falls back to another model. |
 | `agent`, `all_agents` | The HTTP run endpoint (423), the LangGraph runner and resume path (result status `operator_override`), `BaseAgent.execute` (failed result, code `E1012`), and the agent's tool calls. |
-| `workflow` | The HTTP run endpoint (423) and the workflow engine before every step: the run keeps status `running` and retries the step every five seconds until the override is released or the run is cancelled. |
+| `workflow` | The HTTP run endpoint (423) and the workflow engine before every step: the run keeps status `running` and the `resume_halted_workflow` worker task retries the step every `operator_halt_retry_seconds` (30 s by default) until the override is released or the run is cancelled. The retry lives in the task queue, so a restart of the API process does not strand the run. |
 | `connector`, `tool`, `tool_pipeline` | The connector dispatch boundary, `ToolGateway.execute` and the agent tool path. The refusal is audited (`action=operator_override`, `outcome=blocked`). |
 
 Provider names are normalised, so `claude` and `anthropic`, or `gpt`, `openai`
@@ -101,5 +101,5 @@ and `azure_openai`, name the same provider.
 
 1. `POST /api/v1/operator-overrides` with `{"target_kind": "all_agents", "mode": "halt", "reason": "..."}` and again with `{"target_kind": "tool_pipeline", "mode": "halt", "reason": "..."}`.
 2. Confirm with `GET /api/v1/operator-overrides/status`; watch `agenticorg_operator_override_blocks_total` rise.
-3. Running workflows report `halted` and wait; cancel the ones that must not resume.
+3. Running workflows report `halted` and wait in the task queue; cancel the ones that must not resume.
 4. Release each override when the incident is over; the audit rows record the window.

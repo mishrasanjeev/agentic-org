@@ -102,6 +102,29 @@ def hitl_timeout_hours(step_result: dict[str, Any], step_def: dict[str, Any]) ->
     return 4.0
 
 
+def schedule_halted_workflow_retry(engine_run_id: str) -> bool:
+    """Queue ``resume_halted_workflow`` for a run held by an operator override.
+
+    The retry then lives in the worker queue rather than in the API process:
+    the run's durable status stays ``running`` and the task re-drives the
+    engine every ``operator_halt_retry_seconds`` until the override is released
+    or the run is cancelled. Scheduling failure is logged and returns False;
+    the run keeps its status and an operator can re-run the task.
+    """
+    try:
+        from core.config import settings
+        from core.tasks.workflow_tasks import resume_halted_workflow
+
+        resume_halted_workflow.apply_async(
+            args=[engine_run_id], countdown=max(1, int(settings.operator_halt_retry_seconds))
+        )
+        return True
+    # enterprise-gate: broad-except-ok reason=halt-retry-scheduling-failure-leaves-the-durable-running-status
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("workflow_halt_retry_schedule_failed", run_id=engine_run_id, error=str(exc))
+        return False
+
+
 def schedule_hitl_timeout(engine_run_id: str, step_id: str, expires_at: datetime) -> bool:
     """Queue ``timeout_workflow_hitl`` for ``expires_at``.
 
