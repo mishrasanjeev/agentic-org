@@ -16,11 +16,24 @@ logged, the text travels on unchanged and nothing is blocked. With it on,
 signed audit row. Flag-only mode is how a deployment sees what a rule set
 would do before it bites.
 
-This part delivers the engine, the rule model and API, and the detectors the
-platform already had the primitives for. The call-site hooks (every model
-call's input and output, retrieved documents, tool actions), the prompt-injection
-and output-policy detectors and the grounding checker follow in the package's
-next parts.
+The hooks are behind `AGENTICORG_GUARDRAILS_HOOKS_ENABLED` (off by default):
+on, every stage is evaluated at its call site, in flag-only mode until
+`guardrails.enforce` is on for the tenant; off, the hooks return what they
+were given and read nothing. The grounding checker follows in the package's
+next part.
+
+## Where the stages apply
+
+| Stage | Call site | What passes | A transform | A block |
+|---|---|---|---|---|
+| `input` | the agent graph's reasoning node, before every model call | the newest human or tool message of the turn | replaces that message's content | ends the run with status `guardrail_blocked` and `E1016` |
+| `output` | the reasoning node, after every model call | the model's answer (tool calls untouched) | replaces the answer's content | ends the run with `guardrail_blocked` |
+| `retrieval` | the knowledge search results; the governed case's rendered evidence before its model call | each retrieved chunk; the whole evidence context | replaces the chunk or context | withholds the chunk (the search returns the rest); skips the case's model call with failure `guardrail_blocked` |
+| `action` | the connector dispatch boundary, before any provider side effect | the connector, tool and JSON arguments | not allowed: an action rule flags or blocks | the tool returns `{"error": "guardrail_blocked"}` and the step fails |
+
+Each hook attributes the outcome to the run's routing decision when the caller
+does not name the tenant, agent and use case, so a guardrail outcome, the model
+call it guarded and the audit row share one correlation id.
 
 ## A rule
 
@@ -28,14 +41,16 @@ next parts.
 |---|---|
 | `name`, `priority`, `enabled` | Enabled rules matching a stage are evaluated in ascending `priority` (then name); every matching rule applies. |
 | `stage` | `input` (what goes to the model), `retrieval` (documents retrieved into the context), `output` (what the model returned), `action` (a tool call's arguments). |
-| `detector` | `sensitive_data`: the platform's PII analyser where installed, its regex recognisers otherwise, plus a Luhn-checked card-number check; `options.entities` narrows the kinds (`CREDIT_CARD`, `AADHAAR`, `PAN`, `GSTIN`, `EMAIL`, `UPI`, `PHONE`). `toxicity`: the content-safety classifier with its keyword fallback. `pattern`: `options.patterns`, the administrator's own regular expressions (`options.kind` names the finding, `options.ignore_case` defaults to true). |
+| `detector` | `sensitive_data`: the platform's PII analyser where installed, its regex recognisers otherwise, plus a Luhn-checked card-number check; `options.entities` narrows the kinds (`CREDIT_CARD`, `AADHAAR`, `PAN`, `GSTIN`, `EMAIL`, `UPI`, `PHONE`). `toxicity`: the content-safety classifier with its keyword fallback. `pattern`: `options.patterns`, the administrator's own regular expressions (`options.kind` names the finding, `options.ignore_case` defaults to true). `injection`: the phrasings by which a text tries to take over the model (instruction overrides, system-prompt disclosure, persona switches, jailbreak markers, fake system blocks, standing orders, false authority) and invisible characters, each with its own confidence; `options.patterns` adds the administrator's own; direct in a message and indirect inside a retrieved document alike. `output_policy` (output stage; flag or block): `max_length`, `require_json`, `required_keys`, `forbidden_phrases`, `no_urls`. |
 | `action` | `flag` records the finding. `mask` replaces each span with asterisks, `redact` with `<KIND>`, `tokenise` (sensitive data only) with a reversible `<KIND_n>` token whose original is returned in the result's token map. `block` refuses the stage. |
 | `threshold` | A rule applies when the detector's best score is at or above it (0 to 1; sensitive-data and pattern findings score 1, toxicity scores the classifier's confidence). |
 | `agent_id`, `use_case`, `risk_tier` | Narrow the rule; empty applies to every call at the stage. `risk_tier` is `low`, `medium`, `high` or `critical`. |
 | `reason` | Why the rule exists; recorded in the audit row. |
 
-Example: card numbers never leave the platform in a model's answer, and a
-drafting agent's output must not mention a competitor's product names.
+Example: card numbers never leave the platform in a model's answer, a
+drafting agent's output must not mention a competitor's product names, a
+retrieved document that tries to instruct the model is withheld, and a
+tool call carrying a card number is refused.
 
 ```json
 {"name": "cards-out", "stage": "output", "detector": "sensitive_data", "action": "redact",
@@ -43,6 +58,10 @@ drafting agent's output must not mention a competitor's product names.
 {"name": "no-competitor-names", "stage": "output", "detector": "pattern", "action": "block",
  "agent_id": "a2f4...", "options": {"patterns": ["\\bAcmePay\\b", "\\bZetaCard\\b"], "kind": "competitor"},
  "reason": "drafts must not name competitor products"}
+{"name": "no-injected-documents", "stage": "retrieval", "detector": "injection", "action": "block", "threshold": 0.7,
+ "reason": "a document that instructs the model is withheld"}
+{"name": "no-cards-in-tool-calls", "stage": "action", "detector": "sensitive_data", "action": "block",
+ "options": {"entities": ["CREDIT_CARD"]}, "reason": "card numbers never reach a connector"}
 ```
 
 ## Evaluation
@@ -79,6 +98,9 @@ drafting agent's output must not mention a competitor's product names.
 
 - `agenticorg_guardrail_outcomes_total{stage,detector,action,mode}` counts
   every outcome by mode (`flag_only`, `enforced`).
+- `GET /compliance/evidence-package` carries a `guardrails` section: whether
+  the hooks are on and the tenant enforces, the rules in effect by stage, and
+  the blocked and transformed outcomes of the last thirty days.
 - Every outcome is logged as `guardrail_outcome` with the correlation id, the
   rule, the detector, the action, the finding count and kinds, and whether the
   action was applied.

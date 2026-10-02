@@ -3416,7 +3416,7 @@
     "public_exempt_reason": null,
     "rate_limit": "compliance-evidence-export",
     "scope": "compliance.evidence.sensitive.export",
-    "source_line": 175,
+    "source_line": 173,
     "tenant_required": true
   },
   {
@@ -4910,7 +4910,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1350,
+    "source_line": 1362,
     "tenant_required": false
   },
   {
@@ -4928,7 +4928,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1292,
+    "source_line": 1304,
     "tenant_required": true
   },
   {
@@ -4946,7 +4946,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1463,
+    "source_line": 1475,
     "tenant_required": true
   },
   {

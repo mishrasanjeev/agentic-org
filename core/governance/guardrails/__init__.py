@@ -11,11 +11,20 @@ from core.governance.guardrails.engine import (
     GuardrailBlocked,
     GuardrailResult,
     active_rules,
+    blocked_run_result,
     delete_rule,
     enforcing,
     evaluate,
+    report_section,
     set_rule,
     update_rule,
+)
+from core.governance.guardrails.hooks import (
+    guard_action,
+    guard_input_messages,
+    guard_output_message,
+    guard_retrieval_texts,
+    guard_text,
 )
 from core.governance.guardrails.schema import ACTIONS, DETECTORS, STAGES, Finding, Outcome, Rule, validate_rule_fields
 
@@ -31,9 +40,16 @@ __all__ = [
     "Outcome",
     "Rule",
     "active_rules",
+    "blocked_run_result",
     "delete_rule",
     "enforcing",
     "evaluate",
+    "guard_action",
+    "guard_input_messages",
+    "guard_output_message",
+    "guard_retrieval_texts",
+    "guard_text",
+    "report_section",
     "set_rule",
     "update_rule",
     "validate_rule_fields",

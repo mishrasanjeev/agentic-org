@@ -25,6 +25,8 @@ from auth.grant_enforcement import EnforcementMode
 from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
+from core.governance.guardrails.engine import blocked_run_result as guardrail_blocked_result
+from core.governance.guardrails.schema import GuardrailBlocked
 from core.governance.model_gateway import (
     ModelGatewayRefused,
     bind_route,
@@ -672,6 +674,9 @@ async def run_agent(
         # A model call of the run was refused by a per-model limit.
         logger.warning("agent_run_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
         return refused_run_result(exc)
+    except GuardrailBlocked as exc:
+        logger.warning("agent_run_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
+        return guardrail_blocked_result(exc)
     except TimeoutError:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.warning(
@@ -903,6 +908,9 @@ async def resume_agent(
     except ModelGatewayRefused as exc:
         logger.warning("agent_resume_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
         return refused_run_result(exc)
+    except GuardrailBlocked as exc:
+        logger.warning("agent_resume_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
+        return guardrail_blocked_result(exc)
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))

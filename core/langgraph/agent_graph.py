@@ -31,6 +31,7 @@ from langgraph.types import interrupt
 from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant, refresh_run_grant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
+from core.governance.guardrails.hooks import guard_input_messages, guard_output_message
 from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import current_route
 from core.governance.model_gateway import release as gateway_release
@@ -476,6 +477,11 @@ def build_agent_graph(
             # messages (runner, tool results, a resumed checkpoint), no raw
             # value leaves in the request.
             messages = await pseudonymiser.pseudonymise_messages(messages)
+        # Guardrails: the newest message of the turn passes the input stage
+        # (a transform replaces its content, a block ends the run).
+        messages = await guard_input_messages(
+            messages, tenant_id=tenant_id, agent_id=agent_id or str(state.get("agent_id") or "") or None
+        )
         llm = _get_llm()
         # Operator override: checked on every model call, so a halt placed
         # mid-run stops the next call of a cached model too.
@@ -530,6 +536,8 @@ def build_agent_graph(
             admission_wait_ms=admission_wait_ms,
             agent_id=called_agent,
         )
+        # Guardrails: the answer passes the output stage before it travels on.
+        response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")
