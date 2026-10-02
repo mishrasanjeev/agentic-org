@@ -1048,6 +1048,23 @@ class TestCostAware:
             decision = asyncio.run(decide(_req()))
         assert decision.model == "gemini-2.5-flash" and "health unavailable" in decision.reason
 
+    def test_the_fence_narrows_the_candidates_and_refuses_a_policy_whose_targets_all_stray(self, gateway_on):
+        # The cheapest target is outside the fence: the cheapest inside it wins.
+        policy = _policy(targets=CANDIDATES, cost_aware=True, allowed_providers=("openai",))
+        with (
+            _with([policy]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            assert asyncio.run(decide(_req())).model == "gpt-4o-mini"
+        # A stored policy whose targets all stray outside its fence fails closed.
+        strayed = _policy(targets=CANDIDATES[2:], cost_aware=True, allowed_providers=("openai",))
+        with (
+            _with([strayed]),
+            patch("core.governance.model_gateway_records.model_health", AsyncMock(return_value={})),
+        ):
+            with pytest.raises(ModelGatewayRefused, match="outside the providers"):
+                asyncio.run(decide(_req()))
+
     def test_an_unpriced_candidate_ranks_last_and_the_fence_still_applies(self, gateway_on):
         targets = (
             {"provider": "openai_compatible", "model": "in-house", "weight": 1},

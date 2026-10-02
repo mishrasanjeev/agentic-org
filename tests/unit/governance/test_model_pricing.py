@@ -69,9 +69,21 @@ class TestPrices:
 
 
 class TestRouterPricing:
-    def test_the_router_costs_a_call_at_its_models_price_and_keeps_the_flat_rate_for_an_unknown_model(self):
-        from core.llm.router import priced_cost_usd
+    def test_the_router_keeps_its_flat_rates_until_the_flag_is_on(self):
+        from core.llm.router import priced_cost_usd, settings
 
+        assert settings.model_pricing_for_router_costs is False
+        assert (
+            priced_cost_usd("openai", "gpt-4o-mini", input_tokens=1000, output_tokens=1000, tokens=2000, fallback=0.02)
+            == 0.02
+        )
+
+    def test_the_router_costs_a_call_at_its_models_price_and_keeps_the_flat_rate_for_an_unknown_model(
+        self, monkeypatch
+    ):
+        from core.llm.router import priced_cost_usd, settings
+
+        monkeypatch.setattr(settings, "model_pricing_for_router_costs", True)
         mini = priced_cost_usd(
             "openai", "gpt-4o-mini", input_tokens=1000, output_tokens=1000, tokens=2000, fallback=0.02
         )
