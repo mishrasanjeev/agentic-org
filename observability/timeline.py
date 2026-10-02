@@ -6,10 +6,13 @@ has one yet; the console needs the waterfall of one run without it. With
 ``AGENTICORG_TRACING_TIMELINE_ENABLED`` (off by default, and nothing while
 tracing itself is off) a span processor keeps the finished spans that
 describe a run (the run, each model call, tool call and knowledge search) in
-memory per trace, and the runner stores that trace's spans in ``run_spans``
-when the run ends: on the run's own event loop, through the run's own tenant
-session, so no thread and no second engine is involved. A trace nothing
-stores (a search outside a run) ages out of memory.
+memory per run, keyed by the run's root span (``run.id``, which the runner
+binds and every span inside the run carries), and the runner stores that
+run's spans in ``run_spans`` when the run ends: on the run's own event loop,
+through the run's own tenant session, so no thread and no second engine is
+involved. Two runs that share one trace (parallel agents under one task, a
+request continuing a caller's trace) therefore never mix, and a span opened
+outside any run is never kept. A run nothing stores ages out of memory.
 
 A stored span carries identifiers, timings, outcomes and the governance
 events; never prompts, answers, tool arguments or retrieved text. An
@@ -71,10 +74,9 @@ class TimelineProcessor(SpanProcessor):
     def on_end(self, span: ReadableSpan) -> None:
         if span.name not in STORED_SPANS:
             return
-        context = span.get_span_context()
-        if context is None or not context.is_valid:
+        key = str((span.attributes or {}).get(tracing.RUN_KEY) or "")
+        if not key:
             return
-        key = format(context.trace_id, "032x")
         now = time.monotonic()
         with self._lock:
             self._buffers.setdefault(key, []).append(span)
@@ -83,11 +85,11 @@ class TimelineProcessor(SpanProcessor):
             self._count += 1
             self._evict(now)
 
-    def take(self, trace_id: str) -> list[ReadableSpan]:
-        """Remove and return the spans buffered for ``trace_id``."""
+    def take(self, run_id: str) -> list[ReadableSpan]:
+        """Remove and return the spans buffered for the run whose root span id is ``run_id``."""
         with self._lock:
-            spans = self._buffers.pop(trace_id, [])
-            self._touched.pop(trace_id, None)
+            spans = self._buffers.pop(run_id, [])
+            self._touched.pop(run_id, None)
             self._count -= len(spans)
             return spans
 
@@ -197,6 +199,7 @@ def row_for(span: ReadableSpan, tenant_id: uuid.UUID) -> Any:
     return RunSpan(
         tenant_id=tenant_id,
         trace_id=format(context.trace_id, "032x"),
+        run_span_id=str(attributes.get(tracing.RUN_KEY) or "")[:16],
         span_id=format(context.span_id, "016x"),
         parent_span_id=format(parent.span_id, "016x") if parent is not None else None,
         name=span.name[:64],
@@ -212,7 +215,7 @@ def row_for(span: ReadableSpan, tenant_id: uuid.UUID) -> Any:
 
 
 async def persist(span: trace.Span, tenant_id: str | uuid.UUID | None) -> int:
-    """Store the buffered spans of ``span``'s trace for ``tenant_id``; the number stored.
+    """Store the buffered spans of the run whose root is ``span`` for ``tenant_id``; the number stored.
 
     Nothing while the timeline is off or the span records nothing. A storage
     failure is logged and the run's result stands: the timeline is evidence
@@ -224,14 +227,15 @@ async def persist(span: trace.Span, tenant_id: str | uuid.UUID | None) -> int:
     context = span.get_span_context()
     if not context.is_valid:
         return 0
+    run_id = format(context.span_id, "016x")
     trace_id = format(context.trace_id, "032x")
-    spans = processor.take(trace_id)
+    spans = processor.take(run_id)
     if not spans:
         return 0
     try:
         tid = uuid.UUID(str(tenant_id))
     except ValueError:
-        logger.warning("run_timeline_tenant_invalid", trace_id=trace_id)
+        logger.warning("run_timeline_tenant_invalid", trace_id=trace_id, run_id=run_id)
         return 0
     rows = [row_for(item, tid) for item in spans]
     try:
@@ -241,9 +245,15 @@ async def persist(span: trace.Span, tenant_id: str | uuid.UUID | None) -> int:
             session.add_all(rows)
     # enterprise-gate: broad-except-ok reason=timeline-storage-failure-is-logged-and-the-run-result-stands
     except Exception as exc:
-        logger.warning("run_timeline_store_failed", trace_id=trace_id, error_type=type(exc).__name__, spans=len(rows))
+        logger.warning(
+            "run_timeline_store_failed",
+            trace_id=trace_id,
+            run_id=run_id,
+            error_type=type(exc).__name__,
+            spans=len(rows),
+        )
         return 0
-    logger.info("run_timeline_stored", trace_id=trace_id, spans=len(rows))
+    logger.info("run_timeline_stored", trace_id=trace_id, run_id=run_id, spans=len(rows))
     return len(rows)
 
 
@@ -262,6 +272,7 @@ def root_summary(row: Any) -> dict[str, Any]:
     tokens = attributes.get("llm.tokens")
     return {
         "trace_id": row.trace_id,
+        "run_id": row.run_span_id,
         "span_id": row.span_id,
         "name": row.name,
         "agent_id": row.agent_id,
@@ -276,7 +287,7 @@ def root_summary(row: Any) -> dict[str, Any]:
     }
 
 
-async def recent_traces(tenant_id: uuid.UUID, *, agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+async def recent_runs(tenant_id: uuid.UUID, *, agent_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """The newest stored runs for the tenant, one entry per root span."""
     from sqlalchemy import select
 
@@ -291,8 +302,8 @@ async def recent_traces(tenant_id: uuid.UUID, *, agent_id: str | None = None, li
     return [root_summary(row) for row in rows]
 
 
-async def trace_detail(tenant_id: uuid.UUID, trace_id: str) -> dict[str, Any] | None:
-    """Every stored span of one trace, with offsets from the trace's start; None when nothing is stored."""
+async def run_detail(tenant_id: uuid.UUID, run_id: str) -> dict[str, Any] | None:
+    """Every stored span of one run (by its root span id) with offsets from its start; None when none is stored."""
     from sqlalchemy import select
 
     from core.database import get_tenant_session
@@ -301,7 +312,7 @@ async def trace_detail(tenant_id: uuid.UUID, trace_id: str) -> dict[str, Any] | 
     async with get_tenant_session(tenant_id) as session:
         query = (
             select(RunSpan)
-            .where(RunSpan.tenant_id == tenant_id, RunSpan.trace_id == trace_id)
+            .where(RunSpan.tenant_id == tenant_id, RunSpan.run_span_id == run_id)
             .order_by(RunSpan.started_at.asc(), RunSpan.duration_ms.desc())
         )
         rows = (await session.execute(query)).scalars().all()
@@ -325,7 +336,8 @@ async def trace_detail(tenant_id: uuid.UUID, trace_id: str) -> dict[str, Any] | 
         for row in rows
     ]
     return {
-        "trace_id": trace_id,
+        "run_id": run_id,
+        "trace_id": rows[0].trace_id,
         "started_at": _iso(start),
         "duration_ms": max(0, int(end - start.timestamp() * 1000)),
         "spans": spans,

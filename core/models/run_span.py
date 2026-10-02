@@ -27,6 +27,7 @@ from core.models.base import BaseModel
 class RunSpan(BaseModel):
     __tablename__ = "run_spans"
     __table_args__ = (
+        Index("ix_run_spans_tenant_run", "tenant_id", "run_span_id"),
         Index("ix_run_spans_tenant_trace", "tenant_id", "trace_id"),
         Index("ix_run_spans_tenant_name_started", "tenant_id", "name", text("started_at DESC")),
         Index("ix_run_spans_tenant_created", "tenant_id", text("created_at DESC")),
@@ -35,6 +36,8 @@ class RunSpan(BaseModel):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     trace_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    # The root span of the run the span belongs to (its own id for the root): two runs sharing a trace stay apart.
+    run_span_id: Mapped[str] = mapped_column(String(16), nullable=False)
     span_id: Mapped[str] = mapped_column(String(16), nullable=False)
     parent_span_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)

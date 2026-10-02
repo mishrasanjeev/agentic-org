@@ -7,8 +7,9 @@ Create Date: 2026-10-02
 
 One row per finished span of an agent run stored for the console's
 waterfall (the run, its model calls, tool calls and knowledge searches),
-with timings, outcomes and the governance events. Tenant-scoped under
-row-level security; pruned after the retention period.
+with timings, outcomes and the governance events, keyed by the run's root
+span so two runs sharing a trace stay apart. Tenant-scoped under row-level
+security; pruned after the retention period.
 """
 
 from alembic import op
@@ -25,6 +26,7 @@ def upgrade() -> None:
             id UUID PRIMARY KEY,
             tenant_id UUID NOT NULL,
             trace_id VARCHAR(32) NOT NULL,
+            run_span_id VARCHAR(16) NOT NULL,
             span_id VARCHAR(16) NOT NULL,
             parent_span_id VARCHAR(16) NULL,
             name VARCHAR(64) NOT NULL,
@@ -41,6 +43,7 @@ def upgrade() -> None:
             CONSTRAINT ck_run_spans_duration CHECK (duration_ms >= 0)
         );
     """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_run_spans_tenant_run ON run_spans(tenant_id, run_span_id);")
     op.execute("CREATE INDEX IF NOT EXISTS ix_run_spans_tenant_trace ON run_spans(tenant_id, trace_id);")
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_run_spans_tenant_name_started ON run_spans(tenant_id, name, started_at DESC);"

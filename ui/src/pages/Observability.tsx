@@ -4,8 +4,9 @@ import api, { extractApiError } from "@/lib/api";
 
 /** Run timelines (the waterfall of one agent run) and the live workload. Reads only. */
 
-interface TraceSummary {
+interface RunSummary {
   trace_id: string;
+  run_id: string;
   span_id: string;
   name: string;
   agent_id: string | null;
@@ -19,10 +20,10 @@ interface TraceSummary {
   correlation_id: string | null;
 }
 
-interface TracesOut {
+interface RunsOut {
   enabled: boolean;
   tracing: boolean;
-  traces: TraceSummary[];
+  runs: RunSummary[];
 }
 
 interface SpanEvent {
@@ -44,23 +45,18 @@ interface SpanRow {
   events: SpanEvent[];
 }
 
-interface TraceDetail {
+interface RunDetail {
+  run_id: string;
   trace_id: string;
   started_at: string | null;
   duration_ms: number;
   spans: SpanRow[];
 }
 
-interface QueueDepth {
-  name: string;
-  depth: number;
-}
-
 interface Workload {
   generated_at: string;
   tracing_enabled: boolean;
   timeline_enabled: boolean;
-  queues: { queues: QueueDepth[] | null; error: string | null };
   reviews: {
     pending: number | null;
     overdue: number | null;
@@ -174,40 +170,40 @@ export default function Observability() {
   const [tab, setTab] = useState<Tab>("traces");
   const [error, setError] = useState<string | null>(null);
 
-  const [traces, setTraces] = useState<TracesOut | null>(null);
-  const [tracesLoading, setTracesLoading] = useState(false);
+  const [runs, setRuns] = useState<RunsOut | null>(null);
+  const [runsLoading, setRunsLoading] = useState(false);
   const [agentFilter, setAgentFilter] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [detail, setDetail] = useState<TraceDetail | null>(null);
+  const [detail, setDetail] = useState<RunDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [workloadLoading, setWorkloadLoading] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
-  const loadTraces = useCallback(async () => {
-    setTracesLoading(true);
+  const loadRuns = useCallback(async () => {
+    setRunsLoading(true);
     setError(null);
     try {
       const params: Record<string, string> = { limit: "50" };
       if (agentFilter.trim()) params.agent_id = agentFilter.trim();
-      const { data } = await api.get("/observability/traces", { params });
-      setTraces(data as TracesOut);
+      const { data } = await api.get("/observability/runs", { params });
+      setRuns(data as RunsOut);
     } catch (err) {
-      setTraces(null);
+      setRuns(null);
       setError(extractApiError(err, "Failed to load run timelines."));
     } finally {
-      setTracesLoading(false);
+      setRunsLoading(false);
     }
   }, [agentFilter]);
 
-  const loadDetail = useCallback(async (traceId: string) => {
-    setSelected(traceId);
+  const loadDetail = useCallback(async (runId: string) => {
+    setSelected(runId);
     setDetailLoading(true);
     setError(null);
     try {
-      const { data } = await api.get(`/observability/traces/${traceId}`);
-      setDetail(data as TraceDetail);
+      const { data } = await api.get(`/observability/runs/${runId}`);
+      setDetail(data as RunDetail);
     } catch (err) {
       setDetail(null);
       setError(extractApiError(err, "Failed to load the run timeline."));
@@ -233,8 +229,8 @@ export default function Observability() {
   }, []);
 
   useEffect(() => {
-    if (tab === "traces") void loadTraces();
-  }, [tab, loadTraces]);
+    if (tab === "traces") void loadRuns();
+  }, [tab, loadRuns]);
 
   useEffect(() => {
     if (tab !== "workload") return;
@@ -286,10 +282,10 @@ export default function Observability() {
 
       {tab === "traces" && (
         <div className="space-y-4">
-          {traces && !traces.enabled && (
+          {runs && !runs.enabled && (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="timeline-off">
               Run timelines are not being recorded in this deployment
-              {traces.tracing ? " (tracing is on; set AGENTICORG_TRACING_TIMELINE_ENABLED)" : " (tracing is off)"}.
+              {runs.tracing ? " (tracing is on; set AGENTICORG_TRACING_TIMELINE_ENABLED)" : " (tracing is off)"}.
               Runs that were recorded earlier still appear below.
             </div>
           )}
@@ -306,12 +302,12 @@ export default function Observability() {
             <button
               type="button"
               className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50"
-              onClick={() => void loadTraces()}
+              onClick={() => void loadRuns()}
               data-testid="traces-refresh"
             >
               Refresh
             </button>
-            {tracesLoading && <span className="text-sm text-slate-500">Loading…</span>}
+            {runsLoading && <span className="text-sm text-slate-500">Loading…</span>}
           </div>
 
           <div className={cardClass}>
@@ -328,19 +324,19 @@ export default function Observability() {
                 </tr>
               </thead>
               <tbody>
-                {traces && traces.traces.length === 0 && (
+                {runs && runs.runs.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-3 text-slate-500">
                       No stored runs.
                     </td>
                   </tr>
                 )}
-                {traces?.traces.map((row) => (
+                {runs?.runs.map((row) => (
                   <tr
                     key={row.span_id}
-                    className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${selected === row.trace_id ? "bg-slate-50" : ""}`}
-                    onClick={() => void loadDetail(row.trace_id)}
-                    data-testid={`trace-row-${row.trace_id}`}
+                    className={`cursor-pointer border-t border-slate-100 hover:bg-slate-50 ${selected === row.run_id ? "bg-slate-50" : ""}`}
+                    onClick={() => void loadDetail(row.run_id)}
+                    data-testid={`trace-row-${row.run_id}`}
                   >
                     <td className="py-1">{row.started_at ? new Date(row.started_at).toLocaleString() : "–"}</td>
                     <td className="font-mono text-xs">{row.agent_id ?? "–"}</td>
@@ -363,7 +359,9 @@ export default function Observability() {
           {detail && (
             <div className={cardClass} data-testid="waterfall">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-sm">
-                <span className="font-mono text-xs text-slate-600">trace {detail.trace_id}</span>
+                <span className="font-mono text-xs text-slate-600">
+                  run {detail.run_id} · trace {detail.trace_id}
+                </span>
                 <span className="text-slate-600">
                   {detail.spans.length} spans · {formatMs(detail.duration_ms)}
                 </span>
@@ -423,21 +421,7 @@ export default function Observability() {
             {workload && <span>as of {new Date(workload.generated_at).toLocaleTimeString()}</span>}
           </div>
           {workload && (
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <div className={cardClass} data-testid="workload-queues">
-                <h2 className="mb-2 text-sm font-semibold text-slate-800">Queues</h2>
-                {workload.queues.error && <p className="text-sm text-red-700">Unavailable ({workload.queues.error})</p>}
-                {workload.queues.queues && (
-                  <ul className="space-y-1 text-sm">
-                    {workload.queues.queues.map((queue) => (
-                      <li key={queue.name} className="flex justify-between">
-                        <span className="font-mono text-xs">{queue.name}</span>
-                        <span data-testid={`queue-depth-${queue.name}`}>{queue.depth}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div className={cardClass} data-testid="workload-reviews">
                 <h2 className="mb-2 text-sm font-semibold text-slate-800">Reviews</h2>
                 {workload.reviews.error && <p className="text-sm text-red-700">Unavailable ({workload.reviews.error})</p>}

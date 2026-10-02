@@ -20,14 +20,16 @@ vi.mock("@/lib/api", () => ({
 import Observability from "@/pages/Observability";
 
 const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+const RUN = "00f067aa0ba902b7";
 
-const TRACES = {
+const RUNS = {
   enabled: false,
   tracing: true,
-  traces: [
+  runs: [
     {
       trace_id: TRACE,
-      span_id: "00f067aa0ba902b7",
+      run_id: RUN,
+      span_id: RUN,
       name: "agenticorg.agent.run",
       agent_id: "a1",
       status: "unset",
@@ -43,6 +45,7 @@ const TRACES = {
 };
 
 const DETAIL = {
+  run_id: RUN,
   trace_id: TRACE,
   started_at: "2026-10-02T10:00:00+00:00",
   duration_ms: 2400,
@@ -90,7 +93,6 @@ const WORKLOAD = {
   generated_at: "2026-10-02T10:05:00+00:00",
   tracing_enabled: true,
   timeline_enabled: false,
-  queues: { queues: [{ name: "celery", depth: 3 }, { name: "workflows", depth: 0 }], error: null },
   reviews: { pending: 4, overdue: 1, soonest_due_at: "2026-10-02T10:07:05+00:00", soonest_seconds_left: 125, error: null },
   runs: { window_hours: 1, runs: 7, by_status: { completed: 6, guardrail_blocked: 1 }, p50_duration_ms: 1800, error: null },
   model_calls: { window_hours: 1, calls: 12, failed: 1, p50_latency_ms: 900, error: null },
@@ -110,8 +112,8 @@ function renderPage() {
 beforeEach(() => {
   mockGet.mockReset();
   mockGet.mockImplementation((url: string) => {
-    if (url === "/observability/traces") return Promise.resolve({ data: TRACES });
-    if (url === `/observability/traces/${TRACE}`) return Promise.resolve({ data: DETAIL });
+    if (url === "/observability/runs") return Promise.resolve({ data: RUNS });
+    if (url === `/observability/runs/${RUN}`) return Promise.resolve({ data: DETAIL });
     if (url === "/observability/workload") return Promise.resolve({ data: WORKLOAD });
     return Promise.reject(new Error(`unexpected ${url}`));
   });
@@ -120,20 +122,21 @@ beforeEach(() => {
 describe("Observability page", () => {
   it("lists the stored runs and says when recording is off", async () => {
     renderPage();
-    await screen.findByTestId(`trace-row-${TRACE}`);
+    await screen.findByTestId(`trace-row-${RUN}`);
     expect(screen.getByTestId("timeline-off").textContent).toContain("AGENTICORG_TRACING_TIMELINE_ENABLED");
-    const row = screen.getByTestId(`trace-row-${TRACE}`);
+    const row = screen.getByTestId(`trace-row-${RUN}`);
     expect(row.textContent).toContain("completed");
     expect(row.textContent).toContain("openai/gpt-4o");
     expect(row.textContent).toContain("321");
     expect(row.textContent).toContain("2.40 s");
-    expect(mockGet).toHaveBeenCalledWith("/observability/traces", { params: { limit: "50" } });
+    expect(mockGet).toHaveBeenCalledWith("/observability/runs", { params: { limit: "50" } });
   });
 
   it("shows the waterfall of the selected run with nested spans, bars and events", async () => {
     renderPage();
-    fireEvent.click(await screen.findByTestId(`trace-row-${TRACE}`));
+    fireEvent.click(await screen.findByTestId(`trace-row-${RUN}`));
     await screen.findByTestId("waterfall");
+    expect(screen.getByTestId("waterfall").textContent).toContain(`run ${RUN}`);
     const reason = screen.getByTestId("span-row-1111111111111111");
     expect(reason.textContent).toContain("agent.reason");
     expect(reason.textContent).toContain("200 in / 121 out");
@@ -152,14 +155,14 @@ describe("Observability page", () => {
     await screen.findByTestId("traces-table");
     fireEvent.change(screen.getByTestId("trace-agent-filter"), { target: { value: "a1" } });
     fireEvent.click(screen.getByTestId("traces-refresh"));
-    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/observability/traces", { params: { limit: "50", agent_id: "a1" } }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/observability/runs", { params: { limit: "50", agent_id: "a1" } }));
   });
 
-  it("shows the workload with queue depths, the review countdown and a part that could not be read", async () => {
+  it("shows the workload with the review countdown and a part that could not be read", async () => {
     renderPage();
     fireEvent.click(screen.getByTestId("tab-workload"));
-    await screen.findByTestId("workload-queues");
-    expect(screen.getByTestId("queue-depth-celery").textContent).toBe("3");
+    await screen.findByTestId("workload-reviews");
+    expect(screen.queryByTestId("workload-queues")).toBeNull();
     expect(screen.getByTestId("reviews-pending").textContent).toBe("4");
     expect(screen.getByTestId("reviews-overdue").textContent).toBe("1");
     expect(screen.getByTestId("reviews-countdown").textContent).toBe("2m 05s");

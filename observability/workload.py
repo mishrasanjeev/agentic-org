@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The live workload: queue depths, review deadlines and the last hour's outcomes, each read on its own.
+"""The live workload of one tenant: review deadlines and the last hour's outcomes, each read on its own.
 
 A part that cannot be read says so (``error``) instead of failing the whole
 answer, as the compliance evidence package does, so the console always shows
-what it can. Reads only: nothing here changes a queue, a review or a run.
+what it can. Reads only, and every part is the tenant's own: the task queues
+are shared by every tenant, so their depths are not a tenant's workload and
+are not answered here.
 """
 
 from __future__ import annotations
@@ -12,48 +14,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import redis.asyncio as aioredis
 import structlog
 
-from core.config import redis_socket_timeout_kwargs
 from observability import timeline, tracing
 
 logger = structlog.get_logger()
 
-DEFAULT_QUEUE = "celery"
 WINDOW_HOURS = 1
-
-
-def queue_names() -> list[str]:
-    """Every queue the task routes name, and the default queue."""
-    from core.tasks.celery_app import app
-
-    names = {DEFAULT_QUEUE}
-    for route in (app.conf.task_routes or {}).values():
-        queue = route.get("queue") if isinstance(route, dict) else None
-        if queue:
-            names.add(str(queue))
-    return sorted(names)
-
-
-async def queue_depths() -> dict[str, Any]:
-    """How many messages wait on each queue of the task broker."""
-    from core.tasks.celery_app import app
-
-    names = queue_names()
-    client = None
-    try:
-        client = aioredis.from_url(str(app.conf.broker_url), decode_responses=True, **redis_socket_timeout_kwargs())
-        depths = [{"name": name, "depth": int(await client.llen(name))} for name in names]
-        return {"queues": depths, "error": None}
-    # enterprise-gate: broad-except-ok reason=an-unreachable-broker-is-reported-as-unknown-not-raised
-    except Exception as exc:
-        logger.warning("workload_queue_depths_unavailable", error_type=type(exc).__name__)
-        return {"queues": None, "error": type(exc).__name__}
-    finally:
-        if client is not None:
-            close = getattr(client, "aclose", None) or client.close
-            await close()
 
 
 async def review_deadlines(tenant_id: uuid.UUID) -> dict[str, Any]:
@@ -218,7 +185,6 @@ async def workload(tenant_id: uuid.UUID) -> dict[str, Any]:
         "generated_at": datetime.now(UTC).isoformat(),
         "tracing_enabled": tracing.enabled(),
         "timeline_enabled": timeline.enabled(),
-        "queues": await queue_depths(),
         "reviews": await review_deadlines(tenant_id),
         "runs": await run_outcomes(tenant_id),
         "model_calls": await model_call_outcomes(tenant_id),

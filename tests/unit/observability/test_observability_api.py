@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Observability endpoints: admin-only reads of the run timelines and the live workload."""
+"""Observability endpoints: admin-only reads of a tenant's run timelines and live workload."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from observability import timeline, workload
 
 TENANT = uuid.uuid4()
 TRACE = "4bf92f3577b34da6a3ce929d0e0e4736"
+RUN = "00f067aa0ba902b7"
 
 
 def _app(scopes: list[str]) -> FastAPI:
@@ -48,7 +49,8 @@ def _no_rate_limit_redis():
 
 SUMMARY = {
     "trace_id": TRACE,
-    "span_id": "00f067aa0ba902b7",
+    "run_id": RUN,
+    "span_id": RUN,
     "name": "agenticorg.agent.run",
     "agent_id": "a1",
     "status": "unset",
@@ -64,32 +66,33 @@ SUMMARY = {
 
 def test_non_admin_is_refused():
     client = TestClient(_app(["agents:write"]))
-    assert client.get("/api/v1/observability/traces").status_code == 403
-    assert client.get(f"/api/v1/observability/traces/{TRACE}").status_code == 403
+    assert client.get("/api/v1/observability/runs").status_code == 403
+    assert client.get(f"/api/v1/observability/runs/{RUN}").status_code == 403
     assert client.get("/api/v1/observability/workload").status_code == 403
 
 
-def test_traces_list_says_whether_runs_are_recorded(monkeypatch):
+def test_runs_list_says_whether_runs_are_recorded(monkeypatch):
     recent = AsyncMock(return_value=[SUMMARY])
-    monkeypatch.setattr(timeline, "recent_traces", recent)
+    monkeypatch.setattr(timeline, "recent_runs", recent)
     client = TestClient(_app(["agenticorg:admin"]))
-    resp = client.get("/api/v1/observability/traces", params={"agent_id": "a1", "limit": 5})
+    resp = client.get("/api/v1/observability/runs", params={"agent_id": "a1", "limit": 5})
     assert resp.status_code == 200
     body = resp.json()
     assert body["enabled"] is False and body["tracing"] is False
-    assert body["traces"] == [SUMMARY]
+    assert body["runs"] == [SUMMARY]
     recent.assert_awaited_once_with(TENANT, agent_id="a1", limit=5)
-    assert client.get("/api/v1/observability/traces", params={"limit": 0}).status_code == 422
+    assert client.get("/api/v1/observability/runs", params={"limit": 0}).status_code == 422
 
 
-def test_trace_detail_and_the_404(monkeypatch):
+def test_run_detail_and_the_404(monkeypatch):
     detail = {
+        "run_id": RUN,
         "trace_id": TRACE,
         "started_at": "2026-10-02T10:00:00+00:00",
         "duration_ms": 2400,
         "spans": [
             {
-                "span_id": "00f067aa0ba902b7",
+                "span_id": RUN,
                 "parent_span_id": None,
                 "name": "agenticorg.agent.run",
                 "kind": "internal",
@@ -102,17 +105,18 @@ def test_trace_detail_and_the_404(monkeypatch):
             }
         ],
     }
-    monkeypatch.setattr(timeline, "trace_detail", AsyncMock(return_value=detail))
+    monkeypatch.setattr(timeline, "run_detail", AsyncMock(return_value=detail))
     client = TestClient(_app(["agenticorg:admin"]))
-    resp = client.get(f"/api/v1/observability/traces/{TRACE}")
+    resp = client.get(f"/api/v1/observability/runs/{RUN}")
     assert resp.status_code == 200 and resp.json() == detail
-    monkeypatch.setattr(timeline, "trace_detail", AsyncMock(return_value=None))
-    assert client.get(f"/api/v1/observability/traces/{TRACE}").status_code == 404
-    assert client.get("/api/v1/observability/traces/not-a-trace").status_code == 422
+    monkeypatch.setattr(timeline, "run_detail", AsyncMock(return_value=None))
+    assert client.get(f"/api/v1/observability/runs/{RUN}").status_code == 404
+    assert client.get("/api/v1/observability/runs/not-a-run").status_code == 422
+    assert client.get(f"/api/v1/observability/runs/{TRACE}").status_code == 422
 
 
 def test_workload_is_the_assembled_picture(monkeypatch):
-    picture = {"generated_at": "2026-10-02T10:05:00+00:00", "queues": {"queues": [], "error": None}}
+    picture = {"generated_at": "2026-10-02T10:05:00+00:00", "reviews": {"pending": 0, "error": None}}
     monkeypatch.setattr(workload, "workload", AsyncMock(return_value=picture))
     client = TestClient(_app(["agenticorg:admin"]))
     resp = client.get("/api/v1/observability/workload")
@@ -120,37 +124,6 @@ def test_workload_is_the_assembled_picture(monkeypatch):
 
 
 class TestWorkloadParts:
-    def test_queue_names_come_from_the_task_routes_and_the_default_queue(self):
-        names = workload.queue_names()
-        assert "celery" in names and "workflows" in names and "maintenance" in names and names == sorted(names)
-
-    def test_queue_depths_read_the_broker_lists_and_report_an_unreachable_broker(self, monkeypatch):
-        calls: list[str] = []
-
-        class _Client:
-            async def llen(self, name):
-                calls.append(name)
-                return 2 if name == "celery" else 0
-
-            async def aclose(self):
-                calls.append("closed")
-
-        monkeypatch.setattr(workload.aioredis, "from_url", lambda *_a, **_k: _Client())
-        depths = asyncio.run(workload.queue_depths())
-        assert depths["error"] is None
-        assert {q["name"]: q["depth"] for q in depths["queues"]}["celery"] == 2
-        assert calls[-1] == "closed"
-
-        class _Broken:
-            async def llen(self, _name):
-                raise OSError("connection refused")
-
-            async def aclose(self):
-                return None
-
-        monkeypatch.setattr(workload.aioredis, "from_url", lambda *_a, **_k: _Broken())
-        assert asyncio.run(workload.queue_depths()) == {"queues": None, "error": "OSError"}
-
     def test_review_deadlines_count_pending_overdue_and_the_soonest(self, monkeypatch):
         now = datetime.now(UTC)
         rows = [(now - timedelta(minutes=5),), (now + timedelta(minutes=2, seconds=5),), (now + timedelta(hours=3),)]
@@ -201,16 +174,15 @@ class TestWorkloadParts:
         guardrails = asyncio.run(workload.guardrail_outcomes(TENANT))
         assert guardrails == {"window_hours": 1, "blocked": 2, "transformed": 5, "error": None}
 
-    def test_every_part_reports_its_own_failure(self, monkeypatch):
+    def test_every_part_reports_its_own_failure_and_nothing_is_deployment_wide(self, monkeypatch):
         @contextlib.asynccontextmanager
         async def _broken(_tid):
             raise RuntimeError("database down")
             yield  # pragma: no cover
 
         monkeypatch.setattr("core.database.get_tenant_session", _broken)
-        monkeypatch.setattr(workload, "queue_depths", AsyncMock(return_value={"queues": None, "error": "OSError"}))
         picture = asyncio.run(workload.workload(TENANT))
-        assert picture["queues"]["error"] == "OSError"
+        assert "queues" not in picture and not hasattr(workload, "queue_depths")
         for part in ("reviews", "runs", "model_calls", "guardrails"):
             assert picture[part]["error"] == "RuntimeError", part
         assert picture["tracing_enabled"] is False and picture["timeline_enabled"] is False

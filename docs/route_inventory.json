@@ -5436,39 +5436,39 @@
     "tenant_required": true
   },
   {
-    "audit_event": "observability.traces.list",
+    "audit_event": "observability.runs.list",
     "auth_required": true,
-    "function": "list_traces",
+    "function": "list_runs",
     "idempotency": "idempotent-read",
-    "key": "GET /api/v1/observability/traces api/v1/observability.py:list_traces",
+    "key": "GET /api/v1/observability/runs api/v1/observability.py:list_runs",
     "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/observability.py",
-    "path": "/api/v1/observability/traces",
+    "path": "/api/v1/observability/runs",
     "public_exempt_reason": null,
     "rate_limit": "standard",
-    "scope": "observability.traces.sensitive.read",
-    "source_line": 76,
+    "scope": "observability.runs.sensitive.read",
+    "source_line": 78,
     "tenant_required": true
   },
   {
-    "audit_event": "observability.traces.read",
+    "audit_event": "observability.runs.read",
     "auth_required": true,
-    "function": "get_trace",
+    "function": "get_run",
     "idempotency": "idempotent-read",
-    "key": "GET /api/v1/observability/traces/{trace_id} api/v1/observability.py:get_trace",
+    "key": "GET /api/v1/observability/runs/{run_id} api/v1/observability.py:get_run",
     "metadata_present": true,
     "methods": [
       "GET"
     ],
     "module": "api/v1/observability.py",
-    "path": "/api/v1/observability/traces/{trace_id}",
+    "path": "/api/v1/observability/runs/{run_id}",
     "public_exempt_reason": null,
     "rate_limit": "standard",
-    "scope": "observability.traces.sensitive.read",
-    "source_line": 99,
+    "scope": "observability.runs.sensitive.read",
+    "source_line": 101,
     "tenant_required": true
   },
   {
@@ -5486,7 +5486,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.workload.sensitive.read",
-    "source_line": 119,
+    "source_line": 121,
     "tenant_required": true
   },
   {

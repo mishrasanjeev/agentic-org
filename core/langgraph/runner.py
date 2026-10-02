@@ -473,7 +473,10 @@ async def run_agent(
     # node admits each model call under the per-model limits against it.
     route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
     run_span = tracing.start(
-        "agenticorg.agent.run", tenant=tenant_id, **_run_span_attributes(route, agent_id, agent_type, domain)
+        "agenticorg.agent.run",
+        tenant=tenant_id,
+        root=True,
+        **_run_span_attributes(route, agent_id, agent_type, domain),
     )
     t0 = time.perf_counter()
     try:
@@ -879,7 +882,9 @@ async def resume_agent(
     )
 
     route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
-    run_span = tracing.start("agenticorg.agent.resume", tenant=tenant_id, **_run_span_attributes(route, agent_id))
+    run_span = tracing.start(
+        "agenticorg.agent.resume", tenant=tenant_id, root=True, **_run_span_attributes(route, agent_id)
+    )
     t0 = time.perf_counter()
     try:
         if require_paused:

@@ -117,11 +117,14 @@ row, so an auditor can go from a row to the trace and back.
 A collector shows a trace; the console needs the waterfall of one run without one. With
 `AGENTICORG_TRACING_TIMELINE_ENABLED=true` (off by default, and nothing while tracing itself is
 off) a span processor keeps the finished spans that describe a run (the run, each model call,
-tool call and knowledge search; never the HTTP request or the task span) in memory per trace,
-and the runner stores that trace's spans in the tenant-scoped `run_spans` table when the run
-ends, on the run's own event loop through the run's own tenant session. A trace nothing stores
-(a knowledge search outside a run) ages out of memory after thirty minutes, and the buffer never
-holds more than twenty thousand spans.
+tool call and knowledge search; never the HTTP request or the task span) in memory per run, and
+the runner stores that run's spans in the tenant-scoped `run_spans` table when the run ends, on
+the run's own event loop through the run's own tenant session. A run is named by its root span
+(`run.id`, which the runner binds and every span opened inside the run carries), not by the
+trace: two runs that share one trace (parallel agents under one task, a request continuing a
+caller's `traceparent`) never mix, and a span opened outside any run is never kept. A run
+nothing stores ages out of memory after thirty minutes, and the buffer never holds more than
+twenty thousand spans.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -136,18 +139,22 @@ The endpoints (admin only):
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/v1/observability/traces?agent_id=&limit=` | the newest stored runs, one entry per run (status, duration, provider, model, tokens, correlation id), and `enabled`, whether runs are being recorded at all |
-| `GET /api/v1/observability/traces/{trace_id}` | every stored span of one run with its offset from the run's start and its duration: the waterfall |
-| `GET /api/v1/observability/workload` | queue depths from the task broker, pending reviews with the soonest deadline and the overdue count, and the last hour's run, model-call and guardrail outcomes; each part reports its own `error` when it cannot be read |
+| `GET /api/v1/observability/runs?agent_id=&limit=` | the newest stored runs, one entry per run (status, duration, provider, model, tokens, correlation id, trace id), and `enabled`, whether runs are being recorded at all |
+| `GET /api/v1/observability/runs/{run_id}` | every stored span of one run (named by its root span id) with its offset from the run's start and its duration: the waterfall |
+| `GET /api/v1/observability/workload` | the tenant's pending reviews with the soonest deadline and the overdue count, and the last hour's run, model-call and guardrail outcomes; each part reports its own `error` when it cannot be read |
+
+The endpoints are tenant administrators' reads, and the console page is shown to administrators
+only. Everything answered is the tenant's own: the task queues are shared by every tenant, so
+their depths are not part of a tenant's workload.
 
 The run response of `POST /api/v1/agents/{id}/run` carries `trace_id` when tracing is on, so a
 client can open the run's waterfall directly.
 
-The console page `/dashboard/observability` has two views: **Traces**, the stored runs and the
-waterfall of the selected one (model, tool and retrieval spans with their durations, the model
-gateway's decision and every guardrail outcome as events on the span they belong to), and
-**Workload**, the queue depths, the reviews with a countdown to the soonest deadline, and the
-last hour's outcomes, refreshed every fifteen seconds.
+The console page `/dashboard/observability` (administrators) has two views: **Traces**, the
+stored runs and the waterfall of the selected one (model, tool and retrieval spans with their
+durations, the model gateway's decision and every guardrail outcome as events on the span they
+belong to), and **Workload**, the reviews with a countdown to the soonest deadline and the last
+hour's outcomes, refreshed every fifteen seconds.
 
 ## Tests
 
@@ -172,6 +179,8 @@ on a blocked resume; and the audit rows' trace id with and without a trace in pr
   instruments (`docs/operations/metrics.md`); the console shows the picture, it does not page.
 - **No automatic HTTP client instrumentation.** A connector's outbound HTTP calls are inside the
   `agenticorg.tool.call` span but not spans of their own.
+- **No platform-wide view.** Queue depths and other deployment-wide signals need an operator
+  surface outside tenant scope; the tenant console shows only the tenant's own workload.
 - **Workflow steps** are not yet spans; the original span catalogue in
   `observability/tracing.py` (workflow, step, hitl, auth, shadow) keeps its constructors for that
   work.

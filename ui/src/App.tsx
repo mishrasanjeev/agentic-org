@@ -602,7 +602,7 @@ export default function App() {
       <Route
         path="/dashboard/observability"
         element={
-          <ProtectedRoute allowedRoles={["admin", "coo", "auditor"]}>
+          <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <Observability />
             </Layout>

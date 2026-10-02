@@ -23,8 +23,9 @@ from observability import timeline, tracing, workload
 router = APIRouter(prefix="/observability", tags=["Observability"], dependencies=[require_tenant_admin])
 
 
-class TraceSummary(BaseModel):
+class RunSummary(BaseModel):
     trace_id: str
+    run_id: str
     span_id: str
     name: str
     agent_id: str | None = None
@@ -38,10 +39,10 @@ class TraceSummary(BaseModel):
     correlation_id: str | None = None
 
 
-class TracesOut(BaseModel):
+class RunsOut(BaseModel):
     enabled: bool
     tracing: bool
-    traces: list[TraceSummary]
+    runs: list[RunSummary]
 
 
 class SpanOut(BaseModel):
@@ -57,54 +58,55 @@ class SpanOut(BaseModel):
     events: list[dict[str, Any]]
 
 
-class TraceOut(BaseModel):
+class RunOut(BaseModel):
+    run_id: str
     trace_id: str
     started_at: str | None = None
     duration_ms: int
     spans: list[SpanOut]
 
 
-@router.get("/traces", response_model=TracesOut)
+@router.get("/runs", response_model=RunsOut)
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="observability.traces.sensitive.read",
+    scope="observability.runs.sensitive.read",
     rate_limit="standard",
     idempotency="idempotent-read",
-    audit_event="observability.traces.list",
+    audit_event="observability.runs.list",
 )
-async def list_traces(
+async def list_runs(
     agent_id: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
     tenant_id: str = Depends(get_current_tenant),
-) -> TracesOut:
+) -> RunsOut:
     """The newest stored runs, one entry per run, and whether runs are being recorded at all."""
-    rows = await timeline.recent_traces(uuid.UUID(tenant_id), agent_id=agent_id, limit=limit)
-    return TracesOut(
+    rows = await timeline.recent_runs(uuid.UUID(tenant_id), agent_id=agent_id, limit=limit)
+    return RunsOut(
         enabled=bool(settings.tracing_timeline_enabled) and timeline.enabled(),
         tracing=tracing.enabled(),
-        traces=[TraceSummary(**row) for row in rows],
+        runs=[RunSummary(**row) for row in rows],
     )
 
 
-@router.get("/traces/{trace_id}", response_model=TraceOut)
+@router.get("/runs/{run_id}", response_model=RunOut)
 @route_meta(
     auth_required=True,
     tenant_required=True,
-    scope="observability.traces.sensitive.read",
+    scope="observability.runs.sensitive.read",
     rate_limit="standard",
     idempotency="idempotent-read",
-    audit_event="observability.traces.read",
+    audit_event="observability.runs.read",
 )
-async def get_trace(
-    trace_id: Annotated[str, Path(pattern="^[0-9a-f]{32}$")],
+async def get_run(
+    run_id: Annotated[str, Path(pattern="^[0-9a-f]{16}$")],
     tenant_id: str = Depends(get_current_tenant),
-) -> TraceOut:
-    """Every stored span of one run with its offset from the run's start: the waterfall."""
-    detail = await timeline.trace_detail(uuid.UUID(tenant_id), trace_id)
+) -> RunOut:
+    """Every stored span of one run (named by its root span id) with its offset from the run's start: the waterfall."""
+    detail = await timeline.run_detail(uuid.UUID(tenant_id), run_id)
     if detail is None:
-        raise HTTPException(status_code=404, detail="Trace not found")
-    return TraceOut(**detail)
+        raise HTTPException(status_code=404, detail="Run not found")
+    return RunOut(**detail)
 
 
 @router.get("/workload")
@@ -117,5 +119,5 @@ async def get_trace(
     audit_event="observability.workload.read",
 )
 async def get_workload(tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
-    """Queue depths, review deadlines and the last hour's run, model-call and guardrail outcomes."""
+    """The tenant's review deadlines and the last hour's run, model-call and guardrail outcomes."""
     return await workload.workload(uuid.UUID(tenant_id))

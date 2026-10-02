@@ -8,23 +8,24 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Behind `AGENTICORG_TRACING_TIMELINE_ENABLED` (off by default; nothing
   while tracing is off): a span processor keeps the finished spans of each
   agent run (the run, its model calls, tool calls and knowledge searches) in
-  memory per trace, and the runner stores them in the tenant-scoped
-  `run_spans` table when the run ends, on the run's own event loop. Rows hold
+  memory per run, keyed by the run's root span so two runs sharing a trace
+  never mix, and the runner stores them in the tenant-scoped `run_spans`
+  table when the run ends, on the run's own event loop. Rows hold
   identifiers, timings, outcomes and the governance events, never content;
   a daily task prunes them after `AGENTICORG_TRACING_TIMELINE_RETENTION_DAYS`
   (migration `v6z39_run_spans`).
-- `GET /api/v1/observability/traces` lists the newest stored runs (and says
-  whether recording is on), `GET /api/v1/observability/traces/{trace_id}`
+- `GET /api/v1/observability/runs` lists the newest stored runs (and says
+  whether recording is on), `GET /api/v1/observability/runs/{run_id}`
   returns one run's spans with their offsets and durations, and
-  `GET /api/v1/observability/workload` reports queue depths from the task
-  broker, pending reviews with the soonest deadline and the overdue count,
-  and the last hour's run, model-call and guardrail outcomes, each part
-  reported on its own. Admin-only reads. The run response carries
-  `trace_id` when tracing is on.
-- Console page `/dashboard/observability`: the waterfall of one run (model,
-  tool and retrieval spans with durations and the gateway and guardrail
-  events) and the live workload with a countdown to the soonest review
-  deadline.
+  `GET /api/v1/observability/workload` reports the tenant's pending reviews
+  with the soonest deadline and the overdue count, and the last hour's run,
+  model-call and guardrail outcomes, each part reported on its own. Admin-only
+  reads of the tenant's own data (the shared task queues are not answered).
+  The run response carries `trace_id` when tracing is on.
+- Console page `/dashboard/observability` (administrators): the waterfall of
+  one run (model, tool and retrieval spans with durations and the gateway and
+  guardrail events) and the live workload with a countdown to the soonest
+  review deadline.
 
 ### Added - Observability: tracing wiring and correlation ids
 - Behind `AGENTICORG_TRACING_ENABLED` (off by default): the API's lifespan and
