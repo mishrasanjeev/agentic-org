@@ -85,6 +85,11 @@ operator_override_blocks_total = Counter(
     "Model, agent, workflow and tool calls refused by an operator override",
     ["target_kind", "mode"],
 )
+residency_refusals_total = Counter(
+    "agenticorg_residency_refusals_total",
+    "Providers refused by residency enforcement, by reason",
+    ["reason"],
+)
 grant_enforcement_mode_fallbacks_total = Counter(
     "agenticorg_grant_enforcement_mode_fallbacks_total",
     "Runs whose grants.enforce_closed mode could not be read from the flag store",

@@ -68,6 +68,16 @@ def _ragflow_available() -> bool:
     return bool(_RAGFLOW_URL and _httpx)
 
 
+async def _ragflow_allowed(tenant_id: str | None) -> bool:
+    """Residency: the managed retrieval service is an external provider and needs an attestation."""
+    from core.governance.residency import check_provider
+
+    decision = await check_provider(tenant_id, "ragflow", kind="rag")
+    if decision.blocked:
+        logger.warning("ragflow_refused_residency", reason=decision.reason)
+    return not decision.blocked
+
+
 def _ragflow_headers() -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if _RAGFLOW_KEY:
@@ -799,7 +809,7 @@ async def upload_document(
         "metadata": doc_metadata,
     }
 
-    if _ragflow_available():
+    if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             rf_result = await _ragflow_upload(
                 tenant_id,
@@ -1285,7 +1295,7 @@ async def search_knowledge(
     opaque global ``E1001 INTERNAL_ERROR`` envelope that the UI only
     knows how to render as "Something went wrong".
     """
-    if _ragflow_available():
+    if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
             return SearchResponse(results=[SearchResult(**c) for c in chunks])

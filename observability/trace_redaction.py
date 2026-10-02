@@ -56,6 +56,15 @@ def install_trace_redaction() -> bool:
     global _installed
     if _installed or not tracing_enabled():
         return _installed
+    from core.config import settings
+
+    if settings.residency_enforce:
+        # Residency: tracing export is an external destination with no
+        # tenant attestation path; with deployment-wide enforcement it stays off.
+        for name in _TRACING_ENV_VARS:
+            os.environ.pop(name, None)
+        logger.warning("langsmith_tracing_refused_residency")
+        return False
     try:
         import langsmith
         from langsmith import Client

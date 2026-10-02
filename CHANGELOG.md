@@ -4,6 +4,28 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Residency enforcement and provider attestations
+- `core/governance/residency.py`: with enforcement on, a provider is refused
+  unless an administrator has attested, for the tenant's data region, that
+  processing stays in region and the provider does not train on the data.
+  Enforced at the AI credential resolver (every LLM, embedding, retrieval and
+  speech credential), the managed retrieval service's upload and search, the
+  third-party tool hub and tracing export; providers inside the deployment
+  need no attestation. Strict runtimes fail closed when the region or the
+  attestations cannot be read. Refusals: `agenticorg_residency_refusals_total`.
+- `GET /api/v1/residency/status`, `GET/POST /api/v1/residency/attestations`,
+  `POST .../{id}/revoke` (tenant admin); each change writes a signed audit row.
+  Table `provider_residency_attestations` (`v6z33_provider_attestations`,
+  tenant RLS).
+- The compliance evidence package gains a `data_residency` section (`RES-1`):
+  region, enforcement state, storage-region conformance, tenancy profile
+  (`AGENTICORG_TENANCY_PROFILE`), disaster-recovery profile
+  (`AGENTICORG_DR_STANDBY_REGION`, `AGENTICORG_DR_LAST_DRILL_AT`) and the active
+  attestations.
+- Off by default: the authority flag `residency.enforce` (operator managed) or
+  `AGENTICORG_RESIDENCY_ENFORCE` turns it on. Docs:
+  `docs/governance/data-residency.md`.
+
 ### Added - Operator override (halt or throttle a model, agent, workflow or the tool pipeline)
 - `core/governance/operator_override.py`: an administrator places an override
   on a provider, a model, one agent, every agent, a workflow definition, a

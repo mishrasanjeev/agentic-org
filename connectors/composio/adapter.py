@@ -103,6 +103,14 @@ class ComposioConnectorAdapter(BaseConnector):
         if not _COMPOSIO_AVAILABLE or self._composio_toolset is None:
             return {"error": "Composio SDK not available"}
 
+        # Residency: the tool hub is an external provider and needs an attestation.
+        from core.governance.residency import check_provider
+
+        tenant_id = (getattr(self, "config", None) or {}).get("tenant_id")
+        decision = await check_provider(tenant_id, "composio", kind="tool")
+        if decision.blocked:
+            return decision.to_error()
+
         handler = self._tool_registry.get(tool_name)
         if not handler:
             raise ValueError(f"Tool {tool_name} not registered on composio adapter")

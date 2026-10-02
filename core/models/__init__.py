@@ -70,7 +70,6 @@ from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.dsar import DSARRequestRecord as DSARRequestRecord
 from core.models.feature_flag import FeatureFlag as FeatureFlag
-from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
@@ -93,12 +92,14 @@ from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as 
 from core.models.oacp_retention_disposition_decision import (
     OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
 )
+from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
 from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
+from core.models.provider_attestation import ProviderAttestation as ProviderAttestation
 from core.models.report_schedule import ReportSchedule as ReportSchedule
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry

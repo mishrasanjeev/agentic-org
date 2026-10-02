@@ -47,7 +47,6 @@ from api.v1 import (
     departments,
     evals,
     feature_flags,
-    operator_overrides,
     governance,
     governed_cases,
     health,
@@ -57,12 +56,14 @@ from api.v1 import (
     kpis,
     mcp,
     oauth_connector,
+    operator_overrides,
     packs,
     product_facts,
     professional_tax,
     prompt_templates,
     push,
     report_schedules,
+    residency,
     rpa,
     rpa_schedules,
     sales,
@@ -303,6 +304,7 @@ app.include_router(departments.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(delegations.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(feature_flags.router, prefix="/api/v1", tags=["Feature Flags"])
 app.include_router(operator_overrides.router, prefix="/api/v1", tags=["Operator Overrides"])
+app.include_router(residency.router, prefix="/api/v1", tags=["Residency"])
 app.include_router(costs.router, prefix="/api/v1", tags=["Costs"])
 app.include_router(invoices.router, prefix="/api/v1", tags=["Billing"])
 app.include_router(branding.public_router, prefix="/api/v1", tags=["Branding"])

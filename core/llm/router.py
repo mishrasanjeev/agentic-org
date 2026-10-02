@@ -44,6 +44,7 @@ import structlog
 
 from core.config import external_keys, is_relaxed_env, settings
 from core.governance.operator_override import OperatorOverrideBlocked
+from core.governance.residency import ResidencyBlocked
 
 if TYPE_CHECKING:
     from core.pii.pseudonymiser import PseudonymSession
@@ -67,7 +68,15 @@ class LLMProviderConfigurationError(RuntimeError):
 def _is_transient_llm_failure(exc: Exception) -> bool:
     """Retry only transport failures and rate-limit/server responses."""
     if isinstance(
-        exc, (DailyBudgetExceeded, LLMProviderConfigurationError, OperatorOverrideBlocked, ValueError, PermissionError)
+        exc,
+        (
+            DailyBudgetExceeded,
+            LLMProviderConfigurationError,
+            OperatorOverrideBlocked,
+            ResidencyBlocked,
+            ValueError,
+            PermissionError,
+        ),
     ):
         return False
     if isinstance(exc, (TimeoutError, ConnectionError)):
