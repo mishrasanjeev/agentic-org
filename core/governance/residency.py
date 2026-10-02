@@ -194,9 +194,17 @@ async def enabled(tenant_id: uuid.UUID | str | None) -> bool:
     tid = _as_uuid(tenant_id)
     if tid is None:
         return False
-    from core.feature_flags import is_enabled_strict
+    # An authority flag: the global row and the tenant's row are read separately
+    # and enforcement is on when either enables it, so a tenant row can never
+    # switch off an operator's global setting. The strict reader raises
+    # FeatureFlagLookupError rather than reading an unreadable store as "off".
+    from core.feature_flags import load_flag_rows_strict, row_enabled
 
-    return await is_enabled_strict(FLAG_KEY, tenant_id=tid)
+    rows = await load_flag_rows_strict(FLAG_KEY, tenant_id=tid)
+    subject = str(tid)
+    return row_enabled(FLAG_KEY, rows.global_row, subject_id=subject) or row_enabled(
+        FLAG_KEY, rows.tenant_row, subject_id=subject
+    )
 
 
 async def _load_region(tenant_id: uuid.UUID) -> str:

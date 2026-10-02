@@ -30,6 +30,14 @@ def _att(provider: str, region: str = "IN", in_region: bool = True, no_training:
     )
 
 
+def _rows(enabled: bool):
+    """A flag store answer: the global row enables the control, or no rows at all."""
+    from core.feature_flags import FlagRows
+
+    row = {"enabled": True, "rollout_percentage": 100} if enabled else None
+    return FlagRows(global_row=row, tenant_row=None)
+
+
 @pytest.fixture(autouse=True)
 def _clear_caches():
     res.invalidate()
@@ -55,7 +63,7 @@ class TestDecision:
         monkeypatch.setattr(res.settings, "residency_enforce", False)
         region = AsyncMock(return_value="IN")
         with (
-            patch("core.feature_flags.is_enabled_strict", AsyncMock(return_value=False)),
+            patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))),
             patch.object(res, "tenant_data_region", region),
         ):
             assert asyncio.run(check_provider(TENANT, "openai")).blocked is False
@@ -64,7 +72,7 @@ class TestDecision:
     def test_authority_flag_turns_enforcement_on(self, monkeypatch):
         monkeypatch.setattr(res.settings, "residency_enforce", False)
         a, b = _with([])
-        with patch("core.feature_flags.is_enabled_strict", AsyncMock(return_value=True)), a, b:
+        with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(True))), a, b:
             decision = asyncio.run(check_provider(TENANT, "openai"))
         assert decision.blocked is True and "no active attestation" in decision.reason
 
@@ -134,7 +142,7 @@ class TestDecision:
         from core.feature_flags import FeatureFlagLookupError
 
         monkeypatch.setattr(res.settings, "residency_enforce", False)
-        with patch("core.feature_flags.is_enabled_strict", AsyncMock(side_effect=FeatureFlagLookupError("down"))):
+        with patch("core.feature_flags.load_flag_rows_strict", AsyncMock(side_effect=FeatureFlagLookupError("down"))):
             monkeypatch.setattr(res.settings, "env", "test")
             assert asyncio.run(check_provider(TENANT, "openai")).blocked is False
             monkeypatch.setattr(res.settings, "env", "production")
