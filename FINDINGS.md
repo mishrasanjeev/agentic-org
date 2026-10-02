@@ -1608,7 +1608,9 @@ Remove an entry in the pull request that fixes it.
   alerts and the cost counters read those figures.
 - **Reproduce:** call `_call_openai` with a `gpt-4o-mini` response of 1,000
   prompt and 1,000 completion tokens: cost 0.02 instead of 0.00075.
-- **Fixed:** both calls cost the response at the model's price from
+- **Fixed (opt-in):** with `AGENTICORG_MODEL_PRICING_FOR_ROUTER_COSTS=true`
+  both calls cost the response at the model's price from
   `core/governance/model_pricing.py` (prompt and completion tokens split when the
   response carries them) and keep the historical flat rate only for a model
-  without a price, with a warning.
+  without a price, with a warning. Off (the default) the flat rates stand, so a
+  deployment validates the priced figures before its budget controls change.

@@ -17,6 +17,7 @@ million tokens, so negotiated rates replace the list.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -82,7 +83,11 @@ def _overrides() -> dict[str, tuple[float, float]]:
         data = json.loads(raw)
         out: dict[str, tuple[float, float]] = {}
         for key, value in dict(data).items():
-            out[str(key).strip().lower()] = (float(value["input"]), float(value["output"]))
+            rates = (float(value["input"]), float(value["output"]))
+            if not all(math.isfinite(rate) and rate >= 0 for rate in rates):
+                logger.warning("model_price_override_rejected", key=str(key)[:80])
+                continue
+            out[str(key).strip().lower()] = rates
         return out
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         logger.warning("model_price_overrides_invalid", error_type=type(exc).__name__)

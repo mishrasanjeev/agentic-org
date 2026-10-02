@@ -177,6 +177,10 @@ class Settings(BaseSettings):
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
+    # The direct router costs its OpenAI and Anthropic calls at the model's
+    # list price instead of the historical flat rates. Off by default: the
+    # figures feed the cost counters and budget controls (FINDINGS A-116).
+    model_pricing_for_router_costs: bool = False
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30

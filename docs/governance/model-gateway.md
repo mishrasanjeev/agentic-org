@@ -21,7 +21,7 @@ deployment. Off, the gateway returns the caller's own choice and reads nothing.
 | `agent_id`, `business_unit`, `language` | Further match fields; `business_unit` is matched against the agent's domain. Empty matches everything. |
 | `provider`, `model`, `tier` | What a match gets: a provider (with a model, or the provider's first catalogue model), a model, or a cost tier (`tier1`, `tier2`, `tier3`, resolved like the smart router's tiers). |
 | `targets` | Instead of one provider, model or tier: a weighted split, `[{"provider", "model", "weight"}, ...]`. Each call lands on one target, stable for its correlation id and proportional to the weights over many calls; every target is checked against the catalogue and must sit inside `allowed_providers` when that is set. |
-| `cost_aware`, `max_failure_rate` | With `cost_aware`, the targets are candidates and each call gets the cheapest one (by list price, see below) whose observed failure rate over the quality window stays at or under `max_failure_rate` (`AGENTICORG_MODEL_GATEWAY_MAX_FAILURE_RATE`, 0.05, when unset). A candidate with no observations counts as healthy; an unpriced candidate ranks last. When the records cannot be read the choice is by price alone; when no candidate is healthy the least failing one is chosen; both are logged and named in the decision's reason. |
+| `cost_aware`, `max_failure_rate` | With `cost_aware`, the targets are candidates and each call gets the cheapest one (by list price, see below) whose observed failure rate over the quality window stays at or under `max_failure_rate` (`AGENTICORG_MODEL_GATEWAY_MAX_FAILURE_RATE`, 0.05, when unset). Only candidates inside `allowed_providers` are considered, and the fence is checked on the choice as on any other route. A candidate with no observations counts as healthy; an unpriced candidate ranks last. When the records cannot be read the choice is by price alone; when no candidate is healthy the least failing one is chosen; both are logged and named in the decision's reason. |
 | `allowed_providers` | A fence: a provider outside the list is refused, with the policy named, rather than replaced. |
 | `in_region_only` | The call may only use a provider inside the deployment or one attested for the tenant's data region. |
 | `reason` | Why the policy exists; recorded in the audit row. |
@@ -104,9 +104,12 @@ table), prices models inside the deployment (`ollama`, `vllm`) at nothing per
 token, prices an Azure deployment as its base model, and leaves
 `openai_compatible` unpriced. `AGENTICORG_MODEL_PRICE_OVERRIDES_JSON`, a JSON
 object keyed `provider/model` with `input` and `output` per million tokens,
-replaces list prices with negotiated ones. The direct router and the routing
-records cost each call at its model's price when one is known (the direct
-router used a flat rate for every OpenAI model before, FINDINGS A-116).
+replaces list prices with negotiated ones; an override that is negative or
+not finite is rejected and logged. The routing records cost each call at its
+model's price when one is known. The direct router does the same with
+`AGENTICORG_MODEL_PRICING_FOR_ROUTER_COSTS=true` (off by default, since those
+figures feed the cost counters and budget controls); off, it keeps the
+historical flat rates (FINDINGS A-116).
 
 `GET /api/v1/model-gateway/costs?window_hours=24` lists every catalogue model
 and every model seen in the records with its list price, a blended per-million

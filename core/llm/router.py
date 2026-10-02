@@ -220,7 +220,14 @@ GEMINI_PRICE_PER_1M: dict[str, dict[str, float]] = {
 def priced_cost_usd(
     provider: str, model: str, *, input_tokens: int | None, output_tokens: int | None, tokens: int, fallback: float
 ) -> float:
-    """The call's cost at the model's price when one is known, else ``fallback`` (the historical flat rate)."""
+    """The call's cost at the model's price, behind ``model_pricing_for_router_costs``; else ``fallback``.
+
+    Off (the default) the historical flat rate stands, so a deployment can
+    validate the priced figures before its cost counters and budget controls
+    change (FINDINGS A-116).
+    """
+    if not settings.model_pricing_for_router_costs:
+        return fallback
     price = price_for(provider, model)
     if price is None:
         logger.warning("model_unknown_pricing", provider=provider, model=model)

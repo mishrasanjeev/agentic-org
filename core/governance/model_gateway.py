@@ -708,7 +708,12 @@ async def cheapest_healthy(policy: Policy, tenant_id: uuid.UUID | None) -> CostC
     from core.governance.model_gateway_records import model_health
     from core.governance.model_pricing import price_for, rank_key
 
+    # Only targets inside the policy's fence are candidates; a policy whose
+    # targets all stray outside it keeps them so the fence refuses the call.
     targets = list(policy.targets or ())
+    if policy.allowed_providers is not None:
+        inside = [t for t in targets if (normalise_provider(t.get("provider")) or "") in policy.allowed_providers]
+        targets = inside or targets
     threshold = (
         policy.max_failure_rate if policy.max_failure_rate is not None else settings.model_gateway_max_failure_rate
     )
@@ -863,15 +868,16 @@ async def _decide(
     else:
         provider, model = _apply(policy, provider, model, correlation_id)
         reason = f"policy {policy.name}"
-        if policy.allowed_providers is not None and (provider or "") not in policy.allowed_providers:
-            raise _refuse(
-                f"Model gateway: provider {provider or 'unknown'} is outside the providers policy "
-                f"{policy.name} allows.",
-                correlation_id=correlation_id,
-                policy=policy,
-                request=request,
-                dry_run=dry_run,
-            )
+    # The fence is checked after either selection, so a stored policy whose
+    # targets stray outside it still fails closed.
+    if policy is not None and policy.allowed_providers is not None and (provider or "") not in policy.allowed_providers:
+        raise _refuse(
+            f"Model gateway: provider {provider or 'unknown'} is outside the providers policy {policy.name} allows.",
+            correlation_id=correlation_id,
+            policy=policy,
+            request=request,
+            dry_run=dry_run,
+        )
     access_policy = _check_access(
         request, provider, model, policy_set.access, correlation_id=correlation_id, dry_run=dry_run
     )

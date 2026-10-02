@@ -9,9 +9,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   catalogue models (Gemini from the router's table), nothing per token for
   models inside the deployment, Azure deployments priced as their base model;
   `AGENTICORG_MODEL_PRICE_OVERRIDES_JSON` replaces list prices with negotiated
-  ones. The routing records and the direct router cost each call at its
-  model's price when one is known; the direct router used a flat rate for every
-  OpenAI model before (FINDINGS A-116).
+  ones (a negative or non-finite override is rejected). The routing records
+  cost each call at its model's price when one is known; the direct router
+  does so behind `AGENTICORG_MODEL_PRICING_FOR_ROUTER_COSTS` (off by default)
+  and otherwise keeps its historical flat rates (FINDINGS A-116).
 - `GET /api/v1/model-gateway/costs`: every catalogue model and every model seen
   in the records with its list price, blended rate and the observations over
   the window (calls, failures, failure rate, latency, cost), cheapest first.
