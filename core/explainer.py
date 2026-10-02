@@ -105,17 +105,21 @@ async def _call_llm_for_summary(
     reasoning_trace: list[str],
     output: dict[str, Any],
     tools_used: list[str],
+    *,
+    tenant_id: str | None = None,
 ) -> list[str] | None:
     """Try to call the configured LLM for a concise summary.
 
-    Returns a list of bullet strings, or None if LLM is unavailable.
+    The run's tenant goes with the call so the provider is resolved, and
+    residency is checked, for that tenant. Returns a list of bullet strings,
+    or None if LLM is unavailable.
     """
     try:
         import json as _json
 
         from core.langgraph.llm_factory import create_chat_model
 
-        llm = create_chat_model(model="")  # use default model
+        llm = create_chat_model(model="", tenant_id=tenant_id)  # the tenant's default model
         trace_text = "\n".join(reasoning_trace[:20])
         tools_text = ", ".join(tools_used) if tools_used else "(none)"
         output_text = _json.dumps(output, default=str)[:500]
@@ -151,6 +155,8 @@ async def generate_explanation(
     reasoning_trace: list[str],
     output: dict[str, Any],
     tools_used: list[str],
+    *,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate a plain-English explanation of an agent run.
 
@@ -158,12 +164,13 @@ async def generate_explanation(
         reasoning_trace: Raw list of strings from the agent run.
         output: The agent's output dict.
         tools_used: List of tool names that were called.
+        tenant_id: The run's tenant; the summary model call is made for it.
 
     Returns:
         dict with keys: bullets, confidence, tools_cited, readability_grade
     """
     # Attempt LLM summarisation; fall back to heuristic extraction
-    bullets = await _call_llm_for_summary(reasoning_trace, output, tools_used)
+    bullets = await _call_llm_for_summary(reasoning_trace, output, tools_used, tenant_id=tenant_id)
     if bullets is None:
         bullets = _fallback_bullets(reasoning_trace, output, tools_used)
 

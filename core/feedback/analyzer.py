@@ -95,7 +95,9 @@ async def analyze_feedback(
 
         from core.langgraph.llm_factory import create_chat_model
 
-        llm = create_chat_model(model="")
+        # The agent's tenant goes with the call: provider resolution and the
+        # residency check are the tenant's.
+        llm = create_chat_model(model="", tenant_id=tenant_id or None)
         prompt = _ANALYSIS_PROMPT.format(feedback_text=feedback_text)
         response = await llm.ainvoke(prompt)
         content = response.content if hasattr(response, "content") else str(response)

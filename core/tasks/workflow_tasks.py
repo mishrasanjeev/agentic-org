@@ -271,6 +271,55 @@ async def _timeout_workflow_event_async(run_id: str, step_id: str) -> dict:
         await state_store.close()
 
 
+async def _resume_halted_workflow_async(run_id: str) -> dict:
+    log = logger.bind(run_id=run_id)
+    store = _state_store()
+    await store.init()
+    try:
+        state = await store.load(run_id)
+        if not state:
+            log.warning("workflow_state_not_found")
+            return {"status": "error", "reason": "workflow_state_not_found"}
+        if state.get("status") != "running":
+            return {"status": "noop", "reason": f"run_status_{state.get('status')}"}
+        result = await _drive_engine_and_sync(store, run_id, "operator_halt", log)
+        if result.get("halted"):
+            log.info("workflow_still_halted_by_operator_override")
+            return {"status": "halted"}
+        return {"status": "resumed", "run_status": result.get("status")}
+    finally:
+        await store.close()
+
+
+def _halt_retry_countdown() -> int:
+    from core.config import settings
+
+    return max(1, int(settings.operator_halt_retry_seconds))
+
+
+@app.task(name="resume_halted_workflow", max_retries=None, **_task_retry_options())
+def resume_halted_workflow(self, run_id: str) -> dict:
+    """Re-drive a workflow halted by an operator override until it is released or the run is cancelled.
+
+    The hold lives in the queue, not in the API process: the run's durable
+    status stays ``running`` and this task retries on a fixed countdown
+    (``operator_halt_retry_seconds``) for as long as the override is active,
+    so a restart of the API process cannot strand the run.
+    """
+    try:
+        result = run_async(_resume_halted_workflow_async(run_id))
+    # enterprise-gate: broad-except-ok reason=celery-boundary-logs-then-reraises-for-autoretry
+    except Exception as exc:  # noqa: BLE001 - re-raised so Celery autoretry runs.
+        logger.error("resume_halted_workflow_failed", run_id=run_id, error=str(exc))
+        raise
+    if result.get("status") == "halted":
+        if self.request.is_eager:
+            # Eager (test) mode would re-run this body synchronously forever.
+            return {**result, "retry": "skipped_eager"}
+        raise self.retry(countdown=_halt_retry_countdown(), max_retries=None)
+    return result
+
+
 @app.task(name="timeout_workflow_event", **_task_retry_options())
 def timeout_workflow_event(self, run_id: str, step_id: str) -> dict:
     """Mark an event wait as timed_out and let the engine continue later."""

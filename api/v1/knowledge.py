@@ -69,7 +69,13 @@ def _ragflow_available() -> bool:
 
 
 async def _ragflow_allowed(tenant_id: str | None) -> bool:
-    """Residency: the managed retrieval service is an external provider and needs an attestation."""
+    """Residency: the managed retrieval service is an external provider and needs an attestation.
+
+    Every call that sends data to the service or reads tenant data back from
+    it (upload, search, list, statistics) asks here first. Deletion does not:
+    removing a document from the external index is the direction residency
+    wants, so a tenant whose attestation lapsed can still clear it out.
+    """
     from core.governance.residency import check_provider
 
     decision = await check_provider(tenant_id, "ragflow", kind="rag")
@@ -737,6 +743,7 @@ async def upload_document(
             ) from exc
         if existing is not None:
             old_doc_id = existing["document_id"]
+            # Deletion is not residency-gated (see _ragflow_allowed).
             if _ragflow_available():
                 try:
                     await _ragflow_delete(tenant_id, old_doc_id)
@@ -967,7 +974,7 @@ async def list_documents(
     rf_docs: list[dict[str, Any]] = []
     db_docs: list[dict[str, Any]] = []
 
-    if _ragflow_available():
+    if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             rf_docs = await _ragflow_list(tenant_id)
         except _RAGFLOW_ERRORS as exc:
@@ -1056,6 +1063,7 @@ async def list_documents(
 async def delete_document(doc_id: str, tenant_id: str = Depends(get_current_tenant)):
     """Delete a document from the knowledge base."""
     ragflow_deleted = False
+    # Deletion is not residency-gated (see _ragflow_allowed).
     if _ragflow_available():
         try:
             ragflow_deleted = await _ragflow_delete(tenant_id, doc_id)
@@ -1466,7 +1474,7 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     """
     docs: list[dict[str, Any]] = []
 
-    if _ragflow_available():
+    if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             docs = await _ragflow_list(tenant_id)
         except _RAGFLOW_ERRORS as exc:
@@ -1483,7 +1491,7 @@ async def knowledge_stats(tenant_id: str = Depends(get_current_tenant)):
     stats_source = "fallback"
 
     # Prefer real RAGFlow metrics when the service is up.
-    if _ragflow_available():
+    if _ragflow_available() and await _ragflow_allowed(tenant_id):
         stats = await _ragflow_dataset_stats(tenant_id)
         if stats is not None:
             chunk_count = stats["chunk_count"]

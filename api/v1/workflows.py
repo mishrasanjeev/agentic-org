@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import functools
 import uuid as _uuid
 from collections.abc import Awaitable, Callable
@@ -36,7 +35,6 @@ router = APIRouter()
 _log = structlog.get_logger()
 PAUSED_WORKFLOW_STATUSES = {"waiting_hitl", "waiting_delay", "waiting_event"}
 # How often a run held by an operator override re-checks the override.
-OPERATOR_HALT_POLL_SECONDS = 5.0
 TERMINAL_WORKFLOW_STATUSES = {"completed", "failed", "timed_out", "cancelled"}
 
 
@@ -709,10 +707,14 @@ async def _execute_workflow_bg(
         while True:
             step_result = await engine.execute_next(engine_run_id)
             if isinstance(step_result, dict) and step_result.get("halted"):
-                # An operator override holds the run; the durable status stays
-                # ``running`` and the next step is retried once it is released
-                # (or the run is cancelled, which the status re-read below sees).
-                await asyncio.sleep(OPERATOR_HALT_POLL_SECONDS)
+                # An operator override holds the run. The retry is queued as a
+                # worker task so a restart of this process cannot strand the
+                # run; the durable status stays ``running`` until the override
+                # is released or the run is cancelled.
+                from workflows.run_sync import schedule_halted_workflow_retry
+
+                schedule_halted_workflow_retry(engine_run_id)
+                break
 
             state = await state_store.load(engine_run_id)
             if not state:
