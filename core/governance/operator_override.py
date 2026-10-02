@@ -11,18 +11,25 @@ boundary (``core.langgraph.tool_adapter``) and ``ToolGateway.execute``. The HTTP
 run endpoints refuse early with 423 so a caller learns why before a run starts.
 
 Behaviour is off until ``operator_override.enabled`` is on for the tenant (an
-authority flag, operator-managed) or ``AGENTICORG_OPERATOR_OVERRIDE_ENABLED`` is
-set. With the control off ``check`` always allows and reads nothing.
+authority flag, operator-managed, read strictly) or
+``AGENTICORG_OPERATOR_OVERRIDE_ENABLED`` is set. With the control off ``check``
+always allows and reads nothing.
 
 Decision rules:
 
-* ``halt`` beats ``throttle`` when several overrides match one call.
+* ``halt`` beats ``throttle`` when several overrides match one call, and a halt
+  is re-checked at every enforcement point.
 * A throttle is a fixed window of ``limit_per_minute`` calls per override; the
-  counter is shared across replicas through Redis. In a strict runtime a Redis
-  failure blocks the call (fail closed); a relaxed runtime falls back to memory.
-* Overrides are read through a short Redis cache (``CACHE_TTL_SECONDS``) and
-  then the database. In a strict runtime a read failure blocks the call; a
-  relaxed runtime allows it and logs.
+  counter is shared across replicas through Redis and counts one logical
+  dispatch: an agent throttle is consumed once per agent run (``throttle_unit``
+  ``"agent"``), a provider or model throttle once per model call (``"model"``),
+  a connector, tool or pipeline throttle once per tool call (``"tool"``) and a
+  workflow throttle once per workflow step (``"workflow"``). A boundary that
+  passes no unit only applies halts. In a strict runtime a Redis failure blocks
+  the call (fail closed); a relaxed runtime falls back to memory.
+* Overrides, and the authority flag, are read through a short cache and then the
+  database. In a strict runtime a read failure blocks the call; a relaxed
+  runtime allows it and logs.
 
 Every block is metered (``agenticorg_operator_override_blocks_total``) and the
 change of an override is written as a signed audit row.
@@ -101,15 +108,43 @@ ALLOWED = OverrideDecision(blocked=False)
 
 
 async def enabled(tenant_id: uuid.UUID | str | None) -> bool:
-    """Whether the control is on for ``tenant_id`` (settings switch or authority flag)."""
+    """Whether the control is on for ``tenant_id`` (settings switch or authority flag).
+
+    The flag is read strictly: a lookup failure raises
+    ``core.feature_flags.FeatureFlagLookupError`` rather than reading as off, so
+    a store outage cannot silently lift an active override (``check`` fails
+    closed on it in a strict runtime).
+    """
     if settings.operator_override_enabled:
         return True
     tid = _as_uuid(tenant_id)
     if tid is None:
         return False
-    from core.feature_flags import is_enabled
+    # An authority flag: the global row and the tenant's row are read separately
+    # and the control is on when either enables it, so a tenant row can never
+    # switch off an operator's global setting (the pattern of the other
+    # authority flags). The strict reader raises FeatureFlagLookupError rather
+    # than reading an unreadable store as "off".
+    from core.feature_flags import load_flag_rows_strict, row_enabled
 
-    return await is_enabled(FLAG_KEY, tenant_id=tid, default=False)
+    rows = await load_flag_rows_strict(FLAG_KEY, tenant_id=tid)
+    subject = str(tid)
+    return row_enabled(FLAG_KEY, rows.global_row, subject_id=subject) or row_enabled(
+        FLAG_KEY, rows.tenant_row, subject_id=subject
+    )
+
+
+# The dispatch unit a throttle on each target kind is counted against.
+THROTTLE_UNITS: dict[str, str] = {
+    "provider": "model",
+    "model": "model",
+    "agent": "agent",
+    "all_agents": "agent",
+    "workflow": "workflow",
+    "connector": "tool",
+    "tool": "tool",
+    "tool_pipeline": "tool",
+}
 
 
 def _as_uuid(value: uuid.UUID | str | None) -> uuid.UUID | None:
@@ -258,8 +293,14 @@ async def check(
     workflow_id: str | None = None,
     connector: str | None = None,
     tool: str | None = None,
+    throttle_unit: str | None = None,
 ) -> OverrideDecision:
     """Decide whether an override blocks the call described by the keyword arguments.
+
+    Halts apply at every boundary. A throttle is counted only at the boundary
+    whose ``throttle_unit`` matches the override's target kind
+    (``THROTTLE_UNITS``), so one logical dispatch consumes one token; a boundary
+    with no unit ignores throttles.
 
     Without a tenant there is nothing to look up and the call is allowed; every
     production path carries the tenant. With the control off the call is allowed
@@ -268,9 +309,9 @@ async def check(
     tid = _as_uuid(tenant_id)
     if tid is None:
         return ALLOWED
-    if not await enabled(tid):
-        return ALLOWED
     try:
+        if not await enabled(tid):
+            return ALLOWED
         overrides = await active_overrides(tid)
     # enterprise-gate: broad-except-ok reason=override-read-failure-fails-closed-in-strict-runtime
     except Exception as exc:
@@ -300,6 +341,8 @@ async def check(
         _meter(o.target_kind, o.mode)
         return OverrideDecision(blocked=True, reason=_describe(o), override=o)
     for o in matched:
+        if throttle_unit is None or THROTTLE_UNITS.get(o.target_kind) != throttle_unit:
+            continue
         if await _throttled(tid, o):
             _meter(o.target_kind, o.mode)
             return OverrideDecision(blocked=True, reason=_describe(o), override=o)
@@ -311,7 +354,7 @@ def _meter(target_kind: str, mode: str) -> None:
         from observability.metrics import operator_override_blocks_total
 
         operator_override_blocks_total.labels(target_kind=target_kind, mode=mode).inc()
-    # enterprise-gate: broad-except-ok reason=metrics-never-change-an-enforcement-decision
+    # enterprise-gate: broad-except-ok reason=metrics-outage-degrades-to-an-unmetered-decision-never-changes-it
     except Exception:
         logger.debug("operator_override_metric_unavailable")
 
@@ -433,7 +476,8 @@ async def set_override(
             reason=row.reason,
         )
     await invalidate(tenant_id)
-    logger.warning("operator_override_set", tenant_id=str(tenant_id), **override.to_dict(), actor_id=actor_id)
+    # Identifiers and the free-form reason stay in the signed audit row.
+    logger.warning("operator_override_set", override_id=override.id, target_kind=target_kind, mode=mode)
     return override
 
 
@@ -476,7 +520,5 @@ async def release_override(tenant_id: uuid.UUID, override_id: uuid.UUID, *, acto
             reason=row.reason,
         )
     await invalidate(tenant_id)
-    logger.warning(
-        "operator_override_released", tenant_id=str(tenant_id), override_id=str(override_id), actor_id=actor_id
-    )
+    logger.warning("operator_override_released", override_id=str(override_id), target_kind=override.target_kind)
     return override

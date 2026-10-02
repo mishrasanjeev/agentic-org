@@ -130,7 +130,9 @@ class ToolGateway:
         # the whole pipeline is refused before any other check.
         from core.governance.operator_override import check as check_operator_override
 
-        override = await check_operator_override(tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name)
+        override = await check_operator_override(
+            tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name, throttle_unit="tool"
+        )
         if override.blocked:
             if self.audit:
                 await self.audit.log(

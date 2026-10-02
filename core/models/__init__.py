@@ -70,7 +70,6 @@ from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
 from core.models.dsar import DSARRequestRecord as DSARRequestRecord
 from core.models.feature_flag import FeatureFlag as FeatureFlag
-from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.feed import FeedEvent as FeedEvent
 from core.models.feedback import AgentFeedback as AgentFeedback
 from core.models.filing_approval import FilingApproval as FilingApproval
@@ -93,6 +92,7 @@ from core.models.oacp_operator_decision import OacpOperatorDecisionRecordRow as 
 from core.models.oacp_retention_disposition_decision import (
     OacpRetentionDispositionDecisionRecordRow as OacpRetentionDispositionDecisionRecordRow,
 )
+from core.models.operator_override import OperatorOverride as OperatorOverride
 from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration

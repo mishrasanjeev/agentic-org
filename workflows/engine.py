@@ -859,7 +859,9 @@ class WorkflowEngine:
         """
         from core.governance.operator_override import check as check_operator_override
 
-        override = await check_operator_override(state.get("tenant_id"), workflow_id=state.get("workflow_id"))
+        override = await check_operator_override(
+            state.get("tenant_id"), workflow_id=state.get("workflow_id"), throttle_unit="workflow"
+        )
         if not override.blocked:
             return None
         logger.warning(

@@ -44,10 +44,14 @@ def _app(scopes: list[str]) -> FastAPI:
 
     @app.middleware("http")
     async def _auth(request: Request, call_next):
-        request.state.auth_mode = "api_key"
+        request.state.auth_mode = app.state.auth_mode
+        request.state.claims = dict(app.state.claims)
         request.state.scopes = scopes
         request.state.tenant_id = str(TENANT)
         return await call_next(request)
+
+    app.state.auth_mode = "api_key"
+    app.state.claims = {"sub": "apikey:key_01"}
 
     app.include_router(api.router, prefix="/api/v1")
     app.dependency_overrides[get_current_tenant] = lambda: str(TENANT)
@@ -166,6 +170,8 @@ def test_set_and_release(session_rows):
     assert response.json()["mode"] == "throttle" and response.json()["limit_per_minute"] == 5
     kwargs = setter.await_args.kwargs
     assert kwargs["target_kind"] == "provider" and kwargs["mode"] == "throttle" and kwargs["limit_per_minute"] == 5
+    # A machine caller is attributed by its auth mode and authenticated subject.
+    assert kwargs["actor_id"] == "api_key:apikey:key_01"
     assert kwargs["expires_at"].tzinfo is not None
 
     session_rows[0].released_at = datetime.now(UTC)
@@ -176,3 +182,26 @@ def test_set_and_release(session_rows):
 
     with patch.object(api.overrides, "release_override", AsyncMock(return_value=None)):
         assert client.post(f"/api/v1/operator-overrides/{uuid.uuid4()}/release").status_code == 404
+
+
+def test_the_actor_is_the_authenticated_principal(session_rows):
+    app = _app(["agenticorg:admin"])
+    app.state.auth_mode = "legacy"
+    app.state.claims = {"sub": "ops@example.com", "agenticorg:user_id": str(uuid.uuid4()), "role": "admin"}
+    client = TestClient(app)
+    placed = Override(
+        id=str(uuid.uuid4()), target_kind="all_agents", target_id="", mode="halt", limit_per_minute=None, reason="drill"
+    )
+    session_rows.append(_row(id=uuid.UUID(placed.id), target_kind="all_agents", target_id=""))
+    body = {"target_kind": "all_agents", "reason": "incident 42"}
+    with patch.object(api.overrides, "set_override", AsyncMock(return_value=placed)) as setter:
+        assert client.post("/api/v1/operator-overrides", json=body).status_code == 201
+    assert setter.await_args.kwargs["actor_id"] == "user:" + app.state.claims["agenticorg:user_id"]
+
+    # No attributable caller: refused before any write.
+    app.state.auth_mode = ""
+    app.state.claims = {}
+    with patch.object(api.overrides, "set_override", AsyncMock(return_value=placed)) as setter:
+        response = client.post("/api/v1/operator-overrides", json=body)
+    assert response.status_code == 403
+    setter.assert_not_called()

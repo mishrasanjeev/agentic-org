@@ -68,10 +68,20 @@ and `azure_openai`, name the same provider.
 
 ## Decision rules
 
-- A halt beats a throttle when several overrides match one call.
+- A halt beats a throttle when several overrides match one call, and halts are
+  re-checked at every enforcement point.
 - A throttle is a fixed one-minute window per override, counted in Redis across
-  replicas. In a strict runtime a Redis failure blocks the call; a relaxed
-  runtime falls back to an in-memory window.
+  replicas, and counts one logical dispatch: an agent throttle once per agent run,
+  a provider or model throttle once per model call, a connector, tool or
+  pipeline throttle once per tool call, a workflow throttle once per workflow
+  step. The early HTTP refusals apply halts only. In a strict runtime a Redis
+  failure blocks the call; a relaxed runtime falls back to an in-memory window.
+- The authority flag is read strictly: with the deployment switch off, a flag
+  store that cannot be read blocks the call in a strict runtime rather than
+  reading as "control off".
+- Every change is attributed to the authenticated principal (`user:<id>` for a
+  human administrator, `<auth mode>:<subject>` for an API key or agent grant);
+  a request with no attributable caller is refused.
 - In a strict runtime a failure to read the overrides blocks the call (fail
   closed); a relaxed runtime allows it and logs `operator_override_read_failed`.
 - Blocks are counted in `agenticorg_operator_override_blocks_total{target_kind,mode}`.

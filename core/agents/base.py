@@ -131,7 +131,7 @@ class BaseAgent:
             from core.governance.operator_override import ERROR_CODE as OVERRIDE_ERROR_CODE
             from core.governance.operator_override import check as check_operator_override
 
-            override = await check_operator_override(self.tenant_id, agent_id=self.agent_id)
+            override = await check_operator_override(self.tenant_id, agent_id=self.agent_id, throttle_unit="agent")
             if override.blocked:
                 logger.warning("agent_execute_refused_operator_override", agent=self.agent_id, reason=override.reason)
                 trace.append(override.reason)

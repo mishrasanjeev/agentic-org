@@ -314,7 +314,9 @@ async def _execute_connector_tool(
     # connection setup, retry, or any provider side effect.
     from core.governance.operator_override import check as check_operator_override
 
-    override = await check_operator_override(tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name)
+    override = await check_operator_override(
+        tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name, throttle_unit="tool"
+    )
     if override.blocked:
         logger.warning(
             "connector_call_refused_operator_override", connector=connector_name, tool=tool_name, reason=override.reason
