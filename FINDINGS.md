@@ -1555,7 +1555,7 @@ Remove an entry in the pull request that fixes it.
   message, and a direct run returns HTTP 500 when it escapes. Callers cannot
   tell a spend cap from a model outage.
 - **Fix:** map `DailyBudgetExceeded` and `OperatorOverrideBlocked` to typed
-  results (`E2008` budget, `E1012` override) in the runner and to 429 / 423 in
+  results (`E2008` budget, `E1013` override) in the runner and to 429 / 423 in
   the API error handlers.
 
 ## A-112 — The workflow replanner calls the model provider directly

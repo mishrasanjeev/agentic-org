@@ -16,6 +16,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - `encryption_in_transit.mtls_internal` is false unless `AGENTICORG_MTLS=true` is set
   by a deployment with a mesh (FINDINGS A-114).
 
+### Fixed - Operator override error code
+- The operator override refusal is `E1013`. It had been registered as `E1012`,
+  the code the pseudonymisation refusal (`pseudonym_restore_failed`) already
+  carried, so a client could not tell a halted agent from a refused tool
+  argument.
 ### Added - Residency enforcement and provider attestations
 - `core/governance/residency.py`: with enforcement on, a provider is refused
   unless an administrator has attested, for the tenant's data region, that
