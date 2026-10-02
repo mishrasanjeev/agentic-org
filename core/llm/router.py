@@ -43,6 +43,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from core.config import external_keys, is_relaxed_env, settings
+from core.governance.operator_override import OperatorOverrideBlocked
 
 if TYPE_CHECKING:
     from core.pii.pseudonymiser import PseudonymSession
@@ -65,7 +66,9 @@ class LLMProviderConfigurationError(RuntimeError):
 
 def _is_transient_llm_failure(exc: Exception) -> bool:
     """Retry only transport failures and rate-limit/server responses."""
-    if isinstance(exc, (DailyBudgetExceeded, LLMProviderConfigurationError, ValueError, PermissionError)):
+    if isinstance(
+        exc, (DailyBudgetExceeded, LLMProviderConfigurationError, OperatorOverrideBlocked, ValueError, PermissionError)
+    ):
         return False
     if isinstance(exc, (TimeoutError, ConnectionError)):
         return True
@@ -635,6 +638,15 @@ class LLMRouter:
         # green pattern Foundation #8 forbids.
         if not any(prefix in model for prefix in ("gemini", "claude", "gpt")):
             raise ValueError(f"Unsupported model: {model}")
+
+        # Operator override: a halted or throttled provider or model is refused
+        # before any provider call, and never falls back to another model.
+        from core.governance.operator_override import check as check_operator_override
+
+        override = await check_operator_override(tenant_id, provider=_model_provider(model), model=model)
+        if override.blocked:
+            logger.warning("llm_call_refused_operator_override", model=model, reason=override.reason)
+            raise OperatorOverrideBlocked(override)
 
         # Foundation #7 PR-A: hermetic-CI seam. When the env flag is
         # set, short-circuit ALL providers to the deterministic fake

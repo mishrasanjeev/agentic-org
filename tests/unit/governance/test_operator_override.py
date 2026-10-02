@@ -1,0 +1,401 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Operator override: decisions, and the enforcement points that honour them.
+
+Everything here runs without a database or Redis: the active override list is
+patched at ``core.governance.operator_override.active_overrides`` and the
+control is switched on through ``settings.operator_override_enabled``.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import uuid
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from core.governance import operator_override as oo
+from core.governance.operator_override import (
+    ERROR_CODE,
+    OperatorOverrideBlocked,
+    Override,
+    OverrideDecision,
+    blocked_run_result,
+    check,
+    normalise_provider,
+)
+
+TENANT = uuid.uuid4()
+AGENT = str(uuid.uuid4())
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _override(kind: str, target: str = "", mode: str = "halt", limit: int | None = None) -> Override:
+    return Override(
+        id=str(uuid.uuid4()), target_kind=kind, target_id=target, mode=mode, limit_per_minute=limit, reason="drill"
+    )
+
+
+@pytest.fixture
+def control_on(monkeypatch):
+    monkeypatch.setattr(oo.settings, "operator_override_enabled", True)
+
+
+def _with(overrides: list[Override]):
+    return patch.object(oo, "active_overrides", AsyncMock(return_value=overrides))
+
+
+# ---------------------------------------------------------------------------
+# Decisions
+# ---------------------------------------------------------------------------
+
+
+class TestDecision:
+    def test_off_by_default_reads_nothing(self, monkeypatch):
+        monkeypatch.setattr(oo.settings, "operator_override_enabled", False)
+        loader = AsyncMock(return_value=[_override("all_agents")])
+        with (
+            patch.object(oo, "active_overrides", loader),
+            patch.object(oo, "is_enabled", AsyncMock(return_value=False), create=True),
+        ):
+            with patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)):
+                decision = asyncio.run(check(TENANT, agent_id=AGENT))
+        assert decision.blocked is False
+        loader.assert_not_called()
+
+    def test_authority_flag_turns_the_control_on(self, monkeypatch):
+        monkeypatch.setattr(oo.settings, "operator_override_enabled", False)
+        with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)), _with([_override("all_agents")]):
+            decision = asyncio.run(check(TENANT, agent_id=AGENT))
+        assert decision.blocked is True
+
+    def test_no_tenant_is_allowed(self, control_on):
+        with _with([_override("all_agents")]) as loader:
+            assert asyncio.run(check(None, agent_id=AGENT)).blocked is False
+            assert asyncio.run(check("not-a-uuid", agent_id=AGENT)).blocked is False
+        loader.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("kind", "target", "kwargs", "blocked"),
+        [
+            ("provider", "gemini", {"provider": "gemini", "model": "gemini-2.5-flash"}, True),
+            ("provider", "anthropic", {"provider": "claude", "model": "claude-sonnet"}, True),
+            ("provider", "openai", {"provider": "gpt", "model": "gpt-4o"}, True),
+            ("provider", "openai", {"provider": "gemini", "model": "gemini-2.5-flash"}, False),
+            ("model", "gemini-2.5-flash", {"provider": "gemini", "model": "Gemini-2.5-Flash"}, True),
+            ("model", "gemini-2.5-pro", {"provider": "gemini", "model": "gemini-2.5-flash"}, False),
+            ("agent", AGENT, {"agent_id": AGENT}, True),
+            ("agent", str(uuid.uuid4()), {"agent_id": AGENT}, False),
+            ("all_agents", "", {"agent_id": AGENT}, True),
+            ("all_agents", "", {"provider": "gemini"}, False),
+            ("workflow", "wf-1", {"workflow_id": "wf-1"}, True),
+            ("workflow", "wf-1", {"workflow_id": "wf-2"}, False),
+            ("connector", "mock", {"connector": "mock", "tool": "ownership"}, True),
+            ("connector", "hubspot", {"connector": "mock", "tool": "ownership"}, False),
+            ("tool", "ownership", {"connector": "mock", "tool": "ownership"}, True),
+            ("tool", "mock:ownership", {"connector": "mock", "tool": "ownership"}, True),
+            ("tool", "hubspot:ownership", {"connector": "mock", "tool": "ownership"}, False),
+            ("tool_pipeline", "", {"connector": "mock", "tool": "ownership"}, True),
+            ("tool_pipeline", "", {"agent_id": AGENT}, False),
+        ],
+    )
+    def test_matching(self, control_on, kind, target, kwargs, blocked):
+        with _with([_override(kind, target)]):
+            decision = asyncio.run(check(TENANT, **kwargs))
+        assert decision.blocked is blocked
+        if blocked:
+            assert decision.override is not None and decision.override.target_kind == kind
+            assert "halted" in decision.reason
+
+    def test_halt_beats_throttle(self, control_on):
+        throttle = _override("all_agents", mode="throttle", limit=1000)
+        halt = _override("agent", AGENT)
+        with _with([throttle, halt]), patch.object(oo, "_throttled", AsyncMock(return_value=False)):
+            decision = asyncio.run(check(TENANT, agent_id=AGENT))
+        assert decision.blocked and decision.override is halt
+
+    def test_throttle_blocks_above_the_window_limit(self, control_on):
+        throttle = _override("connector", "mock", mode="throttle", limit=2)
+        calls = iter([False, False, True])
+        with (
+            _with([throttle]),
+            patch("core.auth_state.check_window_rate", AsyncMock(side_effect=lambda *a, **k: next(calls))),
+        ):
+            first = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
+            second = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
+            third = asyncio.run(check(TENANT, connector="mock", tool="ownership"))
+        assert not first.blocked and not second.blocked and third.blocked
+        assert "throttled to 2 calls per minute" in third.reason
+
+    def test_throttle_counter_failure_fails_closed(self, control_on):
+        throttle = _override("connector", "mock", mode="throttle", limit=2)
+        with (
+            _with([throttle]),
+            patch("core.auth_state.check_window_rate", AsyncMock(side_effect=RuntimeError("redis down"))),
+        ):
+            assert asyncio.run(check(TENANT, connector="mock", tool="ownership")).blocked is True
+
+    def test_zero_limit_throttle_blocks_everything(self, control_on):
+        with _with([_override("provider", "gemini", mode="throttle", limit=0)]):
+            assert asyncio.run(check(TENANT, provider="gemini", model="gemini-2.5-flash")).blocked is True
+
+    def test_read_failure_fails_closed_in_strict_runtime(self, control_on, monkeypatch):
+        monkeypatch.setattr(oo.settings, "env", "production")
+        with patch.object(oo, "active_overrides", AsyncMock(side_effect=RuntimeError("db down"))):
+            decision = asyncio.run(check(TENANT, agent_id=AGENT))
+        assert decision.blocked is True and "could not be read" in decision.reason
+
+    def test_read_failure_allows_in_relaxed_runtime(self, control_on, monkeypatch):
+        monkeypatch.setattr(oo.settings, "env", "test")
+        with patch.object(oo, "active_overrides", AsyncMock(side_effect=RuntimeError("db down"))):
+            assert asyncio.run(check(TENANT, agent_id=AGENT)).blocked is False
+
+    def test_blocks_are_metered(self, control_on):
+        from observability.metrics import operator_override_blocks_total
+
+        before = operator_override_blocks_total.labels(target_kind="agent", mode="halt")._value.get()
+        with _with([_override("agent", AGENT)]):
+            asyncio.run(check(TENANT, agent_id=AGENT))
+        assert operator_override_blocks_total.labels(target_kind="agent", mode="halt")._value.get() == before + 1
+
+    def test_error_payload_and_run_result_shapes(self):
+        o = _override("agent", AGENT)
+        decision = OverrideDecision(blocked=True, reason="halted", override=o)
+        assert decision.to_error()["error"] == {"code": ERROR_CODE, "message": "halted"}
+        assert decision.to_error()["override"]["id"] == o.id
+        result = blocked_run_result(decision)
+        assert result["status"] == "operator_override" and result["error"] == "halted"
+        assert set(result) >= {
+            "output",
+            "confidence",
+            "reasoning_trace",
+            "tool_calls_log",
+            "tool_calls",
+            "hitl_trigger",
+            "performance",
+        }
+
+    def test_provider_aliases(self):
+        assert normalise_provider("claude") == "anthropic"
+        assert normalise_provider("GPT") == "openai"
+        assert normalise_provider("azure_openai") == "openai"
+        assert normalise_provider("gemini") == "gemini"
+
+
+class TestCache:
+    def test_cache_hit_skips_the_database(self):
+        cached = [_override("all_agents").to_dict()]
+        import json
+
+        redis = AsyncMock()
+        redis.get = AsyncMock(return_value=json.dumps(cached))
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(oo, "_load_from_db", AsyncMock()) as db,
+        ):
+            overrides = asyncio.run(oo.active_overrides(TENANT))
+        assert [o.to_dict() for o in overrides] == cached
+        db.assert_not_called()
+
+    def test_cache_miss_reads_the_database_and_fills_the_cache(self):
+        redis = AsyncMock()
+        redis.get = AsyncMock(return_value=None)
+        redis.set = AsyncMock()
+        rows = [_override("agent", AGENT)]
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(oo, "_load_from_db", AsyncMock(return_value=rows)),
+        ):
+            overrides = asyncio.run(oo.active_overrides(TENANT))
+        assert overrides == rows
+        redis.set.assert_awaited_once()
+        assert redis.set.await_args.kwargs["ex"] == oo.CACHE_TTL_SECONDS
+
+    def test_without_redis_the_database_is_read(self):
+        rows = [_override("agent", AGENT)]
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=None)),
+            patch.object(oo, "_load_from_db", AsyncMock(return_value=rows)),
+        ):
+            assert asyncio.run(oo.active_overrides(TENANT)) == rows
+
+
+# ---------------------------------------------------------------------------
+# Enforcement points
+# ---------------------------------------------------------------------------
+
+
+def _blocked(reason: str = "Operator override: agent halted (drill).") -> OverrideDecision:
+    return OverrideDecision(blocked=True, reason=reason, override=_override("agent", AGENT))
+
+
+class TestModelRouter:
+    def test_call_model_refuses_before_any_provider_call(self):
+        from core.llm.router import LLMRouter, _is_transient_llm_failure
+
+        router = LLMRouter()
+        with patch(
+            "core.governance.operator_override.check", AsyncMock(return_value=_blocked("provider halted"))
+        ) as chk:
+            with patch.object(router, "_call_provider", AsyncMock()) as provider:
+                with pytest.raises(OperatorOverrideBlocked):
+                    asyncio.run(
+                        router._call_model(
+                            "gemini-2.5-flash", [{"role": "user", "content": "hi"}], 0.1, 10, tenant_id=str(TENANT)
+                        )
+                    )
+        chk.assert_awaited_once()
+        assert chk.await_args.kwargs == {"provider": "gemini", "model": "gemini-2.5-flash"}
+        provider.assert_not_called()
+        # A block never triggers the fallback model.
+        assert _is_transient_llm_failure(OperatorOverrideBlocked(_blocked())) is False
+
+    def test_check_runs_after_model_validation(self):
+        src = (ROOT / "core" / "llm" / "router.py").read_text(encoding="utf-8")
+        body = src[src.index("async def _call_model(") :]
+        assert body.index('raise ValueError(f"Unsupported model') < body.index("check_operator_override(")
+
+
+class TestAgentRunner:
+    def test_run_agent_returns_the_blocked_result_before_building_the_graph(self):
+        src = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
+        body = src[src.index("async def run_agent(") : src.index("async def resume_agent(")]
+        assert body.index("gate_agent_run(") < body.index("check_operator_override(") < body.index("build_agent_graph(")
+        resume = src[src.index("async def resume_agent(") :]
+        assert resume.index("check_operator_override(") < resume.index("get_checkpointer()")
+
+    def test_run_agent_blocked(self):
+        from core.langgraph import runner
+
+        with patch("core.billing.metering.gate_agent_run", AsyncMock(return_value=None)):
+            with patch("core.governance.operator_override.check", AsyncMock(return_value=_blocked())):
+                with patch.object(runner, "build_agent_graph") as graph:
+                    result = asyncio.run(
+                        runner.run_agent(
+                            agent_id=AGENT,
+                            agent_type="finance",
+                            domain="finance",
+                            tenant_id=str(TENANT),
+                            system_prompt="x",
+                            authorized_tools=[],
+                            task_input={},
+                        )
+                    )
+        assert result["status"] == "operator_override"
+        assert result["override"]["target_kind"] == "agent"
+        graph.assert_not_called()
+
+
+class TestBaseAgent:
+    def test_execute_returns_a_failed_result_with_the_override_code(self):
+        from core.agents.base import BaseAgent
+        from core.schemas.messages import TargetAgent, TaskAssignment, TaskInput
+
+        agent = BaseAgent(agent_id=AGENT, tenant_id=str(TENANT), authorized_tools=[])
+        task = TaskAssignment(
+            message_id="msg-1",
+            correlation_id="corr-1",
+            workflow_run_id="run-1",
+            workflow_definition_id="wf-1",
+            step_id="s1",
+            step_index=0,
+            total_steps=1,
+            target_agent=TargetAgent(agent_id=AGENT, agent_type="finance", agent_token="test-token"),
+            task=TaskInput(action="probe", inputs={}),
+        )
+        with patch("core.governance.operator_override.check", AsyncMock(return_value=_blocked())):
+            with patch.object(agent, "_reason", AsyncMock(side_effect=AssertionError("must not run"))):
+                result = asyncio.run(agent.execute(task))
+        assert result.status == "failed"
+        assert result.error["code"] == ERROR_CODE
+
+
+class TestToolDispatch:
+    def test_connector_dispatch_refuses_and_audits(self):
+        from core.langgraph import tool_adapter
+
+        with patch("core.governance.operator_override.check", AsyncMock(return_value=_blocked("tool halted"))) as chk:
+            with patch.object(tool_adapter, "_audit_operator_override", AsyncMock()) as audit:
+                with patch.object(tool_adapter.ConnectorRegistry, "get") as registry:
+                    result = asyncio.run(
+                        tool_adapter._execute_connector_tool(
+                            "mock", "ownership", {}, None, tenant_id=str(TENANT), agent_id=AGENT
+                        )
+                    )
+        assert result["error"] == "operator_override" and result["message"] == "tool halted"
+        assert chk.await_args.kwargs == {"agent_id": AGENT, "connector": "mock", "tool": "ownership"}
+        audit.assert_awaited_once()
+        registry.assert_not_called()
+
+    def test_tool_gateway_refuses_with_the_error_code(self):
+        from auth.run_grants import NO_RUN_GRANT_FOR_TESTS
+        from core.tool_gateway.gateway import ToolGateway
+
+        gateway = ToolGateway(audit_logger=AsyncMock())
+        with patch("core.governance.operator_override.check", AsyncMock(return_value=_blocked("pipeline halted"))):
+            result = asyncio.run(
+                gateway.execute(str(TENANT), AGENT, [], "mock", "ownership", {}, run_grant=NO_RUN_GRANT_FOR_TESTS)
+            )
+        assert result["error"]["code"] == ERROR_CODE and result["error"]["message"] == "pipeline halted"
+        gateway.audit.log.assert_awaited_once()
+        assert gateway.audit.log.await_args.kwargs["action"] == "operator_override"
+
+
+class TestWorkflowEngine:
+    def test_halted_run_keeps_its_status_and_executes_no_step(self):
+        from workflows.engine import WorkflowEngine
+
+        engine = WorkflowEngine.__new__(WorkflowEngine)
+        state = {
+            "id": "wfr_1",
+            "status": "running",
+            "tenant_id": str(TENANT),
+            "workflow_id": "wf-1",
+            "step_results": {"a": {}},
+        }
+        with patch(
+            "core.governance.operator_override.check", AsyncMock(return_value=_blocked("workflow halted"))
+        ) as chk:
+            halted = asyncio.run(engine._operator_halt(state, "b"))
+        assert halted == {
+            "status": "running",
+            "halted": True,
+            "override": halted["override"],
+            "error": "workflow halted",
+            "step_results": {"a": {}},
+        }
+        assert chk.await_args.kwargs == {"workflow_id": "wf-1"}
+        with patch("core.governance.operator_override.check", AsyncMock(return_value=oo.ALLOWED)):
+            assert asyncio.run(engine._operator_halt(state, "b")) is None
+
+    def test_both_loops_check_before_executing_a_step(self):
+        src = (ROOT / "workflows" / "engine.py").read_text(encoding="utf-8")
+        assert src.count("halted = await self._operator_halt(state, step_id)") == 2
+        for marker in ("async def _execute_unguarded(", "async def _execute_next_unguarded("):
+            body = src[src.index(marker) :]
+            assert body.index("self._operator_halt(") < body.index("self._execute_with_retry(")
+
+    def test_background_loop_waits_while_halted(self):
+        src = (ROOT / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
+        assert 'step_result.get("halted")' in src and "OPERATOR_HALT_POLL_SECONDS" in src
+
+
+class TestMigration:
+    def test_revision_chain_and_rls(self):
+        import importlib.util
+
+        path = ROOT / "migrations" / "versions" / "v6_z32_operator_overrides.py"
+        spec = importlib.util.spec_from_file_location("v6_z32_operator_overrides", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.revision == "v6z32_operator_overrides" and len(module.revision) <= 32
+        assert module.down_revision == "v6z31_a2a_buyers"
+        src = path.read_text(encoding="utf-8")
+        assert "ALTER TABLE operator_overrides ENABLE ROW LEVEL SECURITY" in src
+        assert "FORCE ROW LEVEL SECURITY" in src and "WITH CHECK" in src
+
+    def test_flag_is_operator_managed(self):
+        from core.feature_flags import is_reserved_flag_key
+
+        assert is_reserved_flag_key(oo.FLAG_KEY)

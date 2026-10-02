@@ -299,6 +299,7 @@ async def _execute_connector_tool(
     company_id: str | None = None,
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
+    agent_id: str = "",
 ) -> dict[str, Any]:
     """Execute a connector tool and return the result.
 
@@ -311,6 +312,20 @@ async def _execute_connector_tool(
     # This is the connector dispatch boundary used by LangGraph and workflow
     # connector steps. Evaluate policy before registry lookup, cache access,
     # connection setup, retry, or any provider side effect.
+    from core.governance.operator_override import check as check_operator_override
+
+    override = await check_operator_override(tenant_id, agent_id=agent_id, connector=connector_name, tool=tool_name)
+    if override.blocked:
+        logger.warning(
+            "connector_call_refused_operator_override", connector=connector_name, tool=tool_name, reason=override.reason
+        )
+        await _audit_operator_override(tenant_id, connector_name, tool_name, override.reason)
+        return {
+            "error": "operator_override",
+            "message": override.reason,
+            "override": override.override.to_dict() if override.override else None,
+        }
+
     if is_strict_runtime_env(settings.env) or tenant_id is not None or company_id is not None or domain is not None:
         decision = await evaluate_action(
             f"{connector_name}:{tool_name}",
@@ -849,6 +864,34 @@ async def execute_agent_tool(
         company_id=company_id,
         domain=domain,
         capability_authorization=capability_authorization,
+        agent_id=agent_id,
+    )
+
+
+async def _audit_operator_override(tenant_id: str | None, connector_name: str, tool_name: str, reason: str) -> None:
+    """Audit a tool call refused by an operator override, in the tenant's RLS context."""
+    import uuid as _uuid
+
+    from core.database import get_tenant_session
+    from core.tool_gateway.audit_logger import AuditLogger
+
+    session_factory = None
+    if tenant_id:
+        try:
+            tid = _uuid.UUID(str(tenant_id))
+        except ValueError:
+            tid = None
+        if tid is not None:
+
+            def session_factory() -> Any:
+                return get_tenant_session(tid)
+
+    await AuditLogger(session_factory).log(
+        tenant_id=str(tenant_id or ""),
+        tool_name=tool_name,
+        action="operator_override",
+        outcome="blocked",
+        details={"reason": reason, "connector": connector_name},
     )
 
 
@@ -952,6 +995,7 @@ def build_tools_for_agent(
     capability_authorization: CapabilityAuthorization | None = None,
     pii_token_map: dict[str, str] | None = None,
     pseudonymiser: PseudonymSession | None = None,
+    agent_id: str = "",
 ) -> list[StructuredTool]:
     """Build LangChain tools from an agent's authorized_tools list.
 
@@ -1075,6 +1119,7 @@ def build_tools_for_agent(
                     company_id=company_id,
                     domain=domain,
                     capability_authorization=capability_authorization,
+                    agent_id=agent_id,
                 )
                 if pseudonymiser is not None:
                     return await pseudonymiser.pseudonymise_value(result)

@@ -36,6 +36,7 @@ from auth.run_grants import (
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.governance.operator_override import check as check_operator_override
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.approval_policy import ApprovalPolicy
 from core.models.audit import AuditLog
@@ -3282,6 +3283,17 @@ async def run_agent(
                     f"{_effective_shadow_accuracy_floor(agent_row)}). "
                     "Rollback to shadow and retest before running live work."
                 ),
+            )
+
+        override = await check_operator_override(tenant_id, agent_id=str(agent_id))
+        if override.blocked:
+            raise HTTPException(
+                423,
+                detail={
+                    "error": "operator_override",
+                    "message": override.reason,
+                    "override": override.override.to_dict() if override.override else None,
+                },
             )
 
         agent_config = _agent_to_dict(agent_row)

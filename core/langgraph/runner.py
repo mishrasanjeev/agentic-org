@@ -256,6 +256,15 @@ async def run_agent(
     if limit_block is not None:
         return limit_block
 
+    # --- Step 0b: operator override (halt or throttle on this agent or every agent) ---
+    from core.governance.operator_override import blocked_run_result
+    from core.governance.operator_override import check as check_operator_override
+
+    override = await check_operator_override(tenant_id, agent_id=agent_id)
+    if override.blocked:
+        logger.warning("agent_run_refused_operator_override", agent_id=agent_id, reason=override.reason)
+        return blocked_run_result(override)
+
     run_thread_id = _run_thread_id(tenant_id, thread_id, agent_id)
 
     # PRD F-1: resolve the grant the run's tool calls are checked against.
@@ -388,6 +397,7 @@ async def run_agent(
             domain=domain,
             pii_token_map=pii_token_map if pii_mode == "before_llm" and pseudonymiser is None else None,
             llm_provider=llm_provider,
+            agent_id=agent_id,
             run_grant=run_grant,
             pseudonymiser=pseudonymiser,
         )
@@ -737,6 +747,14 @@ async def resume_agent(
             logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=reason)
             return {"status": "failed", "error": reason, "reason": reason}
 
+    from core.governance.operator_override import blocked_run_result
+    from core.governance.operator_override import check as check_operator_override
+
+    override = await check_operator_override(tenant_id, agent_id=agent_id)
+    if override.blocked:
+        logger.warning("agent_resume_refused_operator_override", agent_id=agent_id, reason=override.reason)
+        return blocked_run_result(override)
+
     config = {"configurable": {"thread_id": thread_id}}
     # The configured store (core/langgraph/checkpointer.py); raises rather
     # than falling back to memory when a Postgres store is unavailable.
@@ -776,6 +794,7 @@ async def resume_agent(
     try:
         graph = build_agent_graph(
             system_prompt=system_prompt,
+            agent_id=agent_id,
             authorized_tools=authorized_tools,
             llm_model=llm_model,
             confidence_floor=confidence_floor,

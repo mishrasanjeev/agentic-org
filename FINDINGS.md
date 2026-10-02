@@ -1534,3 +1534,37 @@ Remove an entry in the pull request that fixes it.
   refuse a grant request for a tool-qualified scope the agent did not
   register.
 
+## A-110 — A paused agent can still be run directly
+
+- **Found:** mapping the enforcement points for the operator override (2026-10-02).
+- **What:** `POST /agents/{id}/run` refuses only `retired` agents; `paused`
+  is respected by the task router and keyword chat routing, but a direct run,
+  a chat with an explicit `agent_id`, an A2A task, an MCP call and a workflow
+  agent step all run a paused agent. The console's per-agent pause therefore
+  stops routing, not execution.
+- **Fix:** refuse `paused` at the run endpoint and in the runner's step 0, behind
+  a flag until the next minor; the operator override (`all_agents` or `agent`
+  halt) is the control that stops execution today.
+
+## A-111 — The provider daily spend cap is never surfaced as an error status
+
+- **Found:** same work.
+- **What:** `DailyBudgetExceeded` says it is "surfaced as HTTP 429 by the API
+  layer", but no handler catches it: `BaseAgent` folds it into a failed result
+  with code `E5001`, the LangGraph runner returns `status: failed` with the
+  message, and a direct run returns HTTP 500 when it escapes. Callers cannot
+  tell a spend cap from a model outage.
+- **Fix:** map `DailyBudgetExceeded` and `OperatorOverrideBlocked` to typed
+  results (`E2008` budget, `E1012` override) in the runner and to 429 / 423 in
+  the API error handlers.
+
+## A-112 — The workflow replanner calls the model provider directly
+
+- **Found:** same work.
+- **What:** `workflows/replanner.py` imports the provider SDK and calls it
+  directly, bypassing `LLMRouter` and `create_chat_model`: no tenant
+  credentials, no routing policy, no spend cap, no pseudonymisation and no
+  operator override apply to replanning calls.
+- **Fix:** route the replanner through `LLMRouter.complete` with the run's
+  tenant, behind a flag, and delete the direct SDK call.
+

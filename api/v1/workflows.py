@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import uuid as _uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -24,6 +26,7 @@ from auth.run_grants import (
     caller_grant_from_request,
 )
 from core.database import get_tenant_session
+from core.governance.operator_override import check as check_operator_override
 from core.models.company import Company
 from core.models.workflow import StepExecution, WorkflowDefinition, WorkflowRun
 from core.ownership import Caller, caller_from_request, can_view_agent
@@ -32,6 +35,8 @@ from core.schemas.api import PaginatedResponse, WorkflowCreate, WorkflowRunTrigg
 router = APIRouter()
 _log = structlog.get_logger()
 PAUSED_WORKFLOW_STATUSES = {"waiting_hitl", "waiting_delay", "waiting_event"}
+# How often a run held by an operator override re-checks the override.
+OPERATOR_HALT_POLL_SECONDS = 5.0
 TERMINAL_WORKFLOW_STATUSES = {"completed", "failed", "timed_out", "cancelled"}
 
 
@@ -653,9 +658,10 @@ def _bound_to_run_caller(
         definition: dict,
         trigger_payload: dict | None,
         caller: CallerGrant = NO_CALLER,
+        **kwargs: Any,
     ) -> None:
         with bind_caller_grant(caller):
-            await execute(tenant_id, run_id, definition, trigger_payload, caller)
+            await execute(tenant_id, run_id, definition, trigger_payload, caller, **kwargs)
 
     return _bound
 
@@ -667,6 +673,7 @@ async def _execute_workflow_bg(
     definition: dict,
     trigger_payload: dict | None,
     caller: CallerGrant = NO_CALLER,
+    workflow_id: str | None = None,
 ) -> None:
     """Execute workflow steps in background and sync each result to the DB."""
     from core.models.agent import Agent
@@ -687,6 +694,7 @@ async def _execute_workflow_bg(
             tenant_id=str(tenant_id),
             workflow_run_id=str(run_id),
             caller_grant=caller.marker(),
+            workflow_id=workflow_id,
         )
 
         # Persist engine_run_id so HITL resume can find it later
@@ -699,7 +707,12 @@ async def _execute_workflow_bg(
         steps_def = {s["id"]: s for s in definition.get("steps", [])}
 
         while True:
-            await engine.execute_next(engine_run_id)
+            step_result = await engine.execute_next(engine_run_id)
+            if isinstance(step_result, dict) and step_result.get("halted"):
+                # An operator override holds the run; the durable status stays
+                # ``running`` and the next step is retried once it is released
+                # (or the run is cancelled, which the status re-read below sees).
+                await asyncio.sleep(OPERATOR_HALT_POLL_SECONDS)
 
             state = await state_store.load(engine_run_id)
             if not state:
@@ -866,6 +879,16 @@ async def run_workflow(
             raise HTTPException(404, "Workflow definition not found")
         if not wf.is_active:
             raise HTTPException(409, "Workflow definition is inactive")
+        override = await check_operator_override(tenant_id, workflow_id=str(wf_id))
+        if override.blocked:
+            raise HTTPException(
+                423,
+                detail={
+                    "error": "operator_override",
+                    "message": override.reason,
+                    "override": override.override.to_dict() if override.override else None,
+                },
+            )
 
         definition = wf.definition
 
@@ -936,7 +959,7 @@ async def run_workflow(
 
     # Execute workflow steps in the background
     background_tasks.add_task(
-        _execute_workflow_bg, tid, run.id, definition, body.payload, run_caller
+        _execute_workflow_bg, tid, run.id, definition, body.payload, run_caller, workflow_id=str(wf_id)
     )
 
     return {

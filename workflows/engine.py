@@ -138,6 +138,7 @@ class WorkflowEngine:
         tenant_id: str | None = None,
         workflow_run_id: str | None = None,
         caller_grant: dict[str, str] | None = None,
+        workflow_id: str | None = None,
     ) -> str:
         """Parse a workflow definition, persist initial state, and return the run_id.
 
@@ -162,6 +163,8 @@ class WorkflowEngine:
             state["tenant_id"] = tenant_id
         if workflow_run_id:
             state["workflow_run_id"] = workflow_run_id
+        if workflow_id:
+            state["workflow_id"] = workflow_id
         if caller_grant:
             from auth.run_grants import CALLER_GRANT_KEY
 
@@ -218,6 +221,10 @@ class WorkflowEngine:
                         status=live_status,
                     )
                     return {"status": live_status, "step_results": state["step_results"]}
+
+            halted = await self._operator_halt(state, step_id)
+            if halted is not None:
+                return halted
 
             # ---- timeout check ----
             if timeout_hours is not None:
@@ -442,6 +449,10 @@ class WorkflowEngine:
                     metadata={"event": "step_skipped", "reason": dep_failure},
                 )
                 continue
+
+            halted = await self._operator_halt(state, step_id)
+            if halted is not None:
+                return halted
 
             context = self._build_context(state)
 
@@ -838,6 +849,32 @@ class WorkflowEngine:
             if result.get("action"):
                 state_result["action"] = result.get("action")
         return state_result
+
+    async def _operator_halt(self, state: dict[str, Any], step_id: str) -> dict[str, Any] | None:
+        """Operator override on this workflow: stop before the step without changing the run's status.
+
+        The durable status stays ``running`` so the background executor can
+        retry the step once the override is released; a halted run is reported
+        with ``halted`` set and the override that stopped it.
+        """
+        from core.governance.operator_override import check as check_operator_override
+
+        override = await check_operator_override(state.get("tenant_id"), workflow_id=state.get("workflow_id"))
+        if not override.blocked:
+            return None
+        logger.warning(
+            "workflow_halted_by_operator_override",
+            run_id=state.get("id"),
+            step_id=step_id,
+            reason=override.reason,
+        )
+        return {
+            "status": state.get("status", "running"),
+            "halted": True,
+            "override": override.override.to_dict() if override.override else None,
+            "error": override.reason,
+            "step_results": state.get("step_results", {}),
+        }
 
     async def _live_status(self, run_id: str) -> str | None:
         latest = await self.state_store.load(run_id)
