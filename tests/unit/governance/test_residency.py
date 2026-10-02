@@ -55,7 +55,7 @@ class TestDecision:
         monkeypatch.setattr(res.settings, "residency_enforce", False)
         region = AsyncMock(return_value="IN")
         with (
-            patch("core.feature_flags.is_enabled", AsyncMock(return_value=False)),
+            patch("core.feature_flags.is_enabled_strict", AsyncMock(return_value=False)),
             patch.object(res, "tenant_data_region", region),
         ):
             assert asyncio.run(check_provider(TENANT, "openai")).blocked is False
@@ -64,7 +64,7 @@ class TestDecision:
     def test_authority_flag_turns_enforcement_on(self, monkeypatch):
         monkeypatch.setattr(res.settings, "residency_enforce", False)
         a, b = _with([])
-        with patch("core.feature_flags.is_enabled", AsyncMock(return_value=True)), a, b:
+        with patch("core.feature_flags.is_enabled_strict", AsyncMock(return_value=True)), a, b:
             decision = asyncio.run(check_provider(TENANT, "openai"))
         assert decision.blocked is True and "no active attestation" in decision.reason
 
@@ -129,6 +129,17 @@ class TestDecision:
         with a, b:
             asyncio.run(check_provider(TENANT, "openai"))
         assert residency_refusals_total.labels(reason="no_attestation")._value.get() == before + 1
+
+    def test_flag_lookup_failure_fails_closed_in_strict_runtime(self, monkeypatch):
+        from core.feature_flags import FeatureFlagLookupError
+
+        monkeypatch.setattr(res.settings, "residency_enforce", False)
+        with patch("core.feature_flags.is_enabled_strict", AsyncMock(side_effect=FeatureFlagLookupError("down"))):
+            monkeypatch.setattr(res.settings, "env", "test")
+            assert asyncio.run(check_provider(TENANT, "openai")).blocked is False
+            monkeypatch.setattr(res.settings, "env", "production")
+            decision = asyncio.run(check_provider(TENANT, "openai"))
+        assert decision.blocked is True and "flag could not be read" in decision.reason
 
 
 class TestRegions:

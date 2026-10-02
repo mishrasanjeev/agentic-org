@@ -107,7 +107,9 @@ LOCAL_PROVIDERS: frozenset[str] = frozenset(
 )
 
 _REGION_CACHE_TTL_S = 60.0
+# enterprise-gate: process-local-ok reason=bounded-ttl-cache-of-governance-config-reads-refilled-from-the-database
 _region_cache: dict[str, tuple[str, float]] = {}
+# enterprise-gate: process-local-ok reason=bounded-ttl-cache-of-attestation-reads-refilled-from-the-database
 _attestation_cache: dict[str, tuple[list[Attestation], float]] = {}
 
 
@@ -180,15 +182,21 @@ def cloud_region_conforms(data_region: str, cloud_region: str | None) -> bool | 
 
 
 async def enabled(tenant_id: uuid.UUID | str | None) -> bool:
-    """Whether enforcement is on for ``tenant_id`` (settings switch or authority flag)."""
+    """Whether enforcement is on for ``tenant_id`` (settings switch or authority flag).
+
+    The flag is read strictly: a lookup failure raises
+    ``core.feature_flags.FeatureFlagLookupError`` rather than reading as off, so a
+    store outage cannot silently lift enforcement (``check_provider`` fails closed
+    on it in a strict runtime).
+    """
     if settings.residency_enforce:
         return True
     tid = _as_uuid(tenant_id)
     if tid is None:
         return False
-    from core.feature_flags import is_enabled
+    from core.feature_flags import is_enabled_strict
 
-    return await is_enabled(FLAG_KEY, tenant_id=tid, default=False)
+    return await is_enabled_strict(FLAG_KEY, tenant_id=tid)
 
 
 async def _load_region(tenant_id: uuid.UUID) -> str:
@@ -290,11 +298,19 @@ async def check_provider(tenant_id: uuid.UUID | str | None, provider: str, *, ki
     if not key:
         return ALLOWED
     tid = _as_uuid(tenant_id)
-    if not await enabled(tid):
+    strict = is_strict_runtime_env(settings.env)
+    try:
+        on = await enabled(tid)
+    # enterprise-gate: broad-except-ok reason=flag-read-failure-fails-closed-in-strict-runtime
+    except Exception as exc:
+        logger.error("residency_flag_read_failed", provider=key, error_type=type(exc).__name__)
+        if strict:
+            return _fail(key, "", "Residency: the enforcement flag could not be read; refusing the provider.")
+        return ALLOWED
+    if not on:
         return ALLOWED
     if is_local_provider(key):
         return ALLOWED
-    strict = is_strict_runtime_env(settings.env)
     try:
         region = await tenant_data_region(tid)
     # enterprise-gate: broad-except-ok reason=region-read-failure-fails-closed-in-strict-runtime
@@ -343,7 +359,7 @@ def _meter(provider: str, reason: str) -> None:
         from observability.metrics import residency_refusals_total
 
         residency_refusals_total.labels(reason=reason).inc()
-    # enterprise-gate: broad-except-ok reason=metrics-never-change-an-enforcement-decision
+    # enterprise-gate: broad-except-ok reason=metrics-outage-degrades-to-an-unmetered-decision-never-changes-it
     except Exception:
         logger.debug("residency_metric_unavailable", provider=provider)
 
@@ -469,7 +485,8 @@ async def set_attestation(
         )
         attestation = _attestation(row)
     invalidate(tenant_id)
-    logger.warning("residency_attestation_set", tenant_id=str(tenant_id), **attestation.to_dict(), actor_id=actor_id)
+    # Identifiers and the evidence reference stay in the signed audit row.
+    logger.warning("residency_attestation_set", attestation_id=attestation.id, provider=key, data_region=region)
     return attestation
 
 
@@ -504,7 +521,5 @@ async def revoke_attestation(tenant_id: uuid.UUID, attestation_id: uuid.UUID, *,
         )
         attestation = _attestation(row)
     invalidate(tenant_id)
-    logger.warning(
-        "residency_attestation_revoked", tenant_id=str(tenant_id), attestation_id=str(attestation_id), actor_id=actor_id
-    )
+    logger.warning("residency_attestation_revoked", attestation_id=str(attestation_id), provider=attestation.provider)
     return attestation

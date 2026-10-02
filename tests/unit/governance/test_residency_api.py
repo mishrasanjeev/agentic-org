@@ -44,10 +44,14 @@ def _app(scopes: list[str]) -> FastAPI:
 
     @app.middleware("http")
     async def _auth(request: Request, call_next):
-        request.state.auth_mode = "api_key"
+        request.state.auth_mode = app.state.auth_mode
+        request.state.claims = dict(app.state.claims)
         request.state.scopes = scopes
         request.state.tenant_id = str(TENANT)
         return await call_next(request)
+
+    app.state.auth_mode = "api_key"
+    app.state.claims = {"sub": "apikey:key_01"}
 
     app.include_router(api.router, prefix="/api/v1")
     app.dependency_overrides[get_current_tenant] = lambda: str(TENANT)
@@ -161,6 +165,7 @@ def test_set_and_revoke(session_rows):
     assert response.json()["provider"] == "gemini" and response.json()["active"] is True
     kwargs = setter.await_args.kwargs
     assert kwargs["data_region"] == "IN" and kwargs["no_training"] is True and kwargs["expires_at"].tzinfo is not None
+    assert kwargs["actor_id"] == "api_key:apikey:key_01"
 
     session_rows[0].revoked_at = datetime.now(UTC)
     with patch.object(api.residency, "revoke_attestation", AsyncMock(return_value=placed)) as revoker:
@@ -170,3 +175,14 @@ def test_set_and_revoke(session_rows):
 
     with patch.object(api.residency, "revoke_attestation", AsyncMock(return_value=None)):
         assert client.post(f"/api/v1/residency/attestations/{uuid.uuid4()}/revoke").status_code == 404
+
+
+def test_no_attributable_caller_is_refused(session_rows):
+    app = _app(["agenticorg:admin"])
+    app.state.auth_mode = ""
+    app.state.claims = {}
+    client = TestClient(app)
+    with patch.object(api.residency, "set_attestation", AsyncMock()) as setter:
+        response = client.post("/api/v1/residency/attestations", json={"provider": "gemini", "data_region": "IN"})
+    assert response.status_code == 403
+    setter.assert_not_called()

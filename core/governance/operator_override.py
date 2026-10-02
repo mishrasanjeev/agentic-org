@@ -311,7 +311,7 @@ def _meter(target_kind: str, mode: str) -> None:
         from observability.metrics import operator_override_blocks_total
 
         operator_override_blocks_total.labels(target_kind=target_kind, mode=mode).inc()
-    # enterprise-gate: broad-except-ok reason=metrics-never-change-an-enforcement-decision
+    # enterprise-gate: broad-except-ok reason=metrics-outage-degrades-to-an-unmetered-decision-never-changes-it
     except Exception:
         logger.debug("operator_override_metric_unavailable")
 

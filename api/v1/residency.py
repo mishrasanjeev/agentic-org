@@ -14,7 +14,7 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 
@@ -65,9 +65,22 @@ class AttestationOut(BaseModel):
     active: bool
 
 
-def _actor(caller: Caller | None) -> str:
+def _actor(request: Request, caller: Caller | None) -> str:
+    """The authenticated principal an attestation change is attributed to.
+
+    A human administrator is recorded by user id; a machine caller by its
+    authenticated subject, prefixed with its auth mode. A request with neither is
+    refused: a control-plane action with no attributable actor is not performed.
+    """
     user_id = getattr(caller, "user_id", None)
-    return str(user_id) if user_id else "admin"
+    if user_id:
+        return f"user:{user_id}"
+    claims = getattr(request.state, "claims", None) or {}
+    subject = str(claims.get("sub") or "").strip()
+    auth_mode = str(getattr(request.state, "auth_mode", None) or "").strip()
+    if subject and auth_mode:
+        return f"{auth_mode}:{subject}"
+    raise HTTPException(403, "A residency attestation needs an attributable caller")
 
 
 def _out(row: ProviderAttestation) -> AttestationOut:
@@ -137,10 +150,12 @@ async def list_attestations(
 )
 async def set_attestation(
     body: AttestationIn,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ) -> AttestationOut:
     tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
     try:
         placed = await residency.set_attestation(
             tid,
@@ -149,7 +164,7 @@ async def set_attestation(
             in_region=body.in_region,
             no_training=body.no_training,
             evidence_ref=body.evidence_ref,
-            actor_id=_actor(caller),
+            actor_id=actor_id,
             expires_at=body.expires_at,
         )
     except ValueError as exc:
@@ -172,11 +187,12 @@ async def set_attestation(
 )
 async def revoke_attestation(
     attestation_id: uuid.UUID,
+    request: Request,
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ) -> AttestationOut:
     tid = uuid.UUID(tenant_id)
-    revoked = await residency.revoke_attestation(tid, attestation_id, actor_id=_actor(caller))
+    revoked = await residency.revoke_attestation(tid, attestation_id, actor_id=_actor(request, caller))
     if revoked is None:
         raise HTTPException(404, "No active attestation with that id")
     async with get_tenant_session(tid) as session:
