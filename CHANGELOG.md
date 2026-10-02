@@ -21,9 +21,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   unless an administrator has attested, for the tenant's data region, that
   processing stays in region and the provider does not train on the data.
   Enforced at the AI credential resolver (every LLM, embedding, retrieval and
-  speech credential), the managed retrieval service's upload and search, the
-  third-party tool hub and tracing export; providers inside the deployment
-  need no attestation. Strict runtimes fail closed when the region or the
+  speech credential, with the tenant carried through the explanation, SOP
+  parsing and feedback analysis model calls), the managed retrieval service's
+  upload, search, list and statistics (deletion stays open), the third-party
+  tool hub at the dispatch boundary and tracing export (off deployment-wide;
+  under tenant-scoped enforcement an enforcing or unread tenant's payloads are
+  withheld); providers inside the deployment need no attestation. Strict runtimes fail closed when the region or the
   attestations cannot be read. Refusals: `agenticorg_residency_refusals_total`.
 - `GET /api/v1/residency/status`, `GET/POST /api/v1/residency/attestations`,
   `POST .../{id}/revoke` (tenant admin); each change writes a signed audit row.
@@ -45,9 +48,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (calls per minute) mode, with a reason and an optional expiry. Enforced at
   the model router and the LangGraph reason node (never falls back to another
   model), the agent runner and resume path, `BaseAgent.execute`, the workflow
-  engine before every step (the run waits and retries once released), the
-  connector dispatch boundary and `ToolGateway.execute`; the agent and workflow
-  run endpoints refuse early with 423. Halt beats throttle; a throttle counts
+  engine before every step (the run keeps status `running` and the
+  `resume_halted_workflow` worker task retries it every
+  `AGENTICORG_OPERATOR_HALT_RETRY_SECONDS`, 30 s by default, until released or
+  cancelled), the connector dispatch boundary and `ToolGateway.execute`; the
+  agent and workflow run endpoints, and chat before its deterministic route,
+  refuse early with 423. Halt beats throttle; a throttle counts
   in Redis across replicas and fails closed in a strict runtime; blocks are
   counted in `agenticorg_operator_override_blocks_total`.
 - `POST/GET /api/v1/operator-overrides`, `GET .../status`,

@@ -2246,7 +2246,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-history-read",
     "scope": "chat.history.sensitive.read",
-    "source_line": 1044,
+    "source_line": 1061,
     "tenant_required": true
   },
   {
@@ -2264,7 +2264,7 @@
     "public_exempt_reason": null,
     "rate_limit": "chat-query",
     "scope": "chat.agent_execution.external_tool_sensitive.write",
-    "source_line": 613,
+    "source_line": 614,
     "tenant_required": true
   },
   {
@@ -4766,7 +4766,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 957,
+    "source_line": 964,
     "tenant_required": true
   },
   {
@@ -4784,7 +4784,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1056,
+    "source_line": 1063,
     "tenant_required": true
   },
   {
@@ -4802,7 +4802,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1342,
+    "source_line": 1350,
     "tenant_required": false
   },
   {
@@ -4820,7 +4820,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1284,
+    "source_line": 1292,
     "tenant_required": true
   },
   {
@@ -4838,7 +4838,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1455,
+    "source_line": 1463,
     "tenant_required": true
   },
   {
@@ -4856,7 +4856,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 545,
+    "source_line": 551,
     "tenant_required": true
   },
   {
@@ -4874,7 +4874,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 571,
+    "source_line": 577,
     "tenant_required": true
   },
   {
@@ -6494,7 +6494,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sop-deploy",
     "scope": "sop.agent_deployment.high_risk.write",
-    "source_line": 180,
+    "source_line": 182,
     "tenant_required": true
   },
   {
@@ -6512,7 +6512,7 @@
     "public_exempt_reason": null,
     "rate_limit": "sop-parse",
     "scope": "sop.external_input.sensitive.write",
-    "source_line": 121,
+    "source_line": 122,
     "tenant_required": true
   },
   {
@@ -7142,7 +7142,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.list",
-    "source_line": 407,
+    "source_line": 405,
     "tenant_required": true
   },
   {
@@ -7160,7 +7160,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 554,
+    "source_line": 552,
     "tenant_required": true
   },
   {
@@ -7178,7 +7178,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "workflows.generate",
-    "source_line": 297,
+    "source_line": 295,
     "tenant_required": true
   },
   {
@@ -7196,7 +7196,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.read",
-    "source_line": 985,
+    "source_line": 987,
     "tenant_required": true
   },
   {
@@ -7214,7 +7214,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-control",
     "scope": "workflows.runs.cancel",
-    "source_line": 1075,
+    "source_line": 1077,
     "tenant_required": true
   },
   {
@@ -7232,7 +7232,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.replan-history",
-    "source_line": 1031,
+    "source_line": 1033,
     "tenant_required": true
   },
   {
@@ -7250,7 +7250,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.templates.read",
-    "source_line": 382,
+    "source_line": 380,
     "tenant_required": false
   },
   {
@@ -7268,7 +7268,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 619,
+    "source_line": 617,
     "tenant_required": true
   },
   {
@@ -7286,7 +7286,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.read",
-    "source_line": 466,
+    "source_line": 464,
     "tenant_required": true
   },
   {
@@ -7304,7 +7304,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 1178,
+    "source_line": 1180,
     "tenant_required": true
   },
   {
@@ -7322,7 +7322,7 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-execution",
     "scope": "workflows.run",
-    "source_line": 859,
+    "source_line": 861,
     "tenant_required": true
   },
   {
@@ -7340,7 +7340,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.list",
-    "source_line": 492,
+    "source_line": 490,
     "tenant_required": true
   },
   {
