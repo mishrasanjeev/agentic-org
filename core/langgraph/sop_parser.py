@@ -100,6 +100,8 @@ async def parse_sop_document(
     document_text: str,
     llm_model: str = "",
     domain_hint: str = "",
+    *,
+    tenant_id: str | None = None,
 ) -> dict[str, Any]:
     """Parse an SOP document and return a draft agent configuration.
 
@@ -107,6 +109,8 @@ async def parse_sop_document(
         document_text: The full text of the SOP/BRD/PRD document.
         llm_model: LLM model to use for parsing.
         domain_hint: Optional hint for the domain (finance, hr, etc.)
+        tenant_id: The authenticated tenant; the model is resolved, and
+            residency checked, for it.
 
     Returns:
         Dict with the parsed agent configuration (draft, needs human review).
@@ -134,7 +138,7 @@ async def parse_sop_document(
     user_message += f"--- DOCUMENT START ---\n{document_text[:15000]}\n--- DOCUMENT END ---"
 
     # Call LLM
-    llm = create_chat_model(model=llm_model, temperature=0.1, max_tokens=4096)
+    llm = create_chat_model(model=llm_model, temperature=0.1, max_tokens=4096, tenant_id=tenant_id)
     from langchain_core.messages import HumanMessage, SystemMessage
 
     response = await llm.ainvoke([

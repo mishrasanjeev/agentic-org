@@ -9,9 +9,11 @@ control is switched on through ``settings.operator_override_enabled``.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import uuid
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
@@ -263,6 +265,133 @@ class TestCache:
 # ---------------------------------------------------------------------------
 
 
+class TestHaltedWorkflowRetry:
+    """A halted workflow's retry lives in the task queue, not in the API process."""
+
+    def test_the_retry_is_queued_with_the_configured_countdown(self, monkeypatch):
+        from core.config import settings
+        from workflows.run_sync import schedule_halted_workflow_retry
+
+        monkeypatch.setattr(settings, "operator_halt_retry_seconds", 7)
+        with patch("core.tasks.workflow_tasks.resume_halted_workflow.apply_async") as apply:
+            assert schedule_halted_workflow_retry("run-1") is True
+        apply.assert_called_once_with(args=["run-1"], countdown=7)
+        broken = patch("core.tasks.workflow_tasks.resume_halted_workflow.apply_async", side_effect=RuntimeError("down"))
+        with broken:
+            assert schedule_halted_workflow_retry("run-1") is False
+
+    def test_the_task_retries_while_halted_and_stops_when_released_or_cancelled(self, monkeypatch):
+        from core.config import settings
+        from core.tasks import workflow_tasks as wt
+
+        monkeypatch.setattr(settings, "operator_halt_retry_seconds", 7)
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value={"status": "running"}))
+        monkeypatch.setattr(wt, "_state_store", lambda: store)
+        from celery.exceptions import Retry
+
+        with (
+            patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"halted": True, "status": "running"})),
+            patch.object(wt.resume_halted_workflow, "retry", side_effect=Retry("requeued")) as retry,
+            pytest.raises(Retry),
+        ):
+            wt.resume_halted_workflow.run("run-1")
+        # The explicit requeue, not the autoretry wrapper, decides the countdown.
+        assert retry.call_args_list[0] == call(countdown=7, max_retries=None)
+        with patch.object(wt, "_drive_engine_and_sync", AsyncMock(return_value={"status": "completed"})):
+            assert wt.resume_halted_workflow.run("run-1") == {"status": "resumed", "run_status": "completed"}
+        store.load = AsyncMock(return_value={"status": "cancelled"})
+        assert wt.resume_halted_workflow.run("run-1")["status"] == "noop"
+        store.load = AsyncMock(return_value=None)
+        assert wt.resume_halted_workflow.run("run-1")["status"] == "error"
+        assert store.close.await_count == 4
+
+    def test_the_background_executor_queues_the_retry_and_returns(self):
+        from api.v1 import workflows as wf
+
+        tenant_id, run_id = uuid.uuid4(), uuid.uuid4()
+        db_run = SimpleNamespace(context={}, status="running")
+        result = MagicMock()
+        result.scalar_one.return_value = db_run
+        result.scalar_one_or_none.return_value = db_run
+        session = SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        @contextlib.asynccontextmanager
+        async def _session(*_args, **_kwargs):
+            yield session
+
+        engine = SimpleNamespace(
+            start_run=AsyncMock(return_value="eng-1"),
+            execute_next=AsyncMock(return_value={"status": "running", "halted": True, "error": "halted"}),
+        )
+        store = SimpleNamespace(init=AsyncMock(), close=AsyncMock(), load=AsyncMock(return_value=None))
+        with (
+            patch("workflows.state_store.WorkflowStateStore", return_value=store),
+            patch("workflows.engine.WorkflowEngine", return_value=engine),
+            patch.object(wf, "get_tenant_session", _session),
+            patch("workflows.run_sync.schedule_halted_workflow_retry", return_value=True) as schedule,
+            patch("workflows.run_sync.record_ab_outcome_if_terminal", AsyncMock()),
+        ):
+            asyncio.run(wf._execute_workflow_bg(tenant_id, run_id, {"steps": []}, None, workflow_id="wf-1"))
+        schedule.assert_called_once_with("eng-1")
+        assert engine.execute_next.await_count == 1 and db_run.status == "running"
+        store.close.assert_awaited_once()
+
+
+class TestChatOverride:
+    """Chat consults the override before either route answers; the agent throttle counts for the deterministic route."""
+
+    @staticmethod
+    def _query(det, blocked):
+        from fastapi import HTTPException
+
+        from api.v1 import chat
+
+        class _Row(SimpleNamespace):
+            def __getattr__(self, name):  # attributes the route reads but this test does not set
+                return None
+
+        agent = _Row(
+            id=uuid.uuid4(), domain="finance", name="TDS", agent_type="tds_compliance", status="active",
+            authorized_tools=[], connector_ids=[],
+        )
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = agent
+
+        @contextlib.asynccontextmanager
+        async def _session(*_args, **_kwargs):
+            yield SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        check = AsyncMock(return_value=_blocked("agent halted") if blocked else OverrideDecision(blocked=False))
+        body = chat.ChatQueryRequest(query="calculate TDS on 100000 under 194C", agent_id=str(agent.id))
+        with (
+            patch("api.v1.agents._require_company_for_tenant", AsyncMock(return_value=uuid.uuid4())),
+            patch.object(chat, "caller_from_request", return_value=SimpleNamespace(user_id=None, is_admin=True)),
+            patch.object(chat, "get_tenant_session", _session),
+            patch.object(chat, "require_agent_visible", lambda *_: None),
+            patch.object(chat, "_pinned_llm_provider", return_value=None),
+            patch.object(chat, "agent_ownership_fields", return_value={"visibility": "tenant"}),
+            patch("api.v1._tds_routing.try_tds_deterministic_route", AsyncMock(return_value=det)),
+            patch.object(chat, "resolve_run_grant", AsyncMock(return_value=None)),
+            patch.object(chat, "direct_tool_call_permitted", AsyncMock(return_value=True)),
+            patch.object(chat, "check_operator_override", check),
+        ):
+            try:
+                asyncio.run(chat.chat_query(body, MagicMock(), tenant_id=str(TENANT), user_domains=None))
+            except HTTPException as exc:
+                return exc, check, str(agent.id)
+        raise AssertionError("expected the route to be refused")
+
+    def test_a_halt_refuses_the_deterministic_route_and_counts_the_agent_throttle(self):
+        exc, check, agent_id = self._query({"answer": "x", "confidence": 0.9, "tool_calls": []}, blocked=True)
+        assert exc.status_code == 423 and exc.detail["error"] == "operator_override"
+        check.assert_awaited_once_with(str(TENANT), agent_id=agent_id, throttle_unit="agent")
+
+    def test_a_halt_refuses_the_model_route_without_counting_a_throttle(self):
+        exc, check, agent_id = self._query(None, blocked=True)
+        assert exc.status_code == 423
+        check.assert_awaited_once_with(str(TENANT), agent_id=agent_id, throttle_unit=None)
+
+
 def _blocked(reason: str = "Operator override: agent halted (drill).") -> OverrideDecision:
     return OverrideDecision(blocked=True, reason=reason, override=_override("agent", AGENT))
 
@@ -432,9 +561,10 @@ class TestWorkflowEngine:
             body = src[src.index(marker) :]
             assert body.index("self._operator_halt(") < body.index("self._execute_with_retry(")
 
-    def test_background_loop_waits_while_halted(self):
+    def test_background_loop_queues_the_retry_while_halted(self):
         src = (ROOT / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")
-        assert 'step_result.get("halted")' in src and "OPERATOR_HALT_POLL_SECONDS" in src
+        assert 'step_result.get("halted")' in src and "schedule_halted_workflow_retry(engine_run_id)" in src
+        assert "OPERATOR_HALT_POLL_SECONDS" not in src and "asyncio.sleep" not in src
 
 
 class TestMigration:

@@ -27,10 +27,14 @@ Production data for Indian customers is stored exclusively in the
 `asia-south1` region (Mumbai) on Google Cloud. Cross-region backups
 stay within India (`asia-south2` in Delhi).
 
-LLM inference is routed to Anthropic's us-east-1 endpoint by default;
-Indian customers with a data residency requirement can enable the
-`india_only_llm_routing` feature flag which uses a locally hosted
-open model pack. See `docs/INDIA_RESIDENCY.md`.
+Model inference, embeddings, retrieval and speech use the providers the
+tenant has configured. With residency enforcement on (the authority flag
+`residency.enforce` or `AGENTICORG_RESIDENCY_ENFORCE`), a provider is used
+only after an administrator has attested, for the tenant's data region, that
+processing stays in region and that the provider does not train on the data;
+providers running inside the deployment (local inference, local embeddings,
+local speech engines) need no attestation. See
+`docs/governance/data-residency.md`.
 
 ## Data principal rights
 

@@ -1568,3 +1568,26 @@ Remove an entry in the pull request that fixes it.
 - **Fix:** route the replanner through `LLMRouter.complete` with the run's
   tenant, behind a flag, and delete the direct SDK call.
 
+## A-113 — The data-protection document describes residency controls that do not exist
+
+- **Found:** mapping the residency enforcement points (2026-10-02).
+- **What:** `docs/DPDP_ACT.md` ("Data localization") says inference is routed
+  to one provider's foreign endpoint by default and that an
+  `india_only_llm_routing` feature flag switches to a local model pack, citing
+  `docs/INDIA_RESIDENCY.md`. Neither the flag nor that document exists, and
+  `data_region` / `storage_region` were settings nothing read at runtime.
+- **Fix (this change):** the paragraph now describes the real control
+  (residency enforcement with provider attestations) and links to
+  `docs/governance/data-residency.md`.
+
+## A-114 — The compliance report claims internal mTLS by default
+
+- **Found:** same work.
+- **What:** `GET /compliance/evidence-package` reports
+  `encryption_in_transit.mtls_internal` from `AGENTICORG_MTLS`, which defaults
+  to `"true"` and is read nowhere else, so the report asserts mutual TLS
+  whether or not a mesh is configured.
+- **Fix:** default the flag to false and have the deployment set it when a
+  mesh with mutual TLS is in place, with the attestation recorded the same
+  way as the residency deployment profile.
+

@@ -99,6 +99,7 @@ from core.models.professional_tax import ProfessionalTaxRegistration as Professi
 from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
+from core.models.provider_attestation import ProviderAttestation as ProviderAttestation
 from core.models.report_schedule import ReportSchedule as ReportSchedule
 from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry

@@ -39,6 +39,8 @@ class ComposioConnectorAdapter(BaseConnector):
     """
 
     name = "composio"
+    # Calls leave for the tool hub: the dispatch boundary checks the tenant's residency attestation for it.
+    residency_provider = "composio"
     category = "marketplace"
     auth_type = "composio_managed"
     base_url = ""

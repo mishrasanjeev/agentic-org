@@ -87,6 +87,7 @@ async def upload_and_parse_sop(
             document_text=document_text,
             llm_model=llm_model,
             domain_hint=domain_hint,
+            tenant_id=tenant_id,
         )
 
         _log.info(
@@ -155,6 +156,7 @@ async def parse_text_sop(
         document_text=body.text,
         llm_model=body.llm_model,
         domain_hint=body.domain_hint,
+        tenant_id=tenant_id,
     )
 
     return {
