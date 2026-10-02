@@ -107,7 +107,7 @@ def report_section() -> dict[str, Any]:
     if path:
         try:
             recorded = _read_attestations(path)
-        # enterprise-gate: broad-except-ok reason=unreadable-attestation-file-reports-the-section-unavailable-never-fails-the-package
+        # enterprise-gate: broad-except-ok reason=unreadable-file-degrades-to-section-unavailable
         except Exception as exc:
             logger.warning("infrastructure_attestations_unreadable", error_type=type(exc).__name__)
             section["status"] = "unavailable"
