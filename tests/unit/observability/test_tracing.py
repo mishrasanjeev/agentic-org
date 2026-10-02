@@ -19,7 +19,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from opentelemetry.trace import SpanKind, StatusCode
+from opentelemetry import trace
+from opentelemetry.trace import NonRecordingSpan, SpanContext, SpanKind, StatusCode, TraceFlags
 
 from observability import tracing
 
@@ -70,6 +71,22 @@ class TestOffByDefault:
         carrier: dict[str, str] = {}
         tracing.inject_headers(carrier)
         assert carrier == {}
+
+    def test_ambient_opentelemetry_span_is_ignored_when_agenticorg_tracing_is_off(self):
+        ambient = NonRecordingSpan(
+            SpanContext(
+                trace_id=int(TRACE, 16),
+                span_id=int("00f067aa0ba902b7", 16),
+                is_remote=True,
+                trace_flags=TraceFlags(0x01),
+            )
+        )
+        token = trace.context_api.attach(trace.set_span_in_context(ambient))
+        try:
+            assert tracing.enabled() is False
+            assert tracing.current_trace_id() == ""
+        finally:
+            trace.context_api.detach(token)
 
     def test_the_settings_switch_is_off_and_init_from_settings_installs_nothing(self):
         assert tracing.settings.tracing_enabled is False

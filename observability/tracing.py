@@ -388,6 +388,8 @@ def set_attributes(**attributes: Any) -> None:
 
 def current_trace_id() -> str:
     """The trace id of the span in progress (32 hex characters), or empty when none is."""
+    if _tracer is None:
+        return ""
     return _trace_id_of(trace.get_current_span())
 
 
