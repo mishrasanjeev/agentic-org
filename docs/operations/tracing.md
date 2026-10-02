@@ -1,9 +1,11 @@
 # Distributed tracing and correlation ids
 
 > **Status: wired, off by default, no collector deployed.** The tracer, the spans at every
-> call site and the correlation ids are in place and tested. Nothing exports anywhere until a
-> deployment sets `AGENTICORG_TRACING_ENABLED=true` and names an OTLP endpoint, and no
-> environment of this platform has done that yet. See [What is not here yet](#what-is-not-here-yet).
+> call site, the correlation ids, the run timelines and the console page are in place and
+> tested. Nothing exports anywhere until a deployment sets `AGENTICORG_TRACING_ENABLED=true` and
+> names an OTLP endpoint, and nothing is stored for the console until it also sets
+> `AGENTICORG_TRACING_TIMELINE_ENABLED=true`; no environment of this platform has done either
+> yet. See [What is not here yet](#what-is-not-here-yet).
 
 AgenticOrg emits OpenTelemetry spans around the operations an operator or an auditor needs to
 follow end to end: the API request, the task a worker picks up, the agent run inside it, every
@@ -110,7 +112,50 @@ agenticorg.http.request  POST /api/v1/agents/{id}/run           request.id=...
 The audit rows of that run carry the same trace id, and `GET /api/v1/audit` returns it with each
 row, so an auditor can go from a row to the trace and back.
 
+## Run timelines and the console
+
+A collector shows a trace; the console needs the waterfall of one run without one. With
+`AGENTICORG_TRACING_TIMELINE_ENABLED=true` (off by default, and nothing while tracing itself is
+off) a span processor keeps the finished spans that describe a run (the run, each model call,
+tool call and knowledge search; never the HTTP request or the task span) in memory per trace,
+and the runner stores that trace's spans in the tenant-scoped `run_spans` table when the run
+ends, on the run's own event loop through the run's own tenant session. A trace nothing stores
+(a knowledge search outside a run) ages out of memory after thirty minutes, and the buffer never
+holds more than twenty thousand spans.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_TRACING_TIMELINE_ENABLED` | `false` | Keep each run's spans and store them when the run ends. |
+| `AGENTICORG_TRACING_TIMELINE_RETENTION_DAYS` | `30` | The daily task `core.tasks.timeline_tasks.prune_run_spans` drops older rows, deleted tenants included. |
+
+A stored row holds the span's identifiers, kind, status, timings, the attributes listed above
+and the governance events; an exception event keeps only the exception's type. Nothing stored
+is a prompt, an answer, a tool argument or a retrieved text.
+
+The endpoints (admin only):
+
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/v1/observability/traces?agent_id=&limit=` | the newest stored runs, one entry per run (status, duration, provider, model, tokens, correlation id), and `enabled`, whether runs are being recorded at all |
+| `GET /api/v1/observability/traces/{trace_id}` | every stored span of one run with its offset from the run's start and its duration: the waterfall |
+| `GET /api/v1/observability/workload` | queue depths from the task broker, pending reviews with the soonest deadline and the overdue count, and the last hour's run, model-call and guardrail outcomes; each part reports its own `error` when it cannot be read |
+
+The run response of `POST /api/v1/agents/{id}/run` carries `trace_id` when tracing is on, so a
+client can open the run's waterfall directly.
+
+The console page `/dashboard/observability` has two views: **Traces**, the stored runs and the
+waterfall of the selected one (model, tool and retrieval spans with their durations, the model
+gateway's decision and every guardrail outcome as events on the span they belong to), and
+**Workload**, the queue depths, the reviews with a countdown to the soonest deadline, and the
+last hour's outcomes, refreshed every fifteen seconds.
+
 ## Tests
+
+`tests/unit/observability/test_timeline.py` covers the processor keeping only the catalogue
+spans, the cap and the age-out, the stored row (parent, status, offsets, the exception event
+reduced to its type), storing at the end of a run and never raising, the reads and the prune.
+`tests/unit/observability/test_observability_api.py` covers the admin-only routes, the
+`enabled` flag, the 404 for an unknown trace and the workload parts reported on their own.
 
 `tests/unit/observability/test_tracing.py` covers: the helpers as no-ops while tracing is off;
 spans with their attributes, events, nested trace ids, the log-context binding and error status
@@ -123,8 +168,8 @@ on a blocked resume; and the audit rows' trace id with and without a trace in pr
 
 - **No collector.** No environment names an OTLP endpoint; the switch stays off everywhere. The
   deployment reference records how to turn it on when a collector exists.
-- **No dashboards or trace-based alerts.** Latency and error alerts still come from the
-  Prometheus instruments (`docs/operations/metrics.md`).
+- **No trace-based alerts.** Latency and error alerts still come from the Prometheus
+  instruments (`docs/operations/metrics.md`); the console shows the picture, it does not page.
 - **No automatic HTTP client instrumentation.** A connector's outbound HTTP calls are inside the
   `agenticorg.tool.call` span but not spans of their own.
 - **Workflow steps** are not yet spans; the original span catalogue in

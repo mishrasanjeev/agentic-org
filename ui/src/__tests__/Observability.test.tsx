@@ -1,0 +1,177 @@
+/**
+ * Observability page: the stored runs, the waterfall of one run, and the live workload.
+ */
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
+import { HelmetProvider } from "react-helmet-async";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mockGet = vi.fn();
+
+vi.mock("@/lib/api", () => ({
+  default: {
+    get: (...args: unknown[]) => mockGet(...args),
+    post: vi.fn(),
+    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+  },
+  extractApiError: (_err: unknown, fallback: string) => fallback,
+}));
+
+import Observability from "@/pages/Observability";
+
+const TRACE = "4bf92f3577b34da6a3ce929d0e0e4736";
+
+const TRACES = {
+  enabled: false,
+  tracing: true,
+  traces: [
+    {
+      trace_id: TRACE,
+      span_id: "00f067aa0ba902b7",
+      name: "agenticorg.agent.run",
+      agent_id: "a1",
+      status: "unset",
+      run_status: "completed",
+      started_at: "2026-10-02T10:00:00+00:00",
+      duration_ms: 2400,
+      provider: "openai",
+      model: "gpt-4o",
+      tokens: 321,
+      correlation_id: "req-1",
+    },
+  ],
+};
+
+const DETAIL = {
+  trace_id: TRACE,
+  started_at: "2026-10-02T10:00:00+00:00",
+  duration_ms: 2400,
+  spans: [
+    {
+      span_id: "00f067aa0ba902b7",
+      parent_span_id: null,
+      name: "agenticorg.agent.run",
+      kind: "internal",
+      status: "unset",
+      agent_id: "a1",
+      offset_ms: 0,
+      duration_ms: 2400,
+      attributes: { "agent.run.status": "completed", "llm.provider": "openai", "llm.model": "gpt-4o" },
+      events: [{ name: "model_gateway.decision", offset_ms: 1, attributes: { provider: "openai", model: "gpt-4o", reason: "policy" } }],
+    },
+    {
+      span_id: "1111111111111111",
+      parent_span_id: "00f067aa0ba902b7",
+      name: "agenticorg.agent.reason",
+      kind: "client",
+      status: "unset",
+      agent_id: "a1",
+      offset_ms: 100,
+      duration_ms: 1200,
+      attributes: { "llm.provider": "openai", "llm.model": "gpt-4o", "llm.input_tokens": 200, "llm.output_tokens": 121 },
+      events: [{ name: "guardrail.outcome", offset_ms: 5, attributes: { stage: "input", detector: "injection", action: "flag", applied: true } }],
+    },
+    {
+      span_id: "2222222222222222",
+      parent_span_id: "00f067aa0ba902b7",
+      name: "agenticorg.tool.call",
+      kind: "client",
+      status: "error",
+      agent_id: "a1",
+      offset_ms: 1400,
+      duration_ms: 600,
+      attributes: { "tool.name": "list_ledgers", "connector.id": "tally", "tool.outcome": "error" },
+      events: [],
+    },
+  ],
+};
+
+const WORKLOAD = {
+  generated_at: "2026-10-02T10:05:00+00:00",
+  tracing_enabled: true,
+  timeline_enabled: false,
+  queues: { queues: [{ name: "celery", depth: 3 }, { name: "workflows", depth: 0 }], error: null },
+  reviews: { pending: 4, overdue: 1, soonest_due_at: "2026-10-02T10:07:05+00:00", soonest_seconds_left: 125, error: null },
+  runs: { window_hours: 1, runs: 7, by_status: { completed: 6, guardrail_blocked: 1 }, p50_duration_ms: 1800, error: null },
+  model_calls: { window_hours: 1, calls: 12, failed: 1, p50_latency_ms: 900, error: null },
+  guardrails: { window_hours: 1, blocked: null, transformed: null, error: "ProgrammingError" },
+};
+
+function renderPage() {
+  return render(
+    <HelmetProvider>
+      <MemoryRouter>
+        <Observability />
+      </MemoryRouter>
+    </HelmetProvider>,
+  );
+}
+
+beforeEach(() => {
+  mockGet.mockReset();
+  mockGet.mockImplementation((url: string) => {
+    if (url === "/observability/traces") return Promise.resolve({ data: TRACES });
+    if (url === `/observability/traces/${TRACE}`) return Promise.resolve({ data: DETAIL });
+    if (url === "/observability/workload") return Promise.resolve({ data: WORKLOAD });
+    return Promise.reject(new Error(`unexpected ${url}`));
+  });
+});
+
+describe("Observability page", () => {
+  it("lists the stored runs and says when recording is off", async () => {
+    renderPage();
+    await screen.findByTestId(`trace-row-${TRACE}`);
+    expect(screen.getByTestId("timeline-off").textContent).toContain("AGENTICORG_TRACING_TIMELINE_ENABLED");
+    const row = screen.getByTestId(`trace-row-${TRACE}`);
+    expect(row.textContent).toContain("completed");
+    expect(row.textContent).toContain("openai/gpt-4o");
+    expect(row.textContent).toContain("321");
+    expect(row.textContent).toContain("2.40 s");
+    expect(mockGet).toHaveBeenCalledWith("/observability/traces", { params: { limit: "50" } });
+  });
+
+  it("shows the waterfall of the selected run with nested spans, bars and events", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByTestId(`trace-row-${TRACE}`));
+    await screen.findByTestId("waterfall");
+    const reason = screen.getByTestId("span-row-1111111111111111");
+    expect(reason.textContent).toContain("agent.reason");
+    expect(reason.textContent).toContain("200 in / 121 out");
+    expect(reason.textContent).toContain("1.20 s");
+    expect(reason.querySelector("[data-testid='span-bar']")?.getAttribute("style")).toContain("width: 50%");
+    expect(reason.querySelector("[style*='padding-left: 12px']")).not.toBeNull();
+    const tool = screen.getByTestId("span-row-2222222222222222");
+    expect(tool.textContent).toContain("tally:list_ledgers error");
+    const events = screen.getAllByTestId("span-event").map((e) => e.textContent);
+    expect(events).toContain("gateway openai/gpt-4o policy");
+    expect(events).toContain("guardrail input injection flag applied");
+  });
+
+  it("filters the list by agent id", async () => {
+    renderPage();
+    await screen.findByTestId("traces-table");
+    fireEvent.change(screen.getByTestId("trace-agent-filter"), { target: { value: "a1" } });
+    fireEvent.click(screen.getByTestId("traces-refresh"));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/observability/traces", { params: { limit: "50", agent_id: "a1" } }));
+  });
+
+  it("shows the workload with queue depths, the review countdown and a part that could not be read", async () => {
+    renderPage();
+    fireEvent.click(screen.getByTestId("tab-workload"));
+    await screen.findByTestId("workload-queues");
+    expect(screen.getByTestId("queue-depth-celery").textContent).toBe("3");
+    expect(screen.getByTestId("reviews-pending").textContent).toBe("4");
+    expect(screen.getByTestId("reviews-overdue").textContent).toBe("1");
+    expect(screen.getByTestId("reviews-countdown").textContent).toBe("2m 05s");
+    expect(screen.getByTestId("runs-total").textContent).toBe("7");
+    expect(screen.getByTestId("model-calls-total").textContent).toBe("12");
+    expect(screen.getByTestId("workload-guardrails").textContent).toContain("Unavailable (ProgrammingError)");
+    expect(screen.getByTestId("workload-runs").textContent).toContain("Run timelines are off");
+  });
+
+  it("reports a failed load instead of an empty page", async () => {
+    mockGet.mockRejectedValue(new Error("boom"));
+    renderPage();
+    expect((await screen.findByRole("alert")).textContent).toContain("Failed to load run timelines.");
+  });
+});

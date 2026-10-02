@@ -51,7 +51,7 @@ from core.langgraph.thread_ids import (
 )
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
-from observability import tracing
+from observability import timeline, tracing
 from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
@@ -739,8 +739,9 @@ async def run_agent(
             },
         }
     finally:
-        run_span.end()
         reset_route(route_token)
+        run_span.end()
+        await timeline.persist(run_span.span, tenant_id)
 
 
 async def resume_agent(
@@ -930,8 +931,9 @@ async def resume_agent(
         reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
         return _traced_result(run_span, {"status": "failed", "error": str(e), "reason": reason})
     finally:
-        run_span.end()
         reset_route(route_token)
+        run_span.end()
+        await timeline.persist(run_span.span, tenant_id)
 
 
 def _run_span_attributes(route: Any, agent_id: str, agent_type: str = "", domain: str = "") -> dict[str, Any]:

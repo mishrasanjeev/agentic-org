@@ -164,7 +164,18 @@ def init_tracing_from_settings() -> bool:
         environment=settings.env,
         set_global=True,
     )
-    logger.info("tracing_started", protocol=protocol, exporter=exporter is not None, sample_ratio=ratio)
+    if settings.tracing_timeline_enabled:
+        # The console's run timelines (observability/timeline.py): off by default.
+        from observability.timeline import install as install_timeline
+
+        install_timeline()
+    logger.info(
+        "tracing_started",
+        protocol=protocol,
+        exporter=exporter is not None,
+        sample_ratio=ratio,
+        timeline=bool(settings.tracing_timeline_enabled),
+    )
     return True
 
 
@@ -243,6 +254,14 @@ def traces_endpoint(endpoint: str) -> str:
     """The http/protobuf traces URL for a collector base URL (``/v1/traces`` appended once)."""
     base = endpoint.strip().rstrip("/")
     return base if base.endswith(_TRACES_PATH) else base + _TRACES_PATH
+
+
+def add_span_processor(processor: Any) -> bool:
+    """Attach a span processor to the installed provider; False while tracing is off."""
+    if _provider is None:
+        return False
+    _provider.add_span_processor(processor)
+    return True
 
 
 def flush() -> None:
