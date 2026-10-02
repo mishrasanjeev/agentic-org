@@ -160,6 +160,9 @@ class Settings(BaseSettings):
     # ``model_gateway.enabled`` turns it on per tenant, this switch for the
     # whole deployment.
     model_gateway_enabled: bool = False
+    # A concurrency slot the model gateway hands out expires on its own after
+    # this many seconds when the holder never releases it (a process that died).
+    model_gateway_lease_seconds: int = 600
     # A workflow halted by an override is re-driven by the ``resume_halted_workflow``
     # task on this countdown until the override is released or the run is cancelled.
     operator_halt_retry_seconds: int = 30

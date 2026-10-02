@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Model routing policies: how the model gateway picks a provider and model.
+"""Model access policies: which application, principal or business unit may use which provider or model.
 
-A row matches requests on any of its match columns (a NULL column matches every
-request) and names what the match gets: a provider, a model, a cost tier or a
-weighted list of targets, the providers allowed, and whether the call must stay
-in the tenant's data region.
-``core.governance.model_gateway`` evaluates the enabled rows in priority order
-and the first match decides.
+A row matches a routed model call on any of its match columns (a NULL column
+matches every call) and says what the match gets: ``deny`` refuses the call;
+``allow`` lets it through, fenced to ``allowed_providers`` and
+``allowed_models`` when those are set. ``core.governance.model_gateway``
+evaluates the enabled rows in priority order after the routing policies have
+chosen the provider and model; the first match decides, and a call no row
+matches is allowed.
 
-Row-level security: tenant-scoped (``v6z34_model_routing_policies``).
+Row-level security: tenant-scoped (``v6z35_model_access_limits``).
 """
 
 from __future__ import annotations
@@ -23,16 +24,16 @@ from sqlalchemy.orm import Mapped, mapped_column
 from core.models.base import BaseModel
 
 
-class ModelRoutingPolicy(BaseModel):
-    __tablename__ = "model_routing_policies"
+class ModelAccessPolicy(BaseModel):
+    __tablename__ = "model_access_policies"
     __table_args__ = (
+        CheckConstraint("effect IN ('allow','deny')", name="ck_model_access_policies_effect"),
         CheckConstraint(
             "sensitivity IS NULL OR sensitivity IN ('public','internal','confidential','restricted')",
-            name="ck_model_routing_policies_sensitivity",
+            name="ck_model_access_policies_sensitivity",
         ),
-        CheckConstraint("tier IS NULL OR tier IN ('tier1','tier2','tier3')", name="ck_model_routing_policies_tier"),
-        CheckConstraint("priority >= 0", name="ck_model_routing_policies_priority"),
-        Index("ix_model_routing_policies_tenant_enabled", "tenant_id", "enabled", "priority"),
+        CheckConstraint("priority >= 0", name="ck_model_access_policies_priority"),
+        Index("ix_model_access_policies_tenant_enabled", "tenant_id", "enabled", "priority"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -40,20 +41,20 @@ class ModelRoutingPolicy(BaseModel):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # Match columns: NULL matches every request.
+    # Match columns: NULL matches every call.
     use_case: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sensitivity: Mapped[str | None] = mapped_column(String(16), nullable=True)
     agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     business_unit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     language: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # What a match gets.
+    application: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    principal: Mapped[str | None] = mapped_column(String(255), nullable=True)
     provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     model: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    tier: Mapped[str | None] = mapped_column(String(8), nullable=True)
-    # Weighted split: a list of {provider, model, weight}; set instead of provider, model or tier.
-    targets: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # What a match gets.
+    effect: Mapped[str] = mapped_column(String(8), nullable=False, default="allow")
     allowed_providers: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    in_region_only: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    allowed_models: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

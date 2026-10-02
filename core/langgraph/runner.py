@@ -26,6 +26,8 @@ from auth.run_grants import RunGrant, resolve_run_grant
 from core.explainer import generate_explanation
 from core.feedback.analyzer import format_amendments_for_prompt
 from core.governance.model_gateway import ModelGatewayRefused, refused_run_result, route_for_agent
+from core.governance.model_gateway import admit as admit_route
+from core.governance.model_gateway import release as release_route
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.checkpointer import (
     BACKEND_POSTGRES,
@@ -460,6 +462,13 @@ async def run_agent(
     # Execute the graph — bounded by MAX_AGENT_DURATION_SEC so a runaway
     # agent can't burn through the tenant's budget. LangGraph's recursion
     # limit caps the step count.
+    # Per-model limits apply just before the model work starts; the slot is
+    # released when the run ends, whichever way it ends.
+    try:
+        lease = await admit_route(route)
+    except ModelGatewayRefused as exc:
+        logger.warning("agent_run_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
+        return refused_run_result(exc)
     t0 = time.perf_counter()
     try:
         invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
@@ -713,6 +722,8 @@ async def run_agent(
                 "llm_cost_usd": 0,
             },
         }
+    finally:
+        await release_route(lease)
 
 
 async def resume_agent(
@@ -849,6 +860,11 @@ async def resume_agent(
         else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
     )
 
+    try:
+        lease = await admit_route(route)
+    except ModelGatewayRefused as exc:
+        logger.warning("agent_resume_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
+        return refused_run_result(exc)
     t0 = time.perf_counter()
     try:
         if require_paused:
@@ -889,6 +905,8 @@ async def resume_agent(
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
         reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
         return {"status": "failed", "error": str(e), "reason": reason}
+    finally:
+        await release_route(lease)
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:

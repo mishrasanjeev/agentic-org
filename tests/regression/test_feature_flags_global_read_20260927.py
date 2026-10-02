@@ -43,7 +43,7 @@ def test_revision_remains_in_the_single_head_migration_chain() -> None:
     assert len(module.revision) <= 32
     assert module.down_revision == "v6z29_admin_scope_compat"
     heads = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini"))).get_heads()
-    assert heads == ["v6z34_model_routing_policies"]
+    assert heads == ["v6z35_model_access_limits"]
 
 
 def test_upgrade_adds_only_a_select_policy_for_global_rows() -> None:

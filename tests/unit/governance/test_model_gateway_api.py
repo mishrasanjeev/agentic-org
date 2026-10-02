@@ -136,7 +136,9 @@ def test_list_and_status(session_rows):
 
     with (
         patch.object(api.gateway, "enabled", AsyncMock(return_value=True)),
-        patch.object(api.gateway, "active_policies", AsyncMock(return_value=[_policy(row)])),
+        patch.object(
+            api.gateway, "active_policy_set", AsyncMock(return_value=api.gateway.PolicySet(routing=(_policy(row),)))
+        ),
     ):
         status = client.get("/api/v1/model-gateway/status")
     assert status.status_code == 200
@@ -241,3 +243,195 @@ def test_evaluate_returns_the_decision_or_the_refusal_as_data(session_rows):
     assert response.json()["model_gateway"]["policy_name"] == "fence"
     unknown = client.post("/api/v1/model-gateway/evaluate", json={"use_case": "x", "sensitivity": "secret"})
     assert unknown.status_code == 422
+
+
+def _access_row(**over):
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "name": "frontier-denied",
+        "priority": 20,
+        "enabled": True,
+        "use_case": None,
+        "sensitivity": None,
+        "agent_id": None,
+        "business_unit": None,
+        "language": None,
+        "application": "advisory-app",
+        "principal": None,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "effect": "deny",
+        "allowed_providers": None,
+        "allowed_models": None,
+        "reason": "every other caller uses the standard models",
+        "created_by": "user:1",
+        "created_at": datetime.now(UTC),
+        "updated_by": None,
+        "updated_at": None,
+    }
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def _limit_row(**over):
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "enabled": True,
+        "max_concurrency": 8,
+        "requests_per_minute": None,
+        "reason": "contracted capacity",
+        "created_by": "user:1",
+        "created_at": datetime.now(UTC),
+        "updated_by": None,
+        "updated_at": None,
+    }
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_access_policies_crud_and_validation(session_rows):
+    row = _access_row()
+    session_rows.append(row)
+    client = TestClient(_app(["agenticorg:admin"]))
+    listed = client.get("/api/v1/model-gateway/access-policies")
+    assert listed.status_code == 200 and listed.json()[0]["application"] == "advisory-app"
+    assert listed.json()[0]["effect"] == "deny"
+
+    policy = api.gateway.AccessPolicy(
+        id=str(row.id), name=row.name, priority=20, application="advisory-app", effect="deny"
+    )
+    body = {
+        "name": "frontier-denied",
+        "priority": 20,
+        "application": "Advisory-App",
+        "model": "gpt-4o",
+        "effect": "deny",
+    }
+    with patch.object(api.gateway, "set_access_policy", AsyncMock(return_value=policy)) as setter:
+        created = client.post("/api/v1/model-gateway/access-policies", json=body)
+    assert created.status_code == 201 and created.json()["id"] == str(row.id)
+    assert setter.await_args.kwargs["actor_id"] == "api_key:apikey:key_01"
+    assert setter.await_args.kwargs["effect"] == "deny" and setter.await_args.kwargs["application"] == "Advisory-App"
+
+    for bad in (
+        {"name": "p", "effect": "deny", "allowed_models": ["gpt-4o"]},
+        {"name": "p", "effect": "maybe"},
+        {"effect": "deny"},
+        {"name": "p", "provider": "openai", "model": "gemini-2.5-pro"},
+    ):
+        with patch.object(api.gateway, "set_access_policy", AsyncMock()) as setter:
+            assert client.post("/api/v1/model-gateway/access-policies", json=bad).status_code == 422
+        setter.assert_not_called()
+
+    with patch.object(api.gateway, "update_access_policy", AsyncMock(return_value=policy)) as updater:
+        changed = client.patch(f"/api/v1/model-gateway/access-policies/{row.id}", json={"effect": "allow"})
+    assert changed.status_code == 200 and updater.await_args.kwargs["changes"] == {"effect": "allow"}
+    assert client.patch(f"/api/v1/model-gateway/access-policies/{row.id}", json={}).status_code == 422
+    with patch.object(api.gateway, "update_access_policy", AsyncMock(return_value=None)):
+        assert (
+            client.patch(f"/api/v1/model-gateway/access-policies/{uuid.uuid4()}", json={"priority": 1}).status_code
+            == 404
+        )
+    with patch.object(api.gateway, "update_access_policy", AsyncMock(side_effect=ValueError("belongs on"))):
+        assert (
+            client.patch(f"/api/v1/model-gateway/access-policies/{row.id}", json={"allowed_models": ["x"]}).status_code
+            == 422
+        )
+
+    with patch.object(api.gateway, "delete_access_policy", AsyncMock(return_value=True)) as deleter:
+        assert client.delete(f"/api/v1/model-gateway/access-policies/{row.id}").status_code == 204
+    assert deleter.await_args.kwargs["actor_id"] == "api_key:apikey:key_01"
+    with patch.object(api.gateway, "delete_access_policy", AsyncMock(return_value=False)):
+        assert client.delete(f"/api/v1/model-gateway/access-policies/{uuid.uuid4()}").status_code == 404
+    assert TestClient(_app(["agents:write"])).get("/api/v1/model-gateway/access-policies").status_code == 403
+
+
+def test_limits_crud_and_validation(session_rows):
+    from core.governance.model_gateway_limits import Limit
+
+    row = _limit_row()
+    session_rows.append(row)
+    client = TestClient(_app(["agenticorg:admin"]))
+    listed = client.get("/api/v1/model-gateway/limits")
+    assert listed.status_code == 200 and listed.json()[0]["max_concurrency"] == 8
+
+    limit = Limit(id=str(row.id), provider="openai", model="gpt-4o", max_concurrency=8)
+    with patch.object(api.gateway, "set_limit", AsyncMock(return_value=limit)) as setter:
+        created = client.post(
+            "/api/v1/model-gateway/limits", json={"provider": "openai", "model": "gpt-4o", "max_concurrency": 8}
+        )
+    assert created.status_code == 201 and created.json()["id"] == str(row.id)
+    assert setter.await_args.kwargs["max_concurrency"] == 8 and setter.await_args.kwargs["model"] == "gpt-4o"
+
+    for bad in (
+        {"provider": "openai"},
+        {"provider": "openai", "max_concurrency": 0},
+        {"model": "gpt-4o", "max_concurrency": 1},
+    ):
+        with patch.object(api.gateway, "set_limit", AsyncMock()) as setter:
+            assert client.post("/api/v1/model-gateway/limits", json=bad).status_code == 422
+        setter.assert_not_called()
+
+    with patch.object(api.gateway, "update_limit", AsyncMock(return_value=limit)) as updater:
+        assert (
+            client.patch(f"/api/v1/model-gateway/limits/{row.id}", json={"requests_per_minute": 30}).status_code == 200
+        )
+    assert updater.await_args.kwargs["changes"] == {"requests_per_minute": 30}
+    assert client.patch(f"/api/v1/model-gateway/limits/{row.id}", json={}).status_code == 422
+    with patch.object(api.gateway, "update_limit", AsyncMock(return_value=None)):
+        assert client.patch(f"/api/v1/model-gateway/limits/{uuid.uuid4()}", json={"enabled": False}).status_code == 404
+    with patch.object(api.gateway, "update_limit", AsyncMock(side_effect=ValueError("must set"))):
+        assert client.patch(f"/api/v1/model-gateway/limits/{row.id}", json={"enabled": False}).status_code == 422
+    with patch.object(api.gateway, "delete_limit", AsyncMock(return_value=True)):
+        assert client.delete(f"/api/v1/model-gateway/limits/{row.id}").status_code == 204
+    with patch.object(api.gateway, "delete_limit", AsyncMock(return_value=False)):
+        assert client.delete(f"/api/v1/model-gateway/limits/{uuid.uuid4()}").status_code == 404
+    assert (
+        TestClient(_app(["agents:write"]))
+        .post("/api/v1/model-gateway/limits", json={"provider": "openai", "max_concurrency": 1})
+        .status_code
+        == 403
+    )
+
+
+def test_status_lists_access_policies_and_limits(session_rows):
+    from core.governance.model_gateway_limits import Limit
+
+    policy_set = api.gateway.PolicySet(
+        access=(api.gateway.AccessPolicy(id="a1", name="frontier-denied", priority=20, effect="deny"),),
+        limits=(Limit(id="l1", provider="openai", model="gpt-4o", max_concurrency=8),),
+    )
+    client = TestClient(_app(["agenticorg:admin"]))
+    with (
+        patch.object(api.gateway, "enabled", AsyncMock(return_value=True)),
+        patch.object(api.gateway, "active_policy_set", AsyncMock(return_value=policy_set)),
+    ):
+        status = client.get("/api/v1/model-gateway/status")
+    assert status.status_code == 200
+    assert status.json()["active_policies"] == []
+    assert status.json()["active_access_policies"][0]["name"] == "frontier-denied"
+    assert status.json()["active_limits"][0]["max_concurrency"] == 8
+    with patch.object(api.gateway, "enabled", AsyncMock(return_value=False)):
+        with patch.object(api.gateway, "active_policy_set", AsyncMock()) as reads:
+            off = client.get("/api/v1/model-gateway/status")
+    assert off.json() == {"enabled": False, "active_policies": [], "active_access_policies": [], "active_limits": []}
+    reads.assert_not_called()
+
+
+def test_evaluate_passes_the_caller_to_the_access_policies(session_rows):
+    client = TestClient(_app(["agenticorg:admin"]))
+    decision = RouteDecision(provider="openai", model="gpt-4o", correlation_id="c1", reason="p", gated=True)
+    with patch.object(
+        api.gateway, "evaluate", AsyncMock(return_value=Evaluation(enabled=True, decision=decision))
+    ) as ask:
+        response = client.post(
+            "/api/v1/model-gateway/evaluate",
+            json={"use_case": "agent_run", "application": "advisory-app", "principal": "user:7"},
+        )
+    assert response.status_code == 200 and response.json()["decision"]["gated"] is True
+    request = ask.await_args.args[0]
+    assert request.application == "advisory-app" and request.principal == "user:7"

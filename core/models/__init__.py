@@ -84,6 +84,8 @@ from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
 from core.models.lead_pipeline import EmailSequence as EmailSequence
 from core.models.lead_pipeline import LeadPipeline as LeadPipeline
+from core.models.model_access_policy import ModelAccessPolicy as ModelAccessPolicy
+from core.models.model_limit import ModelLimit as ModelLimit
 from core.models.model_routing_policy import ModelRoutingPolicy as ModelRoutingPolicy
 from core.models.oacp_artifact_cache import OacpArtifactCacheRecordRow as OacpArtifactCacheRecordRow
 from core.models.oacp_audit_review_manifest import (

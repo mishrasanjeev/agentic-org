@@ -44,8 +44,10 @@ import structlog
 
 from core.config import external_keys, is_relaxed_env, settings
 from core.governance.model_gateway import ModelGatewayRefused, RouteRequest
+from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import decide as gateway_decide
 from core.governance.model_gateway import normalise_provider as gateway_provider
+from core.governance.model_gateway import release as gateway_release
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
 
@@ -612,6 +614,7 @@ class LLMRouter:
             if pseudonymiser is not None:
                 messages = await pseudonymiser.pseudonymise_router_messages(messages)
             model = model_override or self.primary_model
+            lease = None
             if tenant_id:
                 # The model gateway may replace the model from the tenant's routing
                 # policy; its choice is an explicit selection, so failover below
@@ -640,6 +643,9 @@ class LLMRouter:
                         )
                     model = decision.model
                     model_override = model
+                # Per-model limits apply just before the call; the concurrency
+                # slot is released when the call (or its fallback) ends.
+                lease = await gateway_admit(decision)
             temp = temperature if temperature is not None else self.temperature
             # Only forward tenant_id when set so existing _call_model call shapes stay stable.
             scope = {"tenant_id": tenant_id} if tenant_id else {}
@@ -671,6 +677,8 @@ class LLMRouter:
                     raise
                 logger.info("llm_falling_back", fallback=self.fallback_model)
                 return await self._call_model(self.fallback_model, messages, temp, max_tokens, **scope)
+            finally:
+                await gateway_release(lease)
 
     async def _call_model(
         self,
