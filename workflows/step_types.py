@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from core.config import external_keys, is_relaxed_env, is_strict_runtime_env, settings
+from core.governance.agent_status import inactive_agent_statuses
 from core.marketing.approval_timeouts import timeout_policy_for_action
 from core.marketing.external_writes import evaluate_marketing_external_write_result
 from core.marketing.workflow_activation import EXTERNAL_WRITE_ACTIONS
@@ -159,7 +160,7 @@ async def _load_workflow_agent_config(agent_id: str, tenant_id: str) -> dict[str
     async with get_tenant_session(tenant_uuid) as session:
         result = await session.execute(select(Agent).where(Agent.id == agent_uuid, Agent.tenant_id == tenant_uuid))
         agent = result.scalar_one_or_none()
-    if agent is None or agent.status in {"deleted", "retired"}:
+    if agent is None or agent.status in inactive_agent_statuses():
         return {}
 
     return {

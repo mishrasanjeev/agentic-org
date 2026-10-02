@@ -15,6 +15,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   record nobody has heartbeated for three retry intervals, so a broker outage
   followed by a restart of the retrying process cannot strand it either.
   Publishing to the broker runs off the event loop.
+### Changed - A paused agent can be refused, not only left out of routing
+- `AGENTICORG_PAUSED_AGENTS_REFUSED` (default off): `POST /agents/{id}/run` and a
+  chat that names the agent refuse a `paused` agent with 409, and a workflow
+  agent step treats it as inactive, so the console's pause stops execution
+  (FINDINGS A-110). Routing already skipped paused agents.
 
 ### Fixed - Operator override error code
 - The operator override refusal is `E1013`. It had been registered as `E1012`,
