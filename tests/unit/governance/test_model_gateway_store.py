@@ -75,7 +75,7 @@ class _Session:
     async def flush(self):
         self.flushed += 1
         for obj in self.added:
-            if getattr(obj, "id", None) is None and hasattr(obj, "priority"):
+            if getattr(obj, "id", None) is None and hasattr(obj, "created_by"):
                 obj.id = uuid.uuid4()
 
 
@@ -114,10 +114,14 @@ class TestLoading:
         redis.get = AsyncMock(side_effect=lambda key: store.get(key))
         redis.set = AsyncMock(side_effect=lambda key, value, ex=None: store.__setitem__(key, value))
         redis.delete = AsyncMock(side_effect=lambda key: store.pop(key, None))
-        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)):
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(gw, "_load_access_policies", AsyncMock(return_value=[])),
+            patch.object(gw, "_load_limits", AsyncMock(return_value=[])),
+        ):
             loaded = asyncio.run(gw.active_policies(TENANT))
             assert loaded[0].allowed_providers == ("openai",)
-            assert json.loads(next(iter(store.values())))[0]["name"] == "finance"
+            assert json.loads(next(iter(store.values())))["routing"][0]["name"] == "finance"
             assert redis.set.await_args.kwargs["ex"] == gw.CACHE_TTL_SECONDS
             session.rows = []
             assert len(asyncio.run(gw.active_policies(TENANT))) == 1  # served from the cache
@@ -129,7 +133,11 @@ class TestLoading:
         session.rows = [_row()]
         redis = AsyncMock()
         redis.get = AsyncMock(side_effect=RuntimeError("redis down"))
-        with patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)):
+        with (
+            patch("core.async_redis.get_async_redis", AsyncMock(return_value=redis)),
+            patch.object(gw, "_load_access_policies", AsyncMock(return_value=[])),
+            patch.object(gw, "_load_limits", AsyncMock(return_value=[])),
+        ):
             assert len(asyncio.run(gw.active_policies(TENANT))) == 1
             asyncio.run(gw.invalidate(TENANT))  # best effort, never raises
 
@@ -238,7 +246,7 @@ class TestAgentSensitivity:
             return gw._passthrough(request, correlation_id, "probe")
 
         with (
-            patch.object(gw, "active_policies", AsyncMock(return_value=[restricted_policy])),
+            patch.object(gw, "active_policy_set", AsyncMock(return_value=gw.PolicySet(routing=(restricted_policy,)))),
             patch.object(gw, "agent_sensitivity", AsyncMock(return_value="restricted")),
             patch.object(gw, "_decide", fake_decide),
         ):
@@ -258,21 +266,201 @@ class TestAgentSensitivity:
         monkeypatch.setattr(gw.settings, "model_gateway_enabled", True)
         monkeypatch.setattr(gw.settings, "env", "production")
         with (
-            patch.object(gw, "active_policies", AsyncMock(return_value=[])),
+            patch.object(gw, "active_policy_set", AsyncMock(return_value=gw.PolicySet())),
             patch.object(gw, "agent_sensitivity", AsyncMock(side_effect=RuntimeError("db down"))),
         ):
             with pytest.raises(gw.ModelGatewayRefused, match="sensitivity could not be read"):
                 asyncio.run(
                     gw.route_for_agent(
-                        TENANT, use_case="agent_run", agent_id="a1", business_unit=None,
-                        requested_provider="gemini", requested_model="gemini-2.5-flash",
+                        TENANT,
+                        use_case="agent_run",
+                        agent_id="a1",
+                        business_unit=None,
+                        requested_provider="gemini",
+                        requested_model="gemini-2.5-flash",
                     )
                 )
             monkeypatch.setattr(gw.settings, "env", "test")
             decision = asyncio.run(
                 gw.route_for_agent(
-                    TENANT, use_case="agent_run", agent_id="a1", business_unit=None,
-                    requested_provider="gemini", requested_model="gemini-2.5-flash",
+                    TENANT,
+                    use_case="agent_run",
+                    agent_id="a1",
+                    business_unit=None,
+                    requested_provider="gemini",
+                    requested_model="gemini-2.5-flash",
                 )
             )
         assert decision.applied is False and decision.restricted is False
+
+
+def _access_row(**over):
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "name": "frontier-denied",
+        "priority": 20,
+        "enabled": True,
+        "use_case": None,
+        "sensitivity": None,
+        "agent_id": None,
+        "business_unit": None,
+        "language": None,
+        "application": "advisory-app",
+        "principal": None,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "effect": "deny",
+        "allowed_providers": None,
+        "allowed_models": None,
+        "reason": "",
+        "created_by": "user:1",
+        "created_at": datetime.now(UTC),
+        "updated_by": None,
+        "updated_at": None,
+    }
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def _limit_row(**over):
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "provider": "openai",
+        "model": "gpt-4o",
+        "enabled": True,
+        "max_concurrency": 8,
+        "requests_per_minute": None,
+        "reason": "",
+        "created_by": "user:1",
+        "created_at": datetime.now(UTC),
+        "updated_by": None,
+        "updated_at": None,
+    }
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+class TestPolicySetLoading:
+    def test_rows_map_to_access_policies_and_limits(self, session):
+        session.rows = [_access_row(allowed_models=None)]
+        access = asyncio.run(gw._load_access_policies(TENANT))
+        assert access[0].application == "advisory-app" and access[0].effect == "deny"
+        session.rows = [_limit_row(model=None, requests_per_minute=30)]
+        limits = asyncio.run(gw._load_limits(TENANT))
+        assert limits[0].model is None and limits[0].requests_per_minute == 30 and limits[0].max_concurrency == 8
+
+    def test_the_policy_set_combines_the_three_tables_and_the_accessors_read_it(self, session):
+        routing, access, limit = _row(), _access_row(), _limit_row()
+        with (
+            patch.object(gw, "_load_policies", AsyncMock(return_value=[gw._policy(routing)])),
+            patch.object(gw, "_load_access_policies", AsyncMock(return_value=[gw._access_policy(access)])),
+            patch.object(gw, "_load_limits", AsyncMock(return_value=[gw._limit(limit)])),
+        ):
+            policy_set = asyncio.run(gw.active_policy_set(TENANT))
+            assert [p.name for p in policy_set.routing] == ["finance"]
+            assert [p.name for p in asyncio.run(gw.active_access_policies(TENANT))] == ["frontier-denied"]
+            assert [limit.provider for limit in asyncio.run(gw.active_limits(TENANT))] == ["openai"]
+
+
+class TestAccessAndLimitChanges:
+    def test_set_access_policy_writes_the_row_and_a_signed_audit_entry(self, session):
+        policy = asyncio.run(
+            gw.set_access_policy(
+                TENANT,
+                actor_id="user:1",
+                name="frontier-denied",
+                application="Advisory-App",
+                provider="openai",
+                model="gpt-4o",
+                effect="Deny",
+                reason="standard models for the rest",
+            )
+        )
+        assert policy.effect == "deny" and policy.application == "advisory-app"
+        rows = [obj for obj in session.added if type(obj).__name__ == "ModelAccessPolicy"]
+        assert len(rows) == 1 and str(rows[0].id) == policy.id and rows[0].created_by == "user:1"
+        audit = _audits(session)
+        assert audit[0].event_type == "model_gateway_access_policy.set" and audit[0].signature
+        assert audit[0].resource_type == "model_access_policy" and audit[0].details["effect"] == "deny"
+
+    def test_set_access_policy_refuses_an_unusable_policy_before_any_write(self, session):
+        with pytest.raises(ValueError, match="belongs on an allow"):
+            asyncio.run(
+                gw.set_access_policy(TENANT, actor_id="user:1", name="d", effect="deny", allowed_models=["gpt-4o"])
+            )
+        assert session.added == []
+
+    def test_update_and_delete_access_policy(self, session):
+        row = _access_row()
+        session.rows = [row]
+        updated = asyncio.run(
+            gw.update_access_policy(
+                TENANT, row.id, actor_id="user:2", changes={"effect": "allow", "allowed_models": ["gpt-4o"]}
+            )
+        )
+        assert updated is not None and updated.effect == "allow" and updated.allowed_models == ("gpt-4o",)
+        assert row.updated_by == "user:2" and row.allowed_models == ["gpt-4o"]
+        audit = _audits(session)
+        assert audit[0].event_type == "model_gateway_access_policy.update"
+        assert audit[0].details["changes"] == {"effect": "allow", "allowed_models": ["gpt-4o"]}
+        with pytest.raises(ValueError, match="belongs on an allow"):
+            asyncio.run(gw.update_access_policy(TENANT, row.id, actor_id="user:2", changes={"effect": "deny"}))
+        assert asyncio.run(gw.delete_access_policy(TENANT, row.id, actor_id="user:3")) is True
+        assert session.deleted == [row] and _audits(session)[-1].event_type == "model_gateway_access_policy.delete"
+        session.rows = []
+        assert asyncio.run(gw.update_access_policy(TENANT, uuid.uuid4(), actor_id="u", changes={"priority": 1})) is None
+        assert asyncio.run(gw.delete_access_policy(TENANT, uuid.uuid4(), actor_id="u")) is False
+
+    def test_set_limit_writes_the_row_and_a_signed_audit_entry(self, session):
+        limit = asyncio.run(
+            gw.set_limit(TENANT, actor_id="user:1", provider="OpenAI", model="gpt-4o", max_concurrency=8)
+        )
+        assert limit.provider == "openai" and limit.max_concurrency == 8 and limit.requests_per_minute is None
+        rows = [obj for obj in session.added if type(obj).__name__ == "ModelLimit"]
+        assert len(rows) == 1 and str(rows[0].id) == limit.id
+        audit = _audits(session)
+        assert audit[0].event_type == "model_gateway_limit.set" and audit[0].resource_type == "model_limit"
+        assert audit[0].details["max_concurrency"] == 8 and audit[0].signature
+
+    def test_set_limit_refuses_an_unusable_limit_before_any_write(self, session):
+        with pytest.raises(ValueError, match="must set"):
+            asyncio.run(gw.set_limit(TENANT, actor_id="user:1", provider="openai"))
+        assert session.added == []
+
+    def test_update_and_delete_limit(self, session):
+        row = _limit_row()
+        session.rows = [row]
+        updated = asyncio.run(gw.update_limit(TENANT, row.id, actor_id="user:2", changes={"requests_per_minute": 30}))
+        assert updated is not None and updated.requests_per_minute == 30 and row.requests_per_minute == 30
+        assert _audits(session)[0].event_type == "model_gateway_limit.update"
+        with pytest.raises(ValueError, match="must set"):
+            asyncio.run(
+                gw.update_limit(
+                    TENANT, row.id, actor_id="user:2", changes={"max_concurrency": None, "requests_per_minute": None}
+                )
+            )
+        assert asyncio.run(gw.delete_limit(TENANT, row.id, actor_id="user:3")) is True
+        assert _audits(session)[-1].event_type == "model_gateway_limit.delete"
+        session.rows = []
+        assert asyncio.run(gw.update_limit(TENANT, uuid.uuid4(), actor_id="u", changes={"enabled": False})) is None
+        assert asyncio.run(gw.delete_limit(TENANT, uuid.uuid4(), actor_id="u")) is False
+
+    def test_a_routing_policy_change_may_set_targets(self, session):
+        policy = asyncio.run(
+            gw.set_policy(
+                TENANT,
+                actor_id="user:1",
+                name="split",
+                targets=[
+                    {"provider": "openai", "model": "gpt-4o", "weight": 3},
+                    {"provider": "gemini", "model": "gemini-2.5-flash"},
+                ],
+            )
+        )
+        assert policy.targets == (
+            {"provider": "openai", "model": "gpt-4o", "weight": 3},
+            {"provider": "gemini", "model": "gemini-2.5-flash", "weight": 1},
+        )
+        assert _audits(session)[0].details["targets"][0]["weight"] == 3

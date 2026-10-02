@@ -30,6 +30,9 @@ from langgraph.types import interrupt
 from auth.grant_enforcement import EnforcementMode, GrantCallContext, enforce_connector_grant
 from auth.run_grants import RunGrant, check_run_grant, refresh_run_grant
 from core.governance.action_policy import ActionDomain, CapabilityAuthorization
+from core.governance.model_gateway import admit as gateway_admit
+from core.governance.model_gateway import current_route
+from core.governance.model_gateway import release as gateway_release
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.operator_override import check as check_operator_override
 from core.langgraph.grantex_auth import get_grantex_client
@@ -484,7 +487,15 @@ def build_agent_graph(
         if override.blocked:
             trace.append(override.reason)
             raise OperatorOverrideBlocked(override)
-        response = await llm.ainvoke(messages)
+        # Per-model limits: every turn is one provider request, so every turn
+        # is admitted on its own against the run's routing decision and gives
+        # its concurrency slot back when the model returns.
+        route = current_route()
+        lease = await gateway_admit(route.decision) if route is not None else None
+        try:
+            response = await llm.ainvoke(messages)
+        finally:
+            await gateway_release(lease)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")

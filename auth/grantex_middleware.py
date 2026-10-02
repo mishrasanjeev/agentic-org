@@ -386,6 +386,17 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             )
         return JSONResponse(status_code=401, content={"detail": detail})
 
+    @staticmethod
+    async def _continue(request: Request, call_next) -> Response:
+        """Hand an authenticated request on with the caller's identity bound for the policies that match on it."""
+        from core.governance.caller_identity import bind_identity, identity_from_state, reset_identity
+
+        token = bind_identity(identity_from_state(request.state))
+        try:
+            return await call_next(request)
+        finally:
+            reset_identity(token)
+
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method == "OPTIONS":
             return await call_next(request)
@@ -471,7 +482,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         request.state.buyer_seller_agent_id = identity.seller_agent_id
         request.state.auth_mode = "commerce_buyer"
         await clear_auth_failures(client_ip)
-        return await call_next(request)
+        return await self._continue(request, call_next)
 
     async def _handle_api_key(
         self, request: Request, call_next, token: str, client_ip: str
@@ -538,10 +549,11 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
             request.state.scopes = matched_key.scopes or []
             request.state.agent_id = None
             request.state.user_sub = f"apikey:{matched_key.prefix}"
+            request.state.api_key_name = matched_key.name
             request.state.auth_mode = "api_key"
 
             await clear_auth_failures(client_ip)
-            return await call_next(request)
+            return await self._continue(request, call_next)
 
         # enterprise-gate: broad-except-ok reason=api-key-validation-boundary-records-failure-and-returns-401
         except Exception:
@@ -580,7 +592,7 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         request.state.auth_mode = "grantex"
 
         await clear_auth_failures(client_ip)
-        return await call_next(request)
+        return await self._continue(request, call_next)
 
     async def _handle_legacy_token(
         self, request: Request, call_next, token: str, client_ip: str
@@ -621,6 +633,6 @@ class GrantexAuthMiddleware(BaseHTTPMiddleware):
         # per-route via ``api.deps.get_current_tenant`` / tenant sessions.
 
         await clear_auth_failures(client_ip)
-        return await call_next(request)
+        return await self._continue(request, call_next)
 
     # Auth failure tracking is now in core.auth_state (Redis-backed)

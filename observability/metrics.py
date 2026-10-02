@@ -90,6 +90,11 @@ model_gateway_decisions_total = Counter(
     "Model gateway decisions by outcome (applied, passthrough, refused)",
     ["outcome"],
 )
+model_gateway_limit_outcomes_total = Counter(
+    "agenticorg_model_gateway_limit_outcomes_total",
+    "Model gateway per-model limit checks by limit (concurrency, rate) and outcome (allowed, rejected, unavailable)",
+    ["limit", "outcome"],
+)
 residency_refusals_total = Counter(
     "agenticorg_residency_refusals_total",
     "Providers refused by residency enforcement, by reason",

@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Model gateway endpoints: routing policies and a dry-run evaluation.
+"""Model gateway endpoints: routing policies, access policies, per-model limits and a dry-run evaluation.
 
-Tenant administrators only. A policy says which provider, model or cost tier a
-kind of request gets, which providers it may use and whether it must stay in the
-tenant's data region; ``core.governance.model_gateway`` applies the enabled
-policies before every tenant-scoped model call once the gateway is on. Each
-change writes a signed audit row.
+Tenant administrators only. A routing policy says which provider, model, cost
+tier or weighted targets a kind of request gets, which providers it may use and
+whether it must stay in the tenant's data region; an access policy says which
+application, principal, agent or business unit may use which provider or model;
+a limit caps the calls in flight and the calls per minute on a provider or a
+model. ``core.governance.model_gateway`` applies them to every tenant-scoped
+model call once the gateway is on. Each change writes a signed audit row.
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.governance import model_gateway as gateway
+from core.models.model_access_policy import ModelAccessPolicy
+from core.models.model_limit import ModelLimit
 from core.models.model_routing_policy import ModelRoutingPolicy
 from core.ownership import Caller, caller_from_request
 
@@ -41,6 +45,11 @@ class PolicyIn(BaseModel):
     provider: str | None = Field(None, max_length=64)
     model: str | None = Field(None, max_length=128)
     tier: str | None = Field(None, description="tier1, tier2 or tier3")
+    targets: list[dict[str, object]] | None = Field(
+        None,
+        max_length=16,
+        description="weighted split: [{provider, model, weight}], instead of provider, model or tier",
+    )
     allowed_providers: list[str] | None = Field(None, max_length=32)
     in_region_only: bool = False
     reason: str = Field("", max_length=2000)
@@ -66,6 +75,7 @@ class PolicyUpdate(BaseModel):
     provider: str | None = Field(None, max_length=64)
     model: str | None = Field(None, max_length=128)
     tier: str | None = None
+    targets: list[dict[str, object]] | None = Field(None, max_length=16)
     allowed_providers: list[str] | None = Field(None, max_length=32)
     in_region_only: bool | None = None
     reason: str | None = Field(None, max_length=2000)
@@ -84,8 +94,121 @@ class PolicyOut(BaseModel):
     provider: str | None
     model: str | None
     tier: str | None
+    targets: list[dict[str, object]] | None
     allowed_providers: list[str] | None
     in_region_only: bool
+    reason: str
+    created_by: str
+    created_at: datetime
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class AccessPolicyIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    priority: int = Field(100, ge=0, le=100_000)
+    enabled: bool = True
+    use_case: str | None = Field(None, max_length=64)
+    sensitivity: str | None = Field(None, description="public, internal, confidential or restricted")
+    agent_id: str | None = Field(None, max_length=64)
+    business_unit: str | None = Field(None, max_length=64)
+    language: str | None = Field(None, max_length=16)
+    application: str | None = Field(
+        None, max_length=128, description="the calling application, as the identity names it"
+    )
+    principal: str | None = Field(None, max_length=255, description="the calling principal, as the audit rows name it")
+    provider: str | None = Field(None, max_length=64, description="matches the provider the routing chose")
+    model: str | None = Field(None, max_length=128, description="matches the model the routing chose")
+    effect: str = Field("allow", description="allow or deny")
+    allowed_providers: list[str] | None = Field(None, max_length=32)
+    allowed_models: list[str] | None = Field(None, max_length=64)
+    reason: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def _usable(self) -> AccessPolicyIn:
+        try:
+            gateway.validate_access_policy_fields(self.model_dump())
+        except ValueError as exc:
+            raise ValueError(str(exc)) from None
+        return self
+
+
+class AccessPolicyUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=120)
+    priority: int | None = Field(None, ge=0, le=100_000)
+    enabled: bool | None = None
+    use_case: str | None = Field(None, max_length=64)
+    sensitivity: str | None = None
+    agent_id: str | None = Field(None, max_length=64)
+    business_unit: str | None = Field(None, max_length=64)
+    language: str | None = Field(None, max_length=16)
+    application: str | None = Field(None, max_length=128)
+    principal: str | None = Field(None, max_length=255)
+    provider: str | None = Field(None, max_length=64)
+    model: str | None = Field(None, max_length=128)
+    effect: str | None = None
+    allowed_providers: list[str] | None = Field(None, max_length=32)
+    allowed_models: list[str] | None = Field(None, max_length=64)
+    reason: str | None = Field(None, max_length=2000)
+
+
+class AccessPolicyOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    priority: int
+    enabled: bool
+    use_case: str | None
+    sensitivity: str | None
+    agent_id: str | None
+    business_unit: str | None
+    language: str | None
+    application: str | None
+    principal: str | None
+    provider: str | None
+    model: str | None
+    effect: str
+    allowed_providers: list[str] | None
+    allowed_models: list[str] | None
+    reason: str
+    created_by: str
+    created_at: datetime
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+class LimitIn(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=64)
+    model: str | None = Field(None, max_length=128, description="empty for a provider-wide limit")
+    enabled: bool = True
+    max_concurrency: int | None = Field(None, ge=1, le=100_000)
+    requests_per_minute: int | None = Field(None, ge=1, le=10_000_000)
+    reason: str = Field("", max_length=2000)
+
+    @model_validator(mode="after")
+    def _usable(self) -> LimitIn:
+        try:
+            gateway.validate_limit_fields(self.model_dump())
+        except ValueError as exc:
+            raise ValueError(str(exc)) from None
+        return self
+
+
+class LimitUpdate(BaseModel):
+    provider: str | None = Field(None, min_length=1, max_length=64)
+    model: str | None = Field(None, max_length=128)
+    enabled: bool | None = None
+    max_concurrency: int | None = Field(None, ge=1, le=100_000)
+    requests_per_minute: int | None = Field(None, ge=1, le=10_000_000)
+    reason: str | None = Field(None, max_length=2000)
+
+
+class LimitOut(BaseModel):
+    id: uuid.UUID
+    provider: str
+    model: str | None
+    enabled: bool
+    max_concurrency: int | None
+    requests_per_minute: int | None
     reason: str
     created_by: str
     created_at: datetime
@@ -101,6 +224,8 @@ class EvaluateIn(BaseModel):
     agent_id: str | None = Field(None, max_length=64)
     business_unit: str | None = Field(None, max_length=64)
     language: str | None = Field(None, max_length=16)
+    application: str | None = Field(None, max_length=128)
+    principal: str | None = Field(None, max_length=255)
 
     @model_validator(mode="after")
     def _known_sensitivity(self) -> EvaluateIn:
@@ -143,6 +268,7 @@ def _out(row: ModelRoutingPolicy) -> PolicyOut:
         provider=row.provider,
         model=row.model,
         tier=row.tier,
+        targets=[dict(t) for t in row.targets] if getattr(row, "targets", None) is not None else None,
         allowed_providers=list(row.allowed_providers) if row.allowed_providers is not None else None,
         in_region_only=row.in_region_only,
         reason=row.reason or "",
@@ -151,6 +277,53 @@ def _out(row: ModelRoutingPolicy) -> PolicyOut:
         updated_by=row.updated_by,
         updated_at=row.updated_at,
     )
+
+
+def _access_out(row: ModelAccessPolicy) -> AccessPolicyOut:
+    return AccessPolicyOut(
+        id=row.id,
+        name=row.name,
+        priority=row.priority,
+        enabled=row.enabled,
+        use_case=row.use_case,
+        sensitivity=row.sensitivity,
+        agent_id=row.agent_id,
+        business_unit=row.business_unit,
+        language=row.language,
+        application=row.application,
+        principal=row.principal,
+        provider=row.provider,
+        model=row.model,
+        effect=row.effect,
+        allowed_providers=list(row.allowed_providers) if row.allowed_providers is not None else None,
+        allowed_models=list(row.allowed_models) if row.allowed_models is not None else None,
+        reason=row.reason or "",
+        created_by=row.created_by,
+        created_at=row.created_at,
+        updated_by=row.updated_by,
+        updated_at=row.updated_at,
+    )
+
+
+def _limit_out(row: ModelLimit) -> LimitOut:
+    return LimitOut(
+        id=row.id,
+        provider=row.provider,
+        model=row.model,
+        enabled=row.enabled,
+        max_concurrency=row.max_concurrency,
+        requests_per_minute=row.requests_per_minute,
+        reason=row.reason or "",
+        created_by=row.created_by,
+        created_at=row.created_at,
+        updated_by=row.updated_by,
+        updated_at=row.updated_at,
+    )
+
+
+async def _fetch(tenant_id: uuid.UUID, model: type, row_id: uuid.UUID):
+    async with get_tenant_session(tenant_id) as session:
+        return (await session.execute(select(model).where(model.id == row_id))).scalar_one()
 
 
 @router.get("/status")
@@ -163,11 +336,16 @@ def _out(row: ModelRoutingPolicy) -> PolicyOut:
     audit_event="model_gateway.status",
 )
 async def gateway_status(tenant_id: str = Depends(get_current_tenant)) -> dict[str, object]:
-    """Whether the gateway is on for this tenant and which policies are active."""
+    """Whether the gateway is on for this tenant and which policies and limits are active."""
     tid = uuid.UUID(tenant_id)
     on = await gateway.enabled(tid)
-    policies = await gateway.active_policies(tid) if on else []
-    return {"enabled": on, "active_policies": [p.to_dict() for p in policies]}
+    policy_set = await gateway.active_policy_set(tid) if on else gateway.PolicySet()
+    return {
+        "enabled": on,
+        "active_policies": [p.to_dict() for p in policy_set.routing],
+        "active_access_policies": [p.to_dict() for p in policy_set.access],
+        "active_limits": [limit.to_dict() for limit in policy_set.limits],
+    }
 
 
 @router.get("/policies", response_model=list[PolicyOut])
@@ -278,6 +456,204 @@ async def delete_policy(
     return Response(status_code=204)
 
 
+@router.get("/access-policies", response_model=list[AccessPolicyOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="model_gateway.access_policies.list",
+)
+async def list_access_policies(
+    include_disabled: bool = True,
+    tenant_id: str = Depends(get_current_tenant),
+) -> list[AccessPolicyOut]:
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(ModelAccessPolicy).where(ModelAccessPolicy.tenant_id == tid)
+        if not include_disabled:
+            query = query.where(ModelAccessPolicy.enabled.is_(True))
+        rows = (
+            (await session.execute(query.order_by(ModelAccessPolicy.priority, ModelAccessPolicy.name))).scalars().all()
+        )
+        return [_access_out(row) for row in rows]
+
+
+@router.post("/access-policies", response_model=AccessPolicyOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="non-idempotent-create",
+    audit_event="model_gateway.access_policies.set",
+)
+async def create_access_policy(
+    body: AccessPolicyIn,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> AccessPolicyOut:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    try:
+        policy = await gateway.set_access_policy(tid, actor_id=actor_id, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return _access_out(await _fetch(tid, ModelAccessPolicy, uuid.UUID(policy.id)))
+
+
+@router.patch("/access-policies/{policy_id}", response_model=AccessPolicyOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-update",
+    audit_event="model_gateway.access_policies.update",
+)
+async def update_access_policy(
+    policy_id: uuid.UUID,
+    body: AccessPolicyUpdate,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> AccessPolicyOut:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(422, "nothing to change")
+    try:
+        policy = await gateway.update_access_policy(tid, policy_id, actor_id=actor_id, changes=changes)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if policy is None:
+        raise HTTPException(404, "Access policy not found")
+    return _access_out(await _fetch(tid, ModelAccessPolicy, policy_id))
+
+
+@router.delete("/access-policies/{policy_id}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-delete",
+    audit_event="model_gateway.access_policies.delete",
+)
+async def delete_access_policy(
+    policy_id: uuid.UUID,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> Response:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    if not await gateway.delete_access_policy(tid, policy_id, actor_id=actor_id):
+        raise HTTPException(404, "Access policy not found")
+    return Response(status_code=204)
+
+
+@router.get("/limits", response_model=list[LimitOut])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="model_gateway.limits.list",
+)
+async def list_limits(
+    include_disabled: bool = True,
+    tenant_id: str = Depends(get_current_tenant),
+) -> list[LimitOut]:
+    tid = uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        query = select(ModelLimit).where(ModelLimit.tenant_id == tid)
+        if not include_disabled:
+            query = query.where(ModelLimit.enabled.is_(True))
+        rows = (await session.execute(query.order_by(ModelLimit.provider, ModelLimit.model))).scalars().all()
+        return [_limit_out(row) for row in rows]
+
+
+@router.post("/limits", response_model=LimitOut, status_code=201)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="non-idempotent-create",
+    audit_event="model_gateway.limits.set",
+)
+async def create_limit(
+    body: LimitIn,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> LimitOut:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    try:
+        limit = await gateway.set_limit(tid, actor_id=actor_id, **body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return _limit_out(await _fetch(tid, ModelLimit, uuid.UUID(limit.id)))
+
+
+@router.patch("/limits/{limit_id}", response_model=LimitOut)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-update",
+    audit_event="model_gateway.limits.update",
+)
+async def update_limit(
+    limit_id: uuid.UUID,
+    body: LimitUpdate,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> LimitOut:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    changes = body.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(422, "nothing to change")
+    try:
+        limit = await gateway.update_limit(tid, limit_id, actor_id=actor_id, changes=changes)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if limit is None:
+        raise HTTPException(404, "Limit not found")
+    return _limit_out(await _fetch(tid, ModelLimit, limit_id))
+
+
+@router.delete("/limits/{limit_id}", status_code=204)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.model_gateway.sensitive.write",
+    rate_limit="security-admin-write",
+    idempotency="idempotent-delete",
+    audit_event="model_gateway.limits.delete",
+)
+async def delete_limit(
+    limit_id: uuid.UUID,
+    request: Request,
+    tenant_id: str = Depends(get_current_tenant),
+    caller: Caller | None = Depends(caller_from_request),
+) -> Response:
+    tid = uuid.UUID(tenant_id)
+    actor_id = _actor(request, caller)
+    if not await gateway.delete_limit(tid, limit_id, actor_id=actor_id):
+        raise HTTPException(404, "Limit not found")
+    return Response(status_code=204)
+
+
 @router.post("/evaluate")
 @route_meta(
     auth_required=True,
@@ -288,10 +664,11 @@ async def delete_policy(
     audit_event="model_gateway.evaluate",
 )
 async def evaluate(body: EvaluateIn, tenant_id: str = Depends(get_current_tenant)) -> dict[str, object]:
-    """Dry-run the policies for a described request, whether or not the gateway is on.
+    """Dry-run the routing and access policies for a described request, whether or not the gateway is on.
 
     The answer is the decision the policies would make, or the refusal, as data,
-    with ``enabled`` saying whether the gateway currently applies it.
+    with ``enabled`` saying whether the gateway currently applies it. Limits are
+    not applied: a dry run starts no model work.
     """
     request = gateway.RouteRequest(tenant_id=uuid.UUID(tenant_id), **body.model_dump())
     evaluation = await gateway.evaluate(request)

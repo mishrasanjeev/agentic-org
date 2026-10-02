@@ -5022,6 +5022,78 @@
     "tenant_required": false
   },
   {
+    "audit_event": "model_gateway.access_policies.list",
+    "auth_required": true,
+    "function": "list_access_policies",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/model-gateway/access-policies api/v1/model_gateway.py:list_access_policies",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/access-policies",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.model_gateway.sensitive.read",
+    "source_line": 468,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.access_policies.set",
+    "auth_required": true,
+    "function": "create_access_policy",
+    "idempotency": "non-idempotent-create",
+    "key": "POST /api/v1/model-gateway/access-policies api/v1/model_gateway.py:create_access_policy",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/access-policies",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 492,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.access_policies.delete",
+    "auth_required": true,
+    "function": "delete_access_policy",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/model-gateway/access-policies/{policy_id} api/v1/model_gateway.py:delete_access_policy",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/access-policies/{policy_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 546,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.access_policies.update",
+    "auth_required": true,
+    "function": "update_access_policy",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/model-gateway/access-policies/{policy_id} api/v1/model_gateway.py:update_access_policy",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/access-policies/{policy_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 516,
+    "tenant_required": true
+  },
+  {
     "audit_event": "model_gateway.evaluate",
     "auth_required": true,
     "function": "evaluate",
@@ -5036,7 +5108,79 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 290,
+    "source_line": 666,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.limits.list",
+    "auth_required": true,
+    "function": "list_limits",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/model-gateway/limits api/v1/model_gateway.py:list_limits",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/limits",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.model_gateway.sensitive.read",
+    "source_line": 568,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.limits.set",
+    "auth_required": true,
+    "function": "create_limit",
+    "idempotency": "non-idempotent-create",
+    "key": "POST /api/v1/model-gateway/limits api/v1/model_gateway.py:create_limit",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/limits",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 590,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.limits.delete",
+    "auth_required": true,
+    "function": "delete_limit",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/model-gateway/limits/{limit_id} api/v1/model_gateway.py:delete_limit",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/limits/{limit_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 644,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "model_gateway.limits.update",
+    "auth_required": true,
+    "function": "update_limit",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/model-gateway/limits/{limit_id} api/v1/model_gateway.py:update_limit",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/model_gateway.py",
+    "path": "/api/v1/model-gateway/limits/{limit_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "governance.model_gateway.sensitive.write",
+    "source_line": 614,
     "tenant_required": true
   },
   {
@@ -5054,7 +5198,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 182,
+    "source_line": 360,
     "tenant_required": true
   },
   {
@@ -5072,7 +5216,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 208,
+    "source_line": 386,
     "tenant_required": true
   },
   {
@@ -5090,7 +5234,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 268,
+    "source_line": 446,
     "tenant_required": true
   },
   {
@@ -5108,7 +5252,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.model_gateway.sensitive.write",
-    "source_line": 236,
+    "source_line": 414,
     "tenant_required": true
   },
   {
@@ -5126,7 +5270,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.model_gateway.sensitive.read",
-    "source_line": 165,
+    "source_line": 338,
     "tenant_required": true
   },
   {

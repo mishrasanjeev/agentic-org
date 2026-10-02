@@ -4,6 +4,35 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Model gateway: access policies, per-model limits and weighted targets
+- Access policies (`model_access_policies`, `GET/POST /api/v1/model-gateway/access-policies`,
+  `PATCH/DELETE .../access-policies/{id}`): who may use which provider or model.
+  Evaluated after routing, first match in priority order; a policy matches on
+  use case, sensitivity, agent, business unit, language, the calling
+  `application` and `principal`, and the provider and model chosen; `deny`
+  refuses, `allow` lets through fenced to `allowed_providers` and
+  `allowed_models`; no match allows. A refusal is `E1014` with `kind: access`.
+- The auth middleware binds the caller's identity for every authenticated
+  request (`core/governance/caller_identity.py`): `application` is the API
+  key's name, `agent:<id>` for an Agent Passport or `console` for a human
+  session; `principal` is exactly the audit actor (`user:<id>` for a session
+  with a user id, else mode and subject such as `api_key:apikey:<prefix>` or
+  `grantex:<subject>`). Work outside a request carries none.
+- Per-model limits (`model_limits`, `GET/POST /api/v1/model-gateway/limits`,
+  `PATCH/DELETE .../limits/{id}`): `max_concurrency` and `requests_per_minute`
+  per provider or per model, enforced in Redis at admission just before each
+  model call is sent (every reasoning turn of an agent run, every direct
+  completion) and released when the model returns; a slot never released
+  expires after `AGENTICORG_MODEL_GATEWAY_LEASE_SECONDS`
+  (600). A call above a limit is refused with the new retryable `E1015`
+  carrying `retry_after_seconds`; every check is metered in
+  `agenticorg_model_gateway_limit_outcomes_total{limit,outcome}`. An
+  unreachable limit store admits the call and meters `unavailable`.
+- Routing policies may split their matches by weight (`targets`:
+  `[{provider, model, weight}]`), stable per correlation id; the dry run
+  reports access decisions and takes `application` and `principal`.
+- Migration `v6z35_model_access_limits`; each change writes a signed audit row.
+
 ### Fixed - A halted workflow stays recoverable when the task queue is unavailable
 - When `resume_halted_workflow` cannot be queued (broker down), the background
   executor no longer leaves the run at `running` with nobody retrying it: it

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -42,8 +43,9 @@ def _req(**over) -> RouteRequest:
     return RouteRequest(**base)
 
 
-def _with(policies: list[Policy]):
-    return patch.object(gw, "active_policies", AsyncMock(return_value=policies))
+def _with(policies: list[Policy], access: list[gw.AccessPolicy] | None = None, limits: list | None = None):
+    policy_set = gw.PolicySet(routing=tuple(policies), access=tuple(access or ()), limits=tuple(limits or ()))
+    return patch.object(gw, "active_policy_set", AsyncMock(return_value=policy_set))
 
 
 @pytest.fixture
@@ -58,7 +60,7 @@ class TestSwitch:
         reads = AsyncMock(return_value=[])
         with (
             patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))),
-            patch.object(gw, "active_policies", reads),
+            patch.object(gw, "active_policy_set", reads),
         ):
             decision = asyncio.run(decide(_req()))
         assert decision.applied is False and decision.reason == "gateway off"
@@ -83,7 +85,7 @@ class TestSwitch:
     def test_an_unreadable_policy_set_refuses_in_strict_and_passes_through_in_relaxed(self, monkeypatch):
         monkeypatch.setattr(gw.settings, "model_gateway_enabled", True)
         monkeypatch.setattr(gw.settings, "env", "production")
-        with patch.object(gw, "active_policies", AsyncMock(side_effect=RuntimeError("db down"))):
+        with patch.object(gw, "active_policy_set", AsyncMock(side_effect=RuntimeError("db down"))):
             with pytest.raises(ModelGatewayRefused) as info:
                 asyncio.run(decide(_req()))
             assert "could not be read" in info.value.reason
@@ -340,15 +342,22 @@ class TestEnforcementPoints:
         refusal = ModelGatewayRefused("refused", correlation_id="c2", policy_id="p1", policy_name="fence")
         result, _route, prefetch, graph = self._run(AsyncMock(side_effect=refusal))
         assert result["status"] == "model_gateway_refused" and result["error_code"] == gw.ERROR_CODE
-        assert result["model_gateway"] == {"correlation_id": "c2", "policy_id": "p1", "policy_name": "fence"}
+        assert result["model_gateway"] == {
+            "correlation_id": "c2",
+            "policy_id": "p1",
+            "policy_name": "fence",
+            "kind": "routing",
+        }
         prefetch.assert_not_called()
         graph.assert_not_called()
 
     def test_the_resume_path_routes_before_its_credential_prefetch(self):
         src = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
         resume = src[src.index("async def resume_agent(") :]
-        assert resume.index("check_operator_override(") < resume.index("route_for_agent(") < resume.index(
-            "prefetch_llm_credential("
+        assert (
+            resume.index("check_operator_override(")
+            < resume.index("route_for_agent(")
+            < resume.index("prefetch_llm_credential(")
         )
         assert 'use_case="agent_resume"' in resume
 
@@ -419,3 +428,414 @@ class TestMigration:
         src = path.read_text(encoding="utf-8")
         assert "ALTER TABLE model_routing_policies ENABLE ROW LEVEL SECURITY" in src
         assert "FORCE ROW LEVEL SECURITY" in src and "WITH CHECK" in src
+
+
+TARGETS = (
+    {"provider": "openai", "model": "gpt-4o", "weight": 3},
+    {"provider": "gemini", "model": "gemini-2.5-flash", "weight": 1},
+)
+
+
+def _access(**over) -> gw.AccessPolicy:
+    base = {"id": str(uuid.uuid4()), "name": "a", "priority": 100}
+    base.update(over)
+    return gw.AccessPolicy(**base)
+
+
+class TestTargets:
+    def test_pick_target_is_stable_per_correlation_id_and_proportional_over_many(self):
+        first = gw.pick_target(TARGETS, "c1")
+        assert gw.pick_target(TARGETS, "c1") == first
+        counts = Counter(gw.pick_target(TARGETS, f"id-{i}")["model"] for i in range(2000))
+        assert 0.68 < counts["gpt-4o"] / 2000 < 0.82
+
+    def test_a_policy_with_targets_sends_each_call_to_one_of_them(self, gateway_on):
+        with _with([_policy(targets=TARGETS)]):
+            decisions = [asyncio.run(decide(_req(correlation_id=f"c-{i}"))) for i in range(40)]
+            again = asyncio.run(decide(_req(correlation_id="c-0")))
+        assert all(d.applied for d in decisions)
+        assert {(d.provider, d.model) for d in decisions} == {("openai", "gpt-4o"), ("gemini", "gemini-2.5-flash")}
+        assert (again.provider, again.model) == (decisions[0].provider, decisions[0].model)
+
+    def test_targets_are_validated_against_the_catalogue_and_the_fence(self):
+        clean = gw.validate_policy_fields(
+            {
+                "name": "split",
+                "targets": [
+                    {"provider": "OpenAI", "model": "gpt-4o", "weight": 3},
+                    {"provider": "gemini", "model": "gemini-2.5-flash"},
+                ],
+            }
+        )
+        assert clean["targets"] == [
+            {"provider": "openai", "model": "gpt-4o", "weight": 3},
+            {"provider": "gemini", "model": "gemini-2.5-flash", "weight": 1},
+        ]
+        for bad in (
+            [],
+            "x",
+            ["x"],
+            [{"provider": "openai", "model": "gpt-4o", "weight": 0}],
+            [{"provider": "openai", "model": "nope"}],
+        ):
+            with pytest.raises(ValueError):
+                gw.validate_policy_fields({"name": "s", "targets": bad})
+        with pytest.raises(ValueError, match="no single provider"):
+            gw.validate_policy_fields({"name": "s", "targets": list(TARGETS), "tier": "tier1"})
+        with pytest.raises(ValueError, match="allowed_providers"):
+            gw.validate_policy_fields({"name": "s", "targets": list(TARGETS), "allowed_providers": ["openai"]})
+        policy = _policy(targets=TARGETS, allowed_providers=("gemini", "openai"))
+        assert Policy.from_dict(policy.to_dict()) == policy
+
+
+class TestAccess:
+    def test_a_call_no_access_policy_matches_is_allowed(self, gateway_on):
+        with _with([], access=[_access(application="other-app", effect="deny")]):
+            decision = asyncio.run(decide(_req()))
+        assert decision.gated and decision.access_policy_id is None and decision.model == "gemini-2.5-flash"
+
+    def test_a_deny_refuses_with_the_access_kind(self, gateway_on):
+        deny = _access(name="no-flash", model="gemini-2.5-flash", effect="deny")
+        with _with([], access=[deny]):
+            with pytest.raises(ModelGatewayRefused) as info:
+                asyncio.run(decide(_req(application="advisory-app")))
+        assert info.value.kind == "access" and info.value.code == gw.ERROR_CODE
+        assert info.value.policy_name == "no-flash" and "denies advisory-app" in info.value.reason
+        assert info.value.to_error()["model_gateway"]["kind"] == "access"
+
+    def test_the_first_match_in_priority_order_decides(self, gateway_on):
+        allow = _access(name="advisory-ok", priority=10, application="advisory-app", model="gemini-2.5-flash")
+        deny = _access(name="flash-denied", priority=20, model="gemini-2.5-flash", effect="deny")
+        with _with([], access=[deny, allow]):
+            allowed = asyncio.run(decide(_req(application="Advisory-App")))
+            with pytest.raises(ModelGatewayRefused, match="flash-denied"):
+                asyncio.run(decide(_req(application="other-app")))
+        assert allowed.access_policy_name == "advisory-ok"
+
+    def test_an_allow_fences_the_providers_and_models(self, gateway_on):
+        with _with([], access=[_access(application="app", allowed_models=("gpt-4o",))]):
+            with pytest.raises(ModelGatewayRefused, match="outside the models"):
+                asyncio.run(decide(_req(application="app")))
+        with _with([], access=[_access(application="app", allowed_providers=("openai",))]):
+            with pytest.raises(ModelGatewayRefused, match="outside the providers"):
+                asyncio.run(decide(_req(application="app")))
+        with _with(
+            [], access=[_access(application="app", allowed_providers=("gemini",), allowed_models=("gemini-2.5-flash",))]
+        ):
+            assert asyncio.run(decide(_req(application="app"))).access_policy_id is not None
+
+    def test_the_access_policy_sees_the_routed_model_not_the_requested_one(self, gateway_on):
+        with _with([_policy(model="gpt-4o")], access=[_access(model="gpt-4o", effect="deny")]):
+            with pytest.raises(ModelGatewayRefused, match="gpt-4o"):
+                asyncio.run(decide(_req()))
+
+    def test_the_bound_identity_fills_the_application_and_principal(self, gateway_on):
+        from core.governance.caller_identity import CallerIdentity, bind_identity, reset_identity
+
+        deny = _access(principal="user:7", effect="deny")
+        token = bind_identity(CallerIdentity(principal="user:7", application="console", auth_mode="legacy"))
+        try:
+            with _with([], access=[deny]):
+                with pytest.raises(ModelGatewayRefused):
+                    asyncio.run(decide(_req()))
+                # A request that names its caller is not overridden by the bound identity.
+                assert asyncio.run(decide(_req(principal="user:8", application="x"))).gated
+        finally:
+            reset_identity(token)
+        with _with([], access=[deny]):
+            assert asyncio.run(decide(_req())).access_policy_id is None
+
+    def test_the_runner_entry_point_also_carries_the_identity(self, gateway_on):
+        from core.governance.caller_identity import CallerIdentity, bind_identity, reset_identity
+
+        seen: list[RouteRequest] = []
+
+        async def fake_decide(request, policies, correlation_id, **_kw):
+            seen.append(request)
+            return gw._passthrough(request, correlation_id, "probe")
+
+        token = bind_identity(CallerIdentity(principal="api_key:k1", application="ops", auth_mode="api_key"))
+        try:
+            with (
+                _with([]),
+                patch.object(gw, "agent_sensitivity", AsyncMock(return_value=None)),
+                patch.object(gw, "_decide", fake_decide),
+            ):
+                asyncio.run(
+                    gw.route_for_agent(
+                        TENANT,
+                        use_case="agent_run",
+                        agent_id="a1",
+                        business_unit="finance",
+                        requested_provider="gemini",
+                        requested_model="gemini-2.5-flash",
+                    )
+                )
+        finally:
+            reset_identity(token)
+        assert seen[0].application == "ops" and seen[0].principal == "api_key:k1"
+
+    def test_a_dry_run_reports_an_access_refusal_without_metering(self, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_enabled", False)
+        monkeypatch.setattr(gw.settings, "env", "test")
+        meter = []
+        with (
+            patch("core.feature_flags.load_flag_rows_strict", AsyncMock(return_value=_rows(False))),
+            _with([], access=[_access(effect="deny")]),
+            patch.object(gw, "_meter", lambda outcome: meter.append(outcome)),
+        ):
+            evaluation = asyncio.run(gw.evaluate(_req(application="app")))
+        assert evaluation.enabled is False and evaluation.refusal is not None
+        assert evaluation.refusal.kind == "access" and meter == []
+
+    def test_access_policy_validation(self):
+        clean = gw.validate_access_policy_fields(
+            {
+                "name": "frontier",
+                "application": "Advisory-App",
+                "provider": "OpenAI",
+                "model": "gpt-4o",
+                "effect": "ALLOW",
+                "allowed_models": ["gpt-4o", " "],
+            }
+        )
+        assert clean["application"] == "advisory-app" and clean["provider"] == "openai" and clean["effect"] == "allow"
+        assert clean["allowed_models"] == ["gpt-4o"] and clean["priority"] == 100 and clean["enabled"] is True
+        with pytest.raises(ValueError, match="belongs on an allow"):
+            gw.validate_access_policy_fields({"name": "d", "effect": "deny", "allowed_models": ["gpt-4o"]})
+        with pytest.raises(ValueError, match="effect must be"):
+            gw.validate_access_policy_fields({"name": "d", "effect": "maybe"})
+        with pytest.raises(ValueError, match="sensitivity"):
+            gw.validate_access_policy_fields({"name": "d", "sensitivity": "secret"})
+        with pytest.raises(ValueError, match="at least one"):
+            gw.validate_access_policy_fields({"name": "d", "allowed_providers": [""]})
+        with pytest.raises(ValueError, match="needs a name"):
+            gw.validate_access_policy_fields({"effect": "deny"})
+        with pytest.raises(ValueError, match="priority"):
+            gw.validate_access_policy_fields({"name": "d", "priority": True})
+        with pytest.raises(ValueError):
+            gw.validate_access_policy_fields({"name": "d", "provider": "openai", "model": "gemini-2.5-pro"})
+
+    def test_round_trips(self):
+        access = _access(application="app", allowed_providers=("openai",), allowed_models=("gpt-4o",))
+        assert gw.AccessPolicy.from_dict(access.to_dict()) == access
+        from core.governance.model_gateway_limits import Limit
+
+        policy_set = gw.PolicySet(
+            routing=(_policy(targets=TARGETS),),
+            access=(access,),
+            limits=(Limit(id="l1", provider="openai", model="gpt-4o", max_concurrency=2),),
+        )
+        assert gw.PolicySet.from_json(policy_set.to_json()) == policy_set
+
+
+class TestAdmission:
+    def _decision(self, **over) -> RouteDecision:
+        base = {
+            "provider": "openai",
+            "model": "gpt-4o",
+            "correlation_id": "c9",
+            "reason": "p",
+            "applied": True,
+            "gated": True,
+            "tenant_id": str(TENANT),
+            "use_case": "agent_run",
+        }
+        base.update(over)
+        return RouteDecision(**base)
+
+    def test_a_pass_through_decision_is_not_admitted_and_reads_nothing(self):
+        with patch.object(gw, "active_limits", AsyncMock()) as reads:
+            assert asyncio.run(gw.admit(self._decision(gated=False))) is None
+            assert asyncio.run(gw.admit(self._decision(tenant_id=None))) is None
+        reads.assert_not_called()
+
+    def test_admission_applies_the_tenants_limits_and_returns_the_lease(self):
+        from core.governance.model_gateway_limits import Admission, Lease, Limit
+
+        limit = Limit(id="l1", provider="openai", model="gpt-4o", max_concurrency=2)
+        lease = Lease(lease_id="c9", keys=("k",))
+        with (
+            patch.object(gw, "active_limits", AsyncMock(return_value=[limit])),
+            patch.object(gw, "_admit_limits", AsyncMock(return_value=Admission(lease=lease))) as admit,
+        ):
+            assert asyncio.run(gw.admit(self._decision())) is lease
+        assert admit.await_args.args == (str(TENANT), "openai", "gpt-4o", [limit])
+        assert admit.await_args.kwargs == {"correlation_id": "c9"}
+
+    def test_a_rejected_admission_refuses_with_the_limit_code_and_the_wait(self):
+        from core.governance.model_gateway_limits import Admission, Lease, Limit, LimitRejected
+
+        limit = Limit(id="l1", provider="openai", model="gpt-4o", max_concurrency=2, requests_per_minute=60)
+        for kind, wait, text in (("concurrency", 1.0, "2 calls in flight"), ("rate", 12.5, "60 calls per minute")):
+            admission = Admission(
+                lease=Lease(lease_id="c9", outcome="rejected"),
+                rejected=LimitRejected(limit=limit, kind=kind, retry_after_seconds=wait, in_flight=2),
+            )
+            with (
+                patch.object(gw, "active_limits", AsyncMock(return_value=[limit])),
+                patch.object(gw, "_admit_limits", AsyncMock(return_value=admission)),
+            ):
+                with pytest.raises(ModelGatewayRefused) as info:
+                    asyncio.run(gw.admit(self._decision()))
+            assert info.value.kind == "limit" and info.value.code == gw.LIMIT_ERROR_CODE == "E1015"
+            assert info.value.retry_after_seconds == wait and text in info.value.reason
+            error = info.value.to_error()
+            assert error["error"]["code"] == "E1015" and error["model_gateway"]["retry_after_seconds"] == wait
+            assert gw.refused_run_result(info.value)["error_code"] == "E1015"
+
+    def test_unreadable_limits_admit_with_an_unavailable_lease(self):
+        with patch.object(gw, "active_limits", AsyncMock(side_effect=RuntimeError("db down"))):
+            lease = asyncio.run(gw.admit(self._decision()))
+        assert lease is not None and lease.outcome == "unavailable" and not lease.held
+
+    def test_release_delegates_to_the_limit_store(self):
+        from core.governance.model_gateway_limits import Lease
+
+        lease = Lease(lease_id="c9", keys=("k",))
+        with patch.object(gw, "_release_lease", AsyncMock()) as release:
+            asyncio.run(gw.release(lease))
+            asyncio.run(gw.release(None))
+        assert [call.args[0] for call in release.await_args_list] == [lease, None]
+
+    def test_the_runner_binds_the_route_for_the_run_and_the_reasoning_node_admits_each_turn(self):
+        src = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
+        run = src[src.index("async def run_agent(") : src.index("async def resume_agent(")]
+        resume = src[src.index("async def resume_agent(") :]
+        for body in (run, resume):
+            assert body.index("route_for_agent(") < body.index("graph.compile(") < body.index("bind_route(")
+            assert body.index("bind_route(") < body.index("t0 = time.perf_counter()")
+            assert body.count("reset_route(route_token)") == 1
+            tail = body[body.index("reset_route(route_token)") - 40 : body.index("reset_route(route_token)")]
+            assert "finally:" in tail
+            assert "except ModelGatewayRefused as exc:" in body[body.index("t0 = time.perf_counter()") :]
+        graph = (ROOT / "core" / "langgraph" / "agent_graph.py").read_text(encoding="utf-8")
+        reason = graph[graph.index("async def reason(") : graph.index("async def evaluate(")]
+        assert reason.index("gateway_admit(route.decision)") < reason.index("llm.ainvoke(messages)")
+        assert "finally:" in reason and "await gateway_release(lease)" in reason
+
+    def _resume(self, invoke_outcome):
+        from unittest.mock import MagicMock
+
+        from auth.grant_enforcement import EnforcementMode
+        from auth.run_grants import RunGrant
+        from core.langgraph import runner
+
+        seen: dict[str, object] = {}
+
+        class _Compiled:
+            async def ainvoke(self, _command, config=None):
+                seen["route"] = gw.current_route()
+                if isinstance(invoke_outcome, Exception):
+                    raise invoke_outcome
+                return {"status": "completed", "messages": []}
+
+        graph = MagicMock()
+        graph.compile.return_value = _Compiled()
+        decision = self._decision(use_case="agent_resume")
+        with (
+            patch.object(runner, "build_agent_graph", MagicMock(return_value=graph)),
+            patch.object(runner, "prefetch_llm_credential", AsyncMock(return_value=None)),
+            patch.object(runner, "route_for_agent", AsyncMock(return_value=decision)),
+        ):
+            result = asyncio.run(
+                runner.resume_agent(
+                    agent_id="a1",
+                    thread_id=runner._run_thread_id(str(TENANT), "t-1", "a1"),
+                    decision={"action": "approve"},
+                    system_prompt="x",
+                    authorized_tools=[],
+                    tenant_id=str(TENANT),
+                    run_grant=RunGrant(mode=EnforcementMode.OFF, token="", source="minted"),
+                )
+            )
+        return result, seen, decision
+
+    def test_the_resume_path_binds_the_route_while_the_graph_runs_and_clears_it_after(self):
+        result, seen, decision = self._resume(None)
+        assert result["status"] == "completed"
+        route = seen["route"]
+        assert route is not None and route.decision is decision
+        assert route.use_case == "agent_resume" and route.agent_id == "a1"
+        assert gw.current_route() is None
+
+    def test_the_resume_path_returns_the_refused_result_when_a_turn_is_refused(self):
+        refusal = ModelGatewayRefused("at its limit", correlation_id="c9", kind="limit", retry_after_seconds=2.0)
+        result, _seen, _decision = self._resume(refusal)
+        assert result["status"] == "model_gateway_refused" and result["error_code"] == "E1015"
+        assert result["model_gateway"]["retry_after_seconds"] == 2.0
+        assert gw.current_route() is None
+
+    def test_the_router_admits_after_the_decision_and_releases_after_the_call_and_its_fallback(self):
+        from core.governance.model_gateway_limits import Lease
+        from core.llm.router import LLMResponse, LLMRouter
+
+        router = LLMRouter()
+        router.primary_model = "gemini-2.5-flash"
+        router.fallback_model = "gemini-2.5-flash"
+        decision = self._decision(provider="gemini", model="gemini-2.5-pro", use_case="completion")
+        lease = Lease(lease_id="c9", keys=("k",))
+        called: list[str] = []
+        response = LLMResponse(content="ok", model="gemini-2.5-flash", tokens_used=1, cost_usd=0.0, latency_ms=1)
+
+        async def fake_call(model, _messages, _temperature, _max_tokens, **_scope):
+            called.append(model)
+            if len(called) == 1:
+                raise TimeoutError("transient")
+            return response
+
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=decision)),
+            patch("core.llm.router.gateway_admit", AsyncMock(return_value=lease)) as admit,
+            patch("core.llm.router.gateway_release", AsyncMock()) as release,
+            patch.object(router, "_call_model", fake_call),
+        ):
+            result = asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        assert result.content == "ok" and called == ["gemini-2.5-pro", "gemini-2.5-flash"]
+        assert admit.await_args.args[0] is decision
+        release.assert_awaited_once_with(lease)
+
+    def test_the_router_refusal_at_admission_calls_no_model(self):
+        from core.llm.router import LLMRouter
+
+        router = LLMRouter()
+        decision = self._decision(provider="gemini", model="gemini-2.5-flash", use_case="completion")
+        refusal = ModelGatewayRefused("at its limit", correlation_id="c9", kind="limit", retry_after_seconds=1.0)
+        with (
+            patch("core.llm.router.gateway_decide", AsyncMock(return_value=decision)),
+            patch("core.llm.router.gateway_admit", AsyncMock(side_effect=refusal)),
+            patch("core.llm.router.gateway_release", AsyncMock()) as release,
+            patch.object(router, "_call_model", AsyncMock()) as call,
+        ):
+            with pytest.raises(ModelGatewayRefused, match="at its limit"):
+                asyncio.run(router.complete([{"role": "user", "content": "hi"}], tenant_id=str(TENANT)))
+        call.assert_not_called()
+        release.assert_not_called()
+
+
+class TestAccessAndLimitsMigration:
+    def test_revision_chain_rls_and_the_targets_column(self):
+        import importlib.util
+
+        path = ROOT / "migrations" / "versions" / "v6_z35_model_access_limits.py"
+        spec = importlib.util.spec_from_file_location("v6_z35_model_access_limits", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        assert module.revision == "v6z35_model_access_limits" and len(module.revision) <= 32
+        assert module.down_revision == "v6z34_model_routing_policies"
+        src = path.read_text(encoding="utf-8")
+        assert "ADD COLUMN IF NOT EXISTS targets JSONB" in src
+        for table in ("model_access_policies", "model_limits"):
+            assert f"CREATE TABLE IF NOT EXISTS {table}" in src
+            assert f'_rls("{table}")' in src
+        assert "{table}_tenant_isolation" in src and "ENABLE ROW LEVEL SECURITY" in src
+        assert "FORCE ROW LEVEL SECURITY" in src and "WITH CHECK" in src
+        assert "COALESCE(model, '')" in src
+
+    def test_the_limit_error_code_is_registered_and_retryable(self):
+        from core.schemas.errors import ERROR_META, ErrorCode
+
+        assert ErrorCode.MODEL_GATEWAY_LIMIT.value == "E1015"
+        entry = ERROR_META["E1015"]
+        assert entry["name"] == "MODEL_GATEWAY_LIMIT" and entry["retryable"] is True
+        assert ERROR_META["E1014"]["retryable"] is False
