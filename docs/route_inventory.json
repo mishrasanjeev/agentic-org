@@ -7142,7 +7142,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.list",
-    "source_line": 405,
+    "source_line": 406,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.list",
+    "auth_required": true,
+    "function": "list_workflows",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows api/v1/workflows.py:list_workflows",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.list",
+    "source_line": 406,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.list",
+    "auth_required": true,
+    "function": "list_workflows",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows api/v1/workflows.py:list_workflows",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.list",
+    "source_line": 406,
     "tenant_required": true
   },
   {
@@ -7160,7 +7196,43 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 552,
+    "source_line": 553,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.create",
+    "auth_required": true,
+    "function": "create_workflow",
+    "idempotency": "not-idempotent-definition-create",
+    "key": "POST /api/v1/workflows api/v1/workflows.py:create_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 553,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.create",
+    "auth_required": true,
+    "function": "create_workflow",
+    "idempotency": "not-idempotent-definition-create",
+    "key": "POST /api/v1/workflows api/v1/workflows.py:create_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 553,
     "tenant_required": true
   },
   {
@@ -7178,7 +7250,43 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "workflows.generate",
-    "source_line": 295,
+    "source_line": 296,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.generate",
+    "auth_required": true,
+    "function": "generate_workflow_endpoint",
+    "idempotency": "not-idempotent-ai-generation-may-deploy",
+    "key": "POST /api/v1/workflows/generate api/v1/workflows.py:generate_workflow_endpoint",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "ai-generation",
+    "scope": "workflows.generate",
+    "source_line": 296,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.generate",
+    "auth_required": true,
+    "function": "generate_workflow_endpoint",
+    "idempotency": "not-idempotent-ai-generation-may-deploy",
+    "key": "POST /api/v1/workflows/generate api/v1/workflows.py:generate_workflow_endpoint",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/generate",
+    "public_exempt_reason": null,
+    "rate_limit": "ai-generation",
+    "scope": "workflows.generate",
+    "source_line": 296,
     "tenant_required": true
   },
   {
@@ -7196,7 +7304,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.read",
-    "source_line": 987,
+    "source_line": 988,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.read",
+    "auth_required": true,
+    "function": "get_workflow_run",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id} api/v1/workflows.py:get_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.read",
+    "source_line": 988,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.read",
+    "auth_required": true,
+    "function": "get_workflow_run",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id} api/v1/workflows.py:get_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.read",
+    "source_line": 988,
     "tenant_required": true
   },
   {
@@ -7214,7 +7358,43 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-control",
     "scope": "workflows.runs.cancel",
-    "source_line": 1077,
+    "source_line": 1078,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.cancel",
+    "auth_required": true,
+    "function": "cancel_workflow_run",
+    "idempotency": "idempotent-terminal-status",
+    "key": "POST /api/v1/workflows/runs/{run_id}/cancel api/v1/workflows.py:cancel_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/cancel",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-control",
+    "scope": "workflows.runs.cancel",
+    "source_line": 1078,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.cancel",
+    "auth_required": true,
+    "function": "cancel_workflow_run",
+    "idempotency": "idempotent-terminal-status",
+    "key": "POST /api/v1/workflows/runs/{run_id}/cancel api/v1/workflows.py:cancel_workflow_run",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/cancel",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-control",
+    "scope": "workflows.runs.cancel",
+    "source_line": 1078,
     "tenant_required": true
   },
   {
@@ -7232,7 +7412,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.replan-history",
-    "source_line": 1033,
+    "source_line": 1034,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.replan_history",
+    "auth_required": true,
+    "function": "get_replan_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id}/replan-history api/v1/workflows.py:get_replan_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/replan-history",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.replan-history",
+    "source_line": 1034,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.replan_history",
+    "auth_required": true,
+    "function": "get_replan_history",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/runs/{run_id}/replan-history api/v1/workflows.py:get_replan_history",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/runs/{run_id}/replan-history",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.replan-history",
+    "source_line": 1034,
     "tenant_required": true
   },
   {
@@ -7250,7 +7466,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.templates.read",
-    "source_line": 380,
+    "source_line": 381,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "workflows.templates.list",
+    "auth_required": true,
+    "function": "list_workflow_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/templates api/v1/workflows.py:list_workflow_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.templates.read",
+    "source_line": 381,
+    "tenant_required": false
+  },
+  {
+    "audit_event": "workflows.templates.list",
+    "auth_required": true,
+    "function": "list_workflow_templates",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/templates api/v1/workflows.py:list_workflow_templates",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/templates",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.templates.read",
+    "source_line": 381,
     "tenant_required": false
   },
   {
@@ -7268,7 +7520,43 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 617,
+    "source_line": 618,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.delete",
+    "auth_required": true,
+    "function": "delete_workflow",
+    "idempotency": "idempotent-soft-delete",
+    "key": "DELETE /api/v1/workflows/{wf_id} api/v1/workflows.py:delete_workflow",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 618,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.delete",
+    "auth_required": true,
+    "function": "delete_workflow",
+    "idempotency": "idempotent-soft-delete",
+    "key": "DELETE /api/v1/workflows/{wf_id} api/v1/workflows.py:delete_workflow",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 618,
     "tenant_required": true
   },
   {
@@ -7286,7 +7574,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.sensitive.read",
-    "source_line": 464,
+    "source_line": 465,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.read",
+    "auth_required": true,
+    "function": "get_workflow",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id} api/v1/workflows.py:get_workflow",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.read",
+    "source_line": 465,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.read",
+    "auth_required": true,
+    "function": "get_workflow",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id} api/v1/workflows.py:get_workflow",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.sensitive.read",
+    "source_line": 465,
     "tenant_required": true
   },
   {
@@ -7304,7 +7628,43 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-write",
     "scope": "workflows.write",
-    "source_line": 1180,
+    "source_line": 1181,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.replan_config.update",
+    "auth_required": true,
+    "function": "update_replan_config",
+    "idempotency": "idempotent-replan-config-replace",
+    "key": "PUT /api/v1/workflows/{wf_id}/replan-config api/v1/workflows.py:update_replan_config",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/replan-config",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 1181,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.replan_config.update",
+    "auth_required": true,
+    "function": "update_replan_config",
+    "idempotency": "idempotent-replan-config-replace",
+    "key": "PUT /api/v1/workflows/{wf_id}/replan-config api/v1/workflows.py:update_replan_config",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/replan-config",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-write",
+    "scope": "workflows.write",
+    "source_line": 1181,
     "tenant_required": true
   },
   {
@@ -7322,7 +7682,43 @@
     "public_exempt_reason": null,
     "rate_limit": "workflow-execution",
     "scope": "workflows.run",
-    "source_line": 861,
+    "source_line": 862,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.run.create",
+    "auth_required": true,
+    "function": "run_workflow",
+    "idempotency": "not-idempotent-run-creation-requires-client-key",
+    "key": "POST /api/v1/workflows/{wf_id}/run api/v1/workflows.py:run_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-execution",
+    "scope": "workflows.run",
+    "source_line": 862,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.run.create",
+    "auth_required": true,
+    "function": "run_workflow",
+    "idempotency": "not-idempotent-run-creation-requires-client-key",
+    "key": "POST /api/v1/workflows/{wf_id}/run api/v1/workflows.py:run_workflow",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "workflow-execution",
+    "scope": "workflows.run",
+    "source_line": 862,
     "tenant_required": true
   },
   {
@@ -7340,7 +7736,43 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workflows.runs.sensitive.list",
-    "source_line": 490,
+    "source_line": 491,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.list",
+    "auth_required": true,
+    "function": "list_workflow_runs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id}/runs api/v1/workflows.py:list_workflow_runs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/runs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.list",
+    "source_line": 491,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "workflows.runs.list",
+    "auth_required": true,
+    "function": "list_workflow_runs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workflows/{wf_id}/runs api/v1/workflows.py:list_workflow_runs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workflows.py",
+    "path": "/api/v1/workflows/{wf_id}/runs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workflows.runs.sensitive.list",
+    "source_line": 491,
     "tenant_required": true
   },
   {
