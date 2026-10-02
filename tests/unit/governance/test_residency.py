@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -177,6 +178,15 @@ class TestRegions:
 
 
 class TestReport:
+    def test_disaster_recovery_conformance_follows_the_tenant_region(self, enforce_on, monkeypatch):
+        monkeypatch.setattr(res.settings, "data_region", "IN")
+        monkeypatch.setattr(res.settings, "dr_standby_region", "asia-south2")
+        a, b = _with([], region="EU")
+        with a, b:
+            section = asyncio.run(res.report_section(TENANT))
+        assert section["data_region"] == "EU"
+        assert section["disaster_recovery"]["standby_conforms"] is False
+
     def test_section_reports_region_profile_and_attestations(self, enforce_on, monkeypatch):
         monkeypatch.setattr(res.settings, "data_region", "IN")
         monkeypatch.setattr(res.settings, "storage_region", "asia-south1")
@@ -246,13 +256,26 @@ class TestEnforcementPoints:
         with a, b:
             assert asyncio.run(knowledge._ragflow_allowed(str(TENANT))) is True
 
-    def test_composio_execute_is_gated(self, enforce_on):
-        from connectors.composio import adapter as composio
+    def test_the_tool_hub_is_gated_at_the_dispatch_boundary_with_the_tenant(self, enforce_on):
+        from connectors.composio.adapter import ComposioConnectorAdapter
+        from core.langgraph import tool_adapter
 
-        src = (ROOT / "connectors" / "composio" / "adapter.py").read_text(encoding="utf-8")
-        body = src[src.index("async def execute_tool(") :]
-        assert body.index('check_provider(tenant_id, "composio"') < body.index("self._tool_registry.get(tool_name)")
-        assert composio is not None
+        assert ComposioConnectorAdapter.residency_provider == "composio"
+        a, b = _with([])
+        with (
+            a,
+            b,
+            patch("core.governance.operator_override.check", AsyncMock(return_value=SimpleNamespace(blocked=False))),
+        ):
+            allowed = SimpleNamespace(dispatch_allowed=True, to_dict=lambda: {})
+            with patch.object(tool_adapter, "evaluate_action", AsyncMock(return_value=allowed)):
+                with patch.object(tool_adapter.ConnectorRegistry, "get", return_value=ComposioConnectorAdapter):
+                    result = asyncio.run(
+                        tool_adapter._execute_connector_tool(
+                            "composio", "notion_create_page", {}, None, tenant_id=str(TENANT)
+                        )
+                    )
+        assert result["error"]["code"] == "E4006" and result["residency"]["provider"] == "composio"
 
     def test_tracing_export_stays_off_under_deployment_enforcement(self, enforce_on, monkeypatch):
         from observability import trace_redaction
