@@ -22,15 +22,24 @@ The model gateway's decision and every guardrail outcome are events on the
 span in progress. While a span records, the log context carries its trace
 id under ``trace_id`` and the signed audit rows the governance modules write
 record it in their ``trace_id`` column, so one id links a request, its logs,
-its spans and its audit trail. The original span catalogue (workflow, step,
-agent, tool, hitl, auth, shadow) keeps its constructors below for callers
-that manage span lifetimes themselves.
+its spans and its audit trail.
+
+A span names its tenant by ``tenant.ref``, a keyed reference, never by the
+tenant identifier. Residency: with deployment-wide enforcement no exporter
+is installed (spans stay in the process); with tenant-scoped enforcement a
+span of a tenant that enforces, or whose enforcement was never read, is
+withheld from export, as is a span that names no tenant while some tenant in
+the process enforces. The original span catalogue (workflow, step, agent,
+tool, hitl, auth, shadow) keeps its constructors below for callers that
+manage span lifetimes themselves.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import math
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -38,8 +47,8 @@ from typing import Any
 import structlog
 from opentelemetry import propagate, trace
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.sdk.trace import ReadableSpan, TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter, SpanExportResult
 from opentelemetry.sdk.trace.sampling import ParentBased, TraceIdRatioBased
 from opentelemetry.trace import SpanKind, StatusCode
 
@@ -50,6 +59,8 @@ logger = structlog.get_logger()
 PROTOCOLS: tuple[str, ...] = ("http/protobuf", "grpc")
 TRACE_CONTEXT_HEADERS: tuple[str, ...] = ("traceparent", "tracestate")
 LOG_KEY = "trace_id"
+TENANT_REF_KEY = "tenant.ref"
+WITHHELD_KEY = "export.withheld"
 AUDIT_TRACE_ID_WIDTH = 64
 _TRACES_PATH = "/v1/traces"
 
@@ -106,17 +117,14 @@ def init_tracing(
     return _tracer
 
 
-def init_tracing_from_settings() -> bool:
-    """Install the tracer the settings describe; False when tracing is off.
+def validate_settings() -> tuple[str, float, str]:
+    """Check the tracing settings and return the protocol, the sample ratio and the endpoint.
 
-    A strict runtime with tracing on and no OTLP endpoint refuses to start:
-    spans that have nowhere to go are a silent gap in the evidence trail. A
-    relaxed runtime records them without an exporter and says so.
+    Raises ``TracingError`` for an unknown protocol, a sample ratio outside 0
+    to 1, or a strict runtime with tracing on and no OTLP endpoint (spans with
+    nowhere to go would be a silent gap in the evidence trail). The worker
+    process refuses to start on it, as the API's lifespan does.
     """
-    if not settings.tracing_enabled:
-        return False
-    if enabled():
-        return True
     protocol = str(settings.tracing_protocol or "").strip().lower()
     if protocol not in PROTOCOLS:
         raise TracingError(f"AGENTICORG_TRACING_PROTOCOL must be one of {', '.join(PROTOCOLS)}, not {protocol!r}")
@@ -124,11 +132,29 @@ def init_tracing_from_settings() -> bool:
     if isinstance(ratio, bool) or not isinstance(ratio, int | float) or not math.isfinite(ratio) or not 0 <= ratio <= 1:
         raise TracingError("AGENTICORG_TRACING_SAMPLE_RATIO must be a number from 0 to 1")
     endpoint = str(external_keys.otel_exporter_otlp_endpoint or "").strip()
-    exporter: SpanExporter | None = None
-    if endpoint:
-        exporter = otlp_exporter(protocol, endpoint)
-    elif is_strict_runtime_env(settings.env):
+    if not endpoint and is_strict_runtime_env(settings.env):
         raise TracingError("tracing is on and OTEL_EXPORTER_OTLP_ENDPOINT is not set: spans would have nowhere to go")
+    return protocol, float(ratio), endpoint
+
+
+def init_tracing_from_settings() -> bool:
+    """Install the tracer the settings describe; False when tracing is off.
+
+    Residency: with deployment-wide enforcement no exporter is installed (the
+    collector is an external destination with no attestation path), and the
+    spans stay in the process; with tenant-scoped enforcement the exporter
+    withholds the spans ``residency_exporter`` describes.
+    """
+    if not settings.tracing_enabled:
+        return False
+    if enabled():
+        return True
+    protocol, ratio, endpoint = validate_settings()
+    exporter: SpanExporter | None = None
+    if settings.residency_enforce:
+        logger.warning("tracing_export_withheld_residency", env=settings.env)
+    elif endpoint:
+        exporter = ResidencyExporter(otlp_exporter(protocol, endpoint))
     else:
         logger.warning("tracing_without_exporter", env=settings.env)
     init_tracing(
@@ -138,8 +164,63 @@ def init_tracing_from_settings() -> bool:
         environment=settings.env,
         set_global=True,
     )
-    logger.info("tracing_started", protocol=protocol, exporter=exporter is not None, sample_ratio=float(ratio))
+    logger.info("tracing_started", protocol=protocol, exporter=exporter is not None, sample_ratio=ratio)
     return True
+
+
+class ResidencyExporter(SpanExporter):
+    """Hands spans to the OTLP exporter, withholding the ones residency keeps in the platform.
+
+    A span marked withheld at creation (its tenant enforces residency, or its
+    enforcement was never read in this process) never leaves, nor does a span
+    that names no tenant while some tenant in the process enforces: the rule
+    the LangSmith redaction hook applies (observability/trace_redaction.py).
+    """
+
+    def __init__(self, inner: SpanExporter) -> None:
+        self.inner = inner
+
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        kept = [span for span in spans if exportable(span)]
+        if not kept:
+            return SpanExportResult.SUCCESS
+        return self.inner.export(kept)
+
+    def shutdown(self) -> None:
+        self.inner.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self.inner.force_flush(timeout_millis)
+
+
+def exportable(span: ReadableSpan) -> bool:
+    """Whether residency lets ``span`` leave the platform."""
+    from core.governance import residency
+
+    attributes = span.attributes or {}
+    if attributes.get(WITHHELD_KEY):
+        return False
+    if TENANT_REF_KEY not in attributes and residency.any_tenant_enforcing():
+        return False
+    return True
+
+
+def tenant_ref(tenant_id: Any) -> str:
+    """A keyed, bounded reference to a tenant for telemetry: the same tenant always maps to it, nobody maps it back."""
+    digest = hmac.new(settings.secret_key.encode(), b"tenant-ref:" + str(tenant_id).encode(), hashlib.sha256)
+    return digest.hexdigest()[:16]
+
+
+def _tenant_attributes(tenant: Any) -> dict[str, Any]:
+    """What a span records for its tenant: the reference, and the withholding mark when residency keeps it home."""
+    if tenant is None or tenant == "":
+        return {}
+    from core.governance import residency
+
+    attributes: dict[str, Any] = {TENANT_REF_KEY: tenant_ref(tenant)}
+    if residency.enforcement_known(tenant) is not False:
+        attributes[WITHHELD_KEY] = "residency"
+    return attributes
 
 
 def otlp_exporter(protocol: str, endpoint: str) -> SpanExporter:
@@ -226,21 +307,26 @@ def span(
     *,
     kind: SpanKind = SpanKind.INTERNAL,
     parent: Mapping[str, str] | None = None,
+    tenant: Any = None,
     **attributes: Any,
 ) -> Iterator[trace.Span]:
     """A span named ``name`` around the block, current for its duration.
 
     While tracing is off this yields a non-recording span and touches
     nothing. ``parent`` carries W3C trace-context headers (``traceparent``)
-    to continue a trace that started in another process. While the span is
-    current the log context carries its trace id under ``trace_id``.
+    to continue a trace that started in another process. ``tenant`` is the
+    tenant the span belongs to: the span records a keyed reference to it,
+    never the identifier, and is withheld from export when residency keeps
+    that tenant's data in the platform. While the span is current the log
+    context carries its trace id under ``trace_id``.
     """
     tracer = _tracer
     if tracer is None:
         yield trace.INVALID_SPAN
         return
     context = propagate.extract(dict(parent)) if parent else None
-    with tracer.start_as_current_span(name, context=context, kind=kind, attributes=_attributes(attributes)) as current:
+    recorded = {**_attributes(attributes), **_tenant_attributes(tenant)}
+    with tracer.start_as_current_span(name, context=context, kind=kind, attributes=recorded) as current:
         tokens = _bind_log_context(current)
         try:
             yield current
@@ -274,10 +360,11 @@ def start(
     *,
     kind: SpanKind = SpanKind.INTERNAL,
     parent: Mapping[str, str] | None = None,
+    tenant: Any = None,
     **attributes: Any,
 ) -> SpanHandle:
     """Open ``span`` without a ``with`` block; the caller ends it through the handle."""
-    manager = span(name, kind=kind, parent=parent, **attributes)
+    manager = span(name, kind=kind, parent=parent, tenant=tenant, **attributes)
     return SpanHandle(manager, manager.__enter__())
 
 

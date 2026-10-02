@@ -226,10 +226,33 @@ def _mark_worker_process(**_kwargs: Any) -> None:
     mark_worker_process()
 
 
+@worker_init.connect
+def _refuse_worker_with_invalid_tracing(**_kwargs: Any) -> None:
+    """A worker never starts with tracing on and misconfigured.
+
+    Runs in the main worker process before the pool starts. Celery's
+    ``Signal.send`` logs and swallows any ``Exception`` a receiver raises, so
+    the refusal is raised as ``SystemExit``, which it does not catch. The
+    tracer itself is installed per child process (``_start_tracing``): an
+    exporter's thread would not survive the fork.
+    """
+    from core.config import settings
+
+    if not settings.tracing_enabled:
+        return
+    try:
+        tracing.validate_settings()
+    except tracing.TracingError as exc:
+        raise SystemExit(f"Refusing to start the worker: {exc}") from exc
+
+
 @worker_process_init.connect
 def _start_tracing(**_kwargs: Any) -> None:
-    """Install the tracer the settings describe (off by default; a misconfiguration stops the process)."""
-    tracing.init_tracing_from_settings()
+    """Install the tracer the settings describe in this child (off by default; a misconfiguration stops the child)."""
+    try:
+        tracing.init_tracing_from_settings()
+    except tracing.TracingError as exc:
+        raise SystemExit(f"Refusing to start the worker process: {exc}") from exc
 
 
 @worker_process_shutdown.connect

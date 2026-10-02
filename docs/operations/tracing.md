@@ -38,10 +38,10 @@ the matching shutdown.
 | --- | --- | --- | --- |
 | `agenticorg.http.request` | SERVER | the request-id middleware, around every API request | `http.request.method`, `url.path`, `request.id`, `http.response.status_code` |
 | `agenticorg.task.run` | CONSUMER | the worker, around every Celery task | `task.name`, `task.id`, `request.id`, `task.state` |
-| `agenticorg.agent.run` / `agenticorg.agent.resume` | INTERNAL | the runner, around an agent graph's execution | `tenant.id`, `agent.id`, `agent.type`, `domain`, `gateway.correlation_id`, `gateway.gated`, `llm.provider`, `llm.model`, `agent.run.status`, `agent.run.error_code`, `llm.tokens` |
-| `agenticorg.agent.reason` | CLIENT | the reasoning node, around every model call | `llm.provider`, `llm.model`, `agent.id`, `gateway.correlation_id`, `gateway.admission_wait_ms`, `llm.input_tokens`, `llm.output_tokens`, `llm.latency_ms` |
-| `agenticorg.tool.call` | CLIENT | the connector dispatch boundary, around every tool call | `tool.name`, `connector.id`, `agent.id`, `tenant.id`, `tool.outcome` (`ok`, `guardrail_blocked`, `operator_override`, `action_contained`, `error`) |
-| `agenticorg.knowledge.search` | INTERNAL | the knowledge search route | `tenant.id`, `search.top_k`, `search.results`, `search.withheld` |
+| `agenticorg.agent.run` / `agenticorg.agent.resume` | INTERNAL | the runner, around an agent graph's execution | `tenant.ref`, `agent.id`, `agent.type`, `domain`, `gateway.correlation_id`, `gateway.gated`, `llm.provider`, `llm.model`, `agent.run.status`, `agent.run.error_code`, `llm.tokens` |
+| `agenticorg.agent.reason` | CLIENT | the reasoning node, around every model call | `tenant.ref`, `llm.provider`, `llm.model`, `agent.id`, `gateway.correlation_id`, `gateway.admission_wait_ms`, `llm.input_tokens`, `llm.output_tokens`, `llm.latency_ms` |
+| `agenticorg.tool.call` | CLIENT | the connector dispatch boundary, around every tool call | `tenant.ref`, `tool.name`, `connector.id`, `agent.id`, `tool.outcome` (`ok`, `guardrail_blocked`, `operator_override`, `action_contained`, `error`) |
+| `agenticorg.knowledge.search` | INTERNAL | the knowledge search route | `tenant.ref`, `search.top_k`, `search.results`, `search.withheld` |
 
 Two governance decisions are recorded as events on whichever span is in progress rather than as
 spans of their own: `model_gateway.decision` (the correlation id, use case, policies, provider,
@@ -51,6 +51,26 @@ detector, action, whether it applied and the mode).
 A span records identifiers, counts and outcomes, never prompts, model answers, tool arguments
 or retrieved text. The content a run handles stays in the platform's own stores under its
 tenant's residency and retention rules.
+
+### Tenant references and residency
+
+A span never carries a tenant identifier. `tenant.ref` is a keyed reference (an HMAC of the
+identifier under the platform's audit key, cut to sixteen characters): the same tenant always
+maps to the same reference, so a collector can group a tenant's spans, and nobody can map a
+reference back to the tenant.
+
+Residency follows the rule the LangSmith redaction hook applies (`observability/trace_redaction.py`):
+
+- with deployment-wide enforcement (`AGENTICORG_RESIDENCY_ENFORCE`) no exporter is installed at
+  all; the collector is an external destination with no attestation path, so spans stay in the
+  process (`tracing_export_withheld_residency` is logged at startup);
+- with tenant-scoped enforcement, a span of a tenant that enforces residency, or whose
+  enforcement was never read in this process, is marked at creation and withheld from export;
+  a span that names no tenant (the HTTP request, the task) is withheld while some tenant in the
+  process enforces.
+
+The withholding happens in the exporter wrapper before anything leaves the process; the spans
+still exist in the process for the platform's own use.
 
 ## Correlation ids
 

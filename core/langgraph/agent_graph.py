@@ -514,6 +514,7 @@ def build_agent_graph(
         with tracing.span(
             "agenticorg.agent.reason",
             kind=tracing.SpanKind.CLIENT,
+            tenant=tenant_id,
             **{
                 "llm.provider": called_provider,
                 "llm.model": called_model,

@@ -24,6 +24,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the signed audit rows the model gateway, operator overrides, residency
   attestations and guardrails write record the trace id (the request id when
   no trace is in progress). See `docs/operations/tracing.md`.
+- A span names its tenant by `tenant.ref`, a keyed reference, never by the
+  identifier. Residency: with deployment-wide enforcement no exporter is
+  installed; with tenant-scoped enforcement a span of a tenant that enforces
+  (or was never read) is withheld from export, as is a span naming no tenant
+  while some tenant enforces. A worker refuses to start with tracing on and
+  misconfigured, as the API does.
 
 ### Added - Runtime guardrails: call-site hooks, injection and output-policy detectors
 - Behind `AGENTICORG_GUARDRAILS_HOOKS_ENABLED` (off by default; on, every

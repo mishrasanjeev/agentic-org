@@ -473,7 +473,7 @@ async def run_agent(
     # node admits each model call under the per-model limits against it.
     route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
     run_span = tracing.start(
-        "agenticorg.agent.run", **_run_span_attributes(route, tenant_id, agent_id, agent_type, domain)
+        "agenticorg.agent.run", tenant=tenant_id, **_run_span_attributes(route, agent_id, agent_type, domain)
     )
     t0 = time.perf_counter()
     try:
@@ -878,7 +878,7 @@ async def resume_agent(
     )
 
     route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
-    run_span = tracing.start("agenticorg.agent.resume", **_run_span_attributes(route, tenant_id, agent_id))
+    run_span = tracing.start("agenticorg.agent.resume", tenant=tenant_id, **_run_span_attributes(route, agent_id))
     t0 = time.perf_counter()
     try:
         if require_paused:
@@ -934,12 +934,9 @@ async def resume_agent(
         reset_route(route_token)
 
 
-def _run_span_attributes(
-    route: Any, tenant_id: str, agent_id: str, agent_type: str = "", domain: str = ""
-) -> dict[str, Any]:
-    """What an agent run's span records: who runs, under which routing decision."""
+def _run_span_attributes(route: Any, agent_id: str, agent_type: str = "", domain: str = "") -> dict[str, Any]:
+    """What an agent run's span records: who runs, under which routing decision (the tenant travels as a reference)."""
     return {
-        "tenant.id": tenant_id,
         "agent.id": agent_id,
         "agent.type": agent_type,
         "domain": domain,

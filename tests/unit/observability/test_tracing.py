@@ -208,11 +208,132 @@ class TestSettings:
         assert tracing.init_tracing_from_settings() is True
         assert built == [("http/protobuf", "https://collector.example")]
 
+    def test_validate_settings_returns_what_init_needs_and_refuses_the_rest(self, on, monkeypatch):
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", " https://collector.example ")
+        assert tracing.validate_settings() == ("http/protobuf", 1.0, "https://collector.example")
+        monkeypatch.setattr(tracing.settings, "env", "production")
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", "")
+        with pytest.raises(tracing.TracingError):
+            tracing.validate_settings()
+
+    def test_deployment_wide_residency_keeps_the_exporter_out(self, on, monkeypatch):
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", "https://collector.example")
+        monkeypatch.setattr(tracing.settings, "residency_enforce", True)
+        built: list[tuple[str, str]] = []
+        monkeypatch.setattr(tracing, "otlp_exporter", lambda protocol, endpoint: built.append((protocol, endpoint)))
+        assert tracing.init_tracing_from_settings() is True
+        assert built == [] and tracing.enabled() is True
+
+    def test_tenant_scoped_residency_wraps_the_exporter(self, on, monkeypatch):
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", "https://collector.example")
+        wrapped: list = []
+        monkeypatch.setattr(tracing, "otlp_exporter", lambda protocol, endpoint: InMemorySpanExporter())
+        original = tracing.ResidencyExporter
+
+        def _record(inner):
+            exporter = original(inner)
+            wrapped.append(exporter)
+            return exporter
+
+        monkeypatch.setattr(tracing, "ResidencyExporter", _record)
+        assert tracing.init_tracing_from_settings() is True
+        assert len(wrapped) == 1 and isinstance(wrapped[0].inner, InMemorySpanExporter)
+
     def test_the_http_exporter_gets_the_traces_path_once(self):
         assert tracing.traces_endpoint("https://collector.example/") == "https://collector.example/v1/traces"
         assert tracing.traces_endpoint("https://collector.example/v1/traces") == "https://collector.example/v1/traces"
         http = tracing.otlp_exporter("http/protobuf", "https://collector.example")
         assert http._endpoint == "https://collector.example/v1/traces"
+
+
+class TestResidency:
+    def test_a_tenant_reference_is_keyed_bounded_and_stable(self):
+        tenant = str(uuid.uuid4())
+        ref = tracing.tenant_ref(tenant)
+        assert len(ref) == 16 and ref == tracing.tenant_ref(tenant) and ref != tracing.tenant_ref(uuid.uuid4())
+        assert tenant[:8] not in ref and tracing.tenant_ref(uuid.UUID(tenant)) == ref
+
+    def test_a_span_records_the_reference_and_the_withholding_mark(self, exporter, monkeypatch):
+        known: dict[str, bool | None] = {"home": True, "free": False}
+        monkeypatch.setattr("core.governance.residency.enforcement_known", lambda tenant: known.get(str(tenant)))
+        with (
+            tracing.span("home", tenant="home"),
+            tracing.span("free", tenant="free"),
+            tracing.span("unread", tenant="x"),
+        ):
+            pass
+        with tracing.span("nobody"):
+            pass
+        spans = {s.name: dict(s.attributes) for s in _finished(exporter)}
+        assert spans["home"] == {"tenant.ref": tracing.tenant_ref("home"), "export.withheld": "residency"}
+        assert spans["free"] == {"tenant.ref": tracing.tenant_ref("free")}
+        assert spans["unread"]["export.withheld"] == "residency"
+        assert spans["nobody"] == {}
+
+    def test_the_exporter_withholds_what_residency_keeps_home(self, exporter, monkeypatch):
+        known: dict[str, bool | None] = {"home": True, "free": False}
+        monkeypatch.setattr("core.governance.residency.enforcement_known", lambda tenant: known.get(str(tenant)))
+        anyone = {"value": False}
+        monkeypatch.setattr("core.governance.residency.any_tenant_enforcing", lambda: anyone["value"])
+        with tracing.span("home", tenant="home"), tracing.span("free", tenant="free"), tracing.span("nobody"):
+            pass
+        finished = _finished(exporter)
+
+        class _Inner:
+            def __init__(self):
+                self.received: list[str] = []
+                self.flushed = False
+                self.stopped = False
+
+            def export(self, spans):
+                self.received.extend(s.name for s in spans)
+                return tracing.SpanExportResult.SUCCESS
+
+            def force_flush(self, timeout_millis=30000):
+                self.flushed = True
+                return True
+
+            def shutdown(self):
+                self.stopped = True
+
+        inner = _Inner()
+        wrapper = tracing.ResidencyExporter(inner)
+        assert wrapper.export(finished) is tracing.SpanExportResult.SUCCESS
+        assert sorted(inner.received) == ["free", "nobody"]
+        anyone["value"] = True
+        inner.received.clear()
+        wrapper.export(finished)
+        assert inner.received == ["free"]
+        assert wrapper.export([s for s in finished if s.name == "home"]) is tracing.SpanExportResult.SUCCESS
+        assert inner.received == ["free"]
+        assert wrapper.force_flush() is True and inner.flushed
+        wrapper.shutdown()
+        assert inner.stopped
+
+
+class TestWorkerStartup:
+    def test_a_worker_refuses_to_start_with_tracing_on_and_misconfigured(self, monkeypatch):
+        from core.tasks.celery_app import _refuse_worker_with_invalid_tracing, _start_tracing
+
+        assert _refuse_worker_with_invalid_tracing() is None
+        monkeypatch.setattr(tracing.settings, "tracing_enabled", True)
+        monkeypatch.setattr(tracing.settings, "tracing_protocol", "thrift")
+        with pytest.raises(SystemExit, match="Refusing to start the worker"):
+            _refuse_worker_with_invalid_tracing()
+        monkeypatch.setattr(
+            tracing, "init_tracing_from_settings", lambda: (_ for _ in ()).throw(tracing.TracingError("bad"))
+        )
+        with pytest.raises(SystemExit, match="Refusing to start the worker process"):
+            _start_tracing()
+
+    def test_a_worker_process_installs_the_tracer_when_the_settings_are_good(self, monkeypatch):
+        from core.tasks.celery_app import _start_tracing
+
+        monkeypatch.setattr(tracing.settings, "tracing_enabled", True)
+        monkeypatch.setattr(tracing.settings, "env", "test")
+        monkeypatch.setattr(tracing.external_keys, "otel_exporter_otlp_endpoint", "")
+        _start_tracing()
+        assert tracing.enabled() is True
 
 
 class TestRequestMiddleware:
@@ -320,7 +441,7 @@ class TestToolCalls:
         assert span.attributes["tool.name"] == "list_ledgers"
         assert span.attributes["connector.id"] == "tally"
         assert span.attributes["agent.id"] == "a-1"
-        assert span.attributes["tenant.id"] == "t-1"
+        assert span.attributes["tenant.ref"] == tracing.tenant_ref("t-1") and "tenant.id" not in span.attributes
         assert span.attributes["tool.outcome"] == outcome
 
 
@@ -362,7 +483,7 @@ class TestAgentRuns:
         assert result["status"] == "guardrail_blocked"
         assert tracing.current_trace_id() == ""
         span = _one(exporter, "agenticorg.agent.resume")
-        assert span.attributes["tenant.id"] == tenant
+        assert span.attributes["tenant.ref"] == tracing.tenant_ref(tenant) and "tenant.id" not in span.attributes
         assert span.attributes["agent.id"] == "a1"
         assert span.attributes["gateway.correlation_id"] == "corr-run"
         assert span.attributes["llm.provider"] == "openai" and span.attributes["llm.model"] == "gpt-4o"

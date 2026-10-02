@@ -1318,7 +1318,7 @@ async def search_knowledge(
     opaque global ``E1001 INTERNAL_ERROR`` envelope that the UI only
     knows how to render as "Something went wrong".
     """
-    with tracing.span("agenticorg.knowledge.search", **{"tenant.id": tenant_id, "search.top_k": req.top_k}):
+    with tracing.span("agenticorg.knowledge.search", tenant=tenant_id, **{"search.top_k": req.top_k}):
         return await _search_knowledge(req, tenant_id)
 
 

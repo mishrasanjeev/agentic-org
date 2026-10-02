@@ -317,7 +317,8 @@ async def _execute_connector_tool(
     with tracing.span(
         "agenticorg.tool.call",
         kind=tracing.SpanKind.CLIENT,
-        **{"tool.name": tool_name, "connector.id": connector_name, "agent.id": agent_id, "tenant.id": tenant_id},
+        tenant=tenant_id,
+        **{"tool.name": tool_name, "connector.id": connector_name, "agent.id": agent_id},
     ):
         result = await _dispatch_connector_tool(
             connector_name,
