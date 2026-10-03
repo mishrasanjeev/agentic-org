@@ -1046,10 +1046,14 @@ async def admit(decision: RouteDecision) -> Lease | None:
         logger.warning(
             "model_gateway_limits_read_failed", error_type=type(exc).__name__, correlation_id=decision.correlation_id
         )
+        if settings.model_gateway_limits_fail_closed:
+            raise _limit_state_unavailable(decision) from exc
         return Lease(lease_id=decision.correlation_id, outcome="unavailable")
     admission = await _admit_limits(
         str(tid), decision.provider, decision.model, limits, correlation_id=decision.correlation_id
     )
+    if admission.lease.outcome == "unavailable" and settings.model_gateway_limits_fail_closed:
+        raise _limit_state_unavailable(decision)
     if admission.rejected is not None:
         rejected = admission.rejected
         scope = f"{rejected.limit.provider}" + (f" {rejected.limit.model}" if rejected.limit.model else "")
@@ -1068,6 +1072,18 @@ async def admit(decision: RouteDecision) -> Lease | None:
             retry_after_seconds=rejected.retry_after_seconds,
         )
     return admission.lease
+
+
+def _limit_state_unavailable(decision: RouteDecision) -> ModelGatewayRefused:
+    request = RouteRequest(tenant_id=decision.tenant_id, use_case=decision.use_case)
+    return _refuse(
+        "Model gateway limit state is unavailable; retry after the limit store recovers.",
+        correlation_id=decision.correlation_id,
+        policy=None,
+        request=request,
+        kind="limit",
+        retry_after_seconds=1.0,
+    )
 
 
 async def release(lease: Lease | None) -> None:

@@ -689,6 +689,45 @@ class TestAdmission:
             lease = asyncio.run(gw.admit(self._decision()))
         assert lease is not None and lease.outcome == "unavailable" and not lease.held
 
+    def test_strict_limits_refuse_when_policy_rows_cannot_be_read(self, monkeypatch):
+        monkeypatch.setattr(gw.settings, "model_gateway_limits_fail_closed", True)
+        with patch.object(gw, "active_limits", AsyncMock(side_effect=RuntimeError("db down"))):
+            with pytest.raises(ModelGatewayRefused) as info:
+                asyncio.run(gw.admit(self._decision()))
+        assert info.value.kind == "limit"
+        assert info.value.code == "E1015"
+        assert info.value.retry_after_seconds == 1.0
+        assert "db down" not in info.value.reason
+
+    def test_strict_limits_refuse_when_admission_store_is_unavailable(self, monkeypatch):
+        from core.governance.model_gateway_limits import Admission, Lease, Limit
+
+        monkeypatch.setattr(gw.settings, "model_gateway_limits_fail_closed", True)
+        limit = Limit(id="l1", provider="openai", model="gpt-4o", max_concurrency=2)
+        with (
+            patch.object(gw, "active_limits", AsyncMock(return_value=[limit])),
+            patch.object(
+                gw,
+                "_admit_limits",
+                AsyncMock(return_value=Admission(lease=Lease(lease_id="c9", outcome="unavailable"))),
+            ),
+        ):
+            with pytest.raises(ModelGatewayRefused) as info:
+                asyncio.run(gw.admit(self._decision()))
+        assert info.value.code == "E1015"
+        assert "unavailable" in info.value.reason
+
+    def test_strict_limits_allow_unlimited_calls_when_no_limits_exist(self, monkeypatch):
+        from core.governance.model_gateway_limits import Admission, Lease
+
+        monkeypatch.setattr(gw.settings, "model_gateway_limits_fail_closed", True)
+        lease = Lease(lease_id="c9", outcome="unlimited")
+        with (
+            patch.object(gw, "active_limits", AsyncMock(return_value=[])),
+            patch.object(gw, "_admit_limits", AsyncMock(return_value=Admission(lease=lease))),
+        ):
+            assert asyncio.run(gw.admit(self._decision())) is lease
+
     def test_release_delegates_to_the_limit_store(self):
         from core.governance.model_gateway_limits import Lease
 

@@ -1141,9 +1141,7 @@ async def _native_semantic_search(
 
     tid = _UUID(tenant_id)
 
-    hybrid_enabled = os.getenv("AGENTICORG_KNOWLEDGE_HYBRID_SEARCH", "").strip().lower() in {
-        "1", "true", "yes", "on"
-    }
+    hybrid_enabled = settings.knowledge_hybrid_search
     if hybrid_enabled:
         if not query.strip():
             return []
@@ -1157,23 +1155,21 @@ async def _native_semantic_search(
     # text/markdown uploads. Keyword-match that layer before the pure
     # filename last-resort so text files actually retrieve on content.
     try:
-        content_match = (
-            "  AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 "
-            if hybrid_enabled else "  AND metadata->>'content_text' ILIKE :like "
+        content_sql = (
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            "AND metadata->>'content_text' IS NOT NULL "
+            "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
+            if hybrid_enabled else
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            "AND metadata->>'content_text' IS NOT NULL "
+            "AND metadata->>'content_text' ILIKE :like LIMIT :k"
         )
         async with get_tenant_session(tid) as session:
             rows = (
                 await session.execute(
-                    _sqtext(
-                        "SELECT filename, "
-                        "       COALESCE(metadata->>'content_text', '') AS content_text "
-                        "FROM documents "
-                        "WHERE tenant_id = :tid "
-                        "  AND status = 'indexed' "
-                        "  AND metadata->>'content_text' IS NOT NULL "
-                        + content_match
-                        + "LIMIT :k"
-                    ),
+                    _sqtext(content_sql),
                     {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k},
                 )
             ).fetchall()
@@ -1389,16 +1385,21 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
         col = rag_embedding_column()
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
+        vector_sql = (
+            "SELECT id, title, content FROM knowledge_documents "
+            "WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL "
+            "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            if col == "embedding" else
+            "SELECT id, title, content FROM knowledge_documents "
+            "WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL "
+            "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+        )
         qvec = await embed_one_async(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
         async with get_tenant_session(tid) as session:
             rows = (
                 await session.execute(
-                    _sqtext(
-                        "SELECT id, title, content FROM knowledge_documents "
-                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL "
-                        f"ORDER BY {col} <=> CAST(:vector AS vector), id ASC LIMIT :limit"
-                    ),
+                    _sqtext(vector_sql),
                     {"tid": str(tid), "vector": vector_literal, "limit": limit},
                 )
             ).fetchall()

@@ -396,6 +396,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 ## Documentation
 
 - [End-user manual: first agent, everyday operations and BFSI playbooks](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md).
+- [Functional BFSI coverage and open gaps](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
 - [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
@@ -1927,6 +1928,9 @@ Audience: Merchants and bank merchant-service teams. Reviewed: 2026-10-02.
 
 AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify or another merchant system remains the operational source of truth. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
 
+For a bank-led pilot with explicit owners, human decisions and blocked paths,
+see the [merchant-services process map](/docs/bfsi-merchant-services#process-map).
+
 ```flow
 Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
 Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.
@@ -2306,16 +2310,21 @@ Assign an onboarding owner, screening analyst, authorized approver, provider int
 
 The institution's application/LOS system submits cases through the reviewed API/workflow. The approvals console is for queue and review, not a universal business-intake form.
 
-#### Follow one fictional application
+#### Process map
+
+This map assigns each handoff in the configured case path. A missing source or
+unresolved review is a stop, not an implied clearance.
 
 ```flow
-Application | Example Trading Ltd submits business details through the bank's approved intake.
-Investigation | Agents read approved registry, ownership and screening evidence.
-Memo | Source-linked findings, missing items and deterministic policy tier are prepared.
-Analyst review | A person inspects possible screening matches and records a reasoned disposition.
-Decision request | The current case/version/action goes to the configured human approval issuer.
-Bank handoff | Verified decision evidence is recorded and signed outcome delivered to the bank system.
+Application | A fictional business submits details through the bank's approved intake. | Owner: Bank intake team | If blocked: Incomplete intake stays with the bank; no case outcome is inferred.
+Investigation | Configured agents read approved registry, ownership and screening sources. | Owner: Configured case agents | If blocked: Missing grant, provider error or absent record remains missing evidence, not a clear result.
+Memo and policy | The case shows cited findings, missing items and the reviewed policy tier. | Owner: AgenticOrg case runtime | If blocked: Unsupported citations or incomplete evidence require investigation before decision.
+Screening review | The analyst checks each proposed disposition against the cited record. | Owner: Screening analyst | Human decision: Accept the proposal or override it with a written reason. | If blocked: An unresolved hit stays open for human review; the proposal does not clear it.
+Decision request | The exact case version and action go to the configured approval issuer. | Owner: Authorized case operator and approval issuer | Human decision: A designated approver decides on the issuer page; a distinct second approver participates where required. | If blocked: Missing, expired or superseded approval cannot record a decision; request a new decision on the current case.
+Bank handoff | The signed outcome is delivered for the bank system to interpret and act on. | Owner: Bank system-of-record team | If blocked: Delivery failure or duplicate evidence needs reconciliation; do not infer account opening.
 ```
+
+#### Follow one fictional application
 
 1. Open **Approvals > governed cases** at `/dashboard/approvals/cases`.
 2. Find the fictional case and inspect investigation state.
@@ -2392,12 +2401,17 @@ Require source-row references and validated calculations in the exception pack.
 6. Inspect source freshness, totals, duplicate handling and every exception.
 7. Hand approved corrections to the accounting system through a separately authorized process.
 
+#### Process map
+
+The comparison below assumes a reviewed read tool, mappings and deterministic
+calculation. It does not imply an automatic ledger posting connector.
+
 ```flow
-Read-only data | Collect the reviewed statement and ledger for the same business period.
-Validate and compare | Apply reviewed mappings, currencies, totals and matching rules.
-Exception pack | List breaks with evidence and missing information.
-Finance review | Resolve ambiguity and approve any proposed correction.
-Authoritative posting | The institution's controlled finance path performs and confirms updates.
+Read-only sources | Collect reviewed statement and ledger exports for one business period. | Owner: Finance data owner and approved read tool | If blocked: A late, partial or inaccessible source makes the period incomplete.
+Validate and compare | Apply reviewed schema, currency, duplicate and matching rules with validated calculations. | Owner: Configured comparison and finance operator | If blocked: Corrupt rows, mismatched currencies or totals become exceptions, not forced matches.
+Exception pack | List matched pairs and each break with source-row evidence and proposed follow-up. | Owner: Finance assistant | If blocked: Missing provenance or uncertain arithmetic must be checked before review.
+Finance review | Recheck ambiguous matches and proposed corrections against the source records. | Owner: Authorized finance reviewer | Human decision: Approve, revise or reject each proposed correction through the institution's controls. | If blocked: Unresolved breaks remain open and cannot be reported as balanced.
+Authoritative posting | Send approved corrections through a separately authorized accounting process. | Owner: Institution finance and accounting system | If blocked: A prepared pack is not a posted entry or certified balance.
 ```
 
 #### Sample acceptance cases
@@ -2444,12 +2458,17 @@ Use a reviewed support-triage candidate or custom operations agent. Define categ
 4. Ask for a private account balance and confirm refusal/referral.
 5. Verify any configured ticket write/email action separately before enabling it.
 
+#### Process map
+
+This is a response-preparation path. The bank's authenticated channel and staff
+remain responsible for private account servicing and final communication.
+
 ```flow
-Question or complaint | Receive the request on the configured authenticated or general-information channel.
-Source-grounded response | Answer supported procedural facts with current sources.
-Sensitivity check | Detect requests that need bank authentication or authorized action.
-Human escalation | Prepare a bounded case/response for the responsible staff queue.
-Confirmed outcome | The bank system owns communication, resolution and account actions.
+Question or complaint | Receive the request through a configured general-information or authenticated channel. | Owner: Bank channel owner | If blocked: A claimed name or phone number alone does not establish customer identity.
+Knowledge check | Retrieve the current approved procedure and inspect its cited source. | Owner: Service agent and knowledge owner | If blocked: Missing, conflicting or outdated guidance goes to staff; do not invent an answer.
+Response draft | Prepare a bounded answer or complaint summary from supported facts. | Owner: Service agent | If blocked: Private account data or an unsupported action is refused or referred to the bank's authorized path.
+Human escalation | Review sensitive, urgent or unresolved requests before any staff response. | Owner: Authorized service staff | Human decision: Staff decide whether to send, revise or escalate the prepared response. | If blocked: Suspected fraud or a failed voice/ticket path follows the bank's urgent human process.
+Confirmed outcome | Record communication and resolution in the bank's approved system. | Owner: Bank service team and system of record | If blocked: A prepared draft is not a sent message or completed account action.
 ```
 
 #### Add voice only after chat is correct
@@ -2488,12 +2507,17 @@ For scans, use supported PDF/image formats and inspect extraction method, OCR co
 
 Create a custom operations/document-review agent with output fields for document type, cited facts, missing items, unreadable fields and reviewer questions. Require it to quote/cite only available evidence and explicitly mark uncertainty. Limit tools to approved reads during the first pilot.
 
+#### Process map
+
+The map stops at reviewer preparation. Coverage, liability and payout stay with
+the insurer's authorized process.
+
 ```flow
-Approved claim documents | Authorized intake supplies the current file references.
-Extraction and quality review | Native parsing or OCR produces text with provenance and visible uncertainty.
-Checklist comparison | The assistant prepares completeness findings from the reviewed procedure.
-Human claims review | Authorized staff verify evidence and coverage under insurer policy.
-System handoff | The claims platform records its own decision and payout process.
+Approved claim file | Authorized intake supplies synthetic file references and the current checklist. | Owner: Insurer intake team | If blocked: Missing documents stay on the request list; no completeness claim is made.
+Extraction check | Native parsing or OCR supplies page-linked text for inspection. | Owner: Document-review operator | If blocked: Unreadable dates, amounts or identifiers are flagged for manual verification, never guessed.
+Checklist comparison | The assistant prepares cited present, missing and uncertain items. | Owner: Configured document-review agent | If blocked: Conflicting policy versions or absent sources go to the checklist owner.
+Claims review | Staff compare the prepared notes with source documents and insurer policy. | Owner: Authorized claims reviewer | Human decision: The reviewer requests more evidence or makes the insurer's coverage determination outside the assistant. | If blocked: Ambiguous or incomplete evidence remains in review; no rejection or payout is automated.
+System handoff | The claims platform records the insurer's own authorized outcome. | Owner: Insurer claims-system team | If blocked: A prepared note is not a customer notification, coverage decision or paid claim.
 ```
 
 #### Run a complete test
@@ -2541,28 +2565,36 @@ Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-10-02.
 This is a reference example for an acquiring bank's merchant-enablement pilot,
 not an already integrated banking product or a claim of live payment execution.
 
-An acquiring bank wants to help an approved Shopify merchant become usable by agentic buyer interfaces. The bank can offer an institution-managed or reviewed hosted AgenticOrg workspace, but merchant/provider/platform contracts still determine actual availability.
+In this synthetic example, an acquiring bank wants to help a fictional Shopify
+merchant become usable by agentic buyer interfaces. The bank can offer an
+institution-managed or reviewed hosted AgenticOrg workspace, but
+merchant/provider/platform contracts still determine actual availability.
 
 AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifacts. Shopify owns merchant catalog/inventory/order truth. The bank/fintech/provider owns payment/mandate execution and customer authorization. OACP is not a reason to make Grantex the engine for every buyer message.
 
-#### Build one real merchant path
+#### Build one synthetic merchant path
 
 1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
 2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
-3. Obtain read-only Shopify access through the merchant's approved process.
-4. Sync products/variants/images/price/inventory and compare samples with Shopify.
+3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process.
+4. Sync synthetic products/variants/images/price/inventory and compare samples with the sandbox store.
 5. Send the bounded Grantex authority request and verify/cache issued artifacts.
-6. Ask real product questions through the configured web or agent bridge.
+6. Ask product questions about the fictional catalog through the configured web or agent bridge.
 7. Inspect source, freshness, supported facts and refusal behavior.
 8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
 
+#### Process map
+
+This is a bank-led reference pilot with configured merchant, channel and
+provider paths. A prepared handoff is never a completed transaction.
+
 ```flow
-Bank and merchant setup | Agree ownership, identities, read scopes and publishing state.
-Shopify evidence | Real read-only sync produces source-linked commercial facts.
-Trust artifacts | Grantex authority and AgenticOrg cache preserve scope and freshness.
-Buyer channel | A configured bridge answers from supported artifacts.
-Provider capability | Plural/Pine evidence checks configured capability, not successful payment.
-Authoritative handoff | The provider, POS or merchant confirms its own execution outcome.
+Bank and merchant setup | Agree identities, read scopes, provider contract and publishing state. | Owner: Bank integration owner and merchant owner | Human decision: Owners approve the pilot scope and any channel publication under their own processes. | If blocked: Unapproved access or publishing state keeps the channel off.
+Merchant-source evidence | Read-only sync supplies product, price and inventory snapshots for sample checks. | Owner: Merchant source owner and configured AgenticOrg sync | If blocked: Missing scopes or stale source facts stop unsupported buyer promises.
+Trust artifacts | The bounded authority request and cache retain scope, source and freshness. | Owner: Grantex authority and AgenticOrg runtime | If blocked: Invalid or stale artifacts cannot support commitment-bound requests.
+Buyer channel | A configured bridge answers from supported merchant artifacts. | Owner: Channel owner and AgenticOrg buyer runtime | If blocked: Unsupported channels or facts are refused until the integration is approved.
+Provider capability | A configured provider path checks non-sensitive capability evidence. | Owner: Bank/provider integration team | Human decision: The customer and provider complete any required authorization outside this map. | If blocked: Capability evidence alone does not prove a mandate or payment.
+Authoritative handoff | A prepared packet awaits provider, POS or merchant confirmation. | Owner: Provider, POS or merchant system | If blocked: Absent or failed confirmation stays pending or failed; no paid or placed state is fabricated.
 ```
 
 #### Plural/Pine and mandates

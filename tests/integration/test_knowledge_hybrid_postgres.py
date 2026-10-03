@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Native hybrid retrieval against real PostgreSQL full-text and pgvector operators."""
 
 from __future__ import annotations

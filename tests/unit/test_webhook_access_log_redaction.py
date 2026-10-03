@@ -64,3 +64,25 @@ def test_configured_access_logger_redacts(caplog: pytest.LogCaptureFixture) -> N
         )
     assert caplog.records, "the access record should still be logged"
     assert all(token not in r.getMessage() for r in caplog.records)
+
+
+def test_repeated_logging_configuration_restores_access_redaction(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    configure_logging()
+    access_logger = logging.getLogger("uvicorn.access")
+    monkeypatch.setattr(access_logger, "handlers", [logging.NullHandler()])
+    monkeypatch.setattr(access_logger, "propagate", False)
+    monkeypatch.setattr(access_logger, "filters", [])
+
+    configure_logging()
+    assert access_logger.propagate is True
+    assert access_logger.handlers == []
+    assert redact_webhook_path_tokens in access_logger.filters
+
+    path = email_webhook_path(TENANT, "sendgrid")
+    token = path.rsplit("/", 1)[1]
+    with caplog.at_level(logging.INFO, logger="uvicorn.access"):
+        access_logger.info('%s - "%s %s HTTP/%s" %d', "203.0.113.7:4711", "POST", path, "1.1", 200)
+    assert caplog.records
+    assert all(token not in record.getMessage() for record in caplog.records)

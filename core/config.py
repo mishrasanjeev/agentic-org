@@ -190,6 +190,9 @@ class Settings(BaseSettings):
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600
+    # When enabled, a routed call refuses if the tenant's limit rows or Redis
+    # admission state cannot be read. Off by default for existing tenants.
+    model_gateway_limits_fail_closed: bool = False
     # Routing records: one signed row per model call while the gateway is on
     # for the tenant, pruned after the retention period by the daily task.
     # Off by default: turning it on adds a write to every routed model call.
@@ -201,6 +204,9 @@ class Settings(BaseSettings):
     model_gateway_quality_window_hours: int = 24
     model_gateway_max_failure_rate: float = 0.05
     model_gateway_health_cache_seconds: int = 60
+    # Native dense + full-text rank fusion. Off until tenant retrieval quality
+    # and index rollout have been verified; RAGFlow precedence is unchanged.
+    knowledge_hybrid_search: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

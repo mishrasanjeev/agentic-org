@@ -390,6 +390,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 ## Documentation
 
 - [End-user manual: first agent, everyday operations and BFSI playbooks](docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](docs/runbooks/documentation-site.md).
+- [Functional BFSI coverage and open gaps](docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
 - [Documentation site publishing and subdomain runbook](docs/runbooks/documentation-site.md)
 - [Documentation home](docs/README.md)
 - [Current product status](docs/PRODUCT_STATUS.md)

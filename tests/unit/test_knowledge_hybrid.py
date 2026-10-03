@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Native knowledge retrieval keeps tenant scope while combining lexical and vector rank."""
 
 from __future__ import annotations
@@ -160,7 +161,7 @@ async def test_full_text_error_uses_literal_keyword_query(scoped_session, monkey
 
 @pytest.mark.asyncio
 async def test_hybrid_flag_defaults_off(monkeypatch) -> None:
-    monkeypatch.delenv("AGENTICORG_KNOWLEDGE_HYBRID_SEARCH", raising=False)
+    monkeypatch.setattr(knowledge.settings, "knowledge_hybrid_search", False)
     called = []
     hit = knowledge.SearchResult(chunk_text="x", score=0.5, document_name="Synthetic")
 
@@ -176,14 +177,14 @@ async def test_hybrid_flag_defaults_off(monkeypatch) -> None:
     monkeypatch.setattr(knowledge, "_native_hybrid_search", hybrid)
     tenant = str(uuid.uuid4())
     await knowledge._native_semantic_search(tenant, "alpha", 1)
-    monkeypatch.setenv("AGENTICORG_KNOWLEDGE_HYBRID_SEARCH", "true")
+    monkeypatch.setattr(knowledge.settings, "knowledge_hybrid_search", True)
     await knowledge._native_semantic_search(tenant, "alpha", 1)
     assert called == ["legacy", "hybrid"]
 
 
 @pytest.mark.asyncio
 async def test_hybrid_blank_query_does_not_reach_document_fallback(monkeypatch) -> None:
-    monkeypatch.setenv("AGENTICORG_KNOWLEDGE_HYBRID_SEARCH", "1")
+    monkeypatch.setattr(knowledge.settings, "knowledge_hybrid_search", True)
 
     async def unexpected(*_args):
         raise AssertionError("blank query should not reach native search")
@@ -221,6 +222,6 @@ async def test_all_hybrid_backends_failing_is_not_empty_success(scoped_session, 
         raise TimeoutError("embedding unavailable")
 
     monkeypatch.setattr(core.embeddings, "embed_one_async", fail_embed)
-    monkeypatch.setenv("AGENTICORG_KNOWLEDGE_HYBRID_SEARCH", "1")
+    monkeypatch.setattr(knowledge.settings, "knowledge_hybrid_search", True)
     with pytest.raises(RuntimeError, match="knowledge filename fallback failed"):
         await knowledge._native_semantic_search(str(tenant), "alpha", 2)

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """Policy roles must map to an RBAC role that can make approval decisions."""
 
 from __future__ import annotations

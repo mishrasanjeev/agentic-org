@@ -3057,7 +3057,7 @@
           "core/llm/router.py",
           "docs/governance/model-gateway.md"
         ],
-        "note": "Policies route by use case, data sensitivity, agent, business unit and language with same-provider failover and in-region restriction; no cost, latency or throughput routing yet."
+        "note": "Policies route by use case, sensitivity, agent, business unit and language; cost-aware target choice and observed failure-rate checks exist. Latency and throughput objectives are not routing inputs, and health-store failure degrades the cost choice."
       },
       "grantex": {
         "status": "none",
@@ -3099,10 +3099,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/runtime_capacity.py",
-          "core/tool_gateway/rate_limiter.py"
+          "core/governance/model_gateway.py",
+          "core/governance/model_gateway_limits.py",
+          "tests/unit/governance/test_model_gateway_limits.py"
         ],
-        "note": "Admission control for local runtimes; no traffic allocation across endpoints."
+        "note": "Weighted model targets and tenant-scoped Redis concurrency/rate limits exist. A default-off strict switch refuses calls when limit state is unreadable; default operation still admits on store outage, so hard-limit assurance is not universal."
       },
       "grantex": {
         "status": "none",
@@ -3144,10 +3145,10 @@
         "status": "partial",
         "evidence": [
           "observability/metrics.py",
-          "core/llm/router.py",
-          "scaling/cost_ledger.py"
+          "core/governance/model_gateway_records.py",
+          "tests/unit/governance/test_model_gateway_records.py"
         ],
-        "note": "Token and cost counters per model; no error, throughput or utilisation metrics."
+        "note": "Signed call records and metrics include outcome, latency, token counts, cost, output tokens per second and admission wait. Model utilisation and streaming time-to-first-token are not captured."
       },
       "grantex": {
         "status": "none",
@@ -3168,9 +3169,10 @@
         "evidence": [
           "core/governance/model_gateway.py",
           "api/v1/model_gateway.py",
-          "core/models/model_routing_policy.py"
+          "core/governance/caller_identity.py",
+          "tests/unit/governance/test_model_gateway.py"
         ],
-        "note": "Policies fence providers per agent and business unit (allowed_providers) and keep restricted data in region; no per-user or application identity policies yet."
+        "note": "Access rules can match application, principal, agent, business unit, provider and model with bound caller identity and recorded policy IDs. Unmatched calls remain allowed, so coverage depends on explicit policy configuration."
       },
       "grantex": {
         "status": "partial",
@@ -3193,9 +3195,10 @@
         "status": "partial",
         "evidence": [
           "core/governance/model_gateway.py",
-          "observability/metrics.py"
+          "core/governance/model_gateway_records.py",
+          "tests/unit/governance/test_model_gateway_records.py"
         ],
-        "note": "Every routing decision is logged with a correlation id, the policy, provider and model, and metered; not yet written to the audit trail."
+        "note": "Signed tenant-scoped call records include correlation ID, request and selected model, policy IDs, outcome, latency, tokens and error type. Raw responses are intentionally omitted and record writes are best effort."
       },
       "grantex": {
         "status": "partial",
@@ -3235,13 +3238,15 @@
       "domain": "VEC",
       "title": "Hybrid retrieval",
       "expectation": "Dense plus sparse retrieval with rank-fusion scoring.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
+        "status": "partial",
         "evidence": [
-          "api/v1/knowledge.py"
+          "api/v1/knowledge.py",
+          "migrations/versions/v6_z40_knowledge_full_text.py",
+          "tests/integration/test_knowledge_hybrid_postgres.py"
         ],
-        "note": "No hybrid search or rank fusion."
+        "note": "The opt-in native path fuses tenant-ready pgvector and full-text ranks, with a PostgreSQL index and fallback tests. It is off by default, RAGFlow takes precedence, and relevance/latency plus document-level access still need validation."
       },
       "grantex": {
         "status": "none",
@@ -4599,10 +4604,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/pages/Playground.tsx",
-          "observability/tracing.py"
+          "api/v1/observability.py",
+          "observability/timeline.py",
+          "ui/src/pages/Observability.tsx"
         ],
-        "note": "Text trace only; no waterfall view."
+        "note": "A tenant-scoped run waterfall exists behind the timeline flag. It does not yet prove every model, tool and memory lookup is instrumented."
       },
       "grantex": {
         "status": "none",
@@ -4617,13 +4623,14 @@
       "domain": "OBS",
       "title": "Streaming latency metrics",
       "expectation": "Time-to-first-token, tokens per second, total duration and queue wait in real time.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
+        "status": "partial",
         "evidence": [
-          "core/llm/router.py"
+          "core/governance/model_gateway_records.py",
+          "observability/metrics.py"
         ],
-        "note": "Latency only; no time-to-first-token, tokens per second or queue wait."
+        "note": "Call duration, output tokens per second and admission wait are recorded. Streaming time-to-first-token and complete queue-wait coverage are missing."
       },
       "grantex": {
         "status": "none",
@@ -4642,11 +4649,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "ui/src/pages/Observatory.tsx",
-          "ui/src/pages/SLAMonitor.tsx",
-          "observability/metrics.py"
+          "ui/src/pages/Observability.tsx",
+          "api/v1/observability.py",
+          "observability/workload.py"
         ],
-        "note": "Live feed and uptime; no queue depth or SLA countdowns."
+        "note": "Tenant-scoped workload summaries show recent run/model/guardrail outcomes and review-deadline countdowns. Shared queue depth and complete active-agent state are not exposed per tenant."
       },
       "grantex": {
         "status": "none",
@@ -4691,10 +4698,10 @@
         "status": "partial",
         "evidence": [
           "api/middleware/request_id.py",
-          "core/models/audit.py",
+          "core/governance/model_gateway_records.py",
           "core/tool_gateway/audit_logger.py"
         ],
-        "note": "Request id bound to logs and audit rows; not propagated through model or retrieval calls."
+        "note": "Request IDs bind logs and audit rows; model routing records and tool audit carry correlation or trace IDs. End-to-end propagation through every retrieval, guardrail and workflow path is not proven."
       },
       "grantex": {
         "status": "partial",
