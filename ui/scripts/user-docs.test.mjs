@@ -119,7 +119,13 @@ test("process maps preserve old flows and escape every richer field", () => {
   assert.match(rich.html, /Owner:<\/span> &lt;script&gt;team&lt;\/script&gt;/);
   assert.match(rich.html, /Human decision<\/strong><p>Review &lt;evidence&gt;<\/p>/);
   assert.match(rich.html, /Blocked \/ exception<\/strong><p>Stop &lt;img/);
-  assert.doesNotMatch(rich.html, /<script>|<img/);
+  assert.equal(rich.html.includes("<script>"), false);
+  assert.equal(rich.html.includes("<img src=x"), false);
+  const upperCaseTag = renderGuide(
+    "```flow\nStart | Read | Owner: <SCRIPT>team</SCRIPT>\n```",
+  );
+  assert.ok(upperCaseTag.html.includes("&lt;SCRIPT&gt;team&lt;/SCRIPT&gt;"));
+  assert.equal(upperCaseTag.html.includes("<SCRIPT>"), false);
   assert.throws(
     () => renderGuide("```flow\nStart | Read | Owner: Team\nFinish | Done\n```"),
     /Every process-map step needs an Owner/,
