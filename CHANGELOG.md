@@ -4,6 +4,33 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Observability: tracing wiring and correlation ids
+- Behind `AGENTICORG_TRACING_ENABLED` (off by default): the API's lifespan and
+  every worker process install an OpenTelemetry tracer that exports to
+  `OTEL_EXPORTER_OTLP_ENDPOINT` over `http/protobuf` or `grpc`
+  (`AGENTICORG_TRACING_PROTOCOL`), sampled at `AGENTICORG_TRACING_SAMPLE_RATIO`.
+  A strict runtime with tracing on and no endpoint refuses to start; off,
+  every helper is a no-op that touches no tracer.
+- Spans: `agenticorg.http.request` around every API request (continuing an
+  incoming `traceparent`), `agenticorg.task.run` around every Celery task
+  (the publisher's trace context travels in the task headers),
+  `agenticorg.agent.run` and `agenticorg.agent.resume` around an agent
+  graph's execution, `agenticorg.agent.reason` around every model call with
+  the provider, model and token counts, `agenticorg.tool.call` around every
+  connector dispatch with its outcome, `agenticorg.knowledge.search` around a
+  knowledge search. The model gateway's decision and every guardrail outcome
+  are events on the span in progress.
+- Correlation: while a span records, the log context carries `trace_id`, and
+  the signed audit rows the model gateway, operator overrides, residency
+  attestations and guardrails write record the trace id (the request id when
+  no trace is in progress). See `docs/operations/tracing.md`.
+- A span names its tenant by `tenant.ref`, a keyed reference, never by the
+  identifier. Residency: with deployment-wide enforcement no exporter is
+  installed; with tenant-scoped enforcement a span of a tenant that enforces
+  (or was never read) is withheld from export, as is a span naming no tenant
+  while some tenant enforces. A worker refuses to start with tracing on and
+  misconfigured, as the API does.
+
 ### Added - Runtime guardrails: call-site hooks, injection and output-policy detectors
 - Behind `AGENTICORG_GUARDRAILS_HOOKS_ENABLED` (off by default; on, every
   stage is evaluated in flag-only mode until `guardrails.enforce` is on for

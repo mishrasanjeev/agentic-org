@@ -51,6 +51,7 @@ from core.langgraph.tool_adapter import (
     build_tools_for_agent,
 )
 from core.pii.pseudonymiser import PseudonymSession
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -508,23 +509,44 @@ def build_agent_graph(
         called_model = _llm_model_name(llm, llm_model) or (route.decision.model if route is not None else "")
         called_agent = agent_id or str(state.get("agent_id") or "") or None
         started = time.monotonic()
-        try:
-            response = await llm.ainvoke(messages)
-        # enterprise-gate: broad-except-ok reason=a-failed-model-call-is-recorded-then-raised-unchanged
-        except Exception as exc:
-            await record_model_call(
-                provider=called_provider,
-                model=called_model,
-                outcome="failed",
-                latency_ms=int((time.monotonic() - started) * 1000),
-                error_type=type(exc).__name__,
-                admission_wait_ms=admission_wait_ms,
-                agent_id=called_agent,
+        # Tracing (off by default): one span per model call, with the routing
+        # decision's correlation id and, on success, the token counts.
+        with tracing.span(
+            "agenticorg.agent.reason",
+            kind=tracing.SpanKind.CLIENT,
+            tenant=tenant_id,
+            **{
+                "llm.provider": called_provider,
+                "llm.model": called_model,
+                "agent.id": called_agent,
+                "gateway.correlation_id": route.decision.correlation_id if route is not None else None,
+                "gateway.admission_wait_ms": admission_wait_ms,
+            },
+        ):
+            try:
+                response = await llm.ainvoke(messages)
+            # enterprise-gate: broad-except-ok reason=a-failed-model-call-is-recorded-then-raised-unchanged
+            except Exception as exc:
+                await record_model_call(
+                    provider=called_provider,
+                    model=called_model,
+                    outcome="failed",
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    error_type=type(exc).__name__,
+                    admission_wait_ms=admission_wait_ms,
+                    agent_id=called_agent,
+                )
+                raise
+            finally:
+                await gateway_release(lease)
+            input_tokens, output_tokens, total_tokens = message_tokens(response)
+            tracing.set_attributes(
+                **{
+                    "llm.input_tokens": input_tokens,
+                    "llm.output_tokens": output_tokens,
+                    "llm.latency_ms": int((time.monotonic() - started) * 1000),
+                }
             )
-            raise
-        finally:
-            await gateway_release(lease)
-        input_tokens, output_tokens, total_tokens = message_tokens(response)
         await record_model_call(
             provider=called_provider,
             model=called_model,

@@ -51,6 +51,7 @@ from core.langgraph.thread_ids import (
 )
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
+from observability import tracing
 from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
@@ -471,6 +472,9 @@ async def run_agent(
     # The routing decision stays bound for the run: the graph's reasoning
     # node admits each model call under the per-model limits against it.
     route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
+    run_span = tracing.start(
+        "agenticorg.agent.run", tenant=tenant_id, **_run_span_attributes(route, agent_id, agent_type, domain)
+    )
     t0 = time.perf_counter()
     try:
         invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
@@ -617,9 +621,10 @@ async def run_agent(
             response["thread_id"] = config["configurable"]["thread_id"]
         if result.get("grant_denial"):
             response["grant_denial"] = result["grant_denial"]
-        return response
+        return _traced_result(run_span, response)
 
     except GraphInterrupt as gi:
+        run_span.set(**{"agent.run.status": "hitl_triggered"})
         # Older LangGraph / subgraph invocation raises GraphInterrupt when
         # HITL pauses the graph. Retrieve the latest checkpoint state so we
         # can extract hitl_trigger, confidence, output, etc. that were set
@@ -673,11 +678,12 @@ async def run_agent(
     except ModelGatewayRefused as exc:
         # A model call of the run was refused by a per-model limit.
         logger.warning("agent_run_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
-        return refused_run_result(exc)
+        return _traced_result(run_span, refused_run_result(exc))
     except GuardrailBlocked as exc:
         logger.warning("agent_run_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
-        return guardrail_blocked_result(exc)
+        return _traced_result(run_span, guardrail_blocked_result(exc))
     except TimeoutError:
+        run_span.set(**{"agent.run.status": "timeout"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.warning(
             "langgraph_agent_timeout",
@@ -705,6 +711,7 @@ async def run_agent(
     except Exception as e:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         logger.error("langgraph_agent_failed", agent_id=agent_id, error=str(e))
+        run_span.error(e)
 
         # Generate explanation for failed runs too
         fail_trace = [f"Agent execution failed: {type(e).__name__}"]
@@ -732,6 +739,7 @@ async def run_agent(
             },
         }
     finally:
+        run_span.end()
         reset_route(route_token)
 
 
@@ -870,6 +878,7 @@ async def resume_agent(
     )
 
     route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
+    run_span = tracing.start("agenticorg.agent.resume", tenant=tenant_id, **_run_span_attributes(route, agent_id))
     t0 = time.perf_counter()
     try:
         if require_paused:
@@ -881,7 +890,7 @@ async def resume_agent(
                 refusal = "checkpoint_not_paused"
             if refusal:
                 logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
-                return {"status": "failed", "error": refusal, "reason": refusal}
+                return _traced_result(run_span, {"status": "failed", "error": refusal, "reason": refusal})
         result = await compiled.ainvoke(  # type: ignore[call-overload]
             resume_command,
             config=config,
@@ -894,30 +903,61 @@ async def resume_agent(
         if pseudonymiser is not None:
             result["output"] = pseudonymiser.restore_value(result.get("output", {}))
             result["reasoning_trace"] = pseudonymiser.restore_value(result.get("reasoning_trace", []))
-        return {
-            "status": result.get("status", "completed"),
-            "output": result.get("output", {}),
-            "confidence": result.get("confidence", 0.0),
-            "reasoning_trace": result.get("reasoning_trace", []),
-            "performance": {
-                "total_latency_ms": latency_ms,
-                "llm_tokens_used": tokens_used,
-                "llm_cost_usd": cost_usd,
+        return _traced_result(
+            run_span,
+            {
+                "status": result.get("status", "completed"),
+                "output": result.get("output", {}),
+                "confidence": result.get("confidence", 0.0),
+                "reasoning_trace": result.get("reasoning_trace", []),
+                "performance": {
+                    "total_latency_ms": latency_ms,
+                    "llm_tokens_used": tokens_used,
+                    "llm_cost_usd": cost_usd,
+                },
             },
-        }
+        )
     except ModelGatewayRefused as exc:
         logger.warning("agent_resume_refused_model_gateway_limit", agent_id=agent_id, reason=exc.reason)
-        return refused_run_result(exc)
+        return _traced_result(run_span, refused_run_result(exc))
     except GuardrailBlocked as exc:
         logger.warning("agent_resume_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
-        return guardrail_blocked_result(exc)
+        return _traced_result(run_span, guardrail_blocked_result(exc))
     # enterprise-gate: broad-except-ok reason=langgraph-resume-boundary-returns-explicit-failed-status
     except Exception as e:
         logger.error("langgraph_resume_failed", agent_id=agent_id, error=str(e))
+        run_span.error(e)
         reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
-        return {"status": "failed", "error": str(e), "reason": reason}
+        return _traced_result(run_span, {"status": "failed", "error": str(e), "reason": reason})
     finally:
+        run_span.end()
         reset_route(route_token)
+
+
+def _run_span_attributes(route: Any, agent_id: str, agent_type: str = "", domain: str = "") -> dict[str, Any]:
+    """What an agent run's span records: who runs, under which routing decision (the tenant travels as a reference)."""
+    return {
+        "agent.id": agent_id,
+        "agent.type": agent_type,
+        "domain": domain,
+        "gateway.correlation_id": getattr(route, "correlation_id", ""),
+        "gateway.gated": getattr(route, "gated", None),
+        "llm.provider": getattr(route, "provider", ""),
+        "llm.model": getattr(route, "model", ""),
+    }
+
+
+def _traced_result(run_span: tracing.SpanHandle, result: dict[str, Any]) -> dict[str, Any]:
+    """Record a run's outcome on its span and hand the result back unchanged."""
+    performance = result.get("performance")
+    run_span.set(
+        **{
+            "agent.run.status": str(result.get("status", "")),
+            "agent.run.error_code": str(result.get("error_code", "")),
+            "llm.tokens": performance.get("llm_tokens_used") if isinstance(performance, dict) else None,
+        }
+    )
+    return result
 
 
 def _build_user_message(task_input: dict[str, Any]) -> str:

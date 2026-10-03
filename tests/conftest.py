@@ -10,7 +10,13 @@ import pytest
 from core.crypto.migration_helpers import AUDIT_DIR_ENV
 from core.test_doubles.ambient_redis_policy import declared_redis_url
 
-_TEST_TMPDIR = Path.cwd() / "codex-pytest-temp"
+# Pytest capture and multiprocessing need reliable local filesystem semantics. In Docker,
+# the checkout may be a Windows bind mount, so keep scratch files on the container filesystem.
+_TEST_TMPDIR = (
+    Path("/tmp/agenticorg-pytest-temp")  # noqa: S108 - private container-local test scratch dir
+    if Path("/.dockerenv").exists()
+    else Path.cwd() / "codex-pytest-temp"
+)
 _TEST_TMPDIR.mkdir(parents=True, exist_ok=True)
 tempfile.tempdir = str(_TEST_TMPDIR)
 os.environ.setdefault("TMP", str(_TEST_TMPDIR))

@@ -24,6 +24,8 @@ from celery.signals import (
     worker_process_shutdown,
 )
 
+from observability import tracing
+
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
 # ``include=`` is what actually registers the @app.task decorators with
@@ -200,6 +202,8 @@ app.autodiscover_tasks(["core.tasks"])
 REQUEST_ID_HEADER = "request_id"
 # enterprise-gate: process-local-ok reason=per-worker-process-contextvar-reset-tokens-keyed-by-task-id
 _task_context_tokens: dict[str, Any] = {}
+# enterprise-gate: process-local-ok reason=per-worker-process-open-task-spans-keyed-by-task-id
+_task_spans: dict[str, tracing.SpanHandle] = {}
 
 
 @setup_logging.connect
@@ -220,6 +224,40 @@ def _mark_worker_process(**_kwargs: Any) -> None:
     from core.tasks.async_runner import mark_worker_process
 
     mark_worker_process()
+
+
+@worker_init.connect
+def _refuse_worker_with_invalid_tracing(**_kwargs: Any) -> None:
+    """A worker never starts with tracing on and misconfigured.
+
+    Runs in the main worker process before the pool starts. Celery's
+    ``Signal.send`` logs and swallows any ``Exception`` a receiver raises, so
+    the refusal is raised as ``SystemExit``, which it does not catch. The
+    tracer itself is installed per child process (``_start_tracing``): an
+    exporter's thread would not survive the fork.
+    """
+    from core.config import settings
+
+    if not settings.tracing_enabled:
+        return
+    try:
+        tracing.validate_settings()
+    except tracing.TracingError as exc:
+        raise SystemExit(f"Refusing to start the worker: {exc}") from exc
+
+
+@worker_process_init.connect
+def _start_tracing(**_kwargs: Any) -> None:
+    """Install the tracer the settings describe in this child (off by default; a misconfiguration stops the child)."""
+    try:
+        tracing.init_tracing_from_settings()
+    except tracing.TracingError as exc:
+        raise SystemExit(f"Refusing to start the worker process: {exc}") from exc
+
+
+@worker_process_shutdown.connect
+def _stop_tracing(**_kwargs: Any) -> None:
+    tracing.shutdown_tracing()
 
 
 @beat_init.connect
@@ -278,12 +316,28 @@ def _close_checkpointer_in_worker(**_kwargs: Any) -> None:
 
 @before_task_publish.connect
 def propagate_request_id_to_task(headers: dict[str, Any] | None = None, **_kwargs: Any) -> None:
-    """Copy the caller's ``request_id`` contextvar into the task message headers."""
+    """Copy the caller's ``request_id`` contextvar, and the trace context in progress, into the task headers."""
     if headers is None:
         return
     request_id = structlog.contextvars.get_contextvars().get("request_id")
     if request_id and not headers.get(REQUEST_ID_HEADER):
         headers[REQUEST_ID_HEADER] = str(request_id)
+    tracing.inject_headers(headers)
+
+
+def _trace_headers_from_task(task: Any) -> dict[str, str]:
+    """The W3C trace context the publisher put in the task headers, if any."""
+    request = getattr(task, "request", None)
+    found: dict[str, str] = {}
+    for source in (request, getattr(request, "headers", None)):
+        get = getattr(source, "get", None)
+        if not callable(get):
+            continue
+        for key in tracing.TRACE_CONTEXT_HEADERS:
+            value = get(key)
+            if value and key not in found:
+                found[key] = str(value)
+    return found
 
 
 def _request_id_from_task(task: Any, task_id: str) -> str:
@@ -300,17 +354,29 @@ def _request_id_from_task(task: Any, task_id: str) -> str:
 @task_prerun.connect
 def bind_task_log_context(task_id: str = "", task: Any = None, **_kwargs: Any) -> None:
     """Bind ``request_id`` (propagated header, else the task id) + task name."""
+    request_id = _request_id_from_task(task, task_id)
     tokens = structlog.contextvars.bind_contextvars(
-        request_id=_request_id_from_task(task, task_id),
+        request_id=request_id,
         task_id=str(task_id),
         task_name=str(getattr(task, "name", "") or ""),
     )
     _task_context_tokens[str(task_id)] = tokens
+    # Tracing (off by default): the task span continues the publisher's trace.
+    _task_spans[str(task_id)] = tracing.start(
+        "agenticorg.task.run",
+        kind=tracing.SpanKind.CONSUMER,
+        parent=_trace_headers_from_task(task) if tracing.enabled() else None,
+        **{"task.name": str(getattr(task, "name", "") or ""), "task.id": str(task_id), "request.id": request_id},
+    )
 
 
 @task_postrun.connect
-def clear_task_log_context(task_id: str = "", **_kwargs: Any) -> None:
+def clear_task_log_context(task_id: str = "", state: Any = None, **_kwargs: Any) -> None:
     """Restore the pre-task context (a bare worker context becomes empty again)."""
+    task_span = _task_spans.pop(str(task_id), None)
+    if task_span is not None:
+        task_span.set(**{"task.state": str(state or "")})
+        task_span.end()
     tokens = _task_context_tokens.pop(str(task_id), None)
     if tokens is None:
         structlog.contextvars.clear_contextvars()

@@ -54,7 +54,7 @@ def test_report_survives_a_deleted_module_written_under_basetemp(tmp_path: Path)
         run = subprocess.run(  # noqa: S603 - literal argv
             [
                 sys.executable, "-m", "coverage", "run", rcfile,
-                f"--data-file={data_file}", "--source=.", str(driver), str(work),
+                f"--data-file={data_file}", f"--source={work},{ROOT / 'scripts'}", str(driver), str(work),
                 str(ROOT / "scripts" / "check_license_headers.py"),
             ],
             cwd=ROOT, capture_output=True, text=True, check=False, timeout=120,

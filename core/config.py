@@ -173,6 +173,15 @@ class Settings(BaseSettings):
     # runtime). Pattern rules scan at most this many characters.
     guardrails_detector_timeout_seconds: float = 2.0
     guardrails_pattern_max_chars: int = 50_000
+    # Distributed tracing. Off by default: on, every API request, task, agent
+    # run, model call, tool call and knowledge search opens an OpenTelemetry
+    # span, the log context carries the trace id and signed audit rows record
+    # it. Spans go to OTEL_EXPORTER_OTLP_ENDPOINT over http/protobuf or grpc,
+    # sampled at the ratio; a strict runtime refuses to start with tracing on
+    # and no endpoint.
+    tracing_enabled: bool = False
+    tracing_protocol: str = "http/protobuf"
+    tracing_sample_ratio: float = 1.0
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600

@@ -263,7 +263,10 @@ def test_worker_vault_check_is_connected_to_worker_init():
         if isinstance(node, ast.FunctionDef)
         and any(ast.unparse(d) == "worker_init.connect" for d in node.decorator_list)
     ]
-    assert handlers == ["_refuse_worker_without_vault_key"]
+    assert set(handlers) == {
+        "_refuse_worker_with_invalid_tracing",
+        "_refuse_worker_without_vault_key",
+    }
 
 
 def test_celery_dispatch_of_worker_init_stops_a_worker_without_a_key(clean_vault_env):

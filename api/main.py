@@ -110,6 +110,11 @@ async def lifespan(app: FastAPI):
     # No credential-vault key outside local and test runtimes stops startup
     # here instead of sealing credentials under a key published in this repo.
     assert_vault_key_configured()
+    # Tracing is off unless configured; on, a strict runtime with no OTLP
+    # endpoint stops here (observability/tracing.py).
+    from observability.tracing import init_tracing_from_settings, shutdown_tracing
+
+    init_tracing_from_settings()
     await init_db()
     # A configured Postgres checkpoint store that cannot be reached, or whose
     # schema is not migrated, stops startup here instead of degrading to
@@ -168,6 +173,7 @@ async def lifespan(app: FastAPI):
 
     yield
     stop_metrics_server()
+    shutdown_tracing()
     from api.v1.health import close_health_resources
     from core.database import close_db
 

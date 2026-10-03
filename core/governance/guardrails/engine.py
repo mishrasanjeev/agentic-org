@@ -51,6 +51,7 @@ from core.governance.guardrails.schema import (
     Rule,
     validate_rule_fields,
 )
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -360,6 +361,16 @@ async def evaluate(
                 applied=outcome.applied,
                 mode=mode,
             )
+            tracing.add_event(
+                "guardrail.outcome",
+                correlation_id=scope.correlation_id,
+                stage=stage,
+                rule_id=rule.id,
+                detector=rule.detector,
+                action=rule.action,
+                applied=outcome.applied,
+                mode=mode,
+            )
             if enforced and rule.action != "flag":
                 await _audit_outcome(scope, outcome)
     if blocker is not None and not dry_run:
@@ -473,7 +484,7 @@ async def _audit_outcome(scope: _Scope, outcome: Outcome) -> None:
             resource_id=outcome.rule_id,
             outcome="blocked" if outcome.blocked else "transformed",
             details={**outcome.to_dict(), "correlation_id": scope.correlation_id, "agent_id": scope.agent_id},
-            trace_id=scope.correlation_id,
+            trace_id=tracing.audit_trace_id(scope.correlation_id),
         )
         async with get_tenant_session(scope.tenant_id) as session:
             session.add(entry)
@@ -515,7 +526,7 @@ def _audit_entry(
         "action": event,
         "outcome": outcome,
         "details": details,
-        "trace_id": trace_id,
+        "trace_id": trace_id or tracing.audit_trace_id(),
         "created_at": datetime.now(UTC),
     }
     entry["signature"] = sign_audit_record(entry, settings.secret_key.encode())

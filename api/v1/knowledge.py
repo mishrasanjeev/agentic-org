@@ -21,6 +21,7 @@ from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.config import settings
 from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
+from observability import tracing
 
 logger = structlog.get_logger()
 
@@ -1287,9 +1288,11 @@ async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[Se
     texts = await guard_retrieval_texts(
         [r.chunk_text for r in results], tenant_id=tenant_id, use_case="knowledge_search"
     )
-    return [
+    kept = [
         r.model_copy(update={"chunk_text": text}) for r, text in zip(results, texts, strict=True) if text is not None
     ]
+    tracing.set_attributes(**{"search.results": len(kept), "search.withheld": len(results) - len(kept)})
+    return kept
 
 
 @router.post("/knowledge/search", response_model=SearchResponse)
@@ -1315,6 +1318,12 @@ async def search_knowledge(
     opaque global ``E1001 INTERNAL_ERROR`` envelope that the UI only
     knows how to render as "Something went wrong".
     """
+    with tracing.span("agenticorg.knowledge.search", tenant=tenant_id, **{"search.top_k": req.top_k}):
+        return await _search_knowledge(req, tenant_id)
+
+
+async def _search_knowledge(req: SearchRequest, tenant_id: str) -> SearchResponse:
+    """The search itself: RAGFlow when configured, else native semantic search; both pass the retrieval guardrails."""
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
