@@ -1,6 +1,6 @@
 ## What evidence you should inspect
 
-Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observatory**, agent history and workflow run detail according to your role.
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observability**, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
 
 ![Illustrative audit workspace](/screenshots/audit.webp)
 
@@ -34,4 +34,4 @@ Stop the affected external-action schedule or agent path through supported contr
 
 Check [Service Status](https://agenticorg.ai/status) and your own deployment health separately. A public service status page cannot certify the health of every tenant connector or self-hosted bank environment.
 
-Next: [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).
+Next: [Run observability](/docs/run-observability), [Guardrails](/docs/guardrails), [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).

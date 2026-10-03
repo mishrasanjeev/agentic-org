@@ -592,6 +592,7 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Workspace, companies and roles](https://agenticorg.ai/docs/workspace-and-roles): Set up your organization, invite colleagues, choose the right company, and understand why different users see different controls.
 - [Core concepts and glossary](https://agenticorg.ai/docs/concepts): A plain-language guide to agents, tools, prompts, workflows, grants, knowledge, shadow mode, cases and OACP artifacts.
 - [AI providers and model setup](https://agenticorg.ai/docs/model-setup): Configure provider credentials, select models, control routing and costs, and diagnose tenant or company credential problems.
+- [Model Gateway, routing and limits](https://agenticorg.ai/docs/model-gateway): Create scoped routing and access policies, dry-run decisions, manage limits, and interpret model-call records and cost estimates.
 - [Create and manage agents](https://agenticorg.ai/docs/create-agents): Use natural-language drafts or manual setup; configure persona, tools, prompts, behavior, visibility and shadow evaluation.
 - [Run agents and use chat](https://agenticorg.ai/docs/run-and-chat): Supply clear inputs, preserve company context, read run outcomes and handle refusals without assuming an external action happened.
 - [Knowledge Base and scanned documents](https://agenticorg.ai/docs/knowledge-and-ocr): Upload supported documents, understand OCR and extraction quality, handle duplicates, and validate source-grounded search.
@@ -603,6 +604,8 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Approvals and human review](https://agenticorg.ai/docs/approvals): Review evidence and permissions before a decision, handle escalations, and distinguish workflow approvals from governed-case decisions.
 - [Governed business onboarding cases](https://agenticorg.ai/docs/governed-cases): Investigate a business, inspect cited evidence and deterministic policy scores, review screening proposals, and request a human decision.
 - [Audit, monitoring and run history](https://agenticorg.ai/docs/audit-and-monitoring): Read agent and workflow evidence, understand dashboard limits, investigate failures, and measure your own service outcomes.
+- [Guardrail rules, dry runs and enforcement](https://agenticorg.ai/docs/guardrails): Configure tenant-admin guardrail rules through the authenticated API, test detector behavior, and distinguish flag-only from enforced operation.
+- [Run timelines and workload observability](https://agenticorg.ai/docs/run-observability): Use the admin trace waterfall and tenant workload view, understand opt-in tracing and storage, and investigate run failures without overreading missing data.
 - [Evaluate and roll out safely](https://agenticorg.ai/docs/evaluate-and-rollout): Build representative tests, compare quality and cost, validate refusals, and promote a bounded pilot with a rollback plan.
 - [Security, privacy and data handling](https://agenticorg.ai/docs/security-and-data): Choose appropriate data, review provider retention and access, protect credentials, and organize evidence deletion and incident response.
 - [Billing, limits and support](https://agenticorg.ai/docs/billing-and-support): Understand hosted plan limits and provider charges, use the billing console, and send a useful support request without secrets.
@@ -734,7 +737,7 @@ These source-verified guides describe usage and configured boundaries, not a bla
 ### Start here
 
 URL: https://agenticorg.ai/docs/start-here
-Audience: Everyone. Reviewed: 2026-09-30.
+Audience: Everyone. Reviewed: 2026-10-02.
 
 #### What you can do with AgenticOrg
 
@@ -754,7 +757,7 @@ Run under review | Assign operators, approvals, support and change control.
 | Your role | Start with | Then learn |
 | --- | --- | --- |
 | First-time user | [Your first useful agent](/docs/first-agent) | [Knowledge and OCR](/docs/knowledge-and-ocr), [Run and chat](/docs/run-and-chat) |
-| Administrator | [Workspace and roles](/docs/workspace-and-roles) | [Model setup](/docs/model-setup), [Connectors](/docs/connectors), [Security](/docs/security-and-data) |
+| Administrator | [Workspace and roles](/docs/workspace-and-roles) | [Model setup](/docs/model-setup), [Model Gateway](/docs/model-gateway), [Guardrails](/docs/guardrails), [Connectors](/docs/connectors) |
 | Process owner | [Create agents](/docs/create-agents) | [Workflows](/docs/workflows), [Approvals](/docs/approvals), [Evaluation](/docs/evaluate-and-rollout) |
 | Bank or fintech team | [Business onboarding](/docs/bfsi-business-onboarding) | [Reconciliation](/docs/bfsi-reconciliation), [Customer service](/docs/bfsi-customer-service) |
 | Merchant team | [Commerce](/docs/commerce) | [BFSI merchant services](/docs/bfsi-merchant-services) |
@@ -795,6 +798,8 @@ bypass permissions.
 | Configure voice | [Voice Setup](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
 | Configure browser automation | [RPA](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
 | Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
+| Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
+| Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
@@ -810,7 +815,7 @@ The guides describe source-verified behavior, not a promise that your deployment
 ### Your first useful agent
 
 URL: https://agenticorg.ai/docs/first-agent
-Audience: New users. Reviewed: 2026-09-30.
+Audience: New users. Reviewed: 2026-10-02.
 
 #### Outcome of this exercise
 
@@ -881,7 +886,7 @@ Have a second person reproduce the exercise with the correct role and company. R
 ### Workspace, companies and roles
 
 URL: https://agenticorg.ai/docs/workspace-and-roles
-Audience: Administrators and team leads. Reviewed: 2026-09-30.
+Audience: Administrators and team leads. Reviewed: 2026-10-02.
 
 #### Organization, company and user are different things
 
@@ -943,7 +948,7 @@ SSO, SCIM and enterprise identity capabilities depend on plan and deployment con
 ### Core concepts and glossary
 
 URL: https://agenticorg.ai/docs/concepts
-Audience: Everyone. Reviewed: 2026-09-30.
+Audience: Everyone. Reviewed: 2026-10-02.
 
 #### The simple mental model
 
@@ -995,7 +1000,7 @@ Read the actual state: draft, prepared, queued, running, awaiting review, failed
 ### AI providers and model setup
 
 URL: https://agenticorg.ai/docs/model-setup
-Audience: Administrators. Reviewed: 2026-09-30.
+Audience: Administrators. Reviewed: 2026-10-02.
 
 #### What this configuration does
 
@@ -1023,6 +1028,8 @@ Credentials are stored through the platform's protected credential path. The for
 
 In **Create Virtual Employee > Behavior**, choose the LLM provider/model and routing mode. Use a model actually served by the configured endpoint. Automatic routing can select a different tier based on configuration; disabling routing uses the selected model path. Confirm the resulting provider in run evidence before comparing latency or cost.
 
+Tenant administrators can use the [Model Gateway](/docs/model-gateway) for scoped routing/access policies, dry runs and limits. It is distinct from adding provider credentials: a policy cannot make an unconfigured provider or model available.
+
 Test a short task with the target company selected. Then test an agent or workflow using that same context. Do not validate a tenant/global key and assume company-specific resolution works identically.
 
 #### Rotate without losing the operating context
@@ -1042,10 +1049,57 @@ Record which agents and environments use the credential. Use the supported rotat
 Jev/System One is an optional advisory integration with separate TypeSafe access and evaluation requirements. A waitlist enrollment does not supply an API key or activate production routing. Keep the ordinary model path usable without it.
 
 
+### Model Gateway, routing and limits
+
+URL: https://agenticorg.ai/docs/model-gateway
+Audience: Tenant administrators. Reviewed: 2026-10-02.
+
+#### Control model routing with the Model Gateway
+
+The Model Gateway is an administrator console for reviewing provider/model choices, routing rules, access policies, per-model limits, dry-run decisions, recent routing records and cost comparisons. It does not create provider credentials. Configure and test credentials first in [AI Provider Credentials](/docs/model-setup), then use **Settings > Model Gateway** (`/dashboard/settings/model-gateway`) for tenant-scoped gateway controls.
+
+```flow
+Prepare approved provider access | Add credentials and confirm allowed models, regions, billing owner and data terms.
+Review current state | Check gateway status and existing routing, access and limit rules.
+Draft one narrow rule | Set its priority, match conditions, allowed targets and reason.
+Evaluate before rollout | Use the dry run with representative requests and inspect the chosen route or refusal.
+Enable deliberately | Confirm tenant policy and feature configuration, then monitor routing records and workload outcomes.
+```
+
+#### Choose the right control
+
+| Control | What it decides | Good first use |
+| --- | --- | --- |
+| Routing policy | Which configured provider/model or weighted target is selected for a matching request | Prefer an approved lower-cost model for a bounded use case |
+| Access policy | Whether a request matching a principal, application, agent, provider, model or other supported context is allowed or denied | Deny a model for a sensitive use case |
+| Model limit | Maximum concurrent requests and/or requests per minute for a provider/model | Protect a shared quota from bursts |
+| Dry run | What the current policy would decide for supplied request context | Compare intended behavior before changing live traffic |
+
+Start with the smallest match scope. Priorities are ordered (lower values win); use explicit reasons that help the next administrator understand the decision. Review overlap between policies and access rules rather than assuming one rule overrides every other control. The dry-run result is a point-in-time evaluation, not a reservation of provider capacity or a guarantee about a later request.
+
+#### Verify the outcome
+
+After a controlled test, inspect the decision shown by the console. When routing-record capture is enabled for the deployment, use the Records tab to search by correlation ID and review provider, model, outcome, latency, token/cost fields and signature status. The Costs tab compares observed calls with available list-price data; an unpriced model or missing observation is not zero cost. Actual invoices and provider billing remain authoritative.
+
+The records feature is configuration-dependent and disabled by default. Confirm `AGENTICORG_MODEL_GATEWAY_RECORDS_ENABLED` and its retention policy with the platform owner before expecting a history. Gateway status, API authorization and tenant scope still apply; a visible rule does not prove that every application path is routed through the gateway.
+
+#### Safe rollout and recovery
+
+1. Use synthetic or approved low-sensitivity inputs first.
+2. Save the existing rule values and identify an administrator who can restore them.
+3. Test allowed, denied, unmatched, provider-timeout and limit-exceeded cases.
+4. Enable one change at a time, then compare the actual provider/model and failure rate.
+5. Disable or revise the specific rule if outcomes differ from the dry run; record the reason and retest.
+
+Do not paste provider keys into prompts, policy reasons or support tickets. Keep credentials in the credential manager, and ask the provider or platform administrator to resolve quota, endpoint or model-availability errors.
+
+Next: [AI provider setup](/docs/model-setup), [Guardrails](/docs/guardrails), [Run observability](/docs/run-observability), [Security and data](/docs/security-and-data).
+
+
 ### Create and manage agents
 
 URL: https://agenticorg.ai/docs/create-agents
-Audience: Agent builders. Reviewed: 2026-09-30.
+Audience: Agent builders. Reviewed: 2026-10-02.
 
 #### Decide the job before choosing a template
 
@@ -1105,7 +1159,7 @@ Next: [Run and chat](/docs/run-and-chat), [Workflows](/docs/workflows), [Evaluat
 ### Run agents and use chat
 
 URL: https://agenticorg.ai/docs/run-and-chat
-Audience: Operators. Reviewed: 2026-09-30.
+Audience: Operators. Reviewed: 2026-10-02.
 
 #### Choose the right entry point
 
@@ -1155,7 +1209,7 @@ Next: [Troubleshooting](/docs/troubleshooting), [Approvals](/docs/approvals), [A
 ### Knowledge Base and scanned documents
 
 URL: https://agenticorg.ai/docs/knowledge-and-ocr
-Audience: Content owners and operators. Reviewed: 2026-09-30.
+Audience: Content owners and operators. Reviewed: 2026-10-02.
 
 #### What Knowledge Base does
 
@@ -1213,7 +1267,7 @@ Next: [First agent](/docs/first-agent), [Insurance assistance](/docs/bfsi-insura
 ### Connect business systems
 
 URL: https://agenticorg.ai/docs/connectors
-Audience: Administrators and integration owners. Reviewed: 2026-09-30.
+Audience: Administrators and integration owners. Reviewed: 2026-10-02.
 
 #### Connector readiness is more than a green badge
 
@@ -1268,7 +1322,7 @@ Next: [Workflows](/docs/workflows), [Model setup](/docs/model-setup), [BFSI reco
 ### Build and run workflows
 
 URL: https://agenticorg.ai/docs/workflows
-Audience: Process owners. Reviewed: 2026-09-30.
+Audience: Process owners. Reviewed: 2026-10-02.
 
 #### Turn a process into explicit steps
 
@@ -1323,7 +1377,7 @@ Next: [Approvals](/docs/approvals), [Audit and monitoring](/docs/audit-and-monit
 ### Voice, speech-to-text and text-to-speech
 
 URL: https://agenticorg.ai/docs/voice
-Audience: Voice administrators. Reviewed: 2026-09-30.
+Audience: Voice administrators. Reviewed: 2026-10-02.
 
 #### Shipped voice path
 
@@ -1371,7 +1425,7 @@ Next: [BFSI customer service](/docs/bfsi-customer-service), [Troubleshooting](/d
 ### Browser RPA and schedules
 
 URL: https://agenticorg.ai/docs/rpa
-Audience: Automation administrators. Reviewed: 2026-09-30.
+Audience: Automation administrators. Reviewed: 2026-10-02.
 
 #### When to use browser automation
 
@@ -1420,7 +1474,7 @@ Next: [Connectors](/docs/connectors), [Security and data](/docs/security-and-dat
 ### Industry packs and business dashboards
 
 URL: https://agenticorg.ai/docs/industry-packs
-Audience: Department leads. Reviewed: 2026-09-30.
+Audience: Department leads. Reviewed: 2026-10-02.
 
 #### Packs are starting points, not automatic integrations
 
@@ -1466,7 +1520,7 @@ Next: [Create agents](/docs/create-agents), [Adoption checklist](/docs/adoption-
 ### Approvals and human review
 
 URL: https://agenticorg.ai/docs/approvals
-Audience: Reviewers and approvers. Reviewed: 2026-09-30.
+Audience: Reviewers and approvers. Reviewed: 2026-10-02.
 
 #### What human review should answer
 
@@ -1511,7 +1565,7 @@ For BFSI, loan, onboarding, claim, sanction, account-change and payment decision
 ### Governed business onboarding cases
 
 URL: https://agenticorg.ai/docs/governed-cases
-Audience: BFSI analysts and authorized approvers. Reviewed: 2026-09-30.
+Audience: BFSI analysts and authorized approvers. Reviewed: 2026-10-02.
 
 #### What a governed case is
 
@@ -1563,11 +1617,11 @@ Next: [BFSI onboarding walkthrough](/docs/bfsi-business-onboarding), [Security a
 ### Audit, monitoring and run history
 
 URL: https://agenticorg.ai/docs/audit-and-monitoring
-Audience: Operators and auditors. Reviewed: 2026-09-30.
+Audience: Operators and auditors. Reviewed: 2026-10-02.
 
 #### What evidence you should inspect
 
-Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observatory**, agent history and workflow run detail according to your role.
+Run evidence helps answer who requested a task, which company/agent handled it, which tools were attempted, what failed, what required review and what outcome was reported. Use **Audit Log**, **Observability**, agent history and workflow run detail according to your role. The separate administrator [run timeline and workload view](/docs/run-observability) is opt-in and has a bounded time window; it is not an exhaustive audit stream.
 
 ![Illustrative audit workspace](/screenshots/audit.webp)
 
@@ -1601,13 +1655,100 @@ Stop the affected external-action schedule or agent path through supported contr
 
 Check [Service Status](https://agenticorg.ai/status) and your own deployment health separately. A public service status page cannot certify the health of every tenant connector or self-hosted bank environment.
 
-Next: [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).
+Next: [Run observability](/docs/run-observability), [Guardrails](/docs/guardrails), [Troubleshooting](/docs/troubleshooting), [Security and data](/docs/security-and-data), [Evaluation](/docs/evaluate-and-rollout).
+
+
+### Guardrail rules, dry runs and enforcement
+
+URL: https://agenticorg.ai/docs/guardrails
+Audience: Tenant administrators and security owners. Reviewed: 2026-10-02.
+
+#### Configure and test guardrails
+
+Tenant-scoped rules evaluate text at the input, retrieved-evidence, model-output and tool-action stages. A rule names a detector, threshold, optional agent/use-case/risk-tier scope, priority and response. Detector identifiers in the API are `sensitive_data`, `toxicity`, `pattern`, `injection` and `output_policy`. Action values are `flag`, `mask`, `redact`, `tokenise` and `block`; API validation enforces detector/action compatibility.
+
+Guardrail rule administration is currently an authenticated tenant-administrator API, not a dedicated console page. Use an approved API client with the tenant selected and the required `governance.guardrails.sensitive.read` or `.write` permission. The API is under `/api/v1/guardrails`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}` and `POST /evaluate`. Do not copy a privileged key into a browser console or commit it to a script.
+
+```flow
+Check effective status | Read /guardrails/status and confirm whether the tenant is flag-only or enforced.
+Create a narrow rule | Choose one stage, detector, threshold, response and explicit scope.
+Dry-run examples | Call /guardrails/evaluate with synthetic allowed and flagged text; inspect transformed text and outcomes.
+Review detector limits | Check false positives, missed cases, latency and failure behavior with the domain owner.
+Enable only through approved controls | Confirm hooks and tenant enforcement configuration before relying on blocking or transforms.
+Monitor and revise | Correlate rule outcomes with run evidence; keep a rollback owner and test after edits.
+```
+
+#### Understand the modes
+
+Rules can be stored while platform hooks or enforcement are off. Hooks are disabled by default. With hooks enabled but tenant enforcement off, evaluations are flag-only: the request continues unchanged while findings are recorded for observation. The `/evaluate` endpoint is a dry run: it returns the result the rules would produce, including transformed text or `allowed: false`, but does not enforce that result on a live call and does not write an audit outcome. A dry run is therefore not evidence that production traffic is protected.
+
+Enforcement is a separate setting. When active, a matching transform changes the text before it continues, and a blocking rule refuses that stage. A strict runtime may refuse a stage if it cannot safely load rules or a detector fails; behavior depends on the deployed strictness configuration. Confirm the effective status, hook configuration and runtime logs with your platform owner rather than inferring enforcement from the existence of a rule.
+
+#### Scope and detector behavior
+
+Rules match one of four stages: `input`, `retrieval`, `output` or `action`. Optional `agent_id`, `use_case` and `risk_tier` fields narrow a rule. Without those fields, the rule can apply to every call at that stage. Rules run in priority order, and a block takes precedence over a transform. Pattern rules are bounded and reject known unsafe regular-expression shapes; keep patterns short, specific and reviewed.
+
+Sensitive-data recognition includes configured patterns for common identifiers such as payment cards, Aadhaar, PAN, GSTIN, email, UPI and phone. Recognition quality depends on the active analyzer and fallback recognizers. Toxicity and prompt-injection detection are signals, not proof of intent or a complete security boundary. Test representative languages, formats, OCR noise and adversarial inputs. Retain a human review path for high-impact decisions.
+
+#### Operational checklist
+
+- Start in flag-only mode with synthetic cases and inspect false positives and misses.
+- Verify exact tenant, agent, use-case and risk-tier matching, including missing-context behavior.
+- Test each action separately; ensure masks/redactions do not destroy required business context.
+- Verify that blocked input, retrieval, output and tool-action cases stop at the intended boundary.
+- Confirm audit permissions, correlation IDs, retention and incident ownership.
+- Keep a rollback rule/configuration and rerun regression cases after every detector or policy change.
+
+Guardrails do not replace access control, data minimization, provider contracts, connector permissions, human approvals or institution policy. They are one control in a layered system.
+
+Next: [Model Gateway](/docs/model-gateway), [Security and data](/docs/security-and-data), [Audit and monitoring](/docs/audit-and-monitoring), [Troubleshooting](/docs/troubleshooting).
+
+
+### Run timelines and workload observability
+
+URL: https://agenticorg.ai/docs/run-observability
+Audience: Administrators and operators. Reviewed: 2026-10-02.
+
+#### Inspect run timelines and workload
+
+The administrator-only **Observability** screen (`/dashboard/observability`) has two views: Traces, which lists recent instrumented runs and a span waterfall for one run, and Workload, which summarizes review deadlines and selected tenant outcomes. These are read-only views. They help an operator investigate; they do not replace the audit log, provider billing, a system-of-record check or an incident process.
+
+```flow
+Open Observability | Sign in as an authorized administrator and select the intended company.
+Check recording state | Read the tracing/timeline status before interpreting an empty run list.
+Find a run | Filter recent runs by agent, then open one run to inspect parent/child spans and events.
+Compare workload | Review pending/overdue reviews and the one-hour run, model-call and guardrail summaries.
+Follow the correlation | Use run/correlation identifiers to inspect audit details and the downstream system separately.
+```
+
+#### Traces and timelines
+
+The list requests up to 50 recent stored runs and can filter by agent ID. A run detail displays its stored spans in relative time order, including duration, parent relationship, status and available attributes/events such as model decisions, tool outcomes, guardrail outcomes and exceptions. Data is limited to what that deployment records; missing spans do not prove that no work occurred.
+
+Before a platform owner changes `AGENTICORG_TRACING_ENABLED` or `AGENTICORG_TRACING_TIMELINE_ENABLED`, agree on an approved OTLP endpoint and protocol, sampling, data classification, storage and retention. Both controls default to off; strict production-like environments require a valid exporter endpoint when tracing is enabled. Confirm the effective retention setting with the platform owner before relying on historical timelines. Never send sensitive payloads to an unapproved telemetry collector.
+
+#### Workload view
+
+Workload refreshes about every 15 seconds. Its run, model-call and guardrail summaries cover the most recent hour. Review counts and deadlines come from the tenant's pending human-review queue. Each panel can report unavailable data independently; a dash or an error means unknown/unavailable, not zero. Model-call summaries depend on model-gateway record capture, and guardrail block/transform counts depend on persisted guardrail audit outcomes.
+
+Use the panel's stated time window and generated time when comparing it with another report. This is not a durable event stream, full audit export, cross-tenant dashboard or service-level guarantee. Do not use it as the sole evidence for a financial, compliance or customer-impact decision.
+
+#### A practical investigation
+
+1. Capture the run ID, correlation ID, company, agent and approximate time.
+2. Check whether tracing and timeline storage were enabled during that interval.
+3. Follow span status, duration and error events; identify the earliest failing dependency.
+4. Compare guardrail and model-gateway decisions with the audit view.
+5. Confirm any external action with its authoritative system (for example, the provider or connected business application).
+6. Record the safe error code, deployed commit and remediation owner; do not attach credentials or full customer payloads.
+
+If the view is empty, first verify permissions, selected company, feature configuration, retention window and whether the run path emits timeline spans. See [Audit and monitoring](/docs/audit-and-monitoring), [Model Gateway](/docs/model-gateway), [Guardrails](/docs/guardrails) and [Security and data](/docs/security-and-data).
 
 
 ### Evaluate and roll out safely
 
 URL: https://agenticorg.ai/docs/evaluate-and-rollout
-Audience: Product owners and administrators. Reviewed: 2026-09-30.
+Audience: Product owners and administrators. Reviewed: 2026-10-02.
 
 #### Define success before running tests
 
@@ -1651,7 +1792,7 @@ Next: [Team adoption checklist](/docs/adoption-checklist), [BFSI onboarding](/do
 ### Security, privacy and data handling
 
 URL: https://agenticorg.ai/docs/security-and-data
-Audience: Security teams and data owners. Reviewed: 2026-09-30.
+Audience: Security teams and data owners. Reviewed: 2026-10-02.
 
 #### Start with approved data
 
@@ -1696,7 +1837,7 @@ Next: [Workspace and roles](/docs/workspace-and-roles), [Audit and monitoring](/
 ### Billing, limits and support
 
 URL: https://agenticorg.ai/docs/billing-and-support
-Audience: Account owners. Reviewed: 2026-09-30.
+Audience: Account owners. Reviewed: 2026-10-02.
 
 #### Understand separate cost sources
 
@@ -1732,7 +1873,7 @@ AgenticOrg is owned by **Orchestrum Technologies LLP**. Inventor / Owner: **Sanj
 ### Troubleshooting by symptom
 
 URL: https://agenticorg.ai/docs/troubleshooting
-Audience: Everyone. Reviewed: 2026-09-30.
+Audience: Everyone. Reviewed: 2026-10-02.
 
 #### Start with the smallest failing layer
 
@@ -1780,7 +1921,7 @@ When an external effect is ambiguous, pause and confirm with the system of recor
 ### Seller and buyer commerce with OACP
 
 URL: https://agenticorg.ai/docs/commerce
-Audience: Merchants and bank merchant-service teams. Reviewed: 2026-09-30.
+Audience: Merchants and bank merchant-service teams. Reviewed: 2026-10-02.
 
 #### The end-to-end ownership model
 
@@ -1837,7 +1978,7 @@ Next: [BFSI merchant-services playbook](/docs/bfsi-merchant-services), [API and 
 ### External buyer and seller A2A demo
 
 URL: https://agenticorg.ai/docs/external-buyer-a2a-demo
-Audience: Merchants, developers and partner integrators. Reviewed: 2026-09-30.
+Audience: Merchants, developers and partner integrators. Reviewed: 2026-10-02.
 
 #### See an outside buyer talk to a seller
 
@@ -2019,7 +2160,7 @@ For an external buyer client, begin with the generic card and a protected creden
 ### API, SDK, MCP and A2A integration
 
 URL: https://agenticorg.ai/docs/api-sdk-mcp
-Audience: Developers and integration owners. Reviewed: 2026-09-30.
+Audience: Developers and integration owners. Reviewed: 2026-10-02.
 
 #### Choose an integration surface
 
@@ -2102,7 +2243,7 @@ refusal, and revocation over HTTP.
 ### Self-hosting and deployment handoff
 
 URL: https://agenticorg.ai/docs/self-hosting
-Audience: IT and platform teams. Reviewed: 2026-09-30.
+Audience: IT and platform teams. Reviewed: 2026-10-02.
 
 #### Hosted versus institution-managed
 
@@ -2151,7 +2292,7 @@ The public user manual is available under `/docs` in the UI build. `docs.agentic
 ### BFSI: business onboarding and KYB review
 
 URL: https://agenticorg.ai/docs/bfsi-business-onboarding
-Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-09-30.
+Audience: Banks, NBFCs and fintech operations. Reviewed: 2026-10-02.
 
 #### Scenario and boundary
 
@@ -2203,7 +2344,7 @@ Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Ado
 ### BFSI: reconciliation and finance exceptions
 
 URL: https://agenticorg.ai/docs/bfsi-reconciliation
-Audience: Finance and treasury operations. Reviewed: 2026-09-30.
+Audience: Finance and treasury operations. Reviewed: 2026-10-02.
 
 #### Scenario and boundary
 
@@ -2281,7 +2422,7 @@ Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and m
 ### BFSI: customer service across chat and voice
 
 URL: https://agenticorg.ai/docs/bfsi-customer-service
-Audience: Contact-center and service teams. Reviewed: 2026-09-30.
+Audience: Contact-center and service teams. Reviewed: 2026-10-02.
 
 #### Scenario and boundary
 
@@ -2329,7 +2470,7 @@ Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-an
 ### BFSI: insurance document and claims assistance
 
 URL: https://agenticorg.ai/docs/bfsi-insurance
-Audience: Insurers and claims operations. Reviewed: 2026-09-30.
+Audience: Insurers and claims operations. Reviewed: 2026-10-02.
 
 #### Scenario and boundary
 
@@ -2393,7 +2534,7 @@ Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows)
 ### BFSI: merchant enablement and agentic commerce
 
 URL: https://agenticorg.ai/docs/bfsi-merchant-services
-Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-09-30.
+Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-10-02.
 
 #### Scenario and ownership
 
@@ -2448,7 +2589,7 @@ Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mc
 ### Team adoption and launch checklist
 
 URL: https://agenticorg.ai/docs/adoption-checklist
-Audience: Sponsors and rollout leads. Reviewed: 2026-09-30.
+Audience: Sponsors and rollout leads. Reviewed: 2026-10-02.
 
 #### Choose the first useful problem
 

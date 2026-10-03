@@ -24,6 +24,8 @@ Credentials are stored through the platform's protected credential path. The for
 
 In **Create Virtual Employee > Behavior**, choose the LLM provider/model and routing mode. Use a model actually served by the configured endpoint. Automatic routing can select a different tier based on configuration; disabling routing uses the selected model path. Confirm the resulting provider in run evidence before comparing latency or cost.
 
+Tenant administrators can use the [Model Gateway](/docs/model-gateway) for scoped routing/access policies, dry runs and limits. It is distinct from adding provider credentials: a policy cannot make an unconfigured provider or model available.
+
 Test a short task with the target company selected. Then test an agent or workflow using that same context. Do not validate a tenant/global key and assume company-specific resolution works identically.
 
 ## Rotate without losing the operating context
