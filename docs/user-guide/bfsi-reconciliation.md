@@ -54,7 +54,7 @@ Read-only sources | Collect reviewed statement and ledger exports for one busine
 Validate and compare | Apply reviewed schema, currency, duplicate and matching rules with validated calculations. | Owner: Configured comparison and finance operator | If blocked: Corrupt rows, mismatched currencies or totals become exceptions, not forced matches.
 Exception pack | List matched pairs and each break with source-row evidence and proposed follow-up. | Owner: Finance assistant | If blocked: Missing provenance or uncertain arithmetic must be checked before review.
 Finance review | Recheck ambiguous matches and proposed corrections against the source records. | Owner: Authorized finance reviewer | Human decision: Approve, revise or reject each proposed correction through the institution's controls. | If blocked: Unresolved breaks remain open and cannot be reported as balanced.
-Authoritative posting | Send approved corrections through a separately authorized accounting process. | Owner: Institution finance and accounting system | If blocked: A prepared pack is not a posted entry or certified balance.
+Authoritative posting | Send approved corrections through a separately authorized accounting process. | Owner: Institution finance and accounting system | If blocked: A prepared pack is neither a posted entry nor a verified balance.
 ```
 
 ## Sample acceptance cases
