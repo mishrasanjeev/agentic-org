@@ -17,6 +17,7 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.models.approval_policy import ApprovalPolicy, ApprovalStep
+from core.rbac import is_approval_policy_role
 
 logger = structlog.get_logger()
 router = APIRouter(
@@ -66,6 +67,8 @@ class PolicyOut(BaseModel):
 
 def _validate_steps(steps: list[StepIn]) -> None:
     for s in steps:
+        if not is_approval_policy_role(s.approver_role):
+            raise HTTPException(400, f"step {s.sequence}: invalid approver_role")
         if s.quorum_required > s.quorum_total:
             raise HTTPException(
                 400, f"step {s.sequence}: quorum_required > quorum_total"

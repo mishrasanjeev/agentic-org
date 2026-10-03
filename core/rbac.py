@@ -92,6 +92,17 @@ ROLE_SCOPES: dict[str, list[str]] = {
     ],
 }
 
+APPROVAL_POLICY_ROLES = frozenset(
+    role
+    for role, scopes in ROLE_SCOPES.items()
+    if "approvals:write" in scopes or ADMIN_SCOPE in scopes
+)
+
+
+def is_approval_policy_role(role: str) -> bool:
+    return role in APPROVAL_POLICY_ROLES
+
+
 ROLE_LABELS: dict[str, dict[str, str]] = {
     "cfo": {"title": "CFO", "domain_label": "Finance"},
     "chro": {"title": "CHRO", "domain_label": "HR"},

@@ -24,6 +24,7 @@ from core.ownership import (
     is_personal_agent,
     personal_approval_decision,
 )
+from core.rbac import is_approval_policy_role
 from core.schemas.api import HITLDecision, PaginatedResponse
 
 router = APIRouter()
@@ -446,6 +447,7 @@ async def decide(
         # someone whose role *would* allow this decision TO the current
         # user. If we find one, the user acts on behalf of the delegator.
         delegated_from: str | None = None
+        delegated_role: str | None = None
         if not allowed and ownership_verdict is None:
             try:
                 from datetime import UTC as _UTC
@@ -476,6 +478,7 @@ async def decide(
                         if d_allowed:
                             allowed = True
                             delegated_from = str(delegation.delegator_id)
+                            delegated_role = delegator_role
                             reason = f"acting on behalf of {delegated_from} (role={delegator_role})"
                             break
             # enterprise-gate: broad-except-ok reason=delegation-lookup-failure-keeps-decision-denied
@@ -682,6 +685,21 @@ async def decide(
                     )
 
             if step is not None:
+                if not is_approval_policy_role(step.approver_role):
+                    raise HTTPException(409, "The approval policy has an invalid approver role")
+                step_allowed, step_reason = _can_decide(
+                    user_role, user_domains, step.approver_role, agent_domain
+                )
+                if not step_allowed and delegated_role is not None:
+                    step_allowed, step_reason = _can_decide(
+                        delegated_role, user_domains, step.approver_role, agent_domain
+                    )
+                if not step_allowed:
+                    raise HTTPException(403, f"Cannot decide on this approval: {step_reason}")
+                if item.requested_by_user_id is not None and (
+                    user_uuid is None or item.requested_by_user_id == user_uuid
+                ):
+                    raise HTTPException(403, "The requester cannot decide on their own approval")
                 # One vote per person per item, across every step: the per-step
                 # count resets when the item advances, so a per-step check let
                 # one reviewer satisfy each step of a multi-person policy in turn.
@@ -724,6 +742,8 @@ async def decide(
                 if pdec.action == "advance":
                     next_step = await next_step_after(policy, step.sequence, ctx)
                     if next_step is not None:
+                        if not is_approval_policy_role(next_step.approver_role):
+                            raise HTTPException(409, "The approval policy has an invalid approver role")
                         # Move to the next step — keep the item open with
                         # the new assignee_role and reset the counter.
                         policy_state["current_sequence"] = next_step.sequence

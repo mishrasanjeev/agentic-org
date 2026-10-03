@@ -297,3 +297,108 @@ async def test_an_unevaluatable_condition_requires_its_step() -> None:
         await _decide(USER_A, item, agent, policy=_policy())
     assert item.status == "pending"
     assert item.context["policy_state"]["approvals_collected"] == 1
+
+
+@pytest.mark.asyncio
+async def test_a_persisted_unknown_current_step_role_cannot_count_a_vote() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    step = _step(1)
+    step.approver_role = "unmapped_reviewer"
+
+    with patch("core.approvals.first_applicable_step", AsyncMock(return_value=step)):
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, policy=_policy())
+
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+    assert item.context == {}
+    assert item.decision_by is None
+
+
+@pytest.mark.asyncio
+async def test_policy_step_role_is_checked_when_item_role_differs() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    item.assignee_role = "domain_lead"
+    step = _step(1)
+    step.approver_role = "admin"
+
+    with patch("core.approvals.first_applicable_step", AsyncMock(return_value=step)):
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, policy=_policy())
+
+    assert exc.value.status_code == 403
+    assert item.status == "pending"
+    assert item.context == {}
+    assert item.decision_by is None
+
+
+@pytest.mark.asyncio
+async def test_delegated_reviewer_uses_delegator_role_for_policy_step() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    item.assignee_role = "admin"
+    step = _step(1)
+    step.approver_role = "admin"
+    delegation = SimpleNamespace(delegator_id=USER_B, ends_at=None)
+
+    with (
+        patch("core.approvals.first_applicable_step", AsyncMock(return_value=step)),
+        patch("core.approvals.next_step_after", AsyncMock(return_value=None)),
+    ):
+        result = await _decide(USER_A, item, agent, [(delegation, "admin")], policy=_policy())
+
+    assert result["status"] == "decided"
+    assert result["decided_by"] == str(USER_A)
+    assert item.context["policy_state"]["approvals"][0]["user_id"] == str(USER_A)
+
+
+@pytest.mark.asyncio
+async def test_a_persisted_unknown_next_step_role_cannot_advance() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    first, second = _step(1), _step(2)
+    second.approver_role = "unmapped_reviewer"
+
+    with (
+        patch("core.approvals.first_applicable_step", AsyncMock(return_value=first)),
+        patch("core.approvals.next_step_after", AsyncMock(return_value=second)),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, policy=_policy())
+
+    assert exc.value.status_code == 409
+    assert item.status == "pending"
+    assert item.context == {}
+    assert item.decision_by is None
+
+
+@pytest.mark.asyncio
+async def test_policy_requester_cannot_approve_their_own_item() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    item.requested_by_user_id = USER_A
+
+    with patch("core.approvals.first_applicable_step", AsyncMock(return_value=_step(1))):
+        with pytest.raises(HTTPException) as exc:
+            await _decide(USER_A, item, agent, policy=_policy())
+
+    assert exc.value.status_code == 403
+    assert item.status == "pending"
+    assert item.context == {}
+
+
+@pytest.mark.asyncio
+async def test_different_reviewer_can_approve_a_requested_policy_item() -> None:
+    agent = _agent()
+    item = _item(agent, {})
+    item.requested_by_user_id = USER_A
+
+    with (
+        patch("core.approvals.first_applicable_step", AsyncMock(return_value=_step(1))),
+        patch("core.approvals.next_step_after", AsyncMock(return_value=None)),
+    ):
+        result = await _decide(USER_B, item, agent, policy=_policy())
+
+    assert result["status"] == "decided"
