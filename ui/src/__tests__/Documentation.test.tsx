@@ -47,6 +47,9 @@ describe("public documentation", () => {
     expect(
       within(directory).getAllByRole("heading", { level: 3 }),
     ).toHaveLength(manual.articles.length);
+    expect(within(directory).getByRole("link", { name: "Explore BFSI process maps" }))
+      .toHaveAttribute("href", "/docs#bfsi-playbooks");
+    expect(document.getElementById("bfsi-playbooks")).toBeInTheDocument();
     const ownership = screen.getByTestId("product-ownership");
     expect(ownership).toHaveTextContent("Orchestrum Technologies LLP");
     expect(ownership).toHaveTextContent("Sanjeev Kumar");
@@ -95,7 +98,10 @@ describe("public documentation", () => {
   it("renders real guide content, visual flow and source references with correct metadata", async () => {
     open("/docs/bfsi-business-onboarding");
     expect(screen.getByRole("main")).toHaveTextContent("Example Bank");
-    expect(screen.getByRole("list", { name: "Workflow" })).toBeInTheDocument();
+    const map = screen.getByRole("list", { name: "Process map" });
+    expect(map).toHaveTextContent("Owner:");
+    expect(map).toHaveTextContent("Human decision");
+    expect(map).toHaveTextContent("Blocked / exception");
     expect(
       screen.getByRole("region", { name: "Implementation references" }),
     ).toBeInTheDocument();

@@ -2,6 +2,9 @@
 
 AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify or another merchant system remains the operational source of truth. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
 
+For a bank-led pilot with explicit owners, human decisions and blocked paths,
+see the [merchant-services process map](/docs/bfsi-merchant-services#process-map).
+
 ```flow
 Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
 Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.

@@ -252,7 +252,10 @@ export function loadRouteDescriptors(root = UI_ROOT) {
   const overview = staticRoutes.find((route) => route.path === "/docs");
   if (overview && docs.length) {
     overview.lastmod = manual.reviewed;
-    overview.bodyHtml = manual.groups.map((group) => "<section><h2>" + escapeHtml(group) + "</h2><ul>" +
+    overview.bodyHtml = '<p><a href="#bfsi-playbooks">Jump to BFSI process maps</a></p>' +
+      manual.groups.map((group) => '<section' +
+      (group === "BFSI Playbooks" ? ' id="bfsi-playbooks"' : "") +
+      "><h2>" + escapeHtml(group) + "</h2><ul>" +
       manual.articles.filter((article) => article.group === group).map((article) =>
         '<li><a href="/docs/' + article.slug + '">' + escapeHtml(article.title) + "</a>: " + escapeHtml(article.description) + "</li>",
       ).join("") + "</ul></section>").join("");

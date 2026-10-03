@@ -189,6 +189,27 @@ test("guides are readable without JavaScript and invalid slugs return 404", asyn
   expect(missing.status()).toBe(404);
 });
 
+test("BFSI process maps and overview anchor render without JavaScript", async ({
+  browser,
+  baseURL,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, baseURL });
+  const page = await context.newPage();
+  for (const article of manual.articles.filter((item) => item.group === "BFSI Playbooks")) {
+    await page.goto(`/docs/${article.slug}`);
+    const map = page.getByRole("list", { name: "Process map" });
+    await expect(map).toBeVisible();
+    await expect(map.getByText("Owner:", { exact: true }).first()).toBeVisible();
+    await expect(map.getByText("Human decision", { exact: true }).first()).toBeVisible();
+    await expect(map.getByText("Blocked / exception", { exact: true }).first()).toBeVisible();
+  }
+  await page.goto("/docs");
+  await page.getByRole("link", { name: "Jump to BFSI process maps" }).click();
+  await expect(page).toHaveURL(/\/docs#bfsi-playbooks$/);
+  await expect(page.locator("#bfsi-playbooks")).toBeVisible();
+  await context.close();
+});
+
 test("local documentation-host alias keeps redirects proxy-safe", async ({ request, baseURL }) => {
   const hostname = new URL(baseURL ?? "https://agenticorg.ai").hostname;
   test.skip(
@@ -271,6 +292,37 @@ test("landing documentation links and accessible reader work", async ({
   await page.emulateMedia({ media: "print" });
   await expect(page.locator(".docs-sidebar")).not.toBeVisible();
   await expect(page.locator("h1")).toBeVisible();
+});
+
+test("BFSI overview jump, commerce map link and mobile process labels work", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route("**/api/**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  );
+  await page.goto("/");
+  await page.locator("#documentation").getByRole("link", { name: /BFSI process maps/ }).click();
+  await expect(page).toHaveURL(/\/docs#bfsi-playbooks$/);
+  await expect(page.locator("#bfsi-playbooks")).toBeInViewport();
+  const header = await page.locator(".docs-header").boundingBox();
+  const destination = await page.locator("#bfsi-playbooks > h2").boundingBox();
+  expect(destination!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
+  await page.locator("#bfsi-playbooks")
+    .getByRole("link", { name: /merchant enablement and agentic commerce/i }).click();
+  const map = page.getByRole("list", { name: "Process map" });
+  await expect(map).toBeVisible();
+  await expect(map.getByText("Owner:", { exact: true })).toHaveCount(6);
+  await expect(map.getByText("Human decision", { exact: true }).first()).toBeVisible();
+  await expect(map.getByText("Blocked / exception", { exact: true }).first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  const accessible = await new AxeBuilder({ page })
+    .include(".docs-site")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(accessible.violations.map((violation) => violation.id)).toEqual([]);
+  await page.goto("/docs/commerce");
+  await page.getByRole("link", { name: "merchant-services process map" }).click();
+  await expect(page).toHaveURL(/\/docs\/bfsi-merchant-services#process-map$/);
+  await expect(page.locator("#process-map")).toBeInViewport();
 });
 
 test("overview and table guides are accessible at compact and tablet widths", async ({

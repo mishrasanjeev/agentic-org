@@ -400,6 +400,7 @@ export default function Documentation() {
                   <ArrowRight size={18} />
                 </Link>
                 <Link to="/docs/start-here">Choose your learning path</Link>
+                <Link to="/docs#bfsi-playbooks">Explore BFSI process maps</Link>
               </div>
               <div className="docs-home-note">
                 <strong>New to agents?</strong> Begin with a read-only task and
@@ -407,7 +408,11 @@ export default function Documentation() {
                 permissions and provider integrations are separate setup steps.
               </div>
               {manual.groups.map((group) => (
-                <section key={group} className="docs-directory">
+                <section
+                  key={group}
+                  id={group === "BFSI Playbooks" ? "bfsi-playbooks" : undefined}
+                  className="docs-directory"
+                >
                   <h2>{group}</h2>
                   <div className="docs-guide-grid">
                     {manual.articles

@@ -3,28 +3,36 @@
 This is a reference example for an acquiring bank's merchant-enablement pilot,
 not an already integrated banking product or a claim of live payment execution.
 
-An acquiring bank wants to help an approved Shopify merchant become usable by agentic buyer interfaces. The bank can offer an institution-managed or reviewed hosted AgenticOrg workspace, but merchant/provider/platform contracts still determine actual availability.
+In this synthetic example, an acquiring bank wants to help a fictional Shopify
+merchant become usable by agentic buyer interfaces. The bank can offer an
+institution-managed or reviewed hosted AgenticOrg workspace, but
+merchant/provider/platform contracts still determine actual availability.
 
 AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifacts. Shopify owns merchant catalog/inventory/order truth. The bank/fintech/provider owns payment/mandate execution and customer authorization. OACP is not a reason to make Grantex the engine for every buyer message.
 
-## Build one real merchant path
+## Build one synthetic merchant path
 
 1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
 2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
-3. Obtain read-only Shopify access through the merchant's approved process.
-4. Sync products/variants/images/price/inventory and compare samples with Shopify.
+3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process.
+4. Sync synthetic products/variants/images/price/inventory and compare samples with the sandbox store.
 5. Send the bounded Grantex authority request and verify/cache issued artifacts.
-6. Ask real product questions through the configured web or agent bridge.
+6. Ask product questions about the fictional catalog through the configured web or agent bridge.
 7. Inspect source, freshness, supported facts and refusal behavior.
 8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
 
+## Process map
+
+This is a bank-led reference pilot with configured merchant, channel and
+provider paths. A prepared handoff is never a completed transaction.
+
 ```flow
-Bank and merchant setup | Agree ownership, identities, read scopes and publishing state.
-Shopify evidence | Real read-only sync produces source-linked commercial facts.
-Trust artifacts | Grantex authority and AgenticOrg cache preserve scope and freshness.
-Buyer channel | A configured bridge answers from supported artifacts.
-Provider capability | Plural/Pine evidence checks configured capability, not successful payment.
-Authoritative handoff | The provider, POS or merchant confirms its own execution outcome.
+Bank and merchant setup | Agree identities, read scopes, provider contract and publishing state. | Owner: Bank integration owner and merchant owner | Human decision: Owners approve the pilot scope and any channel publication under their own processes. | If blocked: Unapproved access or publishing state keeps the channel off.
+Merchant-source evidence | Read-only sync supplies product, price and inventory snapshots for sample checks. | Owner: Merchant source owner and configured AgenticOrg sync | If blocked: Missing scopes or stale source facts stop unsupported buyer promises.
+Trust artifacts | The bounded authority request and cache retain scope, source and freshness. | Owner: Grantex authority and AgenticOrg runtime | If blocked: Invalid or stale artifacts cannot support commitment-bound requests.
+Buyer channel | A configured bridge answers from supported merchant artifacts. | Owner: Channel owner and AgenticOrg buyer runtime | If blocked: Unsupported channels or facts are refused until the integration is approved.
+Provider capability | A configured provider path checks non-sensitive capability evidence. | Owner: Bank/provider integration team | Human decision: The customer and provider complete any required authorization outside this map. | If blocked: Capability evidence alone does not prove a mandate or payment.
+Authoritative handoff | A prepared packet awaits provider, POS or merchant confirmation. | Owner: Provider, POS or merchant system | If blocked: Absent or failed confirmation stays pending or failed; no paid or placed state is fabricated.
 ```
 
 ## Plural/Pine and mandates

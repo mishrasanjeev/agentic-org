@@ -17,6 +17,33 @@ const headingId = (text) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
+function parseFlowStep(line) {
+  const [rawTitle, rawBody, ...extras] = line.split("|");
+  const title = rawTitle?.trim();
+  if (!title || !rawBody?.trim())
+    throw new Error("Flow steps need a title and description.");
+  if (/^(Human decision|If blocked):/i.test(extras[0]?.trim() ?? ""))
+    throw new Error("Process-map steps need an Owner field before other fields.");
+  if (!/^Owner:\s*/i.test(extras[0]?.trim() ?? "")) {
+    return { title, body: [rawBody, ...extras].join("|").trim() };
+  }
+  const fields = {};
+  for (const extra of extras) {
+    const match = /^(Owner|Human decision|If blocked):\s*(.+)$/i.exec(extra.trim());
+    if (!match) throw new Error(`Invalid flow field: ${extra.trim()}`);
+    const key = match[1].toLowerCase();
+    if (fields[key]) throw new Error(`Duplicate flow field: ${match[1]}`);
+    fields[key] = match[2].trim();
+  }
+  return {
+    title,
+    body: rawBody.trim(),
+    owner: fields.owner,
+    decision: fields["human decision"],
+    exception: fields["if blocked"],
+  };
+}
+
 export function renderGuide(markdown) {
   markdown = markdown.replace(/\r\n?/g, "\n");
   const md = new MarkdownIt({
@@ -40,13 +67,34 @@ export function renderGuide(markdown) {
   md.renderer.rules.fence = (tokens, index, options, env, self) => {
     if (tokens[index].info.trim() !== "flow")
       return fence(tokens, index, options, env, self);
-    const steps = tokens[index].content.trim().split("\n");
+    const steps = tokens[index].content.trim().split("\n")
+      .filter((line) => line.trim()).map(parseFlowStep);
+    const processMap = steps.some((step) => step.owner);
+    if (processMap && steps.some((step) => !step.owner))
+      throw new Error("Every process-map step needs an Owner field.");
+    if (processMap) {
+      return (
+        '<ol class="docs-flow docs-process-map" aria-label="Process map">' +
+        steps.map((step, i) =>
+          `<li><span class="docs-flow-number" aria-hidden="true">${i + 1}</span>` +
+          '<div class="docs-process-content"><div class="docs-process-heading">' +
+          `<strong>${escape(step.title)}</strong>` +
+          `<span class="docs-process-owner"><span>Owner:</span> ${escape(step.owner)}</span>` +
+          `</div><p>${escape(step.body)}</p>` +
+          (step.decision || step.exception ? '<div class="docs-process-outcomes">' : "") +
+          (step.decision ? `<div class="docs-process-decision"><strong>Human decision</strong><p>${escape(step.decision)}</p></div>` : "") +
+          (step.exception ? `<div class="docs-process-exception"><strong>Blocked / exception</strong><p>${escape(step.exception)}</p></div>` : "") +
+          (step.decision || step.exception ? "</div>" : "") +
+          "</div></li>",
+        ).join("") +
+        "</ol>"
+      );
+    }
     return (
       `<ol class="docs-flow${steps.length === 6 ? " docs-flow-six" : ""}" aria-label="Workflow">` +
       steps
-        .map((line, i) => {
-          const [title, ...body] = line.split("|");
-          return `<li><span class="docs-flow-number">${i + 1}</span><strong>${escape(title.trim())}</strong><p>${escape(body.join("|").trim())}</p></li>`;
+        .map((step, i) => {
+          return `<li><span class="docs-flow-number">${i + 1}</span><strong>${escape(step.title)}</strong><p>${escape(step.body)}</p></li>`;
         })
         .join("") +
       "</ol>"

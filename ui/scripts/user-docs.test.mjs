@@ -58,8 +58,15 @@ test("the complete manual has maintained source references and five BFSI playboo
     (item) => item.group === "BFSI Playbooks",
   )) {
     assert.match(article.markdown, /example|fictional|synthetic/i);
-    assert.match(article.html, /docs-flow/);
+    assert.match(article.html, /class="docs-flow docs-process-map" aria-label="Process map"/);
+    const stepCount = [...article.html.matchAll(/class="docs-process-content"/g)].length;
+    assert.ok(stepCount >= 5, article.slug);
+    assert.equal([...article.html.matchAll(/class="docs-process-owner"/g)].length, stepCount);
+    assert.match(article.html, /Human decision/);
+    assert.match(article.html, /Blocked \/ exception/);
   }
+  const commerce = manual.articles.find((article) => article.slug === "commerce");
+  assert.match(commerce.html, /href="\/docs\/bfsi-merchant-services#process-map"/);
 });
 
 test("tracked reader data matches the authored Markdown and manifest", () => {
@@ -98,6 +105,33 @@ test("Markdown escapes raw HTML, unsafe links and diagram labels", () => {
     assert.ok(html.includes(`&lt;${image}`));
     assert.match(html, /aria-label="Workflow"/);
   }
+});
+
+test("process maps preserve old flows and escape every richer field", () => {
+  const legacy = renderGuide("```flow\nStart | Review A | B\nFinish | Record result\n```");
+  assert.match(legacy.html, /aria-label="Workflow"/);
+  assert.match(legacy.html, /<p>Review A \| B<\/p>/);
+  assert.doesNotMatch(legacy.html, /docs-process-map/);
+
+  const rich = renderGuide(
+    "```flow\n<Start> | Read <source> & check | Owner: <script>team</script> | Human decision: Review <evidence> | If blocked: Stop <img src=x onerror=alert(1)>\n```");
+  assert.match(rich.html, /aria-label="Process map"/);
+  assert.match(rich.html, /Owner:<\/span> &lt;script&gt;team&lt;\/script&gt;/);
+  assert.match(rich.html, /Human decision<\/strong><p>Review &lt;evidence&gt;<\/p>/);
+  assert.match(rich.html, /Blocked \/ exception<\/strong><p>Stop &lt;img/);
+  assert.doesNotMatch(rich.html, /<script>|<img/);
+  assert.throws(
+    () => renderGuide("```flow\nStart | Read | Owner: Team\nFinish | Done\n```"),
+    /Every process-map step needs an Owner/,
+  );
+  assert.throws(
+    () => renderGuide("```flow\nStart | Read | Owner: Team | Unknown: Value\n```"),
+    /Invalid flow field/,
+  );
+  assert.throws(
+    () => renderGuide("```flow\nStart | Read | Human decision: Approve\n```"),
+    /Owner field before other fields/,
+  );
 });
 
 test("Windows and Linux checkouts generate identical reader data", () => {
@@ -140,6 +174,17 @@ test("all guides have crawlable complete text, canonical URLs and sitemap entrie
       .find((item) => item.path === "/docs")
       .bodyHtml.includes("BFSI Playbooks"),
   );
+  const overview = routes.find((item) => item.path === "/docs");
+  assert.match(overview.bodyHtml, /href="#bfsi-playbooks"/);
+  assert.match(overview.bodyHtml, /<section id="bfsi-playbooks">/);
+  for (const article of manual.articles.filter((item) => item.group === "BFSI Playbooks")) {
+    const route = routes.find((item) => item.path === `/docs/${article.slug}`);
+    const html = renderStaticHtml(base, route, manifest);
+    assert.match(html, /<noscript><main[^>]+data-static-seo="true"/);
+    assert.match(html, /class="docs-flow docs-process-map" aria-label="Process map"/);
+    assert.match(html, /Human decision/);
+    assert.match(html, /Blocked \/ exception/);
+  }
 });
 
 test("both nginx targets reject unknown guides and redirect only the documentation host root", () => {

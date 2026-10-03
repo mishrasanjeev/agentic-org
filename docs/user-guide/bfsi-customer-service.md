@@ -18,12 +18,17 @@ Use a reviewed support-triage candidate or custom operations agent. Define categ
 4. Ask for a private account balance and confirm refusal/referral.
 5. Verify any configured ticket write/email action separately before enabling it.
 
+## Process map
+
+This is a response-preparation path. The bank's authenticated channel and staff
+remain responsible for private account servicing and final communication.
+
 ```flow
-Question or complaint | Receive the request on the configured authenticated or general-information channel.
-Source-grounded response | Answer supported procedural facts with current sources.
-Sensitivity check | Detect requests that need bank authentication or authorized action.
-Human escalation | Prepare a bounded case/response for the responsible staff queue.
-Confirmed outcome | The bank system owns communication, resolution and account actions.
+Question or complaint | Receive the request through a configured general-information or authenticated channel. | Owner: Bank channel owner | If blocked: A claimed name or phone number alone does not establish customer identity.
+Knowledge check | Retrieve the current approved procedure and inspect its cited source. | Owner: Service agent and knowledge owner | If blocked: Missing, conflicting or outdated guidance goes to staff; do not invent an answer.
+Response draft | Prepare a bounded answer or complaint summary from supported facts. | Owner: Service agent | If blocked: Private account data or an unsupported action is refused or referred to the bank's authorized path.
+Human escalation | Review sensitive, urgent or unresolved requests before any staff response. | Owner: Authorized service staff | Human decision: Staff decide whether to send, revise or escalate the prepared response. | If blocked: Suspected fraud or a failed voice/ticket path follows the bank's urgent human process.
+Confirmed outcome | Record communication and resolution in the bank's approved system. | Owner: Bank service team and system of record | If blocked: A prepared draft is not a sent message or completed account action.
 ```
 
 ## Add voice only after chat is correct
