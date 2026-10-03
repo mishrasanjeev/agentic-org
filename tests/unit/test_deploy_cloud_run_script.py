@@ -40,9 +40,11 @@ def test_deploy_source_guard_rejects_dirty_or_mismatched_checkout(tmp_path: Path
     git_bash = Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe"
     bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
     assert bash is not None
+    git_exe = shutil.which("git")
+    assert git_exe is not None
 
     def git(*args: str) -> str:
-        return subprocess.check_output(["git", *args], cwd=tmp_path, text=True).strip()
+        return subprocess.check_output([git_exe, *args], cwd=tmp_path, text=True).strip()  # noqa: S603
 
     git("init", "-q")
     git("config", "user.name", "Release Test")
@@ -53,7 +55,7 @@ def test_deploy_source_guard_rejects_dirty_or_mismatched_checkout(tmp_path: Path
     sha = git("rev-parse", "HEAD")
 
     def check(target: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
+        return subprocess.run(  # noqa: S603
             [bash, "-c", guard],
             cwd=tmp_path,
             env={**os.environ, "DEPLOY_SHA": target},
