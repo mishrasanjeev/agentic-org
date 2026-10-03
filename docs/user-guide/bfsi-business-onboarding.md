@@ -47,4 +47,4 @@ Try a unavailable provider capability, unresolved screening hit, missing grant, 
 
 Compare manual file-assembly time, missing-information rate, analyst overrides, re-investigation, review age and delivery failures on a reviewed sample. Track reopening causes. Do not publish a numerical accuracy claim from a few happy-path examples.
 
-Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).

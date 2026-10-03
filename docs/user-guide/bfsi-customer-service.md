@@ -43,4 +43,4 @@ Track correct routing, unsupported-answer rate, unresolved questions, escalation
 
 Roll out a narrow task population before sensitive account servicing. Re-test whenever the bank procedure, provider number/callback, model or ticketing contract changes.
 
-Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).

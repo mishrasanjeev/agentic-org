@@ -688,6 +688,18 @@ if [[ -z "$DEPLOY_SHA" ]]; then
   git fetch --quiet origin "${PROD_BRANCH#origin/}"
   DEPLOY_SHA="$(git rev-parse "$PROD_BRANCH")"
 fi
+if ! DEPLOY_SHA="$(git rev-parse --verify "${DEPLOY_SHA}^{commit}" 2>/dev/null)"; then
+  echo "::error::Deploy SHA does not resolve to a local commit." >&2
+  exit 2
+fi
+if [[ "$(git rev-parse HEAD)" != "$DEPLOY_SHA" ]]; then
+  echo "::error::Checkout HEAD must match the deploy SHA. Use a clean worktree at that commit." >&2
+  exit 2
+fi
+if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+  echo "::error::Checkout has uncommitted or untracked files. Deploy from a clean worktree." >&2
+  exit 2
+fi
 SHORT_SHA="${DEPLOY_SHA:0:7}"
 
 echo "--- Deploy plan ------------------------------------------------"

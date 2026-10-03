@@ -728,6 +728,11 @@
   display: block;
   margin-bottom: 4px;
 }
+.docs-home-note a {
+  color: #12684e;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .docs-directory {
   margin-top: 38px;
   scroll-margin-top: 92px;

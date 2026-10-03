@@ -32,6 +32,10 @@ Run under review | Assign operators, approvals, support and change control.
 
 ## What availability means
 
+For regulated workflows, first read the [BFSI capability status](/docs/bfsi-capability-status).
+The five process maps are fictional configured examples; 15 of 150 assessed
+functional capabilities are covered, 102 are partial and 33 remain gaps.
+
 **Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
 
 Shopify read-only commerce sync and the signed Twilio voice runtime have specific implemented paths. Other commerce sources and voice-provider options do not automatically have equivalent runtime support. OACP buyer answers and prepared handoffs do not themselves create orders or collect money. Jev advisory integration is access-gated and is not an active production decision authority.

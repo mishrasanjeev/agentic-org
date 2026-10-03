@@ -55,6 +55,10 @@ Cloud DNS/managed HTTPS checks. The canonical manual is
 
 ## BFSI Playbooks
 
+Start with [capability status and open work](bfsi-capability-status.md) before
+using the fictional process maps. The maps teach a configured path; they do not
+mean every bank integration or regulated decision is available by default.
+
 These are fictional reference processes, not regulatory advice, pre-approved
 bank integrations or claims of autonomous financial decision-making.
 

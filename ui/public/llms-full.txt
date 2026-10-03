@@ -352,7 +352,7 @@ Useful modes include:
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --dry-run
 
-The helper stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md) before using production credentials.
+The helper requires a clean checkout at the exact deploy SHA, stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md) before using production credentials.
 
 Default script configuration places Cloud Run services in asia-southeast1 and Artifact Registry in asia-south1. Both are configurable. Older Kubernetes material is retained only for historical or alternative deployment context.
 
@@ -397,6 +397,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 - [End-user manual: first agent, everyday operations and BFSI playbooks](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md).
 - [Functional BFSI coverage and open gaps](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
+- [Public BFSI capability status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
 - [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
@@ -616,11 +617,12 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Seller commerce with an outside A2A buyer](https://agenticorg.ai/docs/seller-a2a-commerce-journey): An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
-- [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.
+- [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A fictional configured example from business application to evidence investigation, screening review, human decision and signed handoff.
 - [BFSI: reconciliation and finance exceptions](https://agenticorg.ai/docs/bfsi-reconciliation): Configure a read-only reconciliation assistant for synthetic bank and ledger data, review discrepancies, and hand approved corrections to finance.
 - [BFSI: customer service across chat and voice](https://agenticorg.ai/docs/bfsi-customer-service): Build a source-grounded service assistant, classify complaints, prepare responses and escalate sensitive account actions to authorized staff.
 - [BFSI: insurance document and claims assistance](https://agenticorg.ai/docs/bfsi-insurance): Use OCR, policy knowledge and reviewed workflows to prepare claim-file checklists without automating coverage or payout decisions.
 - [BFSI: merchant enablement and agentic commerce](https://agenticorg.ai/docs/bfsi-merchant-services): A bank-led merchant pilot using Seller Commerce Agents, Shopify, OACP artifacts, buyer channels and provider-owned payment capability evidence.
+- [BFSI capability status and open work](https://agenticorg.ai/docs/bfsi-capability-status): See which functional capabilities exist, which remain partial or unavailable, and what a configured pilot still needs to prove.
 - [Team adoption and launch checklist](https://agenticorg.ai/docs/adoption-checklist): Assign owners, select a first use case, train operators and reviewers, measure outcomes and expand without skipping real integration work.
 
 Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.
@@ -773,6 +775,10 @@ Run under review | Assign operators, approvals, support and change control.
 5. Know who can approve outputs and who owns the connected system.
 
 #### What availability means
+
+For regulated workflows, first read the [BFSI capability status](/docs/bfsi-capability-status).
+The five process maps are fictional configured examples; 15 of 150 assessed
+functional capabilities are covered, 102 are partial and 33 remain gaps.
 
 **Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
 
@@ -2347,7 +2353,7 @@ Try a unavailable provider capability, unresolved screening hit, missing grant, 
 
 Compare manual file-assembly time, missing-information rate, analyst overrides, re-investigation, review age and delivery failures on a reviewed sample. Track reopening causes. Do not publish a numerical accuracy claim from a few happy-path examples.
 
-Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
 
 
 ### BFSI: reconciliation and finance exceptions
@@ -2430,7 +2436,7 @@ Schedule only after a manual run is reproducible. Confirm timezone, statement ar
 
 Measure correctly identified breaks, false matches, review effort, source delays and reopened corrections. Compare against an independently reviewed ledger sample. Retest mappings after upstream changes.
 
-Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
 
 
 ### BFSI: customer service across chat and voice
@@ -2483,7 +2489,7 @@ Track correct routing, unsupported-answer rate, unresolved questions, escalation
 
 Roll out a narrow task population before sensitive account servicing. Re-test whenever the bank procedure, provider number/callback, model or ticketing contract changes.
 
-Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
 
 
 ### BFSI: insurance document and claims assistance
@@ -2552,7 +2558,7 @@ If a claims-platform write or customer notification is needed, build/approve tha
 
 Assign a checklist owner, claims reviewer, data/privacy owner and integration owner. Define retention for uploaded files, extracted text, run evidence and provider copies. Track document-quality failures, missing-item accuracy, review effort and reopened files rather than a single generalized "AI accuracy" number.
 
-Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
 
 
 ### BFSI: merchant enablement and agentic commerce
@@ -2615,7 +2621,62 @@ An offline POS bridge prepares a store-linked handoff and reconciles authoritati
 
 Verify accurate catalog facts, stale-source refusal, cross-merchant isolation, invalid webhook rejection, channel authentication and non-fabricated transaction state. Keep public discovery off until the publishing path is approved and validated. Measure the complete buyer journey rather than counting adapter names.
 
-Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+
+
+### BFSI capability status and open work
+
+URL: https://agenticorg.ai/docs/bfsi-capability-status
+Audience: BFSI sponsors, operators and integration owners. Reviewed: 2026-10-02.
+
+#### What this status means
+
+AgenticOrg can be configured for evidence-led BFSI workflows, but a process map
+is not proof that a bank's systems, providers, controls or staff are connected.
+The current repository assessment has **150 functional capabilities**: **15
+covered, 102 partial and 33 gaps**. A covered component may still need a
+tenant setting, approved provider, external system or human reviewer. No full
+BFSI journey has end-to-end acceptance on the strength of these counts alone.
+
+This page describes functional software coverage, not infrastructure location,
+regulatory approval, certification or permission to process customer data. A
+feature behind a disabled flag is unavailable in the default installation.
+
+#### Where the work stands
+
+| Area | Working foundation | Still needs real implementation or validation |
+|---|---|---|
+| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping, model cards and cross-service lifecycle proof |
+| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review, comparison, hybrid-ranking rollout and cited refusal across every tenant path |
+| Conversation and speech | Web chat and configured voice runtime | Intent and channel parity, speaker separation, sensitive-data handling and supervised handoff |
+| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Bank-owned source connections, human disposition, provider-owned execution and reconciliation evidence |
+| Operations | Logging, approval controls and evaluation hooks | Complete trace coverage, measured SLOs, budget enforcement, rollback and production-grade recovery |
+
+The detailed [functional assessment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md)
+and [capability matrix](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/coverage-matrix.md)
+identify individual gaps. The [product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
+records other release boundaries. These files describe the current repository
+assessment; verify your deployed version and configuration separately.
+
+#### What to prove in a pilot
+
+1. Select one narrow use case and name its business owner, system-of-record
+   owner, integration owner, reviewer and support owner.
+2. Use fictional or institution-approved data. Connect each required system
+   through its reviewed API or file contract; a diagram is not a connector.
+3. Run normal, missing, stale, conflicting, unauthorized and cross-company
+   cases. Inspect citations, grants, reviewer decisions and external receipts.
+4. Demonstrate restart, replay, revocation, duplicate events and recovery with
+   the same users and roles that will operate the pilot.
+5. Confirm what the external system actually did. An agent draft, signed
+   handoff or payment-capability reference is not an account change, payment,
+   settlement or regulatory filing.
+
+For a concrete teaching path, open the [business onboarding](/docs/bfsi-business-onboarding),
+[reconciliation](/docs/bfsi-reconciliation), [customer service](/docs/bfsi-customer-service),
+[insurance](/docs/bfsi-insurance) or [merchant services](/docs/bfsi-merchant-services)
+playbook. Each is a fictional, configured example and carries its own blocked
+paths and human ownership.
 
 
 ### Team adoption and launch checklist

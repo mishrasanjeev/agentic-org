@@ -30,6 +30,8 @@ test("both production UI images preserve the repository layout and include autho
   const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
   assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);
   assert.match(dockerignore, /^!docs\/a2a-interoperability\.md$/m);
+  assert.match(dockerignore, /^!docs\/bfsi\/functional-coverage\.md$/m);
+  assert.match(dockerignore, /^!docs\/bfsi\/capability-baseline\.json$/m);
 });
 
 test("the complete manual has maintained source references and five BFSI playbooks", () => {
@@ -49,6 +51,9 @@ test("the complete manual has maintained source references and five BFSI playboo
     5,
   );
   assert.equal(manual.groups.length, 5);
+  const coverage = manual.articles.find((article) => article.slug === "bfsi-capability-status");
+  assert.ok(coverage);
+  assert.match(coverage.html, /15\s*covered, 102 partial and 33 gaps/);
   assert.ok(
     manual.articles.every(
       (article) => article.sources.length && article.headings.length >= 3,
@@ -64,6 +69,7 @@ test("the complete manual has maintained source references and five BFSI playboo
     assert.equal([...article.html.matchAll(/class="docs-process-owner"/g)].length, stepCount);
     assert.match(article.html, /Human decision/);
     assert.match(article.html, /Blocked \/ exception/);
+    assert.match(article.html, /href="\/docs\/bfsi-capability-status"/);
   }
   const commerce = manual.articles.find((article) => article.slug === "commerce");
   assert.match(commerce.html, /href="\/docs\/bfsi-merchant-services#process-map"/);

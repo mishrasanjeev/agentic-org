@@ -104,6 +104,9 @@ docs/**
 !docs/a2a-commerce-demo.md
 !docs/a2a-interoperability.md
 !docs/PRODUCT_STATUS.md
+!docs/bfsi/
+!docs/bfsi/functional-coverage.md
+!docs/bfsi/capability-baseline.json
 !docs/connector_production_readiness.md
 !docs/data-classification.md
 !docs/deployment-airgap.md

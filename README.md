@@ -346,7 +346,7 @@ Useful modes include:
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --dry-run
 
-The helper stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](docs/deployment.md) before using production credentials.
+The helper requires a clean checkout at the exact deploy SHA, stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](docs/deployment.md) before using production credentials.
 
 Default script configuration places Cloud Run services in asia-southeast1 and Artifact Registry in asia-south1. Both are configurable. Older Kubernetes material is retained only for historical or alternative deployment context.
 
@@ -391,6 +391,7 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 
 - [End-user manual: first agent, everyday operations and BFSI playbooks](docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](docs/runbooks/documentation-site.md).
 - [Functional BFSI coverage and open gaps](docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
+- [Public BFSI capability status](docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
 - [Documentation site publishing and subdomain runbook](docs/runbooks/documentation-site.md)
 - [Documentation home](docs/README.md)
 - [Current product status](docs/PRODUCT_STATUS.md)

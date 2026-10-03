@@ -49,6 +49,8 @@ describe("public documentation", () => {
     ).toHaveLength(manual.articles.length);
     expect(within(directory).getByRole("link", { name: "Explore BFSI process maps" }))
       .toHaveAttribute("href", "/docs#bfsi-playbooks");
+    expect(within(directory).getByRole("link", { name: "BFSI capability status" }))
+      .toHaveAttribute("href", "/docs/bfsi-capability-status");
     expect(document.getElementById("bfsi-playbooks")).toBeInTheDocument();
     const ownership = screen.getByTestId("product-ownership");
     expect(ownership).toHaveTextContent("Orchestrum Technologies LLP");

@@ -73,4 +73,4 @@ Schedule only after a manual run is reproducible. Confirm timezone, statement ar
 
 Measure correctly identified breaks, false matches, review effort, source delays and reopened corrections. Compare against an independently reviewed ledger sample. Retest mappings after upstream changes.
 
-Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).

@@ -53,4 +53,4 @@ An offline POS bridge prepares a store-linked handoff and reconciles authoritati
 
 Verify accurate catalog facts, stale-source refusal, cross-merchant isolation, invalid webhook rejection, channel authentication and non-fabricated transaction state. Keep public discovery off until the publishing path is approved and validated. Measure the complete buyer journey rather than counting adapter names.
 
-Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).

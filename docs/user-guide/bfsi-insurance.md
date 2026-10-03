@@ -59,4 +59,4 @@ If a claims-platform write or customer notification is needed, build/approve tha
 
 Assign a checklist owner, claims reviewer, data/privacy owner and integration owner. Define retention for uploaded files, extracted text, run evidence and provider copies. Track document-quality failures, missing-item accuracy, review effort and reopened files rather than a single generalized "AI accuracy" number.
 
-Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
