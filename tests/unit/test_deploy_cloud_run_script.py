@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +23,55 @@ def test_cloud_run_deploy_stamps_api_and_ui_commit_metadata() -> None:
     assert 'UI_UPDATE_ENV_VARS="GIT_SHA=${DEPLOY_SHA}"' in script
     assert '--update-env-vars="$env_vars"' in script
     assert '"$UI_IMAGE"' in script
+
+
+def test_cloud_run_deploy_requires_a_clean_checkout_at_the_target_sha() -> None:
+    script = _deploy_script()
+
+    assert 'git rev-parse --verify "${DEPLOY_SHA}^{commit}"' in script
+    assert '"$(git rev-parse HEAD)" != "$DEPLOY_SHA"' in script
+    assert 'git status --porcelain --untracked-files=all' in script
+    assert script.index('Checkout has uncommitted or untracked files') < script.index('docker build \\')
+
+
+def test_deploy_source_guard_rejects_dirty_or_mismatched_checkout(tmp_path: Path) -> None:
+    script = _deploy_script()
+    guard = script[script.index("# 1. Resolve commit."):script.index('SHORT_SHA="${DEPLOY_SHA:0:7}"')]
+    git_bash = Path(os.environ.get("ProgramFiles", "")) / "Git" / "bin" / "bash.exe"
+    bash = str(git_bash) if os.name == "nt" and git_bash.is_file() else shutil.which("bash")
+    assert bash is not None
+    git_exe = shutil.which("git")
+    assert git_exe is not None
+
+    def git(*args: str) -> str:
+        return subprocess.check_output([git_exe, *args], cwd=tmp_path, text=True).strip()  # noqa: S603
+
+    git("init", "-q")
+    git("config", "user.name", "Release Test")
+    git("config", "user.email", "release-test@example.invalid")
+    (tmp_path / "tracked.txt").write_text("original\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-qm", "baseline")
+    sha = git("rev-parse", "HEAD")
+
+    def check(target: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(  # noqa: S603
+            [bash, "-c", guard],
+            cwd=tmp_path,
+            env={**os.environ, "DEPLOY_SHA": target},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+    assert check(sha).returncode == 0
+    (tmp_path / "tracked.txt").write_text("second commit\n", encoding="utf-8")
+    git("add", "tracked.txt")
+    git("commit", "-qm", "second")
+    current_sha = git("rev-parse", "HEAD")
+    assert "Checkout HEAD must match" in check(sha).stderr
+    (tmp_path / "untracked.txt").write_text("local edit\n", encoding="utf-8")
+    assert "uncommitted or untracked" in check(current_sha).stderr
 
 
 def test_cloud_run_deploy_does_not_force_enable_public_discovery() -> None:

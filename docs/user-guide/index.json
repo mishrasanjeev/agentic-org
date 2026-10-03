@@ -343,7 +343,7 @@
     {
       "slug": "bfsi-business-onboarding",
       "title": "BFSI: business onboarding and KYB review",
-      "description": "A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.",
+      "description": "A fictional configured example from business application to evidence investigation, screening review, human decision and signed handoff.",
       "group": "BFSI Playbooks",
       "audience": "Banks, NBFCs and fintech operations",
       "sources": [
@@ -398,6 +398,18 @@
         "docs/oacp/end-user-flow.md",
         "docs/oacp/plural-pine-p3p-capability-verifier.md",
         "docs/oacp/offline-pos-bridge.md"
+      ]
+    },
+    {
+      "slug": "bfsi-capability-status",
+      "title": "BFSI capability status and open work",
+      "description": "See which functional capabilities exist, which remain partial or unavailable, and what a configured pilot still needs to prove.",
+      "group": "Start Here",
+      "audience": "BFSI sponsors, operators and integration owners",
+      "sources": [
+        "docs/bfsi/functional-coverage.md",
+        "docs/bfsi/capability-baseline.json",
+        "docs/PRODUCT_STATUS.md"
       ]
     },
     {

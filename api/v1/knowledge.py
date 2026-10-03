@@ -1127,19 +1127,118 @@ async def _native_semantic_search(
     query: str,
     top_k: int,
 ) -> list[SearchResult]:
-    """Semantic search over knowledge_documents using pgvector + BGE.
+    """Search tenant knowledge, then fall back to uploaded document metadata.
 
-    Falls back to an ILIKE keyword match if the embedding model or the
-    pgvector column is unavailable in the current environment. Never
-    raises — callers expect a best-effort result list.
+    The hybrid path is opt-in until its index and retrieval quality have been
+    verified in the target environment. Never returns an unscoped document.
     """
     from uuid import UUID as _UUID
 
+    from sqlalchemy import func as _func
     from sqlalchemy import text as _sqtext
 
     from core.database import get_tenant_session
 
     tid = _UUID(tenant_id)
+
+    hybrid_enabled = settings.knowledge_hybrid_search
+    if hybrid_enabled:
+        if not query.strip():
+            return []
+        results = await _native_hybrid_search(tid, query, top_k)
+    else:
+        results = await _native_vector_or_keyword_search(tid, query, top_k)
+    if results:
+        return results
+
+    # The `documents` upload path stores extracted plain-text in metadata for
+    # text/markdown uploads. Keyword-match that layer before the pure
+    # filename last-resort so text files actually retrieve on content.
+    try:
+        content_sql = (
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            "AND metadata->>'content_text' IS NOT NULL "
+            "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
+            if hybrid_enabled else
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            "AND metadata->>'content_text' IS NOT NULL "
+            "AND metadata->>'content_text' ILIKE :like LIMIT :k"
+        )
+        async with get_tenant_session(tid) as session:
+            rows = (
+                await session.execute(
+                    _sqtext(content_sql),
+                    {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k},
+                )
+            ).fetchall()
+        results = [
+            SearchResult(
+                chunk_text=(r[1] or "")[:300],
+                score=0.1,  # explicit: below pgvector's real scores
+                document_name=r[0] or "",
+            )
+            for r in rows
+        ]
+        if results:
+            return results
+    except _DB_READ_ERRORS as exc:
+        logger.debug("documents_content_text_fallback_failed", error=str(exc))
+
+    # TC_009 last-resort: match against uploaded document filenames in
+    # the `documents` mirror table. Without this, any query fails when
+    # RAGFlow hasn't finished chunking user uploads yet — the UI showed
+    # "no results" even though the document the user just dropped in
+    # was right there. Returning the filename with a score of 0 and
+    # an empty chunk gives the UI enough signal to say "we found
+    # alpha.pdf but haven't indexed it yet".
+    try:
+        from sqlalchemy import select as _select
+
+        from core.models.document import Document
+
+        filename_match = (
+            _func.strpos(_func.lower(Document.filename), _func.lower(query)) > 0
+            if hybrid_enabled else Document.filename.ilike(f"%{query}%")
+        )
+        async with get_tenant_session(tid) as session:
+            match_rows = (
+                (
+                    await session.execute(
+                        _select(Document)
+                        .where(
+                            Document.tenant_id == tid,
+                            Document.status != "deleted",
+                            filename_match,
+                        )
+                        .limit(top_k)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [
+                SearchResult(
+                    chunk_text=(
+                        f"(matched filename; {d.filename} has not finished "
+                        "indexing yet — re-run the query in a few seconds)"
+                    ),
+                    score=0.0,
+                    document_name=d.filename,
+                )
+                for d in match_rows
+            ]
+    except _DB_READ_ERRORS as exc:
+        logger.debug("filename_fallback_failed", error=str(exc))
+        raise RuntimeError("knowledge filename fallback failed") from exc
+
+
+async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
+    """Preserve the default native retrieval behavior during hybrid rollout."""
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
 
     # Try the vector path first. Column + model swap honour the
     # RAG_USE_BGE_M3 flag — both sides flip atomically.
@@ -1202,83 +1301,113 @@ async def _native_semantic_search(
             return results
     except _DB_READ_ERRORS as exc:
         logger.debug("keyword_fallback_failed", error=str(exc))
+    return []
 
-    # Codex 2026-04-22 release-signoff residual: the `documents` upload
-    # path stores extracted plain-text in metadata->>'content_text' for
-    # text/markdown uploads. Keyword-match that layer before the pure
-    # filename last-resort so text files actually retrieve on content.
+
+def _fuse_native_hits(
+    vector_rows: list[tuple[str, str, str]],
+    lexical_rows: list[tuple[str, str, str]],
+    top_k: int,
+) -> list[SearchResult]:
+    """Fuse bounded candidate lists by reciprocal rank, then stable row ID."""
+    scores: dict[str, float] = {}
+    hits: dict[str, tuple[str, str]] = {}
+    for rows in (vector_rows, lexical_rows):
+        for rank, (row_id, title, content) in enumerate(rows, start=1):
+            scores[row_id] = scores.get(row_id, 0.0) + 1.0 / (60 + rank)
+            hits.setdefault(row_id, (title, content))
+    ordered_ids = sorted(scores, key=lambda row_id: (-scores[row_id], row_id))[:top_k]
+    return [
+        SearchResult(
+            chunk_text=hits[row_id][1][:300],
+            score=round(scores[row_id] / (2.0 / 61), 4),
+            document_name=hits[row_id][0],
+        )
+        for row_id in ordered_ids
+    ]
+
+
+async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
+    """Rank tenant-ready rows through PostgreSQL text and pgvector independently."""
+    from sqlalchemy import text as _sqtext
+
+    from core.database import get_tenant_session
+
+    if not query.strip():
+        return []
+    limit = min(top_k * 4, 200)
+    params = {"tid": str(tid), "query": query, "limit": limit}
+    lexical_rows: list[tuple[str, str, str]] = []
     try:
         async with get_tenant_session(tid) as session:
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT filename, "
-                        "       COALESCE(metadata->>'content_text', '') AS content_text "
-                        "FROM documents "
-                        "WHERE tenant_id = :tid "
-                        "  AND status = 'indexed' "
-                        "  AND metadata->>'content_text' IS NOT NULL "
-                        "  AND metadata->>'content_text' ILIKE :like "
-                        "LIMIT :k"
+                        "SELECT id, title, content FROM knowledge_documents "
+                        "WHERE tenant_id = :tid AND status = 'ready' "
+                        "AND to_tsvector('english', title || ' ' || content) "
+                        "@@ websearch_to_tsquery('english', :query) "
+                        "ORDER BY ts_rank_cd(to_tsvector('english', title || ' ' || content), "
+                        "websearch_to_tsquery('english', :query)) DESC, id ASC "
+                        "LIMIT :limit"
                     ),
-                    {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+                    params,
                 )
             ).fetchall()
-        results = [
-            SearchResult(
-                chunk_text=(r[1] or "")[:300],
-                score=0.1,  # explicit: below pgvector's real scores
-                document_name=r[0] or "",
-            )
-            for r in rows
-        ]
-        if results:
-            return results
+        lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
     except _DB_READ_ERRORS as exc:
-        logger.debug("documents_content_text_fallback_failed", error=str(exc))
+        logger.debug("native_full_text_search_skipped", error_type=type(exc).__name__)
 
-    # TC_009 last-resort: match against uploaded document filenames in
-    # the `documents` mirror table. Without this, any query fails when
-    # RAGFlow hasn't finished chunking user uploads yet — the UI showed
-    # "no results" even though the document the user just dropped in
-    # was right there. Returning the filename with a score of 0 and
-    # an empty chunk gives the UI enough signal to say "we found
-    # alpha.pdf but haven't indexed it yet".
-    try:
-        from sqlalchemy import select as _select
-
-        from core.models.document import Document
-
-        async with get_tenant_session(tid) as session:
-            match_rows = (
-                (
+    if not lexical_rows:
+        try:
+            async with get_tenant_session(tid) as session:
+                rows = (
                     await session.execute(
-                        _select(Document)
-                        .where(
-                            Document.tenant_id == tid,
-                            Document.status != "deleted",
-                            Document.filename.ilike(f"%{query}%"),
-                        )
-                        .limit(top_k)
+                        _sqtext(
+                            "SELECT id, title, content FROM knowledge_documents "
+                            "WHERE tenant_id = :tid AND status = 'ready' "
+                            "AND (strpos(lower(title), lower(:query)) > 0 "
+                            "OR strpos(lower(content), lower(:query)) > 0) "
+                            "ORDER BY CASE WHEN strpos(lower(title), lower(:query)) > 0 "
+                            "THEN 0 ELSE 1 END, id ASC LIMIT :limit"
+                        ),
+                        params,
                     )
+                ).fetchall()
+            lexical_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+        except _DB_READ_ERRORS as exc:
+            logger.debug("native_keyword_search_skipped", error_type=type(exc).__name__)
+
+    vector_rows: list[tuple[str, str, str]] = []
+    try:
+        from core.embeddings import embed_one_async, rag_embedding_column
+
+        col = rag_embedding_column()
+        if col not in {"embedding", "embedding_bge_m3"}:
+            raise ValueError("unsupported embedding column")
+        vector_sql = (
+            "SELECT id, title, content FROM knowledge_documents "
+            "WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL "
+            "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            if col == "embedding" else
+            "SELECT id, title, content FROM knowledge_documents "
+            "WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL "
+            "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+        )
+        qvec = await embed_one_async(query)
+        vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
+        async with get_tenant_session(tid) as session:
+            rows = (
+                await session.execute(
+                    _sqtext(vector_sql),
+                    {"tid": str(tid), "vector": vector_literal, "limit": limit},
                 )
-                .scalars()
-                .all()
-            )
-            return [
-                SearchResult(
-                    chunk_text=(
-                        f"(matched filename; {d.filename} has not finished "
-                        "indexing yet — re-run the query in a few seconds)"
-                    ),
-                    score=0.0,
-                    document_name=d.filename,
-                )
-                for d in match_rows
-            ]
-    except _DB_READ_ERRORS as exc:
-        logger.debug("filename_fallback_failed", error=str(exc))
-        raise RuntimeError("knowledge filename fallback failed") from exc
+            ).fetchall()
+        vector_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
+    except _NATIVE_VECTOR_ERRORS as exc:
+        logger.debug("native_vector_search_skipped", error_type=type(exc).__name__)
+
+    return _fuse_native_hits(vector_rows, lexical_rows, top_k)
 
 
 async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[SearchResult]:

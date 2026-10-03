@@ -122,11 +122,23 @@ def _resolve_level() -> int:
     return level if isinstance(level, int) else logging.INFO
 
 
+def _configure_uvicorn_loggers() -> None:
+    # Uvicorn or a test may replace its access logger after initial setup.
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uv_logger = logging.getLogger(name)
+        uv_logger.handlers = []
+        uv_logger.propagate = True
+    access_logger = logging.getLogger("uvicorn.access")
+    if redact_webhook_path_tokens not in access_logger.filters:
+        access_logger.addFilter(redact_webhook_path_tokens)
+
+
 def configure_logging() -> str:
     """Configure structlog + stdlib logging once; returns the format in use."""
     global _configured_format, _installed_handler
     log_format = resolve_log_format()
     if _configured_format == log_format:
+        _configure_uvicorn_loggers()
         return log_format
 
     structlog.configure(
@@ -154,13 +166,7 @@ def configure_logging() -> str:
 
     # uvicorn installs its own handlers with propagate=False before the app
     # module is imported; fold them into the shared root handler.
-    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
-        uv_logger = logging.getLogger(name)
-        uv_logger.handlers = []
-        uv_logger.propagate = True
-    access_logger = logging.getLogger("uvicorn.access")
-    if redact_webhook_path_tokens not in access_logger.filters:
-        access_logger.addFilter(redact_webhook_path_tokens)
+    _configure_uvicorn_loggers()
 
     _configured_format = log_format
     return log_format

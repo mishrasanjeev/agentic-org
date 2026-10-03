@@ -89,6 +89,12 @@ The limits live in Redis and are shared by every API and worker process. When
 Redis is unavailable the call is admitted and the check is metered as
 `unavailable`: limits protect providers and budgets, they are not a security
 control, and a cache outage must not stop every model call.
+For a tenant whose configured limits must hold during an outage, set
+`AGENTICORG_MODEL_GATEWAY_LIMITS_FAIL_CLOSED=true`. With that default-off
+deployment switch, an unreadable limit policy or Redis admission state refuses
+the routed call with retryable `E1015` instead of bypassing its cap. Configure
+the switch and the tenant's gateway flag together; this does not affect calls
+when the gateway is off.
 
 ```json
 {"provider": "openai", "model": "gpt-4o", "max_concurrency": 8, "requests_per_minute": 120,

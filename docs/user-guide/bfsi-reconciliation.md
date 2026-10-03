@@ -44,12 +44,17 @@ Require source-row references and validated calculations in the exception pack.
 6. Inspect source freshness, totals, duplicate handling and every exception.
 7. Hand approved corrections to the accounting system through a separately authorized process.
 
+## Process map
+
+The comparison below assumes a reviewed read tool, mappings and deterministic
+calculation. It does not imply an automatic ledger posting connector.
+
 ```flow
-Read-only data | Collect the reviewed statement and ledger for the same business period.
-Validate and compare | Apply reviewed mappings, currencies, totals and matching rules.
-Exception pack | List breaks with evidence and missing information.
-Finance review | Resolve ambiguity and approve any proposed correction.
-Authoritative posting | The institution's controlled finance path performs and confirms updates.
+Read-only sources | Collect reviewed statement and ledger exports for one business period. | Owner: Finance data owner and approved read tool | If blocked: A late, partial or inaccessible source makes the period incomplete.
+Validate and compare | Apply reviewed schema, currency, duplicate and matching rules with validated calculations. | Owner: Configured comparison and finance operator | If blocked: Corrupt rows, mismatched currencies or totals become exceptions, not forced matches.
+Exception pack | List matched pairs and each break with source-row evidence and proposed follow-up. | Owner: Finance assistant | If blocked: Missing provenance or uncertain arithmetic must be checked before review.
+Finance review | Recheck ambiguous matches and proposed corrections against the source records. | Owner: Authorized finance reviewer | Human decision: Approve, revise or reject each proposed correction through the institution's controls. | If blocked: Unresolved breaks remain open and cannot be reported as balanced.
+Authoritative posting | Send approved corrections through a separately authorized accounting process. | Owner: Institution finance and accounting system | If blocked: A prepared pack is neither a posted entry nor a verified balance.
 ```
 
 ## Sample acceptance cases
@@ -68,4 +73,4 @@ Schedule only after a manual run is reproducible. Confirm timezone, statement ar
 
 Measure correctly identified breaks, false matches, review effort, source delays and reopened corrections. Compare against an independently reviewed ledger sample. Retest mappings after upstream changes.
 
-Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).

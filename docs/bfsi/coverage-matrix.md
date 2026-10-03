@@ -1,15 +1,15 @@
 # Coverage matrix
 
 Status per capability for AgenticOrg and Grantex, with repository evidence (paths relative to each repository)
-and the capability group (see the [README](README.md)) each item belongs to. Combined status is the better
-of the two products.
+and the capability group (see the [README](README.md)) each item belongs to. Combined status shows the
+strongest component capability, not proof that the products are integrated end to end or enabled for a tenant.
 
 | Section | Items | Covered | Partial | Gap |
 |---|---:|---:|---:|---:|
 | Baseline conditions | 5 | 1 | 4 | 0 |
 | Technical capabilities | 50 | 4 | 33 | 13 |
-| Functional capabilities | 150 | 15 | 100 | 35 |
-| Total | 205 | 20 | 137 | 48 |
+| Functional capabilities | 150 | 15 | 102 | 33 |
+| Total | 205 | 20 | 139 | 46 |
 
 
 ## Baseline residency, isolation and control conditions
@@ -211,20 +211,20 @@ of the two products.
 | ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | GW-01 | Unified model abstraction | Partial | **Partial**. One model factory across cloud and local LLMs behind a policy-driven gateway; no vision or multimodal routing. (`core/langgraph/llm_factory.py`, `core/governance/model_gateway.py`, `core/ai_providers/catalog.py`) | **Gap** | WP-02 |
-| GW-02 | Policy-driven routing | Partial | **Partial**. Policies route by use case, data sensitivity, agent, business unit and language with same-provider failover and in-region restriction; no cost, latency or throughput routing yet. (`core/governance/model_gateway.py`, `core/llm/router.py`, `docs/governance/model-gateway.md`) | **Gap** | WP-02 |
+| GW-02 | Policy-driven routing | Partial | **Partial**. Policies route by use case, sensitivity, agent, business unit and language; cost-aware target choice and observed failure-rate checks exist. Latency and throughput objectives are not routing inputs, and health-store failure degrades the cost choice. (`core/governance/model_gateway.py`, `core/llm/router.py`, `docs/governance/model-gateway.md`) | **Gap** | WP-02 |
 | GW-03 | Independent model onboarding | Partial | **Partial**. Models onboarded by editing the allowlist in code. (`core/ai_providers/catalog.py`, `api/v1/tenant_ai_credentials.py`, `core/ai_providers/health.py`) | **Gap** | WP-02 |
-| GW-04 | Traffic allocation and concurrency | Partial | **Partial**. Admission control for local runtimes; no traffic allocation across endpoints. (`core/runtime_capacity.py`, `core/tool_gateway/rate_limiter.py`) | **Gap** | WP-02 |
+| GW-04 | Traffic allocation and concurrency | Partial | **Partial**. Weighted model targets and tenant-scoped Redis concurrency/rate limits exist. A default-off strict switch refuses calls when limit state is unreadable; default operation still admits on store outage, so hard-limit assurance is not universal. (`core/governance/model_gateway.py`, `core/governance/model_gateway_limits.py`, `tests/unit/governance/test_model_gateway_limits.py`) | **Gap** | WP-02 |
 | GW-05 | Tiered response-time service levels | Partial | **Partial**. No tiered latency objectives or progress indication. (`docs/PERFORMANCE.md`, `ui/src/pages/SLAMonitor.tsx`) | **Gap** | WP-02 |
-| GW-06 | Model-level metrics | Partial | **Partial**. Token and cost counters per model; no error, throughput or utilisation metrics. (`observability/metrics.py`, `core/llm/router.py`, `scaling/cost_ledger.py`) | **Gap** | WP-02 |
-| GW-07 | Model access policies | Partial | **Partial**. Policies fence providers per agent and business unit (allowed_providers) and keep restricted data in region; no per-user or application identity policies yet. (`core/governance/model_gateway.py`, `api/v1/model_gateway.py`, `core/models/model_routing_policy.py`) | **Partial**. Grant-token proxy can restrict any upstream endpoint by agent and grant scope. (`packages/gateway/src/proxy.ts`, `packages/gateway/gateway.example.yaml`) | WP-02 |
-| GW-08 | Gateway audit trail | Partial | **Partial**. Every routing decision is logged with a correlation id, the policy, provider and model, and metered; not yet written to the audit trail. (`core/governance/model_gateway.py`, `observability/metrics.py`) | **Partial**. Evidence entries record model versions and policy evaluations. (`spec/evidence-package.md`, `apps/auth-service/src/lib/evidence/schema-1.0.ts`) | WP-02 |
+| GW-06 | Model-level metrics | Partial | **Partial**. Signed call records and metrics include outcome, latency, token counts, cost, output tokens per second and admission wait. Model utilisation and streaming time-to-first-token are not captured. (`observability/metrics.py`, `core/governance/model_gateway_records.py`, `tests/unit/governance/test_model_gateway_records.py`) | **Gap** | WP-02 |
+| GW-07 | Model access policies | Partial | **Partial**. Access rules can match application, principal, agent, business unit, provider and model with bound caller identity and recorded policy IDs. Unmatched calls remain allowed, so coverage depends on explicit policy configuration. (`core/governance/model_gateway.py`, `api/v1/model_gateway.py`, `core/governance/caller_identity.py`, `tests/unit/governance/test_model_gateway.py`) | **Partial**. Grant-token proxy can restrict any upstream endpoint by agent and grant scope. (`packages/gateway/src/proxy.ts`, `packages/gateway/gateway.example.yaml`) | WP-02 |
+| GW-08 | Gateway audit trail | Partial | **Partial**. Signed tenant-scoped call records include correlation ID, request and selected model, policy IDs, outcome, latency, tokens and error type. Raw responses are intentionally omitted and record writes are best effort. (`core/governance/model_gateway.py`, `core/governance/model_gateway_records.py`, `tests/unit/governance/test_model_gateway_records.py`) | **Partial**. Evidence entries record model versions and policy evaluations. (`spec/evidence-package.md`, `apps/auth-service/src/lib/evidence/schema-1.0.ts`) | WP-02 |
 
 ## Knowledge and vector infrastructure
 
 | ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | VEC-01 | Vector database | Partial | **Partial**. pgvector with local embeddings. (`core/embeddings.py`, `api/v1/knowledge.py`) | **Gap** | WP-04 |
-| VEC-02 | Hybrid retrieval | Gap | **Gap**. No hybrid search or rank fusion. (`api/v1/knowledge.py`) | **Gap** | WP-04 |
+| VEC-02 | Hybrid retrieval | Partial | **Partial**. The opt-in native path fuses tenant-ready pgvector and full-text ranks, with a PostgreSQL index and fallback tests. It is off by default, RAGFlow takes precedence, and relevance/latency plus document-level access still need validation. (`api/v1/knowledge.py`, `migrations/versions/v6_z40_knowledge_full_text.py`, `tests/integration/test_knowledge_hybrid_postgres.py`) | **Gap** | WP-04 |
 | VEC-03 | Metadata filtering | Gap | **Gap**. No metadata filtering. | **Gap** | WP-04 |
 | VEC-04 | Automated embedding pipeline | Partial | **Partial**. Same as re-indexing above. (`core/rag/ingest.py`, `core/embeddings_backfill.py`) | **Gap** | WP-04 |
 | VEC-05 | Lineage visualisation | Gap | **Gap**. No lineage visualisation. | **Gap** | WP-16 |
@@ -321,11 +321,11 @@ of the two products.
 
 | ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
-| OBS-01 | Waterfall execution traces | Partial | **Partial**. Text trace only; no waterfall view. (`ui/src/pages/Playground.tsx`, `observability/tracing.py`) | **Gap** | WP-09 |
-| OBS-02 | Streaming latency metrics | Gap | **Gap**. Latency only; no time-to-first-token, tokens per second or queue wait. (`core/llm/router.py`) | **Gap** | WP-09 |
-| OBS-03 | Live workload console | Partial | **Partial**. Live feed and uptime; no queue depth or SLA countdowns. (`ui/src/pages/Observatory.tsx`, `ui/src/pages/SLAMonitor.tsx`, `observability/metrics.py`) | **Gap** | WP-09 |
+| OBS-01 | Waterfall execution traces | Partial | **Partial**. A tenant-scoped run waterfall exists behind the timeline flag. It does not yet prove every model, tool and memory lookup is instrumented. (`api/v1/observability.py`, `observability/timeline.py`, `ui/src/pages/Observability.tsx`) | **Gap** | WP-09 |
+| OBS-02 | Streaming latency metrics | Partial | **Partial**. Call duration, output tokens per second and admission wait are recorded. Streaming time-to-first-token and complete queue-wait coverage are missing. (`core/governance/model_gateway_records.py`, `observability/metrics.py`) | **Gap** | WP-09 |
+| OBS-03 | Live workload console | Partial | **Partial**. Tenant-scoped workload summaries show recent run/model/guardrail outcomes and review-deadline countdowns. Shared queue depth and complete active-agent state are not exposed per tenant. (`ui/src/pages/Observability.tsx`, `api/v1/observability.py`, `observability/workload.py`) | **Gap** | WP-09 |
 | OBS-04 | Scheduled synthetic checks | Partial | **Partial**. Nightly CI eval and health probes; no in-product scheduled evals. (`.github/workflows/rag-eval.yml`, `core/tasks/health_snapshot.py`, `scripts/prod_smoke_check.py`) | **Gap**. On-demand conformance runner only. (`packages/conformance/src/runner.ts`) | WP-07 |
-| OBS-05 | Correlation identifiers | Partial | **Partial**. Request id bound to logs and audit rows; not propagated through model or retrieval calls. (`api/middleware/request_id.py`, `core/models/audit.py`, `core/tool_gateway/audit_logger.py`) | **Partial**. Request ids, OpenTelemetry spans, caseId linking evidence. (`apps/auth-service/src/server.ts`, `packages/sdk-ts/src/http.ts`, `apps/auth-service/src/lib/traceAttributes.ts`) | WP-09 |
+| OBS-05 | Correlation identifiers | Partial | **Partial**. Request IDs bind logs and audit rows; model routing records and tool audit carry correlation or trace IDs. End-to-end propagation through every retrieval, guardrail and workflow path is not proven. (`api/middleware/request_id.py`, `core/governance/model_gateway_records.py`, `core/tool_gateway/audit_logger.py`) | **Partial**. Request ids, OpenTelemetry spans, caseId linking evidence. (`apps/auth-service/src/server.ts`, `packages/sdk-ts/src/http.ts`, `apps/auth-service/src/lib/traceAttributes.ts`) | WP-09 |
 | OBS-06 | Tamper-evident audit | Covered | **Partial**. Append-only trigger with per-row HMAC; no hash chain; model requests and responses not recorded. (`core/models/audit.py`, `audit/signer.py`, `migrations/versions/v4_8_0_baseline.py`) | **Covered**. Hash-chained audit log and signed, anchored evidence packages. (`apps/auth-service/src/lib/audit-chain.ts`, `apps/auth-service/src/routes/audit.ts`, `spec/evidence-package.md`) | WP-09 |
 
 ## FinOps

@@ -352,7 +352,7 @@ Useful modes include:
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --traffic preserve --yes
     bash scripts/deploy_cloud_run.sh --sha <commit-sha> --dry-run
 
-The helper stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md) before using production credentials.
+The helper requires a clean checkout at the exact deploy SHA, stages revision-specific images, verifies image and commit metadata, supports migration-first deployment, probes health, and moves traffic according to the selected mode. Read the script help and [docs/deployment.md](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/deployment.md) before using production credentials.
 
 Default script configuration places Cloud Run services in asia-southeast1 and Artifact Registry in asia-south1. Both are configurable. Older Kubernetes material is retained only for historical or alternative deployment context.
 
@@ -396,6 +396,8 @@ To refresh the tracked sitemap and llms copies plus route JSON-LD CSP hashes:
 ## Documentation
 
 - [End-user manual: first agent, everyday operations and BFSI playbooks](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/README.md). The UI serves this same Markdown content at [agenticorg.ai/docs](https://agenticorg.ai/docs), with full-text search, visual process flows, print-friendly guides and mobile navigation. The [docs.agenticorg.ai](https://docs.agenticorg.ai) alias has configured Cloud DNS and managed HTTPS; its hosting and verification instructions live in the [documentation runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md).
+- [Functional BFSI coverage and open gaps](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md) shows what is implemented, partial or unavailable, with verification scenarios and product boundaries.
+- [Public BFSI capability status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/user-guide/bfsi-capability-status.md) gives readers a plain-language summary of the same assessment, including unfinished work.
 - [Documentation site publishing and subdomain runbook](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/runbooks/documentation-site.md)
 - [Documentation home](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/README.md)
 - [Current product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
@@ -615,11 +617,12 @@ These names are parsed from connectors. A listing does not prove credentials, su
 - [Seller commerce with an outside A2A buyer](https://agenticorg.ai/docs/seller-a2a-commerce-journey): An interactive third-party buyer transaction map and six checkpoints covering merchant setup, A2A seller access, sourced answers and the Pine Labs Plural payment boundary.
 - [API, SDK, MCP and A2A integration](https://agenticorg.ai/docs/api-sdk-mcp): Connect applications and agent clients with authenticated, scoped APIs; distinguish public discovery from permission to execute.
 - [Self-hosting and deployment handoff](https://agenticorg.ai/docs/self-hosting): Understand hosted versus bank-managed operation, local Docker setup, migration-first releases, backups and operational responsibilities.
-- [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A complete worked example from business application to evidence investigation, screening review, human decision and signed handoff.
+- [BFSI: business onboarding and KYB review](https://agenticorg.ai/docs/bfsi-business-onboarding): A fictional configured example from business application to evidence investigation, screening review, human decision and signed handoff.
 - [BFSI: reconciliation and finance exceptions](https://agenticorg.ai/docs/bfsi-reconciliation): Configure a read-only reconciliation assistant for synthetic bank and ledger data, review discrepancies, and hand approved corrections to finance.
 - [BFSI: customer service across chat and voice](https://agenticorg.ai/docs/bfsi-customer-service): Build a source-grounded service assistant, classify complaints, prepare responses and escalate sensitive account actions to authorized staff.
 - [BFSI: insurance document and claims assistance](https://agenticorg.ai/docs/bfsi-insurance): Use OCR, policy knowledge and reviewed workflows to prepare claim-file checklists without automating coverage or payout decisions.
 - [BFSI: merchant enablement and agentic commerce](https://agenticorg.ai/docs/bfsi-merchant-services): A bank-led merchant pilot using Seller Commerce Agents, Shopify, OACP artifacts, buyer channels and provider-owned payment capability evidence.
+- [BFSI capability status and open work](https://agenticorg.ai/docs/bfsi-capability-status): See which functional capabilities exist, which remain partial or unavailable, and what a configured pilot still needs to prove.
 - [Team adoption and launch checklist](https://agenticorg.ai/docs/adoption-checklist): Assign owners, select a first use case, train operators and reviewers, measure outcomes and expand without skipping real integration work.
 
 Authenticated routes, callbacks, invites, onboarding, and dashboard pages are application surfaces, not public search landing pages.
@@ -772,6 +775,10 @@ Run under review | Assign operators, approvals, support and change control.
 5. Know who can approve outputs and who owns the connected system.
 
 #### What availability means
+
+For regulated workflows, first read the [BFSI capability status](/docs/bfsi-capability-status).
+The five process maps are fictional configured examples; 15 of 150 assessed
+functional capabilities are covered, 102 are partial and 33 remain gaps.
 
 **Implemented** means a runtime path exists. **Configuration-dependent** means it also needs credentials, permissions, worker infrastructure or tenant settings. **Example** means a teaching scenario, not a pre-integrated solution. A listed connector, agent template, voice provider or channel is not proof of successful live execution in your workspace.
 
@@ -1927,6 +1934,9 @@ Audience: Merchants and bank merchant-service teams. Reviewed: 2026-10-02.
 
 AgenticOrg runs seller/buyer agents and their skills, knowledge and approved integration paths. Grantex supplies trust, policy and canonical artifact authority. Shopify or another merchant system remains the operational source of truth. Banks, fintechs, providers and POS systems own payment, mandate and fulfillment execution.
 
+For a bank-led pilot with explicit owners, human decisions and blocked paths,
+see the [merchant-services process map](/docs/bfsi-merchant-services#process-map).
+
 ```flow
 Merchant setup | Configure the Seller Commerce Agent and merchant-scoped sources/channels.
 Shopify read-only sync | Fetch real products, variants, images, price and inventory snapshots with approved access.
@@ -2306,16 +2316,21 @@ Assign an onboarding owner, screening analyst, authorized approver, provider int
 
 The institution's application/LOS system submits cases through the reviewed API/workflow. The approvals console is for queue and review, not a universal business-intake form.
 
-#### Follow one fictional application
+#### Process map
+
+This map assigns each handoff in the configured case path. A missing source or
+unresolved review is a stop, not an implied clearance.
 
 ```flow
-Application | Example Trading Ltd submits business details through the bank's approved intake.
-Investigation | Agents read approved registry, ownership and screening evidence.
-Memo | Source-linked findings, missing items and deterministic policy tier are prepared.
-Analyst review | A person inspects possible screening matches and records a reasoned disposition.
-Decision request | The current case/version/action goes to the configured human approval issuer.
-Bank handoff | Verified decision evidence is recorded and signed outcome delivered to the bank system.
+Application | A fictional business submits details through the bank's approved intake. | Owner: Bank intake team | If blocked: Incomplete intake stays with the bank; no case outcome is inferred.
+Investigation | Configured agents read approved registry, ownership and screening sources. | Owner: Configured case agents | If blocked: Missing grant, provider error or absent record remains missing evidence, not a clear result.
+Memo and policy | The case shows cited findings, missing items and the reviewed policy tier. | Owner: AgenticOrg case runtime | If blocked: Unsupported citations or incomplete evidence require investigation before decision.
+Screening review | The analyst checks each proposed disposition against the cited record. | Owner: Screening analyst | Human decision: Accept the proposal or override it with a written reason. | If blocked: An unresolved hit stays open for human review; the proposal does not clear it.
+Decision request | The exact case version and action go to the configured approval issuer. | Owner: Authorized case operator and approval issuer | Human decision: A designated approver decides on the issuer page; a distinct second approver participates where required. | If blocked: Missing, expired or superseded approval cannot record a decision; request a new decision on the current case.
+Bank handoff | The signed outcome is delivered for the bank system to interpret and act on. | Owner: Bank system-of-record team | If blocked: Delivery failure or duplicate evidence needs reconciliation; do not infer account opening.
 ```
+
+#### Follow one fictional application
 
 1. Open **Approvals > governed cases** at `/dashboard/approvals/cases`.
 2. Find the fictional case and inspect investigation state.
@@ -2338,7 +2353,7 @@ Try a unavailable provider capability, unresolved screening hit, missing grant, 
 
 Compare manual file-assembly time, missing-information rate, analyst overrides, re-investigation, review age and delivery failures on a reviewed sample. Track reopening causes. Do not publish a numerical accuracy claim from a few happy-path examples.
 
-Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
 
 
 ### BFSI: reconciliation and finance exceptions
@@ -2392,12 +2407,17 @@ Require source-row references and validated calculations in the exception pack.
 6. Inspect source freshness, totals, duplicate handling and every exception.
 7. Hand approved corrections to the accounting system through a separately authorized process.
 
+#### Process map
+
+The comparison below assumes a reviewed read tool, mappings and deterministic
+calculation. It does not imply an automatic ledger posting connector.
+
 ```flow
-Read-only data | Collect the reviewed statement and ledger for the same business period.
-Validate and compare | Apply reviewed mappings, currencies, totals and matching rules.
-Exception pack | List breaks with evidence and missing information.
-Finance review | Resolve ambiguity and approve any proposed correction.
-Authoritative posting | The institution's controlled finance path performs and confirms updates.
+Read-only sources | Collect reviewed statement and ledger exports for one business period. | Owner: Finance data owner and approved read tool | If blocked: A late, partial or inaccessible source makes the period incomplete.
+Validate and compare | Apply reviewed schema, currency, duplicate and matching rules with validated calculations. | Owner: Configured comparison and finance operator | If blocked: Corrupt rows, mismatched currencies or totals become exceptions, not forced matches.
+Exception pack | List matched pairs and each break with source-row evidence and proposed follow-up. | Owner: Finance assistant | If blocked: Missing provenance or uncertain arithmetic must be checked before review.
+Finance review | Recheck ambiguous matches and proposed corrections against the source records. | Owner: Authorized finance reviewer | Human decision: Approve, revise or reject each proposed correction through the institution's controls. | If blocked: Unresolved breaks remain open and cannot be reported as balanced.
+Authoritative posting | Send approved corrections through a separately authorized accounting process. | Owner: Institution finance and accounting system | If blocked: A prepared pack is neither a posted entry nor a verified balance.
 ```
 
 #### Sample acceptance cases
@@ -2416,7 +2436,7 @@ Schedule only after a manual run is reproducible. Confirm timezone, statement ar
 
 Measure correctly identified breaks, false matches, review effort, source delays and reopened corrections. Compare against an independently reviewed ledger sample. Retest mappings after upstream changes.
 
-Next: [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Connectors](/docs/connectors), [Workflows](/docs/workflows), [Audit and monitoring](/docs/audit-and-monitoring).
 
 
 ### BFSI: customer service across chat and voice
@@ -2444,12 +2464,17 @@ Use a reviewed support-triage candidate or custom operations agent. Define categ
 4. Ask for a private account balance and confirm refusal/referral.
 5. Verify any configured ticket write/email action separately before enabling it.
 
+#### Process map
+
+This is a response-preparation path. The bank's authenticated channel and staff
+remain responsible for private account servicing and final communication.
+
 ```flow
-Question or complaint | Receive the request on the configured authenticated or general-information channel.
-Source-grounded response | Answer supported procedural facts with current sources.
-Sensitivity check | Detect requests that need bank authentication or authorized action.
-Human escalation | Prepare a bounded case/response for the responsible staff queue.
-Confirmed outcome | The bank system owns communication, resolution and account actions.
+Question or complaint | Receive the request through a configured general-information or authenticated channel. | Owner: Bank channel owner | If blocked: A claimed name or phone number alone does not establish customer identity.
+Knowledge check | Retrieve the current approved procedure and inspect its cited source. | Owner: Service agent and knowledge owner | If blocked: Missing, conflicting or outdated guidance goes to staff; do not invent an answer.
+Response draft | Prepare a bounded answer or complaint summary from supported facts. | Owner: Service agent | If blocked: Private account data or an unsupported action is refused or referred to the bank's authorized path.
+Human escalation | Review sensitive, urgent or unresolved requests before any staff response. | Owner: Authorized service staff | Human decision: Staff decide whether to send, revise or escalate the prepared response. | If blocked: Suspected fraud or a failed voice/ticket path follows the bank's urgent human process.
+Confirmed outcome | Record communication and resolution in the bank's approved system. | Owner: Bank service team and system of record | If blocked: A prepared draft is not a sent message or completed account action.
 ```
 
 #### Add voice only after chat is correct
@@ -2464,7 +2489,7 @@ Track correct routing, unsupported-answer rate, unresolved questions, escalation
 
 Roll out a narrow task population before sensitive account servicing. Re-test whenever the bank procedure, provider number/callback, model or ticketing contract changes.
 
-Next: [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Run and chat](/docs/run-and-chat), [Knowledge and OCR](/docs/knowledge-and-ocr), [Approvals](/docs/approvals).
 
 
 ### BFSI: insurance document and claims assistance
@@ -2488,12 +2513,17 @@ For scans, use supported PDF/image formats and inspect extraction method, OCR co
 
 Create a custom operations/document-review agent with output fields for document type, cited facts, missing items, unreadable fields and reviewer questions. Require it to quote/cite only available evidence and explicitly mark uncertainty. Limit tools to approved reads during the first pilot.
 
+#### Process map
+
+The map stops at reviewer preparation. Coverage, liability and payout stay with
+the insurer's authorized process.
+
 ```flow
-Approved claim documents | Authorized intake supplies the current file references.
-Extraction and quality review | Native parsing or OCR produces text with provenance and visible uncertainty.
-Checklist comparison | The assistant prepares completeness findings from the reviewed procedure.
-Human claims review | Authorized staff verify evidence and coverage under insurer policy.
-System handoff | The claims platform records its own decision and payout process.
+Approved claim file | Authorized intake supplies synthetic file references and the current checklist. | Owner: Insurer intake team | If blocked: Missing documents stay on the request list; no completeness claim is made.
+Extraction check | Native parsing or OCR supplies page-linked text for inspection. | Owner: Document-review operator | If blocked: Unreadable dates, amounts or identifiers are flagged for manual verification, never guessed.
+Checklist comparison | The assistant prepares cited present, missing and uncertain items. | Owner: Configured document-review agent | If blocked: Conflicting policy versions or absent sources go to the checklist owner.
+Claims review | Staff compare the prepared notes with source documents and insurer policy. | Owner: Authorized claims reviewer | Human decision: The reviewer requests more evidence or makes the insurer's coverage determination outside the assistant. | If blocked: Ambiguous or incomplete evidence remains in review; no rejection or payout is automated.
+System handoff | The claims platform records the insurer's own authorized outcome. | Owner: Insurer claims-system team | If blocked: A prepared note is not a customer notification, coverage decision or paid claim.
 ```
 
 #### Run a complete test
@@ -2528,7 +2558,7 @@ If a claims-platform write or customer notification is needed, build/approve tha
 
 Assign a checklist owner, claims reviewer, data/privacy owner and integration owner. Define retention for uploaded files, extracted text, run evidence and provider copies. Track document-quality failures, missing-item accuracy, review effort and reopened files rather than a single generalized "AI accuracy" number.
 
-Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
 
 
 ### BFSI: merchant enablement and agentic commerce
@@ -2541,28 +2571,36 @@ Audience: Acquiring banks and merchant-service teams. Reviewed: 2026-10-02.
 This is a reference example for an acquiring bank's merchant-enablement pilot,
 not an already integrated banking product or a claim of live payment execution.
 
-An acquiring bank wants to help an approved Shopify merchant become usable by agentic buyer interfaces. The bank can offer an institution-managed or reviewed hosted AgenticOrg workspace, but merchant/provider/platform contracts still determine actual availability.
+In this synthetic example, an acquiring bank wants to help a fictional Shopify
+merchant become usable by agentic buyer interfaces. The bank can offer an
+institution-managed or reviewed hosted AgenticOrg workspace, but
+merchant/provider/platform contracts still determine actual availability.
 
 AgenticOrg owns seller/buyer runtime. Grantex owns trust/policy/canonical artifacts. Shopify owns merchant catalog/inventory/order truth. The bank/fintech/provider owns payment/mandate execution and customer authorization. OACP is not a reason to make Grantex the engine for every buyer message.
 
-#### Build one real merchant path
+#### Build one synthetic merchant path
 
 1. Assign a merchant owner, bank integration owner, provider contact and channel owner.
 2. Configure merchant-scoped Seller Commerce Agent onboarding and source/channel settings.
-3. Obtain read-only Shopify access through the merchant's approved process.
-4. Sync products/variants/images/price/inventory and compare samples with Shopify.
+3. Obtain read-only access to a sandbox Shopify store with a fictional catalog through the merchant's approved process.
+4. Sync synthetic products/variants/images/price/inventory and compare samples with the sandbox store.
 5. Send the bounded Grantex authority request and verify/cache issued artifacts.
-6. Ask real product questions through the configured web or agent bridge.
+6. Ask product questions about the fictional catalog through the configured web or agent bridge.
 7. Inspect source, freshness, supported facts and refusal behavior.
 8. Prepare a provider/POS handoff and confirm that no order/payment state is fabricated.
 
+#### Process map
+
+This is a bank-led reference pilot with configured merchant, channel and
+provider paths. A prepared handoff is never a completed transaction.
+
 ```flow
-Bank and merchant setup | Agree ownership, identities, read scopes and publishing state.
-Shopify evidence | Real read-only sync produces source-linked commercial facts.
-Trust artifacts | Grantex authority and AgenticOrg cache preserve scope and freshness.
-Buyer channel | A configured bridge answers from supported artifacts.
-Provider capability | Plural/Pine evidence checks configured capability, not successful payment.
-Authoritative handoff | The provider, POS or merchant confirms its own execution outcome.
+Bank and merchant setup | Agree identities, read scopes, provider contract and publishing state. | Owner: Bank integration owner and merchant owner | Human decision: Owners approve the pilot scope and any channel publication under their own processes. | If blocked: Unapproved access or publishing state keeps the channel off.
+Merchant-source evidence | Read-only sync supplies product, price and inventory snapshots for sample checks. | Owner: Merchant source owner and configured AgenticOrg sync | If blocked: Missing scopes or stale source facts stop unsupported buyer promises.
+Trust artifacts | The bounded authority request and cache retain scope, source and freshness. | Owner: Grantex authority and AgenticOrg runtime | If blocked: Invalid or stale artifacts cannot support commitment-bound requests.
+Buyer channel | A configured bridge answers from supported merchant artifacts. | Owner: Channel owner and AgenticOrg buyer runtime | If blocked: Unsupported channels or facts are refused until the integration is approved.
+Provider capability | A configured provider path checks non-sensitive capability evidence. | Owner: Bank/provider integration team | Human decision: The customer and provider complete any required authorization outside this map. | If blocked: Capability evidence alone does not prove a mandate or payment.
+Authoritative handoff | A prepared packet awaits provider, POS or merchant confirmation. | Owner: Provider, POS or merchant system | If blocked: Absent or failed confirmation stays pending or failed; no paid or placed state is fabricated.
 ```
 
 #### Plural/Pine and mandates
@@ -2583,7 +2621,62 @@ An offline POS bridge prepares a store-linked handoff and reconciles authoritati
 
 Verify accurate catalog facts, stale-source refusal, cross-merchant isolation, invalid webhook rejection, channel authentication and non-fabricated transaction state. Keep public discovery off until the publishing path is approved and validated. Measure the complete buyer journey rather than counting adapter names.
 
-Next: [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Commerce guide](/docs/commerce), [API and agent clients](/docs/api-sdk-mcp), [Team adoption](/docs/adoption-checklist).
+
+
+### BFSI capability status and open work
+
+URL: https://agenticorg.ai/docs/bfsi-capability-status
+Audience: BFSI sponsors, operators and integration owners. Reviewed: 2026-10-02.
+
+#### What this status means
+
+AgenticOrg can be configured for evidence-led BFSI workflows, but a process map
+is not proof that a bank's systems, providers, controls or staff are connected.
+The current repository assessment has **150 functional capabilities**: **15
+covered, 102 partial and 33 gaps**. A covered component may still need a
+tenant setting, approved provider, external system or human reviewer. No full
+BFSI journey has end-to-end acceptance on the strength of these counts alone.
+
+This page describes functional software coverage, not infrastructure location,
+regulatory approval, certification or permission to process customer data. A
+feature behind a disabled flag is unavailable in the default installation.
+
+#### Where the work stands
+
+| Area | Working foundation | Still needs real implementation or validation |
+|---|---|---|
+| Agent governance | Agent execution, scoped grants, human review and case evidence paths | Registry-grade discoverability, dependency mapping, model cards and cross-service lifecycle proof |
+| Knowledge and documents | Ingestion, OCR and source-aware answers on configured paths | Mixed bundles, page-region review, comparison, hybrid-ranking rollout and cited refusal across every tenant path |
+| Conversation and speech | Web chat and configured voice runtime | Intent and channel parity, speaker separation, sensitive-data handling and supervised handoff |
+| Transactions and commerce | Read-only source evidence and prepared agent handoffs | Bank-owned source connections, human disposition, provider-owned execution and reconciliation evidence |
+| Operations | Logging, approval controls and evaluation hooks | Complete trace coverage, measured SLOs, budget enforcement, rollback and production-grade recovery |
+
+The detailed [functional assessment](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/functional-coverage.md)
+and [capability matrix](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/bfsi/coverage-matrix.md)
+identify individual gaps. The [product status](https://github.com/mishrasanjeev/agentic-org/blob/main/docs/PRODUCT_STATUS.md)
+records other release boundaries. These files describe the current repository
+assessment; verify your deployed version and configuration separately.
+
+#### What to prove in a pilot
+
+1. Select one narrow use case and name its business owner, system-of-record
+   owner, integration owner, reviewer and support owner.
+2. Use fictional or institution-approved data. Connect each required system
+   through its reviewed API or file contract; a diagram is not a connector.
+3. Run normal, missing, stale, conflicting, unauthorized and cross-company
+   cases. Inspect citations, grants, reviewer decisions and external receipts.
+4. Demonstrate restart, replay, revocation, duplicate events and recovery with
+   the same users and roles that will operate the pilot.
+5. Confirm what the external system actually did. An agent draft, signed
+   handoff or payment-capability reference is not an account change, payment,
+   settlement or regulatory filing.
+
+For a concrete teaching path, open the [business onboarding](/docs/bfsi-business-onboarding),
+[reconciliation](/docs/bfsi-reconciliation), [customer service](/docs/bfsi-customer-service),
+[insurance](/docs/bfsi-insurance) or [merchant services](/docs/bfsi-merchant-services)
+playbook. Each is a fictional, configured example and carries its own blocked
+paths and human ownership.
 
 
 ### Team adoption and launch checklist

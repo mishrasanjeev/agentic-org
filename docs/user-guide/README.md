@@ -55,6 +55,10 @@ Cloud DNS/managed HTTPS checks. The canonical manual is
 
 ## BFSI Playbooks
 
+Start with [capability status and open work](bfsi-capability-status.md) before
+using the fictional process maps. The maps teach a configured path; they do not
+mean every bank integration or regulated decision is available by default.
+
 These are fictional reference processes, not regulatory advice, pre-approved
 bank integrations or claims of autonomous financial decision-making.
 
@@ -69,6 +73,10 @@ bank integrations or claims of autonomous financial decision-making.
 `index.json` defines guide titles, navigation, audience, review date and source
 references. Article Markdown is the source of truth. Use a fenced `flow` block
 for accessible step diagrams; each line is `Step title | Explanation`. Use
+`Step title | Explanation | Owner: actor` for a process map; append optional
+`| Human decision: action` and `| If blocked: exception path` fields. Every
+step in a process map needs an owner. All field text is rendered as plain text.
+The two-field form remains valid for simpler workflows. Use
 second-level headings for article sections. Internal `/docs/...` links refer to
 the public reader routes; the list above uses relative links for GitHub readers.
 

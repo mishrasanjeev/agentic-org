@@ -3,7 +3,7 @@
 Current product and release boundary: [Current Product Status](PRODUCT_STATUS.md).
 Post-deploy verification: [Production Smoke Readiness Runbook](runbooks/production_smoke.md).
 
-> **Current limitation (2026-07-15):** The Cloud Run helper covers API/UI release mechanics only. The repository production workflow remains disabled, worker/beat rollout is not covered by the helper, and no command in this guide substitutes for green required CI, migration evidence, release-manifest/image-digest retention, post-deploy checks, rollback proof, or an approved change owner. Lower Helm/GKE and raw-SQL sections are historical reference material.
+> **Current limitation (2026-10-03):** The repository production workflow remains disabled. The manual helper stages API/UI and configured worker/beat revisions, but no command in this guide substitutes for green required CI, migration evidence, release-manifest/image-digest retention, post-deploy checks, rollback proof, or an approved change owner. Lower Helm/GKE and raw-SQL sections are historical reference material.
 
 > **2026-06-13 status:** production runs on Cloud Run. The default production
 > Cloud Run services are `agenticorg-api` and `agenticorg-ui` in
@@ -27,7 +27,9 @@ Post-deploy verification: [Production Smoke Readiness Runbook](runbooks/producti
 > The helper verifies both services exist before mutation, prints every command,
 > supports `--dry-run`, verifies platform image digests and commit metadata on
 > staged revisions, probes the API before UI traffic moves, and refuses to
-> report success if public health still returns an older commit. Legacy GKE/Helm
+> report success if public health still returns an older commit. Run it from a
+> clean checkout at the exact deploy SHA; it refuses dirty or mismatched source
+> even with `--skip-build`, so image labels cannot disguise local edits. Legacy GKE/Helm
 > sections below are preserved for reference and non-default deployment shapes.
 
 ## Deployment Options
@@ -50,7 +52,7 @@ docker compose up -d
 # - API:        http://localhost:8000
 # - PostgreSQL:  localhost:5432
 # - Redis:       localhost:6379
-# - MinIO (S3-compat): http://localhost:9000 (console: :9001)
+# - MinIO (S3-compat, test-only community image): http://localhost:9000 (console: :9001)
 ```
 
 ## Cloud Run (Current Production)
@@ -71,6 +73,8 @@ bash scripts/deploy_cloud_run.sh --sha <commit-sha> --skip-build --with-migratio
 
 Important behavior:
 
+- The selected commit must be checked out exactly and the tree must be clean,
+  including untracked files. Use a dedicated clean release worktree.
 - `--with-migrations` updates and executes the Cloud Run migration job before
   services are staged.
 - API and UI services are updated with `--no-traffic` first, then staged

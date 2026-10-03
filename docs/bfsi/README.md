@@ -10,6 +10,7 @@ part, and what it does not provide yet, with the repository evidence for each an
 |---|---|
 | [capability-baseline.md](capability-baseline.md) | The catalogue: baseline conditions, technical capabilities and functional capabilities, grouped by domain. |
 | [coverage-matrix.md](coverage-matrix.md) | Per-capability status for AgenticOrg and Grantex with repository evidence and the capability group each item belongs to. |
+| [functional-coverage.md](functional-coverage.md) | Functional status, verification scenarios and unresolved product gaps. |
 | [deployment-reference.md](deployment-reference.md) | How an in-country deployment satisfies the infrastructure items that belong to the hosting platform. |
 | [capability-baseline.json](capability-baseline.json) | Machine-readable catalogue and status, consumed by the capability readiness report. |
 
@@ -19,12 +20,13 @@ part, and what it does not provide yet, with the repository evidence for each an
 |---|---:|---:|---:|---:|
 | Baseline conditions | 5 | 1 | 4 | 0 |
 | Technical capabilities | 50 | 4 | 33 | 13 |
-| Functional capabilities | 150 | 15 | 100 | 35 |
-| Total | 205 | 20 | 137 | 48 |
+| Functional capabilities | 150 | 15 | 102 | 33 |
+| Total | 205 | 20 | 139 | 46 |
 
 Status rules: **Covered** means the capability exists in product form with tests; **Partial** means part of it
-exists or it exists for one domain only; **Gap** means nothing usable exists yet. A cloud-provider item counts
-as covered only when the deployment reference names the control and the compliance report can attest it.
+exists or it exists for one domain only; **Gap** means nothing usable exists yet. The combined status reports
+the strongest component, not an integrated, tenant-enabled or deployed outcome. Infrastructure and deployment
+requirements are tracked separately from the functional delivery plan.
 
 ## How the two products divide the work
 
@@ -69,4 +71,5 @@ it carries no delivery commitment.
 - Every behaviour change on an existing path ships behind a flag that defaults to off.
 - Vendor neutrality: provider names appear only as product integrations inside code.
 - House terminology as set out in `AGENTS.md`.
-- The matrix is regenerated whenever a capability lands, so it stays truthful.
+- Update the JSON and Markdown matrix together when a capability lands. Status changes require an executable
+  test and a real code path, not just a design document or a deployment reference.

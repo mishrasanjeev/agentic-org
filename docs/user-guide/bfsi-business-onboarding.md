@@ -10,16 +10,21 @@ Assign an onboarding owner, screening analyst, authorized approver, provider int
 
 The institution's application/LOS system submits cases through the reviewed API/workflow. The approvals console is for queue and review, not a universal business-intake form.
 
-## Follow one fictional application
+## Process map
+
+This map assigns each handoff in the configured case path. A missing source or
+unresolved review is a stop, not an implied clearance.
 
 ```flow
-Application | Example Trading Ltd submits business details through the bank's approved intake.
-Investigation | Agents read approved registry, ownership and screening evidence.
-Memo | Source-linked findings, missing items and deterministic policy tier are prepared.
-Analyst review | A person inspects possible screening matches and records a reasoned disposition.
-Decision request | The current case/version/action goes to the configured human approval issuer.
-Bank handoff | Verified decision evidence is recorded and signed outcome delivered to the bank system.
+Application | A fictional business submits details through the bank's approved intake. | Owner: Bank intake team | If blocked: Incomplete intake stays with the bank; no case outcome is inferred.
+Investigation | Configured agents read approved registry, ownership and screening sources. | Owner: Configured case agents | If blocked: Missing grant, provider error or absent record remains missing evidence, not a clear result.
+Memo and policy | The case shows cited findings, missing items and the reviewed policy tier. | Owner: AgenticOrg case runtime | If blocked: Unsupported citations or incomplete evidence require investigation before decision.
+Screening review | The analyst checks each proposed disposition against the cited record. | Owner: Screening analyst | Human decision: Accept the proposal or override it with a written reason. | If blocked: An unresolved hit stays open for human review; the proposal does not clear it.
+Decision request | The exact case version and action go to the configured approval issuer. | Owner: Authorized case operator and approval issuer | Human decision: A designated approver decides on the issuer page; a distinct second approver participates where required. | If blocked: Missing, expired or superseded approval cannot record a decision; request a new decision on the current case.
+Bank handoff | The signed outcome is delivered for the bank system to interpret and act on. | Owner: Bank system-of-record team | If blocked: Delivery failure or duplicate evidence needs reconciliation; do not infer account opening.
 ```
+
+## Follow one fictional application
 
 1. Open **Approvals > governed cases** at `/dashboard/approvals/cases`.
 2. Find the fictional case and inspect investigation state.
@@ -42,4 +47,4 @@ Try a unavailable provider capability, unresolved screening hit, missing grant, 
 
 Compare manual file-assembly time, missing-information rate, analyst overrides, re-investigation, review age and delivery failures on a reviewed sample. Track reopening causes. Do not publish a numerical accuracy claim from a few happy-path examples.
 
-Next: [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Governed cases](/docs/governed-cases), [Approvals](/docs/approvals), [Adoption checklist](/docs/adoption-checklist).

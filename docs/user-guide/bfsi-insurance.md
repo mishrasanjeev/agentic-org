@@ -14,12 +14,17 @@ For scans, use supported PDF/image formats and inspect extraction method, OCR co
 
 Create a custom operations/document-review agent with output fields for document type, cited facts, missing items, unreadable fields and reviewer questions. Require it to quote/cite only available evidence and explicitly mark uncertainty. Limit tools to approved reads during the first pilot.
 
+## Process map
+
+The map stops at reviewer preparation. Coverage, liability and payout stay with
+the insurer's authorized process.
+
 ```flow
-Approved claim documents | Authorized intake supplies the current file references.
-Extraction and quality review | Native parsing or OCR produces text with provenance and visible uncertainty.
-Checklist comparison | The assistant prepares completeness findings from the reviewed procedure.
-Human claims review | Authorized staff verify evidence and coverage under insurer policy.
-System handoff | The claims platform records its own decision and payout process.
+Approved claim file | Authorized intake supplies synthetic file references and the current checklist. | Owner: Insurer intake team | If blocked: Missing documents stay on the request list; no completeness claim is made.
+Extraction check | Native parsing or OCR supplies page-linked text for inspection. | Owner: Document-review operator | If blocked: Unreadable dates, amounts or identifiers are flagged for manual verification, never guessed.
+Checklist comparison | The assistant prepares cited present, missing and uncertain items. | Owner: Configured document-review agent | If blocked: Conflicting policy versions or absent sources go to the checklist owner.
+Claims review | Staff compare the prepared notes with source documents and insurer policy. | Owner: Authorized claims reviewer | Human decision: The reviewer requests more evidence or makes the insurer's coverage determination outside the assistant. | If blocked: Ambiguous or incomplete evidence remains in review; no rejection or payout is automated.
+System handoff | The claims platform records the insurer's own authorized outcome. | Owner: Insurer claims-system team | If blocked: A prepared note is not a customer notification, coverage decision or paid claim.
 ```
 
 ## Run a complete test
@@ -54,4 +59,4 @@ If a claims-platform write or customer notification is needed, build/approve tha
 
 Assign a checklist owner, claims reviewer, data/privacy owner and integration owner. Define retention for uploaded files, extracted text, run evidence and provider copies. Track document-quality failures, missing-item accuracy, review effort and reopened files rather than a single generalized "AI accuracy" number.
 
-Next: [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).
+Next: [Capability status and gaps](/docs/bfsi-capability-status), [Knowledge and OCR](/docs/knowledge-and-ocr), [Workflows](/docs/workflows), [Security and data](/docs/security-and-data).

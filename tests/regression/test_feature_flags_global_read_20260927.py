@@ -42,8 +42,10 @@ def test_revision_remains_in_the_single_head_migration_chain() -> None:
     assert module.revision == "v6z30_flag_global_read"
     assert len(module.revision) <= 32
     assert module.down_revision == "v6z29_admin_scope_compat"
-    heads = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini"))).get_heads()
-    assert heads == ["v6z39_run_spans"]
+    script = ScriptDirectory.from_config(Config(str(_ROOT / "alembic.ini")))
+    heads = script.get_heads()
+    assert len(heads) == 1
+    assert module.revision in {revision.revision for revision in script.walk_revisions()}
 
 
 def test_upgrade_adds_only_a_select_policy_for_global_rows() -> None:

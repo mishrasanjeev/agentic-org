@@ -365,6 +365,94 @@
   margin: 8px 0 0;
   color: #51665a;
 }
+.docs-prose .docs-process-map {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 900px;
+}
+.docs-process-map > li {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 14px;
+  position: relative;
+  padding: 0 0 20px;
+  border: 0;
+  min-width: 0;
+}
+.docs-process-map > li:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 34px;
+  bottom: 0;
+  left: 17px;
+  width: 2px;
+  background: #c6d6ce;
+}
+.docs-process-map .docs-flow-number {
+  display: grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  border: 2px solid #16815d;
+  border-radius: 50%;
+  background: #fff;
+  color: #125b43;
+  font-weight: 700;
+}
+.docs-process-content {
+  min-width: 0;
+  padding: 7px 0 0;
+  border-top: 2px solid #d8e5de;
+}
+.docs-process-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.docs-process-heading strong {
+  font-size: 15px;
+}
+.docs-process-owner {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #4d6257;
+}
+.docs-process-owner span {
+  font-weight: 700;
+}
+.docs-process-content > p {
+  font-size: 13px;
+  margin-top: 5px;
+}
+.docs-process-outcomes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.docs-process-decision,
+.docs-process-exception {
+  padding: 8px 12px;
+  border-left: 3px solid #297ba9;
+  background: #f3f8fa;
+}
+.docs-process-exception {
+  border-color: #b07936;
+  background: #fbf7f0;
+}
+.docs-process-outcomes strong {
+  color: #254e3c;
+  font-size: 12px;
+}
+.docs-process-outcomes p {
+  margin-top: 4px;
+}
 .docs-commerce-journey {
   border: 1px solid #cbded4;
   border-radius: 6px;
@@ -640,8 +728,14 @@
   display: block;
   margin-bottom: 4px;
 }
+.docs-home-note a {
+  color: #12684e;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .docs-directory {
   margin-top: 38px;
+  scroll-margin-top: 92px;
 }
 .docs-directory > h2 {
   font-size: 22px;
@@ -866,6 +960,9 @@
   .docs-prose h2 {
     scroll-margin-top: 140px;
     font-size: 21px;
+  }
+  .docs-directory {
+    scroll-margin-top: 140px;
   }
   .docs-meta {
     gap: 6px 14px;

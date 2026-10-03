@@ -1215,7 +1215,7 @@ export default function Landing() {
               { icon: BookOpen, title: "Your first agent", text: "A complete document-review exercise, from setup to tested answers.", href: "/docs/first-agent" },
               { icon: FileText, title: "Documents and OCR", text: "Upload, inspect extraction quality and verify source-grounded retrieval.", href: "/docs/knowledge-and-ocr" },
               { icon: Network, title: "Connect and orchestrate", text: "Models, business systems, workflows, voice and browser automation.", href: "/docs/workflows" },
-              { icon: Building2, title: "BFSI playbooks", text: "Onboarding, reconciliation, customer service, claims and merchant enablement.", href: "/docs/bfsi-business-onboarding" },
+              { icon: Building2, title: "BFSI process maps", text: "Onboarding, reconciliation, customer service, claims and merchant enablement.", href: "/docs#bfsi-playbooks" },
             ].map(({ icon: Icon, title, text, href }) => <Link key={href} to={href} className="border-t-2 border-emerald-700 pt-5 group">
               <Icon size={22} className="text-emerald-800 mb-4" aria-hidden="true" />
               <h3 className="font-semibold text-slate-900 flex items-center justify-between gap-2">{title}<ArrowRight size={16} className="shrink-0" aria-hidden="true" /></h3>

@@ -1004,7 +1004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approval_policies.sensitive.list",
-    "source_line": 152,
+    "source_line": 155,
     "tenant_required": true
   },
   {
@@ -1022,7 +1022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "approval_policies.write",
-    "source_line": 84,
+    "source_line": 87,
     "tenant_required": true
   },
   {
@@ -1040,7 +1040,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "approval_policies.write",
-    "source_line": 182,
+    "source_line": 185,
     "tenant_required": true
   },
   {
@@ -1058,7 +1058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "approvals.sensitive.list",
-    "source_line": 154,
+    "source_line": 155,
     "tenant_required": true
   },
   {
@@ -1076,7 +1076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "approval-decision",
     "scope": "approvals.decide",
-    "source_line": 364,
+    "source_line": 365,
     "tenant_required": true
   },
   {
@@ -4910,7 +4910,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1371,
+    "source_line": 1500,
     "tenant_required": false
   },
   {
@@ -4928,7 +4928,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1307,
+    "source_line": 1436,
     "tenant_required": true
   },
   {
@@ -4946,7 +4946,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1484,
+    "source_line": 1613,
     "tenant_required": true
   },
   {
