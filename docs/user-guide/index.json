@@ -1,5 +1,5 @@
 {
-  "reviewed": "2026-09-30",
+  "reviewed": "2026-10-02",
   "groups": [
     "Start Here",
     "Build And Run",
@@ -59,6 +59,18 @@
         "ui/src/pages/AICredentials.tsx",
         "ui/src/pages/AIConfig.tsx",
         "ui/src/pages/AgentCreate.tsx"
+      ]
+    },
+    {
+      "slug": "model-gateway",
+      "title": "Model Gateway, routing and limits",
+      "description": "Create scoped routing and access policies, dry-run decisions, manage limits, and interpret model-call records and cost estimates.",
+      "group": "Build And Run",
+      "audience": "Tenant administrators",
+      "sources": [
+        "ui/src/pages/ModelGateway.tsx",
+        "api/v1/model_gateway.py",
+        "core/governance/model_gateway.py"
       ]
     },
     {
@@ -186,6 +198,32 @@
         "ui/src/pages/Audit.tsx",
         "ui/src/pages/Observatory.tsx",
         "docs/PRODUCT_STATUS.md"
+      ]
+    },
+    {
+      "slug": "guardrails",
+      "title": "Guardrail rules, dry runs and enforcement",
+      "description": "Configure tenant-admin guardrail rules through the authenticated API, test detector behavior, and distinguish flag-only from enforced operation.",
+      "group": "Govern And Operate",
+      "audience": "Tenant administrators and security owners",
+      "sources": [
+        "api/v1/guardrails.py",
+        "core/governance/guardrails/engine.py",
+        "core/governance/guardrails/hooks.py",
+        "core/governance/guardrails/detectors.py"
+      ]
+    },
+    {
+      "slug": "run-observability",
+      "title": "Run timelines and workload observability",
+      "description": "Use the admin trace waterfall and tenant workload view, understand opt-in tracing and storage, and investigate run failures without overreading missing data.",
+      "group": "Govern And Operate",
+      "audience": "Administrators and operators",
+      "sources": [
+        "ui/src/pages/Observability.tsx",
+        "api/v1/observability.py",
+        "observability/workload.py",
+        "observability/timeline.py"
       ]
     },
     {

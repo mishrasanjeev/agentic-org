@@ -20,6 +20,12 @@ test("both production UI images preserve the repository layout and include autho
     assert.match(dockerfile, /WORKDIR \/app\/ui/);
     assert.match(dockerfile, /COPY docs\/ \.\.\/docs\//);
     assert.match(dockerfile, /COPY --from=builder \/app\/ui\/dist/);
+    assert.match(dockerfile, /COPY api\/v1\/model_gateway\.py \.\.\/api\/v1\/model_gateway\.py/);
+    assert.match(dockerfile, /COPY api\/v1\/guardrails\.py \.\.\/api\/v1\/guardrails\.py/);
+    assert.match(dockerfile, /COPY api\/v1\/observability\.py \.\.\/api\/v1\/observability\.py/);
+    assert.match(dockerfile, /COPY core\/governance\/model_gateway\.py \.\.\/core\/governance\/model_gateway\.py/);
+    assert.match(dockerfile, /COPY core\/governance\/guardrails\/ \.\.\/core\/governance\/guardrails\//);
+    assert.match(dockerfile, /COPY observability\/workload\.py observability\/timeline\.py \.\.\/observability\//);
   }
   const dockerignore = readFileSync(new URL("../../.dockerignore", import.meta.url), "utf8");
   assert.match(dockerignore, /^!docs\/a2a-commerce-demo\.md$/m);

@@ -16,7 +16,7 @@ Run under review | Assign operators, approvals, support and change control.
 | Your role | Start with | Then learn |
 | --- | --- | --- |
 | First-time user | [Your first useful agent](/docs/first-agent) | [Knowledge and OCR](/docs/knowledge-and-ocr), [Run and chat](/docs/run-and-chat) |
-| Administrator | [Workspace and roles](/docs/workspace-and-roles) | [Model setup](/docs/model-setup), [Connectors](/docs/connectors), [Security](/docs/security-and-data) |
+| Administrator | [Workspace and roles](/docs/workspace-and-roles) | [Model setup](/docs/model-setup), [Model Gateway](/docs/model-gateway), [Guardrails](/docs/guardrails), [Connectors](/docs/connectors) |
 | Process owner | [Create agents](/docs/create-agents) | [Workflows](/docs/workflows), [Approvals](/docs/approvals), [Evaluation](/docs/evaluate-and-rollout) |
 | Bank or fintech team | [Business onboarding](/docs/bfsi-business-onboarding) | [Reconciliation](/docs/bfsi-reconciliation), [Customer service](/docs/bfsi-customer-service) |
 | Merchant team | [Commerce](/docs/commerce) | [BFSI merchant services](/docs/bfsi-merchant-services) |
@@ -57,6 +57,8 @@ bypass permissions.
 | Configure voice | [Voice Setup](https://app.agenticorg.ai/dashboard/voice-setup) | [Voice](/docs/voice) |
 | Configure browser automation | [RPA](https://app.agenticorg.ai/dashboard/rpa) | [RPA](/docs/rpa) |
 | Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
+| Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
+| Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
