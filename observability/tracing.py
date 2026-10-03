@@ -41,6 +41,7 @@ import hmac
 import math
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any
 
@@ -61,6 +62,11 @@ TRACE_CONTEXT_HEADERS: tuple[str, ...] = ("traceparent", "tracestate")
 LOG_KEY = "trace_id"
 TENANT_REF_KEY = "tenant.ref"
 WITHHELD_KEY = "export.withheld"
+RUN_KEY = "run.id"
+# The agent run in progress (its root span id): every span opened inside it
+# carries it, so the run's spans can be told apart from a sibling run sharing
+# the same trace (observability/timeline.py).
+_run_scope: ContextVar[str | None] = ContextVar("agenticorg_run_scope", default=None)
 AUDIT_TRACE_ID_WIDTH = 64
 _TRACES_PATH = "/v1/traces"
 
@@ -164,7 +170,18 @@ def init_tracing_from_settings() -> bool:
         environment=settings.env,
         set_global=True,
     )
-    logger.info("tracing_started", protocol=protocol, exporter=exporter is not None, sample_ratio=ratio)
+    if settings.tracing_timeline_enabled:
+        # The console's run timelines (observability/timeline.py): off by default.
+        from observability.timeline import install as install_timeline
+
+        install_timeline()
+    logger.info(
+        "tracing_started",
+        protocol=protocol,
+        exporter=exporter is not None,
+        sample_ratio=ratio,
+        timeline=bool(settings.tracing_timeline_enabled),
+    )
     return True
 
 
@@ -243,6 +260,14 @@ def traces_endpoint(endpoint: str) -> str:
     """The http/protobuf traces URL for a collector base URL (``/v1/traces`` appended once)."""
     base = endpoint.strip().rstrip("/")
     return base if base.endswith(_TRACES_PATH) else base + _TRACES_PATH
+
+
+def add_span_processor(processor: Any) -> bool:
+    """Attach a span processor to the installed provider; False while tracing is off."""
+    if _provider is None:
+        return False
+    _provider.add_span_processor(processor)
+    return True
 
 
 def flush() -> None:
@@ -326,6 +351,9 @@ def span(
         return
     context = propagate.extract(dict(parent)) if parent else None
     recorded = {**_attributes(attributes), **_tenant_attributes(tenant)}
+    run_scope = _run_scope.get()
+    if run_scope:
+        recorded[RUN_KEY] = run_scope
     with tracer.start_as_current_span(name, context=context, kind=kind, attributes=recorded) as current:
         tokens = _bind_log_context(current)
         try:
@@ -340,6 +368,7 @@ class SpanHandle:
 
     manager: Any
     span: trace.Span
+    scope_token: Token[str | None] | None = None
 
     def set(self, **attributes: Any) -> None:
         if self.span.is_recording():
@@ -353,6 +382,18 @@ class SpanHandle:
         manager, self.manager = self.manager, None
         if manager is not None:
             manager.__exit__(None, None, None)
+        token, self.scope_token = self.scope_token, None
+        if token is not None:
+            try:
+                _run_scope.reset(token)
+            except ValueError:
+                _run_scope.set(None)
+
+    @property
+    def run_id(self) -> str:
+        """The span's id as the run scope records it (empty while tracing is off)."""
+        context = self.span.get_span_context()
+        return format(context.span_id, "016x") if context.is_valid else ""
 
 
 def start(
@@ -361,11 +402,21 @@ def start(
     kind: SpanKind = SpanKind.INTERNAL,
     parent: Mapping[str, str] | None = None,
     tenant: Any = None,
+    root: bool = False,
     **attributes: Any,
 ) -> SpanHandle:
-    """Open ``span`` without a ``with`` block; the caller ends it through the handle."""
+    """Open ``span`` without a ``with`` block; the caller ends it through the handle.
+
+    ``root`` makes the span an agent run's root: it and every span opened
+    while it is current carry ``run.id``, its own span id, until ``end``.
+    """
     manager = span(name, kind=kind, parent=parent, tenant=tenant, **attributes)
-    return SpanHandle(manager, manager.__enter__())
+    handle = SpanHandle(manager, manager.__enter__())
+    if root and handle.span.is_recording():
+        run_id = handle.run_id
+        handle.span.set_attribute(RUN_KEY, run_id)
+        handle.scope_token = _run_scope.set(run_id)
+    return handle
 
 
 def add_event(name: str, **attributes: Any) -> None:

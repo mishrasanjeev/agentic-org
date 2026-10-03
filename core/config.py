@@ -182,6 +182,11 @@ class Settings(BaseSettings):
     tracing_enabled: bool = False
     tracing_protocol: str = "http/protobuf"
     tracing_sample_ratio: float = 1.0
+    # Run timelines for the console's waterfall: with tracing on, the spans of
+    # each agent run are stored in run_spans when the run ends and pruned
+    # after the retention period. Off by default.
+    tracing_timeline_enabled: bool = False
+    tracing_timeline_retention_days: int = 30
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600

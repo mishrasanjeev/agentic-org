@@ -10,11 +10,13 @@ every mutation and leave the working tree exactly as it found it.
 from __future__ import annotations
 
 import importlib.util
+import os
 import socket
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
-
-import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -33,18 +35,25 @@ def _free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-def test_the_multiprocess_probe_still_proves_aggregation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_the_multiprocess_probe_still_proves_aggregation() -> None:
     """On a platform that forks this runs the real thing; elsewhere it reports that it cannot."""
-    import prometheus_client.values as prometheus_values
-
-    # Belt and braces with the probe's own restore: a leaked multiprocess value class breaks every
-    # later test that creates an instrument, a long way from here.
-    monkeypatch.setattr(prometheus_values, "ValueClass", prometheus_values.ValueClass)
-    monkeypatch.setenv("METRICS_PORT", str(_free_port()))
-    monkeypatch.delenv("PORT", raising=False)
-    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", str(tmp_path))
-
-    assert _load("probe_metrics_multiprocess").main() == 0
+    env = os.environ.copy()
+    env["METRICS_PORT"] = str(_free_port())
+    env.pop("PORT", None)
+    with tempfile.TemporaryDirectory(
+        prefix="agenticorg-prometheus-test-", dir=tempfile.gettempdir()
+    ) as directory:
+        env["PROMETHEUS_MULTIPROC_DIR"] = directory
+        result = subprocess.run(  # noqa: S603 - fixed repository-owned probe script
+            [sys.executable, str(ROOT / "scripts" / "probe_metrics_multiprocess.py")],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
 
 def test_the_multiprocess_probe_reads_a_metrics_body() -> None:

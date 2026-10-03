@@ -34,6 +34,7 @@
     "scopes": "Scope Dashboard",
     "enforceAudit": "Enforce Audit",
     "audit": "Audit Log",
+    "observability": "Observability",
     "knowledge": "Knowledge Base",
     "voiceAgents": "Voice Agents",
     "rpa": "RPA Scripts",

@@ -52,6 +52,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/scopes", labelKey: "nav.scopes", label: "Scope Dashboard", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/enforce-audit", labelKey: "nav.enforceAudit", label: "Enforce Audit", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
   { path: "/dashboard/audit", labelKey: "nav.audit", label: "Audit Log", roles: ["admin", "cfo", "chro", "cmo", "coo", "auditor"] },
+  { path: "/dashboard/observability", labelKey: "nav.observability", label: "Observability", roles: ["admin"] },
   { path: "/dashboard/knowledge", labelKey: "nav.knowledge", label: "Knowledge Base", roles: ["admin", "cfo", "chro", "cmo", "coo"] },
   { path: "/dashboard/voice-setup", labelKey: "nav.voiceAgents", label: "Voice Agents", roles: ["admin"] },
   { path: "/dashboard/rpa", labelKey: "nav.rpa", label: "RPA Scripts", roles: ["admin"] },

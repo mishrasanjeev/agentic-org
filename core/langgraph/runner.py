@@ -51,7 +51,7 @@ from core.langgraph.thread_ids import (
 )
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
-from observability import tracing
+from observability import timeline, tracing
 from observability.trace_redaction import install_trace_redaction
 
 logger = structlog.get_logger()
@@ -473,7 +473,10 @@ async def run_agent(
     # node admits each model call under the per-model limits against it.
     route_token = bind_route(route, use_case="agent_run", agent_id=agent_id)
     run_span = tracing.start(
-        "agenticorg.agent.run", tenant=tenant_id, **_run_span_attributes(route, agent_id, agent_type, domain)
+        "agenticorg.agent.run",
+        tenant=tenant_id,
+        root=True,
+        **_run_span_attributes(route, agent_id, agent_type, domain),
     )
     t0 = time.perf_counter()
     try:
@@ -739,8 +742,9 @@ async def run_agent(
             },
         }
     finally:
-        run_span.end()
         reset_route(route_token)
+        run_span.end()
+        await timeline.persist(run_span.span, tenant_id)
 
 
 async def resume_agent(
@@ -878,7 +882,9 @@ async def resume_agent(
     )
 
     route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
-    run_span = tracing.start("agenticorg.agent.resume", tenant=tenant_id, **_run_span_attributes(route, agent_id))
+    run_span = tracing.start(
+        "agenticorg.agent.resume", tenant=tenant_id, root=True, **_run_span_attributes(route, agent_id)
+    )
     t0 = time.perf_counter()
     try:
         if require_paused:
@@ -930,8 +936,9 @@ async def resume_agent(
         reason = e.reason if isinstance(e, CheckpointIntegrityError) else "resume_failed"
         return _traced_result(run_span, {"status": "failed", "error": str(e), "reason": reason})
     finally:
-        run_span.end()
         reset_route(route_token)
+        run_span.end()
+        await timeline.persist(run_span.span, tenant_id)
 
 
 def _run_span_attributes(route: Any, agent_id: str, agent_type: str = "", domain: str = "") -> dict[str, Any]:

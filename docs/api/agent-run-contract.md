@@ -12,6 +12,7 @@ Every agent-execution endpoint returns the same JSON shape:
   "agent_id": "string | null (UUID, set when invoked by id)",
   "agent_type": "string | null (agent type, set when invoked by type)",
   "correlation_id": "string | null",
+  "trace_id": "string | null",
   "status": "completed | failed | hitl_triggered | budget_exceeded",
   "output": { "any": "json" },
   "confidence": 0.0,
@@ -37,6 +38,7 @@ Every agent-execution endpoint returns the same JSON shape:
 | `agent_id` | one-of | Populated when the caller invoked an agent by UUID (e.g. `/agents/{uuid}/run`). |
 | `agent_type` | one-of | Populated when the caller invoked an agent by type (e.g. `/a2a/tasks` with `agent_type`). Exactly one of `agent_id`/`agent_type` is non-null. |
 | `correlation_id` | yes | Stable across the entire run (LLM calls, tool calls, HITL gates) for tracing. |
+| `trace_id` | no | The OpenTelemetry trace id of the request when tracing is on (`docs/operations/tracing.md`); `null` otherwise. The console's run timeline is keyed by it. |
 | `status` | yes | One of the four enum values above. `hitl_triggered` means a human decision is queued; `budget_exceeded` means the run was halted by a budget/scope gate. |
 | `output` | yes | Free-form JSON object — agent-specific. Always present; `{}` when no output. |
 | `confidence` | yes | `0.0`–`1.0`. Agents that do not compute confidence return `0.0`. |

@@ -73,6 +73,7 @@ from core.schemas.api import (
     FleetLimits,
     PaginatedResponse,
 )
+from observability import tracing
 
 MAX_AGENT_CSV_IMPORT_BYTES = 2 * 1024 * 1024
 
@@ -846,9 +847,7 @@ def _connector_not_available(connector_names: list[str]) -> HTTPException:
         403,
         detail={
             "error": "connector_not_available_to_agent",
-            "message": (
-                "A personal connector can only be linked to a personal agent owned by the same user."
-            ),
+            "message": ("A personal connector can only be linked to a personal agent owned by the same user."),
             "connectors": sorted(set(connector_names)),
         },
     )
@@ -985,9 +984,7 @@ def _derive_default_tools(
         else set()
     )
 
-    intersected = [
-        t for t in static_defaults if (t in qualified_names if ":" in t else t in connector_tool_names)
-    ]
+    intersected = [t for t in static_defaults if (t in qualified_names if ":" in t else t in connector_tool_names)]
     if intersected:
         return intersected
 
@@ -1097,9 +1094,7 @@ async def _resolve_agent_connector_ids_for_type(
 
     try:
         company_uuid = (
-            company_id
-            if isinstance(company_id, _uuid.UUID)
-            else _uuid.UUID(str(company_id)) if company_id else None
+            company_id if isinstance(company_id, _uuid.UUID) else _uuid.UUID(str(company_id)) if company_id else None
         )
     except (TypeError, ValueError):
         return []
@@ -1148,11 +1143,7 @@ async def _select_agent_for_type(
                     .where(
                         Agent.tenant_id == tid,
                         Agent.agent_type == agent_type,
-                        (
-                            Agent.company_id == company_uuid
-                            if company_uuid is not None
-                            else Agent.company_id.is_(None)
-                        ),
+                        (Agent.company_id == company_uuid if company_uuid is not None else Agent.company_id.is_(None)),
                         # Bug sheet 2026-09-14 rows 19/22: automatic selection
                         # never lands on anyone's personal agent.
                         shared_agents_only_clause(Agent),
@@ -1265,9 +1256,7 @@ async def _resolve_connector_configs(
 
     try:
         company_uuid = (
-            company_id
-            if isinstance(company_id, _uuid.UUID)
-            else _uuid.UUID(str(company_id)) if company_id else None
+            company_id if isinstance(company_id, _uuid.UUID) else _uuid.UUID(str(company_id)) if company_id else None
         )
     except (TypeError, ValueError):
         logger.warning("load_connector_configs_invalid_company", company_id=str(company_id))
@@ -1870,9 +1859,7 @@ async def create_agent(
             llm_provider=body.llm.provider,
             llm_fallback=body.llm.fallback_model,
             llm_config=(
-                {**body.llm.model_dump(), "routing": body.llm_routing}
-                if body.llm_routing
-                else body.llm.model_dump()
+                {**body.llm.model_dump(), "routing": body.llm_routing} if body.llm_routing else body.llm.model_dump()
             ),
             confidence_floor=Decimal(str(body.confidence_floor)),
             hitl_condition=body.hitl_policy.condition,
@@ -2532,9 +2519,7 @@ async def generate_agent(
         if not effective_caller.is_admin and not target_domain:
             raise HTTPException(403, "The generated agent has no domain; only a tenant admin can deploy it.")
         visibility, owner_user_id = resolve_new_agent_ownership(effective_caller, None, target_domain)
-        _enforce_hitl_condition_on_save(
-            top.get("hitl_condition", "confidence < 0.88"), surface="agents_generate"
-        )
+        _enforce_hitl_condition_on_save(top.get("hitl_condition", "confidence < 0.88"), surface="agents_generate")
 
         # Build tools list. A generated agent is created with no connector
         # linked, so the #46 rule applies exactly as in
@@ -2904,14 +2889,11 @@ async def update_agent(
             # same-tenant administrator from the user row at execution time.
             route_admin = await get_active_human_admin(http_request)
             if agent.visibility != AGENT_VISIBILITY_TENANT or agent.owner_user_id is not None:
-                raise HTTPException(
-                    403, "Route scopes can be granted only to a shared agent, not a personal one"
-                )
+                raise HTTPException(403, "Route scopes can be granted only to a shared agent, not a personal one")
             if not ((agent.config or {}).get("grantex") or {}).get("grantex_agent_id"):
                 raise HTTPException(
                     409,
-                    "The agent is not registered on Grantex, so no grant can carry route scopes; "
-                    "nothing was changed",
+                    "The agent is not registered on Grantex, so no grant can carry route scopes; nothing was changed",
                 )
             try:
                 pending_route_scopes = validate_route_scopes(update_data.pop("route_scopes"))
@@ -2959,9 +2941,7 @@ async def update_agent(
         # appended to the effective prompt, so they are locked too (bug
         # sheet #45 residual, 2026-09-14).
         prompt_changing = (
-            "system_prompt_text" in update_data
-            or "system_prompt" in update_data
-            or "prompt_amendments" in update_data
+            "system_prompt_text" in update_data or "system_prompt" in update_data or "prompt_amendments" in update_data
         )
         if prompt_changing and agent.status == "active":
             raise HTTPException(
@@ -3740,9 +3720,7 @@ async def run_agent(
                 llm_provider=_pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
                 confidence_floor=float(review_learning["effective_confidence_floor"]),
                 hitl_condition=(
-                    ""
-                    if review_learning["confidence_condition_suppressed"]
-                    else agent_config.get("hitl_condition", "")
+                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
                 ),
                 grant_token=grant_token,
                 run_grant=run_grant,
@@ -3878,9 +3856,7 @@ async def run_agent(
                 requested_by_user_id=effective_caller.user_id,
                 title=f"HITL: {agent_config['agent_type']} — {hitl_trigger}",
                 trigger_type=(
-                    "confidence_below_floor"
-                    if str(hitl_trigger).startswith("confidence ")
-                    else "policy_condition"
+                    "confidence_below_floor" if str(hitl_trigger).startswith("confidence ") else "policy_condition"
                 ),
                 priority="high" if task_confidence < 0.7 else "normal",
                 assignee_role=agent_config.get("domain", "admin"),
@@ -3990,6 +3966,7 @@ async def run_agent(
         "agent_id": str(agent_id),
         "agent_type": None,  # this endpoint invokes by id; type path is /a2a/tasks
         "correlation_id": correlation_id,
+        "trace_id": tracing.current_trace_id() or None,
         "status": task_status,
         "output": task_output,
         "confidence": task_confidence,
@@ -4647,9 +4624,7 @@ async def clone_agent(
             # lost the company scope and connector bindings the original
             # depended on. Preserve both by default (overrides can still
             # move the clone to a different company or clear connectors).
-            company_id=(
-                clone_company_id
-            ),
+            company_id=(clone_company_id),
             connector_ids=list(body.overrides.get("connector_ids", parent.connector_ids or [])),
             reporting_to=body.overrides.get("reporting_to", parent.reporting_to),
             org_level=body.overrides.get("org_level", parent.org_level),

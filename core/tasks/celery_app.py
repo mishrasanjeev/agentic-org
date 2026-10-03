@@ -50,6 +50,7 @@ app = Celery(
         "core.tasks.invoice_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
+        "core.tasks.timeline_tasks",
         "core.tasks.token_refresh",
         "core.tasks.workflow_tasks",
     ],
@@ -120,6 +121,12 @@ app.conf.beat_schedule = {
         # Routing records past AGENTICORG_MODEL_GATEWAY_RECORDS_RETENTION_DAYS (core/tasks/gateway_tasks.py).
         "task": "core.tasks.gateway_tasks.prune_model_gateway_records",
         "schedule": crontab(hour=3, minute=0),  # daily at 3:00 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "prune-run-spans": {
+        # Run spans past AGENTICORG_TRACING_TIMELINE_RETENTION_DAYS (core/tasks/timeline_tasks.py).
+        "task": "core.tasks.timeline_tasks.prune_run_spans",
+        "schedule": crontab(hour=3, minute=20),  # daily at 3:20 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-budget-evaluator": {

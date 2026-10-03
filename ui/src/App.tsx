@@ -60,6 +60,7 @@ const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
 const CMOVendorSandboxConnectors = lazyRetry(() => import("./pages/CMOVendorSandboxConnectors"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
+const Observability = lazyRetry(() => import("./pages/Observability"));
 const Observatory = lazyRetry(() => import("./pages/Observatory"));
 const Settings = lazyRetry(() => import("./pages/Settings"));
 const AccessDenied = lazyRetry(() => import("./pages/AccessDenied"));
@@ -594,6 +595,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin", "cfo", "chro", "cmo", "coo", "auditor"]}>
             <Layout>
               <Audit />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/observability"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <Observability />
             </Layout>
           </ProtectedRoute>
         }
