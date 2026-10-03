@@ -20,12 +20,12 @@ open in this codebase by static + runtime verification:
 from __future__ import annotations
 
 import inspect
-import re
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -251,15 +251,13 @@ class TestKnowledgeIndexStatus:
 
 
 @pytest.mark.parametrize("compose_file", ["docker-compose.yml", "docker-compose.dev.yml"])
-def test_compose_minio_image_is_pullable(compose_file: str) -> None:
-    """Neither registry MinIO used to publish on serves the server image any more.
-
-    quay.io removed ``quay.io/minio/minio`` (every tag and digest), and Docker
-    Hub's ``minio/minio`` now needs credentials, so ``make dev`` failed to pull.
-    """
-    compose = (REPO / compose_file).read_text(encoding="utf-8")
-    assert re.search(r"^\s*image: cgr\.dev/chainguard/minio@sha256:[0-9a-f]{64}\s*$", compose, re.M)
-    assert re.search(r"^\s*image: (quay\.io/)?minio/minio", compose, re.M) is None
+def test_compose_minio_image_is_pinned_to_the_public_test_registry(compose_file: str) -> None:
+    """The local smoke job proves pullability; this test pins the reviewed image."""
+    compose = yaml.safe_load((REPO / compose_file).read_text(encoding="utf-8"))
+    assert compose["services"]["minio"]["image"] == (
+        "ghcr.io/coollabsio/minio@sha256:"
+        "69b55a1c1c5dc285ce04db96689f5b2102317fc77a50680a1874ca6efd1c87f9"
+    )
 
 
 def test_claim_values_are_uuid_strings() -> None:

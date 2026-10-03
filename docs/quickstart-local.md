@@ -36,7 +36,8 @@ All ports bind to `127.0.0.1` only.
 
 - **postgres** (pgvector 16) and **redis** — data kept in named volumes
 - **minio** — object storage for uploaded documents (internal only). The dev
-  stack pins a publicly pullable community build by digest because the former
+  stack and the default development compose file pin a publicly pullable
+  community build by digest because the former
   registry image cannot be pulled anonymously on a clean CI runner. This is a
   local test dependency, not a production object-store recommendation.
 - **migrate** — applies Alembic migrations once, then exits; the API and

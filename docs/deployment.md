@@ -52,7 +52,7 @@ docker compose up -d
 # - API:        http://localhost:8000
 # - PostgreSQL:  localhost:5432
 # - Redis:       localhost:6379
-# - MinIO (S3-compat): http://localhost:9000 (console: :9001)
+# - MinIO (S3-compat, test-only community image): http://localhost:9000 (console: :9001)
 ```
 
 ## Cloud Run (Current Production)
