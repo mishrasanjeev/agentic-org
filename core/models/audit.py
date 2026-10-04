@@ -81,3 +81,17 @@ class AuditLog(BaseModel):
     chain_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sealed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class AuditChainAnchor(BaseModel):
+    """The head the last sealing left for a tenant: what verification holds the chain against.
+
+    Row-level security: tenant-scoped (``v6z41_tamper_evident_audit``).
+    """
+
+    __tablename__ = "audit_chain_anchors"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    head_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    head_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    sealed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

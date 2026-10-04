@@ -278,20 +278,52 @@ def content_digest(value: Any) -> str | None:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+# What a provider is sent of a message beside its content: a tool call's name,
+# arguments and id, and the call a tool result answers.
+_ENVELOPE_FIELDS: tuple[str, ...] = ("name", "tool_calls", "tool_call_id")
+
+
+def _message_field(message: Any, name: str) -> Any:
+    return message.get(name) if isinstance(message, dict) else getattr(message, name, None)
+
+
+def _message_type(message: Any) -> str:
+    kind = _message_field(message, "type") or _message_field(message, "role")
+    return str(kind or type(message).__name__)
+
+
+def _envelope(message: Any) -> dict[str, Any]:
+    """The provider-bound form of a message (a LangChain message or a role/content dict)."""
+    content = _message_field(message, "content")
+    item: dict[str, Any] = {"type": _message_type(message), "content": "" if content is None else content}
+    for name in _ENVELOPE_FIELDS:
+        value = _message_field(message, name)
+        if value:
+            item[name] = value
+    return item
+
+
 def messages_digest(messages: Any) -> str | None:
-    """SHA-256 over what was sent to the model: each message's type and content, in order."""
-    items = [
-        {"type": str(getattr(m, "type", None) or type(m).__name__), "content": getattr(m, "content", "")}
-        for m in (messages or [])
-    ]
+    """SHA-256 over what was sent to the model: each message's whole envelope, in order."""
+    items = [_envelope(m) for m in (messages or [])]
     return content_digest(items) if items else None
+
+
+def message_digest(message: Any) -> str | None:
+    """SHA-256 over what the model answered: its content, and its tool calls when it made any."""
+    if message is None:
+        return None
+    item = _envelope(message)
+    if set(item) == {"type", "content"}:
+        return content_digest(item["content"])
+    return content_digest(item)
 
 
 def prompt_digest_of(messages: Any) -> str | None:
     """SHA-256 over the system prompt among ``messages`` (its version, in effect); None without one."""
     for m in messages or []:
-        if str(getattr(m, "type", "") or "") == "system":
-            return content_digest(getattr(m, "content", None))
+        if _message_type(m) == "system":
+            return content_digest(_message_field(m, "content"))
     return None
 
 

@@ -36,7 +36,7 @@ from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import current_route
 from core.governance.model_gateway import release as gateway_release
 from core.governance.model_gateway_records import (
-    content_digest,
+    message_digest,
     message_tokens,
     messages_digest,
     prompt_digest_of,
@@ -571,7 +571,7 @@ def build_agent_graph(
             agent_id=called_agent,
             prompt_digest=prompt_digest,
             request_digest=request_digest,
-            response_digest=content_digest(getattr(response, "content", None)),
+            response_digest=message_digest(response),
         )
         # Guardrails: the answer passes the output stage before it travels on.
         response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent)

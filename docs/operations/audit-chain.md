@@ -27,8 +27,19 @@ The newest link is the chain head. After every sealing the task logs `audit_chai
 the head's sequence number and hash; a log retention outside the platform therefore holds an
 anchor that a later rewrite of the table cannot change.
 
-Sealing runs under the tenant's own row-level security context and locks the head row and the
-batch it links, so two sealers never fork a chain. A batch is at most
+The head is also stored: every sealing writes it to `audit_chain_anchors` (one row per tenant,
+under row-level security) in the same transaction as the links. Verification holds the chain
+against that stored head and against a head the caller supplies from the sealing log, so a
+chain cut at its end is found as well as one cut in the middle.
+
+`audit_log` stays append-only. Its trigger refuses every UPDATE and DELETE except one: the
+sealing transition, an UPDATE that fills the four chain columns of a row whose chain columns
+are all empty and changes no other column. A sealed row can never be updated again, and no
+other field of an unsealed row can be changed.
+
+Sealing runs under the tenant's own row-level security context and takes a transaction-level
+advisory lock for the tenant before it reads the head, so two sealers of one tenant run one
+after the other and never fork a chain or reuse a sequence number. A batch is at most
 `AGENTICORG_AUDIT_CHAIN_SEAL_BATCH` (5000) rows and a run links at most twenty batches per tenant,
 so a backlog drains over a few runs without one run holding locks for long. Deleted tenants are
 included: their rows still exist and still seal.
@@ -55,8 +66,12 @@ The endpoints (an audit reader's scope):
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/v1/audit/chain` | whether sealing is on, the head (sequence, hash, sealed at) and how many rows wait for sealing |
-| `GET /api/v1/audit/chain/verify?from_seq=&limit=` | a verification from `from_seq` over at most `limit` rows (default 10,000): the status (`empty`, `verified`, `broken`), the range checked, the verified and unsigned counts and the first break |
+| `GET /api/v1/audit/chain` | whether sealing is on, the head (sequence, hash, sealed at), the stored anchor and how many rows wait for sealing |
+| `GET /api/v1/audit/chain/verify?from_seq=&limit=&expected_seq=&expected_hash=` | a verification from `from_seq` over at most `limit` rows (default 10,000): the status (`empty`, `verified`, `broken`), the range checked, the verified and unsigned counts, the anchors it was held against and the first break |
+
+`expected_seq` and `expected_hash` (given together) are a head taken from an `audit_chain_sealed`
+log line kept outside the platform. The stored anchor guards against a cut by someone who can
+remove audit rows; the supplied one also guards against someone who can rewrite the anchor table.
 
 The compliance evidence package's `audit_logs` section carries `chain`: the head, the backlog and
 a verification of the newest thousand links, with any unreadable part reported rather than
@@ -68,7 +83,9 @@ A break names the first row at which the chain stops holding. Everything before 
 nothing after it is trusted until the cause is known. `link_hash` at one sequence number means
 that row's fields differ from what was sealed. `sequence_gap` means the row with the missing
 number is gone. `previous_link` means the rows around that number are not in the order they
-were sealed in. The anchor in the log retention says which head the platform had at each
+were sealed in. `truncated` means the chain ends below an anchor: its newest rows, from the
+reported sequence number on, are gone. `anchor_mismatch` means the row at the anchor's sequence
+number carries another link hash than the one sealed. The anchor in the log retention says which head the platform had at each
 sealing, so the last trustworthy head is recoverable even when the table is not.
 
 ## Model request and response digests
@@ -79,8 +96,11 @@ on) now carry three digests, each a SHA-256 over canonical JSON:
 | Field | Over |
 | --- | --- |
 | `prompt_digest` | the system prompt the model was given (the prompt's version, in effect) |
-| `request_digest` | every message sent to the model, in order, after pseudonymisation and the guardrail input stage: what the model saw |
-| `response_digest` | the model's answer |
+| `request_digest` | every message sent to the model, in order, after pseudonymisation and the guardrail input stage: what the model saw, with each message's type, content, name, tool calls (name, arguments, id) and the call a tool result answers |
+| `response_digest` | the model's answer: its content, and its tool calls when it made any |
+
+Both model paths record them: the agent reasoning node and the direct router
+(`core/llm/router.py`, used by agent generation, workflow generation and the legacy agents).
 
 The digests are part of the record's signature, so a record cannot be re-pointed at other
 content, and the content itself is never stored: a party that holds the prompt, the messages
@@ -99,7 +119,8 @@ digest fields are signed only when present).
 
 `tests/unit/governance/test_audit_chain.py` covers the link hash, sealing from the genesis
 value and from an existing head, verification of an intact chain, the detection of an edited
-row, a removed row and reordered rows with the right reason and sequence number, verification
+row, a removed row and reordered rows with the right reason and sequence number, a chain cut at
+its end against the stored and the supplied anchor, the sealing lock, the trigger text, verification
 from a later sequence number and under a limit, the sealing task off by default and isolating a
 failing tenant, the verification task's report and the evidence section with unreadable parts
 reported. `tests/unit/governance/test_audit_chain_api.py` covers the two endpoints and their

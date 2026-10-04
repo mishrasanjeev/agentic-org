@@ -347,8 +347,22 @@ async def audit_chain_status(tenant_id: str = Depends(get_current_tenant)) -> di
 async def audit_chain_verify(
     from_seq: Annotated[int, Query(ge=1)] = 1,
     limit: Annotated[int, Query(ge=1, le=100_000)] = 10_000,
+    expected_seq: Annotated[int | None, Query(ge=1)] = None,
+    expected_hash: Annotated[str | None, Query(pattern="^[0-9a-f]{64}$")] = None,
     tenant_id: str = Depends(get_current_tenant),
 ) -> dict:
-    """Recompute the chain from ``from_seq`` over at most ``limit`` rows and report the first break."""
-    result = await audit_chain.verify(_uuid.UUID(tenant_id), from_seq=from_seq, limit=limit)
+    """Recompute the chain from ``from_seq`` over at most ``limit`` rows and report the first break.
+
+    ``expected_seq`` and ``expected_hash`` are a head from the sealing log kept
+    outside the platform: a chain cut below it, or carrying another link at
+    that sequence, is reported as broken.
+    """
+    if (expected_seq is None) != (expected_hash is None):
+        raise HTTPException(422, "expected_seq and expected_hash are given together")
+    expected = (
+        audit_chain.Head(seq=expected_seq, hash=expected_hash)
+        if expected_seq is not None and expected_hash is not None
+        else None
+    )
+    result = await audit_chain.verify(_uuid.UUID(tenant_id), from_seq=from_seq, limit=limit, expected=expected)
     return result.to_dict()

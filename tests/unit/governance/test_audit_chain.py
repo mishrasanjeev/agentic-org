@@ -54,6 +54,17 @@ class _Store:
 
     def __init__(self, rows: list[SimpleNamespace]) -> None:
         self.rows = rows
+        self.anchor: audit_chain.Head | None = None
+        self.locks: list[uuid.UUID] = []
+
+    async def lock_chain(self, _session, tid):
+        self.locks.append(tid)
+
+    async def read_anchor(self, _session, _tid):
+        return self.anchor
+
+    async def write_anchor(self, _session, _tid, head):
+        self.anchor = head
 
     def sealed(self) -> list[SimpleNamespace]:
         return sorted((r for r in self.rows if r.chain_seq is not None), key=lambda r: r.chain_seq)
@@ -81,6 +92,9 @@ def store(monkeypatch):
     monkeypatch.setattr(audit_chain, "_unsealed_rows", table.unsealed_rows)
     monkeypatch.setattr(audit_chain, "_unsealed_count", table.unsealed_count)
     monkeypatch.setattr(audit_chain, "_sealed_rows", table.sealed_rows)
+    monkeypatch.setattr(audit_chain, "_lock_chain", table.lock_chain)
+    monkeypatch.setattr(audit_chain, "_anchor", table.read_anchor)
+    monkeypatch.setattr(audit_chain, "_write_anchor", table.write_anchor)
 
     @contextlib.asynccontextmanager
     async def _ctx(_tid):
@@ -133,6 +147,64 @@ class TestSeal:
     def test_nothing_to_seal_keeps_the_head(self, store):
         outcome = asyncio.run(audit_chain.seal(TENANT))
         assert outcome.sealed == 0 and outcome.head == audit_chain.Head()
+        assert store.anchor is None
+
+    def test_every_sealing_takes_the_tenant_lock_first_and_stores_the_head(self, store, monkeypatch):
+        store.rows.extend(_row(i) for i in range(1, 4))
+        order: list[str] = []
+        head_row, lock_chain = store.head_row, store.lock_chain
+
+        async def _lock(session, tid):
+            order.append("lock")
+            await lock_chain(session, tid)
+
+        async def _head(session, tid, *, lock=False):
+            order.append("head")
+            return await head_row(session, tid, lock=lock)
+
+        monkeypatch.setattr(audit_chain, "_lock_chain", _lock)
+        monkeypatch.setattr(audit_chain, "_head_row", _head)
+        outcome = asyncio.run(audit_chain.seal(TENANT, batch=2))
+        assert order == ["lock", "head"] and store.locks == [TENANT]
+        assert store.anchor == outcome.head and store.anchor.seq == 2
+        asyncio.run(audit_chain.seal(TENANT, batch=2))
+        assert store.anchor.seq == 3 and store.anchor.hash == store.sealed()[-1].chain_hash
+
+    def test_the_lock_is_a_transaction_level_advisory_lock_per_tenant(self):
+        statements: list[tuple[str, dict]] = []
+
+        class _Session:
+            async def execute(self, statement, params):
+                statements.append((str(statement), params))
+
+        asyncio.run(audit_chain._lock_chain(_Session(), TENANT))
+        assert len(statements) == 1 and "pg_advisory_xact_lock" in statements[0][0]
+        assert statements[0][1] == {"key": f"audit_chain:{TENANT}"}
+
+
+class TestAppendOnlyTrigger:
+    def test_the_trigger_admits_only_the_sealing_transition(self):
+        sql = audit_chain.SEAL_TRIGGER_SQL
+        assert "CREATE OR REPLACE FUNCTION audit_log_reject_mutation()" in sql
+        assert "TG_OP = 'UPDATE'" in sql and "RAISE EXCEPTION" in sql
+        for column in ("chain_seq", "chain_prev", "chain_hash", "sealed_at"):
+            assert f"OLD.{column} IS NULL" in sql and f"NEW.{column} IS NOT NULL" in sql
+        assert "to_jsonb(NEW) - ARRAY['chain_seq', 'chain_prev', 'chain_hash', 'sealed_at']" in sql
+        assert "to_jsonb(OLD) - ARRAY['chain_seq', 'chain_prev', 'chain_hash', 'sealed_at']" in sql
+        # The exception is unconditional after the one admitted transition.
+        assert sql.index("RETURN NEW;") < sql.index("RAISE EXCEPTION")
+
+    def test_the_migration_and_the_schema_bootstrap_install_the_same_function(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        migration = (root / "migrations" / "versions" / "v6_z41_tamper_evident_audit.py").read_text(encoding="utf-8")
+        assert audit_chain.SEAL_TRIGGER_SQL in migration
+        assert "op.execute(_SEAL_TRIGGER_SQL)" in migration and "op.execute(_APPEND_ONLY_SQL)" in migration
+        assert "ALTER TABLE audit_chain_anchors FORCE ROW LEVEL SECURITY;" in migration
+        bootstrap = (root / "core" / "database.py").read_text(encoding="utf-8")
+        assert "await conn.execute(text(SEAL_TRIGGER_SQL))" in bootstrap
+        assert "BEFORE UPDATE OR DELETE ON audit_log" in bootstrap
 
 
 class TestVerify:
@@ -188,6 +260,11 @@ class TestVerify:
         row.chain_hash = audit_chain.link_hash(row.chain_prev, row)
         store.sealed()[2].chain_prev = row.chain_hash
         store.sealed()[2].chain_hash = audit_chain.link_hash(row.chain_hash, store.sealed()[2])
+        # Re-linking the rows after the forgery moves the head off the stored anchor ...
+        relinked = asyncio.run(audit_chain.verify(TENANT))
+        assert (relinked.first_break.seq, relinked.first_break.reason) == (3, "anchor_mismatch")
+        # ... and with the anchor rewritten as well, the forged signature still breaks the chain.
+        store.anchor = audit_chain.Head(seq=3, hash=store.sealed()[2].chain_hash)
         result = asyncio.run(audit_chain.verify(TENANT))
         assert (result.first_break.seq, result.first_break.reason) == (2, "signature")
 
@@ -200,6 +277,45 @@ class TestVerify:
         missing = asyncio.run(audit_chain.verify(TENANT, from_seq=4))
         assert (missing.first_break.seq, missing.first_break.reason) == (3, "sequence_gap")
 
+    def test_a_chain_cut_at_its_end_is_truncated_against_the_stored_anchor(self, store):
+        store.rows.extend(_row(i) for i in range(1, 6))
+        _seal_all(store)
+        for row in store.sealed()[3:]:
+            store.rows.remove(row)
+        result = asyncio.run(audit_chain.verify(TENANT))
+        assert result.status == "broken" and result.head.seq == 3 and result.anchor.seq == 5
+        assert (result.first_break.seq, result.first_break.reason) == (4, "truncated")
+        assert result.to_dict()["anchor"]["seq"] == 5
+
+    def test_a_chain_removed_whole_is_broken_not_empty(self, store):
+        store.rows.extend(_row(i) for i in range(1, 4))
+        _seal_all(store)
+        store.rows.clear()
+        result = asyncio.run(audit_chain.verify(TENANT))
+        assert result.status == "broken" and (result.first_break.seq, result.first_break.reason) == (1, "truncated")
+
+    def test_a_supplied_head_catches_a_cut_the_stored_anchor_was_rewritten_to_hide(self, store):
+        store.rows.extend(_row(i) for i in range(1, 6))
+        logged = _seal_all(store).head
+        for row in store.sealed()[3:]:
+            store.rows.remove(row)
+        survivor = store.sealed()[-1]
+        store.anchor = audit_chain.Head(seq=3, hash=survivor.chain_hash)
+        assert asyncio.run(audit_chain.verify(TENANT)).status == "verified"
+        result = asyncio.run(audit_chain.verify(TENANT, expected=logged))
+        assert (result.first_break.seq, result.first_break.reason) == (4, "truncated")
+        assert result.to_dict()["expected"]["seq"] == 5
+
+    def test_a_supplied_head_must_match_the_link_at_its_sequence(self, store):
+        store.rows.extend(_row(i) for i in range(1, 6))
+        _seal_all(store)
+        third = store.sealed()[2]
+        good = asyncio.run(audit_chain.verify(TENANT, expected=audit_chain.Head(seq=3, hash=third.chain_hash)))
+        assert good.status == "verified" and good.verified == 5
+        bad = asyncio.run(audit_chain.verify(TENANT, expected=audit_chain.Head(seq=3, hash="e" * 64)))
+        assert (bad.first_break.seq, bad.first_break.reason) == (3, "anchor_mismatch")
+        assert bad.first_break.row_id == str(third.id)
+
     def test_status_reports_the_head_and_the_backlog(self, store, monkeypatch):
         store.rows.extend(_row(i) for i in range(1, 4))
         _seal_all(store)
@@ -208,6 +324,7 @@ class TestVerify:
         current = asyncio.run(audit_chain.status(TENANT))
         assert current["enabled"] is True and current["head"]["seq"] == 3 and current["unsealed"] == 1
         assert current["head"]["hash"] == store.sealed()[-1].chain_hash
+        assert current["anchor"] == current["head"]
 
 
 class TestTasks:

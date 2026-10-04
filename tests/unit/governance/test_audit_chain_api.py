@@ -70,6 +70,15 @@ def test_verify_runs_from_a_sequence_under_a_limit(monkeypatch):
     assert resp.status_code == 200
     body = resp.json()
     assert body["status"] == "verified" and body["verified"] == 8 and body["first_break"] is None
-    verify.assert_awaited_once_with(TENANT, from_seq=5, limit=100)
+    verify.assert_awaited_once_with(TENANT, from_seq=5, limit=100, expected=None)
+    verify.reset_mock()
+    anchored = {"expected_seq": 12, "expected_hash": "a" * 64}
+    assert client.get("/api/v1/audit/chain/verify", params=anchored).status_code == 200
+    verify.assert_awaited_once_with(TENANT, from_seq=1, limit=10_000, expected=audit_chain.Head(seq=12, hash="a" * 64))
+    assert client.get("/api/v1/audit/chain/verify", params={"expected_seq": 12}).status_code == 422
+    assert client.get("/api/v1/audit/chain/verify", params={"expected_hash": "a" * 64}).status_code == 422
+    assert (
+        client.get("/api/v1/audit/chain/verify", params={"expected_seq": 12, "expected_hash": "xyz"}).status_code == 422
+    )
     assert client.get("/api/v1/audit/chain/verify", params={"from_seq": 0}).status_code == 422
     assert client.get("/api/v1/audit/chain/verify", params={"limit": 0}).status_code == 422

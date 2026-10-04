@@ -18,6 +18,18 @@ first break is reported with its sequence number and reason. A row's own
 signature is checked on the way; a row sealed without one (written before
 signing existed) is counted, not a break.
 
+A chain cut at its end (the newest rows, or all of them, removed) has no gap
+to find, so verification also compares the chain with an anchor: the head
+the last sealing stored in ``audit_chain_anchors``, and a head the caller
+supplies from the sealing log kept outside the platform. A head below an
+anchor is ``truncated``; a row at the anchor's sequence with another link
+hash is ``anchor_mismatch``.
+
+``audit_log`` is append-only: its trigger refuses every UPDATE and DELETE
+except the one sealing transition, an UPDATE that fills the four chain
+columns of an unsealed row and changes nothing else (``SEAL_TRIGGER_SQL``).
+Sealers of one tenant are serialised by a transaction-level advisory lock.
+
 Behind ``AGENTICORG_AUDIT_CHAIN_ENABLED`` (off by default): off, nothing is
 sealed; verification and the status read whatever is sealed either way.
 """
@@ -40,7 +52,36 @@ logger = structlog.get_logger()
 CHAIN_VERSION = "1"
 GENESIS = "0" * 64
 PAGE = 1000
-BREAK_REASONS: tuple[str, ...] = ("sequence_gap", "previous_link", "link_hash", "signature")
+BREAK_REASONS: tuple[str, ...] = (
+    "sequence_gap",
+    "previous_link",
+    "link_hash",
+    "signature",
+    "truncated",
+    "anchor_mismatch",
+)
+
+# The append-only rule of ``audit_log`` with the one transition sealing needs:
+# an UPDATE that fills the chain columns of an unsealed row and leaves every
+# other column as it was. Installed by ``v6z41_tamper_evident_audit`` and by
+# ``core.database.init_db``; the two must stay the same text.
+SEAL_TRIGGER_SQL = """CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'UPDATE'
+       AND OLD.chain_seq IS NULL AND OLD.chain_prev IS NULL
+       AND OLD.chain_hash IS NULL AND OLD.sealed_at IS NULL
+       AND NEW.chain_seq IS NOT NULL AND NEW.chain_prev IS NOT NULL
+       AND NEW.chain_hash IS NOT NULL AND NEW.sealed_at IS NOT NULL
+       AND (to_jsonb(NEW) - ARRAY['chain_seq', 'chain_prev', 'chain_hash', 'sealed_at'])
+         = (to_jsonb(OLD) - ARRAY['chain_seq', 'chain_prev', 'chain_hash', 'sealed_at'])
+    THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION
+      'audit_log is append-only — UPDATE/DELETE rejected'
+      USING ERRCODE = 'insufficient_privilege';
+END;
+$$ LANGUAGE plpgsql;"""
 
 
 def link_hash(prev_hash: str, row: Any) -> str:
@@ -92,6 +133,8 @@ class Verification:
     checked_to: int = 0
     verified: int = 0
     unsigned: int = 0
+    anchor: Head | None = None
+    expected: Head | None = None
     first_break: Break | None = None
     breaks: list[Break] = field(default_factory=list)
 
@@ -113,6 +156,8 @@ class Verification:
             "checked_to": self.checked_to,
             "verified": self.verified,
             "unsigned": self.unsigned,
+            "anchor": self.anchor.to_dict() if self.anchor else None,
+            "expected": self.expected.to_dict() if self.expected else None,
             "first_break": self.first_break.to_dict() if self.first_break else None,
         }
 
@@ -178,6 +223,38 @@ async def _sealed_rows(session: Any, tenant_id: uuid.UUID, from_seq: int, limit:
     return list((await session.execute(query)).scalars().all())
 
 
+async def _lock_chain(session: Any, tenant_id: uuid.UUID) -> None:
+    """Serialise the tenant's sealers: held until the transaction ends."""
+    from sqlalchemy import text
+
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"audit_chain:{tenant_id}"}
+    )
+
+
+async def _anchor(session: Any, tenant_id: uuid.UUID) -> Head | None:
+    from sqlalchemy import select
+
+    from core.models.audit import AuditChainAnchor
+
+    row = (
+        await session.execute(select(AuditChainAnchor).where(AuditChainAnchor.tenant_id == tenant_id))
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    return Head(seq=int(row.head_seq), hash=str(row.head_hash), sealed_at=row.sealed_at)
+
+
+async def _write_anchor(session: Any, tenant_id: uuid.UUID, head: Head) -> None:
+    from sqlalchemy.dialects.postgresql import insert
+
+    from core.models.audit import AuditChainAnchor
+
+    values = {"head_seq": head.seq, "head_hash": head.hash, "sealed_at": head.sealed_at}
+    statement = insert(AuditChainAnchor).values(tenant_id=tenant_id, **values)
+    await session.execute(statement.on_conflict_do_update(index_elements=["tenant_id"], set_=values))
+
+
 def _head_of(row: Any) -> Head:
     if row is None:
         return Head()
@@ -196,6 +273,7 @@ async def seal(tenant_id: uuid.UUID, *, batch: int | None = None) -> SealOutcome
     size = max(1, int(batch or settings.audit_chain_seal_batch))
     now = datetime.now(UTC)
     async with get_tenant_session(tenant_id) as session:
+        await _lock_chain(session, tenant_id)
         head = _head_of(await _head_row(session, tenant_id, lock=True))
         rows = await _unsealed_rows(session, tenant_id, size)
         seq, prev = head.seq, head.hash
@@ -208,6 +286,7 @@ async def seal(tenant_id: uuid.UUID, *, batch: int | None = None) -> SealOutcome
             prev = row.chain_hash
         if rows:
             head = Head(seq=seq, hash=prev, sealed_at=now)
+            await _write_anchor(session, tenant_id, head)
     if rows:
         from observability.metrics import audit_chain_links_total
 
@@ -224,16 +303,49 @@ async def seal(tenant_id: uuid.UUID, *, batch: int | None = None) -> SealOutcome
 # ---------------------------------------------------------------------------
 
 
-async def verify(tenant_id: uuid.UUID, *, from_seq: int = 1, limit: int | None = None) -> Verification:
-    """Recompute every link from ``from_seq`` on (at most ``limit`` rows) and report the first break."""
+async def _anchor_break(session: Any, tenant_id: uuid.UUID, head: Head, anchor: Head) -> Break | None:
+    """The break an anchor shows: a head below it, or another link at its sequence."""
+    if anchor.seq <= 0:
+        return None
+    if anchor.seq > head.seq:
+        return Break(seq=head.seq + 1, row_id=None, reason="truncated")
+    rows = await _sealed_rows(session, tenant_id, anchor.seq, 1)
+    if not rows or int(rows[0].chain_seq) != anchor.seq:
+        return Break(seq=anchor.seq, row_id=None, reason="sequence_gap")
+    if str(rows[0].chain_hash or "") != anchor.hash:
+        return Break(seq=anchor.seq, row_id=str(getattr(rows[0], "id", "") or "") or None, reason="anchor_mismatch")
+    return None
+
+
+async def verify(
+    tenant_id: uuid.UUID, *, from_seq: int = 1, limit: int | None = None, expected: Head | None = None
+) -> Verification:
+    """Recompute every link from ``from_seq`` on (at most ``limit`` rows) and report the first break.
+
+    The chain is first held against its anchors: the head the last sealing
+    stored, and ``expected``, a head the caller took from the sealing log.
+    """
     from core.database import get_tenant_session
 
     start = max(1, int(from_seq))
     async with get_tenant_session(tenant_id) as session:
         head = _head_of(await _head_row(session, tenant_id))
         result = Verification(
-            tenant_id=tenant_id, head=head, unsealed=await _unsealed_count(session, tenant_id), checked_from=start
+            tenant_id=tenant_id,
+            head=head,
+            unsealed=await _unsealed_count(session, tenant_id),
+            checked_from=start,
+            anchor=await _anchor(session, tenant_id),
+            expected=expected,
         )
+        for anchor in (result.anchor, expected):
+            if anchor is None:
+                continue
+            found = await _anchor_break(session, tenant_id, head, anchor)
+            if found is not None:
+                result.first_break = found
+                result.breaks.append(found)
+                return result
         if head.seq == 0:
             return result
         prev = GENESIS
@@ -291,7 +403,13 @@ async def status(tenant_id: uuid.UUID) -> dict[str, Any]:
     async with get_tenant_session(tenant_id) as session:
         head = _head_of(await _head_row(session, tenant_id))
         unsealed = await _unsealed_count(session, tenant_id)
-    return {"enabled": bool(settings.audit_chain_enabled), "head": head.to_dict(), "unsealed": unsealed}
+        anchor = await _anchor(session, tenant_id)
+    return {
+        "enabled": bool(settings.audit_chain_enabled),
+        "head": head.to_dict(),
+        "anchor": anchor.to_dict() if anchor else None,
+        "unsealed": unsealed,
+    }
 
 
 async def evidence(tenant_id: uuid.UUID, *, recent: int = 1000) -> dict[str, Any]:

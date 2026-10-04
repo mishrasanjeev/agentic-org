@@ -14,7 +14,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   as the anchor. Verification recomputes every link and reports the first
   break with its sequence number and reason (`sequence_gap` for a removed
   row, `previous_link` for an inserted or reordered one, `link_hash` for an
-  edited one, `signature` for a forged one); the daily task verifies every
+  edited one, `signature` for a forged one). Every sealing also stores the
+  head in `audit_chain_anchors` (tenant-scoped under row-level security), and
+  verification holds the chain against it and against a head the caller
+  supplies from the sealing log (`expected_seq`, `expected_hash`), so a chain
+  cut at its end is reported as `truncated` or `anchor_mismatch`. The
+  append-only trigger of `audit_log` admits exactly the sealing transition
+  (the chain columns of an unsealed row filled, nothing else changed), and a
+  tenant's sealers are serialised by an advisory lock. The daily task verifies every
   tenant and counts results in
   `agenticorg_audit_chain_verifications_total{result}`.
 - `GET /api/v1/audit/chain` reports the head and the sealing backlog and

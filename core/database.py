@@ -1408,18 +1408,11 @@ async def _legacy_startup_schema_repair_for_local_only() -> None:
         """)
         )
 
-        # 10. Audit log immutability trigger — rejects UPDATE/DELETE
-        await conn.execute(
-            text("""
-            CREATE OR REPLACE FUNCTION audit_log_reject_mutation() RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION
-                  'audit_log is append-only — UPDATE/DELETE rejected'
-                  USING ERRCODE = 'insufficient_privilege';
-            END;
-            $$ LANGUAGE plpgsql;
-        """)
-        )
+        # 10. Audit log immutability trigger — rejects UPDATE/DELETE, except
+        # the one transition that seals an unsealed row into the hash chain.
+        from core.governance.audit_chain import SEAL_TRIGGER_SQL
+
+        await conn.execute(text(SEAL_TRIGGER_SQL))
         await conn.execute(text("DROP TRIGGER IF EXISTS audit_log_immutable ON audit_log;"))
         await conn.execute(
             text("""
