@@ -5472,6 +5472,114 @@
     "tenant_required": true
   },
   {
+    "audit_event": "observability.checks.list",
+    "auth_required": true,
+    "function": "list_checks",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/observability/checks api/v1/observability.py:list_checks",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "observability.checks.sensitive.read",
+    "source_line": 175,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "observability.checks.create",
+    "auth_required": true,
+    "function": "create_check",
+    "idempotency": "non-idempotent-create",
+    "key": "POST /api/v1/observability/checks api/v1/observability.py:create_check",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "observability.checks.sensitive.write",
+    "source_line": 195,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "observability.checks.delete",
+    "auth_required": true,
+    "function": "delete_check",
+    "idempotency": "idempotent-delete",
+    "key": "DELETE /api/v1/observability/checks/{check_id} api/v1/observability.py:delete_check",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks/{check_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "observability.checks.sensitive.write",
+    "source_line": 248,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "observability.checks.update",
+    "auth_required": true,
+    "function": "update_check",
+    "idempotency": "idempotent-update",
+    "key": "PATCH /api/v1/observability/checks/{check_id} api/v1/observability.py:update_check",
+    "metadata_present": true,
+    "methods": [
+      "PATCH"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks/{check_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "observability.checks.sensitive.write",
+    "source_line": 219,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "observability.checks.results",
+    "auth_required": true,
+    "function": "list_check_results",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/observability/checks/{check_id}/results api/v1/observability.py:list_check_results",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks/{check_id}/results",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "observability.checks.sensitive.read",
+    "source_line": 296,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "observability.checks.run",
+    "auth_required": true,
+    "function": "run_check",
+    "idempotency": "non-idempotent-create",
+    "key": "POST /api/v1/observability/checks/{check_id}/run api/v1/observability.py:run_check",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/observability.py",
+    "path": "/api/v1/observability/checks/{check_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "security-admin-write",
+    "scope": "observability.checks.sensitive.write",
+    "source_line": 269,
+    "tenant_required": true
+  },
+  {
     "audit_event": "observability.runs.list",
     "auth_required": true,
     "function": "list_runs",
@@ -5486,7 +5594,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.runs.sensitive.read",
-    "source_line": 78,
+    "source_line": 82,
     "tenant_required": true
   },
   {
@@ -5504,7 +5612,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.runs.sensitive.read",
-    "source_line": 101,
+    "source_line": 105,
     "tenant_required": true
   },
   {
@@ -5522,7 +5630,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.workload.sensitive.read",
-    "source_line": 121,
+    "source_line": 125,
     "tenant_required": true
   },
   {
