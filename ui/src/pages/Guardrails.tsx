@@ -50,6 +50,30 @@ interface DryRun {
   outcomes: Outcome[];
 }
 
+interface SuiteCategory {
+  category: string;
+  attacks: number;
+  detected: number;
+  recall: number | null;
+  controls: number;
+  false_positives: number;
+  missed: string[];
+  wrongly_caught: string[];
+}
+
+interface SuiteReport {
+  rules: string;
+  rule_count: number;
+  cases: number;
+  attacks: number;
+  detected: number;
+  recall: number | null;
+  controls: number;
+  false_positives: number;
+  categories: SuiteCategory[];
+  errors: string[];
+}
+
 interface Draft {
   name: string;
   stage: string;
@@ -142,6 +166,7 @@ export default function Guardrails() {
   const [tryUseCase, setTryUseCase] = useState("");
   const [tryRiskTier, setTryRiskTier] = useState("");
   const [dryRun, setDryRun] = useState<DryRun | null>(null);
+  const [suite, setSuite] = useState<SuiteReport | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -265,6 +290,22 @@ export default function Guardrails() {
       setBusy(null);
     }
   };
+
+  const runSuite = async (which: "tenant" | "baseline") => {
+    setBusy(`suite-${which}`);
+    setError(null);
+    try {
+      const response = await api.post("/guardrails/adversarial/run", { rules: which });
+      setSuite(response.data as SuiteReport);
+    } catch (err) {
+      setSuite(null);
+      setError(extractApiError(err, "Failed to run the adversarial set."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const percent = (value: number | null) => (value === null ? "–" : `${Math.round(value * 100)}%`);
 
   return (
     <div className="space-y-4" data-testid="guardrails-page">
@@ -582,6 +623,70 @@ export default function Guardrails() {
               Text after the rules
               <textarea readOnly className={`${inputClass} h-20 bg-slate-50`} value={dryRun.text} data-testid="try-output" />
             </label>
+          </div>
+        )}
+      </div>
+
+      <div className={cardClass} data-testid="adversarial">
+        <h2 className="mb-1 text-sm font-semibold text-slate-800">Adversarial set</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          Dry-runs a rule set over a fixed corpus of synthetic attacks and look-alike benign texts: injected instructions,
+          sensitive data, unsupported answers and policy breaks. Some attacks are there because pattern-based detectors
+          miss them, so expect less than 100%. Nothing is enforced, metered or audited.
+        </p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className="rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:bg-slate-400"
+            disabled={busy === "suite-tenant"}
+            onClick={() => void runSuite("tenant")}
+            data-testid="suite-run-tenant"
+          >
+            Run against my rules
+          </button>
+          <button
+            type="button"
+            className="rounded-md bg-slate-100 px-3 py-1.5 text-sm text-slate-700 disabled:text-slate-400"
+            disabled={busy === "suite-baseline"}
+            onClick={() => void runSuite("baseline")}
+            data-testid="suite-run-baseline"
+          >
+            Run the recommended baseline
+          </button>
+        </div>
+        {suite && (
+          <div className="mt-3 space-y-2 text-sm" data-testid="suite-result">
+            <p className="text-slate-700">
+              {suite.rules === "baseline" ? "Recommended baseline" : "This tenant's rules"} ({suite.rule_count} rule
+              {suite.rule_count === 1 ? "" : "s"}): {suite.detected} of {suite.attacks} attacks detected (
+              {percent(suite.recall)}), {suite.false_positives} of {suite.controls} benign texts wrongly caught.
+            </p>
+            <table className="w-full text-left text-sm">
+              <thead className="text-xs uppercase text-slate-500">
+                <tr>
+                  <th className="py-1">Category</th>
+                  <th>Detected</th>
+                  <th>Wrongly caught</th>
+                  <th>Missed cases</th>
+                </tr>
+              </thead>
+              <tbody>
+                {suite.categories.map((category) => (
+                  <tr key={category.category} className="border-t border-slate-100" data-testid={`suite-row-${category.category}`}>
+                    <td className="py-1.5">{category.category}</td>
+                    <td>
+                      {category.detected} / {category.attacks} ({percent(category.recall)})
+                    </td>
+                    <td>
+                      {category.false_positives} / {category.controls}
+                      {category.wrongly_caught.length > 0 ? ` (${category.wrongly_caught.join(", ")})` : ""}
+                    </td>
+                    <td className="text-slate-600">{category.missed.length > 0 ? category.missed.join(", ") : "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {suite.errors.length > 0 && <p className="text-red-700">Could not evaluate: {suite.errors.join(", ")}</p>}
           </div>
         )}
       </div>

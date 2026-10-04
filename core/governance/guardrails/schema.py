@@ -143,6 +143,8 @@ class GuardrailResult:
     correlation_id: str
     outcomes: list[Outcome] = field(default_factory=list)
     token_map: dict[str, str] = field(default_factory=dict)
+    # Rules whose detector gave no answer (it raised, timed out or is unknown): the rule id, the detector and why.
+    unverifiable: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def findings(self) -> int:
@@ -162,6 +164,7 @@ class GuardrailResult:
             "findings": self.findings,
             "outcomes": [outcome.to_dict() for outcome in self.outcomes],
             "token_map": dict(self.token_map),
+            "unverifiable": [dict(item) for item in self.unverifiable],
         }
 
 

@@ -18,6 +18,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`task.queue_wait_ms`); tasks scheduled for later, redeliveries and
   retries are not counted.
 
+### Added - Guardrails: the adversarial evaluation set
+- A fixed corpus of 46 synthetic cases
+  (`core/governance/guardrails/adversarial.py`): direct and indirect
+  injection, sensitive data in answers and tool calls, ungrounded answers
+  and output-policy breaks, each with benign controls, and with attacks the
+  pattern-based detectors are known to miss. `POST
+  /api/v1/guardrails/adversarial/run` dry-runs the tenant's rules or the
+  recommended baseline over it and reports per category what was detected,
+  missed and wrongly caught, without any case text; the Guardrails console
+  has a card for it. The baseline's result (25 of 31 attacks, 1 of 15
+  controls wrongly caught) is pinned case by case in a test.
+- `evaluate` takes a rule set for a dry run, so a set can be measured
+  without storing it.
+
 ### Added - Guardrails console
 - `/dashboard/settings/guardrails` (administrators): the mode in effect
   (hooks off, flag-only, enforcing), the rules with what each applies to,
