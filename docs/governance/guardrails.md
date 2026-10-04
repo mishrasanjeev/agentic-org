@@ -190,6 +190,23 @@ Not here yet: the set does not run on a schedule, results are not stored
 over time, and there is no model-graded judging; those belong to the
 evaluation framework.
 
+## Console
+
+Tenant administrators manage rules at `/dashboard/settings/guardrails`
+(`ui/src/pages/Guardrails.tsx`). The page says which mode applies (hooks off,
+flag-only or enforcing), lists the rules with what each applies to, adds and
+changes a rule (the options are edited as JSON, starting from an example for
+the chosen detector), enables, disables and deletes one, and dry-runs a stage
+over a text, showing what each rule would do and the text as the rules would
+leave it. The dry run names the call it stands for (agent, use case, risk
+tier), because a rule narrowed to one of those takes part only when the dry
+run names the same one, and for a grounding rule it takes the retrieved
+context and what the user wrote. The live mode shown beside the result comes
+from the status, not from the dry run. Every action goes
+through the endpoints above, so the same validation, attribution and signed
+audit rows apply. The page changes rules only; turning enforcement on stays
+with the `guardrails.enforce` flag.
+
 ## Grounding
 
 A `grounding` rule checks, at the output stage, whether each claim of the
