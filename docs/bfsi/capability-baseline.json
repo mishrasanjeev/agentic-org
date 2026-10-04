@@ -1143,12 +1143,12 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/content_safety/checker.py",
-          "core/pii/redactor.py",
-          "core/extraction/context.py",
-          "core/agent_generator.py"
+          "core/governance/guardrails/engine.py",
+          "core/governance/guardrails/hooks.py",
+          "api/v1/guardrails.py",
+          "docs/governance/guardrails.md"
         ],
-        "note": "PII detection with India recognisers, toxicity check, regex injection check at agent generation, strict untrusted-text guard for governed cases; runtime check is opt-in and only flags."
+        "note": "Tenant guardrail rules at the input, retrieval, output and action stages with sensitive-data, toxicity, pattern, injection, output-policy and grounding detectors and flag, mask, redact, tokenise or block actions, with a console and an adversarial set. The call-site hooks and tenant enforcement are both off by default, and the detectors are pattern-based."
       },
       "grantex": {
         "status": "none",
@@ -1481,10 +1481,10 @@
         "status": "partial",
         "evidence": [
           "observability/tracing.py",
-          "observability/langsmith.py",
-          "core/models/audit.py"
+          "core/langgraph/agent_graph.py",
+          "docs/operations/tracing.md"
         ],
-        "note": "OpenTelemetry span catalogue defined but not wired; audit rows carry trace_id."
+        "note": "OpenTelemetry spans cover API requests, background tasks, agent runs, model calls, tool calls and knowledge searches, with gateway and guardrail events and residency-aware export, behind a default-off flag. Coverage of every workflow step is not proven."
       },
       "grantex": {
         "status": "partial",
@@ -2566,10 +2566,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/guardrails/grounding.py",
           "core/agents/business_underwriter/memo.py",
-          "scaling/shadow_comparator.py"
+          "docs/governance/guardrails.md"
         ],
-        "note": "Citation-bound memo narratives and shadow hallucination gate; not for general answers."
+        "note": "A grounding rule at the output stage reports claims and figures the retrieved context does not carry and can block the answer, with an option to require retrieved context; memo narratives stay citation-bound. It is a word-level check, off until the guardrail hooks and enforcement are enabled."
       },
       "grantex": {
         "status": "none",
@@ -3146,9 +3147,9 @@
         "evidence": [
           "observability/metrics.py",
           "core/governance/model_gateway_records.py",
-          "tests/unit/governance/test_model_gateway_records.py"
+          "observability/streaming.py"
         ],
-        "note": "Signed call records and metrics include outcome, latency, token counts, cost, output tokens per second and admission wait. Model utilisation and streaming time-to-first-token are not captured."
+        "note": "Signed call records and metrics include outcome, latency, token counts, cost, output tokens per second and admission wait; time to first token is a metric on the agent path behind a default-off flag and is not stored on call records. Model utilisation is not captured."
       },
       "grantex": {
         "status": "none",
@@ -4180,11 +4181,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "tests/security/test_untrusted_content_adversarial.py",
-          "tests/security/test_underwriter_adversarial.py",
-          "tests/security/test_disposition_adversarial.py"
+          "core/governance/guardrails/adversarial.py",
+          "tests/unit/governance/test_guardrails_adversarial.py",
+          "tests/security/test_untrusted_content_adversarial.py"
         ],
-        "note": "Adversarial suites in CI only."
+        "note": "A fixed adversarial set of synthetic injection, sensitive-data, grounding and output-policy cases runs in product against a tenant's guardrail rules or a recommended baseline and reports what was detected, missed and wrongly caught; further adversarial suites run in CI. It runs on demand, results are not stored over time and there is no model-graded judging."
       },
       "grantex": {
         "status": "none",
@@ -4422,12 +4423,12 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
+          "core/governance/guardrails/detectors.py",
+          "core/governance/guardrails/adversarial.py",
           "core/extraction/context.py",
-          "docs/security/untrusted-content.md",
-          "core/agent_generator.py",
-          "core/commerce/sales_guardrails.py"
+          "docs/governance/guardrails.md"
         ],
-        "note": "Strong indirect-injection controls for governed cases only; elsewhere a regex check; not configurable."
+        "note": "An injection detector runs at the input and retrieval stages as a tenant rule, narrowable per agent, beside the strict untrusted-text guard for governed cases. It is pattern-based: the adversarial set shows a paraphrased override, an override in another language and an unphrased instruction inside a document are missed. Hooks and enforcement are off by default."
       },
       "grantex": {
         "status": "none",
@@ -4475,9 +4476,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/agents/business_underwriter/memo.py"
+          "core/governance/guardrails/grounding.py",
+          "core/agents/business_underwriter/memo.py",
+          "tests/unit/governance/test_guardrails_grounding.py"
         ],
-        "note": "Citation-bound checks for case memos only."
+        "note": "A grounding rule holds each claim and figure of an answer against the context the run retrieved and flags or blocks it; case memos keep their citation-bound checks. The check is lexical and does not judge meaning: a claim that reuses the context's words to say the opposite passes."
       },
       "grantex": {
         "status": "none",
@@ -4496,11 +4499,12 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/content_safety/checker.py",
-          "api/v1/content_safety.py",
-          "core/langgraph/runner.py"
+          "core/governance/guardrails/engine.py",
+          "core/governance/guardrails/hooks.py",
+          "core/langgraph/agent_graph.py",
+          "docs/governance/guardrails.md"
         ],
-        "note": "Opt-in output check that flags but does not block."
+        "note": "Output-stage rules redact or block sensitive data, forbidden phrases, links and unsupported answers before delivery, with audited outcomes when enforcing. The hooks and tenant enforcement are both off by default; until both are on a rule only records."
       },
       "grantex": {
         "status": "none",
@@ -4627,10 +4631,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/governance/model_gateway_records.py",
-          "observability/metrics.py"
+          "observability/streaming.py",
+          "observability/metrics.py",
+          "core/governance/model_gateway_records.py"
         ],
-        "note": "Call duration, output tokens per second and admission wait are recorded. Streaming time-to-first-token and complete queue-wait coverage are missing."
+        "note": "Call duration, output tokens per second and admission wait are recorded; time to first token on the agent path and task queue wait are metrics and span attributes behind default-off flags. The direct router is not stream-timed and first-token time is not stored on call records."
       },
       "grantex": {
         "status": "none",
@@ -4672,11 +4677,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          ".github/workflows/rag-eval.yml",
-          "core/tasks/health_snapshot.py",
-          "scripts/prod_smoke_check.py"
+          "observability/synthetic.py",
+          "core/tasks/synthetic_tasks.py",
+          "docs/operations/synthetic-checks.md"
         ],
-        "note": "Nightly CI eval and health probes; no in-product scheduled evals."
+        "note": "Tenant administrators define scheduled probes of the model, knowledge, guardrail and audit-chain paths with a stored result per run and a console tab, behind a default-off flag. There is no agent-run probe and no built-in alert routing, and the adversarial set is not scheduled."
       },
       "grantex": {
         "status": "none",
@@ -4724,12 +4729,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "core/models/audit.py",
-          "audit/signer.py",
-          "migrations/versions/v4_8_0_baseline.py",
-          "api/v1/audit.py"
+          "core/governance/audit_chain.py",
+          "api/v1/audit.py",
+          "docs/operations/audit-chain.md"
         ],
-        "note": "Append-only trigger with per-row HMAC; no hash chain; model requests and responses not recorded."
+        "note": "Per-row signatures and an append-only trigger, plus a per-tenant hash chain with stored and supplied anchors and verification endpoints; model call records carry digests of the prompt, request and response. Sealing is off by default, and content is digested rather than stored."
       },
       "grantex": {
         "status": "covered",
