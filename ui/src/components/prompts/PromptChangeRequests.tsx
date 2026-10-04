@@ -110,8 +110,11 @@ export default function PromptChangeRequests({ onDecided, refreshKey = 0 }: { on
     setBusy(true);
     setError(null);
     try {
+      // One literal path per decision, so each call names the route it uses.
+      const body = { note: note.trim() || null };
       if (action === "withdraw") await api.post(`/prompt-templates/changes/${open.id}/withdraw`);
-      else await api.post(`/prompt-templates/changes/${open.id}/${action}`, { note: note.trim() || null });
+      else if (action === "approve") await api.post(`/prompt-templates/changes/${open.id}/approve`, body);
+      else await api.post(`/prompt-templates/changes/${open.id}/reject`, body);
       setOpen(null);
       await load();
       onDecided?.();
