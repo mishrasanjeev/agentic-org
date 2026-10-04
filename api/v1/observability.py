@@ -4,9 +4,10 @@
 Admin-only. The timeline answers only what ``run_spans`` holds: with
 ``AGENTICORG_TRACING_TIMELINE_ENABLED`` off (the default) the list is empty
 and says so (``enabled``), so a console never mistakes an unrecorded run for
-a missing one. Synthetic checks (``observability.synthetic``) are managed and
-run by hand here; the scheduled sweep runs them behind
-``AGENTICORG_SYNTHETIC_CHECKS_ENABLED`` and the list says whether it is on.
+a missing one. Synthetic checks (``observability.synthetic``) are behind
+``AGENTICORG_SYNTHETIC_CHECKS_ENABLED`` (off by default): off, adding a check
+and running one are refused, the list says so, and what is stored can still
+be read, changed and removed.
 """
 
 from __future__ import annotations
@@ -157,6 +158,11 @@ def _actor(request: Request, caller: Caller | None) -> str:
     raise HTTPException(403, "A synthetic check change needs an attributable caller")
 
 
+def _require_checks_on() -> None:
+    if not synthetic.enabled():
+        raise HTTPException(409, "Synthetic checks are off in this deployment")
+
+
 @router.get("/checks")
 @route_meta(
     auth_required=True,
@@ -193,6 +199,7 @@ async def create_check(
     caller: Caller | None = Depends(caller_from_request),
 ) -> dict[str, Any]:
     actor_id = _actor(request, caller)
+    _require_checks_on()
     try:
         check = await synthetic.create_check(uuid.UUID(tenant_id), actor_id=actor_id, **body.model_dump())
     except ValueError as exc:
@@ -265,12 +272,15 @@ async def run_check(
     tenant_id: str = Depends(get_current_tenant),
     caller: Caller | None = Depends(caller_from_request),
 ) -> dict[str, Any]:
-    """Run one check now and store its result; works whether or not the scheduled sweep is on."""
+    """Run one check now and store its result; refused while synthetic checks are off or the check is running."""
     _actor(request, caller)
+    _require_checks_on()
     check = await synthetic.get_check(uuid.UUID(tenant_id), check_id)
     if check is None:
         raise HTTPException(404, "Synthetic check not found")
     result = await synthetic.run_check(check, trigger="manual")
+    if result is None:
+        raise HTTPException(409, "The check is already running")
     return result.to_dict()
 
 

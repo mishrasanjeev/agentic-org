@@ -221,6 +221,8 @@ class TestRun:
         async def _store(check, result):
             stored.append((check, result))
 
+        claimed = AsyncMock(return_value=True)
+        monkeypatch.setattr(synthetic, "claim", claimed)
         monkeypatch.setattr(synthetic, "_store_result", _store)
         monkeypatch.setattr(
             synthetic, "_probe_knowledge", AsyncMock(return_value=(["too_few_results"], {"results": 0}))
@@ -231,6 +233,55 @@ class TestRun:
         result = asyncio.run(synthetic.run_check(check, trigger="manual"))
         assert stored == [(check, result)] and result.status == "failed"
         assert counter._value.get() == before + 1
+        claimed.assert_awaited_once_with(check)
+
+    def test_a_check_another_runner_holds_is_not_probed(self, monkeypatch):
+        probed = AsyncMock(return_value=([], {}))
+        store = AsyncMock()
+        monkeypatch.setattr(synthetic, "claim", AsyncMock(return_value=False))
+        monkeypatch.setattr(synthetic, "_probe_model", probed)
+        monkeypatch.setattr(synthetic, "_store_result", store)
+        assert asyncio.run(synthetic.run_check(_check())) is None
+        probed.assert_not_awaited()
+        store.assert_not_awaited()
+
+    def test_the_claim_moves_last_run_at_only_from_the_value_the_runner_read(self, monkeypatch):
+        import contextlib
+
+        statements: list = []
+        answers = [1, 0]
+
+        class _Session:
+            async def execute(self, statement):
+                statements.append(statement)
+                return SimpleNamespace(rowcount=answers.pop(0))
+
+        @contextlib.asynccontextmanager
+        async def _ctx(_tid):
+            yield _Session()
+
+        monkeypatch.setattr("core.database.get_tenant_session", _ctx)
+        seen = datetime(2026, 10, 4, 11, 0, tzinfo=UTC)
+        now = datetime(2026, 10, 4, 12, 0, tzinfo=UTC)
+        assert asyncio.run(synthetic.claim(_check(last_run_at=seen), now=now)) is True
+        assert asyncio.run(synthetic.claim(_check(), now=now)) is False
+        first, second = (str(s.compile(compile_kwargs={"literal_binds": False})) for s in statements)
+        assert "UPDATE synthetic_checks SET last_run_at=" in first
+        assert "synthetic_checks.last_run_at = " in first and "synthetic_checks.last_run_at IS NULL" in second
+
+    def test_creations_take_the_tenant_lock_before_the_count(self):
+        statements: list[tuple[str, dict]] = []
+
+        class _Session:
+            async def execute(self, statement, params):
+                statements.append((str(statement), params))
+
+        asyncio.run(synthetic._lock_tenant(_Session(), TENANT))
+        assert len(statements) == 1 and "pg_advisory_xact_lock" in statements[0][0]
+        assert statements[0][1] == {"key": f"synthetic_checks:{TENANT}"}
+        src = (ROOT / "observability" / "synthetic.py").read_text(encoding="utf-8")
+        body = src[src.index("async def create_check(") : src.index("async def update_check(")]
+        assert body.index("await _lock_tenant(session, tenant_id)") < body.index("func.count()")
 
     def test_the_metric_carries_no_tenant_label(self):
         from observability.metrics import synthetic_checks_total
@@ -289,6 +340,18 @@ class TestTasks:
         ):
             result = asyncio.run(synthetic_tasks._run_synthetic_checks_async())
         assert result == {"enabled": True, "tenants": 3, "ran": 2, "not_ok": 1, "errors": 2}
+
+    def test_the_sweep_skips_a_check_another_runner_holds(self, monkeypatch):
+        from core.tasks import synthetic_tasks
+
+        monkeypatch.setattr(settings, "synthetic_checks_enabled", True)
+        with (
+            patch.object(synthetic_tasks, "_tenants_with_checks", AsyncMock(return_value=[uuid.uuid4()])),
+            patch.object(synthetic, "due_checks", AsyncMock(return_value=[_check()])),
+            patch.object(synthetic, "run_check", AsyncMock(return_value=None)),
+        ):
+            result = asyncio.run(synthetic_tasks._run_synthetic_checks_async())
+        assert result == {"enabled": True, "tenants": 1, "ran": 0, "not_ok": 0, "errors": 0}
 
     def test_the_tasks_are_scheduled(self):
         from core.tasks.celery_app import app
@@ -361,6 +424,10 @@ class TestEndpoints:
         monkeypatch.setattr(synthetic, "create_check", create)
         client = TestClient(_app(["agenticorg:admin"]))
         payload = {"name": "model check", "kind": "model", "config": {"prompt": "p"}, "interval_minutes": 30}
+        # Off (the default), nothing is added.
+        refused_off = client.post("/api/v1/observability/checks", json=payload)
+        assert refused_off.status_code == 409 and create.await_count == 0
+        monkeypatch.setattr(settings, "synthetic_checks_enabled", True)
         resp = client.post("/api/v1/observability/checks", json=payload)
         assert resp.status_code == 201 and resp.json()["id"] == str(created.id)
         create.assert_awaited_once_with(
@@ -403,12 +470,241 @@ class TestEndpoints:
         monkeypatch.setattr(synthetic, "run_check", run)
         monkeypatch.setattr(synthetic, "results", AsyncMock(return_value=[result]))
         client = TestClient(_app(["agenticorg:admin"]))
+        # Off (the default), nothing runs; what is stored can still be read.
+        assert client.post(f"/api/v1/observability/checks/{check.id}/run").status_code == 409
+        assert run.await_count == 0
+        assert client.get(f"/api/v1/observability/checks/{check.id}/results").status_code == 200
+        monkeypatch.setattr(settings, "synthetic_checks_enabled", True)
         resp = client.post(f"/api/v1/observability/checks/{check.id}/run")
         assert resp.status_code == 200 and resp.json() == result.to_dict()
         run.assert_awaited_once_with(check, trigger="manual")
+        monkeypatch.setattr(synthetic, "run_check", AsyncMock(return_value=None))
+        busy = client.post(f"/api/v1/observability/checks/{check.id}/run")
+        assert busy.status_code == 409 and "already running" in busy.text
+        monkeypatch.setattr(synthetic, "run_check", run)
         listed = client.get(f"/api/v1/observability/checks/{check.id}/results", params={"limit": 5})
         assert listed.status_code == 200 and listed.json() == {"results": [result.to_dict()]}
         assert client.get(f"/api/v1/observability/checks/{check.id}/results", params={"limit": 0}).status_code == 422
         monkeypatch.setattr(synthetic, "get_check", AsyncMock(return_value=None))
         assert client.post(f"/api/v1/observability/checks/{check.id}/run").status_code == 404
         assert client.get(f"/api/v1/observability/checks/{check.id}/results").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Storage and the task plumbing, against a scripted session
+# ---------------------------------------------------------------------------
+
+
+class _Answer:
+    def __init__(self, value=None, rowcount=0):
+        self.value = value
+        self.rowcount = rowcount
+
+    def all(self):
+        return list(self.value or [])
+
+    def one(self):
+        return self.value
+
+
+class _ScriptedSession:
+    """A session whose reads answer from a queue, recording what was added and executed."""
+
+    def __init__(self, answers: list) -> None:
+        self.answers = list(answers)
+        self.added: list = []
+        self.executed: list = []
+
+    def _next(self):
+        return self.answers.pop(0)
+
+    async def scalars(self, statement):
+        self.executed.append(statement)
+        return _Answer(self._next())
+
+    async def scalar(self, statement):
+        self.executed.append(statement)
+        return self._next()
+
+    async def execute(self, statement, params=None):
+        self.executed.append(statement)
+        answer = self._next() if self.answers else None
+        return answer if isinstance(answer, _Answer) else _Answer(answer)
+
+    def add(self, row):
+        self.added.append(row)
+
+    async def flush(self):
+        return None
+
+    async def refresh(self, row):
+        return None
+
+
+@pytest.fixture
+def scripted(monkeypatch):
+    import contextlib
+
+    def _use(answers: list) -> _ScriptedSession:
+        session = _ScriptedSession(answers)
+
+        @contextlib.asynccontextmanager
+        async def _ctx(_tid=None):
+            yield session
+
+        monkeypatch.setattr("core.database.get_tenant_session", _ctx)
+        monkeypatch.setattr("core.database.async_session_factory", _ctx)
+        return session
+
+    return _use
+
+
+def _stored(**over) -> SimpleNamespace:
+    base = {
+        "id": uuid.uuid4(),
+        "tenant_id": TENANT,
+        "name": "stored",
+        "kind": "model",
+        "config": {"prompt": "p"},
+        "interval_minutes": 30,
+        "enabled": True,
+        "last_run_at": None,
+        "last_status": None,
+        "created_by": "user:1",
+        "created_at": datetime(2026, 10, 4, 9, 0, tzinfo=UTC),
+        "updated_by": None,
+        "updated_at": None,
+    }
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+class TestStorage:
+    def test_list_get_and_results_map_rows(self, scripted):
+        row = _stored()
+        scripted([[row]])
+        assert [check.name for check in asyncio.run(synthetic.list_checks(TENANT))] == ["stored"]
+        scripted([row])
+        found = asyncio.run(synthetic.get_check(TENANT, row.id))
+        assert found is not None and found.to_dict()["created_at"] == "2026-10-04T09:00:00+00:00"
+        scripted([None])
+        assert asyncio.run(synthetic.get_check(TENANT, row.id)) is None
+        result_row = SimpleNamespace(
+            id=uuid.uuid4(),
+            check_id=row.id,
+            status="failed",
+            latency_ms=12,
+            started_at=datetime(2026, 10, 4, 10, 0, tzinfo=UTC),
+            reasons=["too_slow"],
+            detail={"results": 1},
+            trigger="schedule",
+        )
+        scripted([[result_row]])
+        listed = asyncio.run(synthetic.results(TENANT, row.id, limit=5))
+        assert [r.to_dict()["reasons"] for r in listed] == [["too_slow"]]
+
+    def test_create_validates_locks_and_holds_the_limit_and_the_name(self, scripted):
+        session = scripted([None, _Answer((3, 0))])
+        created = asyncio.run(
+            synthetic.create_check(TENANT, actor_id="user:1", name=" nightly ", kind="audit_chain", config={})
+        )
+        assert (created.name, created.config, created.created_by) == ("nightly", {"recent": 1000}, "user:1")
+        assert len(session.added) == 1 and "pg_advisory_xact_lock" in str(session.executed[0])
+        scripted([None, _Answer((3, 1))])
+        with pytest.raises(ValueError, match="already exists"):
+            asyncio.run(synthetic.create_check(TENANT, actor_id="u", name="n", kind="audit_chain", config={}))
+        scripted([None, _Answer((synthetic.MAX_CHECKS, 0))])
+        with pytest.raises(ValueError, match="at most 20"):
+            asyncio.run(synthetic.create_check(TENANT, actor_id="u", name="n", kind="audit_chain", config={}))
+        with pytest.raises(ValueError, match="prompt is required"):
+            asyncio.run(synthetic.create_check(TENANT, actor_id="u", name="n", kind="model", config={}))
+
+    def test_update_changes_only_what_is_allowed(self, scripted):
+        row = _stored()
+        scripted([row, None])
+        changes = {"name": "renamed", "config": {"prompt": "q"}, "interval_minutes": 15, "enabled": False}
+        updated = asyncio.run(synthetic.update_check(TENANT, row.id, actor_id="user:2", changes=changes))
+        assert (updated.name, updated.config, updated.interval_minutes, updated.enabled, updated.updated_by) == (
+            "renamed",
+            {"prompt": "q"},
+            15,
+            False,
+            "user:2",
+        )
+        scripted([_stored(), uuid.uuid4()])
+        with pytest.raises(ValueError, match="already exists"):
+            asyncio.run(synthetic.update_check(TENANT, row.id, actor_id="u", changes={"name": "taken"}))
+        scripted([None])
+        assert asyncio.run(synthetic.update_check(TENANT, row.id, actor_id="u", changes={"enabled": True})) is None
+        with pytest.raises(ValueError, match="cannot change: kind"):
+            asyncio.run(synthetic.update_check(TENANT, row.id, actor_id="u", changes={"kind": "model"}))
+
+    def test_delete_removes_the_results_with_the_check(self, scripted):
+        session = scripted([_Answer(rowcount=4), _Answer(rowcount=1)])
+        assert asyncio.run(synthetic.delete_check(TENANT, uuid.uuid4())) is True
+        assert "synthetic_check_results" in str(session.executed[0]) and "synthetic_checks" in str(session.executed[1])
+        scripted([_Answer(rowcount=0), _Answer(rowcount=0)])
+        assert asyncio.run(synthetic.delete_check(TENANT, uuid.uuid4())) is False
+
+    def test_a_result_is_stored_with_the_last_status_of_its_check(self, scripted):
+        session = scripted([])
+        check = _check()
+        result = synthetic.Result(
+            check_id=check.id,
+            status="failed",
+            latency_ms=7,
+            started_at=datetime(2026, 10, 4, 12, 0, tzinfo=UTC),
+            reasons=["empty_answer"],
+        )
+        asyncio.run(synthetic._store_result(check, result))
+        assert [(row.status, row.reasons, row.tenant_id) for row in session.added] == [
+            ("failed", ["empty_answer"], TENANT)
+        ]
+        assert "UPDATE synthetic_checks" in str(session.executed[-1])
+
+    def test_enabled_follows_the_setting(self, monkeypatch):
+        assert synthetic.enabled() is False
+        monkeypatch.setattr(settings, "synthetic_checks_enabled", True)
+        assert synthetic.enabled() is True
+
+
+class TestTaskPlumbing:
+    def test_tenant_reads_cross_tenants_with_row_security_off(self, scripted):
+        from core.tasks import synthetic_tasks
+
+        t1 = uuid.uuid4()
+        session = scripted([None, [t1]])
+        assert asyncio.run(synthetic_tasks._tenants_with_checks()) == [t1]
+        assert "row_security = off" in str(session.executed[0])
+        session = scripted([None, [t1]])
+        assert asyncio.run(synthetic_tasks._result_tenants()) == [t1]
+        assert "row_security = off" in str(session.executed[0])
+
+    def test_the_prune_deletes_old_results_per_tenant_and_isolates_a_failure(self, scripted, monkeypatch):
+        import contextlib
+
+        from core.tasks import synthetic_tasks
+
+        t1, t2 = uuid.uuid4(), uuid.uuid4()
+        monkeypatch.setattr(synthetic_tasks, "_result_tenants", AsyncMock(return_value=[t1, t2]))
+        scripted([_Answer(rowcount=6), _Answer(rowcount=2)])
+        outcome = asyncio.run(synthetic_tasks._prune_synthetic_results_async(days=7))
+        assert outcome["tenants"] == 2 and outcome["deleted"] == 8 and outcome["errors"] == 0
+        cutoff = datetime.fromisoformat(outcome["cutoff"])
+        assert timedelta(days=6, hours=23) < datetime.now(UTC) - cutoff < timedelta(days=7, hours=1)
+
+        @contextlib.asynccontextmanager
+        async def _broken(_tid):
+            raise RuntimeError("tenant database unavailable")
+            yield  # pragma: no cover
+
+        monkeypatch.setattr("core.database.get_tenant_session", _broken)
+        failed = asyncio.run(synthetic_tasks._prune_synthetic_results_async())
+        assert failed["errors"] == 2 and failed["deleted"] == 0
+
+    def test_the_celery_tasks_run_their_coroutines(self, monkeypatch):
+        from core.tasks import synthetic_tasks
+
+        monkeypatch.setattr(synthetic_tasks, "run_async", lambda coroutine: coroutine.close() or {"ran": True})
+        assert synthetic_tasks.run_synthetic_checks() == {"ran": True}
+        assert synthetic_tasks.prune_synthetic_results(3) == {"ran": True}

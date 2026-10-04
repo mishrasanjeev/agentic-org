@@ -14,6 +14,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   limit. A run ends `ok`, `failed` (with reasons) or `error` (with the
   exception type) and is stored in `synthetic_check_results`; a result keeps
   counts and reasons, never an answer, retrieved text or the input.
+- A run claims its check with one conditional update before it probes, so
+  overlapping sweeps or a run by hand never probe a check twice; creations
+  are serialised per tenant so the limit of 20 holds. Off, adding a check
+  and running one are refused and the console shows no Checks tab.
 - Behind `AGENTICORG_SYNTHETIC_CHECKS_ENABLED` (off by default) the sweep
   (`core.tasks.synthetic_tasks.run_synthetic_checks`, every five minutes)
   runs each tenant's due checks under the tenant's own row-level security

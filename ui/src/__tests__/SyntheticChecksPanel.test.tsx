@@ -78,8 +78,16 @@ describe("SyntheticChecksPanel", () => {
     expect(screen.queryByTestId("checks-off")).not.toBeInTheDocument();
   });
 
-  it("runs a check now and shows its results with the reasons", async () => {
+  it("offers neither run now nor add while synthetic checks are off", async () => {
     route();
+    render(<SyntheticChecksPanel />);
+    expect(await screen.findByTestId("check-run-c1")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("check-name"), { target: { value: "new check" } });
+    expect(screen.getByTestId("check-create")).toBeDisabled();
+  });
+
+  it("runs a check now and shows its results with the reasons", async () => {
+    route([CHECK], true);
     render(<SyntheticChecksPanel />);
     fireEvent.click(await screen.findByTestId("check-run-c1"));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/observability/checks/c1/run"));
@@ -97,7 +105,7 @@ describe("SyntheticChecksPanel", () => {
   });
 
   it("adds a check with the kind's example configuration", async () => {
-    route([]);
+    route([], true);
     render(<SyntheticChecksPanel />);
     await screen.findByTestId("checks-empty");
     expect(screen.getByTestId("check-create")).toBeDisabled();
@@ -117,7 +125,7 @@ describe("SyntheticChecksPanel", () => {
   });
 
   it("refuses a configuration that is not JSON without calling the API", async () => {
-    route([]);
+    route([], true);
     render(<SyntheticChecksPanel />);
     await screen.findByTestId("checks-empty");
     fireEvent.change(screen.getByTestId("check-name"), { target: { value: "broken" } });

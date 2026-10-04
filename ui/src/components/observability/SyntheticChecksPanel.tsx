@@ -149,8 +149,8 @@ export default function SyntheticChecksPanel() {
       )}
       {data && !data.enabled && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800" data-testid="checks-off">
-          Scheduled runs are off in this deployment (set AGENTICORG_SYNTHETIC_CHECKS_ENABLED). Checks can still be run by
-          hand.
+          Synthetic checks are off in this deployment (set AGENTICORG_SYNTHETIC_CHECKS_ENABLED). Nothing runs and no check
+          can be added; stored checks and results can still be read and removed.
         </div>
       )}
 
@@ -200,7 +200,7 @@ export default function SyntheticChecksPanel() {
                     <button
                       type="button"
                       className="text-blue-700 hover:underline disabled:text-slate-400"
-                      disabled={busy === check.id}
+                      disabled={busy === check.id || !data.enabled}
                       onClick={() =>
                         void act(
                           check.id,
@@ -350,7 +350,7 @@ export default function SyntheticChecksPanel() {
         <button
           type="button"
           className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:bg-slate-400"
-          disabled={!name.trim() || busy === "create" || atLimit}
+          disabled={!name.trim() || busy === "create" || atLimit || !data?.enabled}
           onClick={() => void create()}
           data-testid="check-create"
         >
