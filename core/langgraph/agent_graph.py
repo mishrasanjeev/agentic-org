@@ -574,7 +574,8 @@ def build_agent_graph(
             response_digest=message_digest(response),
         )
         # Guardrails: the answer passes the output stage before it travels on.
-        response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent)
+        # A grounding rule holds it against the tool results and the user's words in ``messages``.
+        response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent, messages=messages)
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")

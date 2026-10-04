@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -94,6 +94,9 @@ class EvaluateIn(BaseModel):
     agent_id: str | None = Field(None, max_length=64)
     use_case: str | None = Field(None, max_length=64)
     risk_tier: str | None = None
+    # What the answer is held against by a grounding rule (output stage): retrieved texts and the user's words.
+    context: list[Annotated[str, Field(max_length=50_000)]] | None = Field(None, max_length=50)
+    user_input: list[Annotated[str, Field(max_length=50_000)]] | None = Field(None, max_length=50)
 
     @model_validator(mode="after")
     def _known(self) -> EvaluateIn:
@@ -287,5 +290,7 @@ async def evaluate(body: EvaluateIn, tenant_id: str = Depends(get_current_tenant
         use_case=body.use_case,
         risk_tier=body.risk_tier,
         dry_run=True,
+        context=body.context,
+        user_input=body.user_input,
     )
     return result.to_dict()
