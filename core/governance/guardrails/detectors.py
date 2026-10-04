@@ -11,7 +11,8 @@ phrasings by which a text tries to take over the model (instruction overrides,
 system-prompt disclosure, persona switches, hidden characters), direct in a
 message and indirect inside a retrieved document alike. ``output_policy``
 checks an answer's shape: length, JSON, required keys, forbidden phrases,
-links. The grounding checker joins in the package's next part.
+links. ``grounding`` (``core.governance.guardrails.grounding``) checks an
+answer's claims against the context the run retrieved.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from typing import Any, Protocol
 
 import structlog
 
+from core.governance.guardrails.grounding import GroundingDetector
 from core.governance.guardrails.schema import Finding
 from core.pii.redactor import _REGEX_FALLBACK_PATTERNS, PIIRedactor
 
@@ -267,6 +269,7 @@ REGISTRY: dict[str, Detector] = {
     "pattern": PatternDetector(),
     "injection": InjectionDetector(),
     "output_policy": OutputPolicyDetector(),
+    "grounding": GroundingDetector(),
 }
 
 

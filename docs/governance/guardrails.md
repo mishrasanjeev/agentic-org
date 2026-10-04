@@ -19,8 +19,7 @@ would do before it bites.
 The hooks are behind `AGENTICORG_GUARDRAILS_HOOKS_ENABLED` (off by default):
 on, every stage is evaluated at its call site, in flag-only mode until
 `guardrails.enforce` is on for the tenant; off, the hooks return what they
-were given and read nothing. The grounding checker follows in the package's
-next part.
+were given and read nothing.
 
 ## Where the stages apply
 
@@ -41,7 +40,7 @@ call it guarded and the audit row share one correlation id.
 |---|---|
 | `name`, `priority`, `enabled` | Enabled rules matching a stage are evaluated in ascending `priority` (then name); every matching rule applies. |
 | `stage` | `input` (what goes to the model), `retrieval` (documents retrieved into the context), `output` (what the model returned), `action` (a tool call's arguments). |
-| `detector` | `sensitive_data`: the platform's PII analyser where installed, its regex recognisers otherwise, plus a Luhn-checked card-number check; `options.entities` narrows the kinds (`CREDIT_CARD`, `AADHAAR`, `PAN`, `GSTIN`, `EMAIL`, `UPI`, `PHONE`). `toxicity`: the content-safety classifier with its keyword fallback. `pattern`: `options.patterns`, the administrator's own regular expressions (`options.kind` names the finding, `options.ignore_case` defaults to true). `injection`: the phrasings by which a text tries to take over the model (instruction overrides, system-prompt disclosure, persona switches, jailbreak markers, fake system blocks, standing orders, false authority) and invisible characters, each with its own confidence; `options.patterns` adds the administrator's own; direct in a message and indirect inside a retrieved document alike. `output_policy` (output stage; flag or block): `max_length`, `require_json`, `required_keys`, `forbidden_phrases`, `no_urls`. |
+| `detector` | `sensitive_data`: the platform's PII analyser where installed, its regex recognisers otherwise, plus a Luhn-checked card-number check; `options.entities` narrows the kinds (`CREDIT_CARD`, `AADHAAR`, `PAN`, `GSTIN`, `EMAIL`, `UPI`, `PHONE`). `toxicity`: the content-safety classifier with its keyword fallback. `pattern`: `options.patterns`, the administrator's own regular expressions (`options.kind` names the finding, `options.ignore_case` defaults to true). `injection`: the phrasings by which a text tries to take over the model (instruction overrides, system-prompt disclosure, persona switches, jailbreak markers, fake system blocks, standing orders, false authority) and invisible characters, each with its own confidence; `options.patterns` adds the administrator's own; direct in a message and indirect inside a retrieved document alike. `output_policy` (output stage; flag or block): `max_length`, `require_json`, `required_keys`, `forbidden_phrases`, `no_urls`. `grounding` (output stage; flag or block): the answer's claims held against the context the run retrieved, see [Grounding](#grounding). |
 | `action` | `flag` records the finding. `mask` replaces each span with asterisks, `redact` with `<KIND>`, `tokenise` (sensitive data only) with a reversible `<KIND_n>` token whose original is returned in the result's token map. `block` refuses the stage. |
 | `threshold` | A rule applies when the detector's best score is at or above it (0 to 1; sensitive-data and pattern findings score 1, toxicity scores the classifier's confidence). |
 | `agent_id`, `use_case`, `risk_tier` | Narrow the rule; empty applies to every call at the stage. `risk_tier` is `low`, `medium`, `high` or `critical`. |
@@ -119,7 +118,62 @@ tool call carrying a card number is refused.
 | `POST /api/v1/guardrails/rules` | Create a rule (201). |
 | `PATCH /api/v1/guardrails/rules/{id}` | Change a rule; the merged rule is re-validated. |
 | `DELETE /api/v1/guardrails/rules/{id}` | Delete a rule (204). |
-| `POST /api/v1/guardrails/evaluate` | Dry-run a stage over a text. |
+| `POST /api/v1/guardrails/evaluate` | Dry-run a stage over a text. For a grounding rule, `context` (retrieved texts) and `user_input` are what the text is held against. |
+
+## Grounding
+
+A `grounding` rule checks, at the output stage, whether each claim of the
+answer is supported by what the run retrieved
+(`core/governance/guardrails/grounding.py`). The context is what the run
+retrieved: the conversation's tool results (a knowledge search, a connector
+read) and the evidence a governed case hands its model. Unless the rule sets
+`include_user_input` to false, what the user wrote adds to the words a claim
+may draw on, but it never counts as retrieved context: a run that retrieved
+nothing has no context, whatever the user said.
+
+The check is deterministic and lexical: no model call, the same verdict for
+the same texts, and it runs inside the detector time budget.
+
+1. The answer is split into sentences. A question, or a sentence with fewer
+   than `min_claim_words` content words (default 4), is not a claim.
+2. A claim's support is the share of its content words (stopwords dropped,
+   plurals folded, figures normalised so `5,000.00` and `5000` are one figure)
+   that occur in the context.
+3. A claim with support below `min_support` (default 0.5) is an
+   `unsupported_claim` with a score of one minus its support.
+4. A figure in a claim that occurs nowhere in the context is an
+   `unsupported_number` with a score of at least 0.9, whatever the claim's
+   support: an invented amount, rate or date is reported even when every
+   other word matches.
+
+The rule's `threshold` is how unsupported a claim must be for the rule to
+apply; `flag` records it and `block` suppresses the answer (the run ends
+`guardrail_blocked`) when `guardrails.enforce` is on. A grounding rule never
+rewrites an answer.
+
+With nothing retrieved in the run the rule is silent, because there is
+nothing to hold the answer against. Set `require_context` to true for an
+agent that must answer only from retrieved material: an answer given with
+nothing retrieved is then reported as `no_context`, even when it only repeats
+what the user stated.
+
+```json
+{"name": "answers-from-the-policy", "stage": "output", "detector": "grounding", "action": "block",
+ "agent_id": "policy-assistant", "threshold": 0.5,
+ "options": {"min_support": 0.5, "require_context": true},
+ "reason": "the policy assistant answers only from retrieved policy text"}
+```
+
+What it is not. It does not judge meaning: a claim that reuses the context's
+words to say the opposite passes, and a faithful paraphrase in other words is
+flagged. It is a floor that catches answers written without the context and
+figures that were never retrieved; model-graded faithfulness belongs to the
+evaluation framework. Start in flag-only mode, read the outcomes
+(`kinds` carries `unsupported_claim`, `unsupported_number`, `no_context`) and
+tune `min_support` per agent before blocking.
+
+Findings and outcomes carry positions, kinds and a support figure; never the
+answer or the context.
 
 ## Runbook: redact card numbers in every answer
 

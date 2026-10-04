@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Guardrails: the grounding checker
+- A `grounding` detector for output-stage rules
+  (`core/governance/guardrails/grounding.py`): each claim of an answer is
+  held against the context the run retrieved (the conversation's tool
+  results and, unless `include_user_input` is false, the user's words). A
+  claim whose content words are supported below `min_support` is an
+  `unsupported_claim`; a figure that occurs nowhere in the context is an
+  `unsupported_number` whatever the claim's support; `require_context`
+  reports an answer given with no retrieved context. The rule flags, or
+  blocks the answer when `guardrails.enforce` is on; it never rewrites.
+  Deterministic and lexical: no model call.
+- The reasoning node passes the conversation to the output stage, and
+  `POST /api/v1/guardrails/evaluate` takes `context` and `user_input` for a
+  dry run. Only a detector that uses the context receives it. See
+  `docs/governance/guardrails.md`.
+
 ### Added - Synthetic checks
 - A tenant administrator defines scheduled probes of the tenant's own paths
   (`observability/synthetic.py`): `model` (a fixed prompt through the direct
