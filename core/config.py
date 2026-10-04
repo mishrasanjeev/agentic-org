@@ -186,6 +186,15 @@ class Settings(BaseSettings):
     # each agent run are stored in run_spans when the run ends and pruned
     # after the retention period. Off by default.
     tracing_timeline_enabled: bool = False
+    # Streaming latency: the reasoning node reads each model answer as a
+    # stream to time its first token (observability/streaming.py) and puts
+    # the chunks back together into the same message. Off by default: off,
+    # the call is made exactly as before.
+    model_stream_timing_enabled: bool = False
+    # Task queue wait: a published background task is stamped with its publish
+    # time and the worker meters how long it waited. Off by default: off, no
+    # header is added and nothing is measured.
+    task_queue_timing_enabled: bool = False
     tracing_timeline_retention_days: int = 30
     # Tamper-evident audit: the sealing task links each tenant's audit rows
     # into a hash chain (chain_seq, chain_prev, chain_hash) so a removed,

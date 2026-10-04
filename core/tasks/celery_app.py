@@ -25,6 +25,7 @@ from celery.signals import (
 )
 
 from observability import tracing
+from observability.streaming import observe_queue_wait, stamp_enqueued
 
 _redis_url: str = os.getenv("AGENTICORG_REDIS_URL", "redis://localhost:6379/1")
 
@@ -360,6 +361,13 @@ def propagate_request_id_to_task(headers: dict[str, Any] | None = None, **_kwarg
     tracing.inject_headers(headers)
 
 
+@before_task_publish.connect
+def stamp_task_publish_time(headers: dict[str, Any] | None = None, **_kwargs: Any) -> None:
+    """Queue wait: record when the task was published, so the worker can meter how long it waited."""
+    if headers is not None:
+        stamp_enqueued(headers)
+
+
 def _trace_headers_from_task(task: Any) -> dict[str, str]:
     """The W3C trace context the publisher put in the task headers, if any."""
     request = getattr(task, "request", None)
@@ -403,6 +411,9 @@ def bind_task_log_context(task_id: str = "", task: Any = None, **_kwargs: Any) -
         parent=_trace_headers_from_task(task) if tracing.enabled() else None,
         **{"task.name": str(getattr(task, "name", "") or ""), "task.id": str(task_id), "request.id": request_id},
     )
+    waited = observe_queue_wait(task)
+    if waited is not None:
+        _task_spans[str(task_id)].set(**{"task.queue_wait_ms": int(waited * 1000)})
 
 
 @task_postrun.connect

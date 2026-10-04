@@ -58,6 +58,7 @@ from core.langgraph.tool_adapter import (
 )
 from core.pii.pseudonymiser import PseudonymSession
 from observability import tracing
+from observability.streaming import invoke_timed, observe_first_token
 
 logger = structlog.get_logger()
 
@@ -534,7 +535,8 @@ def build_agent_graph(
             },
         ):
             try:
-                response = await llm.ainvoke(messages)
+                # With stream timing on the answer is read as a stream to time its first token.
+                response, first_token_ms = await invoke_timed(llm, messages)
             # enterprise-gate: broad-except-ok reason=a-failed-model-call-is-recorded-then-raised-unchanged
             except Exception as exc:
                 await record_model_call(
@@ -557,8 +559,10 @@ def build_agent_graph(
                     "llm.input_tokens": input_tokens,
                     "llm.output_tokens": output_tokens,
                     "llm.latency_ms": int((time.monotonic() - started) * 1000),
+                    "llm.first_token_ms": first_token_ms,
                 }
             )
+            observe_first_token(called_provider, called_model, first_token_ms)
         await record_model_call(
             provider=called_provider,
             model=called_model,
