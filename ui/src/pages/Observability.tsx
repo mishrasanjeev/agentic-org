@@ -182,6 +182,23 @@ export default function Observability() {
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [workloadLoading, setWorkloadLoading] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  // The Checks tab exists only where synthetic checks are switched on for the deployment.
+  const [checksOn, setChecksOn] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    api
+      .get("/observability/checks")
+      .then((response) => {
+        if (live) setChecksOn(Boolean((response.data as { enabled?: boolean } | undefined)?.enabled));
+      })
+      .catch(() => {
+        if (live) setChecksOn(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   const loadRuns = useCallback(async () => {
     setRunsLoading(true);
@@ -273,9 +290,11 @@ export default function Observability() {
           <button type="button" className={tabClass("workload")} onClick={() => setTab("workload")} data-testid="tab-workload">
             Workload
           </button>
-          <button type="button" className={tabClass("checks")} onClick={() => setTab("checks")} data-testid="tab-checks">
-            Checks
-          </button>
+          {checksOn && (
+            <button type="button" className={tabClass("checks")} onClick={() => setTab("checks")} data-testid="tab-checks">
+              Checks
+            </button>
+          )}
         </div>
       </div>
 
@@ -495,7 +514,7 @@ export default function Observability() {
         </div>
       )}
 
-      {tab === "checks" && <SyntheticChecksPanel />}
+      {tab === "checks" && checksOn && <SyntheticChecksPanel />}
     </div>
   );
 }

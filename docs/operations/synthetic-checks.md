@@ -14,7 +14,7 @@ endpoints), and the **Checks** tab of the console page `/dashboard/observability
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `AGENTICORG_SYNTHETIC_CHECKS_ENABLED` | `false` | Run the scheduled sweep. Off, no check runs on its own; a check can still be run by hand. |
+| `AGENTICORG_SYNTHETIC_CHECKS_ENABLED` | `false` | Everything that runs a probe: the scheduled sweep, a run by hand and adding a check. Off, nothing runs, adding and running are refused with 409, and the console shows no Checks tab; stored checks and results can still be read, changed and removed through the API. |
 | `AGENTICORG_SYNTHETIC_CHECKS_RETENTION_DAYS` | `30` | How long results are kept. |
 
 The sweep (`core.tasks.synthetic_tasks.run_synthetic_checks`) runs every five minutes. It reads
@@ -22,6 +22,12 @@ which tenants have an enabled check, then runs each tenant's due checks under th
 row-level security context, the longest-waiting first and at most ten per tenant per sweep. A
 check is due when it has never run or its interval has passed. One tenant's or one check's
 failure never stops the sweep.
+
+A run claims its check before it probes: one conditional update moves the check's `last_run_at`
+from the value the runner read to now. Of two runners that read the same due check (a sweep
+still running when the next one starts, a run by hand during a sweep) exactly one probes; the
+other skips, and a run by hand answers 409. So a check is never probed twice for one interval
+and a `model` check is never billed twice.
 
 ## Kinds
 
@@ -73,10 +79,11 @@ All under `/api/v1/observability`, tenant administrators only.
 | `POST /checks` | add a check: `name`, `kind`, `config`, `interval_minutes` (5 to 1440, default 60), `enabled` |
 | `PATCH /checks/{id}` | change the name, the configuration, the interval or the enabled state |
 | `DELETE /checks/{id}` | remove the check and its results |
-| `POST /checks/{id}/run` | run the check now and return the result (works with the sweep off) |
+| `POST /checks/{id}/run` | run the check now and return the result; 409 while synthetic checks are off or the check is already running |
 | `GET /checks/{id}/results?limit=` | the newest results (default 50, at most 500) |
 
-A tenant has at most 20 checks and a name is unique within the tenant. Changes are attributed
+A tenant has at most 20 checks and a name is unique within the tenant; creations for one tenant
+are serialised by an advisory lock, so concurrent requests cannot pass the limit. Changes are attributed
 to the calling principal (`created_by`, `updated_by`).
 
 ## Storage

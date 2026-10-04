@@ -5486,7 +5486,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.checks.sensitive.read",
-    "source_line": 169,
+    "source_line": 175,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "observability.checks.sensitive.write",
-    "source_line": 189,
+    "source_line": 195,
     "tenant_required": true
   },
   {
@@ -5522,7 +5522,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "observability.checks.sensitive.write",
-    "source_line": 241,
+    "source_line": 248,
     "tenant_required": true
   },
   {
@@ -5540,7 +5540,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "observability.checks.sensitive.write",
-    "source_line": 212,
+    "source_line": 219,
     "tenant_required": true
   },
   {
@@ -5558,7 +5558,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.checks.sensitive.read",
-    "source_line": 286,
+    "source_line": 296,
     "tenant_required": true
   },
   {
@@ -5576,7 +5576,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "observability.checks.sensitive.write",
-    "source_line": 262,
+    "source_line": 269,
     "tenant_required": true
   },
   {
@@ -5594,7 +5594,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.runs.sensitive.read",
-    "source_line": 81,
+    "source_line": 82,
     "tenant_required": true
   },
   {
@@ -5612,7 +5612,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.runs.sensitive.read",
-    "source_line": 104,
+    "source_line": 105,
     "tenant_required": true
   },
   {
@@ -5630,7 +5630,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "observability.workload.sensitive.read",
-    "source_line": 124,
+    "source_line": 125,
     "tenant_required": true
   },
   {

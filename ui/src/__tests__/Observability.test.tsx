@@ -179,3 +179,34 @@ describe("Observability page", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Failed to load run timelines.");
   });
 });
+
+describe("Observability page: the Checks tab", () => {
+  it("is absent while synthetic checks are off or unreadable", async () => {
+    renderPage();
+    await screen.findByTestId(`trace-row-${RUN}`);
+    expect(screen.queryByTestId("tab-checks")).not.toBeInTheDocument();
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/observability/runs") return Promise.resolve({ data: RUNS });
+      if (url === "/observability/checks") {
+        return Promise.resolve({ data: { enabled: false, kinds: [], limit: 20, checks: [] } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    renderPage();
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith("/observability/checks"));
+    expect(screen.queryByTestId("tab-checks")).not.toBeInTheDocument();
+  });
+
+  it("appears where synthetic checks are switched on", async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/observability/runs") return Promise.resolve({ data: RUNS });
+      if (url === "/observability/checks") {
+        return Promise.resolve({ data: { enabled: true, kinds: ["model"], limit: 20, checks: [] } });
+      }
+      return Promise.reject(new Error(`unexpected ${url}`));
+    });
+    renderPage();
+    fireEvent.click(await screen.findByTestId("tab-checks"));
+    expect(await screen.findByTestId("checks-panel")).toBeInTheDocument();
+  });
+});

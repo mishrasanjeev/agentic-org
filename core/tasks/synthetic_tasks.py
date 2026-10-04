@@ -75,6 +75,9 @@ async def _run_synthetic_checks_async(*, max_per_tenant: int = MAX_PER_TENANT) -
                     error_type=type(exc).__name__,
                 )
                 continue
+            if result is None:
+                # Another sweep or a run by hand holds the check.
+                continue
             ran += 1
             if result.status != "ok":
                 not_ok += 1

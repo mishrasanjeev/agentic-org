@@ -24,9 +24,15 @@ reasons and the error type; never an answer, retrieved text or the probe's
 input. Prompts and texts are the tenant administrator's own synthetic
 inputs.
 
-The scheduled sweep (``core.tasks.synthetic_tasks``) runs behind
-``AGENTICORG_SYNTHETIC_CHECKS_ENABLED`` (off by default); a check can be run
-by hand through the API either way.
+Everything that runs a probe is behind ``AGENTICORG_SYNTHETIC_CHECKS_ENABLED``
+(off by default): the scheduled sweep (``core.tasks.synthetic_tasks``), a run
+by hand and adding a check. Off, the stored checks and results can still be
+read, changed and removed.
+
+A run claims its check first: one conditional UPDATE moves ``last_run_at``
+from the value the runner read to now, so of two runners that read the same
+due check (an overlapping sweep, a run by hand during a sweep) exactly one
+probes and the other skips.
 """
 
 from __future__ import annotations
@@ -366,8 +372,32 @@ async def probe(check: Check, *, trigger: str = "schedule") -> Result:
     )
 
 
-async def run_check(check: Check, *, trigger: str = "schedule") -> Result:
-    """Probe, store the result on the check and meter it."""
+async def claim(check: Check, *, now: datetime | None = None) -> bool:
+    """Take the check for one run: True for exactly one of the runners that read the same ``last_run_at``."""
+    from sqlalchemy import update
+
+    from core.database import get_tenant_session
+    from core.models.synthetic_check import SyntheticCheck
+
+    seen = (
+        SyntheticCheck.last_run_at.is_(None)
+        if check.last_run_at is None
+        else SyntheticCheck.last_run_at == check.last_run_at
+    )
+    async with get_tenant_session(check.tenant_id) as session:
+        taken = await session.execute(
+            update(SyntheticCheck)
+            .where(SyntheticCheck.tenant_id == check.tenant_id, SyntheticCheck.id == check.id, seen)
+            .values(last_run_at=now or datetime.now(UTC))
+        )
+        return int(getattr(taken, "rowcount", 0) or 0) == 1
+
+
+async def run_check(check: Check, *, trigger: str = "schedule") -> Result | None:
+    """Claim the check, probe, store the result and meter it; None when another runner holds the check."""
+    if not await claim(check):
+        logger.info("synthetic_check_already_claimed", check_id=str(check.id), kind=check.kind, trigger=trigger)
+        return None
     result = await probe(check, trigger=trigger)
     await _store_result(check, result)
     from observability.metrics import synthetic_checks_total
@@ -416,6 +446,15 @@ async def _store_result(check: Check, result: Result) -> None:
             .where(SyntheticCheck.tenant_id == check.tenant_id, SyntheticCheck.id == check.id)
             .values(last_run_at=result.started_at, last_status=result.status)
         )
+
+
+async def _lock_tenant(session: Any, tenant_id: uuid.UUID) -> None:
+    """Serialise the tenant's check creations: held until the transaction ends."""
+    from sqlalchemy import text
+
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": f"synthetic_checks:{tenant_id}"}
+    )
 
 
 async def list_checks(tenant_id: uuid.UUID) -> list[Check]:
@@ -472,6 +511,8 @@ async def create_check(
     clean_config = validate_config(kind, config)
     interval = validate_interval(interval_minutes)
     async with get_tenant_session(tenant_id) as session:
+        # The count and the insert are one step per tenant: concurrent creates queue on this lock.
+        await _lock_tenant(session, tenant_id)
         existing = (
             await session.execute(
                 select(func.count(), func.count().filter(SyntheticCheck.name == clean_name)).where(
