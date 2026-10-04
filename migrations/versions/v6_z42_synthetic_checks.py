@@ -66,7 +66,7 @@ def upgrade() -> None:
     """)
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_synthetic_check_results_check_started "
-        "ON synthetic_check_results(tenant_id, check_id, started_at DESC);"
+        "ON synthetic_check_results(check_id, started_at DESC);"
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS ix_synthetic_check_results_tenant_started "

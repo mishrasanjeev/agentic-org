@@ -51,7 +51,8 @@ class SyntheticCheckResult(BaseModel):
     __table_args__ = (
         CheckConstraint("status IN ('ok','failed','error')", name="ck_synthetic_check_results_status"),
         CheckConstraint("latency_ms >= 0", name="ck_synthetic_check_results_latency"),
-        Index("ix_synthetic_check_results_check_started", "tenant_id", "check_id", text("started_at DESC")),
+        # Leads with the foreign key: the results of one check, newest first, and the cascade on its delete.
+        Index("ix_synthetic_check_results_check_started", "check_id", text("started_at DESC")),
         Index("ix_synthetic_check_results_tenant_started", "tenant_id", text("started_at DESC")),
     )
 
