@@ -193,6 +193,12 @@ class Settings(BaseSettings):
     # and verification read whatever is sealed either way.
     audit_chain_enabled: bool = False
     audit_chain_seal_batch: int = 5000
+    # Synthetic checks (observability/synthetic.py): the scheduled sweep runs
+    # each tenant's due probes (model, knowledge, guardrail, audit chain) and
+    # stores a result per run. Off by default; a check can be run by hand
+    # through the API either way. Results are pruned after the retention period.
+    synthetic_checks_enabled: bool = False
+    synthetic_checks_retention_days: int = 30
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600
