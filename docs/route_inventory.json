@@ -6170,7 +6170,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.list",
-    "source_line": 118,
+    "source_line": 153,
     "tenant_required": true
   },
   {
@@ -6188,7 +6188,25 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 199,
+    "source_line": 303,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.check",
+    "auth_required": true,
+    "function": "check_prompt_template",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/prompt-templates/check api/v1/prompt_templates.py:check_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/check",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 230,
     "tenant_required": true
   },
   {
@@ -6206,7 +6224,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 596,
+    "source_line": 715,
     "tenant_required": true
   },
   {
@@ -6224,7 +6242,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 157,
+    "source_line": 192,
     "tenant_required": true
   },
   {
@@ -6242,7 +6260,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 301,
+    "source_line": 409,
     "tenant_required": true
   },
   {
@@ -6260,7 +6278,25 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.history",
-    "source_line": 409,
+    "source_line": 528,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.render",
+    "auth_required": true,
+    "function": "render_prompt_template",
+    "idempotency": "read-only",
+    "key": "POST /api/v1/prompt-templates/{template_id}/render api/v1/prompt_templates.py:render_prompt_template",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/{template_id}/render",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 256,
     "tenant_required": true
   },
   {
@@ -6278,7 +6314,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.rollback",
-    "source_line": 486,
+    "source_line": 605,
     "tenant_required": true
   },
   {

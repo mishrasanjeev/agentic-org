@@ -18,9 +18,16 @@ from api.deps import (
     require_tenant_admin,
 )
 from api.route_metadata import route_meta
+from core.config import settings
 from core.database import get_tenant_session
 from core.models.prompt_template import PromptTemplate, PromptTemplateEditHistory
-from core.schemas.api import PromptTemplateCreate, PromptTemplateUpdate
+from core.prompts import parameters as prompt_parameters
+from core.schemas.api import (
+    PromptTemplateCheck,
+    PromptTemplateCreate,
+    PromptTemplateRender,
+    PromptTemplateUpdate,
+)
 
 
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
@@ -86,6 +93,34 @@ def _validate_tool_references(template_text: str) -> list[str]:
 
     index = _build_tool_index()
     return [ref for ref in refs if ref not in index]
+
+
+def _checked_parameters(template_text: str, variables: list | None) -> list[dict]:
+    """The template's parameters, checked against its text; 422 names every problem.
+
+    Applied to writes only while typed parameters are on
+    (``AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED``).
+    """
+    try:
+        parameters = prompt_parameters.parse_parameters(variables)
+    except prompt_parameters.ParameterError as exc:
+        raise HTTPException(
+            422, detail={"error": "invalid_parameters", "problems": exc.problems, "message": str(exc)}
+        ) from None
+    check = prompt_parameters.check_template(template_text, parameters)
+    if check.undeclared:
+        raise HTTPException(
+            422,
+            detail={
+                "error": "undeclared_parameters",
+                "undeclared": check.undeclared,
+                "message": (
+                    "The template uses placeholders it does not declare as parameters: "
+                    f"{', '.join(check.undeclared)}."
+                ),
+            },
+        )
+    return [parameter.to_dict() for parameter in parameters]
 
 
 def _template_to_dict(t: PromptTemplate) -> dict:
@@ -182,6 +217,75 @@ async def get_prompt_template(
     return _template_to_dict(template)
 
 
+# ── POST /prompt-templates/check ───────────────────────────────────────────
+@router.post("/prompt-templates/check")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.read",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.check",
+)
+async def check_prompt_template(body: PromptTemplateCheck) -> dict:
+    """Check a template's parameters and text without storing anything.
+
+    Returns the parameters as they would be stored, the placeholders the
+    text uses, the ones it does not declare and the declarations it never
+    uses; ``problems`` lists what is wrong with the declarations.
+    """
+    try:
+        parameters = prompt_parameters.parse_parameters(body.variables)
+    except prompt_parameters.ParameterError as exc:
+        used = prompt_parameters.placeholders(body.template_text)
+        return {"ok": False, "problems": exc.problems, "parameters": [], "placeholders": used}
+    check = prompt_parameters.check_template(body.template_text, parameters)
+    return {**check.to_dict(), "problems": [], "parameters": [parameter.to_dict() for parameter in parameters]}
+
+
+# ── POST /prompt-templates/{id}/render ─────────────────────────────────────
+@router.post("/prompt-templates/{template_id}/render")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.read",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.render",
+)
+async def render_prompt_template(
+    template_id: UUID,
+    body: PromptTemplateRender,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> dict:
+    """The template with the given values filled in, after checking them against its parameters.
+
+    A missing required value, an unknown name, a value of the wrong type or
+    outside its bounds, or a placeholder the template does not declare is a
+    422 that lists every problem; nothing is rendered with a placeholder left
+    in it.
+    """
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(PromptTemplate).where(PromptTemplate.id == template_id, PromptTemplate.tenant_id == tid)
+        )
+        template = result.scalar_one_or_none()
+    if not template:
+        raise HTTPException(404, "Prompt template not found")
+    if isinstance(user_domains, list) and template.domain and template.domain not in user_domains:
+        raise HTTPException(404, "Prompt template not found")
+    try:
+        parameters = prompt_parameters.parse_parameters(template.variables)
+        text = prompt_parameters.render(template.template_text, parameters, body.values)
+    except prompt_parameters.ParameterError as exc:
+        raise HTTPException(
+            422, detail={"error": "invalid_values", "problems": exc.problems, "message": str(exc)}
+        ) from None
+    return {"text": text, "parameters": [parameter.to_dict() for parameter in parameters]}
+
+
 # ── POST /prompt-templates ─────────────────────────────────────────────────
 @router.post(
     "/prompt-templates",
@@ -243,6 +347,10 @@ async def create_prompt_template(
             },
         )
 
+    variables = body.variables
+    if settings.prompt_typed_parameters_enabled:
+        variables = _checked_parameters(body.template_text, body.variables)
+
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         # TC-005: Check for existing ACTIVE template with same name + agent_type.
@@ -269,7 +377,7 @@ async def create_prompt_template(
             agent_type=body.agent_type,
             domain=body.domain,
             template_text=body.template_text,
-            variables=body.variables,
+            variables=variables,
             description=body.description,
             created_by=_user_uuid_from_claims(user),
         )
@@ -345,6 +453,17 @@ async def update_prompt_template(
                         ),
                     },
                 )
+
+        # Typed parameters: the template as it will be after this change is
+        # checked as a whole, so new text cannot use an undeclared placeholder
+        # and new parameters cannot strand the text.
+        if settings.prompt_typed_parameters_enabled and (
+            "template_text" in update_data or "variables" in update_data
+        ):
+            update_data["variables"] = _checked_parameters(
+                update_data.get("template_text") or template.template_text,
+                update_data["variables"] if "variables" in update_data else template.variables,
+            )
 
         # Codex 2026-04-22 audit gap #8 — template history was marketed
         # but never recorded. Snapshot the "before" state so rollback

@@ -356,15 +356,26 @@ class PromptTemplateCreate(BaseModel):
     agent_type: str
     domain: str
     template_text: str
-    variables: list[dict[str, str]] = []
+    # A parameter is a name with an optional type, required flag, default and
+    # bounds (core/prompts/parameters.py); a bare name is a required string.
+    variables: list[dict[str, Any]] = []
     description: str | None = None
 
 
 class PromptTemplateUpdate(BaseModel):
     name: str | None = None
     template_text: str | None = None
-    variables: list[dict[str, str]] | None = None
+    variables: list[dict[str, Any]] | None = None
     description: str | None = None
+
+
+class PromptTemplateCheck(BaseModel):
+    template_text: str = Field(..., max_length=200_000)
+    variables: list[dict[str, Any]] = []
+
+
+class PromptTemplateRender(BaseModel):
+    values: dict[str, Any] = {}
 
 
 class PromptTemplateResponse(BaseModel):
@@ -373,7 +384,7 @@ class PromptTemplateResponse(BaseModel):
     agent_type: str
     domain: str
     template_text: str
-    variables: list[dict[str, str]]
+    variables: list[dict[str, Any]]
     description: str | None
     is_builtin: bool
     is_active: bool

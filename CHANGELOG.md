@@ -4,6 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: typed parameters
+- A prompt template's variables can be declared as typed parameters
+  (`core/prompts/parameters.py`): `string`, `integer`, `number`, `boolean`
+  or `enum`, with required, default, range, length, pattern and choices. A
+  variable declared by name only is a required string, as before.
+- `POST /api/v1/prompt-templates/check` checks a template's text against
+  its declarations without storing it, and `POST
+  /api/v1/prompt-templates/{id}/render` fills a stored template after
+  checking the values; a missing, unknown or mistyped value is refused with
+  every problem listed, and no placeholder is left in rendered text.
+- Behind `AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED` (off by default),
+  creating or changing a template checks its parameters and refuses a
+  placeholder it does not declare. See `docs/governance/prompt-governance.md`.
+
 ### Added - Streaming latency: time to first token and task queue wait
 - Behind `AGENTICORG_MODEL_STREAM_TIMING_ENABLED` (off by default) the
   reasoning node reads each model answer as a stream, times its first token
