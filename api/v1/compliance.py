@@ -215,10 +215,11 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
         )
         incident_count = incident_result.scalar() or 0
 
-    from core.governance import infrastructure, residency
+    from core.governance import audit_chain, infrastructure, residency
     from core.governance.guardrails.engine import report_section as guardrails_section
 
     data_residency = await residency.report_section(tid)
+    audit_chain_evidence = await audit_chain.evidence(tid)
 
     return {
         "package_id": package_id,
@@ -236,6 +237,7 @@ async def evidence_package(tenant_id: str = Depends(get_current_tenant)):
             "audit_logs": {
                 "control_id": "CC7.2",
                 "total_entries": audit_total,
+                "chain": audit_chain_evidence,
                 "status": "collected",
             },
             "encryption_at_rest": {

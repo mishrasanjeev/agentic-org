@@ -155,7 +155,15 @@ def test_tc_audit_006_audit_log_is_db_level_append_only() -> None:
     src = (REPO / "core" / "database.py").read_text(encoding="utf-8")
     assert "audit_log_reject_mutation" in src
     assert "BEFORE UPDATE OR DELETE ON audit_log" in src
-    assert "audit_log is append-only" in src
+    # The function body is the hash chain's: it refuses every mutation but the
+    # one sealing transition (core/governance/audit_chain.py), and the schema
+    # bootstrap installs exactly that text.
+    assert "await conn.execute(text(SEAL_TRIGGER_SQL))" in src
+    from core.governance.audit_chain import SEAL_TRIGGER_SQL
+
+    assert "CREATE OR REPLACE FUNCTION audit_log_reject_mutation()" in SEAL_TRIGGER_SQL
+    assert "audit_log is append-only" in SEAL_TRIGGER_SQL
+    assert "ERRCODE = 'insufficient_privilege'" in SEAL_TRIGGER_SQL
 
 
 def test_tc_audit_006_compliance_evidence_endpoint_is_read_only() -> None:

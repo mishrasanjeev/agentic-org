@@ -48,7 +48,12 @@ from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import decide as gateway_decide
 from core.governance.model_gateway import normalise_provider as gateway_provider
 from core.governance.model_gateway import release as gateway_release
-from core.governance.model_gateway_records import record_model_call
+from core.governance.model_gateway_records import (
+    content_digest,
+    messages_digest,
+    prompt_digest_of,
+    record_model_call,
+)
 from core.governance.model_pricing import price_for
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.residency import ResidencyBlocked
@@ -673,6 +678,10 @@ class LLMRouter:
             temp = temperature if temperature is not None else self.temperature
             # Only forward tenant_id when set so existing _call_model call shapes stay stable.
             scope = {"tenant_id": tenant_id} if tenant_id else {}
+            # Tamper-evident records: digests of the prompt and of what the
+            # model is sent (after pseudonymisation), never the content.
+            prompt_digest = prompt_digest_of(messages)
+            request_digest = messages_digest(messages)
 
             async def _record(
                 called: str,
@@ -698,6 +707,9 @@ class LLMRouter:
                     fallback_from=fallback_from,
                     admission_wait_ms=admission_wait_ms if fallback_from is None else None,
                     use_case="completion",
+                    prompt_digest=prompt_digest,
+                    request_digest=request_digest,
+                    response_digest=content_digest(response.content) if response is not None else None,
                 )
 
             started = time.monotonic()

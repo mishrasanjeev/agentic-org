@@ -167,6 +167,14 @@ decision, each model call and the audit rows of that request; a call outside a
 request gets a fresh id. Time to first token needs streaming, which the
 platform's model calls do not use yet.
 
+A record also carries three digests, each a SHA-256 over canonical JSON:
+`prompt_digest` over the system prompt (the prompt's version, in effect),
+`request_digest` over every message the model saw, after pseudonymisation and
+the guardrail input stage, and `response_digest` over the answer. The digests
+are part of the signature and the content is never stored, so a party holding
+the content can show it matches the record and nobody can learn it from the
+record (`docs/operations/audit-chain.md`).
+
 ## Decision rules
 
 - The first enabled policy in priority order whose match fields all equal the

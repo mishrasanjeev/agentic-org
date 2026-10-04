@@ -397,3 +397,124 @@ class TestModelHealth:
             patch.object(rec, "_load_health", AsyncMock(return_value=[])),
         ):
             assert asyncio.run(rec.model_health(uuid.uuid4())) == {}
+
+
+class TestDigests:
+    def test_content_and_message_digests_are_stable_and_order_sensitive(self):
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        assert rec.content_digest(None) is None and rec.content_digest("") is None and rec.content_digest([]) is None
+        assert rec.content_digest("hello") == rec.content_digest("hello") and len(rec.content_digest("hello")) == 64
+        assert rec.content_digest("hello") != rec.content_digest("hello!")
+        messages = [SystemMessage(content="be brief"), HumanMessage(content="hi")]
+        assert rec.messages_digest(messages) == rec.messages_digest(list(messages))
+        assert rec.messages_digest(list(reversed(messages))) != rec.messages_digest(messages)
+        assert rec.messages_digest([]) is None
+        assert rec.prompt_digest_of(messages) == rec.content_digest("be brief")
+        assert rec.prompt_digest_of([HumanMessage(content="hi")]) is None
+
+    def test_the_request_digest_covers_tool_calls_and_tool_results(self):
+        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+
+        def _turn(name: str, args: dict, call_id: str, answers: str) -> list:
+            return [
+                HumanMessage(content="pay the invoice"),
+                AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}]),
+                ToolMessage(content="done", tool_call_id=answers),
+            ]
+
+        base = rec.messages_digest(_turn("pay", {"amount": 10}, "call-1", "call-1"))
+        assert base == rec.messages_digest(_turn("pay", {"amount": 10}, "call-1", "call-1"))
+        assert rec.messages_digest(_turn("refund", {"amount": 10}, "call-1", "call-1")) != base
+        assert rec.messages_digest(_turn("pay", {"amount": 99}, "call-1", "call-1")) != base
+        assert rec.messages_digest(_turn("pay", {"amount": 10}, "call-2", "call-1")) != base
+        assert rec.messages_digest(_turn("pay", {"amount": 10}, "call-1", "call-9")) != base
+
+    def test_the_response_digest_covers_a_tool_call_answer_with_no_content(self):
+        from langchain_core.messages import AIMessage
+
+        assert rec.message_digest(None) is None and rec.message_digest(AIMessage(content="")) is None
+        assert rec.message_digest(AIMessage(content="hello")) == rec.content_digest("hello")
+        pay = rec.message_digest(AIMessage(content="", tool_calls=[{"name": "pay", "args": {"a": 1}, "id": "c1"}]))
+        other = rec.message_digest(AIMessage(content="", tool_calls=[{"name": "pay", "args": {"a": 2}, "id": "c1"}]))
+        assert pay is not None and len(pay) == 64 and pay != other
+
+    def test_router_messages_are_digested_by_role(self):
+        messages = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}]
+        assert rec.prompt_digest_of(messages) == rec.content_digest("be brief")
+        assert rec.messages_digest(messages) == rec.content_digest(
+            [{"type": "system", "content": "be brief"}, {"type": "user", "content": "hi"}]
+        )
+        assert rec.messages_digest(list(reversed(messages))) != rec.messages_digest(messages)
+
+    def test_the_direct_router_sends_the_digests_with_every_record(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "core" / "llm" / "router.py").read_text(encoding="utf-8")
+        assert "prompt_digest = prompt_digest_of(messages)" in src
+        assert "request_digest = messages_digest(messages)" in src
+        assert "response_digest=content_digest(response.content) if response is not None else None," in src
+        pseudonymised = src.index("pseudonymise_router_messages(messages)")
+        assert pseudonymised < src.index("request_digest = messages_digest(messages)")
+
+    def test_digests_are_signed_only_when_present_so_older_records_still_verify(self):
+        from dataclasses import replace
+
+        record = rec.ModelCallRecord(
+            tenant_id=str(uuid.uuid4()),
+            correlation_id="c1",
+            use_case="agent_run",
+            agent_id="a1",
+            policy_id=None,
+            access_policy_id=None,
+            requested_provider=None,
+            requested_model=None,
+            provider="openai",
+            model="gpt-4o",
+            fallback_from=None,
+            restricted=False,
+            outcome="completed",
+            error_type=None,
+            latency_ms=10,
+            admission_wait_ms=None,
+            tokens=3,
+            input_tokens=1,
+            output_tokens=2,
+            cost_usd=0.0,
+            tokens_per_second=None,
+            created_at=datetime.now(UTC),
+        )
+        key = b"k"
+        older = dict(record.to_dict(), signature=rec.sign_record(record, key))
+        assert "prompt_digest" not in rec.canonical_record_payload(record)
+        assert rec.verify_record(older, key)
+        record = replace(record, request_digest="a" * 64, response_digest="b" * 64)
+        assert '"request_digest"' in rec.canonical_record_payload(record)
+        signed = dict(record.to_dict(), signature=rec.sign_record(record, key))
+        assert rec.verify_record(signed, key)
+        assert not rec.verify_record(dict(signed, response_digest="c" * 64), key)
+
+    def test_record_model_call_carries_the_digests(self):
+        with patch.object(rec, "_write", AsyncMock(return_value=True)), patch.object(rec, "_meter", lambda *_a: None):
+            record = asyncio.run(
+                rec.record_model_call(
+                    _decision(),
+                    provider="openai",
+                    model="gpt-4o",
+                    outcome="completed",
+                    latency_ms=5,
+                    prompt_digest="p" * 64,
+                    request_digest="r" * 64,
+                    response_digest="s" * 64,
+                )
+            )
+        assert (record.prompt_digest, record.request_digest, record.response_digest) == ("p" * 64, "r" * 64, "s" * 64)
+
+    def test_the_reasoning_node_sends_the_digests_with_every_record(self):
+        from pathlib import Path
+
+        src = (Path(__file__).resolve().parents[3] / "core" / "langgraph" / "agent_graph.py").read_text(
+            encoding="utf-8"
+        )
+        assert src.count("request_digest=request_digest,") == 2 and src.count("prompt_digest=prompt_digest,") == 2
+        assert "response_digest=message_digest(response)," in src

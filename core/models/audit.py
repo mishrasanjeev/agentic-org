@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import TIMESTAMP, Index, String, Text, func, text
+from sqlalchemy import TIMESTAMP, BigInteger, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,21 @@ class AuditLog(BaseModel):
             text("created_at DESC"),
             postgresql_where=text("resource_type = 'tool_call'"),
         ),
+        # The hash chain (core/governance/audit_chain.py): one sequence per tenant, the unsealed rows findable.
+        Index(
+            "ux_audit_log_tenant_chain_seq",
+            "tenant_id",
+            "chain_seq",
+            unique=True,
+            postgresql_where=text("chain_seq IS NOT NULL"),
+        ),
+        Index(
+            "ix_audit_log_tenant_unsealed",
+            "tenant_id",
+            "created_at",
+            "id",
+            postgresql_where=text("chain_seq IS NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -60,6 +75,23 @@ class AuditLog(BaseModel):
     details: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     signature: Mapped[str | None] = mapped_column(String(512), nullable=True)
     trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP(timezone=True), server_default=func.now()
-    )
+    # Filled by the sealing task (core/governance/audit_chain.py); null until the row is linked.
+    chain_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    chain_prev: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    chain_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sealed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class AuditChainAnchor(BaseModel):
+    """The head the last sealing left for a tenant: what verification holds the chain against.
+
+    Row-level security: tenant-scoped (``v6z41_tamper_evident_audit``).
+    """
+
+    __tablename__ = "audit_chain_anchors"
+
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    head_seq: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    head_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    sealed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)

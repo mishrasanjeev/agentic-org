@@ -53,4 +53,8 @@ class ModelGatewayRecord(BaseModel):
     output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     signature: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Digests of the prompt, of what the model saw and of what it answered; the content is never stored.
+    prompt_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    request_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    response_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
