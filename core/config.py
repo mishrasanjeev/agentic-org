@@ -196,6 +196,11 @@ class Settings(BaseSettings):
     # required, default, bounds) and refuses a placeholder the template does
     # not declare. Off by default: off, templates are stored as before.
     prompt_typed_parameters_enabled: bool = False
+    # Maker-checker for prompt templates (core/prompts/change_requests.py):
+    # a create, change, rollback or delete waits as a change request for a
+    # second person's approval. Off by default; the authority flag
+    # prompts.maker_checker turns it on for one tenant.
+    prompts_maker_checker: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

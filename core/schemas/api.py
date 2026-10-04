@@ -378,6 +378,10 @@ class PromptTemplateRender(BaseModel):
     values: dict[str, Any] = {}
 
 
+class PromptChangeDecision(BaseModel):
+    note: str | None = Field(None, max_length=500)
+
+
 class PromptTemplateResponse(BaseModel):
     id: UUID
     name: str

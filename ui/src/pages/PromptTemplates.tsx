@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { promptTemplatesApi, extractApiError } from "@/lib/api";
 import type { PromptTemplate } from "@/types";
+import PromptChangeRequests from "@/components/prompts/PromptChangeRequests";
 
 function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -19,6 +20,8 @@ export default function PromptTemplates() {
   const [editText, setEditText] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Bumped on every reload of the list (each write ends in one), so the approval queue reloads too.
+  const [changesKey, setChangesKey] = useState(0);
 
   // Create form state
   const [newName, setNewName] = useState("");
@@ -31,6 +34,7 @@ export default function PromptTemplates() {
 
   async function fetchTemplates() {
     setLoading(true);
+    setChangesKey((key) => key + 1);
     try {
       const params: Record<string, string> = {};
       if (domainFilter) params.domain = domainFilter;
@@ -77,6 +81,9 @@ export default function PromptTemplates() {
         <h2 className="text-2xl font-bold">Prompt Templates</h2>
         <Button onClick={() => { setCreating(!creating); setCreateError(null); }}>{creating ? "Cancel" : "Create Template"}</Button>
       </div>
+
+      {/* Maker-checker: changes waiting for a second person (renders nothing while it is off and nothing waits). */}
+      <PromptChangeRequests onDecided={fetchTemplates} refreshKey={changesKey} />
 
       {/* Create Form */}
       {creating && (

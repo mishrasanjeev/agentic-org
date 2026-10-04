@@ -4,6 +4,21 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: maker-checker for prompt templates
+- With `AGENTICORG_PROMPTS_MAKER_CHECKER` or the authority flag
+  `prompts.maker_checker` on (both off by default), creating, changing,
+  rolling back or deleting a prompt template is stored as a change request
+  and answers 202; a different person approves or rejects it and only an
+  approval applies it (`core/prompts/change_requests.py`). The proposer
+  cannot decide their own change, a template has one pending change at a
+  time, a change proposed against a template that has since changed becomes
+  stale and is not applied, and an unreadable flag refuses the change.
+- The template history records who proposed a change, who approved it and
+  the request it came from. `GET /api/v1/prompt-templates/changes`, `GET
+  .../changes/{id}` and `POST .../changes/{id}/approve|reject|withdraw`; the
+  prompt templates page shows what is waiting. Migration
+  `v6z43_prompt_change_requests`. An agent's own prompt is not covered yet.
+
 ### Added - Prompt governance: typed parameters
 - A prompt template's variables can be declared as typed parameters
   (`core/prompts/parameters.py`): `string`, `integer`, `number`, `boolean`

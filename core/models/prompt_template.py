@@ -138,6 +138,54 @@ class PromptTemplateEditHistory(BaseModel):
     variables_after: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     description_after: Mapped[str | None] = mapped_column(Text, nullable=True)
     change_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Maker-checker: who approved the change and the request it came from (null for a change made directly).
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    change_request_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
+
+
+class PromptChangeRequest(BaseModel):
+    """A proposed change to a prompt template that waits for a second person's decision.
+
+    Written instead of the change itself while maker-checker is on for the
+    tenant (``core/prompts/change_requests.py``). ``proposed`` is the template
+    as it would be after the change; ``base_updated_at`` is the template's
+    ``updated_at`` when the change was proposed, so a change proposed against
+    a template that has moved on since is not applied.
+
+    Row-level security: tenant-scoped (``v6z43_prompt_change_requests``).
+    """
+
+    __tablename__ = "prompt_change_requests"
+    __table_args__ = (
+        # Leads with the foreign key: the requests of one template.
+        Index("ix_prompt_change_requests_template", "template_id", "status"),
+        # One pending change per template, held by the database under concurrent proposals.
+        Index(
+            "ux_prompt_change_requests_one_pending",
+            "template_id",
+            unique=True,
+            postgresql_where="status = 'pending' AND template_id IS NOT NULL",
+        ),
+        Index("ix_prompt_change_requests_tenant_status", "tenant_id", "status", "requested_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("prompt_templates.id"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    domain: Mapped[str] = mapped_column(String(50), nullable=False)
+    proposed: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    base_updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    requested_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    requested_by_user: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)
+    decided_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(String(500), nullable=True)

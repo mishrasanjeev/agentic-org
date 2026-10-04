@@ -8,6 +8,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -21,8 +22,10 @@ from api.route_metadata import route_meta
 from core.config import settings
 from core.database import get_tenant_session
 from core.models.prompt_template import PromptTemplate, PromptTemplateEditHistory
+from core.prompts import change_requests
 from core.prompts import parameters as prompt_parameters
 from core.schemas.api import (
+    PromptChangeDecision,
     PromptTemplateCheck,
     PromptTemplateCreate,
     PromptTemplateRender,
@@ -188,6 +191,173 @@ async def list_prompt_templates(
         templates = result.scalars().all()
 
     return [_template_to_dict(t) for t in templates]
+
+
+# ── Change requests (maker-checker) ────────────────────────────────────────
+async def _maker_checker(tenant_id: _uuid.UUID) -> bool:
+    """Whether changes wait for approval; an unreadable flag refuses the change rather than applying it."""
+    try:
+        return await change_requests.enabled(tenant_id)
+    # enterprise-gate: broad-except-ok reason=an-unreadable-maker-checker-flag-fails-closed-and-is-logged
+    except Exception as exc:
+        logger.error("prompt_maker_checker_flag_unreadable", error_type=type(exc).__name__)
+        raise HTTPException(503, "The maker-checker setting could not be read; the change was not made") from exc
+
+
+def _pending(row) -> JSONResponse:
+    return JSONResponse(
+        status_code=202,
+        content={
+            "id": str(row.template_id) if row.template_id else None,
+            "pending_approval": True,
+            "change_request_id": str(row.id),
+            "status": row.status,
+        },
+    )
+
+
+def _refusal(exc: change_requests.ChangeRequestError) -> HTTPException:
+    return HTTPException(exc.status, exc.message)
+
+
+@router.get("/prompt-templates/changes")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.list",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.changes.list",
+)
+async def list_prompt_changes(
+    status: str | None = "pending",
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> dict:
+    """Change requests for the tenant's prompt templates, newest first, and whether maker-checker is on."""
+    if status is not None and status not in change_requests.STATUSES:
+        raise HTTPException(422, f"status must be one of {', '.join(change_requests.STATUSES)}")
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        rows = await change_requests.list_requests(session, tid, status=status, domains=user_domains)
+        items = [change_requests.to_dict(row) for row in rows]
+    return {"maker_checker": await _maker_checker(tid), "changes": items}
+
+
+@router.get("/prompt-templates/changes/{change_id}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.read",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.changes.get",
+)
+async def get_prompt_change(
+    change_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> dict:
+    """One change request with the template as it is now, so the reviewer sees what would change."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        try:
+            row = await change_requests.get_request(session, tid, change_id, user_domains)
+        except change_requests.ChangeRequestError as exc:
+            raise _refusal(exc) from None
+        current = None
+        if row.template_id is not None:
+            template = (
+                await session.execute(
+                    select(PromptTemplate).where(PromptTemplate.id == row.template_id, PromptTemplate.tenant_id == tid)
+                )
+            ).scalar_one_or_none()
+            current = change_requests.state_of(template) if template is not None else None
+        return {**change_requests.to_dict(row), "current": current}
+
+
+async def _decide(action: str, change_id: UUID, tenant_id: str, user: dict, user_domains, note: str | None) -> dict:
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            if action == "approve":
+                row = await change_requests.approve(
+                    session, tid, change_id, user=user, note=note, domains=user_domains
+                )
+            elif action == "reject":
+                row = await change_requests.reject(
+                    session, tid, change_id, user=user, note=note or "", domains=user_domains
+                )
+            else:
+                row = await change_requests.withdraw(session, tid, change_id, user=user, domains=user_domains)
+            result = change_requests.to_dict(row)
+    except change_requests.ChangeRequestError as exc:
+        raise _refusal(exc) from None
+    except IntegrityError as exc:
+        raise HTTPException(409, "A template with this name and agent_type already exists") from exc
+    if result["status"] == "stale":
+        # The stale mark is stored; the caller is told nothing was applied.
+        raise HTTPException(409, detail={"error": "stale_change_request", "message": result["decision_note"]})
+    return result
+
+
+@router.post("/prompt-templates/changes/{change_id}/approve", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="not-idempotent-applies-the-change-once",
+    audit_event="prompt_templates.changes.approve",
+)
+async def approve_prompt_change(
+    change_id: UUID,
+    body: PromptChangeDecision,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Apply a pending change. Refused for the person who proposed it."""
+    return await _decide("approve", change_id, tenant_id, user, user_domains, body.note)
+
+
+@router.post("/prompt-templates/changes/{change_id}/reject", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="not-idempotent-closes-the-request",
+    audit_event="prompt_templates.changes.reject",
+)
+async def reject_prompt_change(
+    change_id: UUID,
+    body: PromptChangeDecision,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """Reject a pending change with a note. Refused for the person who proposed it."""
+    return await _decide("reject", change_id, tenant_id, user, user_domains, body.note)
+
+
+@router.post("/prompt-templates/changes/{change_id}/withdraw", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-template-write",
+    idempotency="not-idempotent-closes-the-request",
+    audit_event="prompt_templates.changes.withdraw",
+)
+async def withdraw_prompt_change(
+    change_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
+) -> dict:
+    """The proposer takes a pending change back."""
+    return await _decide("withdraw", change_id, tenant_id, user, user_domains, None)
 
 
 # ── GET /prompt-templates/{id} ─────────────────────────────────────────────
@@ -380,6 +550,30 @@ async def create_prompt_template(
                 409, "A template with this name and agent_type already exists"
             )
 
+        # Maker-checker: the new template waits for a second person.
+        if await _maker_checker(tid):
+            try:
+                pending = await change_requests.open_request(
+                    session,
+                    tid,
+                    kind="create",
+                    template=None,
+                    proposed={
+                        "name": body.name,
+                        "agent_type": body.agent_type,
+                        "domain": body.domain,
+                        "template_text": body.template_text,
+                        "variables": variables,
+                        "description": body.description,
+                    },
+                    domain=body.domain,
+                    reason=None,
+                    user=user,
+                )
+            except change_requests.ChangeRequestError as exc:
+                raise _refusal(exc) from None
+            return _pending(pending)
+
         # Codex 2026-04-22 audit gap #9 — created_by was never populated,
         # so the "who authored this template" claim in marketing copy had
         # no backing data.
@@ -478,6 +672,27 @@ async def update_prompt_template(
             )
         elif "variables" in update_data:
             _legacy_variables(update_data["variables"])
+
+        # Maker-checker: the change waits for a second person; nothing is applied now.
+        if await _maker_checker(tid):
+            try:
+                pending = await change_requests.open_request(
+                    session,
+                    tid,
+                    kind="update",
+                    template=template,
+                    proposed={
+                        key: update_data[key]
+                        for key in ("name", "template_text", "variables", "description")
+                        if key in update_data
+                    },
+                    domain=template.domain,
+                    reason=None,
+                    user=user,
+                )
+            except change_requests.ChangeRequestError as exc:
+                raise _refusal(exc) from None
+            return _pending(pending)
 
         # Codex 2026-04-22 audit gap #8 — template history was marketed
         # but never recorded. Snapshot the "before" state so rollback
@@ -587,6 +802,10 @@ async def get_prompt_template_history(
             {
                 "id": str(h.id),
                 "edited_by": str(h.edited_by) if h.edited_by else None,
+                "approved_by": getattr(h, "approved_by", None),
+                "change_request_id": (
+                    str(h.change_request_id) if getattr(h, "change_request_id", None) else None
+                ),
                 "name_before": h.name_before,
                 "name_after": h.name_after,
                 "template_text_before": h.template_text_before,
@@ -669,6 +888,33 @@ async def rollback_prompt_template(
         if not hist:
             raise HTTPException(404, "History entry not found for this template")
 
+        # Maker-checker: the rollback waits for a second person.
+        if await _maker_checker(tid):
+            restored = {
+                key: value
+                for key, value in (
+                    ("name", hist.name_before),
+                    ("template_text", hist.template_text_before),
+                    ("variables", hist.variables_before),
+                    ("description", hist.description_before),
+                )
+                if value is not None
+            }
+            try:
+                pending = await change_requests.open_request(
+                    session,
+                    tid,
+                    kind="rollback",
+                    template=template,
+                    proposed=restored,
+                    domain=template.domain,
+                    reason=f"Rollback to history {history_id}",
+                    user=user,
+                )
+            except change_requests.ChangeRequestError as exc:
+                raise _refusal(exc) from None
+            return _pending(pending)
+
         # Snapshot current state before rolling back so the audit chain
         # stays intact ("you reverted from X to Y on DATE").
         before_snapshot = {
@@ -730,6 +976,7 @@ async def delete_prompt_template(
     template_id: UUID,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
+    user: dict = Depends(get_current_user),
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -749,6 +996,23 @@ async def delete_prompt_template(
             raise HTTPException(404, "Prompt template not found")
         if template.is_builtin:
             raise HTTPException(409, "Cannot delete built-in templates")
+
+        # Maker-checker: the deletion waits for a second person.
+        if await _maker_checker(tid):
+            try:
+                pending = await change_requests.open_request(
+                    session,
+                    tid,
+                    kind="delete",
+                    template=template,
+                    proposed={},
+                    domain=template.domain,
+                    reason=None,
+                    user=user,
+                )
+            except change_requests.ChangeRequestError as exc:
+                raise _refusal(exc) from None
+            return _pending(pending)
 
         template.is_active = False  # Soft delete
 

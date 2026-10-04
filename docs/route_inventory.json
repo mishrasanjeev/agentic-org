@@ -6170,7 +6170,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.list",
-    "source_line": 164,
+    "source_line": 167,
     "tenant_required": true
   },
   {
@@ -6188,7 +6188,97 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 314,
+    "source_line": 484,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.changes.list",
+    "auth_required": true,
+    "function": "list_prompt_changes",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates/changes api/v1/prompt_templates.py:list_prompt_changes",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/changes",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.list",
+    "source_line": 232,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.changes.get",
+    "auth_required": true,
+    "function": "get_prompt_change",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates/changes/{change_id} api/v1/prompt_templates.py:get_prompt_change",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/changes/{change_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 256,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.changes.approve",
+    "auth_required": true,
+    "function": "approve_prompt_change",
+    "idempotency": "not-idempotent-applies-the-change-once",
+    "key": "POST /api/v1/prompt-templates/changes/{change_id}/approve api/v1/prompt_templates.py:approve_prompt_change",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/changes/{change_id}/approve",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 313,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.changes.reject",
+    "auth_required": true,
+    "function": "reject_prompt_change",
+    "idempotency": "not-idempotent-closes-the-request",
+    "key": "POST /api/v1/prompt-templates/changes/{change_id}/reject api/v1/prompt_templates.py:reject_prompt_change",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/changes/{change_id}/reject",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 333,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.changes.withdraw",
+    "auth_required": true,
+    "function": "withdraw_prompt_change",
+    "idempotency": "not-idempotent-closes-the-request",
+    "key": "POST /api/v1/prompt-templates/changes/{change_id}/withdraw api/v1/prompt_templates.py:withdraw_prompt_change",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/changes/{change_id}/withdraw",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-write",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 353,
     "tenant_required": true
   },
   {
@@ -6206,7 +6296,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 241,
+    "source_line": 411,
     "tenant_required": true
   },
   {
@@ -6224,7 +6314,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 729,
+    "source_line": 975,
     "tenant_required": true
   },
   {
@@ -6242,7 +6332,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 203,
+    "source_line": 373,
     "tenant_required": true
   },
   {
@@ -6260,7 +6350,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 421,
+    "source_line": 615,
     "tenant_required": true
   },
   {
@@ -6278,7 +6368,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.history",
-    "source_line": 542,
+    "source_line": 757,
     "tenant_required": true
   },
   {
@@ -6296,7 +6386,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 267,
+    "source_line": 437,
     "tenant_required": true
   },
   {
@@ -6314,7 +6404,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.rollback",
-    "source_line": 619,
+    "source_line": 838,
     "tenant_required": true
   },
   {

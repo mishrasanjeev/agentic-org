@@ -1,12 +1,12 @@
 # Prompt governance
 
-How prompt templates are declared, checked and filled. This page covers typed parameters, the
-first part of the prompt governance package; approval before production, side-by-side
-comparison, evaluation against datasets and context-window management follow in later parts and
-are listed at the end.
+How prompt templates are declared, checked, filled and changed. This page covers typed
+parameters and maker-checker approval; side-by-side comparison, evaluation against datasets and
+context-window management follow in later parts and are listed at the end.
 
-Implementation: `core/prompts/parameters.py` (declarations, checks, resolution, rendering) and
-`api/v1/prompt_templates.py` (the template endpoints).
+Implementation: `core/prompts/parameters.py` (declarations, checks, resolution, rendering),
+`core/prompts/change_requests.py` (maker-checker) and `api/v1/prompt_templates.py` (the template
+endpoints).
 
 ## Typed parameters
 
@@ -86,6 +86,56 @@ On an update the template is checked as the template it will be after the change
 cannot use a placeholder the stored parameters do not declare. The check and render endpoints
 work whatever the switch is.
 
+## Maker-checker
+
+With maker-checker on, a change to a prompt template does not happen when it is asked for.
+Creating, changing, rolling back or deleting a template is stored as a **change request** holding
+the template as it would be afterwards, the API answers `202` with the request's id, and the
+template is untouched. A different person approves or rejects the request; only an approval
+applies it.
+
+| Rule | |
+| --- | --- |
+| Two people | The person who proposed a change cannot approve or reject it. Identity is the caller's local user id and nothing else: an API key, or any credential without a local user, cannot propose or decide, so one person cannot be maker and checker by switching credentials. With maker-checker on, a template write through an API key is refused with 403. The table also refuses a row whose decider is its proposer. |
+| One at a time | A template has at most one pending change; a second proposal is refused (409) until the first is decided or withdrawn. A partial unique index holds this under concurrent proposals. |
+| Against what was reviewed | A change is applied only to the template it was proposed against. If the template has changed since (or was deleted), the request becomes `stale`, nothing is applied and the approval answers 409. |
+| Reasons | A rejection needs a note. The proposer can withdraw a pending request. |
+| Record | An applied change writes the template's history row with who proposed it (`edited_by`), who approved it (`approved_by`) and the request it came from (`change_request_id`); `GET /prompt-templates/{id}/history` returns them. |
+
+The validation a direct change gets (name and text rules, tool references, typed parameters when
+enabled, the duplicate-name check) runs when the change is proposed, so a request that waits is
+one that would have been accepted.
+
+### The switch
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_PROMPTS_MAKER_CHECKER` | `false` | On for every tenant of the deployment. |
+| authority flag `prompts.maker_checker` | off | On for one tenant. |
+
+The flag is read strictly: if it cannot be read, the change is refused with 503 rather than
+applied unchecked. Requests made while maker-checker was on can still be decided after it is
+turned off.
+
+### Endpoints
+
+| Endpoint | Does |
+| --- | --- |
+| `GET /api/v1/prompt-templates/changes?status=` | change requests (default `pending`), newest first, and whether maker-checker is on |
+| `GET /api/v1/prompt-templates/changes/{id}` | one request with the template as it is now, for a side-by-side review |
+| `POST /api/v1/prompt-templates/changes/{id}/approve` | applies the change; body `note` (optional) |
+| `POST /api/v1/prompt-templates/changes/{id}/reject` | closes the request; body `note` (required) |
+| `POST /api/v1/prompt-templates/changes/{id}/withdraw` | the proposer takes the request back |
+
+Deciding needs tenant administrator rights and the same domain access as the template. The prompt
+templates page shows the requests that are waiting and, for the one under review, every field the
+change touches (name, description, text, parameters) as it is now beside what is proposed, with
+the three decisions. It shows nothing while maker-checker is off and nothing waits, reloads after
+a write on the page, and says so, with a retry, when the queue cannot be loaded.
+
+Storage: `prompt_change_requests` (tenant-scoped under row-level security) and two columns on
+`prompt_template_edit_history` (migration `v6z43_prompt_change_requests`).
+
 ## Tests
 
 `tests/unit/test_prompt_parameters.py` covers declarations (the old form, defaults, every refused
@@ -94,13 +144,21 @@ unused), resolution and rendering (type reading, bounds, defaults, missing and u
 placeholder left behind, a value never read as a placeholder) and the endpoints, including writes
 with the switch off and on.
 
+`tests/unit/test_prompt_change_requests.py` covers the switch (setting, tenant flag, an unreadable
+flag), identity, proposing (one pending per template), approval (the change applied and both
+people recorded), the proposer refused, a stale request not applied, delete and create, rejection
+and withdrawal, domain access, the four write paths with the switch off and on, and the
+endpoints. `ui/src/__tests__/PromptChangeRequests.test.tsx` covers the review panel.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
   still substituted as plain text when its prompt is built.
-- **No approval before production** (maker-checker), **no side-by-side comparison** across
-  models, **no evaluation against a reference dataset**, **no context-window management** and
-  **no structured-output enforcement** beyond the governed-case agents. These are the package's
-  next parts.
+- **Maker-checker covers prompt templates only.** An agent's own prompt is still changed
+  directly through the agents API, so a prompt change can reach an agent without a second
+  approver by that route.
+- **No side-by-side comparison** across models, **no evaluation against a reference dataset**,
+  **no context-window management** and **no structured-output enforcement** beyond the
+  governed-case agents. These are the package's next parts.
 - **No console editor for parameter types.** The prompt templates page shows a template's
   parameters; typed declarations are written through the API.
