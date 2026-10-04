@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react";
 import api, { extractApiError } from "@/lib/api";
 
 interface TemplateState {
-  name?: string;
-  agent_type?: string;
-  domain?: string;
-  template_text?: string;
+  name?: string | null;
+  agent_type?: string | null;
+  domain?: string | null;
+  template_text?: string | null;
   description?: string | null;
-  variables?: unknown[];
+  variables?: unknown[] | null;
 }
 
 interface ChangeRequest {
@@ -36,17 +36,44 @@ const KIND_LABELS: Record<string, string> = {
   delete: "Delete",
 };
 
+// Every field a change request can carry, in the order a reviewer reads them.
+const FIELDS: Array<{ key: keyof TemplateState; label: string }> = [
+  { key: "name", label: "Name" },
+  { key: "agent_type", label: "Agent type" },
+  { key: "domain", label: "Domain" },
+  { key: "description", label: "Description" },
+  { key: "template_text", label: "Template text" },
+  { key: "variables", label: "Parameters" },
+];
+
 function titleOf(change: ChangeRequest): string {
   return change.proposed.name || change.current?.name || change.template_id || "template";
 }
 
+function shown(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "(empty)";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
+/** The fields the request would change: every key it carries, including one set to nothing. */
+function changedFields(change: ChangeRequest): Array<{ key: string; label: string; now: string; proposed: string }> {
+  return FIELDS.filter(({ key }) => key in change.proposed).map(({ key, label }) => ({
+    key,
+    label,
+    now: change.current ? shown(change.current[key]) : "(no template yet)",
+    proposed: shown(change.proposed[key]),
+  }));
+}
+
 /**
- * Prompt changes waiting for a second person. Shown only where maker-checker
- * is on or a request is still pending; the proposer cannot approve their own
- * change (the API refuses it) and can withdraw it.
+ * Prompt changes waiting for a second person. Shown where maker-checker is on
+ * or a request is still pending; the proposer cannot approve their own change
+ * (the API refuses it) and can withdraw it. ``refreshKey`` changes whenever the
+ * page writes a template, so a newly queued request appears without a reload.
  */
-export default function PromptChangeRequests({ onDecided }: { onDecided?: () => void }) {
+export default function PromptChangeRequests({ onDecided, refreshKey = 0 }: { onDecided?: () => void; refreshKey?: number }) {
   const [data, setData] = useState<ChangesOut | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState<ChangeRequest | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -56,15 +83,16 @@ export default function PromptChangeRequests({ onDecided }: { onDecided?: () => 
     try {
       const response = await api.get("/prompt-templates/changes", { params: { status: "pending" } });
       setData(response.data as ChangesOut);
-    } catch {
-      // The panel is an addition to the page: if it cannot load, the page works as before.
+      setLoadError(null);
+    } catch (err) {
       setData(null);
+      setLoadError(extractApiError(err, "The approval queue could not be loaded."));
     }
   }, []);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const review = async (change: ChangeRequest) => {
     setError(null);
@@ -95,7 +123,19 @@ export default function PromptChangeRequests({ onDecided }: { onDecided?: () => 
     }
   };
 
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800" data-testid="prompt-changes-error">
+        {loadError} Changes may be waiting for approval.{" "}
+        <button type="button" className="underline" onClick={() => void load()} data-testid="prompt-changes-retry">
+          Retry
+        </button>
+      </div>
+    );
+  }
   if (!data || (!data.maker_checker && data.changes.length === 0)) return null;
+
+  const fields = open ? changedFields(open) : [];
 
   return (
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-4" data-testid="prompt-changes">
@@ -140,23 +180,28 @@ export default function PromptChangeRequests({ onDecided }: { onDecided?: () => 
             {KIND_LABELS[open.kind] ?? open.kind}: {titleOf(open)}
           </p>
           {open.reason && <p className="text-slate-600">Reason: {open.reason}</p>}
-          {open.kind === "delete" ? (
-            <p className="mt-2 text-slate-700">The template would be deleted.</p>
-          ) : (
-            <div className="mt-2 grid gap-3 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase text-slate-500">Now</p>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs" data-testid="prompt-change-current">
-                  {open.current?.template_text ?? "(no template yet)"}
-                </pre>
+          {open.kind === "delete" && <p className="mt-2 text-slate-700">The template would be deleted.</p>}
+          {open.kind !== "delete" && fields.length === 0 && (
+            <p className="mt-2 text-slate-700" data-testid="prompt-change-nothing">
+              This request changes no field.
+            </p>
+          )}
+          {open.kind !== "delete" &&
+            fields.map((item) => (
+              <div key={item.key} className="mt-2" data-testid={`prompt-change-field-${item.key}`}>
+                <p className="text-xs font-medium uppercase text-slate-500">{item.label}</p>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs" data-testid={`prompt-change-now-${item.key}`}>
+                    {item.now}
+                  </pre>
+                  <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-emerald-50 p-2 text-xs" data-testid={`prompt-change-proposed-${item.key}`}>
+                    {item.proposed}
+                  </pre>
+                </div>
               </div>
-              <div>
-                <p className="text-xs uppercase text-slate-500">Proposed</p>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-50 p-2 text-xs" data-testid="prompt-change-proposed">
-                  {open.proposed.template_text ?? open.current?.template_text ?? ""}
-                </pre>
-              </div>
-            </div>
+            ))}
+          {open.kind !== "delete" && fields.length > 0 && (
+            <p className="mt-1 text-xs text-slate-500">Left: as it is now. Right: as proposed. Fields not listed are not changed.</p>
           )}
           <label className="mt-3 block text-slate-700">
             Note (required to reject)

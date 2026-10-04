@@ -11,10 +11,12 @@ request it came from.
 Rules:
 
 * The person who proposed a change cannot decide it. Identity is the caller's
-  local user id, or the token subject when there is none; a caller with
-  neither cannot propose or decide.
+  local user id and nothing else: an API key or any other credential without
+  one cannot propose or decide, so one person cannot be both maker and
+  checker by switching credentials.
 * One pending change per template: a second proposal is refused until the
-  first is decided or withdrawn.
+  first is decided or withdrawn (a partial unique index holds this under
+  concurrent proposals).
 * A change is applied only to the template it was proposed against. If the
   template has changed since, the request becomes ``stale`` and nothing is
   applied.
@@ -33,6 +35,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from sqlalchemy.exc import IntegrityError
 
 from core.config import settings
 
@@ -80,14 +83,18 @@ def user_uuid(user: Any) -> uuid.UUID | None:
 
 
 def actor_of(user: Any) -> str:
-    """Who is acting, as the string two people are told apart by; refuses a caller with no identity."""
+    """Who is acting: the local user, the one identity that is the same whatever credential is used.
+
+    A token subject is not accepted. An administrator's API key has a subject
+    of its own, so accepting it would let one person propose as themselves
+    and approve with their key.
+    """
     local = user_uuid(user)
     if local is not None:
         return f"user:{local}"
-    subject = str(user.get("sub") or "").strip() if isinstance(user, dict) else ""
-    if subject:
-        return f"sub:{subject}"
-    raise ChangeRequestError(403, "A prompt change under maker-checker needs an attributable caller")
+    raise ChangeRequestError(
+        403, "Under maker-checker a prompt change is proposed and decided by a signed-in user, not an API key"
+    )
 
 
 def state_of(template: Any) -> dict[str, Any]:
@@ -155,7 +162,11 @@ async def open_request(
         requested_by_user=user_uuid(user),
     )
     session.add(row)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        # A concurrent proposal for the same template won the partial unique index.
+        raise ChangeRequestError(409, "This template already has a change waiting for approval") from None
     logger.info("prompt_change_requested", change_request_id=str(row.id), kind=kind, template_id=str(row.template_id))
     return row
 

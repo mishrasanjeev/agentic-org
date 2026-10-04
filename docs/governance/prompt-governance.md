@@ -96,8 +96,8 @@ applies it.
 
 | Rule | |
 | --- | --- |
-| Two people | The person who proposed a change cannot approve or reject it. Identity is the caller's local user id, or the token subject when there is none; a caller with neither cannot propose or decide. The table also refuses a row whose decider is its proposer. |
-| One at a time | A template has at most one pending change; a second proposal is refused (409) until the first is decided or withdrawn. |
+| Two people | The person who proposed a change cannot approve or reject it. Identity is the caller's local user id and nothing else: an API key, or any credential without a local user, cannot propose or decide, so one person cannot be maker and checker by switching credentials. With maker-checker on, a template write through an API key is refused with 403. The table also refuses a row whose decider is its proposer. |
+| One at a time | A template has at most one pending change; a second proposal is refused (409) until the first is decided or withdrawn. A partial unique index holds this under concurrent proposals. |
 | Against what was reviewed | A change is applied only to the template it was proposed against. If the template has changed since (or was deleted), the request becomes `stale`, nothing is applied and the approval answers 409. |
 | Reasons | A rejection needs a note. The proposer can withdraw a pending request. |
 | Record | An applied change writes the template's history row with who proposed it (`edited_by`), who approved it (`approved_by`) and the request it came from (`change_request_id`); `GET /prompt-templates/{id}/history` returns them. |
@@ -128,8 +128,10 @@ turned off.
 | `POST /api/v1/prompt-templates/changes/{id}/withdraw` | the proposer takes the request back |
 
 Deciding needs tenant administrator rights and the same domain access as the template. The prompt
-templates page shows the requests that are waiting, the template as it is beside what is
-proposed, and the three decisions; it shows nothing while maker-checker is off and nothing waits.
+templates page shows the requests that are waiting and, for the one under review, every field the
+change touches (name, description, text, parameters) as it is now beside what is proposed, with
+the three decisions. It shows nothing while maker-checker is off and nothing waits, reloads after
+a write on the page, and says so, with a retry, when the queue cannot be loaded.
 
 Storage: `prompt_change_requests` (tenant-scoped under row-level security) and two columns on
 `prompt_template_edit_history` (migration `v6z43_prompt_change_requests`).

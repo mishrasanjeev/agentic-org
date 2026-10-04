@@ -131,14 +131,22 @@ class TestSwitch:
 
 
 class TestIdentity:
-    def test_the_local_user_id_then_the_subject_and_never_nobody(self):
+    def test_only_a_local_user_is_an_identity(self):
         assert cr.actor_of(MAKER) == f"user:{MAKER['agenticorg:user_id']}"
-        assert cr.actor_of({"sub": "apikey:key_01"}) == "sub:apikey:key_01"
-        assert cr.actor_of({"agenticorg:user_id": "not-a-uuid", "sub": "s"}) == "sub:s"
-        for nobody in ({}, {"sub": " "}, None):
+        assert cr.actor_of({"user_id": MAKER["agenticorg:user_id"]}) == f"user:{MAKER['agenticorg:user_id']}"
+        # An API key, a bare subject or a malformed id is not one: switching credentials cannot make a second person.
+        for other in ({"sub": "apikey:key_01"}, {"agenticorg:user_id": "not-a-uuid", "sub": "s"}, {}, None):
             with pytest.raises(cr.ChangeRequestError) as caught:
-                cr.actor_of(nobody)
-            assert caught.value.status == 403
+                cr.actor_of(other)
+            assert caught.value.status == 403 and "not an API key" in caught.value.message
+
+    def test_the_same_person_with_a_key_cannot_approve_their_own_change(self):
+        template = _template()
+        request = _request(template)
+        own_key = {"sub": "apikey:key_of_the_maker"}
+        with pytest.raises(cr.ChangeRequestError) as caught:
+            _run(cr.approve(_Session([request, template]), TENANT, request.id, user=own_key, note=None, domains=None))
+        assert caught.value.status == 403 and request.status == "pending"
 
 
 class TestPropose:
@@ -167,6 +175,28 @@ class TestPropose:
             _run(
                 cr.open_request(
                     _Session([uuid.uuid4()]),
+                    TENANT,
+                    kind="update",
+                    template=_template(),
+                    proposed={},
+                    domain="ops",
+                    reason=None,
+                    user=MAKER,
+                )
+            )
+        assert caught.value.status == 409
+
+    def test_a_concurrent_proposal_that_loses_the_unique_index_is_a_409(self):
+        from sqlalchemy.exc import IntegrityError
+
+        class _Racing(_Session):
+            async def flush(self):
+                raise IntegrityError("insert", {}, Exception("ux_prompt_change_requests_one_pending"))
+
+        with pytest.raises(cr.ChangeRequestError) as caught:
+            _run(
+                cr.open_request(
+                    _Racing([None]),
                     TENANT,
                     kind="update",
                     template=_template(),
@@ -458,3 +488,5 @@ class TestStorage:
         assert "decided_by <> requested_by" in migration
         assert "ADD COLUMN IF NOT EXISTS approved_by" in migration
         assert "ix_prompt_change_requests_template" in migration and "(template_id, status)" in migration
+        assert "CREATE UNIQUE INDEX IF NOT EXISTS ux_prompt_change_requests_one_pending" in migration
+        assert "WHERE status = 'pending' AND template_id IS NOT NULL" in migration

@@ -48,16 +48,51 @@ describe("PromptChangeRequests", () => {
     mockPost.mockResolvedValue({ data: { status: "approved" } });
   });
 
-  it("shows nothing while maker-checker is off and nothing is pending, or when it cannot load", async () => {
+  it("shows nothing while maker-checker is off and nothing is pending", async () => {
     route(false, []);
-    const { container, unmount } = render(<PromptChangeRequests />);
+    const { container } = render(<PromptChangeRequests />);
     await waitFor(() => expect(mockGet).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
-    unmount();
-    mockGet.mockRejectedValue(new Error("forbidden"));
-    const second = render(<PromptChangeRequests />);
-    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
-    expect(second.container).toBeEmptyDOMElement();
+  });
+
+  it("says when the queue cannot be loaded and retries", async () => {
+    mockGet.mockRejectedValueOnce(new Error("outage"));
+    render(<PromptChangeRequests />);
+    const failure = await screen.findByTestId("prompt-changes-error");
+    expect(failure).toHaveTextContent("could not be loaded");
+    expect(failure).toHaveTextContent("Changes may be waiting");
+    route(true);
+    fireEvent.click(screen.getByTestId("prompt-changes-retry"));
+    expect(await screen.findByTestId("prompt-change-c1")).toBeInTheDocument();
+  });
+
+  it("reloads when the page reports a write", async () => {
+    route(true, []);
+    const { rerender } = render(<PromptChangeRequests refreshKey={1} />);
+    expect(await screen.findByTestId("prompt-changes-empty")).toBeInTheDocument();
+    route(true);
+    rerender(<PromptChangeRequests refreshKey={2} />);
+    expect(await screen.findByTestId("prompt-change-c1")).toBeInTheDocument();
+  });
+
+  it("shows every field a request changes, including one the text does not touch", async () => {
+    const hidden = {
+      ...CHANGE,
+      proposed: { name: "renamed agent", description: null, variables: [{ name: "role", type: "enum", choices: ["a"] }] },
+      current: { name: "claims agent", description: "The claims prompt.", template_text: "You are the claims agent.", variables: [{ name: "role" }] },
+    };
+    mockGet.mockImplementation((url: string) => {
+      if (url === "/prompt-templates/changes") return Promise.resolve({ data: { maker_checker: true, changes: [CHANGE] } });
+      return Promise.resolve({ data: hidden });
+    });
+    render(<PromptChangeRequests />);
+    fireEvent.click(await screen.findByTestId("prompt-change-review-c1"));
+    expect(await screen.findByTestId("prompt-change-now-name")).toHaveTextContent("claims agent");
+    expect(screen.getByTestId("prompt-change-proposed-name")).toHaveTextContent("renamed agent");
+    expect(screen.getByTestId("prompt-change-now-description")).toHaveTextContent("The claims prompt.");
+    expect(screen.getByTestId("prompt-change-proposed-description")).toHaveTextContent("(empty)");
+    expect(screen.getByTestId("prompt-change-proposed-variables")).toHaveTextContent("enum");
+    expect(screen.queryByTestId("prompt-change-field-template_text")).not.toBeInTheDocument();
   });
 
   it("lists what is waiting and says maker-checker is on", async () => {
@@ -74,8 +109,8 @@ describe("PromptChangeRequests", () => {
     const onDecided = vi.fn();
     render(<PromptChangeRequests onDecided={onDecided} />);
     fireEvent.click(await screen.findByTestId("prompt-change-review-c1"));
-    expect(await screen.findByTestId("prompt-change-current")).toHaveTextContent("You are the claims agent.");
-    expect(screen.getByTestId("prompt-change-proposed")).toHaveTextContent("Be brief.");
+    expect(await screen.findByTestId("prompt-change-now-template_text")).toHaveTextContent("You are the claims agent.");
+    expect(screen.getByTestId("prompt-change-proposed-template_text")).toHaveTextContent("Be brief.");
     fireEvent.click(screen.getByTestId("prompt-change-approve"));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/prompt-templates/changes/c1/approve", { note: null }));
     await waitFor(() => expect(onDecided).toHaveBeenCalled());

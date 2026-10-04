@@ -162,6 +162,13 @@ class PromptChangeRequest(BaseModel):
     __table_args__ = (
         # Leads with the foreign key: the requests of one template.
         Index("ix_prompt_change_requests_template", "template_id", "status"),
+        # One pending change per template, held by the database under concurrent proposals.
+        Index(
+            "ux_prompt_change_requests_one_pending",
+            "template_id",
+            unique=True,
+            postgresql_where="status = 'pending' AND template_id IS NOT NULL",
+        ),
         Index("ix_prompt_change_requests_tenant_status", "tenant_id", "status", "requested_at"),
     )
 

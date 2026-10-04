@@ -48,6 +48,10 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_prompt_change_requests_template ON prompt_change_requests(template_id, status);"
     )
     op.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_prompt_change_requests_one_pending "
+        "ON prompt_change_requests(template_id) WHERE status = 'pending' AND template_id IS NOT NULL;"
+    )
+    op.execute(
         "CREATE INDEX IF NOT EXISTS ix_prompt_change_requests_tenant_status "
         "ON prompt_change_requests(tenant_id, status, requested_at);"
     )
