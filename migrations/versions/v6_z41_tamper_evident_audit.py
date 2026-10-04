@@ -2,7 +2,7 @@
 """Tamper-evident audit: the hash chain over audit rows and the model call digests.
 
 Revision ID: v6z41_tamper_evident_audit
-Revises: v6z39_run_spans
+Revises: v6z40_knowledge_full_text
 Create Date: 2026-10-02
 
 ``audit_log`` gains the chain columns the sealing task fills (the sequence
