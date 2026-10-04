@@ -188,4 +188,53 @@ describe("Guardrails console", () => {
     expect(result).toHaveTextContent("unsupported_number");
     expect(result).toHaveTextContent("flag-only");
   });
+
+  it("names the call's scope and the user's words in a dry run", async () => {
+    route({ hooks_enabled: true, enforcing: false });
+    mockPost.mockResolvedValue({
+      data: { stage: "output", text: "x", allowed: true, enforced: false, findings: 0, outcomes: [] },
+    });
+    renderPage();
+    await screen.findByTestId("rule-row-r1");
+    fireEvent.change(screen.getByTestId("try-text"), { target: { value: "Your nominee is on file." } });
+    fireEvent.change(screen.getByTestId("try-agent"), { target: { value: " support-agent " } });
+    fireEvent.change(screen.getByTestId("try-use-case"), { target: { value: "agent_run" } });
+    fireEvent.change(screen.getByTestId("try-risk-tier"), { target: { value: "high" } });
+    fireEvent.change(screen.getByTestId("try-user-input"), { target: { value: "Is my nominee on file?" } });
+    fireEvent.click(screen.getByTestId("try-run"));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/guardrails/evaluate", {
+        stage: "output",
+        text: "Your nominee is on file.",
+        agent_id: "support-agent",
+        use_case: "agent_run",
+        risk_tier: "high",
+        user_input: ["Is my nominee on file?"],
+      }),
+    );
+  });
+
+  it("takes the live mode from the status, not from the dry run's result", async () => {
+    // The dry run says enforced while the hooks are off: no live call is evaluated at all.
+    route({ hooks_enabled: false, enforcing: true });
+    mockPost.mockResolvedValue({
+      data: { stage: "input", text: "x", allowed: true, enforced: true, findings: 0, outcomes: [] },
+    });
+    const first = renderPage();
+    await screen.findByTestId("rule-row-r1");
+    fireEvent.change(screen.getByTestId("try-text"), { target: { value: "x" } });
+    fireEvent.click(screen.getByTestId("try-run"));
+    expect(await screen.findByTestId("try-live-mode")).toHaveTextContent("not evaluated");
+    first.unmount();
+    // No rule matched, so the dry run says not enforced; the tenant is enforcing.
+    route({ hooks_enabled: true, enforcing: true });
+    mockPost.mockResolvedValue({
+      data: { stage: "input", text: "x", allowed: true, enforced: false, findings: 0, outcomes: [] },
+    });
+    renderPage();
+    await screen.findByTestId("rule-row-r1");
+    fireEvent.change(screen.getByTestId("try-text"), { target: { value: "x" } });
+    fireEvent.click(screen.getByTestId("try-run"));
+    expect(await screen.findByTestId("try-live-mode")).toHaveTextContent("live calls are enforced");
+  });
 });

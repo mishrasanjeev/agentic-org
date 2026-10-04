@@ -136,6 +136,11 @@ export default function Guardrails() {
   const [tryStage, setTryStage] = useState("output");
   const [tryText, setTryText] = useState("");
   const [tryContext, setTryContext] = useState("");
+  const [tryUserInput, setTryUserInput] = useState("");
+  // The call the dry run stands for: a rule narrowed to an agent, a use case or a risk tier matches only when named.
+  const [tryAgent, setTryAgent] = useState("");
+  const [tryUseCase, setTryUseCase] = useState("");
+  const [tryRiskTier, setTryRiskTier] = useState("");
   const [dryRun, setDryRun] = useState<DryRun | null>(null);
 
   const load = useCallback(async () => {
@@ -165,6 +170,15 @@ export default function Guardrails() {
     actions: status?.actions ?? FALLBACK.actions,
     risk_tiers: status?.risk_tiers ?? FALLBACK.risk_tiers,
   };
+
+  // What happens to a live call, from the deployment and tenant status; the dry run's own result does not say.
+  const liveMode = !status
+    ? "the live mode is unknown"
+    : !status.hooks_enabled
+      ? "live calls are not evaluated (the hooks are off)"
+      : status.enforcing
+        ? "live calls are enforced"
+        : "live calls are flag-only";
 
   const act = async (id: string, work: () => Promise<unknown>, failure: string) => {
     setBusy(id);
@@ -229,12 +243,19 @@ export default function Guardrails() {
     setBusy("evaluate");
     setError(null);
     try {
-      const context = tryContext
-        .split(/\n\s*\n/)
-        .map((item) => item.trim())
-        .filter(Boolean);
+      const blocks = (value: string) =>
+        value
+          .split(/\n\s*\n/)
+          .map((item) => item.trim())
+          .filter(Boolean);
+      const context = blocks(tryContext);
+      const userInput = blocks(tryUserInput);
       const body: Record<string, unknown> = { stage: tryStage, text: tryText };
+      if (tryAgent.trim()) body.agent_id = tryAgent.trim();
+      if (tryUseCase.trim()) body.use_case = tryUseCase.trim();
+      if (tryRiskTier) body.risk_tier = tryRiskTier;
       if (tryStage === "output" && context.length > 0) body.context = context;
+      if (tryStage === "output" && userInput.length > 0) body.user_input = userInput;
       const response = await api.post("/guardrails/evaluate", body);
       setDryRun(response.data as DryRun);
     } catch (err) {
@@ -474,11 +495,41 @@ export default function Guardrails() {
             <textarea className={`${inputClass} h-20`} value={tryText} onChange={(e) => setTryText(e.target.value)} data-testid="try-text" />
           </label>
         </div>
-        {tryStage === "output" && (
-          <label className="mt-3 block text-sm text-slate-700">
-            Retrieved context for a grounding rule (separate texts with a blank line)
-            <textarea className={`${inputClass} h-20`} value={tryContext} onChange={(e) => setTryContext(e.target.value)} data-testid="try-context" />
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-sm text-slate-700">
+            Agent id of the call (for rules narrowed to an agent)
+            <input className={inputClass} value={tryAgent} maxLength={64} onChange={(e) => setTryAgent(e.target.value)} data-testid="try-agent" />
           </label>
+          <label className="text-sm text-slate-700">
+            Use case of the call
+            <input className={inputClass} value={tryUseCase} maxLength={64} onChange={(e) => setTryUseCase(e.target.value)} data-testid="try-use-case" />
+          </label>
+          <label className="text-sm text-slate-700">
+            Risk tier of the call
+            <select className={inputClass} value={tryRiskTier} onChange={(e) => setTryRiskTier(e.target.value)} data-testid="try-risk-tier">
+              <option value="">none</option>
+              {lists.risk_tiers.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          A rule narrowed to an agent, a use case or a risk tier takes part only when the dry run names the same one.
+        </p>
+        {tryStage === "output" && (
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            <label className="block text-sm text-slate-700">
+              Retrieved context for a grounding rule (separate texts with a blank line)
+              <textarea className={`${inputClass} h-20`} value={tryContext} onChange={(e) => setTryContext(e.target.value)} data-testid="try-context" />
+            </label>
+            <label className="block text-sm text-slate-700">
+              What the user wrote (counts as support unless the rule excludes it)
+              <textarea className={`${inputClass} h-20`} value={tryUserInput} onChange={(e) => setTryUserInput(e.target.value)} data-testid="try-user-input" />
+            </label>
+          </div>
         )}
         <button
           type="button"
@@ -495,9 +546,8 @@ export default function Guardrails() {
               <span className={`rounded px-1.5 py-0.5 text-xs ${dryRun.allowed ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"}`}>
                 {dryRun.allowed ? "allowed" : "blocked"}
               </span>
-              <span className="ml-2 text-slate-600">
-                {dryRun.findings} finding{dryRun.findings === 1 ? "" : "s"}; live calls are{" "}
-                {dryRun.enforced ? "enforced" : "flag-only"}
+              <span className="ml-2 text-slate-600" data-testid="try-live-mode">
+                {dryRun.findings} finding{dryRun.findings === 1 ? "" : "s"}; {liveMode}
               </span>
             </p>
             {dryRun.outcomes.length === 0 && <p className="text-slate-500">No rule matched.</p>}
