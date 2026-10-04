@@ -103,6 +103,7 @@ from core.models.organization import CostCenter as CostCenter
 from core.models.organization import Department as Department
 from core.models.professional_tax import ProfessionalTaxRegistration as ProfessionalTaxRegistration
 from core.models.professional_tax import ProfessionalTaxReturn as ProfessionalTaxReturn
+from core.models.prompt_template import PromptChangeRequest as PromptChangeRequest
 from core.models.prompt_template import PromptEditHistory as PromptEditHistory
 from core.models.prompt_template import PromptTemplate as PromptTemplate
 from core.models.provider_attestation import ProviderAttestation as ProviderAttestation

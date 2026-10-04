@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { promptTemplatesApi, extractApiError } from "@/lib/api";
 import type { PromptTemplate } from "@/types";
+import PromptChangeRequests from "@/components/prompts/PromptChangeRequests";
 
 function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -77,6 +78,9 @@ export default function PromptTemplates() {
         <h2 className="text-2xl font-bold">Prompt Templates</h2>
         <Button onClick={() => { setCreating(!creating); setCreateError(null); }}>{creating ? "Cancel" : "Create Template"}</Button>
       </div>
+
+      {/* Maker-checker: changes waiting for a second person (renders nothing while it is off and nothing waits). */}
+      <PromptChangeRequests onDecided={fetchTemplates} />
 
       {/* Create Form */}
       {creating && (
