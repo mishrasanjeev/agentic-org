@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from collections import Counter
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlparse
 
 import pytest
 from fastapi import Depends, FastAPI, Request
@@ -51,9 +53,10 @@ class TestCorpus:
                 domain = word.rstrip(".,").partition("@")[2]
                 if "." in domain:
                     assert domain == "example.test", case.id
-            assert "http://" not in case.text
-            if "https://" in case.text:
-                assert "https://example.test" in case.text, case.id
+            # Every link is on the reserved test domain, judged by its parsed host rather than by a substring.
+            for link in re.findall(r"[a-z][a-z0-9+.-]*://\S+", case.text):
+                parsed = urlparse(link)
+                assert parsed.scheme == "https" and parsed.hostname == "example.test", case.id
 
     def test_the_description_carries_no_case_text(self):
         described = adversarial.describe()
