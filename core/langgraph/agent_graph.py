@@ -35,7 +35,13 @@ from core.governance.guardrails.hooks import guard_input_messages, guard_output_
 from core.governance.model_gateway import admit as gateway_admit
 from core.governance.model_gateway import current_route
 from core.governance.model_gateway import release as gateway_release
-from core.governance.model_gateway_records import message_tokens, record_model_call
+from core.governance.model_gateway_records import (
+    message_digest,
+    message_tokens,
+    messages_digest,
+    prompt_digest_of,
+    record_model_call,
+)
 from core.governance.operator_override import OperatorOverrideBlocked
 from core.governance.operator_override import check as check_operator_override
 from core.langgraph.grantex_auth import get_grantex_client
@@ -508,6 +514,10 @@ def build_agent_graph(
         called_provider = _llm_provider_name(llm, llm_provider)
         called_model = _llm_model_name(llm, llm_model) or (route.decision.model if route is not None else "")
         called_agent = agent_id or str(state.get("agent_id") or "") or None
+        # Tamper-evident records: digests of the prompt and of what the model
+        # saw, never the content (docs/operations/audit-chain.md).
+        prompt_digest = prompt_digest_of(messages)
+        request_digest = messages_digest(messages)
         started = time.monotonic()
         # Tracing (off by default): one span per model call, with the routing
         # decision's correlation id and, on success, the token counts.
@@ -535,6 +545,8 @@ def build_agent_graph(
                     error_type=type(exc).__name__,
                     admission_wait_ms=admission_wait_ms,
                     agent_id=called_agent,
+                    prompt_digest=prompt_digest,
+                    request_digest=request_digest,
                 )
                 raise
             finally:
@@ -557,6 +569,9 @@ def build_agent_graph(
             output_tokens=output_tokens,
             admission_wait_ms=admission_wait_ms,
             agent_id=called_agent,
+            prompt_digest=prompt_digest,
+            request_digest=request_digest,
+            response_digest=message_digest(response),
         )
         # Guardrails: the answer passes the output stage before it travels on.
         response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent)

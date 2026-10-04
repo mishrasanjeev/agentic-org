@@ -102,6 +102,19 @@ guardrail_outcomes_total = Counter(
     ["stage", "detector", "action", "mode"],
 )
 
+# ── Tamper-evident audit (core/governance/audit_chain.py) ──────────
+
+audit_chain_links_total = Counter(
+    "agenticorg_audit_chain_links_total",
+    "Audit rows sealed into a tenant's hash chain",
+)
+
+audit_chain_verifications_total = Counter(
+    "agenticorg_audit_chain_verifications_total",
+    "Audit chain verifications by result (empty, verified, broken, error)",
+    ["result"],
+)
+
 # ── Model calls (agent path and direct router) ─────────────────────
 
 model_calls_total = Counter(

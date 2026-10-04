@@ -248,6 +248,9 @@ class RecordOut(BaseModel):
     output_tokens: int | None
     cost_usd: float
     signed: bool
+    prompt_digest: str | None = None
+    request_digest: str | None = None
+    response_digest: str | None = None
     created_at: datetime
 
 
@@ -388,6 +391,9 @@ def _record_out(row: ModelGatewayRecord) -> RecordOut:
         output_tokens=row.output_tokens,
         cost_usd=row.cost_usd,
         signed=verify_record(row),
+        prompt_digest=getattr(row, "prompt_digest", None),
+        request_digest=getattr(row, "request_digest", None),
+        response_digest=getattr(row, "response_digest", None),
         created_at=row.created_at,
     )
 

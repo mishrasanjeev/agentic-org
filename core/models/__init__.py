@@ -21,6 +21,7 @@ from core.models.agent_task_result import AgentTaskResult as AgentTaskResult
 from core.models.api_key import APIKey as APIKey
 from core.models.approval_policy import ApprovalPolicy as ApprovalPolicy
 from core.models.approval_policy import ApprovalStep as ApprovalStep
+from core.models.audit import AuditChainAnchor as AuditChainAnchor
 from core.models.audit import AuditLog as AuditLog
 from core.models.base import BaseModel as BaseModel
 from core.models.base import TenantMixin as TenantMixin

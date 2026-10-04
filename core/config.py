@@ -187,6 +187,12 @@ class Settings(BaseSettings):
     # after the retention period. Off by default.
     tracing_timeline_enabled: bool = False
     tracing_timeline_retention_days: int = 30
+    # Tamper-evident audit: the sealing task links each tenant's audit rows
+    # into a hash chain (chain_seq, chain_prev, chain_hash) so a removed,
+    # reordered or edited row breaks verification. Off by default; the status
+    # and verification read whatever is sealed either way.
+    audit_chain_enabled: bool = False
+    audit_chain_seal_batch: int = 5000
     # A concurrency slot the model gateway hands out expires on its own after
     # this many seconds when the holder never releases it (a process that died).
     model_gateway_lease_seconds: int = 600
