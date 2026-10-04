@@ -750,7 +750,7 @@ class TestAdmission:
             assert "except ModelGatewayRefused as exc:" in body[body.index("t0 = time.perf_counter()") :]
         graph = (ROOT / "core" / "langgraph" / "agent_graph.py").read_text(encoding="utf-8")
         reason = graph[graph.index("async def reason(") : graph.index("async def evaluate(")]
-        assert reason.index("gateway_admit(route.decision)") < reason.index("llm.ainvoke(messages)")
+        assert reason.index("gateway_admit(route.decision)") < reason.index("invoke_timed(llm, messages)")
         assert "finally:" in reason and "await gateway_release(lease)" in reason
 
     def _resume(self, invoke_outcome):

@@ -168,6 +168,18 @@ model_admission_wait_seconds = Histogram(
     ["provider", "model"],
     buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0),
 )
+model_first_token_seconds = Histogram(
+    "agenticorg_model_first_token_seconds",
+    "Time from a model call's start to its first token (measured only while stream timing is on)",
+    ["provider", "model"],
+    buckets=(0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0),
+)
+task_queue_wait_seconds = Histogram(
+    "agenticorg_task_queue_wait_seconds",
+    "Time a background task waited between publish and start, by queue",
+    ["queue"],
+    buckets=(0.01, 0.05, 0.1, 0.5, 1.0, 5.0, 15.0, 60.0, 300.0, 900.0),
+)
 residency_refusals_total = Counter(
     "agenticorg_residency_refusals_total",
     "Providers refused by residency enforcement, by reason",

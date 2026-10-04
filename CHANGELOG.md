@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Streaming latency: time to first token and task queue wait
+- Behind `AGENTICORG_MODEL_STREAM_TIMING_ENABLED` (off by default) the
+  reasoning node reads each model answer as a stream, times its first token
+  and reassembles the same message (`observability/streaming.py`); the time
+  is observed in `agenticorg_model_first_token_seconds{provider,model}` and
+  set on the model call's span as `llm.first_token_ms`. Off, the call is
+  made exactly as before.
+- Every published background task carries its publish time, and the worker
+  observes how long it waited in
+  `agenticorg_task_queue_wait_seconds{queue}` and on the task's span
+  (`task.queue_wait_ms`); tasks scheduled for later are not counted.
+
 ### Added - Guardrails: the grounding checker
 - A `grounding` detector for output-stage rules
   (`core/governance/guardrails/grounding.py`): each claim of an answer is

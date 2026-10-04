@@ -156,6 +156,30 @@ durations, the model gateway's decision and every guardrail outcome as events on
 belong to), and **Workload**, the reviews with a countdown to the soonest deadline and the last
 hour's outcomes, refreshed every fifteen seconds.
 
+## Streaming latency
+
+Two timings a call's total duration does not show (`observability/streaming.py`).
+
+**Time to first token.** Behind `AGENTICORG_MODEL_STREAM_TIMING_ENABLED` (off by default). On,
+the reasoning node reads each model answer as a stream, notes when the first chunk carrying text
+or the start of a tool call arrives, and puts the chunks back together into the same message a
+plain call returns (content, tool calls and token usage included). The time is observed in
+`agenticorg_model_first_token_seconds{provider,model}` and set on the model call's span as
+`llm.first_token_ms`. A model that does not stream yields its whole answer as one chunk, so its
+first-token time equals its duration. A stream that fails raises exactly as a failed call does,
+and one that yields nothing falls back to the plain call. Off, the call is made as before and no
+first-token time is reported. The direct router (`core/llm/router.py`) is not timed this way.
+
+**Task queue wait.** Always on. A published background task is stamped with its publish time
+(not when the publisher asked for a later start with an eta or a countdown); when a worker
+starts it, the wait is observed in `agenticorg_task_queue_wait_seconds{queue}` and set on the
+task's span as `task.queue_wait_ms`. Together with the model admission wait
+(`agenticorg_model_admission_wait_seconds`) this covers the time work spends waiting rather
+than running. A wait that is negative or longer than a day is discarded as a clock problem.
+
+Both are durations with provider, model or queue labels only; neither carries content or a
+tenant.
+
 ## Tests
 
 `tests/unit/observability/test_timeline.py` covers the processor keeping only the catalogue
@@ -163,6 +187,11 @@ spans, the cap and the age-out, the stored row (parent, status, offsets, the exc
 reduced to its type), storing at the end of a run and never raising, the reads and the prune.
 `tests/unit/observability/test_observability_api.py` covers the admin-only routes, the
 `enabled` flag, the 404 for an unknown trace and the workload parts reported on their own.
+
+`tests/unit/observability/test_streaming.py` covers the first-token timing (off by default,
+reassembly of text, tool calls and token usage, a model that does not stream, an empty and a
+failing stream), its metric and the task queue wait (the stamp, scheduled tasks, unusable stamps,
+the metric and the Celery signals).
 
 `tests/unit/observability/test_tracing.py` covers: the helpers as no-ops while tracing is off;
 spans with their attributes, events, nested trace ids, the log-context binding and error status
