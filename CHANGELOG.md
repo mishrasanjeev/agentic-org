@@ -4,6 +4,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Guardrails console
+- `/dashboard/settings/guardrails` (administrators): the mode in effect
+  (hooks off, flag-only, enforcing), the rules with what each applies to,
+  add, change, enable, disable and delete, and a dry run of a stage over a
+  text with a retrieved context for a grounding rule. `GET
+  /api/v1/guardrails/status` also reports whether the hooks are on and the
+  stages, detectors, actions and risk tiers a rule may name.
+
 ### Added - Guardrails: the grounding checker
 - A `grounding` detector for output-stage rules
   (`core/governance/guardrails/grounding.py`): each claim of an answer is

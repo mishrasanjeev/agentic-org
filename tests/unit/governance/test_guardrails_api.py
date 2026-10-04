@@ -139,6 +139,11 @@ def test_list_and_status(session_rows):
         status = client.get("/api/v1/guardrails/status")
     assert status.status_code == 200
     assert status.json()["enforcing"] is False and status.json()["mode"] == "flag_only"
+    body = status.json()
+    assert body["hooks_enabled"] is False
+    assert body["stages"] == ["input", "retrieval", "output", "action"]
+    assert "grounding" in body["detectors"] and body["actions"][0] == "flag"
+    assert body["risk_tiers"] == ["low", "medium", "high", "critical"]
     assert status.json()["active_rules"][0]["name"] == "cards"
 
 

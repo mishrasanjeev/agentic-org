@@ -807,6 +807,7 @@ bypass permissions.
 | Investigate run evidence | [Audit](https://app.agenticorg.ai/dashboard/audit) | [Monitoring](/docs/audit-and-monitoring) |
 | Inspect run timelines | [Observability](https://app.agenticorg.ai/dashboard/observability) | [Run observability](/docs/run-observability) |
 | Configure model routing | [Model Gateway](https://app.agenticorg.ai/dashboard/settings/model-gateway) | [Model Gateway](/docs/model-gateway) |
+| Configure guardrail rules | [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) | [Guardrails](/docs/guardrails) |
 | Configure merchant commerce | [Commerce Runtime](https://app.agenticorg.ai/dashboard/commerce-runtime) | [Commerce](/docs/commerce) |
 | Connect an external agent client | [A2A / MCP](https://app.agenticorg.ai/dashboard/integrations) | [API and clients](/docs/api-sdk-mcp) |
 | Create an API key | [Settings](https://app.agenticorg.ai/dashboard/settings) | [API and clients](/docs/api-sdk-mcp) |
@@ -1672,14 +1673,16 @@ Audience: Tenant administrators and security owners. Reviewed: 2026-10-02.
 
 #### Configure and test guardrails
 
-Tenant-scoped rules evaluate text at the input, retrieved-evidence, model-output and tool-action stages. A rule names a detector, threshold, optional agent/use-case/risk-tier scope, priority and response. Detector identifiers in the API are `sensitive_data`, `toxicity`, `pattern`, `injection` and `output_policy`. Action values are `flag`, `mask`, `redact`, `tokenise` and `block`; API validation enforces detector/action compatibility.
+Tenant-scoped rules evaluate text at the input, retrieved-evidence, model-output and tool-action stages. A rule names a detector, threshold, optional agent/use-case/risk-tier scope, priority and response. Detector identifiers are `sensitive_data`, `toxicity`, `pattern`, `injection`, `output_policy` and `grounding`. Action values are `flag`, `mask`, `redact`, `tokenise` and `block`; API validation enforces detector/action compatibility.
 
-Guardrail rule administration is currently an authenticated tenant-administrator API, not a dedicated console page. Use an approved API client with the tenant selected and the required `governance.guardrails.sensitive.read` or `.write` permission. The API is under `/api/v1/guardrails`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}` and `POST /evaluate`. Do not copy a privileged key into a browser console or commit it to a script.
+Tenant administrators manage rules on the [Guardrails](https://app.agenticorg.ai/dashboard/settings/guardrails) page. It shows the mode in effect (hooks off, flag-only or enforcing), lists the rules with what each applies to, adds, changes, enables, disables and deletes a rule, and dry-runs a stage over a text. Detector options are edited as JSON, starting from an example for the chosen detector. The page changes rules only; hooks and tenant enforcement are switched on through their own approved controls.
+
+The same operations are available to an approved API client with the required `governance.guardrails.sensitive.read` or `.write` permission, under `/api/v1/guardrails`: `GET /status`, `GET/POST /rules`, `PATCH/DELETE /rules/{rule_id}` and `POST /evaluate`. Do not copy a privileged key into a browser console or commit it to a script.
 
 ```flow
-Check effective status | Read /guardrails/status and confirm whether the tenant is flag-only or enforced.
+Check effective status | Open the Guardrails page and read the banner: hooks off, flag-only or enforcing.
 Create a narrow rule | Choose one stage, detector, threshold, response and explicit scope.
-Dry-run examples | Call /guardrails/evaluate with synthetic allowed and flagged text; inspect transformed text and outcomes.
+Dry-run examples | Use the dry run with synthetic allowed and flagged text; inspect the outcomes and the text after the rules.
 Review detector limits | Check false positives, missed cases, latency and failure behavior with the domain owner.
 Enable only through approved controls | Confirm hooks and tenant enforcement configuration before relying on blocking or transforms.
 Monitor and revise | Correlate rule outcomes with run evidence; keep a rollback owner and test after edits.
@@ -1695,7 +1698,7 @@ Enforcement is a separate setting. When active, a matching transform changes the
 
 Rules match one of four stages: `input`, `retrieval`, `output` or `action`. Optional `agent_id`, `use_case` and `risk_tier` fields narrow a rule. Without those fields, the rule can apply to every call at that stage. Rules run in priority order, and a block takes precedence over a transform. Pattern rules are bounded and reject known unsafe regular-expression shapes; keep patterns short, specific and reviewed.
 
-Sensitive-data recognition includes configured patterns for common identifiers such as payment cards, Aadhaar, PAN, GSTIN, email, UPI and phone. Recognition quality depends on the active analyzer and fallback recognizers. Toxicity and prompt-injection detection are signals, not proof of intent or a complete security boundary. Test representative languages, formats, OCR noise and adversarial inputs. Retain a human review path for high-impact decisions.
+Sensitive-data recognition includes configured patterns for common identifiers such as payment cards, Aadhaar, PAN, GSTIN, email, UPI and phone. Recognition quality depends on the active analyzer and fallback recognizers. Toxicity and prompt-injection detection are signals, not proof of intent or a complete security boundary. A `grounding` rule (output stage; flag or block) compares each sentence of an answer with what the run retrieved and reports claims, and figures, that the retrieved text does not carry. It is a word-level check, not a judgement of meaning: it catches answers written without the retrieved material, and it can flag a faithful paraphrase. In the dry run, paste the retrieved text as the context. Test representative languages, formats, OCR noise and adversarial inputs. Retain a human review path for high-impact decisions.
 
 #### Operational checklist
 

@@ -23,6 +23,8 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.governance import guardrails
+from core.governance.guardrails.hooks import hooks_enabled
+from core.governance.guardrails.schema import RISK_TIERS
 from core.models.guardrail_rule import GuardrailRule
 from core.ownership import Caller, caller_from_request
 
@@ -163,6 +165,12 @@ async def guardrail_status(tenant_id: str = Depends(get_current_tenant)) -> dict
     return {
         "enforcing": enforced,
         "mode": "enforced" if enforced else "flag_only",
+        # Whether live calls are evaluated at all (AGENTICORG_GUARDRAILS_HOOKS_ENABLED), and what a rule may name.
+        "hooks_enabled": hooks_enabled(),
+        "stages": list(guardrails.STAGES),
+        "detectors": list(guardrails.DETECTORS),
+        "actions": list(guardrails.ACTIONS),
+        "risk_tiers": list(RISK_TIERS),
         "active_rules": [r.to_dict() for r in rules],
     }
 

@@ -113,12 +113,25 @@ tool call carrying a card number is refused.
 
 | Method and path | Purpose |
 |---|---|
-| `GET /api/v1/guardrails/status` | Whether guardrails enforce for the tenant, the mode, and the active rules. |
+| `GET /api/v1/guardrails/status` | Whether guardrails enforce for the tenant, the mode, whether the hooks are on in the deployment, the stages, detectors, actions and risk tiers a rule may name, and the active rules. |
 | `GET /api/v1/guardrails/rules` | List rules (`include_disabled=false` to hide disabled ones). |
 | `POST /api/v1/guardrails/rules` | Create a rule (201). |
 | `PATCH /api/v1/guardrails/rules/{id}` | Change a rule; the merged rule is re-validated. |
 | `DELETE /api/v1/guardrails/rules/{id}` | Delete a rule (204). |
 | `POST /api/v1/guardrails/evaluate` | Dry-run a stage over a text. For a grounding rule, `context` (retrieved texts) and `user_input` are what the text is held against. |
+
+## Console
+
+Tenant administrators manage rules at `/dashboard/settings/guardrails`
+(`ui/src/pages/Guardrails.tsx`). The page says which mode applies (hooks off,
+flag-only or enforcing), lists the rules with what each applies to, adds and
+changes a rule (the options are edited as JSON, starting from an example for
+the chosen detector), enables, disables and deletes one, and dry-runs a stage
+over a text, with a retrieved context for a grounding rule, showing what each
+rule would do and the text as the rules would leave it. Every action goes
+through the endpoints above, so the same validation, attribution and signed
+audit rows apply. The page changes rules only; turning enforcement on stays
+with the `guardrails.enforce` flag.
 
 ## Grounding
 

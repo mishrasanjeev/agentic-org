@@ -42,6 +42,7 @@
     "aiCredentials": "AI Credentials",
     "aiConfig": "AI Configuration",
     "modelGateway": "Model Gateway",
+    "guardrails": "Guardrails",
     "packs": "Industry Packs",
     "sla": "SLA Monitor",
     "billing": "Billing",
