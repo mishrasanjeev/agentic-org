@@ -131,13 +131,62 @@ class TestFirstTokenMetric:
         assert "llm.ainvoke(" not in reason
 
 
-def _task(headers: dict | None = None, *, eta=None, routing_key: str = "maintenance") -> SimpleNamespace:
-    request = SimpleNamespace(headers=headers or {}, eta=eta, delivery_info={"routing_key": routing_key})
+def _task(
+    headers: dict | None = None,
+    *,
+    eta=None,
+    routing_key: str = "maintenance",
+    redelivered: bool = False,
+    retries: int = 0,
+) -> SimpleNamespace:
+    request = SimpleNamespace(
+        headers=headers or {},
+        eta=eta,
+        retries=retries,
+        delivery_info={"routing_key": routing_key, "redelivered": redelivered},
+    )
     request.get = lambda key, default=None: None
     return SimpleNamespace(request=request, name="core.tasks.example")
 
 
+class TestQueueWaitOff:
+    def test_off_by_default_no_header_is_added_and_nothing_is_measured(self):
+        from core.tasks import celery_app
+        from observability.metrics import task_queue_wait_seconds
+
+        assert settings.task_queue_timing_enabled is False
+        headers: dict = {}
+        streaming.stamp_enqueued(headers, now=1000.0)
+        celery_app.stamp_task_publish_time(headers=headers)
+        assert headers == {}
+        series = task_queue_wait_seconds.labels(queue="maintenance")
+        before = series._sum.get()
+        assert streaming.observe_queue_wait(_task({streaming.ENQUEUED_AT_HEADER: "1000.0"}), now=1004.0) is None
+        assert series._sum.get() == before
+
+
 class TestQueueWait:
+    @pytest.fixture(autouse=True)
+    def _on(self, monkeypatch):
+        monkeypatch.setattr(settings, "task_queue_timing_enabled", True)
+
+    def test_a_redelivery_or_a_retry_is_not_measured(self):
+        stamped = {streaming.ENQUEUED_AT_HEADER: "1000.0"}
+        assert streaming.queue_wait_seconds(_task(stamped, redelivered=True), now=1300.0) is None
+        assert streaming.queue_wait_seconds(_task(stamped, retries=1), now=1300.0) is None
+        assert streaming.queue_wait_seconds(_task(stamped), now=1300.0) == 300.0
+
+    @pytest.mark.parametrize("stamp", ["nan", "NaN", "inf", "-inf"])
+    def test_a_stamp_that_is_not_a_finite_number_is_unusable(self, stamp):
+        from observability.metrics import task_queue_wait_seconds
+
+        task = _task({streaming.ENQUEUED_AT_HEADER: stamp})
+        assert streaming.queue_wait_seconds(task, now=1002.0) is None
+        series = task_queue_wait_seconds.labels(queue="maintenance")
+        before = series._sum.get()
+        assert streaming.observe_queue_wait(task, now=1002.0) is None
+        assert series._sum.get() == before
+
     def test_a_published_task_is_stamped_once_unless_it_is_scheduled(self):
         headers: dict = {}
         streaming.stamp_enqueued(headers, now=1000.5)

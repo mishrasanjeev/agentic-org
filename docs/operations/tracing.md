@@ -170,12 +170,15 @@ first-token time equals its duration. A stream that fails raises exactly as a fa
 and one that yields nothing falls back to the plain call. Off, the call is made as before and no
 first-token time is reported. The direct router (`core/llm/router.py`) is not timed this way.
 
-**Task queue wait.** Always on. A published background task is stamped with its publish time
-(not when the publisher asked for a later start with an eta or a countdown); when a worker
-starts it, the wait is observed in `agenticorg_task_queue_wait_seconds{queue}` and set on the
-task's span as `task.queue_wait_ms`. Together with the model admission wait
+**Task queue wait.** Behind `AGENTICORG_TASK_QUEUE_TIMING_ENABLED` (off by default; off, no
+header is added and nothing is measured). On, a published background task is stamped with its
+publish time (not when the publisher asked for a later start with an eta or a countdown); when a
+worker starts it, the wait is observed in `agenticorg_task_queue_wait_seconds{queue}` and set on
+the task's span as `task.queue_wait_ms`. A message the broker redelivered after a lost worker,
+and a retry, are not measured: they carry the first publish's stamp, so the interval would
+include the earlier execution. Together with the model admission wait
 (`agenticorg_model_admission_wait_seconds`) this covers the time work spends waiting rather
-than running. A wait that is negative or longer than a day is discarded as a clock problem.
+than running. A wait that is negative, longer than a day or not a finite number is discarded.
 
 Both are durations with provider, model or queue labels only; neither carries content or a
 tenant.

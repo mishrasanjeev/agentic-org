@@ -191,6 +191,10 @@ class Settings(BaseSettings):
     # the chunks back together into the same message. Off by default: off,
     # the call is made exactly as before.
     model_stream_timing_enabled: bool = False
+    # Task queue wait: a published background task is stamped with its publish
+    # time and the worker meters how long it waited. Off by default: off, no
+    # header is added and nothing is measured.
+    task_queue_timing_enabled: bool = False
     tracing_timeline_retention_days: int = 30
     # Tamper-evident audit: the sealing task links each tenant's audit rows
     # into a hash chain (chain_seq, chain_prev, chain_hash) so a removed,

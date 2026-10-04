@@ -11,10 +11,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   is observed in `agenticorg_model_first_token_seconds{provider,model}` and
   set on the model call's span as `llm.first_token_ms`. Off, the call is
   made exactly as before.
-- Every published background task carries its publish time, and the worker
+- Behind `AGENTICORG_TASK_QUEUE_TIMING_ENABLED` (off by default) a
+  published background task carries its publish time, and the worker
   observes how long it waited in
   `agenticorg_task_queue_wait_seconds{queue}` and on the task's span
-  (`task.queue_wait_ms`); tasks scheduled for later are not counted.
+  (`task.queue_wait_ms`); tasks scheduled for later, redeliveries and
+  retries are not counted.
 
 ### Added - Guardrails: the grounding checker
 - A `grounding` detector for output-stage rules

@@ -18,6 +18,7 @@ The measurement is a duration; it carries no content.
 
 from __future__ import annotations
 
+import math
 import time
 from typing import Any
 
@@ -83,17 +84,40 @@ ENQUEUED_AT_HEADER = "x-agenticorg-enqueued-at"
 MAX_QUEUE_WAIT_SECONDS = 24 * 60 * 60.0
 
 
+def queue_timing_enabled() -> bool:
+    return bool(settings.task_queue_timing_enabled)
+
+
 def stamp_enqueued(headers: dict[str, Any], *, now: float | None = None) -> None:
-    """Record when a task was published, unless the publisher asked for a later start (an eta or a countdown)."""
+    """Record when a task was published, unless the publisher asked for a later start (an eta or a countdown).
+
+    Does nothing while queue timing is off (``AGENTICORG_TASK_QUEUE_TIMING_ENABLED``).
+    """
+    if not queue_timing_enabled():
+        return
     if headers.get("eta") or headers.get(ENQUEUED_AT_HEADER):
         return
     headers[ENQUEUED_AT_HEADER] = repr(time.time() if now is None else now)
 
 
+def _delivered_again(request: Any) -> bool:
+    """A message the broker redelivered after a lost worker, or a retry of the task: its stamp is the first publish."""
+    info = getattr(request, "delivery_info", None) or {}
+    if info.get("redelivered"):
+        return True
+    retries = getattr(request, "retries", 0)
+    return isinstance(retries, int) and retries > 0
+
+
 def queue_wait_seconds(task: Any, *, now: float | None = None) -> float | None:
-    """How long the task waited between publish and start; None when it was not stamped or was scheduled."""
+    """How long the task waited between publish and start.
+
+    None when it was not stamped, was scheduled for later, or is a redelivery
+    or a retry: those carry the first publish's stamp, so the interval would
+    include the earlier execution rather than queueing.
+    """
     request = getattr(task, "request", None)
-    if request is None or getattr(request, "eta", None):
+    if request is None or getattr(request, "eta", None) or _delivered_again(request):
         return None
     stamped = None
     for source in (request, getattr(request, "headers", None)):
@@ -108,7 +132,8 @@ def queue_wait_seconds(task: Any, *, now: float | None = None) -> float | None:
         waited = (time.time() if now is None else now) - float(stamped)
     except (TypeError, ValueError):
         return None
-    if waited < 0 or waited > MAX_QUEUE_WAIT_SECONDS:
+    # NaN and infinity compare false both ways; they are refused before the range check.
+    if not math.isfinite(waited) or waited < 0 or waited > MAX_QUEUE_WAIT_SECONDS:
         return None
     return waited
 
@@ -119,7 +144,9 @@ def _queue_of(task: Any) -> str:
 
 
 def observe_queue_wait(task: Any, *, now: float | None = None) -> float | None:
-    """Meter the task's queue wait by queue; returns the wait for the caller's span."""
+    """Meter the task's queue wait by queue; returns the wait for the caller's span (None while timing is off)."""
+    if not queue_timing_enabled():
+        return None
     waited = queue_wait_seconds(task, now=now)
     if waited is None:
         return None
