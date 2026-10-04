@@ -189,6 +189,32 @@ describe("Guardrails console", () => {
     expect(result).toHaveTextContent("flag-only");
   });
 
+  it("runs the adversarial set against the tenant's rules and the baseline", async () => {
+    route({ hooks_enabled: true, enforcing: false });
+    const report = {
+      rules: "tenant", rule_count: 1, cases: 47, attacks: 31, detected: 6, recall: 0.1935, controls: 15, false_positives: 1,
+      categories: [
+        {
+          category: "sensitive_data", attacks: 7, detected: 6, recall: 0.8571, controls: 3, false_positives: 1,
+          missed: ["pii-07"], wrongly_caught: ["pii-c3"],
+        },
+      ],
+      errors: [],
+    };
+    mockPost.mockResolvedValue({ data: report });
+    renderPage();
+    await screen.findByTestId("rule-row-r1");
+    fireEvent.click(screen.getByTestId("suite-run-tenant"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/guardrails/adversarial/run", { rules: "tenant" }));
+    const result = await screen.findByTestId("suite-result");
+    expect(result).toHaveTextContent("6 of 31 attacks detected (19%)");
+    expect(screen.getByTestId("suite-row-sensitive_data")).toHaveTextContent("6 / 7 (86%)");
+    expect(screen.getByTestId("suite-row-sensitive_data")).toHaveTextContent("pii-07");
+    expect(screen.getByTestId("suite-row-sensitive_data")).toHaveTextContent("pii-c3");
+    fireEvent.click(screen.getByTestId("suite-run-baseline"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/guardrails/adversarial/run", { rules: "baseline" }));
+  });
+
   it("names the call's scope and the user's words in a dry run", async () => {
     route({ hooks_enabled: true, enforcing: false });
     mockPost.mockResolvedValue({

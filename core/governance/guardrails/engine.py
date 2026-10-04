@@ -257,12 +257,15 @@ async def evaluate(
     dry_run: bool = False,
     context: list[str] | None = None,
     user_input: list[str] | None = None,
+    rules: list[Rule] | None = None,
 ) -> GuardrailResult:
     """Run the tenant's rules for ``stage`` over ``text``.
 
     ``context`` is what the run retrieved (tool results, documents) and
     ``user_input`` what the user wrote: a detector that judges an answer
     against them (grounding) receives them; no other detector does.
+    ``rules`` replaces the tenant's stored rules for a dry run only (the
+    adversarial suite measures a given rule set with it).
 
     Returns the text to travel on (transformed when enforcement is on or in a
     dry run), whether the stage may continue, and what each matching rule did.
@@ -277,7 +280,17 @@ async def evaluate(
         risk_tier=risk_tier,
         correlation_id=_correlation_id(correlation_id),
     )
-    rules = await _rules_for(scope)
+    if rules is not None:
+        if not dry_run:
+            raise ValueError("a given rule set is evaluated in a dry run only")
+        rules = [
+            r
+            for r in sorted(rules, key=lambda r: r.priority)
+            if r.enabled
+            and r.matches(scope.stage, agent_id=scope.agent_id, use_case=scope.use_case, risk_tier=scope.risk_tier)
+        ]
+    else:
+        rules = await _rules_for(scope)
     if rules is None:
         logger.warning("guardrail_rules_skipped", stage=stage, correlation_id=scope.correlation_id)
         rules = []
@@ -313,6 +326,7 @@ async def evaluate(
         detector = REGISTRY.get(rule.detector)
         if detector is None:
             logger.warning("guardrail_detector_unknown", detector=rule.detector, rule_id=rule.id)
+            result.unverifiable.append({"rule_id": rule.id, "detector": rule.detector, "reason": "unknown_detector"})
             _unverifiable(rule, scope, enforced, dry_run, "unknown detector")
             continue
         options = rule.options
@@ -331,6 +345,7 @@ async def evaluate(
             logger.error(
                 "guardrail_detector_failed", detector=rule.detector, rule_id=rule.id, error_type=type(exc).__name__
             )
+            result.unverifiable.append({"rule_id": rule.id, "detector": rule.detector, "reason": type(exc).__name__})
             _unverifiable(rule, scope, enforced, dry_run, type(exc).__name__)
             continue
         if not findings:
