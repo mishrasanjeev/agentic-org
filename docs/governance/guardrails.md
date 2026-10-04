@@ -158,7 +158,13 @@ must pass.
 
 Running the set dry-runs a rule set over every case (nothing is enforced,
 metered or audited) and reports per category how many attacks were detected,
-which case ids were missed and which controls were wrongly caught. A report
+which case ids were missed and which controls were wrongly caught. The
+tenant's rules are read once and that snapshot evaluates every case. A rule
+whose detector raised or timed out on a case is listed under `errors` (case
+id, detector, reason), so a broken detector is never read as a plain miss.
+Runs take turns within a process and the run endpoint has its own rate class
+(six a minute per tenant), because the detectors share worker threads with
+live guardrail evaluation. A report
 never carries a case's text. It can be run against the tenant's own rules or
 against the recommended baseline (`baseline_rules()`: injection blocked at
 input and retrieval, sensitive data redacted in answers and blocked in tool

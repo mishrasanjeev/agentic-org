@@ -326,6 +326,7 @@ async def evaluate(
         detector = REGISTRY.get(rule.detector)
         if detector is None:
             logger.warning("guardrail_detector_unknown", detector=rule.detector, rule_id=rule.id)
+            result.unverifiable.append({"rule_id": rule.id, "detector": rule.detector, "reason": "unknown_detector"})
             _unverifiable(rule, scope, enforced, dry_run, "unknown detector")
             continue
         options = rule.options
@@ -344,6 +345,7 @@ async def evaluate(
             logger.error(
                 "guardrail_detector_failed", detector=rule.detector, rule_id=rule.id, error_type=type(exc).__name__
             )
+            result.unverifiable.append({"rule_id": rule.id, "detector": rule.detector, "reason": type(exc).__name__})
             _unverifiable(rule, scope, enforced, dry_run, type(exc).__name__)
             continue
         if not findings:

@@ -335,7 +335,7 @@ async def describe_adversarial_suite() -> dict[str, object]:
     auth_required=True,
     tenant_required=True,
     scope="governance.guardrails.sensitive.read",
-    rate_limit="standard",
+    rate_limit="guardrails-suite",
     idempotency="idempotent-read",
     audit_event="guardrails.adversarial.run",
 )

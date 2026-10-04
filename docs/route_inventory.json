@@ -4710,7 +4710,7 @@
     "module": "api/v1/guardrails.py",
     "path": "/api/v1/guardrails/adversarial/run",
     "public_exempt_reason": null,
-    "rate_limit": "standard",
+    "rate_limit": "guardrails-suite",
     "scope": "governance.guardrails.sensitive.read",
     "source_line": 342,
     "tenant_required": true

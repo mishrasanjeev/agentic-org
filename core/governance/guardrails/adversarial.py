@@ -22,6 +22,7 @@ case's text.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -367,18 +368,44 @@ async def run_suite(
 
     Nothing is enforced, metered or audited. A case whose evaluation fails is
     listed under ``errors`` and counts as missed (an attack) or passes (a
-    control): a rule set that cannot evaluate a text has not caught it.
+    control): a rule set that cannot evaluate a text has not caught it. A
+    rule whose detector raised or timed out on a case is listed under
+    ``errors`` too, so a broken detector is never read as a plain miss.
+
+    The tenant's rules are read once and the same snapshot evaluates every
+    case, so a rule changed during the run cannot mix versions in a report.
+    Runs take turns in this process: the detectors share the process's worker
+    threads with live guardrail evaluation.
     """
     from core.governance.guardrails.engine import active_rules, evaluate
 
     if rules is None:
         if tenant_id is None:
             raise ValueError("run_suite needs a tenant or a rule set")
-        rule_count = len(await active_rules(tenant_id))
+        rules = list(await active_rules(tenant_id))
         name = label or "tenant"
     else:
-        rule_count = len(rules)
         name = label or "given"
+    rule_count = len(rules)
+    async with _run_lock():
+        return await _run_cases(evaluate, rules, name, rule_count)
+
+
+# enterprise-gate: process-local-ok reason=a-per-process-turn-taking-lock-holds-no-tenant-data-and-is-safe-to-lose
+_LOCKS: dict[int, asyncio.Semaphore] = {}
+
+
+def _run_lock() -> asyncio.Semaphore:
+    """One suite run at a time per event loop."""
+    loop_id = id(asyncio.get_running_loop())
+    lock = _LOCKS.get(loop_id)
+    if lock is None:
+        _LOCKS.clear()
+        lock = _LOCKS[loop_id] = asyncio.Semaphore(1)
+    return lock
+
+
+async def _run_cases(evaluate: Any, rules: list[Rule], name: str, rule_count: int) -> SuiteReport:
     reports = {category: CategoryReport(category) for category in CATEGORIES}
     errors: list[str] = []
     for case in CASES:
@@ -388,13 +415,16 @@ async def run_suite(
             result = await evaluate(
                 case.stage,
                 case.text,
-                tenant_id=tenant_id if rules is None else None,
+                tenant_id=None,
                 dry_run=True,
                 context=list(case.context),
                 user_input=list(case.user_input),
                 rules=rules,
             )
             caught = bool(result.outcomes)
+            errors.extend(
+                f"{case.id}: {item['detector']} {item['reason']}" for item in getattr(result, "unverifiable", [])
+            )
         # enterprise-gate: broad-except-ok reason=an-unevaluable-case-fails-closed-as-not-caught-and-is-reported
         except Exception as exc:
             errors.append(f"{case.id}: {type(exc).__name__}")

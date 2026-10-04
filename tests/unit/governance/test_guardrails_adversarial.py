@@ -144,6 +144,65 @@ class TestRunner:
         assert report["detected"] == 0 and report["false_positives"] == 0
         assert len(report["errors"]) == len(adversarial.CASES) and report["errors"][0].endswith(": RuntimeError")
 
+    def test_the_tenants_rules_are_read_once_for_the_whole_run(self):
+        reads = AsyncMock(return_value=adversarial.baseline_rules()[:1])
+        with patch.object(engine, "active_rules", reads):
+            report = _run(tenant_id=TENANT)
+        assert reads.await_count == 1 and report["rule_count"] == 1 and report["detected"] == 9
+
+    def test_a_detector_that_fails_is_an_error_not_a_plain_miss(self):
+        from core.governance.guardrails.detectors import REGISTRY
+
+        class _Broken:
+            name = "injection"
+
+            def detect(self, text, options, *, threshold):
+                raise RuntimeError("model file missing")
+
+        with patch.dict(REGISTRY, {"injection": _Broken()}):
+            report = _run(rules=adversarial.baseline_rules())
+        by_category = {c["category"]: c for c in report["categories"]}
+        assert by_category["injection_direct"]["detected"] == 0
+        injection_cases = sum(1 for c in adversarial.CASES if c.stage in ("input", "retrieval"))
+        assert len(report["errors"]) == injection_cases
+        assert report["errors"][0] == "inj-d-01: injection RuntimeError"
+        # The detectors that work still report their results.
+        assert by_category["sensitive_data"]["detected"] == 6
+
+    def test_a_dry_run_result_names_the_rules_it_could_not_evaluate(self):
+        from core.governance.guardrails.detectors import REGISTRY
+
+        class _Broken:
+            name = "injection"
+
+            def detect(self, text, options, *, threshold):
+                raise TimeoutError
+
+        rule = adversarial.baseline_rules()[0]
+        with patch.dict(REGISTRY, {"injection": _Broken()}):
+            result = asyncio.run(engine.evaluate("input", "text", tenant_id=None, dry_run=True, rules=[rule]))
+        assert result.unverifiable == [{"rule_id": rule.id, "detector": "injection", "reason": "TimeoutError"}]
+        assert result.to_dict()["unverifiable"] == result.unverifiable
+
+    def test_runs_take_turns(self):
+        order: list[str] = []
+        real = engine.evaluate
+
+        async def _slow(stage, text, **kwargs):
+            order.append("start" if text == adversarial.CASES[0].text else "")
+            await asyncio.sleep(0)
+            return await real(stage, text, **kwargs)
+
+        async def _both():
+            with patch.object(engine, "evaluate", _slow):
+                await asyncio.gather(
+                    adversarial.run_suite(rules=[], label="a"), adversarial.run_suite(rules=[], label="b")
+                )
+
+        asyncio.run(_both())
+        starts = [index for index, mark in enumerate(order) if mark == "start"]
+        assert starts == [0, len(adversarial.CASES)]
+
     def test_a_tenant_or_a_rule_set_is_required(self):
         with pytest.raises(ValueError, match="needs a tenant or a rule set"):
             asyncio.run(adversarial.run_suite())
@@ -197,6 +256,12 @@ class TestEndpoints:
         assert body["rules"] == "baseline" and body["detected"] == 25 and body["false_positives"] == 1
         assert "4111" not in report.text and "Ignore all previous" not in report.text
         assert client.post("/api/v1/guardrails/adversarial/run", json={"rules": "everyone"}).status_code == 422
+
+    def test_a_suite_run_has_its_own_tight_rate_class(self):
+        from api.route_enforcement import RATE_LIMIT_CLASSES
+
+        assert RATE_LIMIT_CLASSES["guardrails-suite"] == (6, 60)
+        assert api.run_adversarial_suite.__enterprise_route_metadata__["rate_limit"] == "guardrails-suite"
 
     def test_the_default_run_uses_the_tenants_rules(self, monkeypatch):
         run = AsyncMock(return_value=adversarial.SuiteReport(rules="tenant", rule_count=0, categories=[]))
