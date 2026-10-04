@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 STAGES: tuple[str, ...] = ("input", "retrieval", "output", "action")
-DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern", "injection", "output_policy")
+DETECTORS: tuple[str, ...] = ("sensitive_data", "toxicity", "pattern", "injection", "output_policy", "grounding")
 # The options each detector takes; anything else is refused at the boundary.
 DETECTOR_OPTIONS: dict[str, tuple[str, ...]] = {
     "sensitive_data": ("entities",),
@@ -26,9 +26,12 @@ DETECTOR_OPTIONS: dict[str, tuple[str, ...]] = {
     "pattern": ("patterns", "kind", "ignore_case"),
     "injection": ("patterns",),
     "output_policy": ("max_length", "require_json", "required_keys", "forbidden_phrases", "no_urls"),
+    "grounding": ("min_support", "min_claim_words", "require_context", "include_user_input"),
 }
 # Detectors whose findings describe the whole text rather than spans: they flag or block, never transform.
-STRUCTURAL_DETECTORS: tuple[str, ...] = ("toxicity", "output_policy")
+STRUCTURAL_DETECTORS: tuple[str, ...] = ("toxicity", "output_policy", "grounding")
+# Detectors that judge an answer and so run at the output stage only.
+OUTPUT_ONLY_DETECTORS: tuple[str, ...] = ("output_policy", "grounding")
 MAX_PHRASES = 64
 MAX_PHRASE_LENGTH = 200
 SENSITIVE_ENTITIES: tuple[str, ...] = ("CREDIT_CARD", "AADHAAR", "PAN", "GSTIN", "EMAIL", "UPI", "PHONE")
@@ -268,6 +271,26 @@ def _clean_options(detector: str, raw: Any) -> dict[str, Any]:
             out["require_json"] = True
         if not out:
             raise ValueError("an output_policy rule needs at least one check")
+    elif detector == "grounding":
+        min_support = options.get("min_support")
+        if min_support is not None:
+            if isinstance(min_support, bool) or not isinstance(min_support, int | float) or not 0 < min_support <= 1:
+                raise ValueError("min_support is a fraction above 0 and at most 1")
+            out["min_support"] = float(min_support)
+        min_claim_words = options.get("min_claim_words")
+        if min_claim_words is not None:
+            if (
+                isinstance(min_claim_words, bool)
+                or not isinstance(min_claim_words, int)
+                or not 1 <= min_claim_words <= 50
+            ):
+                raise ValueError("min_claim_words is a whole number between 1 and 50")
+            out["min_claim_words"] = min_claim_words
+        for flag in ("require_context", "include_user_input"):
+            if flag in options:
+                if not isinstance(options[flag], bool):
+                    raise ValueError(f"{flag} must be true or false")
+                out[flag] = options[flag]
     elif detector == "pattern":
         patterns = options.get("patterns")
         if not isinstance(patterns, list) or not patterns:
@@ -312,8 +335,8 @@ def validate_rule_fields(fields: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"{detector} findings describe the whole text; the rule flags or blocks")
     if action in TRANSFORMS and stage == "action":
         raise ValueError("an action-stage rule flags or blocks; tool arguments are never rewritten")
-    if detector == "output_policy" and stage != "output":
-        raise ValueError("output_policy applies to the output stage")
+    if detector in OUTPUT_ONLY_DETECTORS and stage != "output":
+        raise ValueError(f"{detector} applies to the output stage")
     out["action"] = action
     threshold = fields.get("threshold", 0.5)
     if isinstance(threshold, bool) or not isinstance(threshold, int | float) or not 0 <= float(threshold) <= 1:

@@ -63,6 +63,8 @@ async def guard_text(
     tenant_id: str | None = None,
     agent_id: str | None = None,
     use_case: str | None = None,
+    context: list[str] | None = None,
+    user_input: list[str] | None = None,
 ) -> GuardrailResult | None:
     """Run the stage's rules over ``text``; None when the hooks are off, the text is empty or no tenant is known."""
     if not hooks_enabled() or not text:
@@ -77,7 +79,39 @@ async def guard_text(
         agent_id=scope.agent_id,
         use_case=scope.use_case,
         correlation_id=scope.correlation_id,
+        # Only a call that has a context names one, so every other stage's evaluation is as it was.
+        **({"context": context, "user_input": user_input} if context is not None or user_input is not None else {}),
     )
+
+
+# A message that carries retrieved material in a human turn (a graph with no
+# tools hands its evidence to the model that way) says so with this marker in
+# ``additional_kwargs``; providers are never sent it.
+RETRIEVED_MARKER = "agenticorg_retrieved_context"
+
+
+def as_retrieved(message: Any) -> Any:
+    """Mark ``message`` as retrieved context for the grounding check."""
+    message.additional_kwargs = {**(getattr(message, "additional_kwargs", None) or {}), RETRIEVED_MARKER: True}
+    return message
+
+
+def run_context(messages: list[Any]) -> tuple[list[str], list[str]]:
+    """What a run's conversation holds for the grounding check: what was retrieved, and what the user wrote."""
+    from langchain_core.messages import HumanMessage, ToolMessage
+
+    retrieved: list[str] = []
+    written: list[str] = []
+    for message in messages or []:
+        text = _content_text(message)
+        if not text:
+            continue
+        marked = bool((getattr(message, "additional_kwargs", None) or {}).get(RETRIEVED_MARKER))
+        if isinstance(message, ToolMessage) or marked:
+            retrieved.append(text)
+        elif isinstance(message, HumanMessage):
+            written.append(text)
+    return retrieved, written
 
 
 def _content_text(message: Any) -> str | None:
@@ -113,8 +147,19 @@ async def guard_input_messages(
     return [*messages[:-1], _with_content(last, result.text)]
 
 
-async def guard_output_message(message: Any, *, tenant_id: str | None = None, agent_id: str | None = None) -> Any:
-    """The model's answer passes the output stage; a transform replaces its content, tool calls untouched."""
+async def guard_output_message(
+    message: Any,
+    *,
+    tenant_id: str | None = None,
+    agent_id: str | None = None,
+    messages: list[Any] | None = None,
+) -> Any:
+    """The model's answer passes the output stage; a transform replaces its content, tool calls untouched.
+
+    ``messages`` is the conversation the answer was given to: its tool
+    results and the user's own words are the context a grounding rule holds
+    the answer against.
+    """
     if not hooks_enabled():
         return message
     from langchain_core.messages import AIMessage
@@ -124,7 +169,10 @@ async def guard_output_message(message: Any, *, tenant_id: str | None = None, ag
     text = _content_text(message)
     if not text:
         return message
-    result = await guard_text("output", text, tenant_id=tenant_id, agent_id=agent_id)
+    context, user_input = run_context(messages or [])
+    result = await guard_text(
+        "output", text, tenant_id=tenant_id, agent_id=agent_id, context=context, user_input=user_input
+    )
     if result is None or result.text == text:
         return message
     return _with_content(message, result.text)

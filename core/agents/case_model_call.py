@@ -76,7 +76,7 @@ async def call_case_model(
 
     # Guardrails: the rendered evidence passes the retrieval stage before the
     # model sees it (an injected instruction inside a document is caught here).
-    from core.governance.guardrails.hooks import guard_text
+    from core.governance.guardrails.hooks import as_retrieved, guard_text
     from core.governance.guardrails.schema import GuardrailBlocked
 
     try:
@@ -103,7 +103,9 @@ async def call_case_model(
         run_grant=RunGrant(mode=EnforcementMode.OFF, source="case_model_no_tools"),
     )
     state = {
-        "messages": [SystemMessage(content=system_prompt), HumanMessage(content=context)],
+        # The evidence is retrieved material, not something a user wrote: a
+        # grounding rule holds the answer against it.
+        "messages": [SystemMessage(content=system_prompt), as_retrieved(HumanMessage(content=context))],
         "agent_id": agent,
         "agent_type": agent,
         "domain": "compliance",

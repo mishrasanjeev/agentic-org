@@ -255,8 +255,14 @@ async def evaluate(
     risk_tier: str | None = None,
     correlation_id: str | None = None,
     dry_run: bool = False,
+    context: list[str] | None = None,
+    user_input: list[str] | None = None,
 ) -> GuardrailResult:
     """Run the tenant's rules for ``stage`` over ``text``.
+
+    ``context`` is what the run retrieved (tool results, documents) and
+    ``user_input`` what the user wrote: a detector that judges an answer
+    against them (grounding) receives them; no other detector does.
 
     Returns the text to travel on (transformed when enforcement is on or in a
     dry run), whether the stage may continue, and what each matching rule did.
@@ -309,9 +315,15 @@ async def evaluate(
             logger.warning("guardrail_detector_unknown", detector=rule.detector, rule_id=rule.id)
             _unverifiable(rule, scope, enforced, dry_run, "unknown detector")
             continue
+        options = rule.options
+        if getattr(detector, "uses_context", False):
+            # Retrieved context and the user's words travel apart: only the
+            # first decides whether the run retrieved anything.
+            written = list(user_input or []) if rule.options.get("include_user_input", True) else []
+            options = {**rule.options, "_context": list(context or []), "_user_input": written}
         try:
             findings = await asyncio.wait_for(
-                asyncio.to_thread(detector.detect, result.text, rule.options, threshold=rule.threshold),
+                asyncio.to_thread(detector.detect, result.text, options, threshold=rule.threshold),
                 timeout=settings.guardrails_detector_timeout_seconds,
             )
         # enterprise-gate: broad-except-ok reason=a-failing-detector-fails-closed-when-enforced-in-strict-else-logged
