@@ -111,14 +111,22 @@ def check(
     min_support: float = DEFAULT_MIN_SUPPORT,
     min_claim_words: int = DEFAULT_MIN_CLAIM_WORDS,
     require_context: bool = False,
+    user_input: list[str] | None = None,
 ) -> list[Finding]:
-    """The answer's claims the context does not support, in document order."""
+    """The answer's claims the context does not support, in document order.
+
+    ``context`` is what the run retrieved and alone decides whether there is
+    anything to hold the answer against; ``user_input`` only adds to the
+    words a claim may draw on. What the user wrote never stands in for
+    retrieved context.
+    """
     usable = [item for item in (context or []) if isinstance(item, str) and item.strip()]
     if not usable:
         if require_context and text.strip():
             return [Finding(NAME, "no_context", 0, len(text), 1.0, "the answer was given with no retrieved context")]
         return []
-    vocabulary = context_vocabulary(usable)
+    written = [item for item in (user_input or []) if isinstance(item, str) and item.strip()]
+    vocabulary = context_vocabulary([*usable, *written])
     findings: list[Finding] = []
     for begin, sentence in sentences(text):
         if sentence.endswith("?"):
@@ -153,4 +161,5 @@ class GroundingDetector:
             min_support=float(options.get("min_support", DEFAULT_MIN_SUPPORT)),
             min_claim_words=int(options.get("min_claim_words", DEFAULT_MIN_CLAIM_WORDS)),
             require_context=bool(options.get("require_context", False)),
+            user_input=options.get("_user_input"),
         )

@@ -317,10 +317,10 @@ async def evaluate(
             continue
         options = rule.options
         if getattr(detector, "uses_context", False):
-            sources = list(context or [])
-            if rule.options.get("include_user_input", True):
-                sources += list(user_input or [])
-            options = {**rule.options, "_context": sources}
+            # Retrieved context and the user's words travel apart: only the
+            # first decides whether the run retrieved anything.
+            written = list(user_input or []) if rule.options.get("include_user_input", True) else []
+            options = {**rule.options, "_context": list(context or []), "_user_input": written}
         try:
             findings = await asyncio.wait_for(
                 asyncio.to_thread(detector.detect, result.text, options, threshold=rule.threshold),

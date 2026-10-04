@@ -124,9 +124,12 @@ tool call carrying a card number is refused.
 
 A `grounding` rule checks, at the output stage, whether each claim of the
 answer is supported by what the run retrieved
-(`core/governance/guardrails/grounding.py`). The context is the conversation's
-tool results (a knowledge search, a connector read) and, unless the rule sets
-`include_user_input` to false, what the user wrote.
+(`core/governance/guardrails/grounding.py`). The context is what the run
+retrieved: the conversation's tool results (a knowledge search, a connector
+read) and the evidence a governed case hands its model. Unless the rule sets
+`include_user_input` to false, what the user wrote adds to the words a claim
+may draw on, but it never counts as retrieved context: a run that retrieved
+nothing has no context, whatever the user said.
 
 The check is deterministic and lexical: no model call, the same verdict for
 the same texts, and it runs inside the detector time budget.
@@ -148,10 +151,11 @@ apply; `flag` records it and `block` suppresses the answer (the run ends
 `guardrail_blocked`) when `guardrails.enforce` is on. A grounding rule never
 rewrites an answer.
 
-With no context in the run (no tool result) the rule is silent, because there
-is nothing to hold the answer against. Set `require_context` to true for an
-agent that must answer only from retrieved material: an answer given with no
-context is then reported as `no_context`.
+With nothing retrieved in the run the rule is silent, because there is
+nothing to hold the answer against. Set `require_context` to true for an
+agent that must answer only from retrieved material: an answer given with
+nothing retrieved is then reported as `no_context`, even when it only repeats
+what the user stated.
 
 ```json
 {"name": "answers-from-the-policy", "stage": "output", "detector": "grounding", "action": "block",

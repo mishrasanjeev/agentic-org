@@ -84,8 +84,20 @@ async def guard_text(
     )
 
 
+# A message that carries retrieved material in a human turn (a graph with no
+# tools hands its evidence to the model that way) says so with this marker in
+# ``additional_kwargs``; providers are never sent it.
+RETRIEVED_MARKER = "agenticorg_retrieved_context"
+
+
+def as_retrieved(message: Any) -> Any:
+    """Mark ``message`` as retrieved context for the grounding check."""
+    message.additional_kwargs = {**(getattr(message, "additional_kwargs", None) or {}), RETRIEVED_MARKER: True}
+    return message
+
+
 def run_context(messages: list[Any]) -> tuple[list[str], list[str]]:
-    """What a run's conversation holds for the grounding check: the tool results, and what the user wrote."""
+    """What a run's conversation holds for the grounding check: what was retrieved, and what the user wrote."""
     from langchain_core.messages import HumanMessage, ToolMessage
 
     retrieved: list[str] = []
@@ -94,7 +106,8 @@ def run_context(messages: list[Any]) -> tuple[list[str], list[str]]:
         text = _content_text(message)
         if not text:
             continue
-        if isinstance(message, ToolMessage):
+        marked = bool((getattr(message, "additional_kwargs", None) or {}).get(RETRIEVED_MARKER))
+        if isinstance(message, ToolMessage) or marked:
             retrieved.append(text)
         elif isinstance(message, HumanMessage):
             written.append(text)

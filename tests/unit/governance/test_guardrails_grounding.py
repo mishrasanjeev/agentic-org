@@ -123,6 +123,16 @@ class TestCheck:
         assert [f.kind for f in required] == ["no_context"] and required[0].score == 1.0
         assert grounding.check("", [], require_context=True) == []
 
+    def test_the_users_words_add_support_but_never_stand_in_for_retrieved_context(self):
+        answer = "Your nominee is recorded as the registered guardian on file."
+        asked = ["Please confirm my nominee is recorded as the registered guardian on file."]
+        assert grounding.check(answer, [POLICY], user_input=asked) == []
+        assert [f.kind for f in grounding.check(answer, [POLICY])] == ["unsupported_claim"]
+        # Nothing retrieved: silent, or no_context when the rule requires one, whatever the user wrote.
+        assert grounding.check(answer, [], user_input=asked) == []
+        required = grounding.check(answer, [], user_input=asked, require_context=True)
+        assert [f.kind for f in required] == ["no_context"]
+
     def test_a_finding_never_carries_the_text(self):
         answer = "Premium customers receive complimentary airport lounge access worldwide."
         for finding in grounding.check(answer, [POLICY]):
@@ -193,6 +203,15 @@ class TestEngine:
         required = _evaluate([_rule(options={"require_context": True})], self.UNGROUNDED)
         assert [o.kinds for o in required.outcomes] == [["no_context"]]
 
+    def test_a_claim_the_user_stated_does_not_satisfy_require_context(self):
+        # No retrieval happened; the model repeats what the user asserted.
+        said = ["Premium customers receive complimentary airport lounge access worldwide, correct?"]
+        rule = _rule(action="block", options={"require_context": True})
+        with pytest.raises(GuardrailBlocked):
+            _evaluate([rule], self.UNGROUNDED, context=[], user_input=said)
+        flagged = _evaluate([_rule(options={"require_context": True})], self.UNGROUNDED, user_input=said)
+        assert [o.kinds for o in flagged.outcomes] == [["no_context"]]
+
     def test_only_a_detector_that_uses_the_context_receives_it(self):
         seen: list[dict] = []
 
@@ -241,6 +260,30 @@ class TestHook:
             assert out is grounded
             with pytest.raises(GuardrailBlocked):
                 asyncio.run(hooks.guard_output_message(invented, tenant_id=TENANT, messages=self._conversation()))
+
+    def test_evidence_handed_over_in_a_human_turn_is_retrieved_context(self, hooks_on):
+        evidence = hooks.as_retrieved(HumanMessage(content=POLICY))
+        conversation = [SystemMessage(content="Write the case summary from the evidence."), evidence]
+        assert hooks.run_context(conversation) == ([POLICY], [])
+        rule = _rule(action="block", options={"require_context": True, "include_user_input": False})
+        grounded = AIMessage(content="The savings account earns interest at 3.5% per year.")
+        invented = AIMessage(content="The savings account earns interest at 9.75% per year.")
+        with contextlib.ExitStack() as stack:
+            for p in _rules([rule]):
+                stack.enter_context(p)
+            assert (
+                asyncio.run(hooks.guard_output_message(grounded, tenant_id=TENANT, messages=conversation)) is grounded
+            )
+            with pytest.raises(GuardrailBlocked):
+                asyncio.run(hooks.guard_output_message(invented, tenant_id=TENANT, messages=conversation))
+
+    def test_the_marker_survives_a_content_rewrite_and_the_governed_case_sets_it(self):
+        evidence = hooks.as_retrieved(HumanMessage(content=POLICY, additional_kwargs={"other": 1}))
+        assert evidence.additional_kwargs == {"other": 1, hooks.RETRIEVED_MARKER: True}
+        rewritten = evidence.model_copy(update={"content": "pseudonymised"})
+        assert hooks.run_context([rewritten]) == (["pseudonymised"], [])
+        src = (ROOT / "core" / "agents" / "case_model_call.py").read_text(encoding="utf-8")
+        assert "as_retrieved(HumanMessage(content=context))" in src
 
     def test_a_run_with_no_tool_result_is_not_judged(self, hooks_on):
         answer = AIMessage(content="Premium customers receive complimentary airport lounge access worldwide.")
