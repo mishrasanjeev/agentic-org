@@ -773,7 +773,8 @@ def test_sso_rpa_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    assert len(routes) == 28
+    # 30 since the prompt template check and render routes.
+    assert len(routes) == 30
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -806,7 +807,8 @@ def test_sso_rpa_mutating_routes_include_audit_and_idempotency() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     mutating_routes = [route for route in routes if any(method in gates.MUTATING_METHODS for method in route.methods)]
 
-    assert len(mutating_routes) == 15
+    # 17 since the prompt template check and render routes (POST, read-only).
+    assert len(mutating_routes) == 17
     assert all(route.audit_event for route in mutating_routes)
     assert all(route.idempotency for route in mutating_routes)
 

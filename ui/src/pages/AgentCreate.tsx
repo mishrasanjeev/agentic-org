@@ -276,7 +276,8 @@ export default function AgentCreate() {
     if (t) {
       setPromptText(t.template_text);
       const vars: Record<string, string> = {};
-      (t.variables || []).forEach((v) => { vars[v.name] = v.default || ""; });
+      // A typed default may be a number or a boolean; the agent form holds text, and 0 and false are values.
+      (t.variables || []).forEach((v) => { vars[v.name] = v.default === undefined || v.default === null ? "" : String(v.default); });
       setPromptVars(vars);
     }
   }, [selectedTemplateId, templates]);

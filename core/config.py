@@ -191,6 +191,11 @@ class Settings(BaseSettings):
     # the chunks back together into the same message. Off by default: off,
     # the call is made exactly as before.
     model_stream_timing_enabled: bool = False
+    # Typed prompt parameters (core/prompts/parameters.py): creating or
+    # changing a prompt template checks its declared parameters (type,
+    # required, default, bounds) and refuses a placeholder the template does
+    # not declare. Off by default: off, templates are stored as before.
+    prompt_typed_parameters_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.
