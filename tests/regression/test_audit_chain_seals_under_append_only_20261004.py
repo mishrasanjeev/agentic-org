@@ -134,20 +134,20 @@ async def test_every_other_mutation_is_still_refused(sealing_rule):
 
     tid = await _seed(4)
     await audit_chain.seal(tid, batch=2)
-    where = "WHERE tenant_id = CAST(:tid AS uuid)"
-    # A sealed row: no field, and no chain column, changes again.
-    assert await _refused(tid, f"UPDATE audit_log SET action = 'edited' {where} AND chain_seq IS NOT NULL")
-    assert await _refused(tid, f"UPDATE audit_log SET chain_hash = repeat('f', 64) {where} AND chain_seq IS NOT NULL")
-    assert await _refused(tid, f"UPDATE audit_log SET chain_seq = NULL {where} AND chain_seq IS NOT NULL")
-    # An unsealed row: no field changes, alone or beside the chain columns, and a part-filled seal is refused.
-    assert await _refused(tid, f"UPDATE audit_log SET action = 'edited' {where} AND chain_seq IS NULL")
-    assert await _refused(
-        tid,
+    refused = (
+        # A sealed row: no field, and no chain column, changes again.
+        "UPDATE audit_log SET action = 'edited' WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_hash = 'x' WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NOT NULL",
+        "UPDATE audit_log SET chain_seq = NULL WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NOT NULL",
+        # An unsealed row: no field changes, alone or beside the chain columns, and a part-filled seal is refused.
+        "UPDATE audit_log SET action = 'edited' WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NULL",
         "UPDATE audit_log SET action = 'edited', chain_seq = 99, chain_prev = repeat('0', 64), "
-        f"chain_hash = repeat('f', 64), sealed_at = now() {where} AND chain_seq IS NULL",
+        "chain_hash = repeat('f', 64), sealed_at = now() WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NULL",
+        "UPDATE audit_log SET chain_seq = 99 WHERE tenant_id = CAST(:tid AS uuid) AND chain_seq IS NULL",
+        "DELETE FROM audit_log WHERE tenant_id = CAST(:tid AS uuid)",
     )
-    assert await _refused(tid, f"UPDATE audit_log SET chain_seq = 99 {where} AND chain_seq IS NULL")
-    assert await _refused(tid, f"DELETE FROM audit_log {where}")
+    for statement in refused:
+        assert await _refused(tid, statement), statement
     # Nothing above took effect: the chain still verifies and the rest still seals.
     assert (await audit_chain.verify(tid)).status == "verified"
     assert (await audit_chain.seal(tid)).head.seq == 4

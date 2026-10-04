@@ -1,73 +1,73 @@
 {
-  "generated_at": "2026-10-04T01:23:21.289734+00:00",
-  "global_percent": null,
+  "generated_at": "2026-09-15T08:40:20.117324+00:00",
+  "global_percent": 16.0,
   "global_floor": 55.0,
   "global_target": 80.0,
   "critical_path_target": 90.0,
-  "status": "fail-all-skipped",
+  "status": "fail-below-floor",
   "modules": [
     {
       "glob": "auth/*",
-      "percent": null,
+      "percent": 2.0,
       "floor": 70.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "fail"
     },
     {
       "glob": "api/v1/auth.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 50.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "fail"
     },
     {
       "glob": "core/crypto/*",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "core/database.py",
-      "percent": null,
+      "percent": 21.0,
       "floor": 30.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "fail"
     },
     {
       "glob": "api/deps.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "core/billing/*",
-      "percent": null,
+      "percent": 1.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "api/v1/billing.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "workflows/*",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "core/tasks/workflow_tasks.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "connectors/framework/*",
@@ -78,24 +78,24 @@
     },
     {
       "glob": "api/v1/connectors.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 0.0,
       "target": 90.0,
-      "status": "skip"
+      "status": "ok"
     },
     {
       "glob": "api/v1/governance.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 35.0,
       "target": 70.0,
-      "status": "skip"
+      "status": "fail"
     },
     {
       "glob": "api/v1/mcp.py",
-      "percent": null,
+      "percent": 0.0,
       "floor": 45.0,
       "target": 70.0,
-      "status": "skip"
+      "status": "fail"
     }
   ]
 }
