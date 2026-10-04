@@ -111,6 +111,8 @@ from core.models.rpa_schedule import RPASchedule as RPASchedule
 from core.models.run_span import RunSpan as RunSpan
 from core.models.schema_registry import SchemaRegistry as SchemaRegistry
 from core.models.sso_config import SSOConfig as SSOConfig
+from core.models.synthetic_check import SyntheticCheck as SyntheticCheck
+from core.models.synthetic_check import SyntheticCheckResult as SyntheticCheckResult
 from core.models.tenant import Tenant as Tenant
 from core.models.tenant_ai_credential import TenantAICredential as TenantAICredential
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting

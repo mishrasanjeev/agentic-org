@@ -4,6 +4,26 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Synthetic checks
+- A tenant administrator defines scheduled probes of the tenant's own paths
+  (`observability/synthetic.py`): `model` (a fixed prompt through the direct
+  router, optionally expecting a text in the answer), `knowledge` (a fixed
+  query expecting a minimum number of results), `guardrail` (a dry run of
+  the rules for a stage expecting the text blocked, detected or clean) and
+  `audit_chain` (a verification of the newest links). Each takes a latency
+  limit. A run ends `ok`, `failed` (with reasons) or `error` (with the
+  exception type) and is stored in `synthetic_check_results`; a result keeps
+  counts and reasons, never an answer, retrieved text or the input.
+- Behind `AGENTICORG_SYNTHETIC_CHECKS_ENABLED` (off by default) the sweep
+  (`core.tasks.synthetic_tasks.run_synthetic_checks`, every five minutes)
+  runs each tenant's due checks under the tenant's own row-level security
+  context; runs count in `agenticorg_synthetic_checks_total{kind,result}`.
+  Results are pruned after `AGENTICORG_SYNTHETIC_CHECKS_RETENTION_DAYS` (30).
+- `GET/POST /api/v1/observability/checks`, `PATCH/DELETE /checks/{id}`,
+  `POST /checks/{id}/run` and `GET /checks/{id}/results` (administrators
+  only), and a Checks tab on the observability console page. Migration
+  `v6z42_synthetic_checks`. See `docs/operations/synthetic-checks.md`.
+
 ### Added - Tamper-evident audit: the hash chain and the model call digests
 - Behind `AGENTICORG_AUDIT_CHAIN_ENABLED` (off by default): the sealing task
   (`core.tasks.audit_chain_tasks.seal_audit_chains`, every five minutes)

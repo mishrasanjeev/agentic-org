@@ -2,6 +2,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import api, { extractApiError } from "@/lib/api";
+import SyntheticChecksPanel from "@/components/observability/SyntheticChecksPanel";
 
 /** Run timelines (the waterfall of one agent run) and the live workload. Reads only. */
 
@@ -82,7 +83,7 @@ interface Workload {
   guardrails: { window_hours: number; blocked: number | null; transformed: number | null; error: string | null };
 }
 
-type Tab = "traces" | "workload";
+type Tab = "traces" | "workload" | "checks";
 
 const WORKLOAD_REFRESH_MS = 15_000;
 const cardClass = "rounded-lg border border-slate-200 bg-white p-4 shadow-sm";
@@ -271,6 +272,9 @@ export default function Observability() {
           </button>
           <button type="button" className={tabClass("workload")} onClick={() => setTab("workload")} data-testid="tab-workload">
             Workload
+          </button>
+          <button type="button" className={tabClass("checks")} onClick={() => setTab("checks")} data-testid="tab-checks">
+            Checks
           </button>
         </div>
       </div>
@@ -490,6 +494,8 @@ export default function Observability() {
           )}
         </div>
       )}
+
+      {tab === "checks" && <SyntheticChecksPanel />}
     </div>
   );
 }

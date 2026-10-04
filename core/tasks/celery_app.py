@@ -51,6 +51,7 @@ app = Celery(
         "core.tasks.invoice_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
+        "core.tasks.synthetic_tasks",
         "core.tasks.timeline_tasks",
         "core.tasks.token_refresh",
         "core.tasks.workflow_tasks",
@@ -141,6 +142,19 @@ app.conf.beat_schedule = {
         # Recomputes every tenant's chain and reports the first break of each.
         "task": "core.tasks.audit_chain_tasks.verify_audit_chains",
         "schedule": crontab(hour=4, minute=0),  # daily at 4:00 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "run-synthetic-checks": {
+        # Runs each tenant's due synthetic checks; a no-op unless
+        # AGENTICORG_SYNTHETIC_CHECKS_ENABLED is true (core/tasks/synthetic_tasks.py).
+        "task": "core.tasks.synthetic_tasks.run_synthetic_checks",
+        "schedule": 300.0,  # every 5 minutes
+        "options": {"queue": "maintenance"},
+    },
+    "prune-synthetic-results": {
+        # Results past AGENTICORG_SYNTHETIC_CHECKS_RETENTION_DAYS (core/tasks/synthetic_tasks.py).
+        "task": "core.tasks.synthetic_tasks.prune_synthetic_results",
+        "schedule": crontab(hour=3, minute=40),  # daily at 3:40 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-budget-evaluator": {

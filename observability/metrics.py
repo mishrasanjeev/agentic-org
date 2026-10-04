@@ -115,6 +115,14 @@ audit_chain_verifications_total = Counter(
     ["result"],
 )
 
+# ── Synthetic checks (observability/synthetic.py) ──────────────────
+
+synthetic_checks_total = Counter(
+    "agenticorg_synthetic_checks_total",
+    "Synthetic check runs by kind (model, knowledge, guardrail, audit_chain) and result (ok, failed, error)",
+    ["kind", "result"],
+)
+
 # ── Model calls (agent path and direct router) ─────────────────────
 
 model_calls_total = Counter(
