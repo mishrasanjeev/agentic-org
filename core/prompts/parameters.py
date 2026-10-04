@@ -31,6 +31,14 @@ TYPES: tuple[str, ...] = ("string", "integer", "number", "boolean", "enum")
 MAX_PARAMETERS = 50
 MAX_STRING_VALUE = 20_000
 MAX_CHOICES = 100
+# A value held to a pattern is short, and the pattern is from a shape that
+# matches in bounded time: Python's matcher has no timeout, so the bound is
+# on what it is given (see ``bounded_pattern``).
+MAX_PATTERN_VALUE = 500
+MAX_UNBOUNDED_QUANTIFIERS = 2
+_QUANTIFIED_GROUP = re.compile(r"\)\s*(?:[+*?]|\{\d*,?\d*\})")
+_UNBOUNDED_QUANTIFIER = re.compile(r"(?<!\\)(?:[+*]|\{\d+,\})")
+_INTEGER_TEXT = re.compile(r"[+-]?\d{1,400}")
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 # {{ name }} with optional spaces; a tool reference ({{tool:name}}, {{tools.name}}) is not a parameter.
 _PLACEHOLDER = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
@@ -127,16 +135,25 @@ def _coerce(parameter: Parameter, value: Any, label: str) -> Any:
     if kind in ("integer", "number"):
         if isinstance(value, bool):
             raise ValueError(f"{label} must be a number")
-        try:
-            number: float = float(value) if not isinstance(value, int | float) else value
-        except (TypeError, ValueError):
-            raise ValueError(f"{label} must be a number") from None
-        if number != number or number in (float("inf"), float("-inf")):
-            raise ValueError(f"{label} must be a finite number")
-        if kind == "integer":
-            if float(number) != int(number):
-                raise ValueError(f"{label} must be a whole number")
-            number = int(number)
+        number: int | float
+        if isinstance(value, int):
+            number = value
+        elif kind == "integer" and isinstance(value, str) and _INTEGER_TEXT.fullmatch(value.strip()):
+            # Read digits as an integer directly: a float round-trip changes a large one.
+            number = int(value.strip())
+        else:
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                raise ValueError(f"{label} must be a number") from None
+            if number != number or number in (float("inf"), float("-inf")):
+                raise ValueError(f"{label} must be a finite number")
+            if kind == "integer":
+                if number != int(number):
+                    raise ValueError(f"{label} must be a whole number")
+                if abs(number) >= 2**53:
+                    raise ValueError(f"{label} is too large to read exactly; give it as digits")
+                number = int(number)
         if parameter.min is not None and number < parameter.min:
             raise ValueError(f"{label} must be at least {parameter.min:g}")
         if parameter.max is not None and number > parameter.max:
@@ -148,12 +165,28 @@ def _coerce(parameter: Parameter, value: Any, label: str) -> Any:
         if value not in parameter.choices:
             raise ValueError(f"{label} must be one of {', '.join(parameter.choices)}")
         return value
-    limit = parameter.max_length or MAX_STRING_VALUE
+    limit = parameter.max_length or (MAX_PATTERN_VALUE if parameter.pattern else MAX_STRING_VALUE)
     if len(value) > limit:
         raise ValueError(f"{label} must be at most {limit} characters")
     if parameter.pattern and not re.fullmatch(parameter.pattern, value):
         raise ValueError(f"{label} does not match the required pattern")
     return value
+
+
+def bounded_pattern(text: str) -> str:
+    """A pattern whose match time is bounded for a short value; ValueError otherwise.
+
+    Beyond the shapes ``safe_pattern`` refuses, a repeated group is refused
+    (``(a|aa)+`` backtracks exponentially) and at most two unbounded
+    repetitions are allowed, which keeps matching at worst quadratic in a
+    value that is itself at most ``MAX_PATTERN_VALUE`` characters.
+    """
+    pattern = safe_pattern(text)
+    if _QUANTIFIED_GROUP.search(pattern):
+        raise ValueError(f"pattern {text!r} repeats a group; repeat single characters or classes instead")
+    if len(_UNBOUNDED_QUANTIFIER.findall(pattern)) > MAX_UNBOUNDED_QUANTIFIERS:
+        raise ValueError(f"pattern {text!r} has more than {MAX_UNBOUNDED_QUANTIFIERS} unbounded repetitions")
+    return pattern
 
 
 def _parameter(raw: Any, index: int) -> Parameter:
@@ -205,10 +238,16 @@ def _parameter(raw: Any, index: int) -> Parameter:
         if not isinstance(pattern, str) or not pattern:
             raise ValueError(f"{name}: pattern must be a regular expression")
         try:
-            pattern = safe_pattern(pattern)
+            pattern = bounded_pattern(pattern)
         except ValueError as exc:
             raise ValueError(f"{name}: {exc}") from None
+        if max_length is not None and max_length > MAX_PATTERN_VALUE:
+            raise ValueError(f"{name}: a string held to a pattern is at most {MAX_PATTERN_VALUE} characters")
     default = raw.get("default")
+    if default == "":
+        # The shape templates were seeded with (a name, an empty description, an empty
+        # default) declares no default: the variable stays required.
+        default = None
     required_raw = raw.get("required")
     if required_raw is not None and not isinstance(required_raw, bool):
         raise ValueError(f"{name}: required must be true or false")

@@ -25,10 +25,16 @@ A parameter is a declared placeholder. It is one entry of the template's `variab
 | `description` | what the parameter is for |
 | `choices` | an `enum`'s allowed values (1 to 100) |
 | `min`, `max` | a number's range |
-| `max_length`, `pattern` | a string's limit (at most 20,000 characters) and a regular expression it must match in full; patterns with shapes that backtrack catastrophically are refused |
+| `max_length`, `pattern` | a string's limit (at most 20,000 characters) and a regular expression it must match in full |
+
+The matcher has no timeout, so a pattern is bounded by what it may be and what it is given: a
+pattern that nests or repeats a group, uses a backreference or has more than two unbounded
+repetitions is refused, and a string held to a pattern is at most 500 characters.
 
 A variable declared the old way, a name with or without a description, is a required string, so
-existing templates read as they did. A template has at most 50 parameters. Any other key is
+existing templates read as they did. That includes the shape built-in templates were seeded
+with, an empty description and an empty `default`: an empty default declares no default, and the
+variable stays required. A parameter that may be left out says `"required": false`. A template has at most 50 parameters. Any other key is
 refused.
 
 ```json
@@ -50,7 +56,8 @@ the connector registry as before and left in the text.
 error, an unused declaration is reported only.
 
 **Values against the declarations.** Each supplied value is read as its parameter's type
-(`"80"` is a valid integer, `"yes"` a valid boolean), held to its bounds, and a default fills a
+(`"80"` is a valid integer, read digit by digit so a large one is not changed by a floating-point
+round trip; `"yes"` is a valid boolean), held to its bounds, and a default fills a
 parameter that was not supplied. A missing required value, an unknown name, a value of the wrong
 type or outside its bounds is refused, and every problem is reported together rather than one at
 a time. An optional parameter with no default and no value renders as empty text.
@@ -73,7 +80,7 @@ reading the template.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
-| `AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED` | `false` | On, creating or changing a template checks its parameters and its text together and stores the parameters in their checked form; a bad declaration or an undeclared placeholder is a 422. Off, a template is stored as it was given, as before. |
+| `AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED` | `false` | On, creating or changing a template checks its parameters and its text together and stores the parameters in their checked form; a bad declaration or an undeclared placeholder is a 422. Off, a template is stored as it was given and a variable is a mapping of text to text, as before: a typed declaration is refused. |
 
 On an update the template is checked as the template it will be after the change, so new text
 cannot use a placeholder the stored parameters do not declare. The check and render endpoints

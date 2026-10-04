@@ -123,6 +123,17 @@ def _checked_parameters(template_text: str, variables: list | None) -> list[dict
     return [parameter.to_dict() for parameter in parameters]
 
 
+def _legacy_variables(variables: list | None) -> list | None:
+    """With typed parameters off, a variable is what it always was: a mapping of text to text."""
+    for index, item in enumerate(variables or []):
+        if not isinstance(item, dict) or any(not isinstance(value, str) for value in item.values()):
+            raise HTTPException(
+                422,
+                f"variables[{index}] must map text to text; typed parameters are not enabled in this deployment",
+            )
+    return variables
+
+
 def _template_to_dict(t: PromptTemplate) -> dict:
     return {
         "id": str(t.id),
@@ -347,9 +358,10 @@ async def create_prompt_template(
             },
         )
 
-    variables = body.variables
     if settings.prompt_typed_parameters_enabled:
         variables = _checked_parameters(body.template_text, body.variables)
+    else:
+        variables = _legacy_variables(body.variables) or []
 
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
@@ -464,6 +476,8 @@ async def update_prompt_template(
                 update_data.get("template_text") or template.template_text,
                 update_data["variables"] if "variables" in update_data else template.variables,
             )
+        elif "variables" in update_data:
+            _legacy_variables(update_data["variables"])
 
         # Codex 2026-04-22 audit gap #8 — template history was marketed
         # but never recorded. Snapshot the "before" state so rollback

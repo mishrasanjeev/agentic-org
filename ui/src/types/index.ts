@@ -42,7 +42,7 @@ export interface Agent {
 }
 export interface PromptTemplate {
   id: string; name: string; agent_type: string; domain: string;
-  template_text: string; variables: Array<{ name: string; description: string; default: string }>;
+  template_text: string; variables: Array<{ name: string; description?: string; default?: string | number | boolean | null; type?: string; required?: boolean }>;
   is_builtin: boolean; is_active: boolean; created_at: string;
   description?: string; created_by?: string; updated_at?: string;
 }

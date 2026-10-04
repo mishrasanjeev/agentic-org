@@ -61,6 +61,10 @@ class TestDeclarations:
             ({"name": "x", "type": "integer", "max_length": 5}, "max_length applies to a string only"),
             ({"name": "x", "max_length": 0}, "max_length is a whole number"),
             ({"name": "x", "pattern": "(a+)+"}, "nests or repeats"),
+            ({"name": "x", "pattern": "(a|aa)+$"}, "repeats a group"),
+            ({"name": "x", "pattern": "(ab){2,}"}, "repeats a group"),
+            ({"name": "x", "pattern": "a*b*c*d"}, "more than 2 unbounded repetitions"),
+            ({"name": "x", "pattern": "[A-Z]+", "max_length": 501}, "held to a pattern is at most 500"),
             ({"name": "x", "pattern": "("}, "does not compile"),
             ({"name": "x", "type": "integer", "default": "many"}, "the default must be a number"),
             ({"name": "x", "type": "integer", "min": 10, "default": 5}, "the default must be at least 10"),
@@ -72,6 +76,25 @@ class TestDeclarations:
     def test_an_unusable_declaration_says_what_is_wrong(self, spec, message):
         with pytest.raises(pp.ParameterError, match=message):
             pp.parse_parameters([spec])
+
+    def test_the_seeded_shape_with_an_empty_default_stays_required(self):
+        [seeded] = pp.parse_parameters([{"name": "org_name", "description": "", "default": ""}])
+        assert seeded.required is True and seeded.default is None
+        with pytest.raises(pp.ParameterError, match="org_name is required"):
+            pp.render("For {{org_name}}.", [seeded], {})
+        [optional] = pp.parse_parameters([{"name": "note", "required": False, "default": ""}])
+        assert optional.required is False and pp.render("Note: {{note}}.", [optional], {}) == "Note: ."
+
+    def test_a_pattern_is_matched_in_bounded_time(self):
+        import time
+
+        [parameter] = pp.parse_parameters([{"name": "code", "pattern": "[A-Z]+[0-9]*"}])
+        started = time.monotonic()
+        with pytest.raises(pp.ParameterError, match="does not match"):
+            pp.resolve([parameter], {"code": "A" * 499 + "!"})
+        assert time.monotonic() - started < 1.0
+        with pytest.raises(pp.ParameterError, match="at most 500 characters"):
+            pp.resolve([parameter], {"code": "A" * 501})
 
     def test_every_problem_is_reported_together(self):
         with pytest.raises(pp.ParameterError) as caught:
@@ -125,6 +148,10 @@ class TestResolveAndRender:
         [
             ({"name": "n", "type": "integer"}, 7, 7),
             ({"name": "n", "type": "integer"}, "7", 7),
+            ({"name": "n", "type": "integer"}, " -12 ", -12),
+            ({"name": "n", "type": "integer"}, "9007199254740993", 9007199254740993),
+            ({"name": "n", "type": "integer"}, 9007199254740993, 9007199254740993),
+            ({"name": "n", "type": "integer"}, 80.0, 80),
             ({"name": "n", "type": "number"}, "2.5", 2.5),
             ({"name": "n", "type": "boolean"}, "Yes", True),
             ({"name": "n", "type": "boolean"}, False, False),
@@ -138,6 +165,8 @@ class TestResolveAndRender:
         ("spec", "value", "message"),
         [
             ({"name": "n", "type": "integer"}, 2.5, "must be a whole number"),
+            ({"name": "n", "type": "integer"}, "2.5", "must be a whole number"),
+            ({"name": "n", "type": "integer"}, 1e300, "too large to read exactly"),
             ({"name": "n", "type": "integer"}, True, "must be a number"),
             ({"name": "n", "type": "number"}, "nan", "must be a finite number"),
             ({"name": "n", "type": "number"}, "inf", "must be a finite number"),
@@ -306,6 +335,24 @@ class TestRenderEndpoint:
 
 
 class TestWritesBehindTheFlag:
+    def test_off_the_variables_keep_their_text_to_text_contract(self):
+        session = _Session()
+        client, sessions = _client(session)
+        typed = [{"name": "max_words", "type": "integer", "default": 120}]
+        with sessions:
+            created = client.post("/api/v1/prompt-templates", json={**CREATE, "variables": typed})
+            listed = client.post(
+                "/api/v1/prompt-templates", json={**CREATE, "variables": [{"name": "tone", "choices": ["a", "b"]}]}
+            )
+        assert created.status_code == 422 and "typed parameters are not enabled" in created.text
+        assert listed.status_code == 422 and session.added == []
+        template = _stored()
+        session = _Session(template)
+        client, sessions = _client(session)
+        with sessions:
+            updated = client.put(f"/api/v1/prompt-templates/{template.id}", json={"variables": typed})
+        assert updated.status_code == 422 and template.variables == SPECS
+
     def test_off_by_default_a_template_is_stored_as_it_was_given(self):
         assert settings.prompt_typed_parameters_enabled is False
         session = _Session()
