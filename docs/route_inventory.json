@@ -4680,6 +4680,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "guardrails.adversarial.describe",
+    "auth_required": true,
+    "function": "describe_adversarial_suite",
+    "idempotency": "idempotent-read",
+    "key": "GET /api/v1/guardrails/adversarial api/v1/guardrails.py:describe_adversarial_suite",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/adversarial",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.guardrails.sensitive.read",
+    "source_line": 328,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "guardrails.adversarial.run",
+    "auth_required": true,
+    "function": "run_adversarial_suite",
+    "idempotency": "idempotent-read",
+    "key": "POST /api/v1/guardrails/adversarial/run api/v1/guardrails.py:run_adversarial_suite",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/guardrails.py",
+    "path": "/api/v1/guardrails/adversarial/run",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.guardrails.sensitive.read",
+    "source_line": 342,
+    "tenant_required": true
+  },
+  {
     "audit_event": "guardrails.evaluate",
     "auth_required": true,
     "function": "evaluate",
@@ -4694,7 +4730,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.guardrails.sensitive.read",
-    "source_line": 286,
+    "source_line": 287,
     "tenant_required": true
   },
   {
@@ -4712,7 +4748,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.guardrails.sensitive.read",
-    "source_line": 187,
+    "source_line": 188,
     "tenant_required": true
   },
   {
@@ -4730,7 +4766,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.guardrails.sensitive.write",
-    "source_line": 210,
+    "source_line": 211,
     "tenant_required": true
   },
   {
@@ -4748,7 +4784,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.guardrails.sensitive.write",
-    "source_line": 264,
+    "source_line": 265,
     "tenant_required": true
   },
   {
@@ -4766,7 +4802,7 @@
     "public_exempt_reason": null,
     "rate_limit": "security-admin-write",
     "scope": "governance.guardrails.sensitive.write",
-    "source_line": 234,
+    "source_line": 235,
     "tenant_required": true
   },
   {
@@ -4784,7 +4820,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "governance.guardrails.sensitive.read",
-    "source_line": 160,
+    "source_line": 161,
     "tenant_required": true
   },
   {

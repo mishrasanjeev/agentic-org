@@ -119,6 +119,8 @@ tool call carrying a card number is refused.
 | `PATCH /api/v1/guardrails/rules/{id}` | Change a rule; the merged rule is re-validated. |
 | `DELETE /api/v1/guardrails/rules/{id}` | Delete a rule (204). |
 | `POST /api/v1/guardrails/evaluate` | Dry-run a stage over a text. For a grounding rule, `context` (retrieved texts) and `user_input` are what the text is held against. |
+| `GET /api/v1/guardrails/adversarial` | The adversarial evaluation set without its texts: ids, categories, stages and what each case expects. |
+| `POST /api/v1/guardrails/adversarial/run` | Dry-run the tenant's rules (`rules: tenant`, the default) or the recommended baseline (`rules: baseline`) over the set and report per category. |
 
 ## Console
 
@@ -132,10 +134,55 @@ leave it. The dry run names the call it stands for (agent, use case, risk
 tier), because a rule narrowed to one of those takes part only when the dry
 run names the same one, and for a grounding rule it takes the retrieved
 context and what the user wrote. The live mode shown beside the result comes
-from the status, not from the dry run. Every action goes
+from the status, not from the dry run. An **Adversarial set** card runs the
+corpus described below against the tenant's rules or the recommended baseline
+and shows the result per category. Every action goes
 through the endpoints above, so the same validation, attribution and signed
 audit rows apply. The page changes rules only; turning enforcement on stays
 with the `guardrails.enforce` flag.
+
+## Adversarial evaluation set
+
+`core/governance/guardrails/adversarial.py` holds a fixed corpus of synthetic
+cases, each a text at a stage with what a sound rule set should do with it:
+`detected` for an attack, `clean` for a benign control that looks similar and
+must pass.
+
+| Category | Attacks | Controls |
+|---|---|---|
+| `injection_direct` | a message that tries to take over the model: instruction overrides, prompt disclosure, persona switches, fake system blocks, false authority, a paraphrase, an override in Hindi, a phrasing broken by invisible characters | ordinary questions that use the same words |
+| `injection_indirect` | the same, inside a retrieved document, including a line hidden with invisible characters and an instruction with no known phrasing | ordinary documents that mention systems, rules and instructions |
+| `sensitive_data` | card numbers, PAN, Aadhaar, email and UPI identifiers in an answer or a tool call, and a card number spelled out in words | reference numbers and amounts |
+| `ungrounded` | an invented figure, a claim absent from the context, and the context's own words used to say the opposite | supported answers, including a figure written another way |
+| `output_policy` | a link, a forbidden promise, and the same promise in other words | compliant answers |
+
+Running the set dry-runs a rule set over every case (nothing is enforced,
+metered or audited) and reports per category how many attacks were detected,
+which case ids were missed and which controls were wrongly caught. A report
+never carries a case's text. It can be run against the tenant's own rules or
+against the recommended baseline (`baseline_rules()`: injection blocked at
+input and retrieval, sensitive data redacted in answers and blocked in tool
+calls, grounding flagged, and an output policy forbidding links and two
+phrases).
+
+The corpus deliberately contains attacks the pattern-based detectors do not
+catch. With the regex recognisers the baseline detects **25 of 31 attacks
+(81%)** and wrongly catches **1 of 15 controls**:
+
+- missed: a paraphrased override (`inj-d-09`), an override in Hindi
+  (`inj-d-10`), an instruction with no known phrasing inside a document
+  (`inj-i-06`), a card number in words (`pii-07`), the context's words reversed
+  (`grd-04`), a forbidden promise reworded (`out-03`);
+- wrongly caught: a 16-digit order number read as a phone number (`pii-c3`).
+
+`tests/unit/governance/test_guardrails_adversarial.py` pins that result case
+by case, so a detector change that fixes or breaks a case must change the
+test with it. The numbers describe this corpus only; they are not a claim
+about attacks in general.
+
+Not here yet: the set does not run on a schedule, results are not stored
+over time, and there is no model-graded judging; those belong to the
+evaluation framework.
 
 ## Grounding
 

@@ -23,6 +23,7 @@ from api.deps import get_current_tenant, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.governance import guardrails
+from core.governance.guardrails import adversarial
 from core.governance.guardrails.hooks import hooks_enabled
 from core.governance.guardrails.schema import RISK_TIERS
 from core.models.guardrail_rule import GuardrailRule
@@ -302,3 +303,53 @@ async def evaluate(body: EvaluateIn, tenant_id: str = Depends(get_current_tenant
         user_input=body.user_input,
     )
     return result.to_dict()
+
+
+class AdversarialRunIn(BaseModel):
+    rules: str = Field("tenant", description="tenant: the tenant's stored rules; baseline: the recommended set")
+
+    @model_validator(mode="after")
+    def _known(self) -> AdversarialRunIn:
+        self.rules = self.rules.strip().lower()
+        if self.rules not in ("tenant", "baseline"):
+            raise ValueError("rules must be tenant or baseline")
+        return self
+
+
+@router.get("/adversarial")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.guardrails.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="guardrails.adversarial.describe",
+)
+async def describe_adversarial_suite() -> dict[str, object]:
+    """The adversarial evaluation set without its texts: ids, categories, stages and what each case expects."""
+    return adversarial.describe()
+
+
+@router.post("/adversarial/run")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="governance.guardrails.sensitive.read",
+    rate_limit="standard",
+    idempotency="idempotent-read",
+    audit_event="guardrails.adversarial.run",
+)
+async def run_adversarial_suite(
+    body: AdversarialRunIn, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, object]:
+    """Dry-run the tenant's rules, or the recommended baseline, over the adversarial set.
+
+    Reports per category how many attacks were detected, which were missed
+    and which benign controls were wrongly caught. Nothing is enforced,
+    metered or audited, and no case text is returned.
+    """
+    if body.rules == "baseline":
+        report = await adversarial.run_suite(rules=adversarial.baseline_rules(), label="baseline")
+    else:
+        report = await adversarial.run_suite(tenant_id=uuid.UUID(tenant_id))
+    return report.to_dict()

@@ -1703,6 +1703,7 @@ Sensitive-data recognition includes configured patterns for common identifiers s
 #### Operational checklist
 
 - Start in flag-only mode with synthetic cases and inspect false positives and misses.
+- Run the adversarial set on the Guardrails page against your rules. It reports, per category, the synthetic attacks your rules detect, the ones they miss and the benign texts they wrongly catch. Some attacks are included because pattern-based detectors miss them, so a score below 100% is expected; the result describes that corpus only.
 - Verify exact tenant, agent, use-case and risk-tier matching, including missing-context behavior.
 - Test each action separately; ensure masks/redactions do not destroy required business context.
 - Verify that blocked input, retrieval, output and tool-action cases stop at the intended boundary.
