@@ -91,6 +91,7 @@ const RPASchedules = lazyRetry(() => import("./pages/RPASchedules"));
 const AICredentials = lazyRetry(() => import("./pages/AICredentials"));
 const AIConfig = lazyRetry(() => import("./pages/AIConfig"));
 const ModelGateway = lazyRetry(() => import("./pages/ModelGateway"));
+const Guardrails = lazyRetry(() => import("./pages/Guardrails"));
 
 /* -- Knowledge Base, Voice, RPA, Industry Packs -- */
 const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
@@ -365,6 +366,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={["admin"]}>
             <Layout>
               <ModelGateway />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/settings/guardrails"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <Layout>
+              <Guardrails />
             </Layout>
           </ProtectedRoute>
         }
