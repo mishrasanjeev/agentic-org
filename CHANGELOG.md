@@ -4,6 +4,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: model comparison and dataset evaluation
+- Behind `AGENTICORG_PROMPT_COMPARE_ENABLED` (off by default; tenant
+  administrators; six requests a minute per tenant): `POST
+  /api/v1/prompt-templates/compare` runs one prompt and one input against up
+  to four models and returns each answer with its latency, tokens and cost,
+  and `POST /api/v1/prompt-templates/evaluate` scores up to three prompt
+  variants against a reference dataset of up to 25 cases with deterministic
+  expectations, reporting pass rates and failed checks
+  (`core/prompts/compare.py`). Calls go through the model gateway as the
+  tenant; one model's failure is its own result; nothing is stored.
+- The prompt templates page has a Compare models panel on a selected
+  template.
+
 ### Added - Prompt governance: maker-checker for agent prompts
 - With maker-checker on (`AGENTICORG_PROMPTS_MAKER_CHECKER` or the
   authority flag `prompts.maker_checker`), an agent whose prompt has changed

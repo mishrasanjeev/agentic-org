@@ -160,6 +160,57 @@ a write on the page, and says so, with a retry, when the queue cannot be loaded.
 Storage: `prompt_change_requests` (tenant-scoped under row-level security) and two columns on
 `prompt_template_edit_history` (migration `v6z43_prompt_change_requests`).
 
+## Comparing models and evaluating variants
+
+Two ways to judge a prompt on what models actually return (`core/prompts/compare.py`). Both
+make real, billed model calls through the direct router as the tenant, so the model gateway's
+policies, limits and records apply to every call and a model the tenant may not use is refused
+there.
+
+**Compare.** One prompt and one input run against up to four models at once. Each model gets
+its own result: the answer, the model that served it, latency, tokens and cost. A model that
+fails is that model's result with the error type; it never fails the comparison. The models
+offered are the catalogue entries the direct router can call (the Gemini, OpenAI and Anthropic
+families).
+
+**Evaluate.** Up to three prompt variants answer a reference dataset of up to 25 cases with one
+model. A case is an input with at least one deterministic expectation:
+
+| Expectation | Passes when |
+| --- | --- |
+| `contains` | the answer contains every listed text (case-insensitive) |
+| `not_contains` | the answer contains none of the listed texts |
+| `equals` | the answer, trimmed, is exactly this |
+| `matches` | a bounded regular expression is found in the first 2,000 characters |
+
+The report gives each variant its pass rate, average latency, cost and, per case, `passed`,
+`failed` with the expectations it failed, or `error` with the error type. A failed model call is
+an error, not a failure of the prompt; the three are kept apart. Answers are not returned by an
+evaluation.
+
+A prompt is either a stored template (`template_id`) or text given in the request
+(`template_text` with its `variables`), filled with `values` and checked as for rendering, so a
+variant that is not saved yet can be scored before it is proposed.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_PROMPT_COMPARE_ENABLED` | `false` | Off, both endpoints answer 409 and the console shows no comparison panel. |
+
+| Endpoint | Does |
+| --- | --- |
+| `GET /api/v1/prompt-templates/compare/models` | whether comparison is on, the models it can call and its limits |
+| `POST /api/v1/prompt-templates/compare` | `template_id` or `template_text`, `values`, `input`, `models` (1 to 4), `max_tokens` (default 512, at most 2,048) |
+| `POST /api/v1/prompt-templates/evaluate` | `variants` (1 to 3, each a named prompt), `cases` (1 to 25), `model`, `max_tokens` |
+
+All three need tenant administrator rights. The two that call models share a rate class of six
+requests a minute per tenant, and calls within a request run four at a time. Nothing is stored:
+a comparison's answers go to the administrator who asked, and the logs carry counts and outcomes
+only. The prompt templates page has a **Compare models** panel on a selected template: values for
+its parameters, an input, the models, and the answers side by side with latency, tokens and cost.
+
+Deterministic expectations catch a missing figure or a forbidden phrase; they do not judge
+quality. Model-graded scoring and stored datasets belong to the evaluation framework.
+
 ## Tests
 
 `tests/unit/test_prompt_parameters.py` covers declarations (the old form, defaults, every refused
@@ -180,6 +231,11 @@ and resume with and without a prompt change, creating straight into active, an u
 the first-prompt history entry, and that every path to `active` in the agents API passes the
 check before the status changes.
 
+`tests/unit/test_prompt_compare.py` covers the models a comparison can call, the bounds, a result
+per model with one failing, the call going through the router as the tenant, the concurrency
+limit, the dataset rules and every refused shape, scoring, pass rates with errors kept apart,
+and the endpoints off and on. `ui/src/__tests__/PromptCompare.test.tsx` covers the panel.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
@@ -187,8 +243,9 @@ check before the status changes.
 - **Other parts of an agent are not under maker-checker.** The check at activation is about
   the prompt: a change to an agent's tools, model or thresholds on a shadow agent is not
   attributed, so it does not by itself require a second person.
-- **No side-by-side comparison** across models, **no evaluation against a reference dataset**,
-  **no context-window management** and **no structured-output enforcement** beyond the
-  governed-case agents. These are the package's next parts.
+- **Evaluation has no console view and no stored datasets or results.** It is an endpoint that
+  takes its dataset in the request; nothing gates a change request on an evaluation result.
+- **No context-window management** and **no structured-output enforcement** beyond the
+  governed-case agents. These are the package's next part.
 - **No console editor for parameter types.** The prompt templates page shows a template's
   parameters; typed declarations are written through the API.
