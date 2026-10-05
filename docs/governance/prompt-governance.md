@@ -144,7 +144,8 @@ the agent's own prompt edit.
 
 The same switch applies, read the same strict way: if it cannot be read, the activation is
 refused with 503. With the switch off, activation is as it was. The first-prompt history entry is
-written on every create and clone by a signed-in user, whatever the switch.
+written on every create and clone by a signed-in user, whatever the switch. It records authorship and is
+not an edit: `GET /agents/{id}/prompt-history` lists edits and leaves it out.
 
 An agent created before this was introduced has no first-prompt entry. If it has never been
 active and its prompt has never been edited, it cannot be activated under maker-checker until a

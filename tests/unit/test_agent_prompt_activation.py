@@ -96,6 +96,13 @@ class TestInitialPrompt:
         assert row.prompt_before is None and row.prompt_after == "You are the claims agent."
         assert row.change_reason == "Initial prompt"
 
+    def test_the_edit_history_endpoint_lists_edits_and_leaves_the_first_prompt_out(self):
+        src = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+        history = src[src.index("select(PromptEditHistory)") :][:900]
+        assert "PromptEditHistory.prompt_before.is_not(None)," in history
+        assert "is_distinct_from(prompt_activation.INITIAL_PROMPT_REASON)" in history
+        assert activation.INITIAL_PROMPT_REASON == "Initial prompt"
+
     def test_a_caller_with_no_user_id_records_nothing(self):
         added: list = []
         activation.record_initial_prompt(SimpleNamespace(add=added.append), TENANT, _agent(), None)
