@@ -36,7 +36,9 @@ MAX_CHOICES = 100
 # on what it is given (see ``bounded_pattern``).
 MAX_PATTERN_VALUE = 500
 MAX_UNBOUNDED_QUANTIFIERS = 2
-_QUANTIFIED_GROUP = re.compile(r"\)\s*(?:[+*?]|\{\d*,?\d*\})")
+# Written so no input makes it backtrack: after the digits a quantifier either has a comma and
+# more digits or it does not, and the pattern being searched is at most 512 characters.
+_QUANTIFIED_GROUP = re.compile(r"\)\s*(?:[+*?]|\{\d*(?:,\d*)?\})")
 _UNBOUNDED_QUANTIFIER = re.compile(r"(?<!\\)(?:[+*]|\{\d+,\})")
 _INTEGER_TEXT = re.compile(r"[+-]?\d{1,400}")
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
