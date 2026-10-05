@@ -773,8 +773,9 @@ def test_sso_rpa_target_routes_have_metadata() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     findings = gates.route_metadata_findings(routes)
 
-    # 35 since the prompt template check and render routes and the five change-request routes.
-    assert len(routes) == 35
+    # 38 since the prompt template check and render routes, the five change-request routes
+    # and the three comparison routes.
+    assert len(routes) == 38
     assert findings == []
     assert all(route.metadata_present for route in routes)
     assert all(route.scope for route in routes)
@@ -807,8 +808,9 @@ def test_sso_rpa_mutating_routes_include_audit_and_idempotency() -> None:
     routes = gates.scan_routes(target_paths, gates.REPO_ROOT)
     mutating_routes = [route for route in routes if any(method in gates.MUTATING_METHODS for method in route.methods)]
 
-    # 20 since the prompt template check and render routes (POST, read-only) and approve, reject and withdraw.
-    assert len(mutating_routes) == 20
+    # 22 since the prompt template check and render routes (POST, read-only), approve, reject and
+    # withdraw, and compare and evaluate.
+    assert len(mutating_routes) == 22
     assert all(route.audit_event for route in mutating_routes)
     assert all(route.idempotency for route in mutating_routes)
 

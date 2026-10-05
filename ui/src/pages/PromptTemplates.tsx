@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { promptTemplatesApi, extractApiError } from "@/lib/api";
 import type { PromptTemplate } from "@/types";
 import PromptChangeRequests from "@/components/prompts/PromptChangeRequests";
+import PromptCompare from "@/components/prompts/PromptCompare";
 
 function humanize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -248,6 +249,8 @@ export default function PromptTemplates() {
                 </div>
               </div>
             )}
+            {/* Side-by-side model comparison (renders nothing where it is off for the deployment). */}
+            <PromptCompare templateId={selected.id} parameters={selected.variables || []} />
           </CardContent>
         </Card>
       )}

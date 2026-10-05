@@ -22,10 +22,14 @@ from api.route_metadata import route_meta
 from core.config import settings
 from core.database import get_tenant_session
 from core.models.prompt_template import PromptTemplate, PromptTemplateEditHistory
+from core.pii.pseudonymiser import PseudonymisationError
 from core.prompts import change_requests
+from core.prompts import compare as prompt_compare
 from core.prompts import parameters as prompt_parameters
 from core.schemas.api import (
     PromptChangeDecision,
+    PromptCompareIn,
+    PromptEvaluateIn,
     PromptTemplateCheck,
     PromptTemplateCreate,
     PromptTemplateRender,
@@ -191,6 +195,134 @@ async def list_prompt_templates(
         templates = result.scalars().all()
 
     return [_template_to_dict(t) for t in templates]
+
+
+# ── Compare and evaluate ───────────────────────────────────────────────────
+def _pseudonymisation_refused(exc: PseudonymisationError) -> HTTPException:
+    """Pseudonymisation is on but could not be applied: nothing was sent."""
+    logger.error("prompt_compare_pseudonymisation_unavailable", reason=str(exc))
+    return HTTPException(503, "Pseudonymisation could not be applied; no model was called")
+
+
+def _require_compare() -> None:
+    if not prompt_compare.enabled():
+        raise HTTPException(409, "Prompt comparison is off in this deployment")
+
+
+async def _prompt_text(source, tenant_id: _uuid.UUID, user_domains: list[str] | None) -> str:
+    """The prompt a comparison runs: the stored template or the given text, with its values filled in."""
+    template_text, variables = source.template_text, source.variables
+    if source.template_id is not None:
+        async with get_tenant_session(tenant_id) as session:
+            template = (
+                await session.execute(
+                    select(PromptTemplate).where(
+                        PromptTemplate.id == source.template_id, PromptTemplate.tenant_id == tenant_id
+                    )
+                )
+            ).scalar_one_or_none()
+        if not template or (isinstance(user_domains, list) and template.domain and template.domain not in user_domains):
+            raise HTTPException(404, "Prompt template not found")
+        template_text, variables = template.template_text, template.variables
+    try:
+        parameters = prompt_parameters.parse_parameters(variables)
+        return prompt_parameters.render(template_text or "", parameters, source.values)
+    except prompt_parameters.ParameterError as exc:
+        raise HTTPException(
+            422, detail={"error": "invalid_values", "problems": exc.problems, "message": str(exc)}
+        ) from None
+
+
+@router.get("/prompt-templates/compare/models", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.sensitive.read",
+    rate_limit="prompt-template-read",
+    idempotency="read-only",
+    audit_event="prompt_templates.compare.models",
+)
+async def list_comparable_models() -> dict:
+    """Whether comparison is on, the models it can call and its limits."""
+    return {
+        "enabled": prompt_compare.enabled(),
+        "models": prompt_compare.comparable_models(),
+        "limits": {
+            "models": prompt_compare.MAX_MODELS,
+            "variants": prompt_compare.MAX_VARIANTS,
+            "cases": prompt_compare.MAX_CASES,
+            "max_tokens": prompt_compare.MAX_MAX_TOKENS,
+        },
+    }
+
+
+@router.post("/prompt-templates/compare", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-compare",
+    idempotency="not-idempotent-makes-billed-model-calls",
+    audit_event="prompt_templates.compare",
+)
+async def compare_prompt(
+    body: PromptCompareIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> dict:
+    """Run one prompt and one input against up to four models and return each answer with its latency and cost.
+
+    Makes one billed model call per model, through the model gateway as the
+    tenant. A model that fails is reported as that model's result.
+    """
+    _require_compare()
+    tid = _uuid.UUID(tenant_id)
+    system_text = await _prompt_text(body, tid, user_domains)
+    try:
+        return await prompt_compare.compare(
+            tid, system_text=system_text, user_input=body.input, models=body.models, max_tokens=body.max_tokens
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except PseudonymisationError as exc:
+        raise _pseudonymisation_refused(exc) from None
+
+
+@router.post("/prompt-templates/evaluate", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="prompt_templates.behavior.write",
+    rate_limit="prompt-compare",
+    idempotency="not-idempotent-makes-billed-model-calls",
+    audit_event="prompt_templates.evaluate",
+)
+async def evaluate_prompt(
+    body: PromptEvaluateIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> dict:
+    """Score up to three prompt variants against a reference dataset of up to 25 cases with one model.
+
+    Makes one billed model call per variant and case. Returns each variant's
+    pass rate and, per case, whether it passed, which expectations it failed
+    or the error type; never an answer.
+    """
+    _require_compare()
+    tid = _uuid.UUID(tenant_id)
+    try:
+        cases = prompt_compare.parse_cases(body.cases)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    variants = [(variant.name.strip(), await _prompt_text(variant, tid, user_domains)) for variant in body.variants]
+    try:
+        return await prompt_compare.evaluate(
+            tid, variants=variants, cases=cases, model=body.model, max_tokens=body.max_tokens
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    except PseudonymisationError as exc:
+        raise _pseudonymisation_refused(exc) from None
 
 
 # ── Change requests (maker-checker) ────────────────────────────────────────

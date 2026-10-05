@@ -100,6 +100,8 @@ RATE_LIMIT_CLASSES: dict[str, tuple[int, int]] = {
     "security-admin-write": (30, 60),
     # A run of the guardrail adversarial set dispatches detector work for every case and rule.
     "guardrails-suite": (6, 60),
+    # A prompt comparison or evaluation makes several billed model calls per request.
+    "prompt-compare": (6, 60),
     "provider-webhook": (600, 60),
     "commerce-webhook": (600, 60),
     "gateway-webhook": (600, 60),

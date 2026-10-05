@@ -201,6 +201,11 @@ class Settings(BaseSettings):
     # second person's approval. Off by default; the authority flag
     # prompts.maker_checker turns it on for one tenant.
     prompts_maker_checker: bool = False
+    # Prompt comparison and dataset evaluation (core/prompts/compare.py): one
+    # prompt against several models side by side, and prompt variants scored
+    # against a reference dataset. Both make real, billed model calls. Off by
+    # default.
+    prompt_compare_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.
