@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: maker-checker for agent prompts
+- With maker-checker on (`AGENTICORG_PROMPTS_MAKER_CHECKER` or the
+  authority flag `prompts.maker_checker`), an agent whose prompt has changed
+  since it was last active is promoted, or resumed to active, only by a
+  signed-in user other than the one who last changed the prompt
+  (`core/prompts/activation.py`); an agent is not created or cloned straight
+  into `active`; a change with no recorded author is not activated; an
+  unreadable flag refuses the activation. A pause and resume with no prompt
+  change is unaffected. Off, activation is as it was.
+- Creating or cloning an agent writes its first prompt into the agent's
+  prompt history with who set it, so a new agent's prompt has an author.
+
 ### Fixed - Public search pages
 - Pre-render substantive public pages at build time, preserve private-page
   noindex behavior, and return a real 404 for unknown public paths.

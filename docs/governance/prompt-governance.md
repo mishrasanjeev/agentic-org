@@ -5,8 +5,8 @@ parameters and maker-checker approval; side-by-side comparison, evaluation again
 context-window management follow in later parts and are listed at the end.
 
 Implementation: `core/prompts/parameters.py` (declarations, checks, resolution, rendering),
-`core/prompts/change_requests.py` (maker-checker) and `api/v1/prompt_templates.py` (the template
-endpoints).
+`core/prompts/change_requests.py` (maker-checker for templates), `core/prompts/activation.py`
+(maker-checker for agent prompts) and `api/v1/prompt_templates.py` (the template endpoints).
 
 ## Typed parameters
 
@@ -106,6 +106,30 @@ The validation a direct change gets (name and text rules, tool references, typed
 enabled, the duplicate-name check) runs when the change is proposed, so a request that waits is
 one that would have been accepted.
 
+### Agent prompts
+
+An agent's own prompt is not changed through a change request, because it cannot be changed in
+production at all: the prompt of an active agent is locked. It is edited on a shadow or paused
+agent, or set when an agent is created or cloned, and it reaches production when the agent
+becomes active. The second person for an agent's prompt is therefore required at activation
+(`core/prompts/activation.py`). With maker-checker on:
+
+| Rule | |
+| --- | --- |
+| A second person activates | An agent whose prompt has changed since it was last active is promoted, or resumed to active, only by a signed-in user other than the one who last changed the prompt (403 otherwise). The activator is recorded on the lifecycle event. |
+| The author is known | The author is whoever made the newest entry in the agent's prompt history. Creating or cloning an agent writes its first prompt there with who set it, so a new agent has an author before anyone edits it. A prompt change with no recorded author is not activated (409). |
+| Not an API key | An API key cannot activate an agent with a changed prompt. |
+| No shortcut | An agent is not created or cloned straight into `active` (409): the person who writes a prompt would be activating it in the same step. |
+| Unchanged prompts | A pause and a resume with no prompt change in between needs no second person and can be done with an API key: nothing new reaches production. |
+
+The same switch applies, read the same strict way: if it cannot be read, the activation is
+refused with 503. With the switch off, activation is as it was. The first-prompt history entry is
+written on every create and clone by a signed-in user, whatever the switch.
+
+An agent created before this was introduced has no first-prompt entry. If it has never been
+active and its prompt has never been edited, it cannot be activated under maker-checker until a
+signed-in user saves its prompt and another activates it.
+
 ### The switch
 
 | Setting | Default | Meaning |
@@ -150,13 +174,19 @@ people recorded), the proposer refused, a stale request not applied, delete and 
 and withdrawal, domain access, the four write paths with the switch off and on, and the
 endpoints. `ui/src/__tests__/PromptChangeRequests.test.tsx` covers the review panel.
 
+`tests/unit/test_agent_prompt_activation.py` covers activation: off, the author refused and
+another user allowed, the last editor as the author, an API key, a change with no author, a pause
+and resume with and without a prompt change, creating straight into active, an unreadable switch,
+the first-prompt history entry, and that every path to `active` in the agents API passes the
+check before the status changes.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
   still substituted as plain text when its prompt is built.
-- **Maker-checker covers prompt templates only.** An agent's own prompt is still changed
-  directly through the agents API, so a prompt change can reach an agent without a second
-  approver by that route.
+- **Other parts of an agent are not under maker-checker.** The check at activation is about
+  the prompt: a change to an agent's tools, model or thresholds on a shadow agent is not
+  attributed, so it does not by itself require a second person.
 - **No side-by-side comparison** across models, **no evaluation against a reference dataset**,
   **no context-window management** and **no structured-output enforcement** beyond the
   governed-case agents. These are the package's next parts.
