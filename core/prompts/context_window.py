@@ -30,11 +30,20 @@ message): provider tokenisers differ and none is loaded here. The margin
 exists because the estimate is rough. When the conversation still does not
 fit, it is sent as it is and the provider's own limit applies, as before.
 
+The budget is the window of the model that is actually called: the model is
+read through a tool binding when the run did not name one, the catalogue is
+searched by provider so a self-hosted or deployment-named model takes its
+provider's entry, and the definitions of the tools bound to the call are
+counted against the window, since the provider is sent them too. A model
+whose window cannot be established is not managed at all: trimming to a
+guessed window would drop evidence a larger window could have held.
+
 Behind ``AGENTICORG_CONTEXT_WINDOW_MANAGED`` (off by default).
 """
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass
 from typing import Any
@@ -48,8 +57,6 @@ logger = structlog.get_logger()
 CHARS_PER_TOKEN = 4
 MESSAGE_OVERHEAD_TOKENS = 4
 SAFETY_MARGIN = 0.10
-DEFAULT_WINDOW = 32_000
-DEFAULT_OUTPUT_RESERVE = 4_096
 MAX_OUTPUT_RESERVE_SHARE = 0.25
 OMITTED = "[An earlier tool result was omitted to fit the model's context window.]"
 TRUNCATED = "\n[The rest of this tool result was cut to fit the model's context window.]"
@@ -79,22 +86,78 @@ def total_tokens(messages: list[Any]) -> int:
     return sum(message_tokens(message) for message in messages)
 
 
-def window_for(model: str | None) -> tuple[int, int]:
-    """The model's context window and the room kept for its answer; a default for a model the catalogue lacks."""
-    from core.ai_providers.catalog import LLM_CATALOG
+def unwrap(llm: Any) -> Any:
+    """The chat model under a tool binding (or the object itself when it is not wrapped)."""
+    seen = 0
+    while getattr(llm, "bound", None) is not None and seen < 5:
+        llm = llm.bound
+        seen += 1
+    return llm
+
+
+def model_name_of(llm: Any, declared: str | None = None) -> str:
+    """The model a call goes to: the declared one, else the name the built model carries."""
+    if declared:
+        return declared
+    base = unwrap(llm)
+    for attr in ("model", "model_name"):
+        value = getattr(base, attr, None)
+        if isinstance(value, str) and value:
+            # Some clients carry the name with a path prefix (``models/gemini-...``).
+            return value.rsplit("/", 1)[-1]
+    return ""
+
+
+def window_for(model: str | None, provider: str | None = None) -> tuple[int, int] | None:
+    """The model's context window and the room kept for its answer; None when the catalogue cannot say.
+
+    With a provider the catalogue's own resolver is used, so a provider whose
+    entry is a wildcard (a self-hosted endpoint) or a deployment name takes
+    that entry. Without one the model is looked up by its exact name.
+    """
+    from core.ai_providers.catalog import LLM_CATALOG, find_llm
 
     name = (model or "").strip()
-    for entry in LLM_CATALOG:
-        if entry.model == name:
-            reserve = min(entry.max_output_tokens, int(entry.context_window * MAX_OUTPUT_RESERVE_SHARE))
-            return entry.context_window, reserve
-    return DEFAULT_WINDOW, DEFAULT_OUTPUT_RESERVE
+    entry = find_llm(provider, name) if provider else None
+    if entry is None and name:
+        entry = next((item for item in LLM_CATALOG if item.model == name), None)
+    if entry is None:
+        return None
+    reserve = min(entry.max_output_tokens, int(entry.context_window * MAX_OUTPUT_RESERVE_SHARE))
+    return entry.context_window, reserve
 
 
-def budget_for(model: str | None) -> int:
-    """How many tokens of conversation the model is sent at most."""
-    window, reserve = window_for(model)
-    return max(1, int((window - reserve) * (1 - SAFETY_MARGIN)))
+def tools_tokens(tools: Any) -> int:
+    """A rough token count for the tool definitions sent with the call (name, description and arguments)."""
+    total = 0
+    for tool in tools or []:
+        schema: Any = None
+        args = getattr(tool, "args_schema", None)
+        describe = getattr(args, "model_json_schema", None)
+        if callable(describe):
+            try:
+                schema = describe()
+            # enterprise-gate: broad-except-ok reason=an-undescribable-tool-schema-degrades-to-a-name-only-estimate
+            except Exception:  # noqa: S110
+                schema = None
+        elif isinstance(args, dict):
+            schema = args
+        definition = {
+            "name": str(getattr(tool, "name", "") or ""),
+            "description": str(getattr(tool, "description", "") or ""),
+            "parameters": schema or {},
+        }
+        total += MESSAGE_OVERHEAD_TOKENS + estimate_tokens(json.dumps(definition, default=str))
+    return total
+
+
+def budget_for(model: str | None, provider: str | None = None, *, tools: Any = None) -> int | None:
+    """How many tokens of conversation the model is sent at most; None when its window is not known."""
+    known = window_for(model, provider)
+    if known is None:
+        return None
+    window, reserve = known
+    return max(1, int((window - reserve) * (1 - SAFETY_MARGIN)) - tools_tokens(tools))
 
 
 @dataclass
@@ -138,9 +201,9 @@ def _relevance(text: str, wanted: frozenset[str]) -> float:
     return len(wanted & set(content_tokens(text[:20_000]))) / len(wanted)
 
 
-def fit(messages: list[Any], model: str | None, *, budget: int | None = None) -> Fit:
+def fit(messages: list[Any], model: str | None, *, budget: int) -> Fit:
     """The conversation as it is sent to ``model``: unchanged when it fits, otherwise with tool results omitted."""
-    limit = budget_for(model) if budget is None else budget
+    limit = budget
     before = total_tokens(messages)
     if before <= limit:
         return Fit(messages=messages, budget=limit, before_tokens=before, after_tokens=before)
@@ -221,8 +284,24 @@ def fit(messages: list[Any], model: str | None, *, budget: int | None = None) ->
     return result
 
 
-def fit_for_call(messages: list[Any], model: str | None) -> Fit | None:
-    """``fit`` when context-window management is on; None when it is off (the caller sends what it had)."""
+def fit_for_call(
+    messages: list[Any],
+    llm: Any,
+    *,
+    model: str | None = None,
+    provider: str | None = None,
+    tools: Any = None,
+) -> Fit | None:
+    """``fit`` against the called model's window; None when management is off or the window is not known.
+
+    ``llm`` is the model as it is called (possibly bound to tools); ``model``
+    and ``provider`` are what the run declared, when it declared them.
+    """
     if not enabled():
         return None
-    return fit(messages, model)
+    name = model_name_of(llm, model)
+    budget = budget_for(name, provider, tools=tools)
+    if budget is None:
+        logger.info("context_window_unmanaged", model=name or None, provider=provider or None)
+        return None
+    return fit(messages, name, budget=budget)

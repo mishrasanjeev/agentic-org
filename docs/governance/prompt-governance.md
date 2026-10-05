@@ -255,9 +255,15 @@ before each model call of an agent run and, when it does not fit, sends a trimme
 | --- | --- | --- |
 | `AGENTICORG_CONTEXT_WINDOW_MANAGED` | `false` | Off, the conversation is sent whole and the provider's own limit applies, as before. |
 
-**The budget.** The model's context window from the catalogue, less the room kept for its answer
-(its answer limit, at most a quarter of the window), less a 10% margin. A model the catalogue does
-not list is given a 32,000-token window.
+**The budget.** The context window of the model that is actually called, from the catalogue, less
+the room kept for its answer (its answer limit, at most a quarter of the window), less a 10%
+margin, less the definitions of the tools bound to the call, which the provider is sent too. The
+model is read through a tool binding when the run did not name one, and the catalogue is searched
+by provider, so a self-hosted or deployment-named model takes its provider's entry.
+
+A model whose window cannot be established is not managed at all: the conversation is sent whole
+and `context_window_unmanaged` is logged. Trimming to a guessed window would drop evidence a
+larger window could have held.
 
 **What is trimmed, in order.**
 

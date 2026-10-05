@@ -49,14 +49,66 @@ class TestEstimates:
         # A model whose answer limit is most of its window keeps at most a quarter for the answer.
         o1_window, o1_reserve = cw.window_for("o1")
         assert o1_reserve == int(o1_window * cw.MAX_OUTPUT_RESERVE_SHARE)
-        assert cw.window_for("a-model-the-catalogue-lacks") == (cw.DEFAULT_WINDOW, cw.DEFAULT_OUTPUT_RESERVE)
         assert cw.budget_for("gpt-4o") == int((128_000 - 16_384) * 0.9)
+
+    def test_a_model_whose_window_is_not_known_has_no_budget(self):
+        assert cw.window_for("a-model-the-catalogue-lacks") is None
+        assert cw.window_for("") is None and cw.window_for(None) is None
+        assert cw.budget_for("a-model-the-catalogue-lacks") is None
+
+    def test_a_self_hosted_or_deployment_named_model_takes_its_providers_entry(self):
+        from core.ai_providers.catalog import find_llm
+
+        wildcard = find_llm("openai_compatible", "any-name-an-administrator-chose")
+        assert wildcard is not None and wildcard.model == "*"
+        assert cw.window_for("any-name-an-administrator-chose", "openai_compatible") == (
+            wildcard.context_window,
+            min(wildcard.max_output_tokens, int(wildcard.context_window * cw.MAX_OUTPUT_RESERVE_SHARE)),
+        )
+        # Without the provider the name alone is not in the catalogue.
+        assert cw.window_for("any-name-an-administrator-chose") is None
+        deployment = cw.window_for("deployment:my-own-deployment", "azure_openai")
+        assert deployment is not None and deployment[0] > 0
+
+    def test_the_model_is_read_through_a_tool_binding(self):
+        from types import SimpleNamespace
+
+        base = SimpleNamespace(model="models/gemini-2.5-flash")
+        bound = SimpleNamespace(bound=base)
+        assert cw.unwrap(bound) is base and cw.unwrap(base) is base
+        assert cw.model_name_of(bound) == "gemini-2.5-flash"
+        assert cw.model_name_of(bound, "gpt-4o") == "gpt-4o"
+        assert cw.model_name_of(SimpleNamespace(bound=SimpleNamespace(model_name="gpt-4o-mini"))) == "gpt-4o-mini"
+        assert cw.model_name_of(SimpleNamespace()) == ""
+
+    def test_the_bound_tool_definitions_are_counted_against_the_window(self):
+        from types import SimpleNamespace
+
+        tool = SimpleNamespace(
+            name="search_policy",
+            description="Search the policy library. " * 40,
+            args_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+        )
+        cost = cw.tools_tokens([tool, tool])
+        assert cost > 2 * cw.estimate_tokens(tool.description) and cw.tools_tokens(None) == 0
+        assert cw.budget_for("gpt-4o", tools=[tool, tool]) == cw.budget_for("gpt-4o") - cost
+
+        class _Broken:
+            name = "broken"
+            description = ""
+
+            class args_schema:  # noqa: N801
+                @staticmethod
+                def model_json_schema():
+                    raise RuntimeError("schema cannot be described")
+
+        assert cw.tools_tokens([_Broken()]) > 0
 
 
 class TestFit:
     def test_a_conversation_that_fits_is_sent_as_it_is(self):
         messages = _conversation("short")
-        result = cw.fit(messages, "gpt-4o")
+        result = cw.fit(messages, "gpt-4o", budget=cw.budget_for("gpt-4o"))
         assert result.messages is messages and result.changed is False and result.fits is True
         assert result.before_tokens == result.after_tokens
 
@@ -132,27 +184,42 @@ class TestFit:
 class TestSwitch:
     def test_off_by_default_nothing_is_measured(self):
         assert settings.context_window_managed is False
-        assert cw.fit_for_call(_conversation(RELEVANT * 50), "gpt-4o") is None
+        assert cw.fit_for_call(_conversation(RELEVANT * 50), None, model="gpt-4o") is None
 
     def test_on_the_call_is_fitted_and_metered_without_a_tenant_label(self, monkeypatch):
         from observability.metrics import context_window_trims_total
 
         assert tuple(context_window_trims_total._labelnames) == ("result",)
         monkeypatch.setattr(settings, "context_window_managed", True)
-        monkeypatch.setattr(cw, "budget_for", lambda _model: 800)
+        monkeypatch.setattr(cw, "budget_for", lambda _model, _provider=None, tools=None: 800)
         series = context_window_trims_total.labels(result="fitted")
         before = series._value.get()
-        result = cw.fit_for_call(_conversation(UNRELATED, UNRELATED), "gpt-4o")
+        result = cw.fit_for_call(_conversation(UNRELATED, UNRELATED), None, model="gpt-4o")
         assert result is not None and result.changed and result.fits
         assert series._value.get() == before + 1
-        untouched = cw.fit_for_call(_conversation("short"), "gpt-4o")
+        untouched = cw.fit_for_call(_conversation("short"), None, model="gpt-4o")
         assert untouched is not None and untouched.changed is False
         assert series._value.get() == before + 1
+
+    def test_an_unknown_model_is_not_managed_rather_than_trimmed_to_a_guess(self, monkeypatch):
+        from types import SimpleNamespace
+
+        monkeypatch.setattr(settings, "context_window_managed", True)
+        huge = _conversation(UNRELATED * 200, UNRELATED * 200)
+        assert cw.fit_for_call(huge, SimpleNamespace(), model="") is None
+        assert cw.fit_for_call(huge, SimpleNamespace(model="a-model-the-catalogue-lacks")) is None
+        # The same conversation under a known model through a tool binding is measured against that model.
+        bound = SimpleNamespace(bound=SimpleNamespace(model="gemini-2.5-flash"))
+        result = cw.fit_for_call(huge, bound)
+        assert result is not None and result.budget > 800_000 and result.changed is False
 
     def test_the_reasoning_node_sends_the_fitted_copy_and_grounds_on_the_full_one(self):
         src = (ROOT / "core" / "langgraph" / "agent_graph.py").read_text(encoding="utf-8")
         reason = src[src.index("async def reason(") : src.index("async def evaluate(")]
-        assert reason.index("full_messages = messages") < reason.index("fitted = fit_for_call(messages, called_model)")
+        assert reason.index("full_messages = messages") < reason.index("fitted = fit_for_call(")
+        call = reason[reason.index("fitted = fit_for_call(") :][:400]
+        assert "model=called_model," in call and "tools=tools," in call
+        assert "provider=called_provider or _llm_provider_name(unwrap_llm(llm), llm_provider)," in call
         assert reason.index("fitted = fit_for_call(") < reason.index("request_digest = messages_digest(messages)")
         assert reason.index("fitted = fit_for_call(") < reason.index("invoke_timed(llm, messages)")
         assert "messages=full_messages" in reason

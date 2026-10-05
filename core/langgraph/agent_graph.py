@@ -58,6 +58,7 @@ from core.langgraph.tool_adapter import (
 )
 from core.pii.pseudonymiser import PseudonymSession
 from core.prompts.context_window import fit_for_call
+from core.prompts.context_window import unwrap as unwrap_llm
 from observability import tracing
 from observability.streaming import invoke_timed, observe_first_token
 
@@ -519,7 +520,13 @@ def build_agent_graph(
         # Context window: the grounding check below reads everything the run retrieved,
         # while the copy sent to the model may have older tool results omitted to fit.
         full_messages = messages
-        fitted = fit_for_call(messages, called_model)
+        fitted = fit_for_call(
+            messages,
+            llm,
+            model=called_model,
+            provider=called_provider or _llm_provider_name(unwrap_llm(llm), llm_provider),
+            tools=tools,
+        )
         if fitted is not None and fitted.changed:
             messages = fitted.messages
             trace.append(
