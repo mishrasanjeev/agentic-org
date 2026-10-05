@@ -14,7 +14,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import (
@@ -65,6 +65,7 @@ from core.ownership import (
     resolve_new_agent_ownership,
     shared_agents_only_clause,
 )
+from core.prompts import activation as prompt_activation
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
@@ -1723,6 +1724,11 @@ async def create_agent(
     company_uuid = _parse_company_id(body.company_id)
 
     initial_status = body.initial_status or "shadow"
+    # Maker-checker: the author of a prompt does not activate it in the same step.
+    try:
+        await prompt_activation.check_new_agent_status(_uuid.UUID(tenant_id), initial_status)
+    except prompt_activation.ActivationError as exc:
+        raise _activation_refused(exc) from None
 
     # Auto-populate authorized tools based on agent type / domain when none provided.
     # When the caller supplied ``connector_ids`` but no explicit
@@ -1899,6 +1905,10 @@ async def create_agent(
                 409,
                 f"An agent named '{agent.employee_name}' of type '{agent.agent_type}' already exists",
             ) from exc
+
+        # The prompt's first author, for the history and for maker-checker at activation.
+        prompt_activation.record_initial_prompt(session, tid, agent, effective_caller.user_id)
+        prompt_activation.record_created_active(session, tid, agent, effective_caller.user_id)
 
         # Create initial AgentVersion snapshot
         version_row = AgentVersion(
@@ -2673,7 +2683,10 @@ async def replace_agent(
     if "hitl_policy" in body.model_fields_set:
         _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_replace")
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -2703,6 +2716,7 @@ async def replace_agent(
         # can't swap out a live agent's prompt via PUT either.
         new_prompt_text = body.system_prompt_text
         old_prompt_text = agent.system_prompt_text
+        prompt_fingerprint = prompt_activation.fingerprint(agent)
         prompt_changing = new_prompt_text is not None and new_prompt_text != old_prompt_text
         if prompt_changing and agent.status == "active":
             raise HTTPException(
@@ -2798,6 +2812,15 @@ async def replace_agent(
                 edited_by=_user_uuid_from_claims(user),
             )
             session.add(audit)
+        # The variables and the reference shape the prompt too: a change to them is recorded with its author.
+        prompt_activation.record_prompt_change(
+            session,
+            tid,
+            agent,
+            before=prompt_fingerprint,
+            before_text=old_prompt_text,
+            editor=_user_uuid_from_claims(user),
+        )
 
     return {"id": str(agent_id), "replaced": True}
 
@@ -2829,7 +2852,7 @@ async def update_agent(
     update_data = body.model_dump(exclude_unset=True)
     async with get_tenant_session(tid) as session:
         query = select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        if {"route_scopes", "authorized_tools"} & update_data.keys():
+        if {"route_scopes", "authorized_tools", *_PROMPT_FIELDS} & update_data.keys():
             # Serialise scope changes on one agent: a concurrent tools PATCH
             # must not push a stale route-scope list back to Grantex.
             query = query.with_for_update()
@@ -2951,6 +2974,7 @@ async def update_agent(
 
         # Track prompt changes for audit
         old_prompt = agent.system_prompt_text
+        prompt_fingerprint = prompt_activation.fingerprint(agent)
         change_reason = update_data.pop("change_reason", None)
         pending_grantex_scopes: list[str] | None = None
 
@@ -3104,6 +3128,15 @@ async def update_agent(
                 edited_by=_user_uuid_from_claims(user),
             )
             session.add(audit)
+        # The variables, the amendments and the reference shape the prompt too.
+        prompt_activation.record_prompt_change(
+            session,
+            tid,
+            agent,
+            before=prompt_fingerprint,
+            before_text=old_prompt,
+            editor=_user_uuid_from_claims(user),
+        )
 
         grantex_config = dict((agent.config or {}).get("grantex") or {})
         if pending_grantex_scopes is not None or (
@@ -4062,7 +4095,10 @@ async def resume_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -4109,7 +4145,15 @@ async def resume_agent(
                 ),
             )
 
+        resumed_by = None
         if resume_to == "active":
+            # Maker-checker: a prompt changed while the agent was paused needs a second person.
+            try:
+                resumed_by = await prompt_activation.check_activation(
+                    session, tid, agent, getattr(_effective_caller(caller), "user_id", None)
+                )
+            except prompt_activation.ActivationError as exc:
+                raise _activation_refused(exc) from None
             async with get_tenant_session(tid, agent.company_id) as connector_session:
                 await _assert_connectors_ready_for_activation(
                     connector_session,
@@ -4125,11 +4169,20 @@ async def resume_agent(
             from_status="paused",
             to_status=resume_to,
             triggered_by="api",
+            triggered_by_user=resumed_by,
             reason=f"Agent resumed via API to '{resume_to}'",
         )
         session.add(event)
 
     return {"id": str(agent_id), "status": resume_to}
+
+
+# The fields of an agent that shape what the model is told.
+_PROMPT_FIELDS = ("system_prompt", "system_prompt_text", "prompt_variables", "prompt_amendments")
+
+
+def _activation_refused(exc: prompt_activation.ActivationError) -> HTTPException:
+    return HTTPException(exc.status, exc.message)
 
 
 # ── POST /agents/{id}/promote ────────────────────────────────────────────────
@@ -4152,7 +4205,10 @@ async def promote_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -4216,6 +4272,15 @@ async def promote_agent(
                 _required_connector_ids_for_agent(agent),
                 agent.company_id,
             )
+        # Maker-checker: a changed prompt is put into production by someone other than its author.
+        activator = None
+        if new_status == "active":
+            try:
+                activator = await prompt_activation.check_activation(
+                    session, tid, agent, getattr(_effective_caller(caller), "user_id", None)
+                )
+            except prompt_activation.ActivationError as exc:
+                raise _activation_refused(exc) from None
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
@@ -4262,6 +4327,7 @@ async def promote_agent(
             from_status=old_status,
             to_status=new_status,
             triggered_by="api",
+            triggered_by_user=activator,
             reason=f"Promoted from {old_status} to {new_status}",
             shadow_accuracy=agent.shadow_accuracy_current,
             shadow_samples=agent.shadow_sample_count,
@@ -4547,6 +4613,11 @@ async def clone_agent(
         if not parent:
             raise HTTPException(404, "Parent agent not found")
         require_agent_mutable(parent, effective_caller)
+        # Maker-checker: a clone carries a prompt its creator chose; it does not start active.
+        try:
+            await prompt_activation.check_new_agent_status(tid, body.initial_status or "shadow")
+        except prompt_activation.ActivationError as exc:
+            raise _activation_refused(exc) from None
         # Admins keep the source's visibility/owner; a non-admin (who can only
         # mutate their own personal agent) always gets a personal clone they own.
         if effective_caller.is_admin:
@@ -4648,6 +4719,10 @@ async def clone_agent(
                 f"An agent named '{clone.employee_name}' of type '{clone.agent_type}' already exists",
             ) from exc
 
+        # The clone's prompt is its creator's choice: recorded as its first author.
+        prompt_activation.record_initial_prompt(session, tid, clone, effective_caller.user_id)
+        prompt_activation.record_created_active(session, tid, clone, effective_caller.user_id)
+
         # Create initial version snapshot for clone
         version_row = AgentVersion(
             tenant_id=tid,
@@ -4699,6 +4774,12 @@ async def get_prompt_history(
             .where(
                 PromptEditHistory.agent_id == agent_id,
                 PromptEditHistory.tenant_id == tid,
+                # Edits only: the row that records who set a new agent's first
+                # prompt is authorship for maker-checker, not an edit.
+                or_(
+                    PromptEditHistory.prompt_before.is_not(None),
+                    PromptEditHistory.change_reason.is_distinct_from(prompt_activation.INITIAL_PROMPT_REASON),
+                ),
             )
             .order_by(PromptEditHistory.created_at.desc())
             .limit(50)

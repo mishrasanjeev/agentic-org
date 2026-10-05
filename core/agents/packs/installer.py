@@ -700,7 +700,11 @@ async def _get_or_create_pack_agents(
             # unrelated global connectors after a successful resync.
             agent.authorized_tools = normalized_tools
             agent.connector_ids = connector_ids
-            agent.system_prompt_text = system_prompt_text
+            # Maker-checker: a resync does not publish a new prompt on an existing agent.
+            from core.prompts.activation import pack_may_replace_prompt
+
+            if await pack_may_replace_prompt(tid, agent, system_prompt_text):
+                agent.system_prompt_text = system_prompt_text
             agent.llm_model = llm_model
             agent.llm_fallback = _DEFAULT_FALLBACK_MODEL
             agent.llm_config = llm_config
