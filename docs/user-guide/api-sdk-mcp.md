@@ -47,6 +47,13 @@ Verify the installed package methods before copying examples. The repository con
 
 ## Connect MCP
 
+There are two directions. The repository MCP adapter exposes AgenticOrg to external
+clients. **Connectors > Remote MCP** instead lets an AgenticOrg agent consume a
+tenant-owned external server through authenticated Streamable HTTP. Follow the
+[remote connector setup and verification workflow](/docs/connectors); generic
+connector registration does not discover remote tools. The incoming path supports
+bearer authentication and reviewed read execution, not arbitrary write execution.
+
 Use the repository MCP adapter with a client that supports its stdio transport. Configure `AGENTICORG_BASE_URL` and one accepted authentication value: `AGENTICORG_API_KEY` or `AGENTICORG_GRANTEX_TOKEN`. Use the client's secure configuration mechanism instead of committing a key in JSON.
 
 The adapter's execution/SOP-submission tools require `company_id`. Its `run_agent` path goes through A2A. Scope enforcement for A2A/MCP depends on the deployment's `AGENTICORG_ROUTE_SCOPE_A2A_MCP` setting; administrators must evaluate and configure it, not assume every discovery route is protected identically.

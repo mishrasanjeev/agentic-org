@@ -880,7 +880,7 @@ async def marketing_connector_contracts(
 @router.get("/tools", dependencies=[require_scope("connectors.tools.read")])
 @route_meta(
     auth_required=True,
-    tenant_required=False,
+    tenant_required=True,
     scope="connectors.tools.read",
     rate_limit="standard",
     idempotency="read-only",
@@ -889,6 +889,8 @@ async def marketing_connector_contracts(
 async def list_tools(
     category: str | None = None,
     connectors: str | None = None,
+    request: Request = None,
+    tenant_id: str = Depends(get_current_tenant),
 ):
     """Return all function-level tool names from the connector registry.
 
@@ -932,6 +934,18 @@ async def list_tools(
                 "connector": connector_name,
                 "description": description or f"{tool_name} on {connector_name}",
             })
+        if isinstance(tenant_id, str):
+            from core.remote_mcp import catalog, tool_ref
+
+            remote = await catalog(tenant_id, connector_filter, caller=caller_from_request(request)) if request else {}
+            if category in (None, "mcp"):
+                for connector_name, descriptors in remote.items():
+                    for descriptor in descriptors:
+                        ref = tool_ref(connector_name, descriptor["name"])
+                        tools.append(ref)
+                        tool_details.append({"name": ref, "connector": connector_name,
+                                             "description": descriptor["description"],
+                                             "permission": descriptor["permission"]})
         return {
             "tools": tools,
             "details": tool_details,
@@ -939,6 +953,8 @@ async def list_tools(
         }
     # enterprise-gate: broad-except-ok reason=connector-tool-list-read-only-static-fallback
     except Exception:
+        if connector_filter or request is not None:
+            raise HTTPException(503, "Tool catalog unavailable. Retry after the connection is restored.") from None
         # Fallback: extract from _AGENT_TYPE_DEFAULT_TOOLS
         from api.v1.agents import _AGENT_TYPE_DEFAULT_TOOLS
 
@@ -1059,6 +1075,10 @@ async def register_connector(
     request: Request,
     tenant_id: str = Depends(get_current_tenant),
 ):
+    from core.remote_mcp_transport import MCP_SCHEMA
+
+    if body.name.startswith("mcp_") or body.data_schema_ref == MCP_SCHEMA:
+        raise HTTPException(422, "Register remote MCP servers through /connectors/mcp so their tools are discovered")
     caller = caller_from_request(request)
     owner_user_id = resolve_new_connector_owner(caller)
     tid = _uuid.UUID(tenant_id)
@@ -1589,6 +1609,9 @@ async def update_connector(
         # 403 for a shared one unless the caller is a tenant admin.
         require_connector_mutable(connector, caller)
 
+        if connector.data_schema_ref == "mcp:streamable-http:v1":
+            raise HTTPException(422, "Use the Remote MCP settings to refresh tools or rotate credentials")
+
         # Prevent blind setattr on secret-bearing or internal fields.
         # auth_config is deprecated for new writes — secrets go via
         # connector_configs.credentials_encrypted.
@@ -1968,6 +1991,14 @@ async def test_connector(
 
     # Bug sheet 2026-09-14 rows 17/18: owner or tenant admin only.
     require_connector_mutable(connector, caller_from_request(request))
+
+    from core.remote_mcp_transport import MCP_SCHEMA
+
+    if connector.data_schema_ref == MCP_SCHEMA:
+        from api.v1.remote_mcp import Refresh, refresh
+
+        result = await refresh(conn_id, Refresh(), request, tenant_id)
+        return {"tested": True, "health": {"status": "healthy"}, "tools": result["tools"]}
 
     connector_cls = ConnectorRegistry.get(connector.name)
     if not connector_cls:

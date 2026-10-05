@@ -31,11 +31,12 @@ and tenants are log fields only. The grant token itself is never logged.
 from __future__ import annotations
 
 import asyncio
+import copy
 import re
 import time
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Any
 
@@ -358,6 +359,48 @@ def enforce_connector_grant(client: Any, *, connector: str, **call: Any) -> Any:
     share. Only Grantex decides: an exception from ``enforce`` propagates to
     the caller, which treats it as a denial.
     """
+    if connector.startswith("mcp_"):
+        from grantex import Grantex, Permission, ToolManifest
+
+        tool = call.get("tool")
+        if (
+            not isinstance(client, Grantex)
+            or not isinstance(tool, str)
+            or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,63}", tool)
+        ):
+            raise ValueError("Remote MCP grant verifier unavailable")
+        # The SDK exposes no per-call manifest argument. Isolate its manifest map,
+        # retaining the SAME verifier, audience, revocation and cap configuration.
+        # Never register tenant-owned tools on the shared singleton. Persistence,
+        # ownership, reviewed permissions and schema are checked again at dispatch.
+        scoped = copy.copy(client)
+        scoped._manifests = dict(client._manifests)
+        scoped.load_manifest(ToolManifest(connector=connector, tools={tool: "write"}))
+        if "audience" not in call and settings.grantex_audience:
+            call = {**call, "audience": settings.grantex_audience}
+        result = scoped.enforce(connector=connector, **call)
+        if not result.allowed:
+            return result
+        # The requirements-pinned SDK predates tool-qualified scope enforcement.
+        # Narrow only AFTER signature/revocation verification; never decode an
+        # unverified JWT or borrow another tool's stronger permission.
+        for scope in result.scopes:
+            parts = scope.split(":")
+            if (
+                len(parts) >= 3
+                and parts[0] == "tool"
+                and parts[1] == connector
+                and Permission.covers(parts[2], "write")
+                and (len(parts) == 3 or parts[3] == tool)
+            ):
+                return result
+        return replace(
+            result,
+            allowed=False,
+            reason="The verified grant does not authorize this remote MCP tool",
+            reason_code="tool_not_granted",
+            sub_reason="tool_scope_missing",
+        )
     result = client.enforce(connector=connector, **call)
     if bool(getattr(result, "allowed", False)):
         return result

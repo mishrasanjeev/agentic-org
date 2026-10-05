@@ -277,6 +277,13 @@ See [mcp-server/README.md](mcp-server/README.md).
 
 The MCP package exposes governed AgenticOrg agent and commerce discovery surfaces. It does not grant an MCP client unrestricted access to every connector action.
 
+For the reverse direction, **Connectors > Remote MCP** registers a tenant-owned
+HTTPS Streamable HTTP server with encrypted bearer credentials, discovers its
+tools, and shares the persisted catalog with agent selection and runtime dispatch.
+Reviewed read tools can execute subject to grants and action policy; write tools
+remain contained. Discovery is not proof of every upstream provider capability.
+See the [connection, review, probe and agent-run workflow](docs/user-guide/connectors.md).
+
 ## Pricing and limits
 
 The hosted plan source of truth is the typed `PUBLIC_PLAN_CATALOG` in [core/billing/catalog.py](core/billing/catalog.py). A compatibility view in `core/billing/limits.py` is derived from that catalog.

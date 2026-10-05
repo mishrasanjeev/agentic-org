@@ -79,6 +79,7 @@ dependencies = [
     "PyJWT[crypto]>=2.15.1",
     "passlib[bcrypt]>=1.7.4",
     "httpx>=0.28.0",
+    "mcp>=1.29.1,<2",
     # Twilio webhook signatures are protocol-defined HMAC-SHA1. Delegate
     # canonicalisation and constant-time validation to the maintained SDK.
     "twilio>=9.11.2",

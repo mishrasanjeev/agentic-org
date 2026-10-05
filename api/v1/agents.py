@@ -891,6 +891,17 @@ def _validate_authorized_tools(tools: list[str]) -> list[str]:
     return [t for t in tools if t not in index]
 
 
+async def _validate_selected_tools(tools: list[str], tenant_id: str, connector_ids: list[str]) -> list[str]:
+    from core.remote_mcp import catalog, tool_ref
+
+    invalid = _validate_authorized_tools(tools)
+    if not any(tool.startswith("mcp_") for tool in tools):
+        return invalid
+    remote = await catalog(tenant_id, connector_ids)
+    allowed = {tool_ref(name, tool["name"]) for name, descriptors in remote.items() for tool in descriptors}
+    return [tool for tool in invalid if tool not in allowed]
+
+
 def _enforce_hitl_condition_on_save(condition: str | None, *, surface: str) -> None:
     """Refuse a HITL condition outside the grammar when validation rejects.
 
@@ -1236,8 +1247,12 @@ async def _resolve_connector_configs(
     globally-registered connectors that happen to expose
     ``list_invoices``.
     """
+    from core.remote_mcp import CATALOG_KEY, catalog
+
+    agent_level_config = dict(agent_level_config or {})
+    agent_level_config.pop(CATALOG_KEY, None)
     if not connector_ids:
-        return dict(agent_level_config or {}), []
+        return agent_level_config, []
 
     import json as _json
     import uuid as _uuid
@@ -1278,6 +1293,7 @@ async def _resolve_connector_configs(
 
     merged: dict[str, Any] = {}
     resolved_names: list[str] = []
+    native_connector_ids: set[str] = set()
     failed_connectors: list[str] = []
     async with get_tenant_session(tid, company_uuid) as session:
         for raw_id in connector_ids:
@@ -1357,6 +1373,11 @@ async def _resolve_connector_configs(
                         connector_uuid=str(row_uuid),
                         connector_name=cc.connector_name,
                     )
+                # Remote credentials remain per connector and are reloaded at dispatch.
+                if cc.connector_name.startswith("mcp_"):
+                    resolved_names.append(cc.connector_name)
+                    continue
+                native_connector_ids.add(raw_id)
                 # Non-secret config (URLs, options).
                 if cc.config:
                     merged.update(cc.config)
@@ -1390,6 +1411,12 @@ async def _resolve_connector_configs(
 
     if agent_level_config:
         merged.update(agent_level_config)
+    # Never accept an agent-supplied catalog or credentials as remote authority.
+    merged.pop(CATALOG_KEY, None)
+    remote = await catalog(str(tid), [value for value in connector_ids if value not in native_connector_ids])
+    if remote:
+        merged[CATALOG_KEY] = remote
+        resolved_names.extend(name for name in remote if name not in resolved_names)
     return merged, resolved_names
 
 
@@ -1753,7 +1780,7 @@ async def create_agent(
     # Validate user-provided tools against the registry (skip for auto-populated)
     if body.authorized_tools and tools:
         try:
-            invalid_tools = _validate_authorized_tools(tools)
+            invalid_tools = await _validate_selected_tools(tools, tenant_id, connector_ids)
             if invalid_tools:
                 raise HTTPException(
                     422,
@@ -2703,6 +2730,11 @@ async def replace_agent(
         check_agent_visibility_change(agent, requested_visibility, effective_caller)
         _apply_agent_visibility(agent, requested_visibility)
         replacement_connector_ids = getattr(body, "connector_ids", None)
+        remote_tools = [tool for tool in body.authorized_tools if tool.startswith("mcp_")]
+        if remote_tools:
+            invalid = await _validate_selected_tools(remote_tools, tenant_id, list(replacement_connector_ids or []))
+            if invalid:
+                raise HTTPException(422, "Remote MCP tools must belong to a linked, active connector")
         await _assert_connector_links_allowed(
             session,
             tid,
@@ -3002,14 +3034,21 @@ async def update_agent(
             agent.system_prompt_text = update_data["system_prompt_text"]
         if "prompt_variables" in update_data:
             agent.prompt_variables = update_data["prompt_variables"]
-        if "authorized_tools" in update_data:
-            invalid = _validate_authorized_tools(update_data["authorized_tools"])
+        if "authorized_tools" in update_data or (
+            "connector_ids" in update_data
+            and any(tool.startswith("mcp_") for tool in (agent.authorized_tools or []))
+        ):
+            invalid = await _validate_selected_tools(
+                update_data.get("authorized_tools", agent.authorized_tools or []), tenant_id,
+                update_data.get("connector_ids", agent.connector_ids or []) or [],
+            )
             if invalid:
                 raise HTTPException(
                     422,
                     detail=f"Invalid authorized_tools: {', '.join(invalid)}. "
                     "Use GET /connectors/registry or GET /tools to discover valid tool names.",
                 )
+        if "authorized_tools" in update_data:
             agent.authorized_tools = update_data["authorized_tools"]
             # BUG-07 (Uday CA Firms 2026-05-02): grantex_scopes are
             # derived from authorized_tools at create time and stored in
@@ -3342,7 +3381,7 @@ async def run_agent(
     # toolset after filtering means the agent genuinely can't do its job.
     if authorized_tools:
         try:
-            missing_tools = _validate_authorized_tools(authorized_tools)
+            missing_tools = await _validate_selected_tools(authorized_tools, tenant_id, dispatch_connector_ids)
         except (RuntimeError, TypeError, ValueError) as exc:
             logger.error(
                 "agent_run_tool_validation_failed",

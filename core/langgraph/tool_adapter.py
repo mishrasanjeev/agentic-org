@@ -239,7 +239,7 @@ def _actual_tool_name(tool_ref: str) -> str:
     raw = str(tool_ref or "").strip()
     if "__" in raw:
         maybe_connector, maybe_tool = raw.split("__", 1)
-        if ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
+        if maybe_connector.startswith("mcp_") or ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
             return maybe_tool
     return raw
 
@@ -312,6 +312,7 @@ async def _execute_connector_tool(
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
     agent_id: str = "",
+    remote_schema_hash: str | None = None,
 ) -> dict[str, Any]:
     """Execute a connector tool inside its span (tracing is off by default); the dispatch itself follows."""
     with tracing.span(
@@ -330,6 +331,7 @@ async def _execute_connector_tool(
             domain=domain,
             capability_authorization=capability_authorization,
             agent_id=agent_id,
+            remote_schema_hash=remote_schema_hash,
         )
         tracing.set_attributes(**{"tool.outcome": _tool_outcome(result)})
         return result
@@ -346,6 +348,7 @@ async def _dispatch_connector_tool(
     domain: ActionDomain | str | None = None,
     capability_authorization: CapabilityAuthorization | None = None,
     agent_id: str = "",
+    remote_schema_hash: str | None = None,
 ) -> dict[str, Any]:
     """Execute a connector tool and return the result.
 
@@ -383,6 +386,12 @@ async def _dispatch_connector_tool(
     except GuardrailBlocked as exc:
         logger.warning("connector_call_refused_guardrail", connector=connector_name, tool=tool_name, rule=exc.rule_name)
         return {"error": "guardrail_blocked", "message": exc.reason, "guardrail": exc.to_error()["guardrail"]}
+
+    if connector_name.startswith("mcp_"):
+        from core.remote_mcp import execute
+
+        return await execute(tenant_id, agent_id, connector_name, tool_name, params,
+                             expected_hash=remote_schema_hash, company_id=company_id)
 
     if is_strict_runtime_env(settings.env) or tenant_id is not None or company_id is not None or domain is not None:
         decision = await evaluate_action(
@@ -575,7 +584,9 @@ def _parse_authorized_tool_ref(raw: Any) -> tuple[str | None, str] | None:
         return connector_hint, tool_name
     if "__" in ref:
         maybe_connector, maybe_tool = ref.split("__", 1)
-        if maybe_tool and ConnectorRegistry.get(_canonical_connector_name(maybe_connector)):
+        if maybe_tool and (
+            maybe_connector.startswith("mcp_") or ConnectorRegistry.get(_canonical_connector_name(maybe_connector))
+        ):
             return _canonical_connector_name(maybe_connector), maybe_tool
     return None, ref
 
@@ -913,6 +924,12 @@ async def execute_agent_tool(
             }
         }
 
+    if connector_name.startswith("mcp_"):
+        return await _execute_connector_tool(
+            connector_name, tool_name, params, tenant_id=tenant_id, company_id=company_id,
+            domain=domain, capability_authorization=capability_authorization, agent_id=agent_id,
+        )
+
     config = await load_connector_config(connector_name, tenant_id, company_id)
     if config is None and company_id:
         return {
@@ -1150,15 +1167,21 @@ def build_tools_for_agent(
             handlers_by_connector[connector_name] = _connector_tool_handlers(connector_name, connector_config)
         handler = handlers_by_connector[connector_name].get(actual_tool_name)
         handler_params, handler_accepts_var_kw = _handler_param_names(handler)
+        from core.remote_mcp import CATALOG_KEY
+
+        remote_descriptor = next((item for item in (connector_config or {}).get(CATALOG_KEY, {}).get(connector_name, [])
+                                  if item["name"] == actual_tool_name), None)
+        if remote_descriptor is not None:
+            handler_accepts_var_kw = True
         # The full docstring lists the params for ``**params`` handlers;
         # OpenAI caps function descriptions at 1024 characters.
         handler_doc = (inspect.getdoc(handler) or "").strip() if handler is not None else ""
         tool_description = (handler_doc or description or f"Execute {actual_tool_name} on {connector_name}")[:1024]
 
         # Create an async wrapper that calls the connector
-        def _make_tool_fn(cn: str, tn: str, desc: str, allowed: set[str], var_kw: bool):
+        def _make_tool_fn(cn: str, tn: str, desc: str, allowed: set[str], var_kw: bool, schema_hash: str | None):
             async def _tool_fn(**kwargs: Any) -> dict[str, Any]:
-                params = _flatten_structured_tool_kwargs(kwargs)
+                params = dict(kwargs) if schema_hash is not None else _flatten_structured_tool_kwargs(kwargs)
                 params = _drop_unknown_handler_params(
                     params,
                     allowed,
@@ -1187,6 +1210,7 @@ def build_tools_for_agent(
                     domain=domain,
                     capability_authorization=capability_authorization,
                     agent_id=agent_id,
+                    remote_schema_hash=schema_hash,
                 )
                 if pseudonymiser is not None:
                     return await pseudonymiser.pseudonymise_value(result)
@@ -1209,10 +1233,12 @@ def build_tools_for_agent(
                 tool_description,
                 handler_params,
                 handler_accepts_var_kw,
+                remote_descriptor["schema_hash"] if remote_descriptor is not None else None,
             ),
             name=public_tool_name,
             description=tool_description,
-            args_schema=_tool_args_schema(handler, actual_tool_name),
+            args_schema=(remote_descriptor["inputSchema"] if remote_descriptor is not None
+                         else _tool_args_schema(handler, actual_tool_name)),
             # Lets the graph map ``gmail.send_email`` / ``gmail:send_email``
             # tool calls back to this registered name (bug sheet #14).
             metadata={"connector": connector_name, "tool": actual_tool_name},
@@ -1302,6 +1328,18 @@ def _build_tool_index(
                     connector_name,
                     doc,
                 )
+
+    from core.remote_mcp import CATALOG_KEY, tool_ref
+
+    for connector_name, descriptors in (connector_config or {}).get(CATALOG_KEY, {}).items():
+        if allowed is None or connector_name not in allowed:
+            continue
+        for descriptor in descriptors:
+            tool_name = descriptor["name"]
+            match = (connector_name, descriptor["description"])
+            index[tool_ref(connector_name, tool_name)] = match
+            if include_connector_aliases:
+                index[f"{connector_name}:{tool_name}"] = match
 
     # 2. Composio tools (already filtered for native priority in registry)
     if allowed is None or "composio" in allowed:

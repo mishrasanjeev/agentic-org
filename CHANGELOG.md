@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Tenant-owned remote MCP tools
+- Dedicated Streamable HTTP bearer connection, protocol discovery, encrypted
+  token storage, schema-bound read review, read-only probe and credential rotation.
+- Agent create/edit, save validation and runtime share tenant-scoped discovered
+  tool identities; remote tool grants use isolated manifests and preserve signature,
+  scope and revocation checks. Unlinking, archiving and schema drift refuse calls.
+- Remote write tools remain contained. OAuth/stdio/legacy SSE connections and
+  live provider speech, messaging or payment actions are not verified by this release.
+- Added SDK protocol, Docker API/database and browser regressions, including the
+  reported speech-tool names, tenant isolation and refusal paths.
+
 ### Added - Prompt governance: structured-output enforcement
 - Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's
   final answer is validated against the output schema it declares
