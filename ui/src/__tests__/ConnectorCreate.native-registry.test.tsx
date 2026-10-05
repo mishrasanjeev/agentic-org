@@ -60,6 +60,8 @@ describe("native connector registration", () => {
     expect(screen.getByTestId("provider-select")).toHaveValue(name);
     expect(screen.getByLabelText("Category")).toBeDisabled();
     expect(screen.getByLabelText("Auth Type")).toBeDisabled();
+    expect(screen.queryByText("Zoho Books regions are inferred from this URL.")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("{}")).toBeInTheDocument();
     fireEvent.change(screen.getByPlaceholderText(placeholder), { target: { value: "synthetic-test-value" } });
     fireEvent.click(screen.getByRole("button", { name: "Register Connector" }));
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith("/connectors", expect.objectContaining({
@@ -98,7 +100,7 @@ describe("native connector registration", () => {
     render(<RouterProvider router={router} />);
     await screen.findByDisplayValue("whatsapp");
     fireEvent.change(screen.getByPlaceholderText("Enter access token"), { target: { value: "first-provider-secret" } });
-    fireEvent.change(screen.getByPlaceholderText(/organization_id/), { target: { value: '{"first":"provider"}' } });
+    fireEvent.change(screen.getByPlaceholderText("{}"), { target: { value: '{"first":"provider"}' } });
     fireEvent.change(screen.getByPlaceholderText("e.g. gcp://projects/my-project/secrets/my-secret/versions/latest"), {
       target: { value: "first-provider-secret-ref" },
     });
@@ -106,7 +108,7 @@ describe("native connector registration", () => {
     await router.navigate("/dashboard/connectors/new?type=twilio");
     await screen.findByDisplayValue("twilio");
     expect(screen.getByPlaceholderText("Enter auth token")).toHaveValue("");
-    expect(screen.getByPlaceholderText(/organization_id/)).toHaveValue("");
+    expect(screen.getByPlaceholderText("{}")).toHaveValue("");
     expect(screen.getByPlaceholderText("e.g. gcp://projects/my-project/secrets/my-secret/versions/latest")).toHaveValue("");
   });
 });

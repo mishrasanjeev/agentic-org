@@ -79,6 +79,7 @@ export default function ConnectorCreate() {
   const providerReady = !requestedType || (
     !providerLoading && !providerError && nativeProvider?.name === requestedType
   );
+  const isZohoBooks = name.trim().toLowerCase() === "zoho_books";
 
   useEffect(() => {
     setNativeProvider(null);
@@ -242,7 +243,9 @@ export default function ConnectorCreate() {
                 className="border rounded px-3 py-2 text-sm w-full mt-1"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                The API endpoint for this connector. Zoho Books regions are inferred from this URL.
+                {isZohoBooks
+                  ? "Zoho Books regions are inferred from this URL."
+                  : "The API endpoint for this connector."}
               </p>
             </div>
 
@@ -342,12 +345,16 @@ export default function ConnectorCreate() {
                 <textarea
                   value={extraConfig}
                   onChange={(e) => setExtraConfig(e.target.value)}
-                  placeholder={'{\n  "organization_id": "12345678",\n  "refresh_token": "1000.xxxxx"\n}'}
+                  placeholder={isZohoBooks
+                    ? '{\n  "organization_id": "12345678",\n  "refresh_token": "1000.xxxxx"\n}'
+                    : "{}"}
                   rows={4}
                   className="border rounded px-3 py-2 text-sm w-full mt-1 font-mono"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Connector-specific parameters, such as Zoho Books organization_id.
+                  {isZohoBooks
+                    ? "Connector-specific parameters, such as Zoho Books organization_id."
+                    : "Optional provider-specific parameters. Do not duplicate credentials here."}
                 </p>
                 {extraConfigError && <p className="text-xs text-red-600 mt-1">{extraConfigError}</p>}
               </div>
