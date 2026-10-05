@@ -111,6 +111,12 @@ counted as a green full run: the subsequent frozen-snapshot suite passed with th
 results above. Never mutate source or share pytest basetemp between
 concurrent validation runs.
 
+The first remote CI attempt rejected the generated guide's prose tool-limit
+sentence as an unregistered inventory claim. The guide now uses an explicit
+input-limit table, without relaxing the claims gate. Regeneration, documentation
+tests and claims lint passed locally. Run claims lint after public artifacts are
+regenerated, not only against the earlier backend snapshot.
+
 Transport checks reject compressed responses that ignore `Accept-Encoding:
 identity`, as well as oversized identity responses, before exposing the client to
 unbounded decompression. This limitation is documented for connector operators.

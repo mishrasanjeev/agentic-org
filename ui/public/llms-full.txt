@@ -1343,10 +1343,19 @@ Use **Refresh** to rediscover a changed server or rotate its token. Unchanged re
 
 Only public HTTPS destinations are permitted: no redirects, IP literals, internal hosts, URL-embedded credentials or query tokens. Requests have bounded durations, arguments, responses and discovery pages. Calls are not automatically retried, because a lost response does not prove an external action failed. Raw credentials are not sent to the model or returned in connector responses. Tenant/company credential bindings and personal connector ownership still apply.
 
-Supported limits: 100 tools across at most 10 discovery pages; a 64-character
-connector-qualified tool name; 32 KiB object input schema; 64 KiB arguments;
-1 MiB response; 30 seconds for a complete protocol operation. Local JSON pointer
-schema definitions are supported within bounded complexity. Recursive/dynamic
+These are input safety caps, not a count of available product integrations:
+
+| Input or operation | Maximum |
+| --- | --- |
+| Discovered tools per connection | 100 |
+| Discovery pages | 10 |
+| Connector-qualified tool name | 64 characters |
+| Object input schema | 32 KiB |
+| Arguments | 64 KiB |
+| Response | 1 MiB |
+| Complete protocol operation | 30 seconds |
+
+Local JSON pointer schema definitions are supported within bounded complexity. Recursive/dynamic
 references, external references and regex-based schemas are refused explicitly.
 Ask the server owner for a bounded compatible schema; do not remove network or
 validation protections to make an incompatible server connect.
