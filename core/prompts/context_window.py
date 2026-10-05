@@ -43,6 +43,7 @@ Behind ``AGENTICORG_CONTEXT_WINDOW_MANAGED`` (off by default).
 
 from __future__ import annotations
 
+import copy
 import json
 import math
 from dataclasses import dataclass
@@ -179,11 +180,10 @@ class Fit:
 
 
 def _with_content(message: Any, content: str) -> Any:
-    copy = getattr(message, "model_copy", None)
-    if callable(copy):
-        return copy(update={"content": content})
-    replacement = type(message).__new__(type(message))
-    replacement.__dict__.update(message.__dict__)
+    model_copy = getattr(message, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(update={"content": content})
+    replacement = copy.copy(message)
     replacement.content = content
     return replacement
 
