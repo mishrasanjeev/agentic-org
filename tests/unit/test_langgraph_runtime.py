@@ -27,7 +27,8 @@ class TestAgentState:
         assert "output" in fields
         assert "pseudonym_case_id" in fields
         assert "grant_denial" in fields
-        assert len(fields) == 15
+        assert {"output_repairs", "output_repair", "output_invalid"} <= set(fields)
+        assert len(fields) == 18
 
 
 # ═══════════════════════════════════════════════════════════════════════════

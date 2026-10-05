@@ -287,6 +287,55 @@ the latest user message, not meaning. A conversation that still does not fit (a 
 prompt or user message) is sent as it is, and the provider's limit applies. The direct router is
 not managed this way; it has no accumulated tool results.
 
+## Structured output
+
+An agent can declare the shape of what it returns. While enforcement is on, an answer that does
+not have that shape is not returned as a completed result (`core/prompts/output_schema.py`).
+
+**Declaring a schema.** Two ways:
+
+- The agent's own schema: `PUT /agents/{id}/output-schema` with `{"schema": {...}}`, or
+  `{"schema": null}` to remove it. It is a JSON Schema (2020-12) for an object, at most 32,000
+  bytes, self-contained (`$ref` is refused) and checked to be a valid schema when it is stored.
+  It changes what the agent may return, so, like the prompt, it cannot be changed while the agent
+  is active, and the agent's edit rules apply. It is stored in the agent's `config` under
+  `output_schema_json`.
+- A registered name: the agent's existing `output_schema` field, when it names one of the
+  platform's registered document schemas.
+
+The agent's own schema wins when both are set.
+
+**What happens on a run.** After the model's final answer is parsed, it is validated:
+
+1. A valid answer completes as before.
+2. An invalid answer goes back to the model with what is wrong (the JSON path and the schema's
+   message for each problem, at most ten), up to two times.
+3. An answer that is still invalid is escalated to a human reviewer with the trigger
+   `output_schema_invalid`, whatever its confidence. The reviewer sees the answer and decides;
+   the run does not end as `completed` on its own.
+4. A declared schema that cannot be used (a name that is not registered, a stored schema that is
+   no longer valid) escalates the same way with `output_schema_unusable`. An agent that says it
+   has a schema does not run as if it had none.
+
+A run refused by grant enforcement ends as it did, before any of this. An agent with no declared
+schema is not affected.
+
+**Switch.** `AGENTICORG_OUTPUT_SCHEMA_ENFORCED`, off by default. Off, nothing is validated and
+runs end as before; schemas can still be stored. Before turning it on, look at the `output_schema`
+names existing agents carry: a name that is not a registered schema escalates every run of that
+agent (point 4). Clear the name or give the agent its own schema first.
+
+**Observability.** The run's trace records each correction and the escalation.
+`agenticorg_output_schema_checks_total{result}` counts `valid`, `repaired` (valid after a
+correction), `retry`, `escalated` and `unusable`. No tenant or agent label, and no answer content;
+a schema message can quote a short value from the answer, so messages are bounded and go only to
+the model and the reviewer.
+
+**Limits.** Enforcement is on runs started through the agents API (`POST /agents/{id}/run`), which
+is where an agent's stored configuration is read. Runs started by the voice channel and by the
+typed agent entry points do not pass a schema and are not validated. Each correction is one more
+model call. A reviewer who approves an escalated answer releases it as it is.
+
 ## Tests
 
 `tests/unit/test_prompt_parameters.py` covers declarations (the old form, defaults, every refused
@@ -319,6 +368,11 @@ omission by relevance and age, that every tool call stays answered and nothing e
 cut when omission is not enough, a conversation that cannot fit, the switch, the metric and that
 the reasoning node sends the fitted copy while the grounding check reads the full one.
 
+`tests/unit/test_output_schema.py` covers the schemas an agent may be given, the errors and their
+bounds, a registered name and an unregistered one, the switch, accept, correction and escalation,
+the metric, the agent graph run with a scripted model (valid, corrected, escalated, an unusable
+name, off, and no schema), the endpoint and the lock on active agents.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
@@ -328,7 +382,7 @@ the reasoning node sends the fitted copy while the grounding check reads the ful
   attributed, so it does not by itself require a second person.
 - **Evaluation has no console view and no stored datasets or results.** It is an endpoint that
   takes its dataset in the request; nothing gates a change request on an evaluation result.
-- **No structured-output enforcement** beyond the governed-case agents: an agent's declared
-  output schema is not validated on the agent graph path. This is the package's last part.
+- **Structured output is enforced on API runs only.** The voice channel and the typed agent
+  entry points do not pass a schema. There is no console editor for an agent's schema.
 - **No console editor for parameter types.** The prompt templates page shows a template's
   parameters; typed declarations are written through the API.

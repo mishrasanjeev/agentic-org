@@ -48,3 +48,9 @@ class AgentState(TypedDict):
     error: str
     pseudonym_case_id: NotRequired[str]
     grant_denial: NotRequired[dict[str, str]]
+    # Structured-output enforcement (core/prompts/output_schema.py): how many
+    # times the answer was sent back to be corrected, whether a correction is
+    # pending, and the escalation trigger when it never became valid.
+    output_repairs: NotRequired[int]
+    output_repair: NotRequired[bool]
+    output_invalid: NotRequired[str]

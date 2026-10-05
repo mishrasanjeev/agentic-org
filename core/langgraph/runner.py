@@ -224,6 +224,8 @@ async def run_agent(
     company_id: str | None = None,
     llm_provider: str | None = None,
     run_grant: RunGrant | None = None,
+    output_schema: str | None = None,
+    output_schema_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -425,6 +427,8 @@ async def run_agent(
             llm_provider=llm_provider,
             agent_id=agent_id,
             run_grant=run_grant,
+            output_schema=output_schema,
+            output_schema_json=output_schema_json,
             pseudonymiser=pseudonymiser,
         )
     finally:
@@ -448,6 +452,10 @@ async def run_agent(
         # A reused thread (voice ``voice:{call_sid}``) must not inherit a
         # denial from an earlier turn.
         "grant_denial": {},
+        # Nor an earlier turn's output-schema corrections.
+        "output_repairs": 0,
+        "output_repair": False,
+        "output_invalid": "",
         "confidence": 0.0,
         "status": "running",
         "output": {},

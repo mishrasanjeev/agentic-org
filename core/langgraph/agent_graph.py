@@ -23,7 +23,7 @@ from dataclasses import replace
 from typing import Any
 
 import structlog
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
@@ -59,6 +59,8 @@ from core.langgraph.tool_adapter import (
 from core.pii.pseudonymiser import PseudonymSession
 from core.prompts.context_window import fit_for_call
 from core.prompts.context_window import unwrap as unwrap_llm
+from core.prompts.output_schema import MAX_REPAIRS as MAX_OUTPUT_REPAIRS
+from core.prompts.output_schema import check as check_output_schema
 from observability import tracing
 from observability.streaming import invoke_timed, observe_first_token
 
@@ -391,6 +393,8 @@ def build_agent_graph(
     pseudonymiser: PseudonymSession | None = None,
     *,
     run_grant: RunGrant | None,
+    output_schema: str | None = None,
+    output_schema_json: dict[str, Any] | None = None,
 ) -> StateGraph:
     """Build a compiled LangGraph agent graph.
 
@@ -739,12 +743,37 @@ def build_agent_graph(
         except (RuntimeError, ValueError, TypeError):
             logger.debug("confidence_metric_update_failed")
 
+        # Structured output: an agent that declares an output schema does not
+        # return an answer that fails it. The answer goes back to the model to
+        # be corrected, and one that never becomes valid goes to a human.
+        repairs = int(state.get("output_repairs") or 0)
+        verdict = check_output_schema(output_schema, output_schema_json, output, repairs=repairs)
+        if verdict["action"] == "repair":
+            trace.append(
+                f"Answer did not match the output schema ({len(verdict['errors'])} problem(s)); "
+                f"sent back for correction ({repairs + 1} of {MAX_OUTPUT_REPAIRS})"
+            )
+            return {
+                "messages": [HumanMessage(content=verdict["message"])],
+                "output_repairs": repairs + 1,
+                "output_repair": True,
+                "status": "running",
+                "reasoning_trace": trace,
+                "tool_calls_log": tool_calls_log,
+            }
+        output_invalid = ""
+        if verdict["action"] == "escalate":
+            output_invalid = str(verdict["trigger"])
+            trace.append(f"Escalated: {output_invalid} ({len(verdict['errors'])} problem(s))")
+
         return {
             "output": output,
             "confidence": confidence,
             "status": "completed",
             "reasoning_trace": trace,
             "tool_calls_log": tool_calls_log,
+            "output_repair": False,
+            "output_invalid": output_invalid,
         }
 
     async def hitl_gate(state: AgentState) -> dict[str, Any]:
@@ -753,7 +782,10 @@ def build_agent_graph(
         output = state.get("output", {})
         trace = list(state.get("reasoning_trace") or [])
 
-        trigger = _check_hitl_trigger(confidence, confidence_floor, hitl_condition, output)
+        # An answer that never matched its output schema goes to a human whatever its confidence.
+        trigger = str(state.get("output_invalid") or "") or _check_hitl_trigger(
+            confidence, confidence_floor, hitl_condition, output
+        )
         if not trigger:
             return {"hitl_trigger": ""}
 
@@ -808,6 +840,11 @@ def build_agent_graph(
         """
         if state.get("grant_denial"):
             return END
+        if state.get("output_repair"):
+            # The answer did not match its output schema: back to the model with what is wrong.
+            return "reason"
+        if state.get("output_invalid"):
+            return "hitl_gate"
         confidence = state.get("confidence", 1.0)
         output = state.get("output", {})
         trigger = _check_hitl_trigger(confidence, confidence_floor, hitl_condition, output)
@@ -876,6 +913,7 @@ def build_agent_graph(
         "evaluate",
         should_escalate,
         {
+            "reason": "reason",
             "hitl_gate": "hitl_gate",
             END: END,
         },

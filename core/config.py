@@ -212,6 +212,12 @@ class Settings(BaseSettings):
     # the copy that is sent. Off by default: off, the conversation is sent
     # whole and the provider's own limit applies.
     context_window_managed: bool = False
+    # Structured-output enforcement (core/prompts/output_schema.py): an
+    # agent's final answer is validated against the output schema it
+    # declares; an invalid answer is sent back to the model to correct, and
+    # one that is still invalid is escalated to a human instead of being
+    # returned as completed. Off by default: off, nothing is validated.
+    output_schema_enforced: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

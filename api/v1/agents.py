@@ -66,10 +66,12 @@ from core.ownership import (
     shared_agents_only_clause,
 )
 from core.prompts import activation as prompt_activation
+from core.prompts import output_schema as prompt_output_schema
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
     AgentFeedbackSubmit,
+    AgentOutputSchemaIn,
     AgentUpdate,
     FleetLimits,
     PaginatedResponse,
@@ -3761,6 +3763,9 @@ async def run_agent(
                 connector_names=connector_names_for_tools,
                 company_id=(str(agent_config["company_id"]) if agent_config.get("company_id") else None),
                 thread_id=run_thread_id,
+                # Structured output: the schema the agent declares (its own, or a registered name).
+                output_schema=agent_config.get("output_schema"),
+                output_schema_json=(agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY),
             )
     except CheckpointerUnavailableError as exc:
         # Postgres checkpoint store configured but unusable: refuse the run
@@ -4175,6 +4180,62 @@ async def resume_agent(
         session.add(event)
 
     return {"id": str(agent_id), "status": resume_to}
+
+
+# ── PUT /agents/{id}/output-schema ───────────────────────────────────────────
+@router.put("/agents/{agent_id}/output-schema")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.output_schema.set",
+)
+async def set_agent_output_schema(
+    agent_id: UUID,
+    body: AgentOutputSchemaIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """Give an agent its own output schema, or remove it.
+
+    The schema is a self-contained JSON Schema for an object. It changes what
+    the agent may return, so, like the prompt, it cannot be changed while the
+    agent is active. It is enforced on runs while
+    ``AGENTICORG_OUTPUT_SCHEMA_ENFORCED`` is on.
+    """
+    tid = _uuid.UUID(tenant_id)
+    schema = None
+    if body.schema_ is not None:
+        try:
+            schema = prompt_output_schema.check_inline_schema(body.schema_)
+        except prompt_output_schema.OutputSchemaError as exc:
+            raise HTTPException(422, str(exc)) from None
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        if agent.status == "active":
+            raise HTTPException(
+                409, "The output schema is locked on active agents. Clone this agent to make changes."
+            )
+        config = dict(agent.config or {})
+        if schema is None:
+            config.pop(prompt_output_schema.INLINE_KEY, None)
+        else:
+            config[prompt_output_schema.INLINE_KEY] = schema
+        agent.config = config
+    return {
+        "id": str(agent_id),
+        "output_schema": schema,
+        "enforced": prompt_output_schema.enabled(),
+    }
 
 
 # The fields of an agent that shape what the model is told.
