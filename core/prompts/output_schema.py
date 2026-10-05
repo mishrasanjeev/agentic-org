@@ -45,6 +45,10 @@ MAX_SCHEMA_BYTES = 32_000
 INLINE_KEY = "output_schema_json"
 TRIGGER_INVALID = "output_schema_invalid"
 TRIGGER_UNUSABLE = "output_schema_unusable"
+# Keywords that point at another schema. A stored schema is self-contained: a
+# reference could reach a document the platform does not control, and one that
+# cannot be resolved fails at validation time.
+REFERENCE_KEYWORDS = frozenset({"$ref", "$dynamicRef", "$recursiveRef"})
 
 
 class OutputSchemaError(ValueError):
@@ -75,14 +79,28 @@ def check_inline_schema(schema: Any) -> dict[str, Any]:
         raise OutputSchemaError(f"the schema is larger than {MAX_SCHEMA_BYTES} bytes")
     if schema.get("type") != "object":
         raise OutputSchemaError('the schema must describe an object ("type": "object"): an agent returns a JSON object')
-    if "$ref" in json.dumps(schema):
-        # A stored schema is self-contained: a reference could reach a document the platform does not control.
-        raise OutputSchemaError("the schema must not use $ref")
+    used = sorted(_reference_keywords(schema))
+    if used:
+        raise OutputSchemaError(f"the schema must not use {', '.join(used)}")
     try:
         Draft202012Validator.check_schema(schema)
     except SchemaError as exc:
         raise OutputSchemaError(f"not a valid JSON Schema: {exc.message}"[:MAX_ERROR_CHARS]) from None
     return schema
+
+
+def _reference_keywords(node: Any) -> set[str]:
+    """The reference keywords used as keys anywhere in the schema."""
+    found: set[str] = set()
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        if isinstance(current, dict):
+            found.update(key for key in current if key in REFERENCE_KEYWORDS)
+            stack.extend(current.values())
+        elif isinstance(current, list):
+            stack.extend(current)
+    return found
 
 
 def _location(path: Any) -> str:
@@ -98,10 +116,14 @@ def errors_for(name: str | None, inline: Any, document: Any) -> list[str]:
         from jsonschema import Draft202012Validator, FormatChecker
 
         schema = check_inline_schema(inline)
-        found = sorted(
-            Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document),
-            key=lambda err: (list(map(str, err.absolute_path)), err.message),
-        )
+        try:
+            found = sorted(
+                Draft202012Validator(schema, format_checker=FormatChecker()).iter_errors(document),
+                key=lambda err: (list(map(str, err.absolute_path)), err.message),
+            )
+        # enterprise-gate: broad-except-ok reason=a-schema-the-validator-cannot-run-fails-closed-as-unusable
+        except Exception as exc:
+            raise OutputSchemaError(f"the schema could not be applied: {type(exc).__name__}") from None
         messages = [f"{_location(err.absolute_path)}: {err.message}" for err in found]
     else:
         from core import domain_schemas

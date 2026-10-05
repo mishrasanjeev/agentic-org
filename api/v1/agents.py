@@ -2725,6 +2725,16 @@ async def replace_agent(
                 409,
                 "Prompt is locked on active agents. Clone this agent to make changes.",
             )
+        # While output schemas are enforced, the registered schema an active
+        # agent is held to is locked the same way as its own schema.
+        if (
+            agent.status == "active"
+            and prompt_output_schema.enabled()
+            and (body.output_schema or None) != (agent.output_schema or None)
+        ):
+            raise HTTPException(
+                409, "The output schema is locked on active agents. Clone this agent to make changes."
+            )
 
         # Core fields
         agent.name = body.name
@@ -3653,6 +3663,14 @@ async def run_agent(
             # invent synthetic success for a removed tool.
             fixture = {}
 
+        # An agent held to an output schema takes no bypass: the
+        # deterministic route builds its own result, which nothing validates.
+        if prompt_output_schema.enabled() and prompt_output_schema.declared(
+            agent_config.get("output_schema"),
+            (agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY),
+        ):
+            fixture = {**fixture, "deterministic_route": ""}
+
         # Path 1: deterministic-route bypass for TDS. Pure math, no LLM,
         # guaranteed tool_call + high confidence. The chat handler uses
         # the same helper for #440 / BUG-17 closure; here we reuse it
@@ -3910,6 +3928,12 @@ async def run_agent(
                     "reasoning_trace": task_trace,
                     "trigger": hitl_trigger,
                     "output": task_output,
+                    # Present when the answer failed its output schema: path and message per problem.
+                    **(
+                        {"output_schema_errors": lg_result["output_schema_errors"]}
+                        if lg_result.get("output_schema_errors")
+                        else {}
+                    ),
                     **resume_spec,
                 },
                 expires_at=datetime.now(UTC) + timedelta(hours=4),

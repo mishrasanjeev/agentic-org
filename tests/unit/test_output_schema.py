@@ -80,6 +80,8 @@ class TestInlineSchema:
             ([], "non-empty JSON object"),
             ({"type": "array"}, "must describe an object"),
             ({"type": "object", "properties": {"a": {"$ref": "https://example.test/schema.json"}}}, "must not use"),
+            ({"type": "object", "$dynamicRef": "https://example.test/schema"}, r"must not use \$dynamicRef"),
+            ({"type": "object", "items": [{"$recursiveRef": "#"}]}, r"must not use \$recursiveRef"),
             ({"type": "object", "properties": {"a": {"type": "nonsense"}}}, "not a valid JSON Schema"),
             ({"type": "object", "description": "x" * 40_000}, "larger than"),
         ],
@@ -90,6 +92,32 @@ class TestInlineSchema:
 
 
 class TestErrors:
+    def test_a_property_named_like_a_reference_is_only_a_property(self):
+        named = {"type": "object", "properties": {"note": {"type": "string", "description": "see $ref below"}}}
+        assert osch.check_inline_schema(named) is named
+
+    def test_a_schema_the_validator_cannot_run_is_unusable_not_a_crash(self, monkeypatch):
+        import jsonschema
+
+        class _Broken:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            @staticmethod
+            def check_schema(_schema):
+                return None
+
+            def iter_errors(self, _document):
+                raise RuntimeError("reference cannot be resolved: https://example.test/secret")
+
+        monkeypatch.setattr(jsonschema, "Draft202012Validator", _Broken)
+        with pytest.raises(osch.OutputSchemaError, match="could not be applied: RuntimeError") as refused:
+            osch.errors_for(None, SCHEMA, VALID)
+        assert "example.test" not in str(refused.value)
+        monkeypatch.setattr(settings, "output_schema_enforced", True)
+        verdict = osch.check(None, SCHEMA, VALID, repairs=0)
+        assert (verdict["action"], verdict["trigger"]) == ("escalate", "output_schema_unusable")
+
     def test_a_conforming_answer_has_no_errors(self):
         assert osch.errors_for(None, SCHEMA, VALID) == []
 
@@ -222,6 +250,36 @@ class TestGraph:
         # The model was told what was wrong, by path.
         assert "does not match the required output schema" in seen[0] and "$.status" in seen[0]
         assert any("sent back for correction (1 of 2)" in line for line in result["reasoning_trace"])
+        assert result["output_errors"] == []
+
+    async def test_a_tool_call_is_listed_once_however_many_corrections_follow(self, enforced, scripted_model):
+        from unittest.mock import AsyncMock, patch
+
+        from core.test_doubles.scripted_model import tool_call
+
+        scripted_model(
+            [
+                tool_call("gmail__send_email", to="ap@example.com", subject="Reminder"),
+                final(BAD),
+                final(BAD),
+                final(GOOD),
+            ]
+        )
+        executed = AsyncMock(return_value={"id": "msg-1", "status": "sent"})
+        with patch("core.langgraph.tool_adapter._execute_connector_tool", new=executed):
+            graph = build_agent_graph(
+                system_prompt="scripted",
+                authorized_tools=["gmail:send_email"],
+                connector_config={},
+                connector_names=["gmail"],
+                confidence_floor=0.5,
+                run_grant=NO_RUN_GRANT_FOR_TESTS,
+                output_schema_json=OPEN_SCHEMA,
+            )
+            result = await graph.compile().ainvoke(_state())
+        assert result["status"] == "completed" and result["output_repairs"] == 2
+        assert executed.await_count == 1
+        assert [entry["tool"] for entry in result["tool_calls_log"]] == ["gmail__send_email"]
 
     async def test_an_answer_that_never_becomes_valid_goes_to_a_human(self, enforced, scripted_model):
         model = scripted_model([final(BAD)] * (osch.MAX_REPAIRS + 1))
@@ -231,6 +289,10 @@ class TestGraph:
         # High confidence, no review condition: only the schema sent it to a human.
         payload = paused["__interrupt__"][0].value
         assert payload["type"] == "hitl_approval" and payload["trigger"] == "output_schema_invalid"
+        # The reviewer is told what is wrong, not only that something is.
+        assert any(error.startswith("$.status: ") for error in payload["output_schema_errors"])
+        assert any("'amount' is a required property" in error for error in payload["output_schema_errors"])
+        assert compiled.get_state(config).values["output_errors"] == payload["output_schema_errors"]
         assert len(model.calls) == osch.MAX_REPAIRS + 1
         rejected = await compiled.ainvoke(Command(resume={"action": "reject", "reason": "wrong shape"}), config)
         assert rejected["status"] == "failed" and "wrong shape" in rejected["error"]
@@ -267,6 +329,35 @@ class TestPlumbing:
         api = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
         assert 'output_schema=agent_config.get("output_schema"),' in api
         assert '(agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY)' in api
+
+    def test_the_reviewer_gets_the_errors_through_the_runner_and_the_approval(self):
+        from core.langgraph import runner
+
+        class _Restore:
+            def restore_text(self, text):
+                return text.replace("[P1]", "Asha")
+
+        assert runner._output_schema_errors({"output_errors": ["$.name: '[P1]' is too long"]}, _Restore()) == [
+            "$.name: 'Asha' is too long"
+        ]
+        assert runner._output_schema_errors({"output_errors": ["$.a: bad"]}, None) == ["$.a: bad"]
+        assert runner._output_schema_errors({}, None) == [] and runner._output_schema_errors(None, None) == []
+        src = (ROOT / "core" / "langgraph" / "runner.py").read_text(encoding="utf-8")
+        assert '"output_schema_errors": _output_schema_errors(state_values, pseudonymiser),' in src
+        assert '"output_schema_errors": _output_schema_errors(result, pseudonymiser),' in src
+        assert '"output_errors": [],' in src
+        api = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+        assert '{"output_schema_errors": lg_result["output_schema_errors"]}' in api
+
+    def test_a_declared_schema_takes_no_deterministic_bypass_and_a_registered_name_is_locked_too(self):
+        api = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")
+        guard = api.index("if prompt_output_schema.enabled() and prompt_output_schema.declared(")
+        assert guard < api.index("# Path 1: deterministic-route bypass for TDS.")
+        assert 'fixture = {**fixture, "deterministic_route": ""}' in api[guard : guard + 400]
+        replace = api[api.index("async def replace_agent(") :] if "async def replace_agent(" in api else api
+        lock = replace.index("and (body.output_schema or None) != (agent.output_schema or None)")
+        assert lock < replace.index("agent.output_schema = body.output_schema")
+        assert "and prompt_output_schema.enabled()" in replace[lock - 200 : lock]
 
     def test_the_schema_is_locked_on_an_active_agent_like_its_prompt(self):
         api = (ROOT / "api" / "v1" / "agents.py").read_text(encoding="utf-8")

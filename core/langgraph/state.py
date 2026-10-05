@@ -54,3 +54,5 @@ class AgentState(TypedDict):
     output_repairs: NotRequired[int]
     output_repair: NotRequired[bool]
     output_invalid: NotRequired[str]
+    # What was wrong with the escalated answer (bounded), for the reviewer.
+    output_errors: NotRequired[list[str]]

@@ -759,11 +759,15 @@ def build_agent_graph(
                 "output_repair": True,
                 "status": "running",
                 "reasoning_trace": trace,
-                "tool_calls_log": tool_calls_log,
+                # The tool log is rebuilt from the whole conversation on each
+                # evaluation; it is not stored here, or the next evaluation
+                # would list every tool call again.
             }
         output_invalid = ""
+        output_errors: list[str] = []
         if verdict["action"] == "escalate":
             output_invalid = str(verdict["trigger"])
+            output_errors = list(verdict["errors"])
             trace.append(f"Escalated: {output_invalid} ({len(verdict['errors'])} problem(s))")
 
         return {
@@ -774,6 +778,7 @@ def build_agent_graph(
             "tool_calls_log": tool_calls_log,
             "output_repair": False,
             "output_invalid": output_invalid,
+            "output_errors": output_errors,
         }
 
     async def hitl_gate(state: AgentState) -> dict[str, Any]:
@@ -803,6 +808,8 @@ def build_agent_graph(
                 "output": output,
                 "agent_id": state.get("agent_id", ""),
                 "agent_type": state.get("agent_type", ""),
+                # Why an answer that failed its output schema is here: path and message per problem.
+                "output_schema_errors": list(state.get("output_errors") or []),
             }
         )
 

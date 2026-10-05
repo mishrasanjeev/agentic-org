@@ -296,12 +296,14 @@ not have that shape is not returned as a completed result (`core/prompts/output_
 
 - The agent's own schema: `PUT /agents/{id}/output-schema` with `{"schema": {...}}`, or
   `{"schema": null}` to remove it. It is a JSON Schema (2020-12) for an object, at most 32,000
-  bytes, self-contained (`$ref` is refused) and checked to be a valid schema when it is stored.
+  bytes, self-contained (`$ref`, `$dynamicRef` and `$recursiveRef` are refused) and checked to be a
+  valid schema when it is stored.
   It changes what the agent may return, so, like the prompt, it cannot be changed while the agent
   is active, and the agent's edit rules apply. It is stored in the agent's `config` under
   `output_schema_json`.
 - A registered name: the agent's existing `output_schema` field, when it names one of the
-  platform's registered document schemas.
+  platform's registered document schemas. While enforcement is on, the name cannot be changed on
+  an active agent through `PUT /agents/{id}` either.
 
 The agent's own schema wins when both are set.
 
@@ -311,14 +313,16 @@ The agent's own schema wins when both are set.
 2. An invalid answer goes back to the model with what is wrong (the JSON path and the schema's
    message for each problem, at most ten), up to two times.
 3. An answer that is still invalid is escalated to a human reviewer with the trigger
-   `output_schema_invalid`, whatever its confidence. The reviewer sees the answer and decides;
-   the run does not end as `completed` on its own.
+   `output_schema_invalid`, whatever its confidence. The reviewer sees the answer and what is
+   wrong with it (`output_schema_errors` on the approval) and decides; the run does not end as
+   `completed` on its own.
 4. A declared schema that cannot be used (a name that is not registered, a stored schema that is
-   no longer valid) escalates the same way with `output_schema_unusable`. An agent that says it
-   has a schema does not run as if it had none.
+   no longer valid, one the validator cannot apply) escalates the same way with
+   `output_schema_unusable`. An agent that says it has a schema does not run as if it had none.
 
 A run refused by grant enforcement ends as it did, before any of this. An agent with no declared
-schema is not affected.
+schema is not affected. A shadow sample of an agent held to a schema does not take the
+deterministic shortcut: it runs through the graph so its answer is validated.
 
 **Switch.** `AGENTICORG_OUTPUT_SCHEMA_ENFORCED`, off by default. Off, nothing is validated and
 runs end as before; schemas can still be stored. Before turning it on, look at the `output_schema`
