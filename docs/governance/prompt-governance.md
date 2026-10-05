@@ -122,6 +122,26 @@ becomes active. The second person for an agent's prompt is therefore required at
 | No shortcut | An agent is not created or cloned straight into `active` (409): the person who writes a prompt would be activating it in the same step. |
 | Unchanged prompts | A pause and a resume with no prompt change in between needs no second person and can be done with an API key: nothing new reaches production. |
 
+What counts as the prompt is everything that shapes what the model is told: the prompt text, the
+prompt reference, the prompt variables and the prompt amendments. A change to any of them is
+written to the agent's prompt history with who made it, so a change to the variables or the
+amendments on a paused agent needs a second person exactly as a change to the text does.
+
+"Last active" is the newest lifecycle event into or out of `active`. An agent that was created
+active, or was active before a lifecycle event was written at creation, therefore counts as
+having been active when it was paused, and resumes unchanged without a second person. Creating an
+agent straight into `active` (possible only with maker-checker off) now writes that event.
+
+Prompt edits and activations take the agent's row lock, so an edit cannot land between the check
+and the status change. The activator is recorded on the lifecycle event for a promotion and for a
+resume.
+
+A pack install or resync does not replace the prompt of an existing agent while maker-checker is
+on (or its switch cannot be read): the installer has no author and no second person, and the agent
+may be active. The existing prompt is kept and the skip is logged
+(`pack_prompt_update_skipped_maker_checker`); a new pack prompt is then applied by a person through
+the agent's own prompt edit.
+
 The same switch applies, read the same strict way: if it cannot be read, the activation is
 refused with 503. With the switch off, activation is as it was. The first-prompt history entry is
 written on every create and clone by a signed-in user, whatever the switch.
@@ -229,7 +249,9 @@ endpoints. `ui/src/__tests__/PromptChangeRequests.test.tsx` covers the review pa
 another user allowed, the last editor as the author, an API key, a change with no author, a pause
 and resume with and without a prompt change, creating straight into active, an unreadable switch,
 the first-prompt history entry, and that every path to `active` in the agents API passes the
-check before the status changes.
+check before the status changes. It also covers changes to the variables, amendments and reference,
+an agent that was active before the switch, the row lock, the activator on both events and the
+pack installer.
 
 `tests/unit/test_prompt_compare.py` covers the models a comparison can call, the bounds, a result
 per model with one failing, the call going through the router as the tenant, the concurrency
