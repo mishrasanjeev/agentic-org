@@ -57,6 +57,8 @@ from core.langgraph.tool_adapter import (
     build_tools_for_agent,
 )
 from core.pii.pseudonymiser import PseudonymSession
+from core.prompts.context_window import fit_for_call
+from core.prompts.context_window import unwrap as unwrap_llm
 from observability import tracing
 from observability.streaming import invoke_timed, observe_first_token
 
@@ -515,6 +517,22 @@ def build_agent_graph(
         called_provider = _llm_provider_name(llm, llm_provider)
         called_model = _llm_model_name(llm, llm_model) or (route.decision.model if route is not None else "")
         called_agent = agent_id or str(state.get("agent_id") or "") or None
+        # Context window: the grounding check below reads everything the run retrieved,
+        # while the copy sent to the model may have older tool results omitted to fit.
+        full_messages = messages
+        fitted = fit_for_call(
+            messages,
+            llm,
+            model=called_model,
+            provider=called_provider or _llm_provider_name(unwrap_llm(llm), llm_provider),
+            tools=tools,
+        )
+        if fitted is not None and fitted.changed:
+            messages = fitted.messages
+            trace.append(
+                f"Context window: {fitted.omitted} tool result(s) omitted, {fitted.truncated} cut "
+                f"({fitted.before_tokens} to {fitted.after_tokens} estimated tokens)"
+            )
         # Tamper-evident records: digests of the prompt and of what the model
         # saw, never the content (docs/operations/audit-chain.md).
         prompt_digest = prompt_digest_of(messages)
@@ -579,7 +597,9 @@ def build_agent_graph(
         )
         # Guardrails: the answer passes the output stage before it travels on.
         # A grounding rule holds it against the tool results and the user's words in ``messages``.
-        response = await guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent, messages=messages)
+        response = await guard_output_message(
+            response, tenant_id=tenant_id, agent_id=called_agent, messages=full_messages
+        )
         if isinstance(response, AIMessage) and response.tool_calls:
             response = _rewrite_tool_call_names(response, tool_aliases)
         trace.append(f"LLM responded ({type(response).__name__})")

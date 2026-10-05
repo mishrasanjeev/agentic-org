@@ -168,6 +168,11 @@ model_admission_wait_seconds = Histogram(
     ["provider", "model"],
     buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0),
 )
+context_window_trims_total = Counter(
+    "agenticorg_context_window_trims_total",
+    "Model calls whose conversation was trimmed to fit the context window, by result (fitted, still_over)",
+    ["result"],
+)
 model_first_token_seconds = Histogram(
     "agenticorg_model_first_token_seconds",
     "Time from a model call's start to its first token (measured only while stream timing is on)",

@@ -244,6 +244,49 @@ its parameters, an input, the models, and the answers side by side with latency,
 Deterministic expectations catch a missing figure or a forbidden phrase; they do not judge
 quality. Model-graded scoring and stored datasets belong to the evaluation framework.
 
+## Context-window management
+
+An agent run accumulates tool results. Sent whole, a long run eventually exceeds the model's
+context window and the provider refuses the call, or it fits but most of the window is spent on
+results the model no longer needs. `core/prompts/context_window.py` measures the conversation
+before each model call of an agent run and, when it does not fit, sends a trimmed copy.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_CONTEXT_WINDOW_MANAGED` | `false` | Off, the conversation is sent whole and the provider's own limit applies, as before. |
+
+**The budget.** The context window of the model that is actually called, from the catalogue, less
+the room kept for its answer (its answer limit, at most a quarter of the window), less a 10%
+margin, less the definitions of the tools bound to the call, which the provider is sent too. The
+model is read through a tool binding when the run did not name one, and the catalogue is searched
+by provider, so a self-hosted or deployment-named model takes its provider's entry.
+
+A model whose window cannot be established is not managed at all: the conversation is sent whole
+and `context_window_unmanaged` is logged. Trimming to a guessed window would drop evidence a
+larger window could have held.
+
+**What is trimmed, in order.**
+
+1. Never: system messages, what the user wrote, the model's own turns, and the newest round of
+   tool results, which the model is about to read.
+2. Older tool results are ranked by how much of the latest user message's wording they share and
+   by how recent they are; the lowest ranked are omitted first. An omitted result is replaced in
+   place by a short marker, so every tool call still has its answer and the provider accepts the
+   conversation.
+3. If that is not enough, the largest remaining tool results are cut to their beginning.
+
+Only the copy sent to the model changes. The run's history keeps every result, later turns are
+measured afresh, and the grounding check still reads everything that was retrieved. The run's
+trace says how many results were omitted or cut, `context_window_fitted` is logged with the
+counts, and `agenticorg_context_window_trims_total{result}` counts trimmed calls (`fitted`, or
+`still_over` when even this was not enough).
+
+**Limits.** Token counts are estimates: characters over four, plus a small cost per message. No
+provider tokeniser is loaded, which is what the margin is for. Relevance is shared wording with
+the latest user message, not meaning. A conversation that still does not fit (a very large system
+prompt or user message) is sent as it is, and the provider's limit applies. The direct router is
+not managed this way; it has no accumulated tool results.
+
 ## Tests
 
 `tests/unit/test_prompt_parameters.py` covers declarations (the old form, defaults, every refused
@@ -271,6 +314,11 @@ per model with one failing, the call going through the router as the tenant, the
 limit, the dataset rules and every refused shape, scoring, pass rates with errors kept apart,
 and the endpoints off and on. `ui/src/__tests__/PromptCompare.test.tsx` covers the panel.
 
+`tests/unit/test_context_window.py` covers the estimates and budgets, a conversation that fits,
+omission by relevance and age, that every tool call stays answered and nothing else changes, the
+cut when omission is not enough, a conversation that cannot fit, the switch, the metric and that
+the reasoning node sends the fitted copy while the grounding check reads the full one.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
@@ -280,7 +328,7 @@ and the endpoints off and on. `ui/src/__tests__/PromptCompare.test.tsx` covers t
   attributed, so it does not by itself require a second person.
 - **Evaluation has no console view and no stored datasets or results.** It is an endpoint that
   takes its dataset in the request; nothing gates a change request on an evaluation result.
-- **No context-window management** and **no structured-output enforcement** beyond the
-  governed-case agents. These are the package's next part.
+- **No structured-output enforcement** beyond the governed-case agents: an agent's declared
+  output schema is not validated on the agent graph path. This is the package's last part.
 - **No console editor for parameter types.** The prompt templates page shows a template's
   parameters; typed declarations are written through the API.
