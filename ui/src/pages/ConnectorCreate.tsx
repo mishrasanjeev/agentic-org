@@ -248,11 +248,14 @@ export default function ConnectorCreate() {
                   disabled={Boolean(nativeProvider)}
                   className="border rounded px-3 py-2 text-sm w-full mt-1"
                 >
-                  {[...new Set([...CATEGORIES, ...(nativeProvider ? [category] : [])])].map((c) => (
+                  {CATEGORIES.map((c) => (
                     <option key={c} value={c}>
                       {c.charAt(0).toUpperCase() + c.slice(1)}
                     </option>
                   ))}
+                  {nativeProvider && !CATEGORIES.includes(category) && (
+                    <option value={category}>{category}</option>
+                  )}
                 </select>
               </div>
               <div>
@@ -264,11 +267,14 @@ export default function ConnectorCreate() {
                   disabled={Boolean(nativeProvider)}
                   className="border rounded px-3 py-2 text-sm w-full mt-1"
                 >
-                  {[...new Set([...AUTH_TYPES, ...(nativeProvider ? [authType] : [])])].map((a) => (
+                  {AUTH_TYPES.map((a) => (
                     <option key={a} value={a}>
                       {a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                     </option>
                   ))}
+                  {nativeProvider && !AUTH_TYPES.some((type) => type === authType) && (
+                    <option value={authType}>{authType.replace(/_/g, " ")}</option>
+                  )}
                 </select>
               </div>
               <div>
