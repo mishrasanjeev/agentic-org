@@ -24,6 +24,8 @@ The native catalog's **Register** button can prefill the connector's exact regis
 
 Registration stores credentials in the encrypted connector vault; it does not prove that the upstream account is authorized. A green connection probe proves only the operation it exercised. Custom or external MCP servers are not native connector classes on the current main runtime; listing tools in another deployment is not proof that this deployment can authorize or execute them. Do not treat an unrecognized custom connector as callable merely because registration returned an ID.
 
+Customers can bring credentials for their own provider accounts. WhatsApp needs a permitted business token and phone-number ID; Twilio needs an account SID and auth token; the guided Gmail form needs a customer OAuth client plus refresh token; Plural needs merchant-issued sandbox credentials before any live-rail review. The Gmail connection test now reads the authenticated user's profile without returning the mailbox address, and a successful profile check does not authorize sending mail. Register first, run the provider's bounded connection test, then separately prove each intended tool and scope with that customer's approved sandbox account. Leave the connector unverified if consent, scope, or provider access is missing.
+
 The exact credential form differs by provider. Protected storage is not permission to grant unlimited upstream scopes. Prefer read-only scopes for the first pilot.
 
 ## Grant the agent only what it needs
