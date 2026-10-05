@@ -195,6 +195,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.ui
+      args:
+        VITE_NATIVE_CONNECTOR_PREFILL_ENABLED: "${AGENTICORG_DEV_NATIVE_CONNECTOR_PREFILL_ENABLED:-false}"
     image: agenticorg-ui:dev
     ports:
       - "127.0.0.1:${AGENTICORG_DEV_UI_PORT:-3000}:80"
@@ -402,6 +404,7 @@ services:
     environment:
       BASE_URL: http://ui
       CI: "true"
+      AGENTICORG_DEV_SEED_PASSWORD: "${AGENTICORG_DEV_SEED_PASSWORD:-}"
     volumes:
       - .:/src
       # Container-only dependencies, kept apart from any host ui/node_modules.

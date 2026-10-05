@@ -12,13 +12,17 @@ Name the integration owner and system-of-record owner. Obtain an approved sandbo
 
 ## Register and bind
 
-1. Open **Connectors** and the **Register Connector** screen.
-2. Select the available provider or **Custom / Generic Connector**.
+1. Open **Connectors**, find the provider in the native catalog, and select **Register**. Use the general **Register Connector** button only for a reviewed custom integration.
+2. When native prefill is enabled, confirm the fixed provider name matches the registry entry. Otherwise enter the canonical registry name manually; a display label is not enough.
 3. Enter the connector name, reviewed base URL, category, authentication type and rate limit.
 4. Use the provider-specific protected credential fields or approved secret reference. Do not put secrets in prompts, screenshots or ordinary task inputs.
 5. Review extra JSON configuration against the provider's contract. Do not assume arbitrary configuration creates a tool implementation.
 6. Bind the connector to the correct company or documented tenant-wide scope.
 7. Run the supported health/test action and inspect the safe result.
+
+The native catalog's **Register** button can prefill the connector's exact registry name, category, endpoint and authentication type when the deployment enables the native-prefill rollout. Check the name before registering; a display label is not the registry ID. An unknown or outdated catalog link is refused rather than creating a generic connector. Without that rollout, the form remains the existing manual registration flow. For the four commonly requested providers, the reviewed credential keys are `access_token` and `phone_number_id` (WhatsApp), `account_sid` and `auth_token` (Twilio), `client_id`, `client_secret` and `refresh_token` (Gmail), and `client_id`, `client_secret` and `merchant_id` (Plural sandbox). A connector may also need provider-side permissions or additional settings. Do not paste real credentials into an issue or test report.
+
+Registration stores credentials in the encrypted connector vault; it does not prove that the upstream account is authorized. A green connection probe proves only the operation it exercised. Custom or external MCP servers are not native connector classes on the current main runtime; listing tools in another deployment is not proof that this deployment can authorize or execute them. Do not treat an unrecognized custom connector as callable merely because registration returned an ID.
 
 The exact credential form differs by provider. Protected storage is not permission to grant unlimited upstream scopes. Prefer read-only scopes for the first pilot.
 

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import api, { extractApiError } from "@/lib/api";
@@ -31,8 +31,33 @@ const FALLBACK_AUTH_FIELDS: Record<string, { key: string; label: string; placeho
   none: [],
 };
 
+const NATIVE_AUTH_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
+  whatsapp: [
+    { key: "access_token", label: "Meta access token", placeholder: "Enter access token" },
+    { key: "phone_number_id", label: "Phone number ID", placeholder: "Enter phone number ID" },
+  ],
+  twilio: [
+    { key: "account_sid", label: "Account SID", placeholder: "Enter account SID" },
+    { key: "auth_token", label: "Auth token", placeholder: "Enter auth token" },
+  ],
+  gmail: [
+    { key: "client_id", label: "OAuth client ID", placeholder: "Enter client ID" },
+    { key: "client_secret", label: "OAuth client secret", placeholder: "Enter client secret" },
+    { key: "refresh_token", label: "OAuth refresh token", placeholder: "Enter refresh token" },
+  ],
+  pinelabs_plural: [
+    { key: "client_id", label: "Client ID", placeholder: "Enter sandbox client ID" },
+    { key: "client_secret", label: "Client secret", placeholder: "Enter sandbox client secret" },
+    { key: "merchant_id", label: "Merchant ID", placeholder: "Enter merchant ID" },
+  ],
+};
+
 export default function ConnectorCreate() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedType = import.meta.env.VITE_NATIVE_CONNECTOR_PREFILL_ENABLED === "true"
+    ? searchParams.get("type")
+    : null;
   const { user } = useAuth();
   // Bug sheet 2026-09-14 rows 17-19/22: admins register shared connectors;
   // other connector roles register personal ones (the backend decides).
@@ -48,6 +73,42 @@ export default function ConnectorCreate() {
   const [rateLimitRpm, setRateLimitRpm] = useState(100);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [nativeProvider, setNativeProvider] = useState<{ name: string; display_name: string } | null>(null);
+  const [providerLoading, setProviderLoading] = useState(Boolean(requestedType));
+  const [providerError, setProviderError] = useState("");
+
+  useEffect(() => {
+    setNativeProvider(null);
+    setProviderError("");
+    setProviderLoading(Boolean(requestedType));
+    setName("");
+    setCategory("finance");
+    setBaseUrl("");
+    setAuthType("api_key");
+    setAuthFields({});
+    if (!requestedType) return;
+    let active = true;
+    api.get<{ items: Array<{ name: string; display_name: string; category: string; auth_type: string; base_url?: string }> }>(
+      "/connectors/registry",
+    ).then(({ data }) => {
+      if (!active) return;
+      const provider = data.items.find((item) => item.name === requestedType);
+      if (!provider) {
+        setProviderError("This native connector is not in the current registry. Return to Connectors and choose an available provider.");
+        return;
+      }
+      setNativeProvider(provider);
+      setName(provider.name);
+      setCategory(provider.category);
+      setAuthType(provider.auth_type);
+      setBaseUrl(provider.base_url || "");
+    }).catch((err: unknown) => {
+      if (active) setProviderError(extractApiError(err, "Could not load the native connector registry."));
+    }).finally(() => {
+      if (active) setProviderLoading(false);
+    });
+    return () => { active = false; };
+  }, [requestedType]);
 
   function handleAuthTypeChange(newType: string) {
     setAuthType(newType);
@@ -86,6 +147,7 @@ export default function ConnectorCreate() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (requestedType && (!nativeProvider || providerError)) return;
     if (!name.trim()) {
       setError("Connector name is required");
       return;
@@ -139,12 +201,14 @@ export default function ConnectorCreate() {
             <div>
               <label className="text-sm font-medium">Provider</label>
               <select
-                value="custom"
+                value={nativeProvider?.name || "custom"}
                 disabled
                 className="border rounded px-3 py-2 text-sm w-full mt-1 bg-muted"
                 data-testid="provider-select"
               >
-                <option value="custom">Custom / Generic Connector</option>
+                <option value={nativeProvider?.name || "custom"}>
+                  {nativeProvider?.display_name || "Custom / Generic Connector"}
+                </option>
               </select>
             </div>
 
@@ -154,6 +218,7 @@ export default function ConnectorCreate() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                readOnly={Boolean(nativeProvider)}
                 placeholder="e.g. zoho_books, Slack, SAP S/4HANA"
                 className="border rounded px-3 py-2 text-sm w-full mt-1"
               />
@@ -175,13 +240,15 @@ export default function ConnectorCreate() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="text-sm font-medium">Category</label>
+                <label htmlFor="connector-category" className="text-sm font-medium">Category</label>
                 <select
+                  id="connector-category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
+                  disabled={Boolean(nativeProvider)}
                   className="border rounded px-3 py-2 text-sm w-full mt-1"
                 >
-                  {CATEGORIES.map((c) => (
+                  {[...new Set([...CATEGORIES, ...(nativeProvider ? [category] : [])])].map((c) => (
                     <option key={c} value={c}>
                       {c.charAt(0).toUpperCase() + c.slice(1)}
                     </option>
@@ -189,13 +256,15 @@ export default function ConnectorCreate() {
                 </select>
               </div>
               <div>
-                <label className="text-sm font-medium">Auth Type</label>
+                <label htmlFor="connector-auth-type" className="text-sm font-medium">Auth Type</label>
                 <select
+                  id="connector-auth-type"
                   value={authType}
                   onChange={(e) => handleAuthTypeChange(e.target.value)}
+                  disabled={Boolean(nativeProvider)}
                   className="border rounded px-3 py-2 text-sm w-full mt-1"
                 >
-                  {AUTH_TYPES.map((a) => (
+                  {[...new Set([...AUTH_TYPES, ...(nativeProvider ? [authType] : [])])].map((a) => (
                     <option key={a} value={a}>
                       {a.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
                     </option>
@@ -218,9 +287,11 @@ export default function ConnectorCreate() {
             <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
               <p className="text-sm font-medium">Authentication</p>
               <p className="text-xs text-muted-foreground">
-                {AUTH_FIELD_HINTS[authType] || "Configure authentication credentials"}
+                {nativeProvider && NATIVE_AUTH_FIELDS[nativeProvider.name]
+                  ? "Enter credentials approved for this provider. Registration does not authorize the upstream account or test runtime access."
+                  : AUTH_FIELD_HINTS[authType] || "Configure authentication credentials"}
               </p>
-              {authType === "oauth2" && (
+              {authType === "oauth2" && !nativeProvider && (
                 <p className="text-xs text-muted-foreground">
                   OAuth2 connectors are registered server-side. For Zoho Books, include organization_id and
                   refresh_token in Extra config so the backend can validate readiness without a browser redirect.
@@ -228,7 +299,7 @@ export default function ConnectorCreate() {
               )}
               {authType !== "none" && (
                 <>
-                  {(FALLBACK_AUTH_FIELDS[authType] || []).map((field) => (
+                  {(NATIVE_AUTH_FIELDS[nativeProvider?.name || ""] || FALLBACK_AUTH_FIELDS[authType] || []).map((field) => (
                     <div key={field.key}>
                       <label className="text-sm font-medium">{field.label}</label>
                       <input
@@ -269,9 +340,10 @@ export default function ConnectorCreate() {
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
+            {providerError && <p role="alert" className="text-sm text-destructive">{providerError}</p>}
 
             <div className="flex gap-3">
-              <Button type="submit" disabled={submitting}>
+              <Button type="submit" disabled={submitting || providerLoading || Boolean(providerError)}>
                 {submitting ? "Registering..." : "Register Connector"}
               </Button>
               <Button type="button" variant="outline" onClick={() => navigate("/dashboard/connectors")}>

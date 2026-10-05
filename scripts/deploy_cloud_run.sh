@@ -794,6 +794,7 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
 
   run docker build \
     --build-arg "VITE_GA4_ID=${VITE_GA4_ID:-}" \
+    --build-arg "VITE_NATIVE_CONNECTOR_PREFILL_ENABLED=${VITE_NATIVE_CONNECTOR_PREFILL_ENABLED:-false}" \
     -t "$UI_IMAGE" \
     -t "${GAR_REGISTRY}/agenticorg-ui-cloudrun:latest" \
     -f Dockerfile.ui.cloudrun .
