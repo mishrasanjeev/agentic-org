@@ -14,7 +14,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from api.deps import (
@@ -4774,6 +4774,12 @@ async def get_prompt_history(
             .where(
                 PromptEditHistory.agent_id == agent_id,
                 PromptEditHistory.tenant_id == tid,
+                # Edits only: the row that records who set a new agent's first
+                # prompt is authorship for maker-checker, not an edit.
+                or_(
+                    PromptEditHistory.prompt_before.is_not(None),
+                    PromptEditHistory.change_reason.is_distinct_from(prompt_activation.INITIAL_PROMPT_REASON),
+                ),
             )
             .order_by(PromptEditHistory.created_at.desc())
             .limit(50)
