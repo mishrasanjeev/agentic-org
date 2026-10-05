@@ -1,6 +1,7 @@
 import { Link, Navigate, useParams } from "react-router";
 import { Helmet } from "react-helmet-async";
 import ProductOwnership from "../../components/ProductOwnership";
+import publicSite from "../../content/publicSite.json";
 import { BLOG_POSTS } from "./blogData";
 
 const SITE_URL = "https://agenticorg.ai";
@@ -27,8 +28,9 @@ export default function BlogPost() {
   const canonical = SITE_URL + "/blog/" + post.slug;
   const pageTitle = post.title + " | AgenticOrg Blog";
   const breadcrumbId = canonical + "#breadcrumb";
+  const isFounderArticle = post.author === publicSite.site.inventorOwner;
   const authorNode =
-    post.author === "AgenticOrg Team"
+    !isFounderArticle
       ? {
           "@type": "Organization",
           name: post.author,
@@ -37,7 +39,9 @@ export default function BlogPost() {
       : {
           "@type": "Person",
           name: post.author,
-          jobTitle: post.authorRole,
+          jobTitle: publicSite.site.founderRole,
+          worksFor: { "@type": "Organization", name: publicSite.site.legalName },
+          sameAs: publicSite.site.founderProfiles,
         };
   const structuredData = {
     "@context": "https://schema.org",
@@ -196,6 +200,19 @@ export default function BlogPost() {
             ))}
           </div>
         </div>
+
+        {isFounderArticle && (
+          <section className="mt-10 border-t border-slate-200 pt-8" aria-label="About the author">
+            <h2 className="text-lg font-bold text-slate-900">About the author</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-700">{publicSite.site.founderBio}</p>
+            <p className="mt-3 text-sm text-slate-700">
+              Follow Sanjeev on{" "}
+              <a href={publicSite.site.founderProfiles[0]} className="underline underline-offset-2" rel="me noopener noreferrer" target="_blank">X</a>
+              {" or "}
+              <a href={publicSite.site.founderProfiles[1]} className="underline underline-offset-2" rel="me noopener noreferrer" target="_blank">LinkedIn</a>.
+            </p>
+          </section>
+        )}
 
         {/* CTA */}
         <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 text-center border border-blue-100">

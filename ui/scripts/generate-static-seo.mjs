@@ -208,7 +208,9 @@ export function loadRouteDescriptors(root = UI_ROOT) {
         lastmod: date || gitLastModified(blogPath, repoRoot),
         datePublished: date || undefined,
         author: stringField(block, "author") || manifest.site.name,
+        authorRole: stringField(block, "authorRole"),
         keywords: stringArrayField(block, "keywords"),
+        content: stringArrayField(block, "content"),
       };
     });
 
@@ -403,10 +405,15 @@ function buildJsonLd(route, manifest) {
       mainEntityOfPage: { "@id": pageId },
       datePublished: route.datePublished || undefined,
       dateModified: route.datePublished || undefined,
-      author: {
-        "@type": "Organization",
-        name: route.author || site.legalName || site.name,
-      },
+      author: route.author === site.inventorOwner
+        ? {
+            "@type": "Person",
+            name: route.author,
+            jobTitle: site.founderRole,
+            worksFor: { "@type": "Organization", name: site.legalName },
+            sameAs: site.founderProfiles,
+          }
+        : { "@type": "Organization", name: route.author || site.legalName || site.name },
       publisher: { "@id": organizationId },
       image: site.defaultImage || undefined,
       keywords: route.keywords && route.keywords.length
@@ -453,7 +460,7 @@ function stripRouteMetadata(html) {
   return html;
 }
 
-export function renderStaticHtml(baseHtml, route, manifest) {
+export function renderStaticHtml(baseHtml, route, manifest, allRoutes = []) {
   const site = manifest.site;
   const url = canonicalUrl(site, route.path);
   const image = site.defaultImage;
@@ -520,6 +527,29 @@ export function renderStaticHtml(baseHtml, route, manifest) {
       escapeHtml(section.body) + "</p></section>",
     ).join("")
     : "";
+  const articleHtml = route.kind === "blog" && Array.isArray(route.content)
+    ? route.content.map((paragraph) => {
+      if (paragraph.startsWith("## ")) return "<h2>" + escapeHtml(paragraph.slice(3)) + "</h2>";
+      if (paragraph.startsWith("**") && paragraph.endsWith("**")) {
+        return "<h3>" + escapeHtml(paragraph.slice(2, -2)) + "</h3>";
+      }
+      return "<p>" + escapeHtml(paragraph) + "</p>";
+    }).join("")
+    : "";
+  const directoryKind = route.path === "/" ? "static"
+    : route.path === "/blog" ? "blog"
+    : route.path === "/resources" ? "resource"
+    : "";
+  const directoryHtml = directoryKind
+    ? "<section><h2>Explore " + escapeHtml(site.name) + "</h2><ul>" +
+      allRoutes.filter((item) =>
+        item.index !== false && item.path !== route.path && item.kind === directoryKind &&
+        (directoryKind !== "static" || item.path.split("/").filter(Boolean).length <= 2),
+      ).map((item) =>
+        '<li><a href="' + escapeHtml(canonicalUrl(site, item.path)) + '">' +
+        escapeHtml(item.name || item.title) + "</a></li>",
+      ).join("") + "</ul></section>"
+    : "";
   const crumbHtml = crumbs.map((crumb) =>
     '<a href="' + escapeHtml(crumb.url) + '">' + escapeHtml(crumb.name) + "</a>",
   ).join(" / ");
@@ -527,7 +557,7 @@ export function renderStaticHtml(baseHtml, route, manifest) {
     '<noscript><main data-static-seo="true"' + (route.bodyHtml ? ' class="docs-site docs-prose" style="max-width:850px;margin:32px auto;padding:20px"' : "") + '><nav aria-label="Breadcrumb">' +
     crumbHtml + "</nav><h1>" + escapeHtml(route.name || route.title) +
     "</h1><p>" + escapeHtml(route.summary || route.description) + "</p>" +
-    (route.bodyHtml || "") + sectionHtml + faqHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
+    (route.bodyHtml || "") + sectionHtml + articleHtml + faqHtml + directoryHtml + '<p><a href="' + escapeHtml(url) + '">View this page on ' +
     escapeHtml(site.name) + "</a></p></main></noscript>";
   return html.replace(
     '<div id="root"></div>',
@@ -678,7 +708,7 @@ export function generateStaticSeo(root = UI_ROOT) {
     if (!route.title || !route.description || !route.name) {
       throw new Error("Incomplete SEO metadata for " + route.path);
     }
-    const rendered = renderStaticHtml(baseHtml, route, manifest);
+    const rendered = renderStaticHtml(baseHtml, route, manifest, routes);
     for (const outputPath of outputPathsForRoute(root, route, routes)) {
       mkdirSync(dirname(outputPath), { recursive: true });
       writeFileSync(outputPath, rendered, "utf8");

@@ -254,7 +254,7 @@ export const BLOG_POSTS: BlogPost[] = [
     description: "An educational framework for scoping five approval-gated CA workflows and measuring them against each firm's own baseline.",
     date: "2026-04-08",
     author: "Sanjeev Kumar",
-    authorRole: "Founder",
+    authorRole: "Founder & CEO",
     readTime: "8 min read",
     category: "Industry Solutions",
     keywords: ["CA firms", "GST automation", "TDS automation", "bank reconciliation", "chartered accountant AI", "GSTR filing", "compliance automation", "Indian CA practice"],

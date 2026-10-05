@@ -3,6 +3,12 @@
     "name": "AgenticOrg",
     "legalName": "Orchestrum Technologies LLP",
     "inventorOwner": "Sanjeev Kumar",
+    "founderRole": "Founder & CEO",
+    "founderBio": "Sanjeev Kumar is Founder & CEO of Orchestrum Technologies LLP and inventor of AgenticOrg, Grantex, and CaseOps.",
+    "founderProfiles": [
+      "https://x.com/mishrak_sanjeev",
+      "https://www.linkedin.com/in/sanjeev-kumar-a184174"
+    ],
     "url": "https://agenticorg.ai",
     "appUrl": "https://app.agenticorg.ai",
     "language": "en-IN",

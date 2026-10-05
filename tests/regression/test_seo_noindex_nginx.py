@@ -112,3 +112,13 @@ def test_registered_indexable_routes_do_not_receive_noindex(config: Path) -> Non
             path = str(page["path"])
             assert not _matches(patterns, path)
             assert not _matches(patterns, path + "?utm_source=test")
+
+
+@pytest.mark.parametrize("config", NGINX_CONFIGS, ids=lambda path: path.name)
+def test_unknown_public_paths_return_real_404_without_breaking_private_routes(config: Path) -> None:
+    text = config.read_text(encoding="utf-8")
+    auth = re.search(r"location ~ \^/\(\?:dashboard.*?\{(.*?)\n    \}", text, re.DOTALL)
+    fallback = re.search(r"location / \{(.*?)\n    \}", text, re.DOTALL)
+    assert auth and fallback
+    assert "try_files $uri $uri.html /index.html;" in auth.group(1)
+    assert "try_files $uri $uri.html =404;" in fallback.group(1)
