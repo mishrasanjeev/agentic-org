@@ -211,7 +211,7 @@ export function verifySeo(root = UI_ROOT) {
           fail("expected exactly one of each social metadata field in " + label);
         }
       }
-      if (route.index !== false && route.path !== "/evals") {
+      if (route.index !== false) {
         if (!/<div id="root">[\s\S]*?<h1\b/i.test(html)) {
           fail("missing prerendered public content: " + label);
         }

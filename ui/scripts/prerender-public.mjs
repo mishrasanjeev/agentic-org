@@ -5,7 +5,7 @@ import { Writable } from "node:stream";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HelmetProvider } from "react-helmet-async";
-import { renderToPipeableStream } from "react-dom/server";
+import { renderToPipeableStream, renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { createServer } from "vite";
 import { JSDOM } from "jsdom";
@@ -44,6 +44,19 @@ export function visibleMarkup(rendered) {
   return document.body.innerHTML;
 }
 
+export function evalsMarkup(route) {
+  return renderToStaticMarkup(React.createElement("main", { className: "min-h-screen mx-auto max-w-5xl px-6 py-12" },
+    React.createElement("h1", { className: "text-3xl font-bold" }, route.name),
+    React.createElement("p", { className: "mt-4" }, route.summary),
+    React.createElement("section", { className: "mt-8" },
+      React.createElement("h2", { className: "text-xl font-semibold" }, "How to interpret this scorecard"),
+      React.createElement("p", { className: "mt-3" },
+        "Evaluation dimensions include quality, safety, performance, reliability, security, and cost. " +
+        "Scores and timestamps load from the live evaluation source; missing measurements are not passing results. " +
+        "The scorecard is not a production service guarantee or a substitute for tenant-specific review.")),
+    React.createElement("a", { className: "mt-6 inline-block underline", href: "/docs" }, "Read the documentation")));
+}
+
 export async function prerenderPublic(root = UI_ROOT) {
   const { routes } = loadRouteDescriptors(root);
   const server = await createServer({
@@ -58,9 +71,10 @@ export async function prerenderPublic(root = UI_ROOT) {
     const { AuthProvider } = await server.ssrLoadModule("/src/contexts/AuthContext.tsx");
     const { BrandingProvider } = await server.ssrLoadModule("/src/contexts/BrandingContext.tsx");
     for (const route of routes.filter((item) => item.index !== false)) {
-      const markup = visibleMarkup(await renderPage(App, AuthProvider, BrandingProvider, route.path));
+      const markup = route.path === "/evals"
+        ? evalsMarkup(route)
+        : visibleMarkup(await renderPage(App, AuthProvider, BrandingProvider, route.path));
       if ((markup.match(/<h1\b/gi) || []).length !== 1) {
-        if (route.path === "/evals") continue; // Live scorecard has no source data at build time.
         throw new Error("Public route did not render exactly one heading: " + route.path);
       }
       for (const path of outputPathsForRoute(root, route, routes)) {

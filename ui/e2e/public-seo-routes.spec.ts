@@ -14,6 +14,22 @@ test("public content is available in HTML without JavaScript", async ({ browser,
   }
 });
 
+test("evaluation page has source-aware context before live scores load", async ({ browser, baseURL, request }) => {
+  const response = await request.get("/evals");
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toContain("missing measurements are not passing results");
+
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${baseURL}/evals`);
+    await expect(page.getByRole("heading", { level: 1, name: "Agent Evaluations" })).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: "How to interpret this scorecard" })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("public links resolve to real routes and unknown paths are 404", async ({ page, request }) => {
   await page.goto("/resources/agent-activity-audit-and-live-feed");
   await page.getByRole("link", { name: "Explore the platform" }).click();
