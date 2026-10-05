@@ -90,6 +90,25 @@ describe("PromptCompare", () => {
     expect(screen.getByTestId("compare-result")).toHaveTextContent("Total cost of this run: $0.0005");
   });
 
+  it("discards an answer that arrives after another template was selected", async () => {
+    options(true, 4);
+    let finish: (value: unknown) => void = () => {};
+    mockPost.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+    const { rerender } = render(<PromptCompare templateId="t1" parameters={[]} />);
+    fireEvent.click(await screen.findByTestId("compare-model-gpt-4o-mini"));
+    fireEvent.change(screen.getByTestId("compare-input"), { target: { value: "q" } });
+    fireEvent.click(screen.getByTestId("compare-run"));
+    rerender(<PromptCompare templateId="t2" parameters={[]} />);
+    finish({
+      data: {
+        total_cost_usd: 0,
+        results: [{ model: "gpt-4o-mini", ok: true, output: "an answer for the first template", served_model: null, latency_ms: 1, tokens: 1, cost_usd: 0, error_type: null }],
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId("compare-run")).not.toHaveTextContent("Running"));
+    expect(screen.queryByTestId("compare-result")).not.toBeInTheDocument();
+  });
+
   it("says when the comparison did not run", async () => {
     options(true, 4);
     mockPost.mockRejectedValue(new Error("422"));
