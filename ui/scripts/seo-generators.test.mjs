@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { JSDOM } from "jsdom";
 import {
   CSP_HASH_CHUNK_MAX,
   chunkCspHashes,
@@ -145,6 +146,45 @@ test("resource shells expose the same evidence and answers without JavaScript", 
   assert.match(html, /What happens when artifacts are stale\?/);
   assert.doesNotMatch(html, /"@type":"FAQPage"/);
   assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
+});
+
+test("blog shells contain the actual article rather than only metadata", () => {
+  const { manifest: actualManifest, routes } = loadRouteDescriptors();
+  const route = routes.find((item) => item.path === "/blog/shopify-merchant-seller-commerce-agent-oacp");
+  assert.ok(route);
+  const html = renderStaticHtml(baseHtml, route, actualManifest, routes);
+  assert.match(html, /<h2>Gated Reference Journey<\/h2>/);
+  assert.match(html, /Shopify remains the operational source of record/);
+  assert.match(html, /<a href="https:\/\/agenticorg\.ai\/blog\//);
+});
+
+test("founder-authored article uses a person author with public profiles", () => {
+  const { manifest: actualManifest, routes } = loadRouteDescriptors();
+  const route = routes.find((item) => item.path === "/blog/ai-agents-for-ca-firms-gst-tds-automation");
+  assert.ok(route);
+  const html = renderStaticHtml(baseHtml, route, actualManifest, routes);
+  const document = new JSDOM(html).window.document;
+  const graph = JSON.parse(document.querySelector('script[type="application/ld+json"]').textContent)["@graph"];
+  const article = graph.find((item) => item["@type"] === "BlogPosting");
+  assert.equal(article.author["@type"], "Person");
+  assert.equal(article.author.name, "Sanjeev Kumar");
+  assert.equal(article.author.worksFor.name, "Orchestrum Technologies LLP");
+  assert.deepEqual(article.author.sameAs, actualManifest.site.founderProfiles);
+});
+
+test("public directory shells link to their leaf pages without leaking private routes", () => {
+  const { manifest: actualManifest, routes } = loadRouteDescriptors();
+  const home = routes.find((item) => item.path === "/");
+  const blog = routes.find((item) => item.path === "/blog");
+  const resources = routes.find((item) => item.path === "/resources");
+  assert.ok(home && blog && resources);
+  const homeHtml = renderStaticHtml(baseHtml, home, actualManifest, routes);
+  const blogHtml = renderStaticHtml(baseHtml, blog, actualManifest, routes);
+  const resourcesHtml = renderStaticHtml(baseHtml, resources, actualManifest, routes);
+  assert.match(homeHtml, /href="https:\/\/agenticorg\.ai\/open-agentic-commerce-protocol"/);
+  assert.match(blogHtml, /href="https:\/\/agenticorg\.ai\/blog\/shopify-merchant-seller-commerce-agent-oacp"/);
+  assert.match(resourcesHtml, /href="https:\/\/agenticorg\.ai\/resources\/buyer-agents-shop-safely-oacp"/);
+  assert.doesNotMatch(homeHtml, /href="https:\/\/agenticorg\.ai\/dashboard"/);
 });
 
 test("activity resource says the live producer is not wired", () => {

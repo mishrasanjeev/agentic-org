@@ -2178,7 +2178,7 @@ Audience: Developers and integration owners. Reviewed: 2026-10-02.
 
 #### Choose an integration surface
 
-Use REST/OpenAPI for application contracts, the repository SDKs for client access, MCP for compatible tool clients, and A2A v1 HTTP+JSON for synchronous text between agents after merchant or tenant authorization. Older AgenticOrg A2A-shaped card/task routes are proprietary; they are not the v1 wire contract. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions. See [external A2A buyer access](../a2a-interoperability.md).
+Use REST/OpenAPI for application contracts, the repository SDKs for client access, MCP for compatible tool clients, and A2A v1 HTTP+JSON for synchronous text between agents after merchant or tenant authorization. Older AgenticOrg A2A-shaped card/task routes are proprietary; they are not the v1 wire contract. The authenticated **A2A / MCP** screen shows integration material. Public discovery does not grant access to business data or actions. See [external A2A buyer access](/docs/seller-a2a-commerce-journey).
 
 | Surface | Suitable first task | Boundary |
 | --- | --- | --- |

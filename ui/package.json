@@ -8,7 +8,7 @@
   "scripts": {
     "predev": "node scripts/generate-user-docs.mjs",
     "dev": "vite",
-    "build": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs && node scripts/verify-seo.mjs",
+    "build": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs && node scripts/prerender-public.mjs && node scripts/generate-sitemap.mjs && node scripts/generate-llms.mjs && node scripts/verify-seo.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "typecheck": "node scripts/generate-user-docs.mjs && tsc --noEmit",
@@ -17,8 +17,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:seo": "node --test scripts/seo-generators.test.mjs scripts/user-docs.test.mjs",
-    "seo:sync": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs --sync-csp && node scripts/generate-sitemap.mjs --sync-public && node scripts/generate-llms.mjs --sync-public && node scripts/verify-seo.mjs",
+    "test:seo": "node --test scripts/seo-generators.test.mjs scripts/user-docs.test.mjs scripts/prerender-public.test.mjs",
+    "seo:sync": "node scripts/generate-user-docs.mjs && tsc && vite build && node scripts/generate-static-seo.mjs --sync-csp && node scripts/prerender-public.mjs && node scripts/generate-sitemap.mjs --sync-public && node scripts/generate-llms.mjs --sync-public && node scripts/verify-seo.mjs",
     "seo:verify": "node scripts/verify-seo.mjs && node scripts/generate-llms.mjs --check"
   },
   "dependencies": {

@@ -4,6 +4,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Public search pages
+- Pre-render substantive public pages at build time, preserve private-page
+  noindex behavior, and return a real 404 for unknown public paths.
+- Repair two public links, connect public pages through crawlable navigation,
+  and show the approved founder bio with consistent article author metadata.
+
 ### Added - Prompt governance: maker-checker for prompt templates
 - With `AGENTICORG_PROMPTS_MAKER_CHECKER` or the authority flag
   `prompts.maker_checker` on (both off by default), creating, changing,

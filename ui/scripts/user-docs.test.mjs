@@ -245,3 +245,10 @@ test("hosted screen shortcuts point to implemented application routes", () => {
   assert.ok(paths.length >= 16);
   for (const path of paths) assert.ok(app.includes(`path="${path}"`), path);
 });
+
+test("public A2A guide links to a hosted page, not a source Markdown soft 404", () => {
+  const guide = loadUserGuides().articles.find((article) => article.slug === "api-sdk-mcp");
+  assert.ok(guide);
+  assert.match(guide.html, /href="\/docs\/seller-a2a-commerce-journey"/);
+  assert.doesNotMatch(guide.html, /href="[^"]*a2a-interoperability\.md"/);
+});

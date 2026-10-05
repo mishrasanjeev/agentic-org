@@ -52,7 +52,7 @@ export const CONTENT_PAGES: ContentPage[] = [
       { q: "Does this page prove a production availability target?", a: "No. An availability or recovery target needs measured load, outage, and restore evidence." },
     ],
     relatedSlugs: ["buyer-agents-shop-safely-oacp", "build-against-oacp-artifacts-bridges"],
-    cta: { text: "Explore the platform", link: "/platform" },
+    cta: { text: "Explore the platform", link: "/" },
   },
   {
     slug: "move-shopify-store-to-agentic-commerce",

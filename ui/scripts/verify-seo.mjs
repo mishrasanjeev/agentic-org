@@ -6,6 +6,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { JSDOM } from "jsdom";
 import {
   cspHash,
   loadRouteDescriptors,
@@ -80,6 +81,7 @@ export function verifySeo(root = UI_ROOT) {
   const titles = new Map();
   const descriptions = new Map();
   const routeCspHashes = new Set();
+  const inboundLinks = new Set();
 
   if (manifest.pages.length < 20) {
     fail("publicSite.json should enumerate every static public/auth route");
@@ -119,6 +121,23 @@ export function verifySeo(root = UI_ROOT) {
       }
       const html = readFileSync(output, "utf8");
       const label = route.path + " (" + output + ")";
+      if (route.index !== false) {
+        const document = new JSDOM(html).window.document;
+        for (const image of document.querySelectorAll("img")) {
+          if (!image.hasAttribute("alt")) fail("image missing alt attribute: " + label);
+        }
+        for (const anchor of document.querySelectorAll("a[href]")) {
+          try {
+            const target = new URL(anchor.getAttribute("href"), expectedCanonical);
+            const targetPath = target.pathname.replace(/\/$/, "") || "/";
+            if (target.origin === new URL(siteUrl).origin && targetPath !== route.path) {
+              inboundLinks.add(targetPath);
+            }
+          } catch {
+            fail("invalid public link: " + label);
+          }
+        }
+      }
       if (countMatches(html, /<title\b[^>]*>[\s\S]*?<\/title>/gi) !== 1) {
         fail("expected exactly one title: " + label);
       }
@@ -192,8 +211,15 @@ export function verifySeo(root = UI_ROOT) {
           fail("expected exactly one of each social metadata field in " + label);
         }
       }
-      if (!/<noscript><main\b[^>]*\bdata-static-seo="true"[^>]*>/.test(html)) {
-        fail("missing static noscript summary: " + label);
+      if (route.index !== false) {
+        if (!/<div id="root">[\s\S]*?<h1\b/i.test(html)) {
+          fail("missing prerendered public content: " + label);
+        }
+        if (countMatches(html, /<h1\b/gi) !== 1) {
+          fail("expected one prerendered H1: " + label);
+        }
+      } else if (!/<noscript><main\b[^>]*\bdata-static-seo="true"[^>]*>/.test(html)) {
+        fail("missing safe no-JavaScript fallback: " + label);
       }
 
       const scripts = [...html.matchAll(
@@ -223,6 +249,12 @@ export function verifySeo(root = UI_ROOT) {
           fail("invalid JSON-LD in " + label + ": " + error.message);
         }
       }
+    }
+  }
+
+  for (const route of routes) {
+    if (route.index !== false && route.path !== "/" && !inboundLinks.has(route.path)) {
+      fail("indexable route has no inbound public link: " + route.path);
     }
   }
 
