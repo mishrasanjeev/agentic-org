@@ -18,8 +18,21 @@ cases, variants, answer tokens, concurrent calls) and behind
 ``AGENTICORG_PROMPT_COMPARE_ENABLED`` (off by default).
 
 Answers are returned to the caller, the administrator trying their own
-prompt; nothing is stored and the logs carry counts and outcomes only. One
-model's failure is that model's result, never the whole comparison's.
+prompt; no prompt, input or answer is stored and the logs carry counts and
+outcomes only. One model's failure is that model's result, never the whole
+comparison's.
+
+Each call is held to the model it was asked for: the router may answer from a
+fallback model of the same provider, and an answer served by another model is
+reported as that model's failure (``served_by_other_model``) rather than
+scored as if the requested model had given it.
+
+Where the tenant has pre-model pseudonymisation on, the prompt and the input
+are pseudonymised before they leave, as for an agent's model call, and the
+answer is restored before it is returned or scored. If the setting or the
+pseudonym map cannot be read, the request is refused rather than sent raw.
+With pseudonymisation on the calls of a request run one at a time, since
+they share one pseudonym map.
 """
 
 from __future__ import annotations
@@ -126,11 +139,44 @@ class ModelResult:
         }
 
 
-async def _complete(tenant_id: uuid.UUID, model: str, messages: list[dict[str, str]], max_tokens: int) -> Any:
+async def _complete(
+    tenant_id: uuid.UUID,
+    model: str,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    pseudonymiser: Any = None,
+) -> Any:
     """One model call through the direct router as the tenant (the seam the tests replace)."""
     from core.llm.router import llm_router
 
-    return await llm_router.complete(messages, model_override=model, max_tokens=max_tokens, tenant_id=str(tenant_id))
+    extra = {"pseudonymiser": pseudonymiser} if pseudonymiser is not None else {}
+    return await llm_router.complete(
+        messages, model_override=model, max_tokens=max_tokens, tenant_id=str(tenant_id), **extra
+    )
+
+
+async def open_pseudonymiser(tenant_id: uuid.UUID) -> Any:
+    """The tenant's pseudonym session for this request, or None when pre-model pseudonymisation is off.
+
+    Raises ``PseudonymisationError`` when the setting or the map cannot be
+    read: the caller refuses the request rather than sending raw text.
+    """
+    from core.pii import pseudonymiser as pseudonymisation
+
+    if not await pseudonymisation.pseudonymisation_enabled(tenant_id):
+        return None
+    # A server-generated case for this one request; nothing a client names.
+    return await pseudonymisation.open_session(
+        str(tenant_id), pseudonymisation.case_key(f"prompt-compare-{uuid.uuid4()}")
+    )
+
+
+def _system_for(system_text: str, pseudonymiser: Any) -> str:
+    if pseudonymiser is None:
+        return system_text
+    from core.pii.pseudonymiser import with_model_guidance
+
+    return with_model_guidance(system_text)
 
 
 async def run_one(
@@ -140,13 +186,20 @@ async def run_one(
     user_input: str,
     max_tokens: int,
     gate: asyncio.Semaphore,
+    pseudonymiser: Any = None,
 ) -> ModelResult:
     """One model's answer; a failure is recorded as this model's result with the error type only."""
-    messages = [{"role": "system", "content": system_text}, {"role": "user", "content": user_input}]
+    messages = [
+        {"role": "system", "content": _system_for(system_text, pseudonymiser)},
+        {"role": "user", "content": user_input},
+    ]
     async with gate:
         started = time.monotonic()
         try:
-            response = await _complete(tenant_id, model, messages, max_tokens)
+            if pseudonymiser is not None:
+                response = await _complete(tenant_id, model, messages, max_tokens, pseudonymiser=pseudonymiser)
+            else:
+                response = await _complete(tenant_id, model, messages, max_tokens)
         # enterprise-gate: broad-except-ok reason=one-models-failure-is-its-own-result-and-is-logged
         except Exception as exc:
             logger.warning("prompt_compare_model_failed", model=model, error_type=type(exc).__name__)
@@ -156,11 +209,26 @@ async def run_one(
                 latency_ms=int((time.monotonic() - started) * 1000),
                 error_type=type(exc).__name__,
             )
+    served = str(getattr(response, "model", "") or "") or None
+    if served is not None and served != model:
+        # The router answered from a fallback: not the model that was asked, so not its result.
+        logger.warning("prompt_compare_served_by_other_model", model=model, served_model=served)
+        return ModelResult(
+            model=model,
+            ok=False,
+            served_model=served,
+            latency_ms=int(getattr(response, "latency_ms", 0) or (time.monotonic() - started) * 1000),
+            cost_usd=float(getattr(response, "cost_usd", 0.0) or 0.0),
+            error_type="served_by_other_model",
+        )
+    answer = str(response.content or "")
+    if pseudonymiser is not None:
+        answer = pseudonymiser.restore_text(answer)
     return ModelResult(
         model=model,
         ok=True,
-        output=str(response.content or ""),
-        served_model=str(getattr(response, "model", "") or "") or None,
+        output=answer,
+        served_model=served,
         latency_ms=int(getattr(response, "latency_ms", 0) or (time.monotonic() - started) * 1000),
         tokens=int(getattr(response, "tokens_used", 0) or 0),
         input_tokens=getattr(response, "input_tokens", None),
@@ -177,8 +245,11 @@ async def compare(
     limit = validate_max_tokens(max_tokens)
     system = _input_text(system_text, "the prompt")
     question = _input_text(user_input)
-    gate = asyncio.Semaphore(CONCURRENCY)
-    results = await asyncio.gather(*(run_one(tenant_id, name, system, question, limit, gate) for name in names))
+    session = await open_pseudonymiser(tenant_id)
+    gate = asyncio.Semaphore(1 if session is not None else CONCURRENCY)
+    results = await asyncio.gather(
+        *(run_one(tenant_id, name, system, question, limit, gate, session) for name in names)
+    )
     logger.info("prompt_compared", models=len(names), failed=sum(1 for r in results if not r.ok))
     return {
         "max_tokens": limit,
@@ -316,18 +387,25 @@ async def evaluate(
         raise ValueError("variant names must be distinct")
     [name] = validate_models([model])
     limit = validate_max_tokens(max_tokens)
-    gate = asyncio.Semaphore(CONCURRENCY)
+    session = await open_pseudonymiser(tenant_id)
+    gate = asyncio.Semaphore(1 if session is not None else CONCURRENCY)
     reports: list[VariantReport] = []
     for variant_name, system_text in variants:
         system = _input_text(system_text, f"variant {variant_name}")
-        answers = await asyncio.gather(*(run_one(tenant_id, name, system, case.input, limit, gate) for case in cases))
+        answers = await asyncio.gather(
+            *(run_one(tenant_id, name, system, case.input, limit, gate, session) for case in cases)
+        )
         report = VariantReport(name=variant_name)
         for case, answer in zip(cases, answers, strict=True):
             report.latency_ms += answer.latency_ms
             report.cost_usd += answer.cost_usd
             if not answer.ok:
                 report.errors += 1
-                report.cases.append({"id": case.id, "result": "error", "error_type": answer.error_type})
+                entry: dict[str, Any] = {"id": case.id, "result": "error", "error_type": answer.error_type}
+                if answer.served_model:
+                    # Another model answered in place of the one under test.
+                    entry["served_model"] = answer.served_model
+                report.cases.append(entry)
                 continue
             failed = score(case, answer.output)
             if failed:

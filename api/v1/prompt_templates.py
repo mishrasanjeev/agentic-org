@@ -22,6 +22,7 @@ from api.route_metadata import route_meta
 from core.config import settings
 from core.database import get_tenant_session
 from core.models.prompt_template import PromptTemplate, PromptTemplateEditHistory
+from core.pii.pseudonymiser import PseudonymisationError
 from core.prompts import change_requests
 from core.prompts import compare as prompt_compare
 from core.prompts import parameters as prompt_parameters
@@ -197,6 +198,12 @@ async def list_prompt_templates(
 
 
 # ── Compare and evaluate ───────────────────────────────────────────────────
+def _pseudonymisation_refused(exc: PseudonymisationError) -> HTTPException:
+    """Pseudonymisation is on but could not be applied: nothing was sent."""
+    logger.error("prompt_compare_pseudonymisation_unavailable", reason=str(exc))
+    return HTTPException(503, "Pseudonymisation could not be applied; no model was called")
+
+
 def _require_compare() -> None:
     if not prompt_compare.enabled():
         raise HTTPException(409, "Prompt comparison is off in this deployment")
@@ -277,6 +284,8 @@ async def compare_prompt(
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+    except PseudonymisationError as exc:
+        raise _pseudonymisation_refused(exc) from None
 
 
 @router.post("/prompt-templates/evaluate", dependencies=[require_tenant_admin])
@@ -312,6 +321,8 @@ async def evaluate_prompt(
         )
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+    except PseudonymisationError as exc:
+        raise _pseudonymisation_refused(exc) from None
 
 
 # ── Change requests (maker-checker) ────────────────────────────────────────

@@ -27,7 +27,7 @@ MODELS = ["gpt-4o-mini", "gemini-2.5-flash"]
 def _answer(content: str, **over) -> SimpleNamespace:
     base = {
         "content": content,
-        "model": "served-model",
+        "model": None,
         "latency_ms": 120,
         "tokens_used": 30,
         "input_tokens": 20,
@@ -38,10 +38,28 @@ def _answer(content: str, **over) -> SimpleNamespace:
     return SimpleNamespace(**base)
 
 
+# The real function, kept for the tests that exercise it: the fixture below replaces it everywhere else.
+REAL_OPEN_PSEUDONYMISER = compare.open_pseudonymiser
+
+
+@pytest.fixture(autouse=True)
+def _pseudonymisation_off():
+    """Pre-model pseudonymisation is off unless a test turns it on (the flag read needs a database)."""
+    with patch.object(compare, "open_pseudonymiser", AsyncMock(return_value=None)):
+        yield
+
+
+class _FakeSession:
+    """A pseudonym session: the router is handed it, and tokens in an answer are restored."""
+
+    def restore_text(self, text: str) -> str:
+        return text.replace("[[PERSON_1]]", "Asha Rao")
+
+
 def _models(by_model: dict):
     """Replace the model call: an answer, or an exception to raise, per model."""
 
-    async def _complete(_tenant, model, messages, max_tokens):
+    async def _complete(_tenant, model, messages, max_tokens, pseudonymiser=None):
         outcome = by_model[model]
         if isinstance(outcome, Exception):
             raise outcome
@@ -106,6 +124,25 @@ class TestCompare:
         assert failed["ok"] is False and failed["error_type"] == "RuntimeError" and failed["output"] == ""
         assert "secret detail" not in str(report) and worked["ok"] is True
 
+    def test_an_answer_served_by_another_model_is_not_the_requested_result(self):
+        fallback = _answer("An answer from the fallback.", model="gemini-2.5-pro")
+        exact = _answer("ok", model="gpt-4o-mini")
+        with _models({"gemini-2.5-flash": fallback, "gpt-4o-mini": exact}):
+            report = asyncio.run(compare.compare(TENANT, system_text=PROMPT, user_input="q", models=MODELS))
+        asked, served = report["results"]
+        assert asked["ok"] is True and asked["served_model"] == "gpt-4o-mini"
+        assert served["ok"] is False and served["error_type"] == "served_by_other_model"
+        assert served["served_model"] == "gemini-2.5-pro" and served["output"] == ""
+        cases = compare.parse_cases([{"id": "c", "input": "q", "contains": ["fallback"]}])
+        with _models({"gemini-2.5-flash": fallback}):
+            evaluated = asyncio.run(
+                compare.evaluate(TENANT, variants=[("v", PROMPT)], cases=cases, model="gemini-2.5-flash")
+            )
+        [variant] = evaluated["variants"]
+        # The fallback answer would have passed; it is an error, not a pass for the model under test.
+        assert (variant["passed"], variant["errors"]) == (0, 1)
+        assert variant["results"][0]["served_model"] == "gemini-2.5-pro"
+
     def test_the_call_goes_through_the_router_as_the_tenant(self):
         complete = AsyncMock(return_value=_answer("ok"))
         with patch("core.llm.router.llm_router.complete", complete):
@@ -135,7 +172,7 @@ class TestCompare:
         running = 0
         peak = 0
 
-        async def _slow(_tenant, _model, _messages, _max_tokens):
+        async def _slow(_tenant, _model, _messages, _max_tokens, pseudonymiser=None):
             nonlocal running, peak
             running += 1
             peak = max(peak, running)
@@ -147,6 +184,89 @@ class TestCompare:
         with patch.object(compare, "_complete", _slow):
             asyncio.run(compare.evaluate(TENANT, variants=[("v1", PROMPT)], cases=cases, model="gpt-4o-mini"))
         assert 1 < peak <= compare.CONCURRENCY
+
+
+class TestPseudonymisation:
+    def test_on_the_router_is_handed_the_session_and_the_answer_is_restored(self):
+        seen: list = []
+        session = _FakeSession()
+
+        async def _complete(_tenant, _model, messages, _max_tokens, pseudonymiser=None):
+            seen.append((pseudonymiser, messages[0]["content"]))
+            return _answer("The request from [[PERSON_1]] is approved.")
+
+        with (
+            patch.object(compare, "open_pseudonymiser", AsyncMock(return_value=session)),
+            patch.object(compare, "_complete", _complete),
+        ):
+            report = asyncio.run(compare.compare(TENANT, system_text=PROMPT, user_input="q", models=MODELS))
+        assert [handed for handed, _system in seen] == [session, session]
+        assert all("pseudonymised_data" in system for _handed, system in seen)
+        assert report["results"][0]["output"] == "The request from Asha Rao is approved."
+
+    def test_on_the_calls_of_a_request_run_one_at_a_time(self):
+        running = 0
+        peak = 0
+
+        async def _slow(_tenant, _model, _messages, _max_tokens, pseudonymiser=None):
+            nonlocal running, peak
+            running += 1
+            peak = max(peak, running)
+            await asyncio.sleep(0.005)
+            running -= 1
+            return _answer("ok")
+
+        cases = compare.parse_cases([{"input": f"q{i}", "contains": ["ok"]} for i in range(6)])
+        with (
+            patch.object(compare, "open_pseudonymiser", AsyncMock(return_value=_FakeSession())),
+            patch.object(compare, "_complete", _slow),
+        ):
+            asyncio.run(compare.evaluate(TENANT, variants=[("v", PROMPT)], cases=cases, model="gpt-4o-mini"))
+        assert peak == 1
+
+    def test_evaluation_scores_the_restored_answer(self):
+        cases = compare.parse_cases([{"id": "c", "input": "q", "contains": ["Asha Rao"]}])
+        with (
+            patch.object(compare, "open_pseudonymiser", AsyncMock(return_value=_FakeSession())),
+            _models({"gpt-4o-mini": _answer("Approved for [[PERSON_1]].")}),
+        ):
+            report = asyncio.run(compare.evaluate(TENANT, variants=[("v", PROMPT)], cases=cases, model="gpt-4o-mini"))
+        assert report["variants"][0]["passed"] == 1
+
+    def test_off_no_session_is_opened_and_on_one_is_opened_for_a_server_made_case(self):
+        from core.pii import pseudonymiser as pseudonymisation
+
+        opened = AsyncMock(return_value="session")
+        with (
+            patch.object(pseudonymisation, "pseudonymisation_enabled", AsyncMock(return_value=False)),
+            patch.object(pseudonymisation, "open_session", opened),
+        ):
+            assert asyncio.run(REAL_OPEN_PSEUDONYMISER(TENANT)) is None
+        opened.assert_not_awaited()
+        with (
+            patch.object(pseudonymisation, "pseudonymisation_enabled", AsyncMock(return_value=True)),
+            patch.object(pseudonymisation, "open_session", opened),
+        ):
+            assert asyncio.run(REAL_OPEN_PSEUDONYMISER(TENANT)) == "session"
+        tenant, case = opened.await_args.args
+        assert tenant == str(TENANT) and case.startswith("prompt-compare-")
+
+    def test_an_unreadable_setting_refuses_the_request_before_any_call(self):
+        from core.pii import pseudonymiser as pseudonymisation
+
+        called = AsyncMock()
+        with (
+            patch.object(
+                pseudonymisation,
+                "pseudonymisation_enabled",
+                AsyncMock(side_effect=pseudonymisation.PseudonymisationError("flag_lookup_failed")),
+            ),
+            patch.object(compare, "open_pseudonymiser", REAL_OPEN_PSEUDONYMISER),
+            patch.object(compare, "_complete", called),
+            pytest.raises(pseudonymisation.PseudonymisationError),
+        ):
+            asyncio.run(compare.compare(TENANT, system_text=PROMPT, user_input="q", models=MODELS))
+        called.assert_not_awaited()
 
 
 class TestCases:
@@ -349,6 +469,20 @@ class TestEndpoints:
         client, sessions = _client(None)
         with sessions:
             assert client.post("/api/v1/prompt-templates/compare", json=body).status_code == 404
+
+    def test_pseudonymisation_that_cannot_be_applied_is_a_503_and_no_call(self, monkeypatch):
+        from core.pii.pseudonymiser import PseudonymisationError
+
+        monkeypatch.setattr(settings, "prompt_compare_enabled", True)
+        client, sessions = _client()
+        refused = AsyncMock(side_effect=PseudonymisationError("flag_lookup_failed"))
+        with (
+            sessions,
+            patch.object(compare, "open_pseudonymiser", refused),
+            patch.object(compare, "_complete", AsyncMock(side_effect=AssertionError("no call"))),
+        ):
+            resp = client.post("/api/v1/prompt-templates/compare", json={**BODY, "input": "q", "models": MODELS})
+        assert resp.status_code == 503 and "no model was called" in resp.text
 
     def test_evaluate_reports_pass_rates(self, monkeypatch):
         monkeypatch.setattr(settings, "prompt_compare_enabled", True)

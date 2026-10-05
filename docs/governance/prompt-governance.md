@@ -194,6 +194,18 @@ fails is that model's result with the error type; it never fails the comparison.
 offered are the catalogue entries the direct router can call (the Gemini, OpenAI and Anthropic
 families).
 
+**Held to the requested model.** The router may answer from a fallback model of the same
+provider. An answer served by another model is reported as that model's failure
+(`served_by_other_model`, with the model that served it), never shown or scored as the requested
+model's answer.
+
+**Pseudonymisation.** Where the tenant has pre-model pseudonymisation on, the prompt and the input
+are pseudonymised before they leave, as for an agent's model call, and the answer is restored
+before it is returned or scored. If the setting or the pseudonym map cannot be read, the request
+is refused with 503 and no model is called. With pseudonymisation on, the calls of a request run
+one at a time, and an encrypted pseudonym map for the request is stored as for any pseudonymised
+call.
+
 **Evaluate.** Up to three prompt variants answer a reference dataset of up to 25 cases with one
 model. A case is an input with at least one deterministic expectation:
 
@@ -224,9 +236,9 @@ variant that is not saved yet can be scored before it is proposed.
 | `POST /api/v1/prompt-templates/evaluate` | `variants` (1 to 3, each a named prompt), `cases` (1 to 25), `model`, `max_tokens` |
 
 All three need tenant administrator rights. The two that call models share a rate class of six
-requests a minute per tenant, and calls within a request run four at a time. Nothing is stored:
-a comparison's answers go to the administrator who asked, and the logs carry counts and outcomes
-only. The prompt templates page has a **Compare models** panel on a selected template: values for
+requests a minute per tenant, and calls within a request run four at a time. No prompt, input or
+answer is stored: a comparison's answers go to the administrator who asked, and the logs carry
+counts and outcomes only. The prompt templates page has a **Compare models** panel on a selected template: values for
 its parameters, an input, the models, and the answers side by side with latency, tokens and cost.
 
 Deterministic expectations catch a missing figure or a forbidden phrase; they do not judge

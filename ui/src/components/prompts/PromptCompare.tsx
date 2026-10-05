@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import api, { extractApiError } from "@/lib/api";
 
 interface ModelOption {
@@ -50,6 +50,8 @@ export default function PromptCompare({ templateId, parameters }: { templateId: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<CompareOut | null>(null);
+  // Each run takes a number; a response is shown only if no later run, and no change of template, has happened since.
+  const generation = useRef(0);
 
   useEffect(() => {
     let live = true;
@@ -68,9 +70,11 @@ export default function PromptCompare({ templateId, parameters }: { templateId: 
   }, []);
 
   useEffect(() => {
+    generation.current += 1;
     setResult(null);
     setError(null);
     setValues({});
+    setBusy(false);
   }, [templateId]);
 
   if (!options || !options.enabled) return null;
@@ -82,6 +86,7 @@ export default function PromptCompare({ templateId, parameters }: { templateId: 
     );
 
   const run = async () => {
+    const mine = ++generation.current;
     setBusy(true);
     setError(null);
     try {
@@ -96,12 +101,14 @@ export default function PromptCompare({ templateId, parameters }: { templateId: 
         input,
         models: chosen,
       });
+      if (mine !== generation.current) return;
       setResult(response.data as CompareOut);
     } catch (err) {
+      if (mine !== generation.current) return;
       setResult(null);
       setError(extractApiError(err, "The comparison did not run."));
     } finally {
-      setBusy(false);
+      if (mine === generation.current) setBusy(false);
     }
   };
 
