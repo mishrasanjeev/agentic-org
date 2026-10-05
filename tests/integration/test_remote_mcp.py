@@ -68,6 +68,22 @@ async def test_remote_mcp_persisted_registration_agent_and_revocation(
         },
     )
     assert review.status_code == 200, review.text
+    refreshed = await client.post(f"{path}/{cid}/refresh", headers=auth_headers, json={})
+    assert refreshed.status_code == 200, refreshed.text
+    assert next(t for t in refreshed.json()["tools"] if t["name"] == "gnani_transcribe")["permission"] == "read"
+    invalid_rotation = await client.post(
+        f"{path}/{cid}/refresh", headers=auth_headers, json={"access_token": "invalid-replacement"}
+    )
+    assert invalid_rotation.status_code == 422
+    assert (await client.post(f"{path}/{cid}/refresh", headers=auth_headers, json={})).status_code == 200
+    rotated_token = "synthetic-mcp-rotated-token"
+    mcp_server.auth.token = rotated_token
+    assert (await client.post(f"{path}/{cid}/refresh", headers=auth_headers, json={})).status_code == 422
+    rotated = await client.post(
+        f"{path}/{cid}/refresh", headers=auth_headers, json={"access_token": rotated_token}
+    )
+    assert rotated.status_code == 200, rotated.text
+    assert rotated_token not in rotated.text
     tested = await client.post(
         f"{path}/{cid}/probe", headers=auth_headers, json={"tool": "gnani_transcribe", "arguments": {"text": "first"}}
     )
@@ -83,6 +99,7 @@ async def test_remote_mcp_persisted_registration_agent_and_revocation(
             )
         ).scalar_one()
         assert TOKEN not in json.dumps(config.credentials_encrypted)
+        assert rotated_token not in json.dumps(config.credentials_encrypted)
         assert config.credentials_encrypted.get("_encrypted")
         company = Company(tenant_id=UUID(tenant_id), name=f"MCP test {uuid4().hex[:8]}", pan="TESTONLY01")
         session.add(company)
@@ -195,6 +212,15 @@ async def test_remote_mcp_persisted_registration_agent_and_revocation(
     denied = await graph_tools[0].ainvoke({"text": "must not call"})
     assert denied["error"] == "remote_mcp_unavailable"
     assert len(mcp_server.calls) == 4
+    mcp_server.server.remove_tool("gnani_transcribe")
+    refreshed = await client.post(f"{path}/{cid}/refresh", headers=auth_headers, json={})
+    assert refreshed.status_code == 200, refreshed.text
+    assert [t["name"] for t in refreshed.json()["tools"]] == ["gnani_voice_reply"]
+    stale_review = await client.put(
+        f"{path}/{cid}/permissions", headers=auth_headers,
+        json={"schema_hashes": hashes, "read_only_tools": ["gnani_transcribe"]},
+    )
+    assert stale_review.status_code == 409
     archived = await client.delete(f"/api/v1/connectors/{cid}", headers=auth_headers)
     assert archived.status_code in (200, 204)
     assert not any(item["id"] == cid for item in (await client.get(path, headers=auth_headers)).json()["items"])

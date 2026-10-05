@@ -44,7 +44,9 @@ The canonical setup and troubleshooting guide is [Connectors](../user-guide/conn
 - `tests/integration/test_remote_mcp.py`: real API/database plus TCP MCP. Checks
   encrypted credential persistence, cross-tenant refusal, POST/PATCH/PUT agent
   validation, graph and Tool Gateway dispatch, signed-grant refusal before dispatch,
-  write containment, unlink and archive behavior.
+  write containment, unlink and archive behavior. It also replays refresh,
+  invalid replacement credentials, real bearer rotation, preservation of unchanged
+  read reviews and refusal of a stale review after catalog changes.
 - `ui/e2e/remote-mcp.spec.ts`: Chromium against local Docker Nginx/API and a real
   SDK server. Creates a synthetic local tenant, rejects a bad bearer, registers
   the server, reviews `gnani_transcribe`, refuses read classification of
@@ -91,6 +93,7 @@ The existing UUID-fallback regression was replayed after correcting that path.
 | Focused MCP unit/integration | 24 passed in local Docker with real HTTP, API, PostgreSQL and Redis |
 | Production-image dependency environment | 24 passed using Python 3.14, MCP 1.30.0, Grantex 0.7.2, FastAPI 0.142.2 and HTTPX 0.28.1; candidate source and local fixture mounted read-only; only test-runner packages added to a temporary environment |
 | Requirements-pinned grant compatibility | 23 focused tests passed on Grantex 0.7.1 before the additional compression regression; signed-grant enforcement is unchanged by that transport-only patch |
+| New module coverage | 94% remote API, 87% persisted catalog/runtime helper, 92% transport; 91% combined in the expanded focused replay |
 | Chromium Docker replay | Passed with both reported tool names selected, saved and reloaded; reviewed read probe passed; write dispatch remains blocked |
 | UI unit suite | 399 passed |
 | TypeScript, ESLint, UI build and SEO build checks | Passed; existing lint/build warnings remain |
@@ -102,6 +105,11 @@ snapshot does not include Node. The UI suite, typecheck, lint, build, generated
 documentation freshness and browser replay were validated separately on the
 workstation and local Docker services. This is not a claim that the backend
 preflight script ran the UI suite.
+
+The complete backend run passed again after the documentation correction.
+The additional token-rotation/catalog-refresh assertions were then replayed in
+the focused suite (24 passed), with lint and types checked again. No runtime code
+changed during these final documentation and regression refinements.
 
 The initial broad run had 11,375 passes and six failures. One exposed the native
 UUID compatibility issue above. The other five were invalidated by overlapping

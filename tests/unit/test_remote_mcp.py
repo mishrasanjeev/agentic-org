@@ -29,6 +29,7 @@ async def mcp_server(monkeypatch):
     monkeypatch.setattr(AppStatus, "should_exit", False)
     monkeypatch.setenv("AGENTICORG_TEST_FAKE_CONNECTORS", "0")
     calls = []
+    auth = SimpleNamespace(token=TOKEN)
     server = FastMCP("Local regression tools", json_response=False)
 
     @server.tool(annotations=ToolAnnotations(readOnlyHint=True))
@@ -50,7 +51,10 @@ async def mcp_server(monkeypatch):
             self.app = app
 
         async def __call__(self, scope, receive, send):
-            if scope["type"] == "http" and dict(scope["headers"]).get(b"authorization") != f"Bearer {TOKEN}".encode():
+            if (
+                scope["type"] == "http"
+                and dict(scope["headers"]).get(b"authorization") != f"Bearer {auth.token}".encode()
+            ):
                 await JSONResponse({"error": "Unauthorized"}, status_code=401)(scope, receive, send)
                 return
             await self.app(scope, receive, send)
@@ -83,7 +87,7 @@ async def mcp_server(monkeypatch):
             )
 
         monkeypatch.setattr(transport, "_client", client)
-        yield SimpleNamespace(server=server, calls=calls)
+        yield SimpleNamespace(server=server, calls=calls, auth=auth)
     finally:
         process.should_exit = True
         await asyncio.wait_for(task, 10)
