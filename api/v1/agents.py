@@ -1908,6 +1908,7 @@ async def create_agent(
 
         # The prompt's first author, for the history and for maker-checker at activation.
         prompt_activation.record_initial_prompt(session, tid, agent, effective_caller.user_id)
+        prompt_activation.record_created_active(session, tid, agent, effective_caller.user_id)
 
         # Create initial AgentVersion snapshot
         version_row = AgentVersion(
@@ -2682,7 +2683,10 @@ async def replace_agent(
     if "hitl_policy" in body.model_fields_set:
         _enforce_hitl_condition_on_save(body.hitl_policy.condition, surface="agents_replace")
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -2712,6 +2716,7 @@ async def replace_agent(
         # can't swap out a live agent's prompt via PUT either.
         new_prompt_text = body.system_prompt_text
         old_prompt_text = agent.system_prompt_text
+        prompt_fingerprint = prompt_activation.fingerprint(agent)
         prompt_changing = new_prompt_text is not None and new_prompt_text != old_prompt_text
         if prompt_changing and agent.status == "active":
             raise HTTPException(
@@ -2807,6 +2812,15 @@ async def replace_agent(
                 edited_by=_user_uuid_from_claims(user),
             )
             session.add(audit)
+        # The variables and the reference shape the prompt too: a change to them is recorded with its author.
+        prompt_activation.record_prompt_change(
+            session,
+            tid,
+            agent,
+            before=prompt_fingerprint,
+            before_text=old_prompt_text,
+            editor=_user_uuid_from_claims(user),
+        )
 
     return {"id": str(agent_id), "replaced": True}
 
@@ -2838,7 +2852,7 @@ async def update_agent(
     update_data = body.model_dump(exclude_unset=True)
     async with get_tenant_session(tid) as session:
         query = select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid)
-        if {"route_scopes", "authorized_tools"} & update_data.keys():
+        if {"route_scopes", "authorized_tools", *_PROMPT_FIELDS} & update_data.keys():
             # Serialise scope changes on one agent: a concurrent tools PATCH
             # must not push a stale route-scope list back to Grantex.
             query = query.with_for_update()
@@ -2960,6 +2974,7 @@ async def update_agent(
 
         # Track prompt changes for audit
         old_prompt = agent.system_prompt_text
+        prompt_fingerprint = prompt_activation.fingerprint(agent)
         change_reason = update_data.pop("change_reason", None)
         pending_grantex_scopes: list[str] | None = None
 
@@ -3113,6 +3128,15 @@ async def update_agent(
                 edited_by=_user_uuid_from_claims(user),
             )
             session.add(audit)
+        # The variables, the amendments and the reference shape the prompt too.
+        prompt_activation.record_prompt_change(
+            session,
+            tid,
+            agent,
+            before=prompt_fingerprint,
+            before_text=old_prompt,
+            editor=_user_uuid_from_claims(user),
+        )
 
         grantex_config = dict((agent.config or {}).get("grantex") or {})
         if pending_grantex_scopes is not None or (
@@ -4071,7 +4095,10 @@ async def resume_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -4118,10 +4145,11 @@ async def resume_agent(
                 ),
             )
 
+        resumed_by = None
         if resume_to == "active":
             # Maker-checker: a prompt changed while the agent was paused needs a second person.
             try:
-                await prompt_activation.check_activation(
+                resumed_by = await prompt_activation.check_activation(
                     session, tid, agent, getattr(_effective_caller(caller), "user_id", None)
                 )
             except prompt_activation.ActivationError as exc:
@@ -4141,11 +4169,16 @@ async def resume_agent(
             from_status="paused",
             to_status=resume_to,
             triggered_by="api",
+            triggered_by_user=resumed_by,
             reason=f"Agent resumed via API to '{resume_to}'",
         )
         session.add(event)
 
     return {"id": str(agent_id), "status": resume_to}
+
+
+# The fields of an agent that shape what the model is told.
+_PROMPT_FIELDS = ("system_prompt", "system_prompt_text", "prompt_variables", "prompt_amendments")
 
 
 def _activation_refused(exc: prompt_activation.ActivationError) -> HTTPException:
@@ -4172,7 +4205,10 @@ async def promote_agent(
 ):
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
-        result = await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        # Locked for the transaction: a prompt edit and an activation of one agent never interleave.
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
         agent = result.scalar_one_or_none()
         if not agent:
             raise HTTPException(404, "Agent not found")
@@ -4685,6 +4721,7 @@ async def clone_agent(
 
         # The clone's prompt is its creator's choice: recorded as its first author.
         prompt_activation.record_initial_prompt(session, tid, clone, effective_caller.user_id)
+        prompt_activation.record_created_active(session, tid, clone, effective_caller.user_id)
 
         # Create initial version snapshot for clone
         version_row = AgentVersion(

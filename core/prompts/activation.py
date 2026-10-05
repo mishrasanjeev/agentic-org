@@ -20,11 +20,24 @@ While maker-checker is on for the tenant (``core.prompts.change_requests``):
 * An agent whose prompt has not changed since it was last active (a pause and
   a resume) is activated as before; nothing new reaches production.
 
+"The prompt" is everything that shapes what the model is told: the prompt
+text, the prompt reference, the prompt variables and the prompt amendments. A
+change to any of them is written to the agent's prompt history with who made
+it, so the check sees it. "Last active" is the newest lifecycle event into or
+out of ``active``, so an agent that was created active, or was active before
+these events were written at creation, still counts as having been active
+when it was paused.
+
+Edits and activations take the agent's row lock, so an edit cannot slip in
+between the check and the status change. A pack install or resync does not
+replace the prompt of an existing agent while maker-checker is on.
+
 Off, activation is as it was.
 """
 
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
@@ -56,7 +69,8 @@ async def _last_prompt_edit(session: Any, tenant_id: uuid.UUID, agent_id: uuid.U
 
 
 async def _last_activation(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID) -> Any:
-    from sqlalchemy import select
+    """The newest moment the agent is known to have been active: an event into ``active`` or out of it."""
+    from sqlalchemy import or_, select
 
     from core.models.agent import AgentLifecycleEvent
 
@@ -65,11 +79,99 @@ async def _last_activation(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UU
         .where(
             AgentLifecycleEvent.tenant_id == tenant_id,
             AgentLifecycleEvent.agent_id == agent_id,
-            AgentLifecycleEvent.to_status == "active",
+            or_(AgentLifecycleEvent.to_status == "active", AgentLifecycleEvent.from_status == "active"),
         )
         .order_by(AgentLifecycleEvent.created_at.desc())
         .limit(1)
     )
+
+
+def fingerprint(agent: Any) -> str:
+    """Everything of an agent that shapes what the model is told, as one comparable value."""
+    return json.dumps(
+        {
+            "ref": getattr(agent, "system_prompt_ref", None),
+            "text": getattr(agent, "system_prompt_text", None),
+            "variables": getattr(agent, "prompt_variables", None) or {},
+            "amendments": list(getattr(agent, "prompt_amendments", None) or []),
+        },
+        sort_keys=True,
+        default=str,
+    )
+
+
+def record_prompt_change(
+    session: Any,
+    tenant_id: uuid.UUID,
+    agent: Any,
+    *,
+    before: str,
+    before_text: str | None,
+    editor: uuid.UUID | None,
+) -> bool:
+    """Write a history row for a change to the variables, the amendments or the reference.
+
+    A change to the prompt text has its own row from the handler; this
+    covers the rest of what the model is told, which had none. Returns
+    whether a row was written.
+    """
+    if fingerprint(agent) == before or getattr(agent, "system_prompt_text", None) != before_text:
+        return False
+    from core.models.prompt_template import PromptEditHistory
+
+    text = getattr(agent, "system_prompt_text", None) or ""
+    session.add(
+        PromptEditHistory(
+            tenant_id=tenant_id,
+            agent_id=agent.id,
+            prompt_before=text,
+            prompt_after=text,
+            change_reason="Prompt variables, amendments or reference changed",
+            edited_by=editor,
+        )
+    )
+    return True
+
+
+def record_created_active(session: Any, tenant_id: uuid.UUID, agent: Any, activator: uuid.UUID | None) -> None:
+    """An agent created straight into ``active`` gets the lifecycle event a promotion would have written."""
+    if getattr(agent, "status", None) != "active":
+        return
+    from core.models.agent import AgentLifecycleEvent
+
+    session.add(
+        AgentLifecycleEvent(
+            tenant_id=tenant_id,
+            agent_id=agent.id,
+            from_status="new",
+            to_status="active",
+            triggered_by="api",
+            triggered_by_user=activator,
+            reason="Created active",
+        )
+    )
+
+
+async def pack_may_replace_prompt(tenant_id: uuid.UUID, agent: Any, new_text: str | None) -> bool:
+    """Whether a pack install or resync may overwrite an existing agent's prompt.
+
+    Under maker-checker it may not: the installer would publish a prompt with
+    no author and no second person, on an agent that may be active. The
+    prompt is left as it is and the skip is logged. An unreadable flag is
+    treated the same way.
+    """
+    if (getattr(agent, "system_prompt_text", None) or "") == (new_text or ""):
+        return True
+    try:
+        on = await change_requests.enabled(tenant_id)
+    # enterprise-gate: broad-except-ok reason=an-unreadable-maker-checker-flag-fails-closed-the-prompt-is-kept-logged
+    except Exception as exc:
+        logger.error("pack_prompt_flag_unreadable", agent_id=str(agent.id), error_type=type(exc).__name__)
+        return False
+    if on:
+        logger.warning("pack_prompt_update_skipped_maker_checker", agent_id=str(agent.id))
+        return False
+    return True
 
 
 def record_initial_prompt(session: Any, tenant_id: uuid.UUID, agent: Any, author: uuid.UUID | None) -> None:
