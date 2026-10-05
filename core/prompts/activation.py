@@ -48,6 +48,11 @@ from core.prompts import change_requests
 logger = structlog.get_logger()
 
 
+# The history row written when an agent is created or cloned: who set its first prompt.
+# It is an authorship record, not an edit, and the edit-history endpoint leaves it out.
+INITIAL_PROMPT_REASON = "Initial prompt"
+
+
 class ActivationError(Exception):
     def __init__(self, status: int, message: str) -> None:
         super().__init__(message)
@@ -186,7 +191,7 @@ def record_initial_prompt(session: Any, tenant_id: uuid.UUID, agent: Any, author
             agent_id=agent.id,
             prompt_before=None,
             prompt_after=getattr(agent, "system_prompt_text", None) or "",
-            change_reason="Initial prompt",
+            change_reason=INITIAL_PROMPT_REASON,
             edited_by=author,
         )
     )
