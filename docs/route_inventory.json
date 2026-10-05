@@ -518,7 +518,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.list",
-    "source_line": 2000,
+    "source_line": 2002,
     "tenant_required": true
   },
   {
@@ -536,7 +536,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1710,
+    "source_line": 1712,
     "tenant_required": true
   },
   {
@@ -554,7 +554,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.tools.sensitive.read",
-    "source_line": 1664,
+    "source_line": 1666,
     "tenant_required": true
   },
   {
@@ -572,7 +572,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "agents.generate",
-    "source_line": 2451,
+    "source_line": 2453,
     "tenant_required": true
   },
   {
@@ -590,7 +590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "agents.import",
-    "source_line": 2263,
+    "source_line": 2265,
     "tenant_required": true
   },
   {
@@ -608,7 +608,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.org_tree",
-    "source_line": 2118,
+    "source_line": 2120,
     "tenant_required": true
   },
   {
@@ -626,7 +626,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 5169,
+    "source_line": 5254,
     "tenant_required": true
   },
   {
@@ -644,7 +644,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.read",
-    "source_line": 2629,
+    "source_line": 2631,
     "tenant_required": true
   },
   {
@@ -662,7 +662,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2842,
+    "source_line": 2854,
     "tenant_required": true
   },
   {
@@ -680,7 +680,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2659,
+    "source_line": 2661,
     "tenant_required": true
   },
   {
@@ -698,7 +698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.amendments.read",
-    "source_line": 5127,
+    "source_line": 5212,
     "tenant_required": true
   },
   {
@@ -716,7 +716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.sensitive.amendments.write",
-    "source_line": 5293,
+    "source_line": 5378,
     "tenant_required": true
   },
   {
@@ -734,7 +734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.budget.read",
-    "source_line": 4813,
+    "source_line": 4898,
     "tenant_required": true
   },
   {
@@ -752,7 +752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4602,
+    "source_line": 4687,
     "tenant_required": true
   },
   {
@@ -770,7 +770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.delegate",
-    "source_line": 2184,
+    "source_line": 2186,
     "tenant_required": true
   },
   {
@@ -788,7 +788,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.explanation.read",
-    "source_line": 4975,
+    "source_line": 5060,
     "tenant_required": true
   },
   {
@@ -806,7 +806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.feedback.list",
-    "source_line": 4936,
+    "source_line": 5021,
     "tenant_required": true
   },
   {
@@ -824,7 +824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-feedback",
     "scope": "agents.feedback.write",
-    "source_line": 4885,
+    "source_line": 4970,
     "tenant_required": true
   },
   {
@@ -842,7 +842,25 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
-    "source_line": 5092,
+    "source_line": 5177,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "agents.output_schema.set",
+    "auth_required": true,
+    "function": "set_agent_output_schema",
+    "idempotency": "idempotent-full-replace",
+    "key": "PUT /api/v1/agents/{agent_id}/output-schema api/v1/agents.py:set_agent_output_schema",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/agents.py",
+    "path": "/api/v1/agents/{agent_id}/output-schema",
+    "public_exempt_reason": null,
+    "rate_limit": "agent-write",
+    "scope": "agents.write",
+    "source_line": 4219,
     "tenant_required": true
   },
   {
@@ -860,7 +878,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4040,
+    "source_line": 4069,
     "tenant_required": true
   },
   {
@@ -878,7 +896,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4201,
+    "source_line": 4286,
     "tenant_required": true
   },
   {
@@ -896,7 +914,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
-    "source_line": 4757,
+    "source_line": 4842,
     "tenant_required": true
   },
   {
@@ -914,7 +932,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4091,
+    "source_line": 4120,
     "tenant_required": true
   },
   {
@@ -932,7 +950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4414,
+    "source_line": 4499,
     "tenant_required": true
   },
   {
@@ -950,7 +968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4360,
+    "source_line": 4445,
     "tenant_required": true
   },
   {
@@ -968,7 +986,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4479,
+    "source_line": 4564,
     "tenant_required": true
   },
   {
@@ -986,7 +1004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents.execute",
-    "source_line": 3266,
+    "source_line": 3278,
     "tenant_required": true
   },
   {
@@ -6170,7 +6188,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.list",
-    "source_line": 167,
+    "source_line": 171,
     "tenant_required": true
   },
   {
@@ -6188,7 +6206,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 484,
+    "source_line": 616,
     "tenant_required": true
   },
   {
@@ -6206,7 +6224,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.list",
-    "source_line": 232,
+    "source_line": 364,
     "tenant_required": true
   },
   {
@@ -6224,7 +6242,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 256,
+    "source_line": 388,
     "tenant_required": true
   },
   {
@@ -6242,7 +6260,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 313,
+    "source_line": 445,
     "tenant_required": true
   },
   {
@@ -6260,7 +6278,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 333,
+    "source_line": 465,
     "tenant_required": true
   },
   {
@@ -6278,7 +6296,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 353,
+    "source_line": 485,
     "tenant_required": true
   },
   {
@@ -6296,7 +6314,61 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 411,
+    "source_line": 543,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.compare",
+    "auth_required": true,
+    "function": "compare_prompt",
+    "idempotency": "not-idempotent-makes-billed-model-calls",
+    "key": "POST /api/v1/prompt-templates/compare api/v1/prompt_templates.py:compare_prompt",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/compare",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-compare",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 268,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.compare.models",
+    "auth_required": true,
+    "function": "list_comparable_models",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/prompt-templates/compare/models api/v1/prompt_templates.py:list_comparable_models",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/compare/models",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-template-read",
+    "scope": "prompt_templates.sensitive.read",
+    "source_line": 245,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "prompt_templates.evaluate",
+    "auth_required": true,
+    "function": "evaluate_prompt",
+    "idempotency": "not-idempotent-makes-billed-model-calls",
+    "key": "POST /api/v1/prompt-templates/evaluate api/v1/prompt_templates.py:evaluate_prompt",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/prompt_templates.py",
+    "path": "/api/v1/prompt-templates/evaluate",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-compare",
+    "scope": "prompt_templates.behavior.write",
+    "source_line": 300,
     "tenant_required": true
   },
   {
@@ -6314,7 +6386,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 975,
+    "source_line": 1107,
     "tenant_required": true
   },
   {
@@ -6332,7 +6404,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 373,
+    "source_line": 505,
     "tenant_required": true
   },
   {
@@ -6350,7 +6422,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.write",
-    "source_line": 615,
+    "source_line": 747,
     "tenant_required": true
   },
   {
@@ -6368,7 +6440,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.history",
-    "source_line": 757,
+    "source_line": 889,
     "tenant_required": true
   },
   {
@@ -6386,7 +6458,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-read",
     "scope": "prompt_templates.sensitive.read",
-    "source_line": 437,
+    "source_line": 569,
     "tenant_required": true
   },
   {
@@ -6404,7 +6476,7 @@
     "public_exempt_reason": null,
     "rate_limit": "prompt-template-write",
     "scope": "prompt_templates.behavior.rollback",
-    "source_line": 838,
+    "source_line": 970,
     "tenant_required": true
   },
   {

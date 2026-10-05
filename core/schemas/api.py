@@ -348,6 +348,14 @@ class FleetLimits(BaseModel):
     max_replicas_global_ceiling: int = 20
 
 
+class AgentOutputSchemaIn(BaseModel):
+    """An agent's own output schema: a JSON Schema for the object it returns, or null to remove it."""
+
+    schema_: dict[str, Any] | None = Field(None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
 # ── Prompt template schemas ──
 
 
@@ -380,6 +388,38 @@ class PromptTemplateRender(BaseModel):
 
 class PromptChangeDecision(BaseModel):
     note: str | None = Field(None, max_length=500)
+
+
+class PromptSource(BaseModel):
+    """A prompt to run: a stored template (``template_id``) or text given here, with values for its parameters."""
+
+    template_id: UUID | None = None
+    template_text: str | None = Field(None, max_length=200_000)
+    variables: list[dict[str, Any]] = []
+    values: dict[str, Any] = {}
+
+    @model_validator(mode="after")
+    def _one_source(self) -> PromptSource:
+        if (self.template_id is None) == (self.template_text is None):
+            raise ValueError("give either template_id or template_text")
+        return self
+
+
+class PromptCompareIn(PromptSource):
+    input: str = Field(..., min_length=1, max_length=20_000)
+    models: list[str] = Field(..., min_length=1, max_length=4)
+    max_tokens: int | None = Field(None, ge=1, le=2048)
+
+
+class PromptVariantIn(PromptSource):
+    name: str = Field(..., min_length=1, max_length=60)
+
+
+class PromptEvaluateIn(BaseModel):
+    variants: list[PromptVariantIn] = Field(..., min_length=1, max_length=3)
+    cases: list[dict[str, Any]] = Field(..., min_length=1, max_length=25)
+    model: str = Field(..., min_length=1, max_length=128)
+    max_tokens: int | None = Field(None, ge=1, le=2048)
 
 
 class PromptTemplateResponse(BaseModel):

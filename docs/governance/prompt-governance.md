@@ -181,6 +181,165 @@ a write on the page, and says so, with a retry, when the queue cannot be loaded.
 Storage: `prompt_change_requests` (tenant-scoped under row-level security) and two columns on
 `prompt_template_edit_history` (migration `v6z43_prompt_change_requests`).
 
+## Comparing models and evaluating variants
+
+Two ways to judge a prompt on what models actually return (`core/prompts/compare.py`). Both
+make real, billed model calls through the direct router as the tenant, so the model gateway's
+policies, limits and records apply to every call and a model the tenant may not use is refused
+there.
+
+**Compare.** One prompt and one input run against up to four models at once. Each model gets
+its own result: the answer, the model that served it, latency, tokens and cost. A model that
+fails is that model's result with the error type; it never fails the comparison. The models
+offered are the catalogue entries the direct router can call (the Gemini, OpenAI and Anthropic
+families).
+
+**Held to the requested model.** The router may answer from a fallback model of the same
+provider. An answer served by another model is reported as that model's failure
+(`served_by_other_model`, with the model that served it), never shown or scored as the requested
+model's answer.
+
+**Pseudonymisation.** Where the tenant has pre-model pseudonymisation on, the prompt and the input
+are pseudonymised before they leave, as for an agent's model call, and the answer is restored
+before it is returned or scored. If the setting or the pseudonym map cannot be read, the request
+is refused with 503 and no model is called. With pseudonymisation on, the calls of a request run
+one at a time, and an encrypted pseudonym map for the request is stored as for any pseudonymised
+call.
+
+**Evaluate.** Up to three prompt variants answer a reference dataset of up to 25 cases with one
+model. A case is an input with at least one deterministic expectation:
+
+| Expectation | Passes when |
+| --- | --- |
+| `contains` | the answer contains every listed text (case-insensitive) |
+| `not_contains` | the answer contains none of the listed texts |
+| `equals` | the answer, trimmed, is exactly this |
+| `matches` | a bounded regular expression is found in the first 2,000 characters |
+
+The report gives each variant its pass rate, average latency, cost and, per case, `passed`,
+`failed` with the expectations it failed, or `error` with the error type. A failed model call is
+an error, not a failure of the prompt; the three are kept apart. Answers are not returned by an
+evaluation.
+
+A prompt is either a stored template (`template_id`) or text given in the request
+(`template_text` with its `variables`), filled with `values` and checked as for rendering, so a
+variant that is not saved yet can be scored before it is proposed.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_PROMPT_COMPARE_ENABLED` | `false` | Off, both endpoints answer 409 and the console shows no comparison panel. |
+
+| Endpoint | Does |
+| --- | --- |
+| `GET /api/v1/prompt-templates/compare/models` | whether comparison is on, the models it can call and its limits |
+| `POST /api/v1/prompt-templates/compare` | `template_id` or `template_text`, `values`, `input`, `models` (1 to 4), `max_tokens` (default 512, at most 2,048) |
+| `POST /api/v1/prompt-templates/evaluate` | `variants` (1 to 3, each a named prompt), `cases` (1 to 25), `model`, `max_tokens` |
+
+All three need tenant administrator rights. The two that call models share a rate class of six
+requests a minute per tenant, and calls within a request run four at a time. No prompt, input or
+answer is stored: a comparison's answers go to the administrator who asked, and the logs carry
+counts and outcomes only. The prompt templates page has a **Compare models** panel on a selected template: values for
+its parameters, an input, the models, and the answers side by side with latency, tokens and cost.
+
+Deterministic expectations catch a missing figure or a forbidden phrase; they do not judge
+quality. Model-graded scoring and stored datasets belong to the evaluation framework.
+
+## Context-window management
+
+An agent run accumulates tool results. Sent whole, a long run eventually exceeds the model's
+context window and the provider refuses the call, or it fits but most of the window is spent on
+results the model no longer needs. `core/prompts/context_window.py` measures the conversation
+before each model call of an agent run and, when it does not fit, sends a trimmed copy.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AGENTICORG_CONTEXT_WINDOW_MANAGED` | `false` | Off, the conversation is sent whole and the provider's own limit applies, as before. |
+
+**The budget.** The context window of the model that is actually called, from the catalogue, less
+the room kept for its answer (its answer limit, at most a quarter of the window), less a 10%
+margin, less the definitions of the tools bound to the call, which the provider is sent too. The
+model is read through a tool binding when the run did not name one, and the catalogue is searched
+by provider, so a self-hosted or deployment-named model takes its provider's entry.
+
+A model whose window cannot be established is not managed at all: the conversation is sent whole
+and `context_window_unmanaged` is logged. Trimming to a guessed window would drop evidence a
+larger window could have held.
+
+**What is trimmed, in order.**
+
+1. Never: system messages, what the user wrote, the model's own turns, and the newest round of
+   tool results, which the model is about to read.
+2. Older tool results are ranked by how much of the latest user message's wording they share and
+   by how recent they are; the lowest ranked are omitted first. An omitted result is replaced in
+   place by a short marker, so every tool call still has its answer and the provider accepts the
+   conversation.
+3. If that is not enough, the largest remaining tool results are cut to their beginning.
+
+Only the copy sent to the model changes. The run's history keeps every result, later turns are
+measured afresh, and the grounding check still reads everything that was retrieved. The run's
+trace says how many results were omitted or cut, `context_window_fitted` is logged with the
+counts, and `agenticorg_context_window_trims_total{result}` counts trimmed calls (`fitted`, or
+`still_over` when even this was not enough).
+
+**Limits.** Token counts are estimates: characters over four, plus a small cost per message. No
+provider tokeniser is loaded, which is what the margin is for. Relevance is shared wording with
+the latest user message, not meaning. A conversation that still does not fit (a very large system
+prompt or user message) is sent as it is, and the provider's limit applies. The direct router is
+not managed this way; it has no accumulated tool results.
+
+## Structured output
+
+An agent can declare the shape of what it returns. While enforcement is on, an answer that does
+not have that shape is not returned as a completed result (`core/prompts/output_schema.py`).
+
+**Declaring a schema.** Two ways:
+
+- The agent's own schema: `PUT /agents/{id}/output-schema` with `{"schema": {...}}`, or
+  `{"schema": null}` to remove it. It is a JSON Schema (2020-12) for an object, at most 32,000
+  bytes, self-contained (`$ref`, `$dynamicRef` and `$recursiveRef` are refused) and checked to be a
+  valid schema when it is stored.
+  It changes what the agent may return, so, like the prompt, it cannot be changed while the agent
+  is active, and the agent's edit rules apply. It is stored in the agent's `config` under
+  `output_schema_json`.
+- A registered name: the agent's existing `output_schema` field, when it names one of the
+  platform's registered document schemas. While enforcement is on, the name cannot be changed on
+  an active agent through `PUT /agents/{id}` either.
+
+The agent's own schema wins when both are set.
+
+**What happens on a run.** After the model's final answer is parsed, it is validated:
+
+1. A valid answer completes as before.
+2. An invalid answer goes back to the model with what is wrong (the JSON path and the schema's
+   message for each problem, at most ten), up to two times.
+3. An answer that is still invalid is escalated to a human reviewer with the trigger
+   `output_schema_invalid`, whatever its confidence. The reviewer sees the answer and what is
+   wrong with it (`output_schema_errors` on the approval) and decides; the run does not end as
+   `completed` on its own.
+4. A declared schema that cannot be used (a name that is not registered, a stored schema that is
+   no longer valid, one the validator cannot apply) escalates the same way with
+   `output_schema_unusable`. An agent that says it has a schema does not run as if it had none.
+
+A run refused by grant enforcement ends as it did, before any of this. An agent with no declared
+schema is not affected. A shadow sample of an agent held to a schema does not take the
+deterministic shortcut: it runs through the graph so its answer is validated.
+
+**Switch.** `AGENTICORG_OUTPUT_SCHEMA_ENFORCED`, off by default. Off, nothing is validated and
+runs end as before; schemas can still be stored. Before turning it on, look at the `output_schema`
+names existing agents carry: a name that is not a registered schema escalates every run of that
+agent (point 4). Clear the name or give the agent its own schema first.
+
+**Observability.** The run's trace records each correction and the escalation.
+`agenticorg_output_schema_checks_total{result}` counts `valid`, `repaired` (valid after a
+correction), `retry`, `escalated` and `unusable`. No tenant or agent label, and no answer content;
+a schema message can quote a short value from the answer, so messages are bounded and go only to
+the model and the reviewer.
+
+**Limits.** Enforcement is on runs started through the agents API (`POST /agents/{id}/run`), which
+is where an agent's stored configuration is read. Runs started by the voice channel and by the
+typed agent entry points do not pass a schema and are not validated. Each correction is one more
+model call. A reviewer who approves an escalated answer releases it as it is.
+
 ## Tests
 
 `tests/unit/test_prompt_parameters.py` covers declarations (the old form, defaults, every refused
@@ -203,6 +362,21 @@ check before the status changes. It also covers changes to the variables, amendm
 an agent that was active before the switch, the row lock, the activator on both events and the
 pack installer.
 
+`tests/unit/test_prompt_compare.py` covers the models a comparison can call, the bounds, a result
+per model with one failing, the call going through the router as the tenant, the concurrency
+limit, the dataset rules and every refused shape, scoring, pass rates with errors kept apart,
+and the endpoints off and on. `ui/src/__tests__/PromptCompare.test.tsx` covers the panel.
+
+`tests/unit/test_context_window.py` covers the estimates and budgets, a conversation that fits,
+omission by relevance and age, that every tool call stays answered and nothing else changes, the
+cut when omission is not enough, a conversation that cannot fit, the switch, the metric and that
+the reasoning node sends the fitted copy while the grounding check reads the full one.
+
+`tests/unit/test_output_schema.py` covers the schemas an agent may be given, the errors and their
+bounds, a registered name and an unregistered one, the switch, accept, correction and escalation,
+the metric, the agent graph run with a scripted model (valid, corrected, escalated, an unusable
+name, off, and no schema), the endpoint and the lock on active agents.
+
 ## What is not here yet
 
 - **Agents are not held to a template's parameters.** An agent's own `prompt_variables` are
@@ -210,8 +384,9 @@ pack installer.
 - **Other parts of an agent are not under maker-checker.** The check at activation is about
   the prompt: a change to an agent's tools, model or thresholds on a shadow agent is not
   attributed, so it does not by itself require a second person.
-- **No side-by-side comparison** across models, **no evaluation against a reference dataset**,
-  **no context-window management** and **no structured-output enforcement** beyond the
-  governed-case agents. These are the package's next parts.
+- **Evaluation has no console view and no stored datasets or results.** It is an endpoint that
+  takes its dataset in the request; nothing gates a change request on an evaluation result.
+- **Structured output is enforced on API runs only.** The voice channel and the typed agent
+  entry points do not pass a schema. There is no console editor for an agent's schema.
 - **No console editor for parameter types.** The prompt templates page shows a template's
   parameters; typed declarations are written through the API.

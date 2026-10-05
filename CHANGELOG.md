@@ -4,6 +4,45 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: structured-output enforcement
+- Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's
+  final answer is validated against the output schema it declares
+  (`core/prompts/output_schema.py`): its own JSON Schema, set with
+  `PUT /agents/{id}/output-schema` (locked on active agents), or a
+  registered schema name. An invalid answer goes back to the model with
+  what is wrong, up to two times; one that is still invalid, or a declared
+  schema that cannot be used, is escalated to a human reviewer
+  (`output_schema_invalid`, `output_schema_unusable`) instead of being
+  returned as completed. Agents with no declared schema are not affected.
+  Enforced on runs started through the agents API.
+  `agenticorg_output_schema_checks_total{result}`.
+
+### Added - Prompt governance: context-window management
+- Behind `AGENTICORG_CONTEXT_WINDOW_MANAGED` (off by default), before each
+  model call of an agent run the conversation is measured against the
+  model's context window, less the room for its answer and a margin
+  (`core/prompts/context_window.py`). When it does not fit, older tool
+  results are omitted from the copy that is sent, least relevant to the
+  latest user message first, each replaced by a marker so every tool call
+  stays answered; the largest remaining results are cut if needed. System
+  messages, the user's messages, the model's turns and the newest tool
+  results are never dropped, the run's history is unchanged, and the
+  grounding check still reads everything retrieved. Token counts are
+  estimates. `agenticorg_context_window_trims_total{result}`.
+
+### Added - Prompt governance: model comparison and dataset evaluation
+- Behind `AGENTICORG_PROMPT_COMPARE_ENABLED` (off by default; tenant
+  administrators; six requests a minute per tenant): `POST
+  /api/v1/prompt-templates/compare` runs one prompt and one input against up
+  to four models and returns each answer with its latency, tokens and cost,
+  and `POST /api/v1/prompt-templates/evaluate` scores up to three prompt
+  variants against a reference dataset of up to 25 cases with deterministic
+  expectations, reporting pass rates and failed checks
+  (`core/prompts/compare.py`). Calls go through the model gateway as the
+  tenant; one model's failure is its own result; nothing is stored.
+- The prompt templates page has a Compare models panel on a selected
+  template.
+
 ### Added - Prompt governance: maker-checker for agent prompts
 - With maker-checker on (`AGENTICORG_PROMPTS_MAKER_CHECKER` or the
   authority flag `prompts.maker_checker`), an agent whose prompt has changed
