@@ -76,6 +76,9 @@ export default function ConnectorCreate() {
   const [nativeProvider, setNativeProvider] = useState<{ name: string; display_name: string } | null>(null);
   const [providerLoading, setProviderLoading] = useState(Boolean(requestedType));
   const [providerError, setProviderError] = useState("");
+  const providerReady = !requestedType || (
+    !providerLoading && !providerError && nativeProvider?.name === requestedType
+  );
 
   useEffect(() => {
     setNativeProvider(null);
@@ -152,7 +155,7 @@ export default function ConnectorCreate() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (requestedType && (!nativeProvider || providerError)) return;
+    if (!providerReady) return;
     if (!name.trim()) {
       setError("Connector name is required");
       return;
@@ -354,7 +357,7 @@ export default function ConnectorCreate() {
             {providerError && <p role="alert" className="text-sm text-destructive">{providerError}</p>}
 
             <div className="flex gap-3">
-              <Button type="submit" disabled={submitting || providerLoading || Boolean(providerError)}>
+              <Button type="submit" disabled={submitting || !providerReady}>
                 {submitting ? "Registering..." : "Register Connector"}
               </Button>
               <Button type="button" variant="outline" onClick={() => navigate("/dashboard/connectors")}>
