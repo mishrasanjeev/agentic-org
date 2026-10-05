@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGet = vi.fn();
@@ -88,5 +88,25 @@ describe("native connector registration", () => {
     renderAt("/dashboard/connectors/new?type=whatsapp");
     expect(screen.getByTestId("provider-select")).toHaveValue("custom");
     expect(mockGet).not.toHaveBeenCalled();
+  });
+
+  it("clears credentials and extra config when switching native providers", async () => {
+    const router = createMemoryRouter(
+      [{ path: "/dashboard/connectors/new", element: <ConnectorCreate /> }],
+      { initialEntries: ["/dashboard/connectors/new?type=whatsapp"] },
+    );
+    render(<RouterProvider router={router} />);
+    await screen.findByDisplayValue("whatsapp");
+    fireEvent.change(screen.getByPlaceholderText("Enter access token"), { target: { value: "first-provider-secret" } });
+    fireEvent.change(screen.getByPlaceholderText(/organization_id/), { target: { value: '{"first":"provider"}' } });
+    fireEvent.change(screen.getByPlaceholderText("e.g. gcp://projects/my-project/secrets/my-secret/versions/latest"), {
+      target: { value: "first-provider-secret-ref" },
+    });
+
+    await router.navigate("/dashboard/connectors/new?type=twilio");
+    await screen.findByDisplayValue("twilio");
+    expect(screen.getByPlaceholderText("Enter auth token")).toHaveValue("");
+    expect(screen.getByPlaceholderText(/organization_id/)).toHaveValue("");
+    expect(screen.getByPlaceholderText("e.g. gcp://projects/my-project/secrets/my-secret/versions/latest")).toHaveValue("");
   });
 });

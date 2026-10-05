@@ -86,6 +86,11 @@ export default function ConnectorCreate() {
     setBaseUrl("");
     setAuthType("api_key");
     setAuthFields({});
+    setSecretRef("");
+    setExtraConfig("");
+    setExtraConfigError("");
+    setRateLimitRpm(100);
+    setError("");
     if (!requestedType) return;
     let active = true;
     api.get<{ items: Array<{ name: string; display_name: string; category: string; auth_type: string; base_url?: string }> }>(
