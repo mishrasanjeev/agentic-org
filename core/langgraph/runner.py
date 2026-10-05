@@ -206,6 +206,15 @@ def _with_reference_resolution_guidance(system_prompt: str) -> str:
     return f"{prompt.rstrip()}\n\n{REFERENCE_RESOLUTION_GUIDANCE}".strip()
 
 
+def _output_schema_errors(values: Any, pseudonymiser: Any) -> list[str]:
+    """What was wrong with an answer escalated for failing its output schema, for the reviewer."""
+    errors = [str(error) for error in ((values or {}).get("output_errors") or [])]
+    if pseudonymiser is not None:
+        # A schema message can quote a short value from the answer.
+        errors = [pseudonymiser.restore_text(error) for error in errors]
+    return errors
+
+
 async def run_agent(
     agent_id: str,
     agent_type: str,
@@ -224,6 +233,8 @@ async def run_agent(
     company_id: str | None = None,
     llm_provider: str | None = None,
     run_grant: RunGrant | None = None,
+    output_schema: str | None = None,
+    output_schema_json: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -425,6 +436,8 @@ async def run_agent(
             llm_provider=llm_provider,
             agent_id=agent_id,
             run_grant=run_grant,
+            output_schema=output_schema,
+            output_schema_json=output_schema_json,
             pseudonymiser=pseudonymiser,
         )
     finally:
@@ -448,6 +461,11 @@ async def run_agent(
         # A reused thread (voice ``voice:{call_sid}``) must not inherit a
         # denial from an earlier turn.
         "grant_denial": {},
+        # Nor an earlier turn's output-schema corrections.
+        "output_repairs": 0,
+        "output_repair": False,
+        "output_invalid": "",
+        "output_errors": [],
         "confidence": 0.0,
         "status": "running",
         "output": {},
@@ -610,6 +628,7 @@ async def run_agent(
                 if pseudonymiser is not None
                 else _hitl_trigger_from_interrupts(interrupts)
             ),
+            "output_schema_errors": _output_schema_errors(result, pseudonymiser),
             "error": result.get("error", ""),
             "explanation": explanation,
             "content_safety": content_safety_result,
@@ -669,6 +688,7 @@ async def run_agent(
             "tool_calls_log": hitl_tool_log,
             "tool_calls": hitl_tool_log,
             "hitl_trigger": hitl_trigger,
+            "output_schema_errors": _output_schema_errors(state_values, pseudonymiser),
             "error": "",
             "thread_id": config["configurable"]["thread_id"],
             "performance": {

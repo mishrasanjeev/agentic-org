@@ -348,6 +348,14 @@ class FleetLimits(BaseModel):
     max_replicas_global_ceiling: int = 20
 
 
+class AgentOutputSchemaIn(BaseModel):
+    """An agent's own output schema: a JSON Schema for the object it returns, or null to remove it."""
+
+    schema_: dict[str, Any] | None = Field(None, alias="schema")
+
+    model_config = {"populate_by_name": True}
+
+
 # ── Prompt template schemas ──
 
 

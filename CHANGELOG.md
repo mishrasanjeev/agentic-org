@@ -4,6 +4,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: structured-output enforcement
+- Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's
+  final answer is validated against the output schema it declares
+  (`core/prompts/output_schema.py`): its own JSON Schema, set with
+  `PUT /agents/{id}/output-schema` (locked on active agents), or a
+  registered schema name. An invalid answer goes back to the model with
+  what is wrong, up to two times; one that is still invalid, or a declared
+  schema that cannot be used, is escalated to a human reviewer
+  (`output_schema_invalid`, `output_schema_unusable`) instead of being
+  returned as completed. Agents with no declared schema are not affected.
+  Enforced on runs started through the agents API.
+  `agenticorg_output_schema_checks_total{result}`.
+
 ### Added - Prompt governance: context-window management
 - Behind `AGENTICORG_CONTEXT_WINDOW_MANAGED` (off by default), before each
   model call of an agent run the conversation is measured against the
