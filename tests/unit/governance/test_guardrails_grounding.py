@@ -294,7 +294,9 @@ class TestHook:
 
     def test_the_reasoning_node_passes_the_conversation_to_the_output_stage(self):
         src = (ROOT / "core" / "langgraph" / "agent_graph.py").read_text(encoding="utf-8")
-        assert "guard_output_message(response, tenant_id=tenant_id, agent_id=called_agent, messages=messages)" in src
+        # The full conversation, not the copy that may have been trimmed to fit the context window.
+        assert "response, tenant_id=tenant_id, agent_id=called_agent, messages=full_messages" in src
+        assert "full_messages = messages" in src
 
 
 class TestDryRunEndpoint:

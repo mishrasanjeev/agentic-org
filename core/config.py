@@ -206,6 +206,12 @@ class Settings(BaseSettings):
     # against a reference dataset. Both make real, billed model calls. Off by
     # default.
     prompt_compare_enabled: bool = False
+    # Context-window management (core/prompts/context_window.py): before a
+    # model call in an agent run, a conversation that does not fit the
+    # model's window has its older, less relevant tool results omitted from
+    # the copy that is sent. Off by default: off, the conversation is sent
+    # whole and the provider's own limit applies.
+    context_window_managed: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

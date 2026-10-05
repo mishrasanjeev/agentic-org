@@ -4,6 +4,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Prompt governance: context-window management
+- Behind `AGENTICORG_CONTEXT_WINDOW_MANAGED` (off by default), before each
+  model call of an agent run the conversation is measured against the
+  model's context window, less the room for its answer and a margin
+  (`core/prompts/context_window.py`). When it does not fit, older tool
+  results are omitted from the copy that is sent, least relevant to the
+  latest user message first, each replaced by a marker so every tool call
+  stays answered; the largest remaining results are cut if needed. System
+  messages, the user's messages, the model's turns and the newest tool
+  results are never dropped, the run's history is unchanged, and the
+  grounding check still reads everything retrieved. Token counts are
+  estimates. `agenticorg_context_window_trims_total{result}`.
+
 ### Added - Prompt governance: model comparison and dataset evaluation
 - Behind `AGENTICORG_PROMPT_COMPARE_ENABLED` (off by default; tenant
   administrators; six requests a minute per tenant): `POST
