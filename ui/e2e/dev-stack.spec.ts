@@ -77,6 +77,16 @@ test.describe("local dev stack @dev-stack", () => {
       expect.arrayContaining([expect.objectContaining({ name: "whatsapp" })]),
     );
 
+    for (const [type, credentialPlaceholder] of [
+      ["twilio", "Enter auth token"],
+      ["gmail", "Enter refresh token"],
+      ["pinelabs_plural", "Enter merchant ID"],
+    ]) {
+      await page.goto(`/dashboard/connectors/new?type=${type}`);
+      await expect(page.getByTestId("provider-select")).toHaveValue(type);
+      await expect(page.getByPlaceholder(credentialPlaceholder)).toBeVisible();
+    }
+
     await page.goto("/dashboard/connectors/new?type=not_in_registry");
     await expect(page.getByRole("alert")).toContainText("not in the current registry");
     await expect(page.getByRole("button", { name: "Register Connector" })).toBeDisabled();
