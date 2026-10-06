@@ -54,6 +54,15 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
     "retired": (),
 }
 CHANNELS: tuple[str, ...] = ("api", "chat", "voice", "email", "workflow", "a2a")
+# The environment an agent is in, read from its state and not stored.
+ENVIRONMENTS: dict[str, str | None] = {
+    "draft": "development",
+    "review": "development",
+    "approved": "staging",
+    "published": "production",
+    "deprecated": "production",
+    "retired": None,
+}
 MAX_PURPOSE = 2000
 MAX_USE_CASE = 120
 MAX_NOTE = 500
@@ -237,6 +246,7 @@ def entry_dict(entry: AgentRegistryEntry | None) -> dict[str, Any]:
             "state_changed_at": None,
             "state_changed_by": None,
             "submitted_by": None,
+            "environment": ENVIRONMENTS["draft"],
             "next_states": list(TRANSITIONS["draft"]),
         }
     return {
@@ -248,6 +258,7 @@ def entry_dict(entry: AgentRegistryEntry | None) -> dict[str, Any]:
         "state_changed_at": entry.state_changed_at.isoformat() if entry.state_changed_at else None,
         "state_changed_by": str(entry.state_changed_by) if entry.state_changed_by else None,
         "submitted_by": str(entry.submitted_by) if entry.submitted_by else None,
+        "environment": ENVIRONMENTS.get(entry.state),
         "next_states": list(TRANSITIONS[entry.state]),
     }
 
