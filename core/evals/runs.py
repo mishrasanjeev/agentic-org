@@ -95,11 +95,13 @@ async def run_version(
     reasons: dict[str, dict[str, str]] = {}
     latency_ms = 0
     cost_usd = 0.0
+    tokens = 0
     passed = failed = errors = 0
     judge_jobs: list[tuple[int, str, Any]] = []
     for index, (case, answer) in enumerate(zip(cases, answers, strict=True)):
         latency_ms += answer.latency_ms
         cost_usd += answer.cost_usd
+        tokens += int(answer.tokens or 0)
         entry: dict[str, Any] = {"id": case.id}
         if case.equals is not None:
             entry["has_equals"] = True
@@ -172,6 +174,7 @@ async def run_version(
         "pass_rate": round(passed / scored, 4) if scored else None,
         "avg_latency_ms": int(latency_ms / len(cases)) if cases else 0,
         "cost_usd": round(cost_usd, 6),
+        "tokens": tokens,
         "metrics": eval_metrics.summarise(results, labels),
         "scores": _scores(results, judges),
         "results": results,
@@ -202,6 +205,7 @@ def run_dict(run: EvalRun, *, with_results: bool = False) -> dict[str, Any]:
         "pass_rate": run.pass_rate,
         "avg_latency_ms": run.avg_latency_ms,
         "cost_usd": run.cost_usd,
+        "tokens": int(run.tokens or 0),
         "metrics": dict(run.metrics or {}),
         "scores": dict(run.scores or {}),
         "created_by_user": str(run.created_by_user) if run.created_by_user else None,
@@ -245,6 +249,7 @@ def store(
         results=report["results"],
         avg_latency_ms=report["avg_latency_ms"],
         cost_usd=report["cost_usd"],
+        tokens=int(report.get("tokens") or 0),
         created_by_user=actor,
     )
     session.add(run)
@@ -268,3 +273,63 @@ async def get_run(session: Any, tenant_id: uuid.UUID, run_id: uuid.UUID) -> Eval
     if found is None:
         raise DatasetError(404, "run_not_found", "Evaluation run not found")
     return found
+
+
+def _per_case(total: float, cases: int, digits: int) -> float | None:
+    return round(total / cases, digits) if cases else None
+
+
+def rank_models(stored: list[EvalRun]) -> list[dict[str, Any]]:
+    """One row per model from its newest run, ranked by pass rate, then latency, then cost per case.
+
+    Throughput is the answers a minute one sequential caller would get at the
+    run's average latency: an estimate from the measured latency, not a load
+    test.
+    """
+    newest: dict[str, EvalRun] = {}
+    for run in sorted(stored, key=lambda item: item.created_at or 0, reverse=True):
+        newest.setdefault(run.model, run)
+    rows: list[dict[str, Any]] = []
+    for run in newest.values():
+        classification = (run.metrics or {}).get("classification") or {}
+        latency = int(run.avg_latency_ms or 0)
+        rows.append(
+            {
+                "model": run.model,
+                "run_id": str(run.id),
+                "prompt_label": run.prompt_label,
+                "prompt_hash": run.prompt_hash,
+                "cases_run": run.cases_run,
+                "complete": run.offset == 0 and run.cases_run == run.cases_total,
+                "pass_rate": run.pass_rate,
+                "accuracy": classification.get("accuracy"),
+                "avg_latency_ms": latency,
+                "answers_per_minute": round(60_000 / latency, 1) if latency else None,
+                "tokens_per_case": _per_case(int(run.tokens or 0), run.cases_run, 1),
+                "cost_per_case_usd": _per_case(float(run.cost_usd or 0.0), run.cases_run, 6),
+                "scores": {kind: score.get("mean") for kind, score in (run.scores or {}).items()},
+                "created_at": run.created_at.isoformat() if run.created_at else None,
+            }
+        )
+    def _order(row: dict[str, Any]) -> tuple[float, int, float]:
+        pass_rate = float(row["pass_rate"]) if row["pass_rate"] is not None else -1.0
+        cost = float(row["cost_per_case_usd"]) if row["cost_per_case_usd"] is not None else 0.0
+        return (-pass_rate, int(row["avg_latency_ms"]), cost)
+
+    rows.sort(key=_order)
+    for rank, row in enumerate(rows, start=1):
+        row["rank"] = rank
+    return rows
+
+
+async def compare_models(
+    session: Any, tenant_id: uuid.UUID, dataset_id: uuid.UUID, version: int
+) -> list[dict[str, Any]]:
+    """The models that ran one dataset version, ranked from their newest stored runs."""
+    statement = (
+        select(EvalRun)
+        .where(EvalRun.dataset_id == dataset_id, EvalRun.tenant_id == tenant_id, EvalRun.version == version)
+        .order_by(EvalRun.created_at.desc())
+        .limit(MAX_RUNS_LISTED * 4)
+    )
+    return rank_models(list((await session.execute(statement)).scalars().all()))

@@ -348,6 +348,12 @@ class FleetLimits(BaseModel):
     max_replicas_global_ceiling: int = 20
 
 
+class AgentEvalGateIn(BaseModel):
+    """An agent's evaluation gate for promotion, or null to remove it."""
+
+    gate: dict[str, Any] | None = None
+
+
 class AgentOutputSchemaIn(BaseModel):
     """An agent's own output schema: a JSON Schema for the object it returns, or null to remove it."""
 
@@ -439,7 +445,9 @@ class EvalDatasetVersionCreate(BaseModel):
 class EvalDatasetRunIn(BaseModel):
     # The latest version when not given.
     version: int | None = Field(None, ge=1)
-    system: str = Field(..., min_length=1, max_length=20_000)
+    # The prompt under test: its text, or an agent whose prompt text is used (and matched by the promotion gate).
+    system: str | None = Field(None, min_length=1, max_length=20_000)
+    agent_id: UUID | None = None
     model: str = Field(..., min_length=1, max_length=128)
     max_tokens: int | None = Field(None, ge=1, le=2048)
     offset: int = Field(0, ge=0)

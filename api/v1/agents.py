@@ -35,6 +35,7 @@ from auth.run_grants import (
 )
 from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
+from core.evals import gates as eval_gates
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
@@ -70,6 +71,7 @@ from core.prompts import output_schema as prompt_output_schema
 from core.schemas.api import (
     AgentCloneRequest,
     AgentCreate,
+    AgentEvalGateIn,
     AgentFeedbackSubmit,
     AgentOutputSchemaIn,
     AgentUpdate,
@@ -4222,6 +4224,10 @@ async def resume_agent(
                 )
             except prompt_activation.ActivationError as exc:
                 raise _activation_refused(exc) from None
+            try:
+                await eval_gates.check_promotion(session, tid, agent)
+            except eval_gates.GateError as exc:
+                raise _gate_refused(exc) from None
             async with get_tenant_session(tid, agent.company_id) as connector_session:
                 await _assert_connectors_ready_for_activation(
                     connector_session,
@@ -4299,6 +4305,94 @@ async def set_agent_output_schema(
         "output_schema": schema,
         "enforced": prompt_output_schema.enabled(),
     }
+
+
+def _gate_refused(exc: eval_gates.GateError) -> HTTPException:
+    detail = {"error": eval_gates.TRIGGER, "code": exc.code, "message": exc.message, **exc.detail}
+    return HTTPException(409, detail=detail)
+
+
+# ── PUT /agents/{id}/eval-gate ────────────────────────────────────────────────
+@router.put("/agents/{agent_id}/eval-gate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.write",
+    rate_limit="agent-write",
+    idempotency="idempotent-full-replace",
+    audit_event="agents.eval_gate.set",
+)
+async def set_agent_eval_gate(
+    agent_id: UUID,
+    body: AgentEvalGateIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """Give an agent its evaluation gate, or remove it.
+
+    The gate names an evaluation dataset, optionally a version, the minimum
+    pass rate the agent's prompt must reach there and the regression it may
+    show against the prompt it replaces. It is applied at promotion and
+    resume to active while ``AGENTICORG_EVAL_PROMOTION_GATE_ENABLED`` is on.
+    """
+    tid = _uuid.UUID(tenant_id)
+    gate = None
+    if body.gate is not None:
+        try:
+            gate = eval_gates.parse_gate(body.gate)
+        except eval_gates.datasets.DatasetError as exc:
+            raise HTTPException(exc.status, exc.message) from None
+    async with get_tenant_session(tid) as session:
+        result = await session.execute(
+            select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid).with_for_update()
+        )
+        agent = result.scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        if gate is not None:
+            try:
+                await eval_gates.datasets.get_version(session, tid, _uuid.UUID(gate["dataset_id"]), gate["version"])
+            except eval_gates.datasets.DatasetError as exc:
+                raise HTTPException(exc.status, exc.message) from None
+        config = dict(agent.config or {})
+        if gate is None:
+            config.pop(eval_gates.GATE_KEY, None)
+        else:
+            config[eval_gates.GATE_KEY] = gate
+        agent.config = config
+        verdict = await eval_gates.evaluate(session, tid, agent)
+    return {"id": str(agent_id), "gate": gate, "verdict": verdict.to_dict()}
+
+
+# ── GET /agents/{id}/eval-gate ────────────────────────────────────────────────
+@router.get("/agents/{agent_id}/eval-gate")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.eval_gate.read",
+)
+async def get_agent_eval_gate(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+):
+    """The agent's evaluation gate and whether its current prompt passes it."""
+    tid = _uuid.UUID(tenant_id)
+    async with get_tenant_session(tid) as session:
+        agent = (
+            await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tid))
+        ).scalar_one_or_none()
+        if not agent:
+            raise HTTPException(404, "Agent not found")
+        require_agent_visible(agent, _effective_caller(caller, user_domains))
+        verdict = await eval_gates.evaluate(session, tid, agent)
+    return {"id": str(agent_id), "gate": eval_gates.declared(agent), "verdict": verdict.to_dict()}
 
 
 # The fields of an agent that shape what the model is told.
@@ -4405,6 +4499,11 @@ async def promote_agent(
                 )
             except prompt_activation.ActivationError as exc:
                 raise _activation_refused(exc) from None
+            # Evaluation gate: the prompt going into production has passed its dataset.
+            try:
+                await eval_gates.check_promotion(session, tid, agent)
+            except eval_gates.GateError as exc:
+                raise _gate_refused(exc) from None
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
