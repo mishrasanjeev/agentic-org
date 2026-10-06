@@ -324,6 +324,9 @@ def test_cloud_run_worker_entrypoint_exits_before_its_health_server(clean_vault_
         raise AssertionError("the health server must not start without a vault key")
 
     monkeypatch.setattr(run_worker.threading, "Thread", _no_threads)
+    # This suite already imported instruments; fresh-process boot is covered
+    # separately by test_worker_metrics_startup.py.
+    monkeypatch.setattr(run_worker, "_enable_multiprocess_metrics", lambda: None)
     _runtime(clean_vault_env, None)
     clean_vault_env.setenv("AGENTICORG_VAULT_KEYRING", "example-material-with-no-id")
     assert run_worker.main() == 1

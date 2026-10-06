@@ -8,7 +8,7 @@ failures. A protocol test is not a speech, messaging or payment-provider test.
 
 | Item | Verdict | Evidence and residual boundary |
 | --- | --- | --- |
-| AgenticOrg incoming MCP discovery/save/runtime gap | Implemented and verified in local Docker; deployment must be confirmed separately | Official MCP SDK over real HTTP, authenticated API, PostgreSQL/Redis, browser replay and signed-grant checks |
+| AgenticOrg incoming MCP discovery/save/runtime gap | Implemented, locally verified and deployed; external provider behavior remains unverified | Official MCP SDK over real HTTP, authenticated API, PostgreSQL/Redis, browser replay and signed-grant checks; scoped production evidence below |
 | Issue #1504 | Reported deployment remains unverified | The reporter used a separate hosted deployment. AgenticOrg.ai is the only authorized release target. Local tests replay the reported speech-tool names and rejection class, not that tenant or real speech provider |
 | Issue #1507 | Partially addressed; live provider authorization remains unverified | Native registration identity and Gmail profile-health fix are in the same PR. Incoming MCP has a dedicated path. WhatsApp, Twilio, Gmail and Plural still require customer-owned credentials and approved provider-side scopes |
 
@@ -97,7 +97,7 @@ The existing UUID-fallback regression was replayed after correcting that path.
 | Chromium Docker replay | Passed with both reported tool names selected, saved and reloaded; reviewed read probe passed; write dispatch remains blocked |
 | UI unit suite | 399 passed |
 | TypeScript, ESLint, UI build and SEO build checks | Passed; existing lint/build warnings remain |
-| Production Dockerfile build | Passed dependency installation and package consistency checks; no production deployment performed |
+| Production Dockerfile build | Passed dependency installation and package consistency checks before deployment; scoped rollout evidence is recorded below |
 | Full backend preflight | Passed in a frozen Linux Docker snapshot: 11,382 passed, 18 skipped, 5 xfailed; 80.43% coverage; lint, types, security and enterprise gates passed |
 
 Backend preflight and UI gates were run separately because the Linux backend
@@ -129,6 +129,53 @@ Transport checks reject compressed responses that ignore `Accept-Encoding:
 identity`, as well as oversized identity responses, before exposing the client to
 unbounded decompression. This limitation is documented for connector operators.
 
+## Production Verification And Worker Follow-Up
+
+PR #1538 merged as `e5fcc3a562b39598700e3e51f50414a3bfc85b28`.
+CI/CD, Local Stack, CodeQL, RAG, container, secret and vendor checks passed.
+The migration-first rollout completed; API health reported this commit with
+healthy DB/Redis. Public readiness/liveness/billing/knowledge checks passed.
+
+Using the approved QA session, the remote-MCP form loaded, a synthetic private-IP
+endpoint was rejected with `ip_literal`, and no connection was saved. Native
+Gmail registration opened the intended prefilled, locked registry ID and OAuth
+credential fields. The updated connectors guide returned 200 on the public,
+application and documentation hosts. These checks did not call a real provider.
+
+Post-deploy worker logs exposed an independent startup regression: vault imports
+created DB metrics before multiprocess initialization. The early health listener
+masked that failure. Production environment configuration restored task processing;
+the durable follow-up initializes metrics first and starts health only on Celery
+readiness. Fresh-process tests reproduced the original failure. The worker,
+vault and metrics focused suite passed (123 tests) after the fix. No vault or
+metrics guard was relaxed. Beat's single-process registry is not affected by
+this import-order defect.
+
+An attempted rollback also showed that an older revision's image had already
+been deleted. Restoring the current beat traffic succeeded. The smoke runbook
+now requires image-digest availability checks before relying on rollback.
+Worker hotfix deployment evidence must be recorded separately; initial helper
+success was not sufficient release evidence.
+
+The production-image worker entrypoint was also replayed locally with the fixed
+script, production settings, synthetic keys and an isolated Redis queue. Celery
+connected, then health returned 200, and a harmless built-in task returned its
+synthetic input. No external connector or production queue was used.
+
+The immutable hotfix image was replayed without a source mount: Celery became
+ready, health returned 200, and the same harmless task completed without a late
+metrics event or traceback. Four startup regression cases also passed under the
+production Python 3.14 environment. The initial PR's Local Stack coverage gate
+caught that subprocess execution did not cover the callback in the parent
+process. An additional isolated Celery-signal test now measures that wiring;
+the original fresh-process regressions remain. Changed-line coverage is 100%,
+above the unchanged 75% requirement. No coverage threshold was lowered.
+
+The final backend-only Docker preflight passed with 11,386 tests passed,
+18 skipped and 5 expected failures, at 80.43% overall coverage. Whole-tree lint,
+types, security, public-claims and enterprise checks also passed. UI code is
+unchanged by this worker follow-up; this is not a new UI test result.
+
 ## Explicitly not verified or enabled
 
 - Real Gnani STT/TTS, Telegram delivery, WhatsApp, Twilio, Gmail sending or Plural
@@ -138,5 +185,5 @@ unbounded decompression. This limitation is documented for connector operators.
   this incoming connector path; the separate AgenticOrg MCP server is unchanged.
 - Universal server compatibility, unlimited schemas or sustained provider-load
   performance: not claimed. Supported limits and refusal reasons are documented.
-- Production readiness or successful deployment: local tests alone do not prove
-  either. CI, deployment identity and safe post-deploy checks are separate evidence.
+- Blanket production readiness: local tests and the scoped deployed checks do
+  not prove every external provider or customer tool configuration.

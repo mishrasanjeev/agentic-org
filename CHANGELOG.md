@@ -43,6 +43,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Added SDK protocol, Docker API/database and browser regressions, including the
   reported speech-tool names, tenant isolation and refusal paths.
 
+### Fixed - Worker startup and readiness
+- Initialize multiprocess metrics before vault imports create DB instruments.
+- Bind the worker startup listener only after Celery reports ready, so import,
+  vault, metrics and initial broker failures cannot present a healthy worker.
+- Add fresh-process regressions for both development and production settings;
+  missing vault keys still refuse startup.
+
 ### Added - Prompt governance: structured-output enforcement
 - Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's
   final answer is validated against the output schema it declares
