@@ -383,6 +383,16 @@ class TestScheduledEvaluation:
         }
         assert "fine" not in str(detail) and "Decide." not in str(detail)
 
+        async def _judge_error(tenant_id, **kwargs):
+            report = await _run_version(tenant_id, **kwargs)
+            report.update(errors=0, pass_rate=1.0)
+            report["scores"]["relevance"]["errors"] = 1
+            return report
+
+        monkeypatch.setattr(runs, "run_version", _judge_error)
+        reasons, _ = asyncio.run(synthetic._probe_eval_dataset(TENANT, config))
+        assert reasons == ["eval_judges_not_completed"]
+
     def test_the_dataset_probe_is_an_error_while_evaluation_is_off(self):
         assert settings.evals_v2_enabled is False
         with pytest.raises(RuntimeError, match="off"):
@@ -411,9 +421,15 @@ class TestRun:
         monkeypatch.setattr(synthetic, "PROBE_TIMEOUT_SECONDS", 0.001)
         monkeypatch.setattr(synthetic, "EVAL_CALL_BUDGET_SECONDS", 0.1)
         monkeypatch.setattr(synthetic, "_probe_eval_dataset", _dataset)
-        check = _check("eval_dataset", config={
-            "dataset_id": str(uuid.uuid4()), "system": "Synthetic prompt", "model": "m", "limit": 1,
-        })
+        check = _check(
+            "eval_dataset",
+            config={
+                "dataset_id": str(uuid.uuid4()),
+                "system": "Synthetic prompt",
+                "model": "m",
+                "limit": 1,
+            },
+        )
         check.config["max_latency_ms"] = 1
         result = asyncio.run(synthetic.probe(check))
         assert result.status == "failed" and result.reasons == ["too_slow"]

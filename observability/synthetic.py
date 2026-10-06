@@ -442,6 +442,8 @@ async def _probe_eval_dataset(tenant_id: uuid.UUID, config: dict[str, Any]) -> t
     reasons: list[str] = []
     if report["errors"]:
         reasons.append("eval_cases_not_answered")
+    if any(score.get("errors", 0) for score in report.get("scores", {}).values()):
+        reasons.append("eval_judges_not_completed")
     if report["pass_rate"] is None or report["pass_rate"] * 100 < int(config["min_pass_rate"]):
         reasons.append("eval_pass_rate_below_minimum")
     detail = {

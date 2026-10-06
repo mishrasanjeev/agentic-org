@@ -10,8 +10,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   rate and a regression allowance. Behind
   `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` (off by default), promotion and
   resume to active refuse, after the maker-checker check, a prompt whose
-  newest stored run of that version is missing, below the minimum, or
-  regressed against the prompt it replaces; `GET /agents/{id}/eval-gate`
+  newest model-bound stored run is missing, incomplete, contains answer or
+  judge errors, is below the minimum, or regresses against an explicitly
+  selected `baseline_run_id`. Runtime fallback models require independent
+  passing evidence. `GET /agents/{id}/eval-gate`
   reports the verdict either way. `POST /eval-datasets/{id}/run` takes
   `agent_id` to run an agent's prompt text so the gate can match it.
   `GET /eval-datasets/{id}/compare` ranks the models that ran a version from

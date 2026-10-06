@@ -49,7 +49,7 @@ class _Session:
 
 
 def _version(number: int = 2) -> SimpleNamespace:
-    return SimpleNamespace(version=number, content_hash="h" * 64, dataset_id=DATASET)
+    return SimpleNamespace(version=number, content_hash="h" * 64, dataset_id=DATASET, case_count=10)
 
 
 def _agent(gate: dict | None = None, text: str = PROMPT, **over) -> SimpleNamespace:
@@ -57,6 +57,7 @@ def _agent(gate: dict | None = None, text: str = PROMPT, **over) -> SimpleNamesp
         "id": uuid.uuid4(),
         "name": "Claims decider",
         "status": "shadow",
+        "llm_model": "gpt-4o",
         "system_prompt_text": text,
         "config": {"eval_gate": gate} if gate else {},
     }
@@ -76,6 +77,8 @@ def _run(pass_rate, *, prompt=PROMPT, model="gpt-4o", at=T0, tokens=1200, cost=0
         "cases_run": cases,
         "cases_total": cases,
         "offset": 0,
+        "content_hash": "h" * 64,
+        "errors": 0,
         "avg_latency_ms": latency,
         "tokens": tokens,
         "cost_usd": cost,
@@ -88,6 +91,12 @@ def _run(pass_rate, *, prompt=PROMPT, model="gpt-4o", at=T0, tokens=1200, cost=0
 
 
 GATE = {"dataset_id": str(DATASET), "version": None, "min_pass_rate": 80, "max_regression": 5}
+
+
+@pytest.fixture(autouse=True)
+def pinned_router(monkeypatch):
+    monkeypatch.setattr(settings, "llm_primary", "gpt-4o")
+    monkeypatch.setattr(settings, "llm_fallback", "gpt-4o")
 
 
 @pytest.fixture
@@ -115,6 +124,7 @@ class TestGateShape:
             ({"dataset_id": str(DATASET), "min_pass_rate": 101}, "between 0 and 100"),
             ({"dataset_id": str(DATASET), "max_regression": True}, "between 0 and 100"),
             ({"dataset_id": str(DATASET), "threshold": 1}, "unknown gate keys"),
+            ({"dataset_id": str(DATASET), "baseline_run_id": "bad"}, "baseline_run_id must be"),
         ],
     )
     def test_refused_shapes(self, raw, message):
@@ -151,6 +161,7 @@ class TestEvaluate:
         # The newest run of this version with this prompt hash.
         statement = session.statements[0]
         assert "eval_runs.prompt_hash = " in statement and "eval_runs.version = " in statement and "DESC" in statement
+        assert "eval_runs.model = " in statement and "eval_runs.tenant_id = " in statement
 
     def test_the_newest_run_of_the_prompt_is_held_to_the_minimum(self, enforced, monkeypatch):
         monkeypatch.setattr(datasets, "get_version", _fake_version())
@@ -162,15 +173,60 @@ class TestEvaluate:
     def test_a_regression_against_the_prompt_it_replaces_is_refused_within_the_allowance(self, enforced, monkeypatch):
         monkeypatch.setattr(datasets, "get_version", _fake_version())
         previous = _run(0.95, prompt="The old prompt.")
-        verdict, session = self._verdict(_agent(GATE), _run(0.85), previous)
+        gate = {**GATE, "baseline_run_id": str(previous.id)}
+        verdict, session = self._verdict(_agent(gate), _run(0.85), previous)
         assert (verdict.ok, verdict.code) == (False, "regressed")
         assert verdict.detail["previous_pass_rate"] == 0.95 and verdict.detail["previous_run_id"] == str(previous.id)
-        assert "eval_runs.prompt_hash != " in session.statements[1]
+        assert "eval_runs.id = " in session.statements[1] and "eval_runs.tenant_id = " in session.statements[1]
         # Within five points, or with no earlier prompt, the gate is passed.
-        verdict, _ = self._verdict(_agent(GATE), _run(0.9), previous)
+        verdict, _ = self._verdict(_agent(gate), _run(0.9), previous)
         assert verdict.ok and verdict.code == "passed"
-        verdict, _ = self._verdict(_agent(GATE), _run(0.9), None)
+        verdict, session = self._verdict(_agent(GATE), _run(0.9))
         assert verdict.ok
+        assert len(session.statements) == 1  # No unrelated prompt is silently selected as a baseline.
+
+    @pytest.mark.parametrize(
+        ("over", "code"),
+        [
+            ({"cases_run": 1}, "incomplete_run"),
+            ({"offset": 1}, "incomplete_run"),
+            ({"cases_total": 20}, "dataset_mismatch"),
+            ({"content_hash": "other"}, "dataset_mismatch"),
+            ({"errors": 9}, "evaluation_errors"),
+            ({"scores": {"relevance": {"errors": 1}}}, "evaluation_errors"),
+        ],
+    )
+    def test_partial_or_errored_runs_never_pass(self, enforced, monkeypatch, over, code):
+        monkeypatch.setattr(datasets, "get_version", _fake_version())
+        verdict, _ = self._verdict(_agent(GATE), _run(1.0, **over))
+        assert not verdict.ok and verdict.code == code
+
+    def test_fallbacks_need_independent_complete_evidence(self, enforced, monkeypatch):
+        monkeypatch.setattr(datasets, "get_version", _fake_version())
+        monkeypatch.setattr(settings, "llm_fallback", "gpt-4o-mini")
+        verdict, _ = self._verdict(_agent(GATE), _run(1), None)
+        assert not verdict.ok and verdict.code == "fallback_not_evaluated"
+        verdict, _ = self._verdict(_agent(GATE), _run(1), _run(1, model="gpt-4o-mini"))
+        assert verdict.ok
+        verdict, _ = self._verdict(_agent(GATE), _run(1), _run(1, model="gpt-4o-mini", errors=1))
+        assert not verdict.ok
+
+    def test_missing_model_and_malformed_gate_fail_closed(self, enforced, monkeypatch):
+        monkeypatch.setattr(datasets, "get_version", _fake_version())
+        verdict, _ = self._verdict(_agent(GATE, llm_model=None))
+        assert not verdict.ok and verdict.code == "no_model"
+        for raw in ("invalid", {}, False):
+            verdict, _ = self._verdict(_agent(config={"eval_gate": raw}))
+            assert not verdict.ok and verdict.code == "gate_unusable"
+
+    @pytest.mark.parametrize(
+        "baseline", [None, _run(1, dataset_id=uuid.uuid4()), _run(1, errors=1), _run(1, model="other")]
+    )
+    def test_invalid_explicit_baseline_cannot_pass(self, enforced, monkeypatch, baseline):
+        monkeypatch.setattr(datasets, "get_version", _fake_version())
+        gate = {**GATE, "baseline_run_id": str(uuid.uuid4())}
+        verdict, _ = self._verdict(_agent(gate), _run(1), baseline)
+        assert not verdict.ok and verdict.code == "baseline_unusable"
 
     def test_a_gate_that_cannot_be_read_or_an_agent_without_text_is_not_passed(self, enforced, monkeypatch):
         async def _missing(_session, _tenant, _dataset, _version):

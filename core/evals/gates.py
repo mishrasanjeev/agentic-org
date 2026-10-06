@@ -4,17 +4,16 @@
 An agent may declare a gate in its configuration (``config["eval_gate"]``): an
 evaluation dataset, optionally a version (the latest when not given), the
 minimum pass rate its prompt must reach there, and how far the pass rate may
-fall below the prompt it replaces. When the agent is promoted or resumed to
-``active``, the newest stored run of that dataset version made with the
-agent's current prompt text (matched by the prompt's hash, so a run made
-through ``POST /eval-datasets/{id}/run`` with ``agent_id`` always matches) is
-read:
+fall below an explicitly selected baseline run. At promotion or resume to
+``active``, the newest stored run of that dataset version, prompt hash and
+configured model is read. Global primary/fallback and agent fallback models
+also require independent full, error-free passing runs:
 
 * no such run: blocked, the prompt has not been evaluated;
 * its pass rate below ``min_pass_rate``: blocked;
-* its pass rate more than ``max_regression`` points below the newest run of
-  the same dataset version made with a different prompt (the prompt it
-  replaces): blocked as a regression.
+* an incomplete run or an answer/judge error: blocked;
+* its pass rate more than ``max_regression`` points below the agent's explicit
+  ``baseline_run_id``: blocked as a regression. No implicit baseline is chosen.
 
 Behind ``AGENTICORG_EVAL_PROMOTION_GATE_ENABLED`` (off by default) and the
 evaluation switch. Off, a declared gate is kept and reported, and promotion
@@ -65,7 +64,7 @@ def parse_gate(raw: Any) -> dict[str, Any]:
     """A gate as it is stored; ``DatasetError`` names what is wrong."""
     if not isinstance(raw, dict):
         raise datasets.DatasetError(422, "invalid", "the gate must be an object")
-    unknown = sorted(set(raw) - {"dataset_id", "version", "min_pass_rate", "max_regression"})
+    unknown = sorted(set(raw) - {"dataset_id", "version", "min_pass_rate", "max_regression", "baseline_run_id"})
     if unknown:
         raise datasets.DatasetError(422, "invalid", f"unknown gate keys: {', '.join(unknown)}")
     try:
@@ -81,12 +80,18 @@ def parse_gate(raw: Any) -> dict[str, Any]:
         "min_pass_rate": _percent(raw.get("min_pass_rate"), "min_pass_rate", 100),
         "max_regression": _percent(raw.get("max_regression"), "max_regression", 0),
     }
+    if raw.get("baseline_run_id") is not None:
+        try:
+            gate["baseline_run_id"] = str(uuid.UUID(str(raw["baseline_run_id"])))
+        except ValueError:
+            raise datasets.DatasetError(422, "invalid", "baseline_run_id must be an evaluation run id") from None
     return gate
 
 
 def declared(agent: Any) -> dict[str, Any] | None:
     gate = (getattr(agent, "config", None) or {}).get(GATE_KEY)
-    return dict(gate) if isinstance(gate, dict) and gate else None
+    # Malformed declarations must be rejected, not mistaken for no gate.
+    return dict(gate) if isinstance(gate, dict) else gate
 
 
 @dataclass
@@ -110,16 +115,28 @@ class Verdict:
 
 
 async def _newest_run(
-    session: Any, tenant_id: uuid.UUID, dataset_id: uuid.UUID, version: int, *, prompt_hash: str, same: bool
+    session: Any, tenant_id: uuid.UUID, dataset_id: uuid.UUID, version: int, *, prompt_hash: str, model: str
 ) -> EvalRun | None:
     statement = (
         select(EvalRun)
         .where(EvalRun.dataset_id == dataset_id, EvalRun.tenant_id == tenant_id, EvalRun.version == version)
-        .where(EvalRun.prompt_hash == prompt_hash if same else EvalRun.prompt_hash != prompt_hash)
+        .where(EvalRun.prompt_hash == prompt_hash, EvalRun.model == model)
         .order_by(EvalRun.created_at.desc())
         .limit(1)
     )
     return (await session.execute(statement)).scalar_one_or_none()
+
+
+def _run_problem(run: EvalRun, version: Any) -> str | None:
+    if run.content_hash != version.content_hash or run.cases_total != version.case_count:
+        return "dataset_mismatch"
+    if run.offset != 0 or run.cases_run != run.cases_total or run.cases_run < 1:
+        return "incomplete_run"
+    if run.errors or any(score.get("errors", 0) for score in (run.scores or {}).values()):
+        return "evaluation_errors"
+    if run.pass_rate is None:
+        return "not_scored"
+    return None
 
 
 async def evaluate(session: Any, tenant_id: uuid.UUID, agent: Any) -> Verdict:
@@ -144,6 +161,25 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, agent: Any) -> Verdict:
             message="The agent has no prompt text to evaluate",
         )
     prompt_hash = runs.prompt_hash(text)
+    model = str(getattr(agent, "llm_model", None) or "").strip()
+    if not model:
+        return Verdict(True, enabled(), False, "no_model", "Pin the agent's model before evaluating promotion")
+    # Runtime can use an agent fallback or the router's global primary/fallback.
+    # Require independent evidence for each; a fallback answer is not evidence
+    # for the requested model (run_one already rejects that substitution).
+    models = list(
+        dict.fromkeys(
+            filter(
+                None,
+                (
+                    model,
+                    getattr(agent, "llm_fallback", None),
+                    settings.llm_primary,
+                    settings.llm_fallback,
+                ),
+            )
+        )
+    )
     detail: dict[str, Any] = {
         "dataset_id": str(dataset_id),
         "version": version.version,
@@ -151,8 +187,9 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, agent: Any) -> Verdict:
         "prompt_hash": prompt_hash,
         "min_pass_rate": gate["min_pass_rate"],
         "max_regression": gate["max_regression"],
+        "required_models": models,
     }
-    current = await _newest_run(session, tenant_id, dataset_id, version.version, prompt_hash=prompt_hash, same=True)
+    current = await _newest_run(session, tenant_id, dataset_id, version.version, prompt_hash=prompt_hash, model=model)
     if current is None:
         return Verdict(
             declared=True,
@@ -163,15 +200,17 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, agent: Any) -> Verdict:
             detail=detail,
         )
     detail.update(run_id=str(current.id), pass_rate=current.pass_rate, cases_run=current.cases_run)
-    if current.pass_rate is None:
+    problem = _run_problem(current, version)
+    if problem:
         return Verdict(
             declared=True,
             enforced=enabled(),
             ok=False,
-            code="not_scored",
-            message="The newest run of this prompt scored no case",
+            code=problem,
+            message="The newest run must cover the entire dataset version without answer or judge errors",
             detail=detail,
         )
+    assert current.pass_rate is not None
     if current.pass_rate * 100 < gate["min_pass_rate"]:
         return Verdict(
             declared=True,
@@ -181,8 +220,49 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, agent: Any) -> Verdict:
             message=f"Pass rate {current.pass_rate:.0%} is below the gate's {gate['min_pass_rate']}%",
             detail=detail,
         )
-    previous = await _newest_run(session, tenant_id, dataset_id, version.version, prompt_hash=prompt_hash, same=False)
-    if previous is not None and previous.pass_rate is not None:
+    for fallback in models[1:]:
+        evidence = await _newest_run(
+            session, tenant_id, dataset_id, version.version, prompt_hash=prompt_hash, model=fallback
+        )
+        if (
+            evidence is None
+            or _run_problem(evidence, version)
+            or evidence.pass_rate is None
+            or evidence.pass_rate * 100 < gate["min_pass_rate"]
+        ):
+            detail["unevaluated_model"] = fallback
+            return Verdict(
+                True,
+                enabled(),
+                False,
+                "fallback_not_evaluated",
+                "A runtime fallback lacks passing full-dataset evidence",
+                detail,
+            )
+    previous = None
+    if gate.get("baseline_run_id"):
+        try:
+            previous = await runs.get_run(session, tenant_id, uuid.UUID(gate["baseline_run_id"]))
+        except datasets.DatasetError:
+            return Verdict(
+                True, enabled(), False, "baseline_unusable", "The selected baseline is not accessible", detail
+            )
+        if (
+            previous.dataset_id != dataset_id
+            or previous.version != version.version
+            or previous.model != model
+            or _run_problem(previous, version)
+        ):
+            return Verdict(
+                True,
+                enabled(),
+                False,
+                "baseline_unusable",
+                "The selected baseline must match the dataset and model and be complete and error-free",
+                detail,
+            )
+    if previous is not None:
+        assert previous.pass_rate is not None
         detail.update(previous_run_id=str(previous.id), previous_pass_rate=previous.pass_rate)
         if (previous.pass_rate - current.pass_rate) * 100 > gate["max_regression"]:
             return Verdict(

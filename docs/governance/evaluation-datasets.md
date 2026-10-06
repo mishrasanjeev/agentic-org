@@ -162,18 +162,28 @@ prompt label and marks a partial slice.
 ## Promotion gate
 
 An agent may declare a gate (`PUT /agents/{id}/eval-gate`): an evaluation dataset, optionally a
-version (the latest when not given), `min_pass_rate` (100 by default) and `max_regression` (0).
+version (the latest when not given), `min_pass_rate` (100 by default), `max_regression` (0),
+and an optional `baseline_run_id` selected by the operator for this agent.
 At promotion or resume to `active`, after the maker-checker check, the newest stored run of that
-dataset version made with the agent's current prompt text is read, matched by the prompt's hash
-(a run made with `agent_id` always matches). The promotion is refused, with the code and the
+dataset version made with the agent's current prompt text and configured model is read.
+The hash and model must both match; using `agent_id` alone does not qualify a run.
+The agent fallback and global primary/fallback each need their own passing full-dataset run
+of that prompt. A model change invalidates the old model's evidence.
+The promotion is refused, with the code and the
 numbers, when:
 
 | Code | Meaning |
 |---|---|
 | `not_evaluated` | no stored run of this version was made with the agent's current prompt text |
 | `not_scored` | the newest such run scored no case (every call failed) |
+| `incomplete_run` | offset is not zero or not every case was evaluated |
+| `dataset_mismatch` | the stored content hash or case count differs from the selected version |
+| `evaluation_errors` | an answer or configured judge failed |
+| `fallback_not_evaluated` | a runtime fallback lacks full, error-free passing evidence |
+| `no_model` | the agent has no pinned model |
+| `baseline_unusable` | the explicit baseline is inaccessible, incomplete, errored, or for another dataset/version/model |
 | `below_minimum` | its pass rate is below `min_pass_rate` |
-| `regressed` | its pass rate is more than `max_regression` points below the newest run of the same version made with a different prompt (the prompt it replaces) |
+| `regressed` | its pass rate is more than `max_regression` points below the explicitly selected baseline |
 | `gate_unusable` | the gate names a dataset or version that cannot be read |
 | `no_prompt_text` | the agent has no prompt text to evaluate |
 
@@ -183,6 +193,13 @@ not held to it. An agent with no gate is not affected either way. The gate reads
 only: an agent whose behaviour comes from a prompt reference, variables or amendments is not
 measured by it, and a run made with a stale copy of the prompt stops matching as soon as the text
 changes.
+
+Without `baseline_run_id`, only the minimum threshold is enforced; no regression comparison
+is claimed. The operator must select a representative prior run for this agent. Runs from
+other prompts, agents or scheduled checks are never silently chosen as its predecessor.
+Datasets larger than the current 25-case run limit cannot pass this gate by combining partial
+slices. Use a complete bounded gate dataset until full-dataset aggregation is available.
+This is a prompt/model evidence gate, not proof of full tool execution or dynamic routing.
 
 ## Scheduled runs
 
@@ -194,9 +211,10 @@ same way and feeds the Guardrails page. Both need `AGENTICORG_SYNTHETIC_CHECKS_E
 
 ## What is not here yet
 
-- **A run takes a prompt and a model.** Running a dataset against an agent or a workflow is not
-  available, so there are no retrieval metrics: nothing in a run knows what was retrieved.
-- **No comparison across runs or versions** beyond the list, and no dashboard.
+- **A run takes a prompt and a model.** `agent_id` selects prompt text, not a complete agent
+  execution. Tool use and workflow execution are not measured; there are no retrieval metrics.
+- **Comparison is within one dataset version.** Cross-version comparison and workload
+  throughput/load testing are not implemented.
 - **The gate reads the prompt text and one dataset.** Prompt references, variables and
   amendments are outside it; there is no gate on a workflow or on a scheduled check's result.
 - **No console editor for the gate**; it is set through the API.
