@@ -112,7 +112,7 @@ A source definition is not evidence that a specific tenant has connected the pro
 ### Configuration-dependent or provider-gated
 
 - LLM calls require a configured supported model provider or a local model runtime.
-- Each connector requires provider credentials, tenant authorization, and the relevant scopes.
+- Each connector requires provider credentials, tenant authorization, and the relevant scopes. Follow the [connector setup guide](docs/user-guide/connectors.md) for native registry names, credential fields, health checks, and the rollout-gated catalog prefill. A registered row is not proof of a live provider connection.
 - Composio is an optional integration gateway; its catalog is not the same as the native connector registry.
 - Document OCR ships with Tesseract, Poppler, and LibreOffice in the production image. See [Knowledge ingestion](docs/knowledge-ingestion.md).
 - The production voice path uses signed Twilio webhooks with provider-managed STT/TTS and encrypted transcript storage. See [Voice runtime](docs/voice-runtime.md).
@@ -276,6 +276,13 @@ See [mcp-server/README.md](mcp-server/README.md).
     npx agenticorg-mcp-server
 
 The MCP package exposes governed AgenticOrg agent and commerce discovery surfaces. It does not grant an MCP client unrestricted access to every connector action.
+
+For the reverse direction, **Connectors > Remote MCP** registers a tenant-owned
+HTTPS Streamable HTTP server with encrypted bearer credentials, discovers its
+tools, and shares the persisted catalog with agent selection and runtime dispatch.
+Reviewed read tools can execute subject to grants and action policy; write tools
+remain contained. Discovery is not proof of every upstream provider capability.
+See the [connection, review, probe and agent-run workflow](docs/user-guide/connectors.md).
 
 ## Pricing and limits
 

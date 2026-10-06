@@ -518,7 +518,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.list",
-    "source_line": 2002,
+    "source_line": 2029,
     "tenant_required": true
   },
   {
@@ -536,7 +536,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 1712,
+    "source_line": 1739,
     "tenant_required": true
   },
   {
@@ -554,7 +554,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.tools.sensitive.read",
-    "source_line": 1666,
+    "source_line": 1693,
     "tenant_required": true
   },
   {
@@ -572,7 +572,7 @@
     "public_exempt_reason": null,
     "rate_limit": "ai-generation",
     "scope": "agents.generate",
-    "source_line": 2453,
+    "source_line": 2480,
     "tenant_required": true
   },
   {
@@ -590,7 +590,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "agents.import",
-    "source_line": 2265,
+    "source_line": 2292,
     "tenant_required": true
   },
   {
@@ -608,7 +608,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.org_tree",
-    "source_line": 2120,
+    "source_line": 2147,
     "tenant_required": true
   },
   {
@@ -626,7 +626,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 5254,
+    "source_line": 5293,
     "tenant_required": true
   },
   {
@@ -644,7 +644,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.read",
-    "source_line": 2631,
+    "source_line": 2658,
     "tenant_required": true
   },
   {
@@ -662,7 +662,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2854,
+    "source_line": 2886,
     "tenant_required": true
   },
   {
@@ -680,7 +680,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 2661,
+    "source_line": 2688,
     "tenant_required": true
   },
   {
@@ -698,7 +698,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.amendments.read",
-    "source_line": 5212,
+    "source_line": 5251,
     "tenant_required": true
   },
   {
@@ -716,7 +716,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.sensitive.amendments.write",
-    "source_line": 5378,
+    "source_line": 5417,
     "tenant_required": true
   },
   {
@@ -734,7 +734,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.budget.read",
-    "source_line": 4898,
+    "source_line": 4937,
     "tenant_required": true
   },
   {
@@ -752,7 +752,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4687,
+    "source_line": 4726,
     "tenant_required": true
   },
   {
@@ -770,7 +770,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.delegate",
-    "source_line": 2186,
+    "source_line": 2213,
     "tenant_required": true
   },
   {
@@ -788,7 +788,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.explanation.read",
-    "source_line": 5060,
+    "source_line": 5099,
     "tenant_required": true
   },
   {
@@ -806,7 +806,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.feedback.list",
-    "source_line": 5021,
+    "source_line": 5060,
     "tenant_required": true
   },
   {
@@ -824,7 +824,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-feedback",
     "scope": "agents.feedback.write",
-    "source_line": 4970,
+    "source_line": 5009,
     "tenant_required": true
   },
   {
@@ -842,7 +842,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.feedback.analyze",
-    "source_line": 5177,
+    "source_line": 5216,
     "tenant_required": true
   },
   {
@@ -860,7 +860,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-write",
     "scope": "agents.write",
-    "source_line": 4219,
+    "source_line": 4258,
     "tenant_required": true
   },
   {
@@ -878,7 +878,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4069,
+    "source_line": 4108,
     "tenant_required": true
   },
   {
@@ -896,7 +896,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4286,
+    "source_line": 4325,
     "tenant_required": true
   },
   {
@@ -914,7 +914,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "agents.sensitive.prompt_history",
-    "source_line": 4842,
+    "source_line": 4881,
     "tenant_required": true
   },
   {
@@ -932,7 +932,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4120,
+    "source_line": 4159,
     "tenant_required": true
   },
   {
@@ -950,7 +950,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4499,
+    "source_line": 4538,
     "tenant_required": true
   },
   {
@@ -968,7 +968,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4445,
+    "source_line": 4484,
     "tenant_required": true
   },
   {
@@ -986,7 +986,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-control",
     "scope": "agents.lifecycle",
-    "source_line": 4564,
+    "source_line": 4603,
     "tenant_required": true
   },
   {
@@ -1004,7 +1004,7 @@
     "public_exempt_reason": null,
     "rate_limit": "agent-execution",
     "scope": "agents.execute",
-    "source_line": 3278,
+    "source_line": 3317,
     "tenant_required": true
   },
   {
@@ -3578,7 +3578,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 966,
+    "source_line": 982,
     "tenant_required": true
   },
   {
@@ -3596,7 +3596,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.create",
-    "source_line": 1057,
+    "source_line": 1073,
     "tenant_required": true
   },
   {
@@ -3614,7 +3614,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1248,
+    "source_line": 1268,
     "tenant_required": true
   },
   {
@@ -3632,7 +3632,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.cmo_vendor_sandbox.write",
-    "source_line": 1321,
+    "source_line": 1341,
     "tenant_required": true
   },
   {
@@ -3669,6 +3669,96 @@
     "rate_limit": "connector-bulk",
     "scope": "connectors.gstn.eway.bulk_generate",
     "source_line": 119,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.mcp.list",
+    "auth_required": true,
+    "function": "list_remote",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/connectors/mcp api/v1/remote_mcp.py:list_remote",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/remote_mcp.py",
+    "path": "/api/v1/connectors/mcp",
+    "public_exempt_reason": null,
+    "rate_limit": "default",
+    "scope": "connectors.read",
+    "source_line": 104,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.mcp.create",
+    "auth_required": true,
+    "function": "register",
+    "idempotency": "tenant-unique-connector-name",
+    "key": "POST /api/v1/connectors/mcp api/v1/remote_mcp.py:register",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/remote_mcp.py",
+    "path": "/api/v1/connectors/mcp",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-test",
+    "scope": "connectors.create",
+    "source_line": 139,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.mcp.permissions",
+    "auth_required": true,
+    "function": "permissions",
+    "idempotency": "replace-reviewed-read-tool-set",
+    "key": "PUT /api/v1/connectors/mcp/{conn_id}/permissions api/v1/remote_mcp.py:permissions",
+    "metadata_present": true,
+    "methods": [
+      "PUT"
+    ],
+    "module": "api/v1/remote_mcp.py",
+    "path": "/api/v1/connectors/mcp/{conn_id}/permissions",
+    "public_exempt_reason": null,
+    "rate_limit": "admin-mutating",
+    "scope": "connectors.personal.write",
+    "source_line": 252,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.mcp.probe",
+    "auth_required": true,
+    "function": "probe",
+    "idempotency": "explicit-read-tool-probe",
+    "key": "POST /api/v1/connectors/mcp/{conn_id}/probe api/v1/remote_mcp.py:probe",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/remote_mcp.py",
+    "path": "/api/v1/connectors/mcp/{conn_id}/probe",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-test",
+    "scope": "connectors.test",
+    "source_line": 286,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "connectors.mcp.refresh",
+    "auth_required": true,
+    "function": "refresh",
+    "idempotency": "replace-discovered-catalog",
+    "key": "POST /api/v1/connectors/mcp/{conn_id}/refresh api/v1/remote_mcp.py:refresh",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/remote_mcp.py",
+    "path": "/api/v1/connectors/mcp/{conn_id}/refresh",
+    "public_exempt_reason": null,
+    "rate_limit": "connector-test",
+    "scope": "connectors.test",
+    "source_line": 194,
     "tenant_required": true
   },
   {
@@ -3776,7 +3866,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.delete",
-    "source_line": 1851,
+    "source_line": 1874,
     "tenant_required": true
   },
   {
@@ -3794,7 +3884,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "connectors.read",
-    "source_line": 1516,
+    "source_line": 1536,
     "tenant_required": true
   },
   {
@@ -3812,7 +3902,7 @@
     "public_exempt_reason": null,
     "rate_limit": "admin-mutating",
     "scope": "connectors.update",
-    "source_line": 1572,
+    "source_line": 1592,
     "tenant_required": true
   },
   {
@@ -3830,7 +3920,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.health.read",
-    "source_line": 1886,
+    "source_line": 1909,
     "tenant_required": true
   },
   {
@@ -3848,7 +3938,7 @@
     "public_exempt_reason": null,
     "rate_limit": "connector-test",
     "scope": "connectors.test",
-    "source_line": 1945,
+    "source_line": 1968,
     "tenant_required": true
   },
   {
@@ -7737,7 +7827,7 @@
     "rate_limit": "standard",
     "scope": "connectors.tools.read",
     "source_line": 889,
-    "tenant_required": false
+    "tenant_required": true
   },
   {
     "audit_event": "voice.calls.list",

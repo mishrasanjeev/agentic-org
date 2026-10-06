@@ -12,15 +12,77 @@ Name the integration owner and system-of-record owner. Obtain an approved sandbo
 
 ## Register and bind
 
-1. Open **Connectors** and the **Register Connector** screen.
-2. Select the available provider or **Custom / Generic Connector**.
+1. Open **Connectors**, find the provider in the native catalog, and select **Register**. Use the general **Register Connector** button only for a reviewed custom integration.
+2. When native prefill is enabled, confirm the fixed provider name matches the registry entry. Otherwise enter the canonical registry name manually; a display label is not enough.
 3. Enter the connector name, reviewed base URL, category, authentication type and rate limit.
 4. Use the provider-specific protected credential fields or approved secret reference. Do not put secrets in prompts, screenshots or ordinary task inputs.
 5. Review extra JSON configuration against the provider's contract. Do not assume arbitrary configuration creates a tool implementation.
 6. Bind the connector to the correct company or documented tenant-wide scope.
 7. Run the supported health/test action and inspect the safe result.
 
+The native catalog's **Register** button can prefill the connector's exact registry name, category, endpoint and authentication type when the deployment enables the native-prefill rollout. Check the name before registering; a display label is not the registry ID. An unknown or outdated catalog link is refused rather than creating a generic connector. Without that rollout, the form remains the existing manual registration flow. For the four commonly requested providers, the reviewed credential keys are `access_token` and `phone_number_id` (WhatsApp), `account_sid` and `auth_token` (Twilio), `client_id`, `client_secret` and `refresh_token` (Gmail), and `client_id`, `client_secret` and `merchant_id` (Plural sandbox). A connector may also need provider-side permissions or additional settings. Do not paste real credentials into an issue or test report.
+
+Registration stores credentials in the encrypted connector vault; it does not prove that the upstream account is authorized. A green connection probe proves only the operation it exercised. For external MCP tools, use the dedicated **Remote MCP** path below instead of registering a generic REST connector. Listing tools in another deployment is not evidence that this deployment has the same catalog or permissions.
+
+Customers can bring credentials for their own provider accounts. WhatsApp needs a permitted business token and phone-number ID; Twilio needs an account SID and auth token; the guided Gmail form needs a customer OAuth client plus refresh token; Plural needs merchant-issued sandbox credentials before any live-rail review. The Gmail connection test now reads the authenticated user's profile without returning the mailbox address, and a successful profile check does not authorize sending mail. Register first, run the provider's bounded connection test, then separately prove each intended tool and scope with that customer's approved sandbox account. Leave the connector unverified if consent, scope, or provider access is missing.
+
 The exact credential form differs by provider. Protected storage is not permission to grant unlimited upstream scopes. Prefer read-only scopes for the first pilot.
+
+## Connect a remote MCP server
+
+The server must honor `Accept-Encoding: identity`; compressed responses are
+refused to keep the response-size limit effective before decompression.
+
+1. Obtain the server owner's approved public HTTPS **Streamable HTTP** endpoint and bearer token. Use the MCP endpoint itself, for example `https://tools.example.com/mcp`, not a website home page. OAuth consent flows, legacy HTTP+SSE endpoints and local stdio commands are not supported by this incoming connector path.
+2. Open **Connectors > Remote MCP**. Enter a unique name such as `mcp_support`, the endpoint and token. Choose **Connect and discover tools**. AgenticOrg performs protocol initialization and paginated tool discovery before saving. A rejected token or incompatible server produces an error; it does not create a healthy connection.
+3. Review the discovered descriptions and input schemas with the server owner. Server annotations are hints, not permission. All tools begin as write/unreviewed. Only tools advertised as read-only can be reviewed as reads, and obvious write names remain writes. A remote server can still misrepresent its behavior: register only trusted servers and use minimally scoped provider tokens.
+4. Select the read-only tools you have reviewed and choose **Save read-only review**. Run one **Read-only connection probe** with non-sensitive arguments. A successful probe verifies that tool, not every server capability or any real speech/payment provider behind it.
+5. In **Create Agent > Behavior**, or **Agent > Config > Edit**, select the remote connector and its exact tools. Save and reload the agent. Names are connector-qualified, such as `mcp_support__search`; a tool from another connection is not interchangeable.
+6. Run a company-scoped agent with an appropriate delegated grant. The runtime rechecks persisted ownership, active connector, selected tools and current schema before dispatch. MCP registration and a read probe do not bypass agent grants, operator overrides or action policies.
+
+```mermaid
+flowchart LR
+  A[Owner connects HTTPS server] --> B[Initialize and discover tools]
+  B --> C[Encrypted token and tenant catalog]
+  C --> D[Owner reviews read-only tools]
+  D --> E[Agent selects exact connector and tools]
+  E --> F[Grant and action checks]
+  F --> G[Reload authority and compare live schema]
+  G --> H[One bounded MCP call]
+```
+
+**Current boundary:** write/unreviewed tools may be selected but remain contained by the platform's action policy. This path does not enable arbitrary messaging, voice replies, payments or destructive actions. Grant labels remain conservatively write-scoped; the reviewed read classification is a separate execution-policy check. Tools and their output are untrusted source data, never instructions to expand permissions.
+
+Use **Refresh** to rediscover a changed server or rotate its token. Unchanged read reviews are preserved; changed tools require another review. If a server changes between discovery and execution, the call is refused with a connection/schema error. Archive the connection to block subsequent calls across workers. A request already sent cannot be recalled by archiving.
+
+Only public HTTPS destinations are permitted: no redirects, IP literals, internal hosts, URL-embedded credentials or query tokens. Requests have bounded durations, arguments, responses and discovery pages. Calls are not automatically retried, because a lost response does not prove an external action failed. Raw credentials are not sent to the model or returned in connector responses. Tenant/company credential bindings and personal connector ownership still apply.
+
+These are input safety caps, not a count of available product integrations:
+
+| Input or operation | Maximum |
+| --- | --- |
+| Discovered tools per connection | 100 |
+| Discovery pages | 10 |
+| Connector-qualified tool name | 64 characters |
+| Object input schema | 32 KiB |
+| Arguments | 64 KiB |
+| Response | 1 MiB |
+| Complete protocol operation | 30 seconds |
+
+Local JSON pointer schema definitions are supported within bounded complexity. Recursive/dynamic
+references, external references and regex-based schemas are refused explicitly.
+Ask the server owner for a bounded compatible schema; do not remove network or
+validation protections to make an incompatible server connect.
+
+| Symptom | Next action |
+| --- | --- |
+| Connection rejected | Check endpoint transport, bearer token, server health and public network reachability |
+| Tool not selectable or save rejected | Refresh the catalog and select the tool from the linked connector, not a copied name |
+| Changed schema or unavailable tool | Refresh discovery, review permissions again and start a new run |
+| Write / approval required | Use an approved governed action integration; a read-only review cannot authorize a write |
+| Agent call refused but probe works | Check company binding, selected tools, agent lifecycle, grant and operator policy |
+
+Keep real tokens and private server responses out of screenshots and support issues. Share the request ID, sanitized error and affected tool reference instead.
 
 ## Grant the agent only what it needs
 

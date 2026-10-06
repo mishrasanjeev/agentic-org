@@ -17,14 +17,32 @@ That mismatch shows up as failed MCP-client calls in the wild and inconsistent m
 
 ## Decision: agents-as-tools
 
-The supported MCP product model is **agents-as-tools**. Rationale:
+The supported MCP export model is **agents-as-tools**. Rationale:
 
 1. Matches the existing backend implementation (least code churn).
 2. Aligns with the product pitch: AgenticOrg ships virtual employees (agents), not raw tools. An MCP client talking to AgenticOrg should see virtual employees, not the connectors beneath them.
 3. One permission boundary (agent scope) instead of two (agent scope + per-connector scope).
 4. Reasoning, HITL, and audit all happen at the agent layer — connectors-as-tools would bypass them and defeat governance.
 
-## Naming + discovery
+## Incoming remote tools are a separate direction
+
+AgenticOrg agents can also consume tenant-owned external MCP tools through
+**Connectors > Remote MCP**. This is not the removed `call_connector_tool`
+export and does not expose raw customer connectors to external clients.
+
+The incoming path uses public HTTPS Streamable HTTP and customer-supplied bearer
+credentials. Discovery, agent selection, save validation and dispatch share a
+persisted tenant-scoped catalog with `mcp_connection__tool` identities. Credentials
+remain encrypted; runtime checks ownership, agent links, grant scope and schema
+freshness. Tools default to write and remain contained unless reviewed as reads.
+This does not provide a general remote-write approval/execution workflow.
+
+See the [remote connector setup guide](user-guide/connectors.md#connect-a-remote-mcp-server)
+for supported schemas, limits and refusal handling. OAuth, local stdio and legacy
+SSE endpoints are not supported by this incoming path. Protocol-level local tests
+do not establish live speech, messaging or payment-provider functionality.
+
+## Naming + discovery (exported AgenticOrg agents)
 
 - **Tool name**: `agenticorg_<agent_type>` (e.g. `agenticorg_ap_processor`).
 - **Discovery**: `GET /api/v1/mcp/tools` returns `{"tools": [{name, description, inputSchema}]}` where every `name` starts with `agenticorg_`.

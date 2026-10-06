@@ -39,4 +39,56 @@ test.describe("local dev stack @dev-stack", () => {
     expect([401, 403, 429]).toContain(response.status());
     await expect(page).toHaveURL(/\/login/);
   });
+
+  test("native catalog registration persists the registry identity", async ({ page }) => {
+    test.skip(!process.env.AGENTICORG_DEV_SEED_PASSWORD, "Local seed password is required");
+    await page.goto("/login");
+    await page.fill('input[type="email"]', "approver.a@example.com");
+    await page.fill('input[type="password"]', process.env.AGENTICORG_DEV_SEED_PASSWORD!);
+    await page.locator('button[type="submit"]').click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+
+    await page.goto("/dashboard/connectors");
+    const card = page.getByTestId("catalog-item-whatsapp");
+    await expect(card).toBeVisible();
+    const list = await page.context().request.get("/api/v1/connectors");
+    expect(list.status()).toBe(200);
+    const existing = await list.json();
+    const alreadyRegistered = existing.items.some((item: { name: string }) => item.name === "whatsapp");
+    if (alreadyRegistered) {
+      await expect(card.getByText("Registered")).toBeVisible();
+      await page.goto("/dashboard/connectors/new?type=whatsapp");
+    } else {
+      await card.getByRole("button", { name: "Register" }).click();
+    }
+    await expect(page).toHaveURL(/\/dashboard\/connectors\/new\?type=whatsapp/);
+    await expect(page.getByTestId("provider-select")).toHaveValue("whatsapp");
+    await expect(page.locator('input[readonly][value="whatsapp"]')).toBeVisible();
+    if (!alreadyRegistered) {
+      await page.getByPlaceholder("Enter access token").fill("synthetic-local-token");
+      await page.getByPlaceholder("Enter phone number ID").fill("synthetic-local-phone-id");
+      await page.getByRole("button", { name: "Register Connector" }).click();
+      await expect(page).toHaveURL(/\/dashboard\/connectors$/, { timeout: 15_000 });
+    }
+
+    const response = await page.context().request.get("/api/v1/connectors");
+    expect(response.status()).toBe(200);
+    expect((await response.json()).items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "whatsapp" })]),
+    );
+
+    for (const [type, credentialPlaceholder] of [
+      ["twilio", "Enter auth token"],
+      ["gmail", "Enter refresh token"],
+      ["pinelabs_plural", "Enter merchant ID"],
+    ]) {
+      await page.goto(`/dashboard/connectors/new?type=${type}`);
+      await expect(page.getByTestId("provider-select")).toHaveValue(type);
+      await expect(page.getByPlaceholder(credentialPlaceholder)).toBeVisible();
+    }
+
+    await page.goto("/dashboard/connectors/new?type=not_in_registry");
+    await expect(page.getByRole("alert")).toContainText("not in the current registry");
+    await expect(page.getByRole("button", { name: "Register Connector" })).toBeDisabled();
+  });
 });

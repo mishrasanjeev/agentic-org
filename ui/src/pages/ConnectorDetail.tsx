@@ -362,7 +362,7 @@ export default function ConnectorDetailPage() {
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-sm font-semibold">Authentication Configuration</CardTitle>
-              {!editing && canManage && <Button size="sm" variant="outline" onClick={() => setEditing(true)}>Edit</Button>}
+              {!editing && canManage && <Button size="sm" variant="outline" onClick={() => connector.data_schema_ref === "mcp:streamable-http:v1" ? navigate("/dashboard/connectors/remote-mcp") : setEditing(true)}>Edit</Button>}
             </div>
           </CardHeader>
           <CardContent>

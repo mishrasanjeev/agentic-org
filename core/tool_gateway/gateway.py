@@ -148,6 +148,29 @@ class ToolGateway:
                 )
             return override.to_error()
 
+        if connector_name.startswith("mcp_"):
+            from core.langgraph.tool_adapter import execute_agent_tool
+            from core.remote_mcp import authorized_descriptor
+            from core.remote_mcp_transport import RemoteMCPError
+
+            try:
+                _, _, remote_agent = await authorized_descriptor(tenant_id, agent_id, connector_name, tool_name)
+            except (RemoteMCPError, ValueError):
+                return {"error": {"code": "E1007", "message": "MCP tool is not available to this agent"}}
+            effective_token = grant_token or getattr(self, "_current_grant_token", None)
+            if not effective_token and (run_grant is None or run_grant.mode is EnforcementMode.OFF):
+                permitted, _ = check_scope(agent_scopes, connector_name, "write", tool_name, amount)
+                if not permitted:
+                    return {"error": {"code": "E1007", "message": "MCP tool scope is missing"}}
+            result = await execute_agent_tool(
+                connector_name, tool_name, params, tenant_id=tenant_id, company_id=company_id, domain=domain,
+                authorized_tools=remote_agent.authorized_tools, grant_token=effective_token,
+                run_grant=run_grant, agent_id=agent_id, runtime="tool_gateway", agent_type=agent_type,
+            )
+            if pseudonymiser is not None:
+                return await pseudonymiser.pseudonymise_value(result)
+            return mask_pii(result)
+
         # In strict runtimes every tool dispatch must carry exact company and
         # domain context. Relaxed runtimes preserve legacy callers unless they
         # opt into governance context, which keeps local/unit fixtures usable

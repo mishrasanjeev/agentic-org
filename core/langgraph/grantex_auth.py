@@ -248,6 +248,8 @@ def _manifest_permission(connector_name: str, tool_name: str) -> str | None:
 
 def _tool_permission(connector_name: str, tool_name: str) -> str:
     """Permission level the SDK understands (``read``/``write``/``delete``/``admin``)."""
+    if connector_name.startswith("mcp_"):
+        return "write"
     declared = _manifest_permission(connector_name, tool_name)
     if declared:
         return declared
@@ -273,11 +275,20 @@ def _tools_to_scopes(tools: list[str]) -> list[str]:
     (``get_alert``); the grant check counts a grant under either id
     (``enforce_connector_grant``).
     """
-    from core.langgraph.tool_adapter import _actual_tool_name, _build_tool_index, _grant_connector_id
+    from core.langgraph.tool_adapter import (
+        _actual_tool_name,
+        _build_tool_index,
+        _grant_connector_id,
+        _parse_authorized_tool_ref,
+    )
 
     index = _build_tool_index(include_connector_aliases=True)
     scopes: list[str] = []
     for tool_name in tools:
+        parsed = _parse_authorized_tool_ref(tool_name)
+        if parsed and parsed[0] and parsed[0].startswith("mcp_"):
+            scopes.append(f"tool:{parsed[0]}:write:{parsed[1]}")
+            continue
         match = index.get(tool_name)
         if match:
             actual = _actual_tool_name(tool_name)

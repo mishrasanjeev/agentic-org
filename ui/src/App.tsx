@@ -57,6 +57,7 @@ const GovernedCaseDetail = lazyRetry(() => import("./pages/GovernedCaseDetail"))
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
 const ConnectorCreate = lazyRetry(() => import("./pages/ConnectorCreate"));
 const ConnectorDetail = lazyRetry(() => import("./pages/ConnectorDetail"));
+const RemoteMCP = lazyRetry(() => import("./pages/RemoteMCP"));
 const CMOVendorSandboxConnectors = lazyRetry(() => import("./pages/CMOVendorSandboxConnectors"));
 const Schemas = lazyRetry(() => import("./pages/Schemas"));
 const Audit = lazyRetry(() => import("./pages/Audit"));
@@ -579,6 +580,10 @@ export default function App() {
             </Layout>
           </ProtectedRoute>
         }
+      />
+      <Route
+        path="/dashboard/connectors/remote-mcp"
+        element={<ProtectedRoute allowedRoles={CONNECTOR_ROLES}><Layout><RemoteMCP /></Layout></ProtectedRoute>}
       />
       <Route
         path="/dashboard/connectors/:id"
