@@ -73,11 +73,67 @@ class TestConfig:
             ("guardrail", {"stage": "nowhere", "text": "t"}, "stage must be one of"),
             ("guardrail", {"stage": "input", "text": "t", "expect": "maybe"}, "expect must be one of"),
             ("audit_chain", {"recent": 0}, "between 1 and 10000"),
+            ("adversarial", {"min_recall": 101}, "between 0 and 100"),
+            ("adversarial", {"max_false_positives": -1}, "between 0 and 1000"),
+            ("adversarial", {"recent": 5}, "unknown config keys"),
+            ("eval_dataset", {"system": "s", "model": "m"}, "dataset_id must be"),
+            ("eval_dataset", {"dataset_id": "not-a-uuid", "system": "s", "model": "m"}, "dataset_id must be"),
+            ("eval_dataset", {"dataset_id": str(uuid.uuid4()), "model": "m"}, "system is required"),
+            ("eval_dataset", {"dataset_id": str(uuid.uuid4()), "system": "s"}, "model is required"),
+            (
+                "eval_dataset",
+                {"dataset_id": str(uuid.uuid4()), "system": "s", "model": "m", "judges": ["vibes"]},
+                "unknown judge",
+            ),
+            (
+                "eval_dataset",
+                {"dataset_id": str(uuid.uuid4()), "system": "s", "model": "m", "judges": ["relevance"]},
+                "judge_model is required",
+            ),
+            (
+                "eval_dataset",
+                {"dataset_id": str(uuid.uuid4()), "system": "s", "model": "m", "limit": 26},
+                "between 1 and 25",
+            ),
+            (
+                "eval_dataset",
+                {"dataset_id": str(uuid.uuid4()), "system": "s", "model": "m", "min_pass_rate": 101},
+                "between 0 and 100",
+            ),
         ],
     )
     def test_an_invalid_configuration_says_what_is_wrong(self, kind, config, message):
         with pytest.raises(ValueError, match=message):
             synthetic.validate_config(kind, config)
+
+    def test_the_adversarial_and_dataset_kinds_take_their_defaults(self):
+        assert synthetic.validate_config("adversarial", {}) == {"min_recall": 50, "max_false_positives": 0}
+        dataset_id = str(uuid.uuid4())
+        clean = synthetic.validate_config(
+            "eval_dataset",
+            {
+                "dataset_id": dataset_id,
+                "system": " Decide. ",
+                "model": "gpt-4o",
+                "judges": ["relevance", "relevance"],
+                "judge_model": "gpt-4o-mini",
+            },
+        )
+        assert clean == {
+            "dataset_id": dataset_id,
+            "system": "Decide.",
+            "model": "gpt-4o",
+            "judges": ["relevance"],
+            "judge_model": "gpt-4o-mini",
+            "limit": 25,
+            "min_pass_rate": 100,
+        }
+        assert (
+            synthetic.validate_config(
+                "eval_dataset", {"dataset_id": dataset_id, "system": "s", "model": "m", "version": 3}
+            )["version"]
+            == 3
+        )
 
     def test_interval_and_name_bounds(self):
         assert synthetic.validate_interval(5) == 5 and synthetic.validate_interval(1440) == 1440
@@ -180,6 +236,159 @@ class TestProbes:
         ):
             reasons, detail = asyncio.run(synthetic._probe_audit_chain(TENANT, {"recent": 100}))
         assert reasons == ["audit_chain_broken"] and (detail["break_seq"], detail["break_reason"]) == (200, "link_hash")
+
+
+class TestScheduledEvaluation:
+    def _suite(self, recall, false_positives=0, errors=()):
+        from core.governance.guardrails import adversarial
+
+        attacks = 20
+        detected = int(round(recall * attacks))
+        category = adversarial.CategoryReport(
+            category="injection_direct",
+            attacks=attacks,
+            detected=detected,
+            controls=9,
+            false_positives=false_positives,
+            missed=[f"inj-d-{index:02d}" for index in range(attacks - detected)],
+        )
+        return adversarial.SuiteReport(rules="tenant", rule_count=4, categories=[category], errors=list(errors))
+
+    def test_the_adversarial_probe_holds_the_rules_to_a_minimum_recall(self):
+        with patch("core.governance.guardrails.adversarial.run_suite", AsyncMock(return_value=self._suite(0.6))) as run:
+            reasons, detail = asyncio.run(
+                synthetic._probe_adversarial(TENANT, {"min_recall": 50, "max_false_positives": 0})
+            )
+            assert run.await_args.kwargs == {"tenant_id": TENANT}
+        assert reasons == [] and detail["recall"] == 0.6 and detail["detected"] == 12 and detail["rule_count"] == 4
+        assert detail["categories"][0]["missed"][0] == "inj-d-00" and "text" not in str(detail)
+        with patch(
+            "core.governance.guardrails.adversarial.run_suite",
+            AsyncMock(return_value=self._suite(0.4, 2, ["inj-d-03"])),
+        ):
+            reasons, detail = asyncio.run(
+                synthetic._probe_adversarial(TENANT, {"min_recall": 50, "max_false_positives": 1})
+            )
+        assert reasons == [
+            "adversarial_recall_below_minimum",
+            "adversarial_controls_wrongly_caught",
+            "adversarial_cases_not_evaluated",
+        ]
+        assert detail["errors"] == 1
+
+    def test_the_dataset_probe_runs_a_version_keeps_the_run_and_holds_it_to_a_pass_rate(self, monkeypatch):
+        from contextlib import asynccontextmanager
+
+        from core.evals import datasets, runs
+
+        monkeypatch.setattr(settings, "evals_v2_enabled", True)
+        monkeypatch.setattr(settings, "prompt_compare_enabled", True)
+        dataset_id = uuid.uuid4()
+        stored, content_hash = datasets.normalise_cases(
+            [{"id": f"c{index}", "input": f"q{index}", "equals": "yes"} for index in range(30)]
+        )
+        version = SimpleNamespace(
+            id=uuid.uuid4(),
+            dataset_id=dataset_id,
+            version=2,
+            cases=stored,
+            case_count=30,
+            content_hash=content_hash,
+            note=None,
+            created_by_user=None,
+            created_at=None,
+        )
+        added: list = []
+
+        class _Session:
+            def add(self, row):
+                added.append(row)
+
+            async def flush(self):
+                return None
+
+        @asynccontextmanager
+        async def _session(_tenant):
+            yield _Session()
+
+        asked: dict = {}
+
+        async def _run_version(tenant_id, **kwargs):
+            asked.update(kwargs, tenant_id=tenant_id)
+            return {
+                "dataset_id": str(dataset_id),
+                "version": 2,
+                "content_hash": content_hash,
+                "cases_total": 30,
+                "offset": 0,
+                "cases_run": len(kwargs["cases"]),
+                "complete": False,
+                "model": kwargs["model"],
+                "judge_model": kwargs["judge_model"],
+                "judges": list(kwargs["judges"]),
+                "prompt_hash": "p" * 64,
+                "max_tokens": 512,
+                "passed": 8,
+                "failed": 1,
+                "errors": 1,
+                "pass_rate": round(8 / 9, 4),
+                "avg_latency_ms": 10,
+                "cost_usd": 0.01,
+                "metrics": {"pass_rate": round(8 / 9, 4)},
+                "scores": {"relevance": {"cases": 9, "mean": 0.8, "errors": 0}},
+                "results": [{"id": "c0", "result": "passed"}],
+                "reasons": {"c0": {"relevance": "fine"}},
+            }
+
+        monkeypatch.setattr("core.database.get_tenant_session", _session)
+        monkeypatch.setattr(datasets, "get_version", AsyncMock(return_value=version))
+        monkeypatch.setattr(runs, "run_version", _run_version)
+        config = synthetic.validate_config(
+            "eval_dataset",
+            {
+                "dataset_id": str(dataset_id),
+                "version": 2,
+                "system": "Decide.",
+                "model": "gpt-4o",
+                "judges": ["relevance"],
+                "judge_model": "gpt-4o-mini",
+                "limit": 10,
+                "min_pass_rate": 90,
+            },
+        )
+        reasons, detail = asyncio.run(synthetic._probe_eval_dataset(TENANT, config))
+        assert len(asked["cases"]) == 10 and asked["offset"] == 0 and asked["judges"] == ("relevance",)
+        assert asked["system_text"] == "Decide." and asked["model"] == "gpt-4o" and asked["tenant_id"] == TENANT
+        [run] = added
+        assert (
+            run.prompt_label == "scheduled:gpt-4o"
+            and run.created_by_user is None
+            and run.results == [{"id": "c0", "result": "passed"}]
+        )
+        assert reasons == ["eval_cases_not_answered", "eval_pass_rate_below_minimum"]
+        assert detail == {
+            "run_id": str(run.id),
+            "version": 2,
+            "cases_run": 10,
+            "complete": False,
+            "passed": 8,
+            "failed": 1,
+            "errors": 1,
+            "pass_rate": round(8 / 9, 4),
+            "scores": {"relevance": 0.8},
+            "cost_usd": 0.01,
+        }
+        assert "fine" not in str(detail) and "Decide." not in str(detail)
+
+    def test_the_dataset_probe_is_an_error_while_evaluation_is_off(self):
+        assert settings.evals_v2_enabled is False
+        with pytest.raises(RuntimeError, match="off"):
+            asyncio.run(
+                synthetic._probe_eval_dataset(
+                    TENANT,
+                    {"dataset_id": str(uuid.uuid4()), "system": "s", "model": "m", "limit": 25, "min_pass_rate": 100},
+                )
+            )
 
 
 class TestRun:
@@ -366,8 +575,17 @@ class TestTasks:
         assert 'down_revision = "v6z41_tamper_evident_audit"' in migration
         assert '_TABLES = ("synthetic_checks", "synthetic_check_results")' in migration
         assert "FORCE ROW LEVEL SECURITY" in migration and "current_setting('agenticorg.tenant_id', true)" in migration
+        later = (ROOT / "migrations" / "versions" / "v6_z46_synthetic_check_kinds.py").read_text(encoding="utf-8")
+        assert 'down_revision = "v6z45_eval_runs"' in later
         for kind in synthetic.KINDS:
-            assert f"'{kind}'" in migration
+            # The first four kinds were created with the table; the later two widened its check constraint.
+            assert f"'{kind}'" in migration or f"'{kind}'" in later
+        assert "DROP CONSTRAINT IF EXISTS ck_synthetic_checks_kind" in later
+        from core.models.synthetic_check import SyntheticCheck
+
+        constraint = next(c for c in SyntheticCheck.__table__.constraints if c.name == "ck_synthetic_checks_kind")
+        for kind in synthetic.KINDS:
+            assert f"'{kind}'" in str(constraint.sqltext)
 
 
 # ---------------------------------------------------------------------------

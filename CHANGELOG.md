@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Evaluation framework: adversarial and scheduled runs
+- Two synthetic check kinds (`observability/synthetic.py`, migration
+  `v6z46_synthetic_check_kinds`): `adversarial` dry-runs the tenant's
+  guardrail rules over the adversarial evaluation set on an interval and
+  fails below a minimum recall or above a number of benign controls
+  wrongly caught; `eval_dataset` scores a dataset version with a fixed
+  prompt and model, keeps the run in the evaluation history and fails
+  below a minimum pass rate. Results keep counts and case ids, never a
+  text. The Guardrails page lists the adversarial checks with their latest
+  result, and the checks panel offers both kinds.
+
 ### Added - Evaluation framework: scorers, metrics and stored runs
 - A case may carry a `label` (the class the answer should name), a
   `reference` answer and a `context`. A run of a dataset version
