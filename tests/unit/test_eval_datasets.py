@@ -127,6 +127,14 @@ class TestCases:
         # What is stored can be parsed again by the scorer, unchanged.
         assert datasets.normalise_cases(stored) == (stored, content_hash)
 
+    def test_labels_and_reference_material_are_stored_with_the_case(self):
+        stored, _ = datasets.normalise_cases(
+            [{"input": "q", "label": "approve", "reference": "Approve it.", "context": "Policy: approve q."}]
+        )
+        assert stored == [
+            {"id": "1", "input": "q", "label": "approve", "reference": "Approve it.", "context": "Policy: approve q."}
+        ]
+
     @pytest.mark.parametrize(
         ("raw", "message"),
         [
@@ -308,7 +316,7 @@ class TestEndpoints:
                 uuid.uuid4(), EvalDatasetVersionCreate(cases=CASES), tenant_id=str(TENANT), user={}
             ),
             api.archive_eval_dataset(uuid.uuid4(), tenant_id=str(TENANT)),
-            api.run_eval_dataset(uuid.uuid4(), EvalDatasetRunIn(system="s", model="m"), tenant_id=str(TENANT)),
+            api.run_eval_dataset(uuid.uuid4(), EvalDatasetRunIn(system="s", model="m"), tenant_id=str(TENANT), user={}),
         ]
         for call in calls:
             with pytest.raises(HTTPException) as refused:
@@ -317,7 +325,7 @@ class TestEndpoints:
 
     def test_every_route_is_for_tenant_administrators(self):
         src = (ROOT / "api" / "v1" / "eval_datasets.py").read_text(encoding="utf-8")
-        assert src.count("@router.") == 7 == src.count("dependencies=[require_tenant_admin])")
+        assert src.count("@router.") == 9 == src.count("dependencies=[require_tenant_admin])")
 
     def test_create_list_read_and_archive(self, on, store):
         session = store(0, None)
@@ -398,58 +406,57 @@ class TestRun:
         dataset = _dataset(latest_version=2, case_count=30)
         many = [{"id": f"c{index}", "input": f"question {index}", "equals": "yes"} for index in range(30)]
         version = _version(dataset, 2, many)
-        seen: dict[str, Any] = {}
+        seen: dict[str, Any] = {"calls": []}
 
         @asynccontextmanager
         async def _session(_tenant):
             yield _Session(dataset, version)
 
-        async def _evaluate(tenant_id, *, variants, cases, model, max_tokens):
-            seen.update(tenant=tenant_id, variants=variants, cases=cases, model=model, max_tokens=max_tokens)
-            return {
-                "model": model,
-                "max_tokens": max_tokens or 512,
-                "variants": [
-                    {
-                        "name": "prompt",
-                        "cases": len(cases),
-                        "passed": len(cases) - 1,
-                        "failed": 1,
-                        "errors": 0,
-                        "pass_rate": round((len(cases) - 1) / len(cases), 4),
-                        "avg_latency_ms": 12,
-                        "cost_usd": 0.001,
-                        "results": [{"id": case.id, "result": "passed"} for case in cases],
-                    }
-                ],
-            }
+        async def _run_one(tenant_id, model, system, user_input, limit, _gate, _session):
+            seen["calls"].append((tenant_id, model, system, user_input, limit))
+            answer = "no" if user_input == "question 29" else "yes"
+            return prompt_compare.ModelResult(model=model, ok=True, output=answer, latency_ms=12, cost_usd=0.0002)
+
+        async def _no_pseudonymiser(_tenant):
+            return None
 
         monkeypatch.setattr(api, "get_tenant_session", _session)
-        monkeypatch.setattr(prompt_compare, "evaluate", _evaluate)
+        monkeypatch.setattr(prompt_compare, "run_one", _run_one)
+        monkeypatch.setattr(prompt_compare, "open_pseudonymiser", _no_pseudonymiser)
         return SimpleNamespace(dataset=dataset, version=version, seen=seen)
 
     def test_a_run_scores_one_slice_and_names_the_version_it_measured(self, ready):
         report = asyncio.run(
             api.run_eval_dataset(
                 ready.dataset.id,
-                EvalDatasetRunIn(system="You answer claims questions.", model="gpt-4o", offset=25),
+                EvalDatasetRunIn(system="You answer claims questions.", model="gpt-4o", offset=25, store=False),
                 tenant_id=str(TENANT),
+                user={},
             )
         )
-        assert [case.id for case in ready.seen["cases"]] == [f"c{index}" for index in range(25, 30)]
-        assert ready.seen["variants"] == [("prompt", "You answer claims questions.")]
-        assert ready.seen["tenant"] == TENANT and ready.seen["model"] == "gpt-4o"
+        calls = ready.seen["calls"]
+        assert [call[3] for call in calls] == [f"question {index}" for index in range(25, 30)]
+        assert all(
+            call[0] == TENANT and call[1] == "gpt-4o" and call[2] == "You answer claims questions." for call in calls
+        )
         assert (report["version"], report["content_hash"]) == (2, ready.version.content_hash)
         assert (report["cases_total"], report["offset"], report["cases_run"], report["complete"]) == (30, 25, 5, False)
-        assert report["passed"] == 4 and report["pass_rate"] == 0.8 and "name" not in report
+        assert report["passed"] == 4 and report["pass_rate"] == 0.8 and report["model"] == "gpt-4o"
+        assert report["metrics"]["exact_match"] == {"cases": 5, "matched": 4, "rate": 0.8}
         # Never an answer or an input: ids and outcomes only.
-        assert all(set(result) == {"id", "result"} for result in report["results"])
+        assert all(set(result) <= {"id", "result", "has_equals", "failed_checks"} for result in report["results"])
+        assert "question 25" not in str(report)
 
     def test_a_version_that_fits_one_request_is_reported_complete(self, ready):
         ready.version.cases = ready.version.cases[:3]
         ready.version.case_count = 3
         report = asyncio.run(
-            api.run_eval_dataset(ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o"), tenant_id=str(TENANT))
+            api.run_eval_dataset(
+                ready.dataset.id,
+                EvalDatasetRunIn(system="s", model="gpt-4o", store=False),
+                tenant_id=str(TENANT),
+                user={},
+            )
         )
         assert (report["cases_run"], report["complete"]) == (3, True)
 
@@ -457,47 +464,47 @@ class TestRun:
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
                 api.run_eval_dataset(
-                    ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o", offset=30), tenant_id=str(TENANT)
+                    ready.dataset.id,
+                    EvalDatasetRunIn(system="s", model="gpt-4o", offset=30),
+                    tenant_id=str(TENANT),
+                    user={},
                 )
             )
-        assert refused.value.status_code == 422 and ready.seen == {}
+        assert refused.value.status_code == 422 and ready.seen["calls"] == []
 
     def test_a_run_needs_prompt_evaluation_to_be_on(self, ready, monkeypatch):
         monkeypatch.setattr(settings, "prompt_compare_enabled", False)
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
                 api.run_eval_dataset(
-                    ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o"), tenant_id=str(TENANT)
+                    ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o"), tenant_id=str(TENANT), user={}
                 )
             )
-        assert refused.value.status_code == 409 and ready.seen == {}
+        assert refused.value.status_code == 409 and ready.seen["calls"] == []
 
     def test_a_refused_model_or_failed_pseudonymisation_is_reported_not_raised(self, ready, monkeypatch):
         from core.pii.pseudonymiser import PseudonymisationError
 
-        async def _unknown_model(*_args, **_kwargs):
-            raise ValueError("unknown model")
-
-        monkeypatch.setattr(prompt_compare, "evaluate", _unknown_model)
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
                 api.run_eval_dataset(
-                    ready.dataset.id, EvalDatasetRunIn(system="s", model="nope"), tenant_id=str(TENANT)
+                    ready.dataset.id, EvalDatasetRunIn(system="s", model="nope"), tenant_id=str(TENANT), user={}
                 )
             )
-        assert refused.value.status_code == 422
+        assert refused.value.status_code == 422 and ready.seen["calls"] == []
 
-        async def _no_pseudonymiser(*_args, **_kwargs):
+        async def _no_pseudonymiser(_tenant):
             raise PseudonymisationError("vault unavailable")
 
-        monkeypatch.setattr(prompt_compare, "evaluate", _no_pseudonymiser)
+        monkeypatch.setattr(prompt_compare, "open_pseudonymiser", _no_pseudonymiser)
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
                 api.run_eval_dataset(
-                    ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o"), tenant_id=str(TENANT)
+                    ready.dataset.id, EvalDatasetRunIn(system="s", model="gpt-4o"), tenant_id=str(TENANT), user={}
                 )
             )
         assert refused.value.status_code == 503 and "no model was called" in refused.value.detail
+        assert ready.seen["calls"] == []
 
 
 class TestMigration:

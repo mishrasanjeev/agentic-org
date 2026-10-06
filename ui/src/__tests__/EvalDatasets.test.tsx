@@ -30,6 +30,21 @@ const CASES_V2 = [
   { id: "b", input: "q2", equals: "y" },
 ];
 const CASES_V1 = [{ id: "a", input: "q1", contains: ["x"] }];
+const JUDGES = ["faithfulness", "relevance", "instruction_adherence", "context_recall"];
+const HISTORY = [
+  {
+    id: "r1",
+    version: 2,
+    model: "gpt-4o-mini",
+    judges: ["relevance"],
+    prompt_label: "claims v2",
+    cases_run: 2,
+    complete: true,
+    pass_rate: 0.5,
+    scores: { relevance: { cases: 2, mean: 0.75, errors: 0 } },
+    created_at: "2026-10-06T09:30:00+00:00",
+  },
+];
 const VERSIONS = [
   { version: 2, case_count: 2, content_hash: "h2", note: "adds b", created_at: null },
   { version: 1, case_count: 1, content_hash: "h1", note: null, created_at: null },
@@ -43,6 +58,7 @@ function serve({ enabled = true, datasets = [DATASET], models = ["gpt-4o-mini"] 
     if (path === "/eval-datasets/d1") return Promise.resolve({ data: { ...DATASET, versions: VERSIONS } });
     if (path === "/eval-datasets/d1/versions/2") return Promise.resolve({ data: { version: 2, cases: CASES_V2 } });
     if (path === "/eval-datasets/d1/versions/1") return Promise.resolve({ data: { version: 1, cases: CASES_V1 } });
+    if (path === "/eval-datasets/d1/runs") return Promise.resolve({ data: { runs: HISTORY, judges: JUDGES } });
     return Promise.reject(new Error(`unexpected ${path}`));
   });
 }
@@ -135,35 +151,78 @@ describe("EvalDatasets", () => {
         cases_run: 25,
         complete: false,
         model: "gpt-4o-mini",
+        judge_model: "gpt-4o-mini",
+        judges: ["relevance"],
         passed: 23,
         failed: 1,
         errors: 1,
         pass_rate: 0.92,
         cost_usd: 0.0123,
+        metrics: {
+          exact_match: { cases: 10, matched: 9, rate: 0.9 },
+          classification: { cases: 8, accuracy: 0.75, precision: 0.7, recall: 0.8, f1: 0.746 },
+        },
+        scores: { relevance: { cases: 23, mean: 0.8, errors: 1 } },
         results: [
           { id: "a", result: "passed" },
           { id: "b", result: "failed", failed_checks: ["equals"] },
           { id: "c", result: "error", error_type: "timeout" },
         ],
+        reasons: { b: { relevance: "Answers a different question." } },
       },
     });
     await openDataset();
+    expect(await screen.findByTestId("eval-run-history")).toHaveTextContent("v2 · gpt-4o-mini · claims v2 · 50% of 2 · relevance 75%");
     expect(screen.getByTestId("eval-run-start")).toBeDisabled();
     fireEvent.change(screen.getByTestId("eval-run-system"), { target: { value: "You answer claims questions." } });
     fireEvent.change(screen.getByTestId("eval-run-model"), { target: { value: "gpt-4o-mini" } });
+    fireEvent.change(screen.getByTestId("eval-run-label"), { target: { value: "claims v3" } });
+    fireEvent.click(screen.getByTestId("eval-judge-relevance"));
+    // A judge needs a judge model before the run can start.
+    expect(screen.getByTestId("eval-run-start")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("eval-judge-model"), { target: { value: "gpt-4o-mini" } });
     fireEvent.click(screen.getByTestId("eval-run-start"));
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith("/eval-datasets/d1/run", {
         version: 2,
         system: "You answer claims questions.",
         model: "gpt-4o-mini",
+        judges: ["relevance"],
+        judge_model: "gpt-4o-mini",
+        prompt_label: "claims v3",
       }),
     );
     const result = await screen.findByTestId("eval-run-result");
     expect(result).toHaveTextContent("23 passed, 1 failed, 1 errors of 25 cases (92%)");
     expect(result).toHaveTextContent("Partial: cases 1 to 25 of 30.");
+    expect(screen.getByTestId("eval-run-metrics")).toHaveTextContent("Exact match 90% of 10 · Labels: accuracy 75%, precision 70%, recall 80%, F1 75% · Relevance: 80% over 23 (1 unrated)");
     expect(result).toHaveTextContent("b: equals");
+    expect(result).toHaveTextContent("Relevance: Answers a different question.");
     expect(result).toHaveTextContent("c: error (timeout)");
+    // The history is reloaded after a run.
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(mockGet.mock.calls.filter((call) => call[0] === "/eval-datasets/d1/runs").length > 1 ? mockGet.mock.calls.length : mockGet.mock.calls.length));
+    expect(mockGet.mock.calls.filter((call) => call[0] === "/eval-datasets/d1/runs").length).toBe(2);
+  });
+
+  it("sends no judge model when no judge is chosen", async () => {
+    serve();
+    mockPost.mockResolvedValue({
+      data: {
+        version: 2, content_hash: "h2", cases_total: 2, offset: 0, cases_run: 2, complete: true, model: "gpt-4o-mini",
+        judge_model: null, judges: [], passed: 2, failed: 0, errors: 0, pass_rate: 1, cost_usd: 0.001,
+        metrics: { exact_match: { cases: 0, matched: 0, rate: null }, classification: null }, scores: {}, results: [],
+      },
+    });
+    await openDataset();
+    fireEvent.change(screen.getByTestId("eval-run-system"), { target: { value: "s" } });
+    fireEvent.change(screen.getByTestId("eval-run-model"), { target: { value: "gpt-4o-mini" } });
+    fireEvent.click(screen.getByTestId("eval-run-start"));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith("/eval-datasets/d1/run", {
+        version: 2, system: "s", model: "gpt-4o-mini", judges: [], judge_model: null, prompt_label: null,
+      }),
+    );
+    expect(await screen.findByTestId("eval-run-metrics")).toHaveTextContent("Exact match n/a of 0");
   });
 
   it("offers no run where prompt evaluation is off", async () => {

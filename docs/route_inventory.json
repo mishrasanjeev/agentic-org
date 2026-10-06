@@ -4392,6 +4392,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "evals.runs.list",
+    "auth_required": true,
+    "function": "list_eval_runs",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/eval-datasets/{dataset_id}/runs api/v1/eval_datasets.py:list_eval_runs",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}/runs",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.read",
+    "source_line": 290,
+    "tenant_required": true
+  },
+  {
     "audit_event": "evals.datasets.version.create",
     "auth_required": true,
     "function": "add_eval_dataset_version",
@@ -4425,6 +4443,24 @@
     "rate_limit": "standard",
     "scope": "evals.read",
     "source_line": 139,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.runs.read",
+    "auth_required": true,
+    "function": "get_eval_run",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/eval-runs/{run_id} api/v1/eval_datasets.py:get_eval_run",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-runs/{run_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.read",
+    "source_line": 312,
     "tenant_required": true
   },
   {
