@@ -54,5 +54,6 @@ class EvalRun(BaseModel):
     results: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
     avg_latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by_user: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

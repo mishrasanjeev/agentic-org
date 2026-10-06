@@ -60,15 +60,19 @@ All routes are for tenant administrators.
 | `POST /eval-datasets/{id}/run` | Score a prompt against a version and keep the run. |
 | `GET /eval-datasets/{id}/runs` | The dataset's stored runs, newest first (at most 50), without per-case outcomes. |
 | `GET /eval-runs/{run_id}` | One stored run with its per-case outcomes. |
+| `GET /eval-datasets/{id}/compare?version=` | The models that ran a version, ranked from their newest stored runs. |
+| `PUT /agents/{id}/eval-gate`, `GET /agents/{id}/eval-gate` | An agent's promotion gate and whether its prompt passes it. |
 
 Refusals carry a code: `invalid`, `invalid_cases`, `name_taken`, `too_many`, `not_found`,
 `version_not_found`, `archived`, `stale`, `unchanged`, `run_not_found`.
 
 ### Running a version
 
-`POST /eval-datasets/{id}/run` takes `system` (the prompt), `model`, and optionally `version`
-(the latest when omitted), `max_tokens`, `offset`, `limit`, `judges` with `judge_model`,
-`prompt_label` and `store` (true by default).
+`POST /eval-datasets/{id}/run` takes the prompt as `system`, or `agent_id` to use an agent's
+prompt text (the run is then labelled `agent:<name>` unless `prompt_label` says otherwise, and
+its hash matches the agent's promotion gate), `model`, and optionally `version` (the latest when
+omitted), `max_tokens`, `offset`, `limit`, `judges` with `judge_model`, `prompt_label` and
+`store` (true by default).
 
 - It also needs `AGENTICORG_PROMPT_COMPARE_ENABLED`: a run makes one billed model call per case,
   through the same path as prompt evaluation, so the model is the one asked for, the tenant's
@@ -144,6 +148,42 @@ metrics; logs carry the dataset id, version number and case count. Use synthetic
 The author of a dataset and of each version is recorded as the caller's local user id. A request
 made with an API key records no author.
 
+## Comparing models
+
+`GET /eval-datasets/{id}/compare?version=` (the latest version when omitted) reads the stored runs
+of that version and gives one row per model from its newest run, ranked by pass rate, then
+average latency, then cost per case. Each row carries the pass rate, the classification accuracy
+where the version has labels, the average latency, answers a minute (what one sequential caller
+would get at that latency: an estimate from the measured latency, not a load test), tokens per
+case, cost per case and the judges' means. The console shows the table under the open dataset.
+A model's newest run is the one compared, whatever prompt or slice it used; the row names the
+prompt label and marks a partial slice.
+
+## Promotion gate
+
+An agent may declare a gate (`PUT /agents/{id}/eval-gate`): an evaluation dataset, optionally a
+version (the latest when not given), `min_pass_rate` (100 by default) and `max_regression` (0).
+At promotion or resume to `active`, after the maker-checker check, the newest stored run of that
+dataset version made with the agent's current prompt text is read, matched by the prompt's hash
+(a run made with `agent_id` always matches). The promotion is refused, with the code and the
+numbers, when:
+
+| Code | Meaning |
+|---|---|
+| `not_evaluated` | no stored run of this version was made with the agent's current prompt text |
+| `not_scored` | the newest such run scored no case (every call failed) |
+| `below_minimum` | its pass rate is below `min_pass_rate` |
+| `regressed` | its pass rate is more than `max_regression` points below the newest run of the same version made with a different prompt (the prompt it replaces) |
+| `gate_unusable` | the gate names a dataset or version that cannot be read |
+| `no_prompt_text` | the agent has no prompt text to evaluate |
+
+Behind `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED`, off by default, beside the evaluation switch.
+Off, a gate is stored and `GET /agents/{id}/eval-gate` reports its verdict, and promotion is
+not held to it. An agent with no gate is not affected either way. The gate reads the prompt text
+only: an agent whose behaviour comes from a prompt reference, variables or amendments is not
+measured by it, and a run made with a stale copy of the prompt stops matching as soon as the text
+changes.
+
 ## Scheduled runs
 
 A synthetic check of kind `eval_dataset` (`docs/operations/synthetic-checks.md`) runs a dataset
@@ -157,6 +197,8 @@ same way and feeds the Guardrails page. Both need `AGENTICORG_SYNTHETIC_CHECKS_E
 - **A run takes a prompt and a model.** Running a dataset against an agent or a workflow is not
   available, so there are no retrieval metrics: nothing in a run knows what was retrieved.
 - **No comparison across runs or versions** beyond the list, and no dashboard.
-- **No promotion gate.** A scheduled run records and reports; nothing blocks a promotion on it.
+- **The gate reads the prompt text and one dataset.** Prompt references, variables and
+  amendments are outside it; there is no gate on a workflow or on a scheduled check's result.
+- **No console editor for the gate**; it is set through the API.
 - **No import from the built-in golden datasets**, and no console view of a run larger than one
   slice.

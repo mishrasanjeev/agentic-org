@@ -8,11 +8,13 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
 from core.evals import datasets, runs, scoring
+from core.models.agent import Agent
 from core.pii.pseudonymiser import PseudonymisationError
 from core.prompts import compare as prompt_compare
 from core.schemas.api import EvalDatasetCreate, EvalDatasetRunIn, EvalDatasetVersionCreate
@@ -238,12 +240,27 @@ async def run_eval_dataset(
         raise HTTPException(422, str(exc)) from None
     if judges and not body.judge_model:
         raise HTTPException(422, "judge_model is required with judges")
+    if (body.system is None) == (body.agent_id is None):
+        raise HTTPException(422, "give the prompt as system, or an agent_id whose prompt text is used, not both")
+    system_text = body.system
+    prompt_label = body.prompt_label
     try:
         async with get_tenant_session(tid) as session:
             version = await datasets.get_version(session, tid, dataset_id, body.version)
             described = datasets.version_dict(version, with_cases=True)
+            if body.agent_id is not None:
+                agent = (
+                    await session.execute(select(Agent).where(Agent.id == body.agent_id, Agent.tenant_id == tid))
+                ).scalar_one_or_none()
+                if agent is None:
+                    raise HTTPException(404, "Agent not found")
+                system_text = str(agent.system_prompt_text or "")
+                if not system_text.strip():
+                    raise HTTPException(422, "The agent has no prompt text to evaluate")
+                prompt_label = prompt_label or f"agent:{agent.name}"[:120]
     except datasets.DatasetError as exc:
         raise _refused(exc) from None
+    assert system_text is not None
     selected = described["cases"][body.offset : body.offset + body.limit]
     if not selected:
         raise HTTPException(422, f"offset {body.offset} is past the version's {described['case_count']} cases")
@@ -259,7 +276,7 @@ async def run_eval_dataset(
             cases=every_case[body.offset : body.offset + body.limit],
             labels=prompt_compare.labels_of(every_case),
             offset=body.offset,
-            system_text=body.system,
+            system_text=system_text,
             model=body.model,
             judges=judges,
             judge_model=body.judge_model,
@@ -272,7 +289,7 @@ async def run_eval_dataset(
         raise HTTPException(503, "Pseudonymisation could not be applied; no model was called") from None
     if body.store:
         async with get_tenant_session(tid) as session:
-            stored = runs.store(session, tid, report, prompt_label=body.prompt_label, actor=_actor(user))
+            stored = runs.store(session, tid, report, prompt_label=prompt_label, actor=_actor(user))
             await session.flush()
             report["id"] = str(stored.id)
     return report
@@ -296,6 +313,40 @@ async def list_eval_runs(dataset_id: UUID, tenant_id: str = Depends(get_current_
             await datasets.get_dataset(session, tid, dataset_id)
             rows = await runs.list_runs(session, tid, dataset_id)
             return {"runs": [runs.run_dict(row) for row in rows], "judges": list(scoring.JUDGES)}
+    except datasets.DatasetError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/eval-datasets/{dataset_id}/compare", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="evals.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="evals.runs.compare",
+)
+async def compare_eval_models(
+    dataset_id: UUID, version: int | None = None, tenant_id: str = Depends(get_current_tenant)
+) -> dict:
+    """The models that ran a dataset version, one row each from its newest stored run, ranked.
+
+    Ranked by pass rate, then average latency, then cost per case; each row
+    also carries accuracy, answers a minute at the measured latency, tokens
+    per case and the judges' means. Reads stored runs only.
+    """
+    _require_enabled()
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            found = await datasets.get_version(session, tid, dataset_id, version)
+            rows = await runs.compare_models(session, tid, dataset_id, found.version)
+            return {
+                "dataset_id": str(dataset_id),
+                "version": found.version,
+                "content_hash": found.content_hash,
+                "models": rows,
+            }
     except datasets.DatasetError as exc:
         raise _refused(exc) from None
 
