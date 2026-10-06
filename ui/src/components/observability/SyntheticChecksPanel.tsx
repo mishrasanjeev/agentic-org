@@ -37,6 +37,16 @@ const EXAMPLES: Record<string, Record<string, unknown>> = {
   knowledge: { query: "leave policy", top_k: 5, min_results: 1 },
   guardrail: { stage: "input", text: "Synthetic card number 4111 1111 1111 1111", expect: "detected" },
   audit_chain: { recent: 1000 },
+  adversarial: { min_recall: 50, max_false_positives: 0 },
+  eval_dataset: {
+    dataset_id: "",
+    system: "Answer the question in one sentence.",
+    model: "",
+    judges: [],
+    judge_model: "",
+    limit: 25,
+    min_pass_rate: 100,
+  },
 };
 
 const cardClass = "rounded-lg border border-slate-200 bg-white p-4 shadow-sm";

@@ -29,6 +29,28 @@ interface Status {
   risk_tiers: string[];
 }
 
+interface ScheduledCheck {
+  id: string;
+  name: string;
+  kind: string;
+  interval_minutes: number;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_status: string | null;
+}
+
+interface ScheduledResult {
+  status: string;
+  started_at: string;
+  reasons: string[];
+  detail: { recall?: number | null; attacks?: number; detected?: number; false_positives?: number; controls?: number };
+}
+
+interface ScheduledSuite {
+  check: ScheduledCheck;
+  result: ScheduledResult | null;
+}
+
 interface Outcome {
   rule_id: string;
   rule_name: string;
@@ -167,6 +189,7 @@ export default function Guardrails() {
   const [tryRiskTier, setTryRiskTier] = useState("");
   const [dryRun, setDryRun] = useState<DryRun | null>(null);
   const [suite, setSuite] = useState<SuiteReport | null>(null);
+  const [scheduled, setScheduled] = useState<ScheduledSuite[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,6 +205,25 @@ export default function Guardrails() {
       setError(extractApiError(err, "Failed to load the guardrail rules."));
     } finally {
       setLoading(false);
+    }
+    // The scheduled adversarial checks and their latest result: an addition that is absent where it cannot load.
+    try {
+      const checks = (await api.get("/observability/checks")).data as { checks: ScheduledCheck[] };
+      const adversarial = (checks.checks ?? []).filter((check) => check.kind === "adversarial");
+      const latest = await Promise.all(
+        adversarial.map(async (check) => {
+          try {
+            const response = await api.get(`/observability/checks/${check.id}/results`, { params: { limit: 1 } });
+            const [result] = (response.data as { results: ScheduledResult[] }).results ?? [];
+            return { check, result: result ?? null };
+          } catch {
+            return { check, result: null };
+          }
+        }),
+      );
+      setScheduled(latest);
+    } catch {
+      setScheduled([]);
     }
   }, []);
 
@@ -654,6 +696,36 @@ export default function Guardrails() {
             Run the recommended baseline
           </button>
         </div>
+        {scheduled.length > 0 && (
+          <div className="mt-3 text-sm" data-testid="suite-scheduled">
+            <h3 className="text-xs font-medium uppercase text-slate-500">Scheduled runs</h3>
+            <ul className="mt-1 space-y-1">
+              {scheduled.map(({ check, result }) => (
+                <li key={check.id} data-testid={`suite-scheduled-${check.id}`}>
+                  <span className="text-slate-800">{check.name}</span>
+                  <span className="text-slate-500">
+                    {" "}
+                    every {check.interval_minutes} min{check.enabled ? "" : ", paused"}:{" "}
+                  </span>
+                  {result ? (
+                    <span className={result.status === "ok" ? "text-emerald-700" : "text-amber-700"}>
+                      {result.status}
+                      {result.detail.recall !== undefined && result.detail.recall !== null
+                        ? `, ${result.detail.detected} of ${result.detail.attacks} attacks detected (${percent(
+                            result.detail.recall,
+                          )}), ${result.detail.false_positives} of ${result.detail.controls} benign texts wrongly caught`
+                        : ""}
+                      {result.reasons.length > 0 ? ` (${result.reasons.join(", ")})` : ""} at{" "}
+                      {new Date(result.started_at).toLocaleString()}
+                    </span>
+                  ) : (
+                    <span className="text-slate-500">not run yet</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {suite && (
           <div className="mt-3 space-y-2 text-sm" data-testid="suite-result">
             <p className="text-slate-700">

@@ -25,7 +25,10 @@ from core.models.base import BaseModel
 class SyntheticCheck(BaseModel):
     __tablename__ = "synthetic_checks"
     __table_args__ = (
-        CheckConstraint("kind IN ('model','knowledge','audit_chain','guardrail')", name="ck_synthetic_checks_kind"),
+        CheckConstraint(
+            "kind IN ('model','knowledge','audit_chain','guardrail','adversarial','eval_dataset')",
+            name="ck_synthetic_checks_kind",
+        ),
         CheckConstraint("interval_minutes >= 5 AND interval_minutes <= 1440", name="ck_synthetic_checks_interval"),
         Index("ux_synthetic_checks_tenant_name", "tenant_id", "name", unique=True),
         Index("ix_synthetic_checks_tenant_enabled", "tenant_id", "enabled", "last_run_at"),
