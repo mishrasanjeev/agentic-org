@@ -30,6 +30,7 @@ def upgrade() -> None:
             judges JSONB NOT NULL DEFAULT '[]'::jsonb,
             prompt_hash VARCHAR(64) NOT NULL,
             prompt_label VARCHAR(120) NULL,
+            max_tokens INTEGER NOT NULL DEFAULT 512,
             cases_total INTEGER NOT NULL DEFAULT 0,
             "offset" INTEGER NOT NULL DEFAULT 0,
             cases_run INTEGER NOT NULL DEFAULT 0,

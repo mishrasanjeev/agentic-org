@@ -67,8 +67,13 @@ async def run_version(
     judges: tuple[str, ...] = (),
     judge_model: str | None = None,
     max_tokens: int | None = None,
+    labels: tuple[str, ...] | None = None,
 ) -> dict[str, Any]:
     """Answer, score and judge ``cases`` (one slice of the version) and report; nothing is stored here.
+
+    ``labels`` are the whole version's labels: a slice is scored against every
+    label the dataset uses, not only those its own cases carry, so an answer
+    that names another of the dataset's labels first is read as that label.
 
     Raises ``ValueError`` for a model or judge that cannot be used and
     ``PseudonymisationError`` when pseudonymisation is on but unavailable, in
@@ -85,7 +90,7 @@ async def run_version(
     answers = await asyncio.gather(
         *(prompt_compare.run_one(tenant_id, name, system, case.input, limit, gate, session) for case in cases)
     )
-    labels = prompt_compare.labels_of(cases)
+    labels = labels if labels is not None else prompt_compare.labels_of(cases)
     results: list[dict[str, Any]] = []
     reasons: dict[str, dict[str, str]] = {}
     latency_ms = 0
@@ -153,6 +158,8 @@ async def run_version(
         "cases_total": cases_total,
         "offset": offset,
         "cases_run": len(cases),
+        # ``cases`` is the first release's name for the number of cases scored.
+        "cases": len(cases),
         "complete": offset == 0 and len(cases) == cases_total,
         "model": name,
         "judge_model": judge_name,
@@ -183,9 +190,11 @@ def run_dict(run: EvalRun, *, with_results: bool = False) -> dict[str, Any]:
         "judges": list(run.judges or []),
         "prompt_hash": run.prompt_hash,
         "prompt_label": run.prompt_label,
+        "max_tokens": run.max_tokens,
         "cases_total": run.cases_total,
         "offset": run.offset,
         "cases_run": run.cases_run,
+        "cases": run.cases_run,
         "complete": run.offset == 0 and run.cases_run == run.cases_total,
         "passed": run.passed,
         "failed": run.failed,
@@ -223,6 +232,7 @@ def store(
         judges=list(report["judges"]),
         prompt_hash=report["prompt_hash"],
         prompt_label=prompt_label,
+        max_tokens=report["max_tokens"],
         cases_total=report["cases_total"],
         offset=report["offset"],
         cases_run=report["cases_run"],

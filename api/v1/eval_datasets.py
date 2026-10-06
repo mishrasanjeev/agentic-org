@@ -248,13 +248,16 @@ async def run_eval_dataset(
     if not selected:
         raise HTTPException(422, f"offset {body.offset} is past the version's {described['case_count']} cases")
     try:
+        # The slice is scored against every label of the version, not only its own.
+        every_case = prompt_compare.parse_cases(described["cases"], limit=datasets.MAX_CASES)
         report = await runs.run_version(
             tid,
             dataset_id=dataset_id,
             version=described["version"],
             content_hash=described["content_hash"],
             cases_total=described["case_count"],
-            cases=prompt_compare.parse_cases(selected),
+            cases=every_case[body.offset : body.offset + body.limit],
+            labels=prompt_compare.labels_of(every_case),
             offset=body.offset,
             system_text=body.system,
             model=body.model,
