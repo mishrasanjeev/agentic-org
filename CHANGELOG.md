@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent registry: ratings, reliability and certification
+- The card carries reliability metrics over a window (runs by status,
+  completion, failure and human-review rates, average and 95th-percentile
+  duration, tokens and cost per run, feedback by type, shadow accuracy;
+  `GET /agents/{id}/reliability?days=`), the rating summary
+  (`POST /agents/{id}/rating`, one score per user and agent, table
+  `agent_ratings`, migration `v6z49_agent_ratings`) and a certification
+  section: registry approval, the evaluation gate verdict and the model
+  provider attestation, with a plain statement that trust-registry
+  attestations and passports are not attached.
+
 ### Added - Agent registry: dependency graph
 - `GET /agents/{id}/dependencies` (`core/agent_registry/dependencies.py`)
   returns an agent's models, prompt, tools and connectors, knowledge base,
