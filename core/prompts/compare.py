@@ -341,6 +341,10 @@ def parse_cases(raw: Any, *, limit: int = MAX_CASES) -> list[Case]:
         cases.append(case)
     if len({case.id for case in cases}) != len(cases):
         raise ValueError("case ids must be distinct")
+    labels = labels_of(cases)
+    if len({label.lower() for label in labels}) != len(labels):
+        # Prediction reads labels case-insensitively: two labels that differ only by case could never both be predicted.
+        raise ValueError("labels must be distinct whatever the letter case")
     return cases
 
 

@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "evals.read",
-    "source_line": 287,
+    "source_line": 290,
     "tenant_required": true
   },
   {
@@ -4460,7 +4460,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "evals.read",
-    "source_line": 309,
+    "source_line": 312,
     "tenant_required": true
   },
   {

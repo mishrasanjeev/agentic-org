@@ -285,7 +285,8 @@ class TestScheduledEvaluation:
         monkeypatch.setattr(settings, "prompt_compare_enabled", True)
         dataset_id = uuid.uuid4()
         stored, content_hash = datasets.normalise_cases(
-            [{"id": f"c{index}", "input": f"q{index}", "equals": "yes"} for index in range(30)]
+            [{"id": f"c{index}", "input": f"q{index}", "equals": "yes"} for index in range(29)]
+            + [{"id": "c29", "input": "q29", "label": "decline"}]
         )
         version = SimpleNamespace(
             id=uuid.uuid4(),
@@ -358,6 +359,8 @@ class TestScheduledEvaluation:
         )
         reasons, detail = asyncio.run(synthetic._probe_eval_dataset(TENANT, config))
         assert len(asked["cases"]) == 10 and asked["offset"] == 0 and asked["judges"] == ("relevance",)
+        # The version's labels come from every case, not only the ten that run.
+        assert asked["labels"] == ("decline",)
         assert asked["system_text"] == "Decide." and asked["model"] == "gpt-4o" and asked["tenant_id"] == TENANT
         [run] = added
         assert (

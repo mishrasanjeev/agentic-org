@@ -40,6 +40,8 @@ class EvalRun(BaseModel):
     # The prompt under test is kept by its hash and an optional label, not its text.
     prompt_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     prompt_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # The answer limit the run was made with: it bounds the answers and so the scores.
+    max_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=512)
     cases_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     offset: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cases_run: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

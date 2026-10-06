@@ -152,7 +152,17 @@ class TestRunVersion:
 
     def test_a_slice_is_reported_as_partial(self, engine):
         report = _run(cases=_cases()[2:], offset=2)
-        assert (report["cases_run"], report["offset"], report["complete"]) == (2, 2, False)
+        assert (report["cases_run"], report["cases"], report["offset"], report["complete"]) == (2, 2, 2, False)
+
+    def test_a_slice_is_scored_against_every_label_of_the_version(self, engine):
+        # Case b expects "decline" and the answer names "approve" first; "approve" is a label of the version only.
+        [case_b] = _cases()[1:2]
+        alone = _run(cases=[case_b], offset=1)
+        assert alone["results"][0]["result"] == "failed"
+        assert alone["results"][0]["label"] == {"expected": "decline", "predicted": None}
+        whole = _run(cases=[case_b], offset=1, labels=("approve", "decline"))
+        assert whole["results"][0]["label"] == {"expected": "decline", "predicted": "approve"}
+        assert set(whole["metrics"]["classification"]["labels"]) == {"approve", "decline"}
 
     def test_an_unusable_model_or_judge_model_is_refused_before_any_call(self, engine):
         with pytest.raises(ValueError):
@@ -204,6 +214,8 @@ class TestStore:
             "claims v3",
         )
         assert run.results == report["results"] and run.scores == report["scores"] and run.pass_rate == 0.5
+        assert run.max_tokens == 512 and runs.run_dict(run)["max_tokens"] == 512
+        assert runs.run_dict(run)["cases"] == runs.run_dict(run)["cases_run"] == 4
         assert not hasattr(run, "reasons") and "fine" not in str(vars(run))
         described = runs.run_dict(run)
         assert described["complete"] is True and "results" not in described
@@ -294,6 +306,7 @@ class TestEndpoints:
         [run] = session.added
         assert isinstance(run, EvalRun) and report["id"] == str(run.id) and session.flushes == 1
         assert run.prompt_label == "claims v3" and run.created_by_user == ACTOR and run.judges == ["relevance"]
+        assert report["cases"] == report["cases_run"] == 4
         assert report["scores"]["relevance"]["cases"] == 3 and report["reasons"]["a"] == {"relevance": "relevance of a"}
 
     def test_a_run_can_be_kept_out_of_the_history(self, on, store, engine):
@@ -363,4 +376,5 @@ class TestMigration:
         src = (ROOT / "migrations" / "versions" / "v6_z45_eval_runs.py").read_text(encoding="utf-8")
         assert 'down_revision = "v6z44_eval_datasets"' in src
         assert "FORCE ROW LEVEL SECURITY" in src and "ON eval_runs(dataset_id, created_at);" in src
+        assert "max_tokens INTEGER NOT NULL DEFAULT 512" in src
         assert "REFERENCES eval_datasets(id)" in src

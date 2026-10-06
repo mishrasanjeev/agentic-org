@@ -417,14 +417,16 @@ async def _probe_eval_dataset(tenant_id: uuid.UUID, config: dict[str, Any]) -> t
     async with get_tenant_session(tenant_id) as session:
         version = await datasets.get_version(session, tenant_id, dataset_id, config.get("version"))
         described = datasets.version_dict(version, with_cases=True)
-    selected = described["cases"][: int(config["limit"])]
+    # The slice is scored against every label of the version, not only its own.
+    every_case = prompt_compare.parse_cases(described["cases"], limit=datasets.MAX_CASES)
     report = await runs.run_version(
         tenant_id,
         dataset_id=dataset_id,
         version=described["version"],
         content_hash=described["content_hash"],
         cases_total=described["case_count"],
-        cases=prompt_compare.parse_cases(selected),
+        cases=every_case[: int(config["limit"])],
+        labels=prompt_compare.labels_of(every_case),
         offset=0,
         system_text=config["system"],
         model=config["model"],

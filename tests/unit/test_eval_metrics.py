@@ -30,6 +30,10 @@ class TestLabels:
             ([{"input": "x", "equals": "y", "reference": ""}], "reference is non-empty text"),
             ([{"input": "x", "equals": "y", "context": ["c"]}], "context is non-empty text"),
             ([{"input": "x", "reference": "only material, no expectation"}], "needs at least one of"),
+            (
+                [{"input": "x", "label": "Approve"}, {"input": "y", "label": "approve"}],
+                "distinct whatever the letter case",
+            ),
         ],
     )
     def test_refused_shapes(self, raw, message):

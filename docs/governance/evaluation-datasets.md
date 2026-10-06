@@ -1,8 +1,8 @@
 # Evaluation datasets and runs
 
 A tenant's administrators keep named sets of reference cases, score prompts against them with
-deterministic checks, labels and model-graded judges, and keep the runs. Scheduled runs and
-promotion gates are not here yet (see the end of this page).
+deterministic checks, labels and model-graded judges, and keep the runs. Promotion gates are
+not here yet (see the end of this page).
 
 Behind `AGENTICORG_EVALS_V2_ENABLED`, off by default. Off, the list answers `enabled: false` and
 every other endpoint answers 409; nothing is stored.
@@ -32,7 +32,8 @@ megabyte.
 **Labels.** The dataset's labels are the distinct `label` values of the version. An answer's
 predicted label is the dataset label it names first, as a whole word, case-insensitively; an
 answer that names none has no predicted label. A labelled case passes when the predicted label is
-the expected one.
+the expected one. Labels are distinct whatever the letter case, and a slice of a version is scored
+against every label of the version, not only those its own cases carry.
 
 **A version is never changed.** Saving different cases makes the next version; the database
 refuses an update to a version row. Each version carries the SHA-256 of its cases in canonical
@@ -121,8 +122,8 @@ deterministic checks, not instead of them.
 
 A run is kept unless `store` is false (`eval_runs`, tenant-scoped). What is kept is what was
 measured and what came out: the version and its hash, the model, the judges and judge model, the
-prompt as a SHA-256 hash with the optional `prompt_label`, the slice, the counts, metrics, scores
-and the outcome per case id. Never an answer, an input, the prompt's text or a judge's reason.
+prompt as a SHA-256 hash with the optional `prompt_label`, the answer limit (`max_tokens`), the
+slice, the counts, metrics, scores and the outcome per case id. Never an answer, an input, the prompt's text or a judge's reason.
 
 ## Console
 
