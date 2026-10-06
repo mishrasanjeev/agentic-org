@@ -59,7 +59,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "fastapi>=0.141.1",
+    "fastapi>=0.142.2",
     "uvicorn[standard]>=0.54.0",
     # Held to the 2.1 series to match requirements.txt: the tools image installs
     # these ranges, and 2.1.0's typing changes failed mypy until the code was
