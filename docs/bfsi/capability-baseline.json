@@ -3389,13 +3389,15 @@
       "domain": "PROMPT",
       "title": "Prompt playground",
       "expectation": "Interactive playground to author, test and compare prompts across models side by side.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "ui/src/pages/Playground.tsx"
+          "ui/src/components/prompts/PromptCompare.tsx",
+          "core/prompts/compare.py",
+          "docs/governance/prompt-governance.md"
         ],
-        "note": "Single-agent playground; no side-by-side comparison."
+        "note": "Single-agent playground, and on the prompt templates page one stored prompt against up to four models side by side with each answer's latency, tokens and cost. Comparison makes billed model calls and is off by default (AGENTICORG_PROMPT_COMPARE_ENABLED)."
       },
       "grantex": {
         "status": "none",
@@ -3410,15 +3412,15 @@
       "domain": "PROMPT",
       "title": "Prompt version history",
       "expectation": "Full version history for prompt templates and agent instructions with approval tracking and rollback.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
           "api/v1/prompt_templates.py",
-          "core/models/prompt_template.py",
-          "api/v1/agents.py"
+          "core/prompts/change_requests.py",
+          "core/prompts/activation.py"
         ],
-        "note": "Edit history and rollback; no approval tracking."
+        "note": "Edit history and rollback for templates and agent prompts; every effective prompt change is attributed, and under maker-checker the approver and the change request are recorded on the history row."
       },
       "grantex": {
         "status": "none",
@@ -3433,14 +3435,15 @@
       "domain": "PROMPT",
       "title": "Prompt templating",
       "expectation": "Reusable templating and parameter management with validation and defaults.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
+          "core/prompts/parameters.py",
           "api/v1/prompt_templates.py",
-          "scripts/check_prompt_tools.py"
+          "docs/governance/prompt-governance.md"
         ],
-        "note": "Variable list and tool-reference validation; no defaults or typed parameters."
+        "note": "Typed parameters (text, integer, number, boolean, enum, pattern) with defaults, bounds and validation on save and at render time, behind AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED. An agent's own prompt variables are still substituted as plain text."
       },
       "grantex": {
         "status": "none",
@@ -3477,11 +3480,15 @@
       "domain": "PROMPT",
       "title": "Prompt optimisation",
       "expectation": "Testing and optimisation of templates across models for clarity and token efficiency.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
-        "evidence": [],
-        "note": "No optimisation tooling."
+        "status": "partial",
+        "evidence": [
+          "core/prompts/compare.py",
+          "ui/src/components/prompts/PromptCompare.tsx",
+          "docs/governance/prompt-governance.md"
+        ],
+        "note": "Comparison and dataset evaluation show, per model, a prompt's answer, pass rate, latency, tokens and cost, so a template can be tested across models; nothing rewrites or optimises a prompt."
       },
       "grantex": {
         "status": "none",
@@ -3496,11 +3503,15 @@
       "domain": "PROMPT",
       "title": "Context-window optimisation",
       "expectation": "Context-window optimisation and token management.",
-      "status": "none",
+      "status": "partial",
       "agenticorg": {
-        "status": "none",
-        "evidence": [],
-        "note": "No context trimming or token management."
+        "status": "partial",
+        "evidence": [
+          "core/prompts/context_window.py",
+          "core/langgraph/agent_graph.py",
+          "docs/governance/prompt-governance.md"
+        ],
+        "note": "Before each model call of an agent run the conversation is measured against the called model's window and older, less relevant tool results are omitted or cut from the sent copy; the run's history and the grounding check keep everything. Token counts are estimates, the direct router is not managed, and the switch is off by default."
       },
       "grantex": {
         "status": "none",
@@ -3519,10 +3530,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "evals/runner.py",
-          "evals/golden_datasets"
+          "core/prompts/compare.py",
+          "core/evals/datasets.py",
+          "api/v1/eval_datasets.py"
         ],
-        "note": "Golden datasets; no prompt-variant comparison."
+        "note": "Up to three prompt variants scored with a chosen model against a reference dataset, and tenant datasets kept as immutable hashed versions and run in slices. Expectations are deterministic (contains, equals, pattern), runs are not stored and nothing gates a release on a result."
       },
       "grantex": {
         "status": "none",
@@ -3537,14 +3549,15 @@
       "domain": "PROMPT",
       "title": "Maker-checker for prompts",
       "expectation": "Prompt changes reviewed and approved before production deployment.",
-      "status": "none",
+      "status": "covered",
       "agenticorg": {
-        "status": "none",
+        "status": "covered",
         "evidence": [
-          "api/v1/prompt_templates.py",
-          "core/cases/decision_requests.py"
+          "core/prompts/change_requests.py",
+          "core/prompts/activation.py",
+          "ui/src/components/prompts/PromptChangeRequests.tsx"
         ],
-        "note": "No maker-checker for prompts."
+        "note": "A change to a prompt template waits for a second person's decision, and an agent whose prompt was last changed by the activator cannot be activated by that person. Other parts of an agent are not under maker-checker. Off by default; the authority flag prompts.maker_checker turns it on per tenant."
       },
       "grantex": {
         "status": "none",
@@ -3581,14 +3594,15 @@
       "domain": "PROMPT",
       "title": "Context safeguards",
       "expectation": "Context relevance, prioritisation, session-memory management and data-masking safeguards in prompts.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
           "core/pii/pseudonymiser.py",
-          "core/extraction/context.py"
+          "core/prompts/context_window.py",
+          "core/governance/guardrails/hooks.py"
         ],
-        "note": "Pre-model pseudonymisation and untrusted-text guard; no relevance prioritisation."
+        "note": "Pre-model pseudonymisation, the untrusted-text guard, guardrail rules at the input and retrieval stages, and context-window management that keeps the tool results most relevant to the latest user message; session memory is the run's checkpointed thread. Relevance is shared wording, not meaning."
       },
       "grantex": {
         "status": "none",
@@ -3603,14 +3617,15 @@
       "domain": "PROMPT",
       "title": "Structured output enforcement",
       "expectation": "Strict structured output conforming to predefined JSON schemas.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "core/domain_schemas.py",
-          "core/agents/base.py"
+          "core/prompts/output_schema.py",
+          "core/langgraph/agent_graph.py",
+          "api/v1/agents.py"
         ],
-        "note": "Strict schemas only for governed-case agents."
+        "note": "An agent's declared output schema (its own JSON Schema, locked on active agents, or a registered one) is enforced on API runs: an invalid answer goes back to the model up to twice, then to a human reviewer. Off by default; the voice channel and the typed agent entry points are not covered."
       },
       "grantex": {
         "status": "none",

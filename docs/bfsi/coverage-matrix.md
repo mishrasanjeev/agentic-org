@@ -8,8 +8,8 @@ strongest component capability, not proof that the products are integrated end t
 |---|---:|---:|---:|---:|
 | Baseline conditions | 5 | 1 | 4 | 0 |
 | Technical capabilities | 50 | 4 | 33 | 13 |
-| Functional capabilities | 150 | 15 | 102 | 33 |
-| Total | 205 | 20 | 139 | 46 |
+| Functional capabilities | 150 | 21 | 99 | 30 |
+| Total | 205 | 26 | 136 | 43 |
 
 
 ## Baseline residency, isolation and control conditions
@@ -241,17 +241,17 @@ strongest component capability, not proof that the products are integrated end t
 
 | ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
-| PROMPT-01 | Prompt playground | Partial | **Partial**. Single-agent playground; no side-by-side comparison. (`ui/src/pages/Playground.tsx`) | **Gap** | WP-06 |
-| PROMPT-02 | Prompt version history | Partial | **Partial**. Edit history and rollback; no approval tracking. (`api/v1/prompt_templates.py`, `core/models/prompt_template.py`, `api/v1/agents.py`) | **Gap**. Prompt version references in evidence only. | WP-06 |
-| PROMPT-03 | Prompt templating | Partial | **Partial**. Variable list and tool-reference validation; no defaults or typed parameters. (`api/v1/prompt_templates.py`, `scripts/check_prompt_tools.py`) | **Gap** | WP-06 |
+| PROMPT-01 | Prompt playground | Covered | **Covered**. Single-agent playground, and on the prompt templates page one stored prompt against up to four models side by side with each answer's latency, tokens and cost. Comparison makes billed model calls and is off by default (AGENTICORG_PROMPT_COMPARE_ENABLED). (`ui/src/components/prompts/PromptCompare.tsx`, `core/prompts/compare.py`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
+| PROMPT-02 | Prompt version history | Covered | **Covered**. Edit history and rollback for templates and agent prompts; every effective prompt change is attributed, and under maker-checker the approver and the change request are recorded on the history row. (`api/v1/prompt_templates.py`, `core/prompts/change_requests.py`, `core/prompts/activation.py`) | **Gap**. Prompt version references in evidence only. | WP-06 |
+| PROMPT-03 | Prompt templating | Covered | **Covered**. Typed parameters (text, integer, number, boolean, enum, pattern) with defaults, bounds and validation on save and at render time, behind AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED. An agent's own prompt variables are still substituted as plain text. (`core/prompts/parameters.py`, `api/v1/prompt_templates.py`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
 | PROMPT-04 | Prompt repository | Partial | **Partial**. Central repository with domain RBAC and audit events. (`ui/src/pages/PromptTemplates.tsx`, `api/v1/prompt_templates.py`) | **Gap** | WP-06 |
-| PROMPT-05 | Prompt optimisation | Gap | **Gap**. No optimisation tooling. | **Gap** | WP-06 |
-| PROMPT-06 | Context-window optimisation | Gap | **Gap**. No context trimming or token management. | **Gap** | WP-06 |
-| PROMPT-07 | Prompt evaluation against datasets | Partial | **Partial**. Golden datasets; no prompt-variant comparison. (`evals/runner.py`, `evals/golden_datasets`) | **Gap** | WP-06 |
-| PROMPT-08 | Maker-checker for prompts | Gap | **Gap**. No maker-checker for prompts. (`api/v1/prompt_templates.py`, `core/cases/decision_requests.py`) | **Gap**. Four-eyes exists for agent actions, not prompt changes. | WP-06 |
+| PROMPT-05 | Prompt optimisation | Partial | **Partial**. Comparison and dataset evaluation show, per model, a prompt's answer, pass rate, latency, tokens and cost, so a template can be tested across models; nothing rewrites or optimises a prompt. (`core/prompts/compare.py`, `ui/src/components/prompts/PromptCompare.tsx`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
+| PROMPT-06 | Context-window optimisation | Partial | **Partial**. Before each model call of an agent run the conversation is measured against the called model's window and older, less relevant tool results are omitted or cut from the sent copy; the run's history and the grounding check keep everything. Token counts are estimates, the direct router is not managed, and the switch is off by default. (`core/prompts/context_window.py`, `core/langgraph/agent_graph.py`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
+| PROMPT-07 | Prompt evaluation against datasets | Partial | **Partial**. Up to three prompt variants scored with a chosen model against a reference dataset, and tenant datasets kept as immutable hashed versions and run in slices. Expectations are deterministic (contains, equals, pattern), runs are not stored and nothing gates a release on a result. (`core/prompts/compare.py`, `core/evals/datasets.py`, `api/v1/eval_datasets.py`) | **Gap** | WP-06 |
+| PROMPT-08 | Maker-checker for prompts | Covered | **Covered**. A change to a prompt template waits for a second person's decision, and an agent whose prompt was last changed by the activator cannot be activated by that person. Other parts of an agent are not under maker-checker. Off by default; the authority flag prompts.maker_checker turns it on per tenant. (`core/prompts/change_requests.py`, `core/prompts/activation.py`, `ui/src/components/prompts/PromptChangeRequests.tsx`) | **Gap**. Four-eyes exists for agent actions, not prompt changes. | WP-06 |
 | PROMPT-09 | Dynamic context assembly | Partial | **Partial**. Context from tool outputs; native knowledge base not wired into agent context. (`core/agents/base.py`, `connectors/ops/confluence.py`) | **Gap** | WP-06 |
-| PROMPT-10 | Context safeguards | Partial | **Partial**. Pre-model pseudonymisation and untrusted-text guard; no relevance prioritisation. (`core/pii/pseudonymiser.py`, `core/extraction/context.py`) | **Gap** | WP-06 |
-| PROMPT-11 | Structured output enforcement | Partial | **Partial**. Strict schemas only for governed-case agents. (`core/domain_schemas.py`, `core/agents/base.py`) | **Gap** | WP-06 |
+| PROMPT-10 | Context safeguards | Covered | **Covered**. Pre-model pseudonymisation, the untrusted-text guard, guardrail rules at the input and retrieval stages, and context-window management that keeps the tool results most relevant to the latest user message; session memory is the run's checkpointed thread. Relevance is shared wording, not meaning. (`core/pii/pseudonymiser.py`, `core/prompts/context_window.py`, `core/governance/guardrails/hooks.py`) | **Gap** | WP-06 |
+| PROMPT-11 | Structured output enforcement | Covered | **Covered**. An agent's declared output schema (its own JSON Schema, locked on active agents, or a registered one) is enforced on API runs: an invalid answer goes back to the model up to twice, then to a human reviewer. Off by default; the voice channel and the typed agent entry points are not covered. (`core/prompts/output_schema.py`, `core/langgraph/agent_graph.py`, `api/v1/agents.py`) | **Gap** | WP-06 |
 
 ## Enterprise agent registry and marketplace
 
