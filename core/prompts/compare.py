@@ -58,7 +58,10 @@ DEFAULT_MAX_TOKENS = 512
 MAX_MAX_TOKENS = 2048
 CONCURRENCY = 4
 ROUTER_PROVIDERS: tuple[str, ...] = ("gemini", "openai", "anthropic")
-CHECKS: tuple[str, ...] = ("contains", "not_contains", "equals", "matches")
+CHECKS: tuple[str, ...] = ("contains", "not_contains", "equals", "matches", "label")
+# Reference material a case may carry for model-graded scoring (core/evals/scoring.py); not checks.
+REFERENCE_FIELDS: tuple[str, ...] = ("reference", "context")
+MAX_LABEL_CHARS = 80
 MAX_CHECK_ITEMS = 10
 MAX_CHECK_TEXT = 500
 
@@ -271,6 +274,18 @@ class Case:
     not_contains: tuple[str, ...] = ()
     equals: str | None = None
     matches: str | None = None
+    # The class the answer should name, judged against the labels the dataset uses.
+    label: str | None = None
+    reference: str | None = None
+    context: str | None = None
+
+
+def _optional_text(raw: Any, label: str, limit: int = MAX_INPUT_CHARS) -> str | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or not raw.strip() or len(raw) > limit:
+        raise ValueError(f"{label} is non-empty text of at most {limit} characters")
+    return raw.strip()
 
 
 def _texts(raw: Any, label: str) -> tuple[str, ...]:
@@ -299,7 +314,7 @@ def parse_cases(raw: Any, *, limit: int = MAX_CASES) -> list[Case]:
         label = f"case {index + 1}"
         if not isinstance(item, dict):
             raise ValueError(f"{label} must be an object")
-        unknown = sorted(set(item) - {"id", "input", *CHECKS})
+        unknown = sorted(set(item) - {"id", "input", *CHECKS, *REFERENCE_FIELDS})
         if unknown:
             raise ValueError(f"{label} has unknown keys: {', '.join(unknown)}")
         equals = item.get("equals")
@@ -317,12 +332,19 @@ def parse_cases(raw: Any, *, limit: int = MAX_CASES) -> list[Case]:
             not_contains=_texts(item.get("not_contains"), f"{label}: not_contains"),
             equals=equals,
             matches=pattern,
+            label=_optional_text(item.get("label"), f"{label}: label", MAX_LABEL_CHARS),
+            reference=_optional_text(item.get("reference"), f"{label}: reference"),
+            context=_optional_text(item.get("context"), f"{label}: context"),
         )
-        if not (case.contains or case.not_contains or case.equals is not None or case.matches):
+        if not (case.contains or case.not_contains or case.equals is not None or case.matches or case.label):
             raise ValueError(f"{label} needs at least one of {', '.join(CHECKS)}")
         cases.append(case)
     if len({case.id for case in cases}) != len(cases):
         raise ValueError("case ids must be distinct")
+    labels = labels_of(cases)
+    if len({label.lower() for label in labels}) != len(labels):
+        # Prediction reads labels case-insensitively: two labels that differ only by case could never both be predicted.
+        raise ValueError("labels must be distinct whatever the letter case")
     return cases
 
 
@@ -330,7 +352,34 @@ def parse_cases(raw: Any, *, limit: int = MAX_CASES) -> list[Case]:
 _MATCH_WINDOW = 2000
 
 
-def score(case: Case, output: str) -> list[str]:
+def labels_of(cases: list[Case]) -> tuple[str, ...]:
+    """The classes a dataset uses, in first-seen order."""
+    seen: list[str] = []
+    for case in cases:
+        if case.label and case.label not in seen:
+            seen.append(case.label)
+    return tuple(seen)
+
+
+def predict_label(output: str, labels: tuple[str, ...]) -> str | None:
+    """The dataset label the answer names first, or None when it names none.
+
+    The answer is searched for each label as a whole word, case-insensitively;
+    the earliest match wins, the longest when two start together.
+    """
+    best: tuple[int, int, str] | None = None
+    lowered = output.lower()
+    for label in labels:
+        found = re.search(r"(?<!\w)" + re.escape(label.lower()) + r"(?!\w)", lowered[:_MATCH_WINDOW])
+        if found is None:
+            continue
+        key = (found.start(), -len(label), label)
+        if best is None or key < best:
+            best = key
+    return best[2] if best else None
+
+
+def score(case: Case, output: str, labels: tuple[str, ...] = ()) -> list[str]:
     """The expectations of ``case`` that ``output`` does not meet (empty when it passes)."""
     failed: list[str] = []
     lowered = output.lower()
@@ -340,6 +389,8 @@ def score(case: Case, output: str) -> list[str]:
         failed.append("equals")
     if case.matches and not re.search(case.matches, output[:_MATCH_WINDOW]):
         failed.append("matches")
+    if case.label and predict_label(output, labels or (case.label,)) != case.label:
+        failed.append(f"label:{case.label}")
     return failed
 
 
@@ -396,6 +447,7 @@ async def evaluate(
             *(run_one(tenant_id, name, system, case.input, limit, gate, session) for case in cases)
         )
         report = VariantReport(name=variant_name)
+        labels = labels_of(cases)
         for case, answer in zip(cases, answers, strict=True):
             report.latency_ms += answer.latency_ms
             report.cost_usd += answer.cost_usd
@@ -407,7 +459,7 @@ async def evaluate(
                     entry["served_model"] = answer.served_model
                 report.cases.append(entry)
                 continue
-            failed = score(case, answer.output)
+            failed = score(case, answer.output, labels)
             if failed:
                 report.failed += 1
                 report.cases.append({"id": case.id, "result": "failed", "failed_checks": failed})

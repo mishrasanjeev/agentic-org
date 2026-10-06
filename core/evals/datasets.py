@@ -80,6 +80,12 @@ def _case_dict(case: prompt_compare.Case) -> dict[str, Any]:
         out["equals"] = case.equals
     if case.matches:
         out["matches"] = case.matches
+    if case.label:
+        out["label"] = case.label
+    if case.reference:
+        out["reference"] = case.reference
+    if case.context:
+        out["context"] = case.context
     return out
 
 

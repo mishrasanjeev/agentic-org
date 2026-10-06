@@ -4,12 +4,20 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
-### Fixed - Worker startup and readiness
-- Initialize multiprocess metrics before vault imports create DB instruments.
-- Bind the worker startup listener only after Celery reports ready, so import,
-  vault, metrics and initial broker failures cannot present a healthy worker.
-- Add fresh-process regressions for both development and production settings;
-  missing vault keys still refuse startup.
+### Added - Evaluation framework: scorers, metrics and stored runs
+- A case may carry a `label` (the class the answer should name), a
+  `reference` answer and a `context`. A run of a dataset version
+  (`core/evals/runs.py`) reports exact-match and classification metrics
+  (accuracy, macro precision, recall and F1 over the dataset's labels;
+  `core/evals/metrics.py`) beside the pass rate, and any of four
+  model-graded judges with a judge model (faithfulness, relevance,
+  instruction adherence, context recall; `core/evals/scoring.py`), each one
+  more billed call per case and judge, with failures kept apart from scores.
+  Runs are stored (`eval_runs`, migration `v6z45_eval_runs`) as what was
+  measured and what came out, with the prompt as a hash and an optional
+  label; never an answer, an input or a judge's reason. `GET
+  /eval-datasets/{id}/runs` and `GET /eval-runs/{run_id}` read them back,
+  and the console panel chooses judges and lists earlier runs.
 
 ### Added - Evaluation framework: datasets
 - Behind `AGENTICORG_EVALS_V2_ENABLED` (off by default), a tenant's
@@ -34,6 +42,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   live provider speech, messaging or payment actions are not verified by this release.
 - Added SDK protocol, Docker API/database and browser regressions, including the
   reported speech-tool names, tenant isolation and refusal paths.
+
+### Fixed - Worker startup and readiness
+- Initialize multiprocess metrics before vault imports create DB instruments.
+- Bind the worker startup listener only after Celery reports ready, so import,
+  vault, metrics and initial broker failures cannot present a healthy worker.
+- Add fresh-process regressions for both development and production settings;
+  missing vault keys still refuse startup.
 
 ### Added - Prompt governance: structured-output enforcement
 - Behind `AGENTICORG_OUTPUT_SCHEMA_ENFORCED` (off by default), an agent's

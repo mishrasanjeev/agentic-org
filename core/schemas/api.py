@@ -444,6 +444,12 @@ class EvalDatasetRunIn(BaseModel):
     max_tokens: int | None = Field(None, ge=1, le=2048)
     offset: int = Field(0, ge=0)
     limit: int = Field(25, ge=1, le=25)
+    # Model-graded scorers (core/evals/scoring.py) and the model that judges; none by default.
+    judges: list[str] = Field(default_factory=list, max_length=4)
+    judge_model: str | None = Field(None, min_length=1, max_length=128)
+    # A name for the prompt under test on the stored run; the prompt itself is kept as a hash.
+    prompt_label: str | None = Field(None, max_length=120)
+    store: bool = True
 
 
 class PromptTemplateResponse(BaseModel):

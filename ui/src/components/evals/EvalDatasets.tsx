@@ -32,7 +32,14 @@ interface CaseResult {
   error_type?: string;
 }
 
+interface JudgeScore {
+  cases: number;
+  mean: number | null;
+  errors: number;
+}
+
 interface RunOut {
+  id?: string;
   version: number;
   content_hash: string;
   cases_total: number;
@@ -40,13 +47,43 @@ interface RunOut {
   cases_run: number;
   complete: boolean;
   model: string;
+  judge_model: string | null;
+  judges: string[];
   passed: number;
   failed: number;
   errors: number;
   pass_rate: number | null;
   cost_usd: number;
+  metrics: {
+    exact_match: { cases: number; matched: number; rate: number | null };
+    classification: { cases: number; accuracy: number | null; precision: number; recall: number; f1: number } | null;
+  };
+  scores: Record<string, JudgeScore>;
   results: CaseResult[];
+  reasons?: Record<string, Record<string, string>>;
 }
+
+interface RunSummary {
+  id: string;
+  version: number;
+  model: string;
+  judges: string[];
+  prompt_label: string | null;
+  cases_run: number;
+  complete: boolean;
+  pass_rate: number | null;
+  scores: Record<string, JudgeScore>;
+  created_at: string | null;
+}
+
+const JUDGE_NAMES: Record<string, string> = {
+  faithfulness: "Faithfulness (needs context)",
+  relevance: "Relevance",
+  instruction_adherence: "Instruction adherence",
+  context_recall: "Context recall (needs reference)",
+};
+
+const percent = (value: number | null) => (value === null ? "n/a" : `${Math.round(value * 100)}%`);
 
 const EXAMPLE = JSON.stringify(
   [{ id: "refund-window", input: "Can I return an item after 40 days?", contains: ["30 days"] }],
@@ -84,7 +121,12 @@ export default function EvalDatasets() {
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("");
   const [system, setSystem] = useState("");
+  const [judges, setJudges] = useState<string[]>([]);
+  const [judgeModel, setJudgeModel] = useState("");
+  const [promptLabel, setPromptLabel] = useState("");
   const [run, setRun] = useState<RunOut | null>(null);
+  const [history, setHistory] = useState<RunSummary[]>([]);
+  const [judgeKinds, setJudgeKinds] = useState<string[]>([]);
   // Each load of a dataset takes a number; a response for an earlier one is dropped.
   const generation = useRef(0);
 
@@ -116,6 +158,17 @@ export default function EvalDatasets() {
     setError(extractApiError(err, fallback));
   };
 
+  const loadHistory = async (datasetId: string, mine: number) => {
+    try {
+      const response = await api.get(`/eval-datasets/${datasetId}/runs`);
+      if (mine !== generation.current) return;
+      setHistory(response.data.runs as RunSummary[]);
+      setJudgeKinds(response.data.judges as string[]);
+    } catch {
+      if (mine === generation.current) setHistory([]);
+    }
+  };
+
   const select = async (dataset: Dataset, version?: number) => {
     const mine = ++generation.current;
     setError(null);
@@ -125,6 +178,7 @@ export default function EvalDatasets() {
       const wanted = version ?? (detail.data.latest_version as number);
       const body = await api.get(`/eval-datasets/${dataset.id}/versions/${wanted}`);
       if (mine !== generation.current) return;
+      void loadHistory(dataset.id, mine);
       setOpen({ ...dataset, latest_version: detail.data.latest_version, case_count: detail.data.case_count });
       setVersions(detail.data.versions as VersionSummary[]);
       setShown(wanted);
@@ -141,6 +195,7 @@ export default function EvalDatasets() {
     setVersions([]);
     setShown(null);
     setRun(null);
+    setHistory([]);
     setCasesText(EXAMPLE);
     setNote("");
   };
@@ -197,8 +252,18 @@ export default function EvalDatasets() {
     setBusy(true);
     setError(null);
     try {
-      const response = await api.post(`/eval-datasets/${open.id}/run`, { version: shown, system, model });
-      if (mine === generation.current) setRun(response.data as RunOut);
+      const response = await api.post(`/eval-datasets/${open.id}/run`, {
+        version: shown,
+        system,
+        model,
+        judges,
+        judge_model: judges.length > 0 ? judgeModel : null,
+        prompt_label: promptLabel || null,
+      });
+      if (mine === generation.current) {
+        setRun(response.data as RunOut);
+        void loadHistory(open.id, mine);
+      }
     } catch (err) {
       if (mine === generation.current) {
         setRun(null);
@@ -368,10 +433,60 @@ export default function EvalDatasets() {
               ))}
             </select>
           </label>
+          <label className="mt-2 block text-sm text-slate-700">
+            Prompt label (kept with the run; the prompt itself is kept as a hash)
+            <input
+              className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+              value={promptLabel}
+              maxLength={120}
+              onChange={(e) => setPromptLabel(e.target.value)}
+              data-testid="eval-run-label"
+            />
+          </label>
+          {judgeKinds.length > 0 && (
+            <fieldset className="mt-2">
+              <legend className="text-sm text-slate-700">Judges (one more billed call per case and judge)</legend>
+              <div className="mt-1 flex flex-wrap gap-3">
+                {judgeKinds.map((kind) => (
+                  <label key={kind} className="flex items-center gap-1 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={judges.includes(kind)}
+                      onChange={() =>
+                        setJudges((current) =>
+                          current.includes(kind) ? current.filter((name) => name !== kind) : [...current, kind],
+                        )
+                      }
+                      data-testid={`eval-judge-${kind}`}
+                    />
+                    {JUDGE_NAMES[kind] ?? kind}
+                  </label>
+                ))}
+              </div>
+              {judges.length > 0 && (
+                <label className="mt-2 block text-sm text-slate-700">
+                  Judge model
+                  <select
+                    className="ml-2 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                    value={judgeModel}
+                    onChange={(e) => setJudgeModel(e.target.value)}
+                    data-testid="eval-judge-model"
+                  >
+                    <option value="">Choose a judge model</option>
+                    {models.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </fieldset>
+          )}
           <button
             type="button"
             className="mt-3 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white disabled:bg-slate-400"
-            disabled={busy || !model || !system.trim()}
+            disabled={busy || !model || !system.trim() || (judges.length > 0 && !judgeModel)}
             onClick={() => void score()}
             data-testid="eval-run-start"
           >
@@ -389,14 +504,49 @@ export default function EvalDatasets() {
                   Partial: cases {run.offset + 1} to {run.offset + run.cases_run} of {run.cases_total}.
                 </p>
               )}
+              <p className="mt-1 text-xs text-slate-600" data-testid="eval-run-metrics">
+                Exact match {percent(run.metrics.exact_match.rate)} of {run.metrics.exact_match.cases}
+                {run.metrics.classification &&
+                  ` · Labels: accuracy ${percent(run.metrics.classification.accuracy)}, precision ${percent(
+                    run.metrics.classification.precision,
+                  )}, recall ${percent(run.metrics.classification.recall)}, F1 ${percent(run.metrics.classification.f1)}`}
+                {Object.entries(run.scores).map(
+                  ([kind, score]) =>
+                    ` · ${JUDGE_NAMES[kind] ?? kind}: ${percent(score.mean)} over ${score.cases}${
+                      score.errors ? ` (${score.errors} unrated)` : ""
+                    }`,
+                )}
+              </p>
               <ul className="mt-1 text-xs text-slate-600">
                 {run.results
                   .filter((item) => item.result !== "passed")
                   .map((item) => (
                     <li key={item.id}>
                       {item.id}: {item.result === "error" ? `error (${item.error_type ?? "unknown"})` : (item.failed_checks ?? []).join(", ")}
+                      {run.reasons?.[item.id] &&
+                        Object.entries(run.reasons[item.id]).map(([kind, reason]) => (
+                          <span key={kind} className="ml-2 text-slate-500">
+                            {JUDGE_NAMES[kind] ?? kind}: {reason}
+                          </span>
+                        ))}
                     </li>
                   ))}
+              </ul>
+            </div>
+          )}
+          {history.length > 0 && (
+            <div className="mt-3" data-testid="eval-run-history">
+              <h5 className="text-xs font-medium text-slate-700">Earlier runs</h5>
+              <ul className="mt-1 text-xs text-slate-600">
+                {history.map((item) => (
+                  <li key={item.id}>
+                    v{item.version} · {item.model}
+                    {item.prompt_label ? ` · ${item.prompt_label}` : ""} · {percent(item.pass_rate)} of {item.cases_run}
+                    {item.complete ? "" : " (partial)"}
+                    {Object.entries(item.scores).map(([kind, score]) => ` · ${kind} ${percent(score.mean)}`)}
+                    {item.created_at ? ` · ${item.created_at.slice(0, 16).replace("T", " ")}` : ""}
+                  </li>
+                ))}
               </ul>
             </div>
           )}

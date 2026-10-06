@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.deps import get_current_tenant, get_current_user, require_tenant_admin
 from api.route_metadata import route_meta
 from core.database import get_tenant_session
-from core.evals import datasets
+from core.evals import datasets, runs, scoring
 from core.pii.pseudonymiser import PseudonymisationError
 from core.prompts import compare as prompt_compare
 from core.schemas.api import EvalDatasetCreate, EvalDatasetRunIn, EvalDatasetVersionCreate
@@ -214,20 +214,30 @@ async def archive_eval_dataset(dataset_id: UUID, tenant_id: str = Depends(get_cu
     audit_event="evals.datasets.run",
 )
 async def run_eval_dataset(
-    dataset_id: UUID, body: EvalDatasetRunIn, tenant_id: str = Depends(get_current_tenant)
+    dataset_id: UUID,
+    body: EvalDatasetRunIn,
+    tenant_id: str = Depends(get_current_tenant),
+    user: dict = Depends(get_current_user),
 ) -> dict:
-    """Score a prompt with one model against a version of a dataset.
+    """Score a prompt with one model against a version of a dataset, with optional judges.
 
-    Makes one billed model call per case, at most 25 cases a request; a larger
-    version is run in slices with ``offset``. The response names the version,
-    its content hash and the slice, and per case whether it passed, which
-    expectations it failed or the error type; never an answer. Nothing is
-    stored.
+    Makes one billed model call per case, plus one per case and judge, at most
+    25 cases a request; a larger version is run in slices with ``offset``. The
+    response names the version, its content hash and the slice, the metrics,
+    the judges' scores, and per case whether it passed, which expectations it
+    failed or the error type; never an answer. The run is stored unless
+    ``store`` is false; a judge's reasons are returned once and not stored.
     """
     _require_enabled()
     if not prompt_compare.enabled():
         raise HTTPException(409, "Prompt evaluation is off in this deployment")
     tid = _uuid.UUID(tenant_id)
+    try:
+        judges = scoring.validate_judges(body.judges)
+    except scoring.JudgeError as exc:
+        raise HTTPException(422, str(exc)) from None
+    if judges and not body.judge_model:
+        raise HTTPException(422, "judge_model is required with judges")
     try:
         async with get_tenant_session(tid) as session:
             version = await datasets.get_version(session, tid, dataset_id, body.version)
@@ -238,11 +248,21 @@ async def run_eval_dataset(
     if not selected:
         raise HTTPException(422, f"offset {body.offset} is past the version's {described['case_count']} cases")
     try:
-        report = await prompt_compare.evaluate(
+        # The slice is scored against every label of the version, not only its own.
+        every_case = prompt_compare.parse_cases(described["cases"], limit=datasets.MAX_CASES)
+        report = await runs.run_version(
             tid,
-            variants=[("prompt", body.system)],
-            cases=prompt_compare.parse_cases(selected),
+            dataset_id=dataset_id,
+            version=described["version"],
+            content_hash=described["content_hash"],
+            cases_total=described["case_count"],
+            cases=every_case[body.offset : body.offset + body.limit],
+            labels=prompt_compare.labels_of(every_case),
+            offset=body.offset,
+            system_text=body.system,
             model=body.model,
+            judges=judges,
+            judge_model=body.judge_model,
             max_tokens=body.max_tokens,
         )
     except ValueError as exc:
@@ -250,17 +270,51 @@ async def run_eval_dataset(
     except PseudonymisationError as exc:
         logger.error("eval_dataset_run_pseudonymisation_unavailable", reason=str(exc))
         raise HTTPException(503, "Pseudonymisation could not be applied; no model was called") from None
-    [result] = report["variants"]
-    result.pop("name", None)
-    return {
-        "dataset_id": described["dataset_id"],
-        "version": described["version"],
-        "content_hash": described["content_hash"],
-        "cases_total": described["case_count"],
-        "offset": body.offset,
-        "cases_run": len(selected),
-        "complete": body.offset == 0 and len(selected) == described["case_count"],
-        "model": report["model"],
-        "max_tokens": report["max_tokens"],
-        **result,
-    }
+    if body.store:
+        async with get_tenant_session(tid) as session:
+            stored = runs.store(session, tid, report, prompt_label=body.prompt_label, actor=_actor(user))
+            await session.flush()
+            report["id"] = str(stored.id)
+    return report
+
+
+@router.get("/eval-datasets/{dataset_id}/runs", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="evals.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="evals.runs.list",
+)
+async def list_eval_runs(dataset_id: UUID, tenant_id: str = Depends(get_current_tenant)) -> dict:
+    """The stored runs of a dataset, newest first (at most 50), without per-case outcomes."""
+    _require_enabled()
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            await datasets.get_dataset(session, tid, dataset_id)
+            rows = await runs.list_runs(session, tid, dataset_id)
+            return {"runs": [runs.run_dict(row) for row in rows], "judges": list(scoring.JUDGES)}
+    except datasets.DatasetError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/eval-runs/{run_id}", dependencies=[require_tenant_admin])
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="evals.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="evals.runs.read",
+)
+async def get_eval_run(run_id: UUID, tenant_id: str = Depends(get_current_tenant)) -> dict:
+    """One stored run with its per-case outcomes."""
+    _require_enabled()
+    tid = _uuid.UUID(tenant_id)
+    try:
+        async with get_tenant_session(tid) as session:
+            return runs.run_dict(await runs.get_run(session, tid, run_id), with_results=True)
+    except datasets.DatasetError as exc:
+        raise _refused(exc) from None
