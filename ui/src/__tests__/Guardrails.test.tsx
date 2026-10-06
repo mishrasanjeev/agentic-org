@@ -52,9 +52,25 @@ function route(status: Record<string, unknown>, rules = [RULE]) {
   mockGet.mockImplementation((url: string) => {
     if (url === "/guardrails/status") return Promise.resolve({ data: { ...LISTS, ...status } });
     if (url === "/guardrails/rules") return Promise.resolve({ data: rules });
+    if (url === "/observability/checks") return Promise.resolve({ data: { checks: scheduledChecks } });
+    if (url === "/observability/checks/chk-1/results")
+      return Promise.resolve({
+        data: {
+          results: [
+            {
+              status: "failed",
+              started_at: "2026-10-06T02:00:00+00:00",
+              reasons: ["adversarial_recall_below_minimum"],
+              detail: { recall: 0.6, attacks: 20, detected: 12, false_positives: 1, controls: 9 },
+            },
+          ],
+        },
+      });
     return Promise.reject(new Error(`unexpected ${url}`));
   });
 }
+
+let scheduledChecks: Array<Record<string, unknown>> = [];
 
 function renderPage() {
   return render(
@@ -187,6 +203,29 @@ describe("Guardrails console", () => {
     expect(result).toHaveTextContent("blocked");
     expect(result).toHaveTextContent("unsupported_number");
     expect(result).toHaveTextContent("flag-only");
+  });
+
+  it("shows the scheduled adversarial checks with their latest result", async () => {
+    scheduledChecks = [
+      { id: "chk-1", name: "nightly attacks", kind: "adversarial", interval_minutes: 1440, enabled: true, last_run_at: null, last_status: "failed" },
+      { id: "chk-2", name: "nightly model", kind: "model", interval_minutes: 60, enabled: true, last_run_at: null, last_status: "ok" },
+      { id: "chk-3", name: "weekly attacks", kind: "adversarial", interval_minutes: 1440, enabled: false, last_run_at: null, last_status: null },
+    ];
+    route({});
+    renderPage();
+    const block = await screen.findByTestId("suite-scheduled");
+    expect(block).toHaveTextContent("nightly attacks every 1440 min: failed, 12 of 20 attacks detected (60%), 1 of 9 benign texts wrongly caught (adversarial_recall_below_minimum)");
+    expect(block).toHaveTextContent("weekly attacks every 1440 min, paused: not run yet");
+    expect(block).not.toHaveTextContent("nightly model");
+    scheduledChecks = [];
+  });
+
+  it("is unchanged where the checks cannot be read", async () => {
+    scheduledChecks = [];
+    route({});
+    renderPage();
+    await screen.findByTestId("adversarial");
+    expect(screen.queryByTestId("suite-scheduled")).not.toBeInTheDocument();
   });
 
   it("runs the adversarial set against the tenant's rules and the baseline", async () => {

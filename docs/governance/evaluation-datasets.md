@@ -1,8 +1,8 @@
 # Evaluation datasets and runs
 
 A tenant's administrators keep named sets of reference cases, score prompts against them with
-deterministic checks, labels and model-graded judges, and keep the runs. Scheduled runs and
-promotion gates are not here yet (see the end of this page).
+deterministic checks, labels and model-graded judges, and keep the runs. Promotion gates are
+not here yet (see the end of this page).
 
 Behind `AGENTICORG_EVALS_V2_ENABLED`, off by default. Off, the list answers `enabled: false` and
 every other endpoint answers 409; nothing is stored.
@@ -144,11 +144,19 @@ metrics; logs carry the dataset id, version number and case count. Use synthetic
 The author of a dataset and of each version is recorded as the caller's local user id. A request
 made with an API key records no author.
 
+## Scheduled runs
+
+A synthetic check of kind `eval_dataset` (`docs/operations/synthetic-checks.md`) runs a dataset
+version with a fixed prompt and model on an interval, keeps each run in the dataset's history
+with the label `scheduled:<model>`, and fails when the pass rate falls below `min_pass_rate` or a
+case could not be answered. A check of kind `adversarial` runs the guardrail adversarial set the
+same way and feeds the Guardrails page. Both need `AGENTICORG_SYNTHETIC_CHECKS_ENABLED`.
+
 ## What is not here yet
 
 - **A run takes a prompt and a model.** Running a dataset against an agent or a workflow is not
   available, so there are no retrieval metrics: nothing in a run knows what was retrieved.
 - **No comparison across runs or versions** beyond the list, and no dashboard.
-- **No scheduled runs and no promotion gate.**
+- **No promotion gate.** A scheduled run records and reports; nothing blocks a promotion on it.
 - **No import from the built-in golden datasets**, and no console view of a run larger than one
   slice.

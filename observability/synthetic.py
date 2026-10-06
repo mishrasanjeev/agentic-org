@@ -16,6 +16,15 @@ A check names a probe kind, its configuration and an interval. Four kinds:
     still catch what they are there to catch.
 ``audit_chain``
     Verifies the newest links of the tenant's audit chain.
+``adversarial``
+    Dry-runs the tenant's guardrail rules over the adversarial evaluation set
+    (``core.governance.guardrails.adversarial``) and expects a minimum recall
+    and at most a given number of benign controls wrongly caught.
+``eval_dataset``
+    Scores a prompt with a model against a version of one of the tenant's
+    evaluation datasets (``core.evals.runs``), keeps the run in the
+    evaluation history, and expects a minimum pass rate. One billed model
+    call per case each run, plus one per case and judge.
 
 Every kind takes ``max_latency_ms``. A run ends ``ok``, ``failed`` (the probe
 answered but an expectation did not hold; ``reasons`` says which) or
@@ -51,7 +60,7 @@ from observability import tracing
 
 logger = structlog.get_logger()
 
-KINDS: tuple[str, ...] = ("model", "knowledge", "guardrail", "audit_chain")
+KINDS: tuple[str, ...] = ("model", "knowledge", "guardrail", "audit_chain", "adversarial", "eval_dataset")
 STATUSES: tuple[str, ...] = ("ok", "failed", "error")
 TRIGGERS: tuple[str, ...] = ("schedule", "manual")
 GUARDRAIL_EXPECTATIONS: tuple[str, ...] = ("blocked", "detected", "clean")
@@ -97,7 +106,25 @@ _KEYS: dict[str, tuple[str, ...]] = {
     "knowledge": ("query", "top_k", "min_results", "max_latency_ms"),
     "guardrail": ("stage", "text", "expect", "max_latency_ms"),
     "audit_chain": ("recent", "max_latency_ms"),
+    "adversarial": ("min_recall", "max_false_positives", "max_latency_ms"),
+    "eval_dataset": (
+        "dataset_id",
+        "version",
+        "system",
+        "model",
+        "judges",
+        "judge_model",
+        "limit",
+        "min_pass_rate",
+        "max_latency_ms",
+    ),
 }
+
+
+def _percent(config: dict[str, Any], key: str, *, default: int) -> int:
+    """A whole-number percentage, 0 to 100."""
+    value = _number(config, key, low=0, high=100, default=default)
+    return int(value if value is not None else default)
 
 
 def validate_config(kind: str, config: Any) -> dict[str, Any]:
@@ -132,8 +159,31 @@ def validate_config(kind: str, config: Any) -> dict[str, Any]:
         clean["stage"] = stage
         clean["text"] = _text(config, "text", limit=2000)
         clean["expect"] = expect
-    else:
+    elif kind == "audit_chain":
         clean["recent"] = _number(config, "recent", low=1, high=10_000, default=1000)
+    elif kind == "adversarial":
+        clean["min_recall"] = _percent(config, "min_recall", default=50)
+        clean["max_false_positives"] = _number(config, "max_false_positives", low=0, high=1000, default=0)
+    else:
+        from core.evals import scoring
+
+        try:
+            clean["dataset_id"] = str(uuid.UUID(str(config.get("dataset_id") or "")))
+        except ValueError:
+            raise ValueError("dataset_id must be an evaluation dataset id") from None
+        clean["version"] = _number(config, "version", low=1, high=1_000_000, default=None)
+        clean["system"] = _text(config, "system", limit=20_000)
+        clean["model"] = _text(config, "model", limit=128)
+        try:
+            judges = list(scoring.validate_judges(config.get("judges")))
+        except scoring.JudgeError as exc:
+            raise ValueError(str(exc)) from None
+        clean["judges"] = judges or None
+        clean["judge_model"] = _text(config, "judge_model", limit=128, required=False)
+        if judges and not clean["judge_model"]:
+            raise ValueError("judge_model is required with judges")
+        clean["limit"] = _number(config, "limit", low=1, high=25, default=25)
+        clean["min_pass_rate"] = _percent(config, "min_pass_rate", default=100)
     clean["max_latency_ms"] = _number(config, "max_latency_ms", low=1, high=MAX_LATENCY_MS, default=None)
     return {key: value for key, value in clean.items() if value is not None}
 
@@ -321,11 +371,99 @@ async def _probe_audit_chain(tenant_id: uuid.UUID, config: dict[str, Any]) -> tu
     return [], detail
 
 
+async def _probe_adversarial(tenant_id: uuid.UUID, config: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """The adversarial set over the tenant's rules; the detail is the report without case texts."""
+    from core.governance.guardrails import adversarial
+
+    report = (await adversarial.run_suite(tenant_id=tenant_id)).to_dict()
+    reasons: list[str] = []
+    recall = report["recall"]
+    if recall is None or recall * 100 < int(config["min_recall"]):
+        reasons.append("adversarial_recall_below_minimum")
+    if int(report["false_positives"]) > int(config["max_false_positives"]):
+        reasons.append("adversarial_controls_wrongly_caught")
+    if report["errors"]:
+        reasons.append("adversarial_cases_not_evaluated")
+    detail = {
+        "rule_count": report["rule_count"],
+        "attacks": report["attacks"],
+        "detected": report["detected"],
+        "recall": recall,
+        "controls": report["controls"],
+        "false_positives": report["false_positives"],
+        "errors": len(report["errors"]),
+        "categories": [
+            {
+                "category": category["category"],
+                "recall": category["recall"],
+                "false_positives": category["false_positives"],
+                "missed": list(category["missed"]),
+            }
+            for category in report["categories"]
+        ],
+    }
+    return reasons, detail
+
+
+async def _probe_eval_dataset(tenant_id: uuid.UUID, config: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
+    """A slice of a dataset version scored with the configured prompt and model; the run is kept."""
+    from core.database import get_tenant_session
+    from core.evals import datasets, runs
+    from core.prompts import compare as prompt_compare
+
+    if not datasets.enabled() or not prompt_compare.enabled():
+        raise RuntimeError("evaluation datasets or prompt evaluation are off")
+    dataset_id = uuid.UUID(config["dataset_id"])
+    async with get_tenant_session(tenant_id) as session:
+        version = await datasets.get_version(session, tenant_id, dataset_id, config.get("version"))
+        described = datasets.version_dict(version, with_cases=True)
+    # The slice is scored against every label of the version, not only its own.
+    every_case = prompt_compare.parse_cases(described["cases"], limit=datasets.MAX_CASES)
+    report = await runs.run_version(
+        tenant_id,
+        dataset_id=dataset_id,
+        version=described["version"],
+        content_hash=described["content_hash"],
+        cases_total=described["case_count"],
+        cases=every_case[: int(config["limit"])],
+        labels=prompt_compare.labels_of(every_case),
+        offset=0,
+        system_text=config["system"],
+        model=config["model"],
+        judges=tuple(config.get("judges") or ()),
+        judge_model=config.get("judge_model"),
+    )
+    async with get_tenant_session(tenant_id) as session:
+        stored = runs.store(session, tenant_id, report, prompt_label=f"scheduled:{config['model']}", actor=None)
+        await session.flush()
+        run_id = str(stored.id)
+    reasons: list[str] = []
+    if report["errors"]:
+        reasons.append("eval_cases_not_answered")
+    if report["pass_rate"] is None or report["pass_rate"] * 100 < int(config["min_pass_rate"]):
+        reasons.append("eval_pass_rate_below_minimum")
+    detail = {
+        "run_id": run_id,
+        "version": report["version"],
+        "cases_run": report["cases_run"],
+        "complete": report["complete"],
+        "passed": report["passed"],
+        "failed": report["failed"],
+        "errors": report["errors"],
+        "pass_rate": report["pass_rate"],
+        "scores": {kind: score["mean"] for kind, score in report["scores"].items()},
+        "cost_usd": report["cost_usd"],
+    }
+    return reasons, detail
+
+
 _PROBES = {
     "model": "_probe_model",
     "knowledge": "_probe_knowledge",
     "guardrail": "_probe_guardrail",
     "audit_chain": "_probe_audit_chain",
+    "adversarial": "_probe_adversarial",
+    "eval_dataset": "_probe_eval_dataset",
 }
 
 
