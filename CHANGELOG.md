@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Fixed - Worker startup and readiness
+- Initialize multiprocess metrics before vault imports create DB instruments.
+- Bind the worker startup listener only after Celery reports ready, so import,
+  vault, metrics and initial broker failures cannot present a healthy worker.
+- Add fresh-process regressions for both development and production settings;
+  missing vault keys still refuse startup.
+
 ### Added - Tenant-owned remote MCP tools
 - Dedicated Streamable HTTP bearer connection, protocol discovery, encrypted
   token storage, schema-bound read review, read-only probe and credential rotation.

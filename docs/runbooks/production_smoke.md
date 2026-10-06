@@ -2,12 +2,32 @@
 
 This runbook defines a cost-capped authenticated production smoke process for the existing AgenticOrg production services. It does not provision infrastructure, change production traffic, or run paid provider checks by default.
 
-Current reference state:
+Historical reference state (not a current production inventory):
 
 - Production app commit: `46798ad20c82ee02cdf76e362f16f92c7163c081`
 - Main after smoke-tooling merge: `016da0b3c2fb0a3e42535e91bca270fae6ac620e`
 - API revision at last deploy: `agenticorg-api-00064-tqc`
 - UI revision at last deploy: `agenticorg-ui-00033-vvx`
+
+## Worker Startup And Rollback Evidence
+
+Before a rollout, resolve the current API/UI/worker/beat traffic revisions and
+verify their exact image digests still exist in Artifact Registry. A saved
+revision name is not a usable rollback if image cleanup deleted its digest.
+Do not delete or overwrite release images during validation.
+
+After a rollout, check the worker revision's Celery-ready log, expected queue
+registration and successful task completion, not only Cloud Run's Ready flag.
+The worker's health listener now starts on Celery's `worker_ready` signal after
+metrics initialization, vault validation, imports and initial broker connection.
+It is a startup check, not a continuous broker or end-to-end connector check.
+Beat uses a single-process metrics registry; verify scheduler startup separately.
+
+The October 2026 MCP rollout exposed late metrics initialization through vault
+imports. Setting the existing worker's environment to production restored task
+processing under the existing nonfatal production metrics policy; that was
+recovery, not a substitute for the import-order fix. Never weaken vault checks
+or rely on an early HTTP listener to hide a startup exception.
 
 ## No-New-Infra Policy
 

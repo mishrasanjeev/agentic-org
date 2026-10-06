@@ -129,6 +129,39 @@ Transport checks reject compressed responses that ignore `Accept-Encoding:
 identity`, as well as oversized identity responses, before exposing the client to
 unbounded decompression. This limitation is documented for connector operators.
 
+## Production Verification And Worker Follow-Up
+
+PR #1538 merged as `e5fcc3a562b39598700e3e51f50414a3bfc85b28`.
+CI/CD, Local Stack, CodeQL, RAG, container, secret and vendor checks passed.
+The migration-first rollout completed; API health reported this commit with
+healthy DB/Redis. Public readiness/liveness/billing/knowledge checks passed.
+
+Using the approved QA session, the remote-MCP form loaded, a synthetic private-IP
+endpoint was rejected with `ip_literal`, and no connection was saved. Native
+Gmail registration opened the intended prefilled, locked registry ID and OAuth
+credential fields. The updated connectors guide returned 200 on the public,
+application and documentation hosts. These checks did not call a real provider.
+
+Post-deploy worker logs exposed an independent startup regression: vault imports
+created DB metrics before multiprocess initialization. The early health listener
+masked that failure. Production environment configuration restored task processing;
+the durable follow-up initializes metrics first and starts health only on Celery
+readiness. Fresh-process tests reproduced the original failure. The worker,
+vault and metrics focused suite passed (122 tests) after the fix. No vault or
+metrics guard was relaxed. Beat's single-process registry is not affected by
+this import-order defect.
+
+An attempted rollback also showed that an older revision's image had already
+been deleted. Restoring the current beat traffic succeeded. The smoke runbook
+now requires image-digest availability checks before relying on rollback.
+Worker hotfix deployment evidence must be recorded separately; initial helper
+success was not sufficient release evidence.
+
+The production-image worker entrypoint was also replayed locally with the fixed
+script, production settings, synthetic keys and an isolated Redis queue. Celery
+connected, then health returned 200, and a harmless built-in task returned its
+synthetic input. No external connector or production queue was used.
+
 ## Explicitly not verified or enabled
 
 - Real Gnani STT/TTS, Telegram delivery, WhatsApp, Twilio, Gmail sending or Plural
@@ -138,5 +171,5 @@ unbounded decompression. This limitation is documented for connector operators.
   this incoming connector path; the separate AgenticOrg MCP server is unchanged.
 - Universal server compatibility, unlimited schemas or sustained provider-load
   performance: not claimed. Supported limits and refusal reasons are documented.
-- Production readiness or successful deployment: local tests alone do not prove
-  either. CI, deployment identity and safe post-deploy checks are separate evidence.
+- Blanket production readiness: local tests and the scoped deployed checks do
+  not prove every external provider or customer tool configuration.
