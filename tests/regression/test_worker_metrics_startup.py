@@ -95,3 +95,47 @@ def test_metrics_failure_never_starts_health_or_reads_vault(monkeypatch):
     monkeypatch.setattr(namespace["threading"], "Thread", forbidden)
     with pytest.raises(RuntimeError, match="synthetic metrics failure"):
         main()
+
+
+def test_health_listener_is_wired_to_celery_readiness(monkeypatch):
+    import runpy
+
+    import celery.signals
+    from celery.utils.dispatch import Signal
+
+    from observability import metrics_export
+
+    main = runpy.run_path(str(ROOT / "scripts/run_worker.py"))["main"]
+    namespace = main.__globals__
+    ready = Signal()
+    events = []
+
+    def vault_check():
+        events.append("vault")
+        return None
+
+    class HealthThread:
+        def __init__(self, *, target, daemon):
+            assert target is namespace["_serve_health"]
+            assert daemon is True
+
+        def start(self):
+            events.append("health")
+
+    def run_cli():
+        assert events == ["metrics", "vault", "exporter", "cleanup", "signal"]
+        ready.send(sender=None)
+        assert events[-1] == "health"
+        return 0
+
+    monkeypatch.setattr(celery.signals, "worker_ready", ready)
+    # Fresh-process coverage above owns real initialization. This isolated
+    # signal test measures the entrypoint wiring without reinitializing globals.
+    monkeypatch.setitem(namespace, "_enable_multiprocess_metrics", lambda: events.append("metrics"))
+    monkeypatch.setitem(namespace, "_vault_key_problem", vault_check)
+    monkeypatch.setitem(namespace, "_register_child_cleanup", lambda: events.append("cleanup"))
+    monkeypatch.setitem(namespace, "_run_celery_worker", run_cli)
+    monkeypatch.setattr(metrics_export, "start_metrics_server", lambda: events.append("exporter"))
+    monkeypatch.setattr(namespace["signal"], "signal", lambda *args: events.append("signal"))
+    monkeypatch.setattr(namespace["threading"], "Thread", HealthThread)
+    assert main() == 0
