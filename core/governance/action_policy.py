@@ -97,6 +97,8 @@ def _set(*values: str) -> frozenset[str]:
 _ALL = frozenset(ActionDomain)
 _CUSTOMER = frozenset(set(ActionDomain) - {ActionDomain.PLATFORM})
 _RULE_GROUPS: tuple[tuple[ActionRisk, frozenset[ActionDomain], frozenset[str]], ...] = (
+    (ActionRisk.READ, _ALL, _set("remote_mcp_read")),
+    (ActionRisk.CUSTOMER_WRITE, _ALL, _set("remote_mcp_write")),
     (
         ActionRisk.READ,
         _ALL,

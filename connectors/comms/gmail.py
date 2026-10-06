@@ -57,6 +57,31 @@ class GmailConnector(BaseConnector):
 
         self._auth_headers = {"Authorization": f"Bearer {token}"}
 
+    async def health_check(self) -> dict[str, Any]:
+        """Verify the Gmail grant against a read-only authenticated resource."""
+        if not self._has_credentials():
+            return {"status": "not_configured", "reason": "missing_credentials"}
+        if self._client is None:
+            return {"status": "not_connected"}
+        try:
+            profile = await self._get("/users/me/profile")
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            reason = (
+                "authentication_rejected"
+                if status == 401
+                else "insufficient_permissions"
+                if status == 403
+                else "upstream_http_error"
+            )
+            return {"status": "unhealthy", "http_status": status, "reason": reason}
+        except httpx.RequestError:
+            return {"status": "unhealthy", "reason": "upstream_connection_error"}
+
+        if not isinstance(profile.get("emailAddress"), str) or not profile["emailAddress"]:
+            return {"status": "unhealthy", "reason": "invalid_profile_response"}
+        return {"status": "healthy", "account_verified": True}
+
     # ── Tools ────────────────────────────────────────────────────────────────
 
     async def send_email(

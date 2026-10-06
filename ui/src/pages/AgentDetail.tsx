@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import KillSwitch from "@/components/KillSwitch";
+import RemoteMCPToolPicker from "@/components/RemoteMCPToolPicker";
 import api, { agentsApi } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { agentDomainsForUser, canManageAgent, isAdminUser, isDomainLocked } from "@/lib/roles";
@@ -1072,6 +1073,8 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
     ? allowedDomains
     : [agent.domain, ...allowedDomains];
   const [editDomain, setEditDomain] = useState(agent.domain || "");
+  const [editConnectors, setEditConnectors] = useState(agent.connector_ids || []);
+  const [editTools, setEditTools] = useState(agent.authorized_tools || []);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -1096,6 +1099,8 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
     !!llmRegistry && !!editLlmProvider && !isFreeTextModelProvider(editLlmProvider) && llmModelOptions.length > 0;
 
   function startEditing() {
+    setEditConnectors(agent.connector_ids || []);
+    setEditTools(agent.authorized_tools || []);
     setEditLlmProvider(agent.llm_provider || inferProviderForModel(llmRegistry, agent.llm_model));
     setEditLlmModel(agent.llm_model || "");
     setEditDomain(agent.domain || "");
@@ -1122,6 +1127,10 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
       }
       if (editHitlCondition) {
         payload.hitl_policy = { condition: editHitlCondition };
+      }
+      if (JSON.stringify(editConnectors) !== JSON.stringify(agent.connector_ids || []) || JSON.stringify(editTools) !== JSON.stringify(agent.authorized_tools || [])) {
+        payload.connector_ids = editConnectors;
+        payload.authorized_tools = editTools;
       }
       await api.patch(`/agents/${agent.id}`, payload);
       setEditing(false);
@@ -1277,6 +1286,7 @@ function ConfigTab({ agent, onUpdated, canManage }: { agent: Agent; onUpdated: (
             </div>
 
             {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+            <RemoteMCPToolPicker connectors={editConnectors} tools={editTools} onChange={(ids, tools) => { setEditConnectors(ids); setEditTools(tools); }} />
 
             <div className="flex gap-2">
               <Button size="sm" onClick={handleSaveConfig} disabled={saving}>
@@ -1873,6 +1883,7 @@ function CostTab({ agent }: { agent: Agent }) {
 type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
 
 function getToolPermission(toolName: string): PermissionLevel {
+  if (toolName.startsWith("mcp_")) return "WRITE";
   if (/^(get_|fetch_|list_|query|search_)/.test(toolName)) return "READ";
   if (/^(create_|update_|send_|post_)/.test(toolName)) return "WRITE";
   if (/^(delete_|remove_)/.test(toolName)) return "DELETE";

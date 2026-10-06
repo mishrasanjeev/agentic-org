@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
+import RemoteMCPToolPicker from "@/components/RemoteMCPToolPicker";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,7 @@ function humanize(s: string) {
 type PermissionLevel = "READ" | "WRITE" | "DELETE" | "ADMIN";
 
 function getToolPermission(toolName: string): PermissionLevel {
+  if (toolName.startsWith("mcp_")) return "WRITE";
   if (/^(get_|fetch_|list_|query|search_)/.test(toolName)) return "READ";
   if (/^(create_|update_|send_|post_)/.test(toolName)) return "WRITE";
   if (/^(delete_|remove_)/.test(toolName)) return "DELETE";
@@ -244,7 +246,7 @@ export default function AgentCreate() {
     if (domain) params.domain = domain;
     if (connectorIds.length > 0) params.connector_ids = connectorIds.join(",");
     api.get(`/agents/default-tools/${type}`, { params }).then(({ data }) => {
-      setAuthorizedTools(data.tools || []);
+      setAuthorizedTools((current) => [...new Set([...current.filter((tool) => tool.startsWith("mcp_")), ...(data.tools || []).filter((tool: string) => !tool.startsWith("mcp_"))])]);
     }).catch(() => {
       // Fallback: union the tools from selected connectors so the list is
       // at least runnable, not a truncated slice of the global catalog.
@@ -257,7 +259,7 @@ export default function AgentCreate() {
           if (!derived.includes(t)) derived.push(t);
         });
       });
-      setAuthorizedTools(derived.length ? derived : availableTools.slice(0, 5));
+      setAuthorizedTools((current) => [...new Set([...current.filter((tool) => tool.startsWith("mcp_")), ...(derived.length ? derived : availableTools.slice(0, 5)).filter((tool) => !tool.startsWith("mcp_"))])]);
     });
   }, [agentType, useCustomType, customType, domain, connectorIds, availableTools, availableConnectors]);
 
@@ -812,6 +814,7 @@ export default function AgentCreate() {
                   </select>
                 </div>
 
+                <RemoteMCPToolPicker connectors={connectorIds} tools={authorizedTools} onChange={(ids, tools) => { setConnectorIds(ids); setAuthorizedTools(tools); }} />
                 {/* Authorized Tools */}
                 <div>
                   <label className="text-sm font-medium">Authorized Tools</label>

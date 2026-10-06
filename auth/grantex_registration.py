@@ -242,7 +242,7 @@ def _tools_to_scopes(
     scopes = [f"agenticorg:{domain}:read"]
 
     try:
-        from core.langgraph.tool_adapter import _build_tool_index, _grant_connector_id, _split_connector_tool_ref
+        from core.langgraph.tool_adapter import _build_tool_index, _grant_connector_id, _parse_authorized_tool_ref
 
         scoped_index = (
             _build_tool_index(connector_names=connector_names)
@@ -259,8 +259,11 @@ def _tools_to_scopes(
         return scopes + [_scope("agenticorg", t) for t in tools]
 
     for tool_name in tools:
-        connector_hint, bare_tool = _split_connector_tool_ref(tool_name)
+        connector_hint, bare_tool = _parse_authorized_tool_ref(tool_name) or (None, tool_name)
         if connector_hint:
+            if connector_hint.startswith("mcp_") and (connector_names is None or connector_hint in connector_names):
+                scopes.append(_scope(connector_hint, bare_tool))
+                continue
             # Scope to the named connector when it registers the tool, never
             # to a first-wins match of the bare name.
             qualified = qualified_index.get(f"{connector_hint}:{bare_tool}")
