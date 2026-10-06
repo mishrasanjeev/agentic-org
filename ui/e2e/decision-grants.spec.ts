@@ -28,7 +28,7 @@
  * namespace, see docker-compose.dev.yml).
  */
 import { expect, test, type APIRequestContext, type Browser, type BrowserContext, type Page, type Request } from "@playwright/test";
-import { openCase, seededCase, signIn } from "./helpers/governed-cases";
+import { seededCase, signIn } from "./helpers/governed-cases";
 
 /**
  * Required, with no default: a missing one is a broken run, not a reason to pass quietly. The
@@ -293,6 +293,41 @@ test.describe("governed case decisions with real decision grants", () => {
     }
   });
 
+  test("case sign-in does not abandon slow dashboard API responses", async ({ page }) => {
+    const watcher = decisionGrantWatcher(page.context());
+    const governed = seededCase("gb-clean-brightwater");
+    const casePath = `/dashboard/approvals/cases/${governed.case_ref}`;
+    const navigations: string[] = [];
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) navigations.push(new URL(frame.url()).pathname);
+    });
+    let releaseResponses!: () => void;
+    const heldResponses = new Promise<void>((resolve) => { releaseResponses = resolve; });
+    let held = 0;
+    let delivered = 0;
+    // Delay real server responses, not fixture bodies. A hard navigation from
+    // the role landing page used to strand these in Chromium's network events.
+    await page.route(/\/api\/v1\/(companies(?:\?|$)|approvals\?)/, async (route) => {
+      const response = await route.fetch();
+      held += 1;
+      await heldResponses;
+      await route.fulfill({ response });
+      delivered += 1;
+    });
+    try {
+      await signIn(page, undefined, casePath);
+      await expect(page.getByTestId("case-state")).toBeVisible({ timeout: 20_000 });
+      await expect.poll(() => held).toBeGreaterThanOrEqual(2);
+      expect(navigations.filter((path) => path !== "/login")).toEqual([casePath]);
+    } finally {
+      releaseResponses();
+    }
+    await expect.poll(() => delivered).toBeGreaterThanOrEqual(2);
+    const watched = await watcher.settled();
+    expect(watched.inspected).toBeGreaterThan(5);
+    expect(watched.seen).toEqual([]);
+  });
+
   test("a four-eyes decline is approved by two different people on the issuer's page and recorded here", async ({
     browser,
     page,
@@ -301,8 +336,7 @@ test.describe("governed case decisions with real decision grants", () => {
     const watcher = decisionGrantWatcher(page.context());
     const governed = seededCase("gb-clean-brightwater");
 
-    await signIn(page);
-    await openCase(page, governed.case_ref);
+    await signIn(page, undefined, `/dashboard/approvals/cases/${governed.case_ref}`);
     await expect(page.getByTestId("case-state")).toContainText("Awaiting decision");
     await cancelOpenRequests(page, request, governed.case_ref);
 
@@ -389,8 +423,8 @@ test.describe("governed case decisions with real decision grants", () => {
     // material change to the case and bumps its version.
     const governed = seededCase("us-false-positive-oakhollow");
 
-    await signIn(page);
-    await openCase(page, governed.case_ref);
+    await signIn(page, undefined, `/dashboard/approvals/cases/${governed.case_ref}`);
+    await expect(page.getByTestId("case-state")).toBeVisible({ timeout: 20_000 });
     await cancelOpenRequests(page, request, governed.case_ref);
 
     // `approve` is not in the four-eyes list, so one approver is enough here:
