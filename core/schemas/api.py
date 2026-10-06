@@ -422,6 +422,30 @@ class PromptEvaluateIn(BaseModel):
     max_tokens: int | None = Field(None, ge=1, le=2048)
 
 
+class EvalDatasetCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=120)
+    description: str | None = Field(None, max_length=500)
+    cases: list[dict[str, Any]] = Field(..., min_length=1, max_length=200)
+    note: str | None = Field(None, max_length=500)
+
+
+class EvalDatasetVersionCreate(BaseModel):
+    cases: list[dict[str, Any]] = Field(..., min_length=1, max_length=200)
+    note: str | None = Field(None, max_length=500)
+    # The version the caller edited: saving is refused when the dataset has moved on.
+    expected_latest: int | None = Field(None, ge=1)
+
+
+class EvalDatasetRunIn(BaseModel):
+    # The latest version when not given.
+    version: int | None = Field(None, ge=1)
+    system: str = Field(..., min_length=1, max_length=20_000)
+    model: str = Field(..., min_length=1, max_length=128)
+    max_tokens: int | None = Field(None, ge=1, le=2048)
+    offset: int = Field(0, ge=0)
+    limit: int = Field(25, ge=1, le=25)
+
+
 class PromptTemplateResponse(BaseModel):
     id: UUID
     name: str

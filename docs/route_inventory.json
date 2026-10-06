@@ -4302,6 +4302,132 @@
     "tenant_required": true
   },
   {
+    "audit_event": "evals.datasets.list",
+    "auth_required": true,
+    "function": "list_eval_datasets",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/eval-datasets api/v1/eval_datasets.py:list_eval_datasets",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.read",
+    "source_line": 57,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.create",
+    "auth_required": true,
+    "function": "create_eval_dataset",
+    "idempotency": "not-idempotent-name-is-unique",
+    "key": "POST /api/v1/eval-datasets api/v1/eval_datasets.py:create_eval_dataset",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.write",
+    "source_line": 81,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.archive",
+    "auth_required": true,
+    "function": "archive_eval_dataset",
+    "idempotency": "idempotent-archive",
+    "key": "DELETE /api/v1/eval-datasets/{dataset_id} api/v1/eval_datasets.py:archive_eval_dataset",
+    "metadata_present": true,
+    "methods": [
+      "DELETE"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.write",
+    "source_line": 196,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.read",
+    "auth_required": true,
+    "function": "get_eval_dataset",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/eval-datasets/{dataset_id} api/v1/eval_datasets.py:get_eval_dataset",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.read",
+    "source_line": 114,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.run",
+    "auth_required": true,
+    "function": "run_eval_dataset",
+    "idempotency": "not-idempotent-makes-billed-model-calls",
+    "key": "POST /api/v1/eval-datasets/{dataset_id}/run api/v1/eval_datasets.py:run_eval_dataset",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}/run",
+    "public_exempt_reason": null,
+    "rate_limit": "prompt-compare",
+    "scope": "evals.write",
+    "source_line": 216,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.version.create",
+    "auth_required": true,
+    "function": "add_eval_dataset_version",
+    "idempotency": "not-idempotent-identical-cases-are-refused",
+    "key": "POST /api/v1/eval-datasets/{dataset_id}/versions api/v1/eval_datasets.py:add_eval_dataset_version",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}/versions",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.write",
+    "source_line": 162,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "evals.datasets.version.read",
+    "auth_required": true,
+    "function": "get_eval_dataset_version",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/eval-datasets/{dataset_id}/versions/{version} api/v1/eval_datasets.py:get_eval_dataset_version",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/eval_datasets.py",
+    "path": "/api/v1/eval-datasets/{dataset_id}/versions/{version}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "evals.read",
+    "source_line": 139,
+    "tenant_required": true
+  },
+  {
     "audit_event": "none-public-evals-read",
     "auth_required": false,
     "function": "get_evals",
