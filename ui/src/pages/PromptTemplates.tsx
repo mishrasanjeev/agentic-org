@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { promptTemplatesApi, extractApiError } from "@/lib/api";
 import type { PromptTemplate } from "@/types";
+import EvalDatasets from "@/components/evals/EvalDatasets";
 import PromptChangeRequests from "@/components/prompts/PromptChangeRequests";
 import PromptCompare from "@/components/prompts/PromptCompare";
 
@@ -85,6 +86,9 @@ export default function PromptTemplates() {
 
       {/* Maker-checker: changes waiting for a second person (renders nothing while it is off and nothing waits). */}
       <PromptChangeRequests onDecided={fetchTemplates} refreshKey={changesKey} />
+
+      {/* Evaluation datasets (renders nothing while they are off for the deployment). */}
+      <EvalDatasets />
 
       {/* Create Form */}
       {creating && (

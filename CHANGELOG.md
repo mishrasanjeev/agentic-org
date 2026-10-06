@@ -11,6 +11,19 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - Add fresh-process regressions for both development and production settings;
   missing vault keys still refuse startup.
 
+### Added - Evaluation framework: datasets
+- Behind `AGENTICORG_EVALS_V2_ENABLED` (off by default), a tenant's
+  administrators keep named evaluation datasets as immutable versions
+  (`core/evals/datasets.py`, tables `eval_datasets` and
+  `eval_dataset_versions` under row-level security, migration
+  `v6z44_eval_datasets`). Each version carries the SHA-256 of its cases;
+  identical cases are not stored twice and a dataset is archived, not
+  deleted. `/eval-datasets` lists, creates, reads, versions and archives;
+  `POST /eval-datasets/{id}/run` scores a prompt with one model against a
+  version, 25 cases a request, and names the version and hash it measured.
+  The Prompt Templates page has a panel for all of it. Runs are not stored.
+  See `docs/governance/evaluation-datasets.md`.
+
 ### Added - Tenant-owned remote MCP tools
 - Dedicated Streamable HTTP bearer connection, protocol discovery, encrypted
   token storage, schema-bound read review, read-only probe and credential rotation.

@@ -218,6 +218,10 @@ class Settings(BaseSettings):
     # one that is still invalid is escalated to a human instead of being
     # returned as completed. Off by default: off, nothing is validated.
     output_schema_enforced: bool = False
+    # Evaluation framework v2 (core/evals/): tenant evaluation datasets, kept
+    # as immutable versions, with an API and console to manage and run them.
+    # Off by default: off, the endpoints answer 409 and nothing is stored.
+    evals_v2_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

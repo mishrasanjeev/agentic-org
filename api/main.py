@@ -45,6 +45,7 @@ from api.v1 import (
     cron,
     delegations,
     departments,
+    eval_datasets,
     evals,
     feature_flags,
     governance,
@@ -279,6 +280,7 @@ app.include_router(v1_demo.router, prefix="/api/v1", tags=["Demo"])
 app.include_router(v1_org.router, prefix="/api/v1", tags=["Organization"])
 app.include_router(api_keys.router, prefix="/api/v1", tags=["API Keys"])
 app.include_router(evals.router, prefix="/api/v1", tags=["Evals"])
+app.include_router(eval_datasets.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])

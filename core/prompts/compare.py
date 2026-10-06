@@ -286,14 +286,14 @@ def _texts(raw: Any, label: str) -> tuple[str, ...]:
     return tuple(out)
 
 
-def parse_cases(raw: Any) -> list[Case]:
-    """The reference dataset: 1 to 25 cases, each an input with at least one expectation."""
+def parse_cases(raw: Any, *, limit: int = MAX_CASES) -> list[Case]:
+    """The reference dataset: 1 to ``limit`` cases (25 for a run), each an input with at least one expectation."""
     from core.prompts.parameters import bounded_pattern
 
     if not isinstance(raw, list) or not raw:
         raise ValueError("cases must be a non-empty list")
-    if len(raw) > MAX_CASES:
-        raise ValueError(f"an evaluation takes at most {MAX_CASES} cases")
+    if len(raw) > limit:
+        raise ValueError(f"an evaluation takes at most {limit} cases")
     cases: list[Case] = []
     for index, item in enumerate(raw):
         label = f"case {index + 1}"
