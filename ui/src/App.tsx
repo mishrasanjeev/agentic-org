@@ -99,6 +99,7 @@ const KnowledgeBase = lazyRetry(() => import("./pages/KnowledgeBase"));
 const VoiceSetup = lazyRetry(() => import("./pages/VoiceSetup"));
 const RPAScripts = lazyRetry(() => import("./pages/RPAScripts"));
 const IndustryPacks = lazyRetry(() => import("./pages/IndustryPacks"));
+const AgentCatalogue = lazyRetry(() => import("./pages/AgentCatalogue"));
 
 /* -- Billing -- */
 const Billing = lazyRetry(() => import("./pages/Billing"));
@@ -417,6 +418,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
             <Layout>
               <Agents />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/agent-catalogue"
+        element={
+          <ProtectedRoute allowedRoles={AGENT_CREATOR_ROLES}>
+            <Layout>
+              <AgentCatalogue />
             </Layout>
           </ProtectedRoute>
         }

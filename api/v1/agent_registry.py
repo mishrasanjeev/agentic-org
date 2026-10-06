@@ -177,16 +177,23 @@ async def get_agent_lifecycle(
 async def list_agent_registry(
     state: str | None = None,
     risk_tier: str | None = None,
+    domain: str | None = None,
+    use_case: str | None = None,
+    channel: str | None = None,
+    q: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
     caller: Caller | None = Depends(caller_from_request),
 ) -> dict:
-    """The registry entries the caller may see, with each agent's name, type, domain and status."""
+    """The catalogue: the registry entries the caller may see, filtered by state, risk tier, domain,
+    use case, channel and a search term, with each agent's name, type, domain and runtime status."""
     _require_enabled()
     tid = _uuid.UUID(tenant_id)
     effective = _effective_caller(caller, user_domains)
     async with get_tenant_session(tid) as session:
-        entries = await lifecycle.list_entries(session, tid, state=state, risk_tier=risk_tier)
+        entries = await lifecycle.list_entries(
+            session, tid, state=state, risk_tier=risk_tier, use_case=use_case, channel=channel
+        )
         ids = [entry.agent_id for entry in entries]
         agents = {}
         if ids:
@@ -201,6 +208,10 @@ async def list_agent_registry(
             agent = agents.get(entry.agent_id)
             if agent is None or not can_view_agent(agent, effective):
                 continue
+            if domain and agent.domain != domain:
+                continue
+            if not lifecycle.matches_search(agent, entry, q):
+                continue
             listed.append(
                 {
                     "agent_id": str(agent.id),
@@ -212,4 +223,27 @@ async def list_agent_registry(
                     **lifecycle.entry_dict(entry),
                 }
             )
-        return {"entries": listed, "states": list(lifecycle.STATES), "risk_tiers": list(lifecycle.RISK_TIERS)}
+        return {
+            "entries": listed,
+            "states": list(lifecycle.STATES),
+            "risk_tiers": list(lifecycle.RISK_TIERS),
+            "channels": list(lifecycle.CHANNELS),
+        }
+
+
+@router.get("/agent-registry/templates")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.registry.templates",
+)
+async def list_agent_templates(pack: str | None = None, tenant_id: str = Depends(get_current_tenant)) -> dict:
+    """The agent templates the industry packs offer, in the card's terms; install a pack to create them."""
+    _require_enabled()
+    rows = lifecycle.templates()
+    if pack:
+        rows = [row for row in rows if row["pack"] == pack]
+    return {"templates": rows}
