@@ -15,7 +15,7 @@ from core.models.eval_dataset import EvalDataset, EvalDatasetVersion
 from core.models.eval_run import EvalRun
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_complete_model_bound_evidence_and_explicit_baseline(db_session, tenant_id, monkeypatch):
     tid = uuid.UUID(tenant_id)
     dataset_id = uuid.uuid4()
