@@ -8,8 +8,8 @@ strongest component capability, not proof that the products are integrated end t
 |---|---:|---:|---:|---:|
 | Baseline conditions | 5 | 1 | 4 | 0 |
 | Technical capabilities | 50 | 4 | 33 | 13 |
-| Functional capabilities | 150 | 21 | 99 | 30 |
-| Total | 205 | 26 | 136 | 43 |
+| Functional capabilities | 150 | 20 | 100 | 30 |
+| Total | 205 | 25 | 137 | 43 |
 
 
 ## Baseline residency, isolation and control conditions
@@ -242,7 +242,7 @@ strongest component capability, not proof that the products are integrated end t
 | ID | Capability | Combined | AgenticOrg | Grantex | Group |
 |---|---|---|---|---|---|
 | PROMPT-01 | Prompt playground | Covered | **Covered**. Single-agent playground, and on the prompt templates page one stored prompt against up to four models side by side with each answer's latency, tokens and cost. Comparison makes billed model calls and is off by default (AGENTICORG_PROMPT_COMPARE_ENABLED). (`ui/src/components/prompts/PromptCompare.tsx`, `core/prompts/compare.py`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
-| PROMPT-02 | Prompt version history | Covered | **Covered**. Edit history and rollback for templates and agent prompts; every effective prompt change is attributed, and under maker-checker the approver and the change request are recorded on the history row. (`api/v1/prompt_templates.py`, `core/prompts/change_requests.py`, `core/prompts/activation.py`) | **Gap**. Prompt version references in evidence only. | WP-06 |
+| PROMPT-02 | Prompt version history | Partial | **Partial**. Edit history for templates and agent prompts with every effective change attributed, and under maker-checker the approver and the change request on the history row; rollback exists for templates only, since the agent rollback restores a prompt reference and not the prompt text. (`api/v1/prompt_templates.py`, `core/prompts/change_requests.py`, `core/prompts/activation.py`) | **Gap**. Prompt version references in evidence only. | WP-06 |
 | PROMPT-03 | Prompt templating | Covered | **Covered**. Typed parameters (text, integer, number, boolean, enum, pattern) with defaults, bounds and validation on save and at render time, behind AGENTICORG_PROMPT_TYPED_PARAMETERS_ENABLED. An agent's own prompt variables are still substituted as plain text. (`core/prompts/parameters.py`, `api/v1/prompt_templates.py`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |
 | PROMPT-04 | Prompt repository | Partial | **Partial**. Central repository with domain RBAC and audit events. (`ui/src/pages/PromptTemplates.tsx`, `api/v1/prompt_templates.py`) | **Gap** | WP-06 |
 | PROMPT-05 | Prompt optimisation | Partial | **Partial**. Comparison and dataset evaluation show, per model, a prompt's answer, pass rate, latency, tokens and cost, so a template can be tested across models; nothing rewrites or optimises a prompt. (`core/prompts/compare.py`, `ui/src/components/prompts/PromptCompare.tsx`, `docs/governance/prompt-governance.md`) | **Gap** | WP-06 |

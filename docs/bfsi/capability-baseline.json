@@ -3412,15 +3412,15 @@
       "domain": "PROMPT",
       "title": "Prompt version history",
       "expectation": "Full version history for prompt templates and agent instructions with approval tracking and rollback.",
-      "status": "covered",
+      "status": "partial",
       "agenticorg": {
-        "status": "covered",
+        "status": "partial",
         "evidence": [
           "api/v1/prompt_templates.py",
           "core/prompts/change_requests.py",
           "core/prompts/activation.py"
         ],
-        "note": "Edit history and rollback for templates and agent prompts; every effective prompt change is attributed, and under maker-checker the approver and the change request are recorded on the history row."
+        "note": "Edit history for templates and agent prompts with every effective change attributed, and under maker-checker the approver and the change request on the history row; rollback exists for templates only, since the agent rollback restores a prompt reference and not the prompt text."
       },
       "grantex": {
         "status": "none",
