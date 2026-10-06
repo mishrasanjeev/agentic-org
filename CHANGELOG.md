@@ -4,6 +4,22 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Evaluation framework: promotion gate and model comparison
+- An agent may declare an evaluation gate (`PUT /agents/{id}/eval-gate`;
+  `core/evals/gates.py`): a dataset, optionally a version, a minimum pass
+  rate and a regression allowance. Behind
+  `AGENTICORG_EVAL_PROMOTION_GATE_ENABLED` (off by default), promotion and
+  resume to active refuse, after the maker-checker check, a prompt whose
+  newest stored run of that version is missing, below the minimum, or
+  regressed against the prompt it replaces; `GET /agents/{id}/eval-gate`
+  reports the verdict either way. `POST /eval-datasets/{id}/run` takes
+  `agent_id` to run an agent's prompt text so the gate can match it.
+  `GET /eval-datasets/{id}/compare` ranks the models that ran a version from
+  their newest stored runs by pass rate, latency and cost per case, with
+  accuracy, answers a minute, tokens per case (migration
+  `v6z47_eval_run_tokens`) and the judges' means; the console shows the
+  table.
+
 ### Added - Evaluation framework: adversarial and scheduled runs
 - Two synthetic check kinds (`observability/synthetic.py`, migration
   `v6z46_synthetic_check_kinds`): `adversarial` dry-runs the tenant's

@@ -76,6 +76,20 @@ interface RunSummary {
   created_at: string | null;
 }
 
+interface ModelRow {
+  rank: number;
+  model: string;
+  prompt_label: string | null;
+  cases_run: number;
+  complete: boolean;
+  pass_rate: number | null;
+  accuracy: number | null;
+  avg_latency_ms: number;
+  answers_per_minute: number | null;
+  tokens_per_case: number | null;
+  cost_per_case_usd: number | null;
+}
+
 const JUDGE_NAMES: Record<string, string> = {
   faithfulness: "Faithfulness (needs context)",
   relevance: "Relevance",
@@ -126,6 +140,7 @@ export default function EvalDatasets() {
   const [promptLabel, setPromptLabel] = useState("");
   const [run, setRun] = useState<RunOut | null>(null);
   const [history, setHistory] = useState<RunSummary[]>([]);
+  const [ranking, setRanking] = useState<ModelRow[]>([]);
   const [judgeKinds, setJudgeKinds] = useState<string[]>([]);
   // Each load of a dataset takes a number; a response for an earlier one is dropped.
   const generation = useRef(0);
@@ -158,7 +173,7 @@ export default function EvalDatasets() {
     setError(extractApiError(err, fallback));
   };
 
-  const loadHistory = async (datasetId: string, mine: number) => {
+  const loadHistory = async (datasetId: string, mine: number, version?: number | null) => {
     try {
       const response = await api.get(`/eval-datasets/${datasetId}/runs`);
       if (mine !== generation.current) return;
@@ -166,6 +181,13 @@ export default function EvalDatasets() {
       setJudgeKinds(response.data.judges as string[]);
     } catch {
       if (mine === generation.current) setHistory([]);
+    }
+    try {
+      const response = await api.get(`/eval-datasets/${datasetId}/compare`, { params: { version: version ?? undefined } });
+      if (mine !== generation.current) return;
+      setRanking(response.data.models as ModelRow[]);
+    } catch {
+      if (mine === generation.current) setRanking([]);
     }
   };
 
@@ -178,7 +200,7 @@ export default function EvalDatasets() {
       const wanted = version ?? (detail.data.latest_version as number);
       const body = await api.get(`/eval-datasets/${dataset.id}/versions/${wanted}`);
       if (mine !== generation.current) return;
-      void loadHistory(dataset.id, mine);
+      void loadHistory(dataset.id, mine, wanted);
       setOpen({ ...dataset, latest_version: detail.data.latest_version, case_count: detail.data.case_count });
       setVersions(detail.data.versions as VersionSummary[]);
       setShown(wanted);
@@ -196,6 +218,7 @@ export default function EvalDatasets() {
     setShown(null);
     setRun(null);
     setHistory([]);
+    setRanking([]);
     setCasesText(EXAMPLE);
     setNote("");
   };
@@ -262,7 +285,7 @@ export default function EvalDatasets() {
       });
       if (mine === generation.current) {
         setRun(response.data as RunOut);
-        void loadHistory(open.id, mine);
+        void loadHistory(open.id, mine, shown);
       }
     } catch (err) {
       if (mine === generation.current) {
@@ -532,6 +555,47 @@ export default function EvalDatasets() {
                     </li>
                   ))}
               </ul>
+            </div>
+          )}
+          {ranking.length > 0 && (
+            <div className="mt-3" data-testid="eval-model-ranking">
+              <h5 className="text-xs font-medium text-slate-700">Models compared on version {shown}</h5>
+              <p className="text-xs text-slate-500">
+                One row per model from its newest stored run, ranked by pass rate, then latency, then cost. Answers a
+                minute is an estimate from the measured latency, not a load test.
+              </p>
+              <table className="mt-1 w-full text-left text-xs">
+                <thead className="text-slate-500">
+                  <tr>
+                    <th className="py-1">#</th>
+                    <th>Model</th>
+                    <th>Pass rate</th>
+                    <th>Accuracy</th>
+                    <th>Latency</th>
+                    <th>Answers/min</th>
+                    <th>Tokens/case</th>
+                    <th>Cost/case</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ranking.map((row) => (
+                    <tr key={row.model} className="border-t border-slate-100" data-testid={`eval-model-${row.model}`}>
+                      <td className="py-1">{row.rank}</td>
+                      <td>
+                        {row.model}
+                        {row.prompt_label ? <span className="text-slate-500"> · {row.prompt_label}</span> : null}
+                        {row.complete ? "" : <span className="text-amber-700"> (partial)</span>}
+                      </td>
+                      <td>{percent(row.pass_rate)}</td>
+                      <td>{percent(row.accuracy)}</td>
+                      <td>{row.avg_latency_ms} ms</td>
+                      <td>{row.answers_per_minute ?? "n/a"}</td>
+                      <td>{row.tokens_per_case ?? "n/a"}</td>
+                      <td>{row.cost_per_case_usd === null ? "n/a" : `$${row.cost_per_case_usd.toFixed(4)}`}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
           {history.length > 0 && (

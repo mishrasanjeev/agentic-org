@@ -45,6 +45,16 @@ const HISTORY = [
     created_at: "2026-10-06T09:30:00+00:00",
   },
 ];
+const RANKING = [
+  {
+    rank: 1, model: "gpt-4o", prompt_label: "claims v2", cases_run: 2, complete: true, pass_rate: 1, accuracy: null,
+    avg_latency_ms: 600, answers_per_minute: 100, tokens_per_case: 150, cost_per_case_usd: 0.003,
+  },
+  {
+    rank: 2, model: "gpt-4o-mini", prompt_label: null, cases_run: 1, complete: false, pass_rate: 0.5, accuracy: 0.5,
+    avg_latency_ms: 200, answers_per_minute: 300, tokens_per_case: 90, cost_per_case_usd: 0.0005,
+  },
+];
 const VERSIONS = [
   { version: 2, case_count: 2, content_hash: "h2", note: "adds b", created_at: null },
   { version: 1, case_count: 1, content_hash: "h1", note: null, created_at: null },
@@ -59,6 +69,7 @@ function serve({ enabled = true, datasets = [DATASET], models = ["gpt-4o-mini"] 
     if (path === "/eval-datasets/d1/versions/2") return Promise.resolve({ data: { version: 2, cases: CASES_V2 } });
     if (path === "/eval-datasets/d1/versions/1") return Promise.resolve({ data: { version: 1, cases: CASES_V1 } });
     if (path === "/eval-datasets/d1/runs") return Promise.resolve({ data: { runs: HISTORY, judges: JUDGES } });
+    if (path === "/eval-datasets/d1/compare") return Promise.resolve({ data: { version: 2, models: RANKING } });
     return Promise.reject(new Error(`unexpected ${path}`));
   });
 }
@@ -173,6 +184,11 @@ describe("EvalDatasets", () => {
     });
     await openDataset();
     expect(await screen.findByTestId("eval-run-history")).toHaveTextContent("v2 · gpt-4o-mini · claims v2 · 50% of 2 · relevance 75%");
+    const ranking = screen.getByTestId("eval-model-ranking");
+    expect(ranking).toHaveTextContent("Models compared on version 2");
+    expect(screen.getByTestId("eval-model-gpt-4o")).toHaveTextContent("1gpt-4o · claims v2100%n/a600 ms100150$0.0030");
+    expect(screen.getByTestId("eval-model-gpt-4o-mini")).toHaveTextContent("(partial)50%50%200 ms30090$0.0005");
+    expect(mockGet).toHaveBeenCalledWith("/eval-datasets/d1/compare", { params: { version: 2 } });
     expect(screen.getByTestId("eval-run-start")).toBeDisabled();
     fireEvent.change(screen.getByTestId("eval-run-system"), { target: { value: "You answer claims questions." } });
     fireEvent.change(screen.getByTestId("eval-run-model"), { target: { value: "gpt-4o-mini" } });

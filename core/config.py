@@ -222,6 +222,12 @@ class Settings(BaseSettings):
     # as immutable versions, with an API and console to manage and run them.
     # Off by default: off, the endpoints answer 409 and nothing is stored.
     evals_v2_enabled: bool = False
+    # Evaluation promotion gate (core/evals/gates.py): an agent that declares
+    # a gate is not promoted or resumed to active while its prompt has no
+    # stored run on the gate's dataset version, falls below the gate's pass
+    # rate, or regresses beyond its allowance. Off by default: off, a gate is
+    # kept and reported but not applied.
+    eval_promotion_gate_enabled: bool = False
     # Task queue wait: a published background task is stamped with its publish
     # time and the worker meters how long it waited. Off by default: off, no
     # header is added and nothing is measured.

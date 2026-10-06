@@ -325,7 +325,7 @@ class TestEndpoints:
 
     def test_every_route_is_for_tenant_administrators(self):
         src = (ROOT / "api" / "v1" / "eval_datasets.py").read_text(encoding="utf-8")
-        assert src.count("@router.") == 9 == src.count("dependencies=[require_tenant_admin])")
+        assert src.count("@router.") == 10 == src.count("dependencies=[require_tenant_admin])")
 
     def test_create_list_read_and_archive(self, on, store):
         session = store(0, None)
