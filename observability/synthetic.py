@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Synthetic checks: scheduled probes of a tenant's own paths, with a stored result each run.
 
-A check names a probe kind, its configuration and an interval. Four kinds:
+A check names a probe kind, its configuration and an interval. Six kinds:
 
 ``model``
     Sends a fixed prompt through the direct router (the model gateway's
@@ -69,6 +69,8 @@ MIN_INTERVAL_MINUTES = 5
 MAX_INTERVAL_MINUTES = 1440
 MAX_LATENCY_MS = 600_000
 PROBE_TIMEOUT_SECONDS = 60.0
+EVAL_CALL_BUDGET_SECONDS = 10.0
+MAX_EVAL_PROBE_TIMEOUT_SECONDS = 240.0
 MODEL_MAX_TOKENS = 64
 
 
@@ -472,6 +474,15 @@ _PROBES = {
 # ---------------------------------------------------------------------------
 
 
+def probe_timeout_seconds(kind: str, config: dict[str, Any]) -> float:
+    if kind != "eval_dataset":
+        return PROBE_TIMEOUT_SECONDS
+    # Budget for serial calls (tenant pseudonymisation), not optimistic concurrency.
+    # Stay below the minimum schedule interval so a slow probe cannot overlap it.
+    calls = int(config["limit"]) * (1 + len(config.get("judges") or ()))
+    return min(MAX_EVAL_PROBE_TIMEOUT_SECONDS, PROBE_TIMEOUT_SECONDS + calls * EVAL_CALL_BUDGET_SECONDS)
+
+
 async def probe(check: Check, *, trigger: str = "schedule") -> Result:
     """Run the check's probe once, under the probe time limit; never raises."""
     started_at = datetime.now(UTC)
@@ -485,7 +496,7 @@ async def probe(check: Check, *, trigger: str = "schedule") -> Result:
         try:
             config = validate_config(check.kind, check.config)
             run = globals()[_PROBES[check.kind]]
-            async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
+            async with asyncio.timeout(probe_timeout_seconds(check.kind, config)):
                 reasons, detail = await run(check.tenant_id, config)
         # enterprise-gate: broad-except-ok reason=a-failing-probe-is-the-result-recorded-as-error-and-logged
         except Exception as exc:

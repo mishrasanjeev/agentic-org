@@ -208,7 +208,11 @@ export default function Guardrails() {
     }
     // The scheduled adversarial checks and their latest result: an addition that is absent where it cannot load.
     try {
-      const checks = (await api.get("/observability/checks")).data as { checks: ScheduledCheck[] };
+      const checks = (await api.get("/observability/checks")).data as { enabled?: boolean; checks: ScheduledCheck[] };
+      if (checks.enabled !== true) {
+        setScheduled([]);
+        return;
+      }
       const adversarial = (checks.checks ?? []).filter((check) => check.kind === "adversarial");
       const latest = await Promise.all(
         adversarial.map(async (check) => {

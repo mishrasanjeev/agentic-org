@@ -76,6 +76,9 @@ export async function signIn(page: Page, email = APPROVER_A): Promise<void> {
     page.locator('button[type="submit"]').click(),
   ]);
   await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 });
+  // A URL change precedes protected-route hydration. Do not abort /auth/me
+  // with the next hard navigation; its body must reach the grant-leak watcher.
+  await expect(page.locator("#main-content")).toBeVisible();
 }
 
 export async function openCase(page: Page, caseRef: string): Promise<void> {

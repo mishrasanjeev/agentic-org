@@ -31,8 +31,13 @@ and a `model` check is never billed twice.
 
 ## Kinds
 
-Every kind accepts `max_latency_ms`; a run slower than it fails with `too_slow`. A probe that
-has not answered within 60 seconds ends as an error.
+Every kind accepts `max_latency_ms`; a run slower than it fails with `too_slow`.
+Ordinary probes have a 60-second deadline. Dataset probes receive that base plus 10 seconds
+per configured case/model-or-judge call, capped at 240 seconds, below the five-minute
+minimum schedule interval. This is a bounded budget, not a guarantee of provider latency.
+Reduce the slice or judge count when serial pseudonymised calls exceed it. A deadline expiry
+ends as an error; model calls already sent may still be billed, and a timed-out evaluation
+does not have a completed stored run. `max_latency_ms` is a result threshold, not a deadline override.
 
 | Kind | Configuration | What it does | Fails with |
 | --- | --- | --- | --- |
@@ -44,7 +49,7 @@ has not answered within 60 seconds ends as an error.
 | `eval_dataset` | `dataset_id` (required), `version` (the latest when omitted), `system` (required, the prompt), `model` (required), `judges` with `judge_model`, `limit` (25), `min_pass_rate` (100, a percentage) | Scores the first `limit` cases of a version of one of the tenant's evaluation datasets with the prompt and model (`docs/governance/evaluation-datasets.md`) and keeps the run in the evaluation history with the label `scheduled:<model>`. One billed model call per case each run, plus one per case and judge. Needs `AGENTICORG_EVALS_V2_ENABLED` and `AGENTICORG_PROMPT_COMPARE_ENABLED`; off, the run is an error. The result keeps the run id, the counts, the pass rate and the judges' means. | `eval_pass_rate_below_minimum`, `eval_cases_not_answered` |
 
 An unknown configuration key is refused, so a check cannot be pointed at anything but these
-four paths; there is no arbitrary URL probe.
+six paths; there is no arbitrary URL probe.
 
 A `model` check makes a real, billed model call on every run. Keep its prompt short and its
 interval long enough for the question it answers.
