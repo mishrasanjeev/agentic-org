@@ -13,10 +13,10 @@ from sqlalchemy import select
 from api.deps import get_current_tenant, get_current_user, get_user_domains
 from api.route_metadata import route_meta
 from api.v1.agents import _effective_caller, _user_uuid_from_claims
-from core.agent_registry import lifecycle
+from core.agent_registry import dependencies, lifecycle
 from core.database import get_tenant_session
 from core.models.agent import Agent
-from core.ownership import Caller, caller_from_request, require_agent_mutable, require_agent_visible
+from core.ownership import Caller, caller_from_request, can_view_agent, require_agent_mutable, require_agent_visible
 from core.schemas.api import AgentCardIn, AgentLifecycleIn
 
 logger = structlog.get_logger()
@@ -165,6 +165,41 @@ async def get_agent_lifecycle(
         }
 
 
+@router.get("/agents/{agent_id}/dependencies")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="agents.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="agents.dependencies.read",
+)
+async def get_agent_dependencies(
+    agent_id: UUID,
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
+) -> dict:
+    """The agent's dependency graph: models, prompt, tools and connectors, knowledge, policies,
+    datasets, related agents and teams, as nodes and edges without prompt text or rule reasons."""
+    _require_enabled()
+    tid = _uuid.UUID(tenant_id)
+    effective = _effective_caller(caller, user_domains)
+    async with get_tenant_session(tid) as session:
+        agent = await _agent(session, tid, agent_id)
+        require_agent_visible(agent, effective)
+
+        async def _load(related_id):
+            row = (
+                await session.execute(select(Agent).where(Agent.id == related_id, Agent.tenant_id == tid))
+            ).scalar_one_or_none()
+            # A related agent the caller may not see is named by its id only.
+            return row if row is not None and can_view_agent(row, effective) else None
+
+        result = await dependencies.graph(session, tid, agent, load_agent=_load)
+        return {"id": str(agent_id), "kinds": list(dependencies.KINDS), **result}
+
+
 @router.get("/agent-registry")
 @route_meta(
     auth_required=True,
@@ -201,8 +236,6 @@ async def list_agent_registry(
                 (await session.execute(select(Agent).where(Agent.id.in_(ids), Agent.tenant_id == tid))).scalars().all()
             )
             agents = {agent.id: agent for agent in rows}
-        from core.ownership import can_view_agent
-
         listed = []
         for entry in entries:
             agent = agents.get(entry.agent_id)

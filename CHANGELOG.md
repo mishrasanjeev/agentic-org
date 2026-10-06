@@ -4,6 +4,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent registry: dependency graph
+- `GET /agents/{id}/dependencies` (`core/agent_registry/dependencies.py`)
+  returns an agent's models, prompt, tools and connectors, knowledge base,
+  governing policies (guardrail rules, review condition, output schema,
+  evaluation gate dataset), related agents and teams as nodes and edges,
+  with names and references only.
+
 ### Added - Agent registry: catalogue, templates and banking pack
 - `GET /agent-registry` filters by state, risk tier, use case, channel,
   domain and a search term over the card text; the console page Agent
