@@ -110,8 +110,10 @@ export default function Conversations() {
       if (action === "reply") {
         await api.post(`/conversation/supervisor/sessions/${selected}/reply`, { text: reply });
         setReply("");
+      } else if (action === "takeover") {
+        await api.post(`/conversation/supervisor/sessions/${selected}/takeover`);
       } else {
-        await api.post(`/conversation/supervisor/sessions/${selected}/${action}`);
+        await api.post(`/conversation/supervisor/sessions/${selected}/release`);
       }
       await loadTranscript(selected);
       await loadSessions();
