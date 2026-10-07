@@ -6,7 +6,7 @@ import Analytics from "./components/Analytics";
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RouteSeo from "./components/RouteSeo";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "./lib/roles";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "./lib/roles";
 
 /* -- Critical path: Landing page loaded eagerly -- */
 import Landing from "./pages/Landing";
@@ -57,6 +57,7 @@ const Documents = lazyRetry(() => import("./pages/Documents"));
 const Workbench = lazyRetry(() => import("./pages/Workbench"));
 const Calls = lazyRetry(() => import("./pages/Calls"));
 const Transactions = lazyRetry(() => import("./pages/Transactions"));
+const Lineage = lazyRetry(() => import("./pages/Lineage"));
 const GovernedCases = lazyRetry(() => import("./pages/GovernedCases"));
 const GovernedCaseDetail = lazyRetry(() => import("./pages/GovernedCaseDetail"));
 const Connectors = lazyRetry(() => import("./pages/Connectors"));
@@ -543,6 +544,16 @@ export default function App() {
           <ProtectedRoute allowedRoles={APPROVAL_ROLES}>
             <Layout>
               <Documents />
+            </Layout>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/dashboard/lineage"
+        element={
+          <ProtectedRoute allowedRoles={LINEAGE_ROLES}>
+            <Layout>
+              <Lineage />
             </Layout>
           </ProtectedRoute>
         }

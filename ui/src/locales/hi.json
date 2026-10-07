@@ -52,7 +52,8 @@
     "agentCatalogue": "एजेंट कैटलॉग",
     "sla": "SLA मॉनिटर",
     "billing": "बिलिंग",
-    "settings": "सेटिंग्स"
+    "settings": "सेटिंग्स",
+    "lineage": "वंशावली"
   },
   "roles": {
     "cfo": "CFO",

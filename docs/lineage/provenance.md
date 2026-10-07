@@ -79,6 +79,14 @@ five minutes (`core/tasks/lineage_tasks.py`) and is a no-op unless `lineage_sync
 is on as well. Another way of listing
 changed items (a connector) registers a fetcher under its own source kind.
 
-## Next
+## The console
 
-The lineage graph in the console is the last part of this work package.
+The Lineage page (`/dashboard/lineage`, for the roles that hold `audit:read`; the navigation entry
+appears only while lineage is on) finds nodes by kind and by a literal substring of their reference
+(`GET /lineage/nodes?kind=&q=&limit=`, newest first), traces one upstream, downstream or both within
+the hop bound and draws it from origin to use (sources, documents and records, chunks, embeddings,
+findings, drafts, model use), and says when the trace was cut at its bounds. Selecting a node shows
+its provenance: whether it traces to a source or only declares one, its sources, the processing
+history in order and every version kept, each of which can be traced in turn. The sync sources are
+listed with their interval, last run and status; their recent runs show what each received,
+processed, skipped and failed, and a role that holds `approvals:write` can run a source now.

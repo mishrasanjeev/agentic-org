@@ -4,6 +4,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Provenance and lineage: the lineage graph in the console
+- The Lineage page finds nodes by kind and reference (`GET /lineage/nodes`),
+  traces one upstream, downstream or both and draws it from origin to use,
+  shows a node's sources, processing history and versions, and lists the
+  sync sources with their recent runs; a role that holds approvals:write
+  can run a source now. The navigation entry appears only while lineage is
+  on (`lineage_enabled`, default off).
+
 ### Added - Provenance and lineage: incremental synchronisation
 - `core/lineage/sync.py`: a sync source names a feed (public HTTPS,
   egress validated, optional bearer token kept encrypted) polled on an

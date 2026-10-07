@@ -113,6 +113,31 @@ async def record_chain(body: ChainIn, tenant_id: str = Depends(get_current_tenan
         raise _refused(exc) from None
 
 
+@router.get("/nodes")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="lineage.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="lineage.search",
+)
+async def search_nodes(
+    kind: Annotated[str | None, Query(max_length=32)] = None,
+    q: Annotated[str | None, Query(max_length=provenance.MAX_REF)] = None,
+    limit: Annotated[int, Query(ge=1, le=provenance.MAX_SEARCH)] = 50,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """The most recently observed nodes, of one kind or all, whose reference contains q: where a trace starts."""
+    if not provenance.enabled():
+        raise _off()
+    try:
+        nodes = await provenance.search(uuid.UUID(tenant_id), kind=kind, query=q, limit=limit)
+    except LineageError as exc:
+        raise _refused(exc) from None
+    return {"nodes": nodes, "total": len(nodes)}
+
+
 @router.get("/nodes/{kind}/{ref:path}")
 @route_meta(
     auth_required=True,

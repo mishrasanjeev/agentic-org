@@ -6,6 +6,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -242,6 +243,75 @@ class TestStore:
         await provenance.record_chain(TENANT, [node("document", "upload://a.pdf", "sha256:2")])
         old = await provenance.describe(TENANT, "document", "upload://a.pdf", version="sha256:1")
         assert old["node"]["version"] == "sha256:1" and old["complete"] is True
+
+
+class TestSearch:
+    @pytest.mark.asyncio
+    async def test_the_search_filters_by_kind_and_a_literal_substring_newest_first(self, monkeypatch):
+        import core.database
+
+        class _Capture:
+            def __init__(self):
+                self.statements = []
+
+            async def execute(self, statement):
+                self.statements.append(statement)
+                return _Result(
+                    [
+                        SimpleNamespace(
+                            **dict(
+                                node("chunk", "upload://a.pdf#chunk1", "ab", observed_at=T0),
+                                id=uuid.uuid4(),
+                                attributes={},
+                            )
+                        )
+                    ]
+                )
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        capture = _Capture()
+        monkeypatch.setattr(core.database, "get_tenant_session", lambda tenant_id: capture)
+        monkeypatch.setattr(settings, "lineage_enabled", True)
+        found = await provenance.search(TENANT, kind="Chunk", query="50%_off", limit=500)
+        assert found[0]["kind"] == "chunk" and found[0]["ref"] == "upload://a.pdf#chunk1"
+        compiled = capture.statements[0].compile(dialect=postgresql.dialect())
+        text = str(compiled)
+        assert (
+            "lineage_nodes.kind = " in text
+            and "LIKE" in text
+            and "ESCAPE" in text
+            and "ORDER BY lineage_nodes.observed_at DESC" in text
+        )
+        assert "50/%/_off" in str(compiled.params) and provenance.MAX_SEARCH in compiled.params.values()
+        await provenance.search(TENANT)
+        assert "LIKE" not in str(capture.statements[1].compile(dialect=postgresql.dialect()))
+        with pytest.raises(LineageError) as refused:
+            await provenance.search(TENANT, kind="thing")
+        assert refused.value.code == "kind_unknown"
+
+    @pytest.mark.asyncio
+    async def test_the_search_route_is_off_with_the_flag_and_maps_refusals(self, monkeypatch):
+        from unittest.mock import AsyncMock as _Async
+
+        monkeypatch.setattr(settings, "lineage_enabled", False)
+        with pytest.raises(HTTPException) as refused:
+            await api.search_nodes(kind=None, q=None, limit=10, tenant_id=str(TENANT))
+        assert refused.value.status_code == 404
+        monkeypatch.setattr(settings, "lineage_enabled", True)
+        monkeypatch.setattr(provenance, "search", _Async(return_value=[{"id": "n1"}]))
+        assert await api.search_nodes(kind="chunk", q="a", limit=10, tenant_id=str(TENANT)) == {
+            "nodes": [{"id": "n1"}],
+            "total": 1,
+        }
+        monkeypatch.setattr(provenance, "search", _Async(side_effect=LineageError(422, "kind_unknown", "no")))
+        with pytest.raises(HTTPException) as refused:
+            await api.search_nodes(kind="thing", q=None, limit=10, tenant_id=str(TENANT))
+        assert refused.value.status_code == 422 and refused.value.detail["error"] == "kind_unknown"
 
 
 class TestHooks:

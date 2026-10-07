@@ -267,6 +267,32 @@ async def record_chain(tenant_id: uuid.UUID, nodes: list[Any], steps: list[Any] 
     return {"nodes": [_node_dict(row) for row in rows], "steps": len(checked_steps)}
 
 
+MAX_SEARCH = 100
+
+
+async def search(
+    tenant_id: uuid.UUID, *, kind: str | None = None, query: str | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    """The most recently observed nodes, of one kind or all, whose reference contains ``query``."""
+    from core.database import get_tenant_session
+    from core.models.lineage import LineageNode
+
+    statement = select(LineageNode).where(LineageNode.tenant_id == tenant_id)
+    if kind:
+        kind = _text(kind, 32).lower()
+        if kind not in KINDS:
+            raise LineageError(422, "kind_unknown", f"kind is one of {', '.join(KINDS)}")
+        statement = statement.where(LineageNode.kind == kind)
+    needle = _text(query, MAX_REF)
+    if needle:
+        # A literal substring: the wildcards a caller types are matched as characters.
+        statement = statement.where(LineageNode.ref.contains(needle, autoescape=True))
+    statement = statement.order_by(LineageNode.observed_at.desc()).limit(max(1, min(int(limit), MAX_SEARCH)))
+    async with get_tenant_session(tenant_id) as session:
+        rows = (await session.execute(statement)).scalars().all()
+    return [_node_dict(row) for row in rows]
+
+
 async def versions(tenant_id: uuid.UUID, kind: str, ref: str) -> list[dict[str, Any]]:
     """Every version kept of one thing, newest first."""
     from core.database import get_tenant_session

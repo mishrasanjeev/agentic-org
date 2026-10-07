@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import HITLBadge from "./HITLBadge";
 import { useAuth } from "../contexts/AuthContext";
-import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
+import { AGENT_CREATOR_ROLES, APPROVAL_ROLES, CONNECTOR_ROLES, LINEAGE_ROLES, SUPERVISOR_ROLES, WORKBENCH_ROLES } from "../lib/roles";
 import api from "../lib/api";
 
 const LANGUAGES = [
@@ -49,6 +49,7 @@ const ALL_NAV: Array<{ path: string; labelKey: string; label: string; roles: rea
   { path: "/dashboard/workbench", labelKey: "nav.workbenches", label: "Workbenches", roles: WORKBENCH_ROLES },
   { path: "/dashboard/calls", labelKey: "nav.calls", label: "Calls", roles: ["admin", "coo", "auditor"], statusPath: "/speech/status" },
   { path: "/dashboard/transactions", labelKey: "nav.transactions", label: "Transactions", roles: ["admin", "coo", "auditor", "cfo"], statusPath: "/txn/status" },
+  { path: "/dashboard/lineage", labelKey: "nav.lineage", label: "Lineage", roles: LINEAGE_ROLES, statusPath: "/lineage/status" },
   { path: "/dashboard/connectors", labelKey: "nav.connectors", label: "Connectors", roles: CONNECTOR_ROLES },
   { path: "/dashboard/commerce-runtime", labelKey: "nav.commerceRuntime", label: "Commerce Runtime", roles: ["admin", "merchant"] },
   { path: "/dashboard/prompt-templates", labelKey: "nav.promptTemplates", label: "Prompt Templates", roles: ["admin"] },
