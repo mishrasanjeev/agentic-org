@@ -97,13 +97,14 @@ class TestAccess:
     def test_sensitive_and_role_bound_tabs_are_hidden_from_other_roles(self):
         investigator = definitions.WORKBENCHES["investigator"]
         assert [t.key for t in access.tabs_for(investigator, "analyst")] == []  # no page admits an analyst yet
-        assert [t.key for t in access.tabs_for(investigator, "auditor")] == ["audit"]
-        assert [t.key for t in access.tabs_for(investigator, "domain_lead")] == ["documents", "cases"]
+        assert [t.key for t in access.tabs_for(investigator, "auditor")] == ["audit", "search"]
+        assert [t.key for t in access.tabs_for(investigator, "domain_lead")] == ["documents", "cases", "search"]
         assert [t.key for t in access.tabs_for(investigator, "admin")] == [
             "documents",
             "cases",
             "audit",
             "observability",
+            "search",
         ]
         supervisor = next(b for b in access.workbenches_for("cfo", {"supervisor"}) if b["name"] == "supervisor")
         assert [t["key"] for t in supervisor["tabs"]] == ["approvals", "costs"]
@@ -159,7 +160,8 @@ class TestAccess:
         assert (
             found is not None
             and found["waiting"] == 7
-            and found["counts"] == {"queue": 7, "approvals": 2, "documents": 5, "drafts": None, "cases": None}
+            and found["counts"]
+            == {"queue": 7, "approvals": 2, "documents": 5, "drafts": None, "cases": None, "search": None}
         )
         assert found["held_by"] == "role" and [t["key"] for t in found["tabs"]] == [
             "queue",
@@ -167,6 +169,7 @@ class TestAccess:
             "documents",
             "drafts",
             "cases",
+            "search",
         ]
         assert await access.summary(TENANT, "supervisor", "cfo") is None
         assert await access.summary(TENANT, "unknown", "admin") is None
@@ -337,7 +340,7 @@ class TestRoutes:
 
         found = await api.summary("investigator", request, role="domain_lead", tenant_id=str(TENANT))
         assert access.counts.call_args.kwargs["caller"].role == "domain_lead"
-        assert found["counts"] == {"documents": 1, "cases": None} and found["waiting"] == 1
+        assert found["counts"] == {"documents": 1, "cases": None, "search": None} and found["waiting"] == 1
         with pytest.raises(HTTPException) as info:
             await api.summary("supervisor", request, role="cfo", tenant_id=str(TENANT))
         assert info.value.status_code == 404

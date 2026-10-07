@@ -5,6 +5,7 @@ import { Link, useParams } from "react-router";
 import api, { extractApiError } from "@/lib/api";
 import BusinessConsole from "@/components/BusinessConsole";
 import ReviewQueue from "@/components/ReviewQueue";
+import WorkbenchSearch from "@/components/WorkbenchSearch";
 
 /**
  * Workbench shell: the role-shaped consoles a person works from. The index lists the caller's
@@ -263,6 +264,7 @@ export default function Workbench() {
           {current && panel === "drafts" && <DraftsPanel />}
           {current && panel === "queue" && <ReviewQueue />}
           {current && panel === "console" && <BusinessConsole />}
+          {current && panel === "search" && <WorkbenchSearch />}
           {current && panel === null && (
             <div className="rounded-md border border-slate-200 bg-white p-4 text-sm" data-testid="workbench-open">
               <p className="text-slate-700">
@@ -275,7 +277,7 @@ export default function Workbench() {
               </Link>
             </div>
           )}
-          {current && panel !== null && panel !== "drafts" && panel !== "queue" && panel !== "console" && (
+          {current && panel !== null && !["drafts", "queue", "console", "search"].includes(panel) && (
             <p className="text-sm text-slate-500" data-testid="workbench-pending">
               {current.title} arrives with the next workbench release.
             </p>

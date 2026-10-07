@@ -85,6 +85,29 @@ Readers take the effective value: the tenant's where one is set and the workbenc
 catalogue's default otherwise, and the default again when the store cannot be read, so a
 deployment with the console off behaves exactly as before.
 
+## Search
+
+`GET /workbench/search` searches cases, documents, customers and accounts in one query
+(`core/workbench/search.py`). The query is words and quoted phrases, every one of which must match
+(a word with a leading minus must not), over the text of each kind: a governed case's reference,
+purpose, provider, state, subject and parties; a kept document's name, status and extracted result,
+corrections first; a customer's name, identifiers, industry, address and signatory; an account as
+the account numbers and bank codes found in kept documents with the holder's name beside. Facet
+filters are repeated query parameters named after the facet (a case's `state`, `purpose`,
+`provider`; a document's `status`, `document_type`; a customer's `industry`, `state_code`,
+`active`) and the response counts the values present so the person can narrow further. Every read
+is tenant scoped, bounded per kind, and a kind is searched only where the caller holds a workbench
+tab that shows it (customers where the companies page admits the role). The review officer's and
+the investigator's workbenches show the search as a tab.
+
+## Accessibility
+
+`ui/src/__tests__/workbench_accessibility.test.tsx` renders every workbench page and panel (the
+index, a workbench with its tabs, the review queue with an item open, the business console, the
+search with results) and runs axe-core over each; a violation fails the suite. Colour contrast and
+page regions are judged by the browser suite, since a component renders without the layout. Every
+control carries a name, results regions announce their count, and tabs mark the current page.
+
 ## The shell
 
 The index lists the held workbenches with how each is held (by role or by assignment). A workbench

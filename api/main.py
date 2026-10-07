@@ -101,6 +101,7 @@ from api.v1 import (
     workbench,
     workbench_console,
     workbench_queue,
+    workbench_search,
     workflow_variants,
     workflows,
 )
@@ -325,6 +326,7 @@ app.include_router(idp_statements.router, prefix="/api/v1")
 app.include_router(workbench.router, prefix="/api/v1")
 app.include_router(workbench_queue.router, prefix="/api/v1")
 app.include_router(workbench_console.router, prefix="/api/v1")
+app.include_router(workbench_search.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

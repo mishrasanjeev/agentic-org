@@ -10188,6 +10188,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "workbench.search",
+    "auth_required": true,
+    "function": "search_workbench",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/workbench/search api/v1/workbench_search.py:search_workbench",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/workbench_search.py",
+    "path": "/api/v1/workbench/search",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "workbench.search.sensitive.read",
+    "source_line": 52,
+    "tenant_required": true
+  },
+  {
     "audit_event": "workbench.summary.read",
     "auth_required": true,
     "function": "summary",

@@ -105,7 +105,7 @@ function SettingCard({ setting, onSaved }: { setting: SettingRow; onSaved: () =>
     <div className="rounded-md border border-slate-200 bg-white p-3" data-testid={`console-${setting.key}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">{setting.title}</h3>
+          <h3 id={`console-title-${setting.key}`} className="text-sm font-semibold text-slate-900">{setting.title}</h3>
           <p className="text-xs text-slate-600">{setting.description}</p>
           <p className="text-xs text-slate-500">
             {setting.source === "set" ? `Set by ${setting.updated_by || "an administrator"}${setting.updated_at ? ` on ${new Date(setting.updated_at).toLocaleString()}` : ""}` : "Default"}
@@ -127,9 +127,9 @@ function SettingCard({ setting, onSaved }: { setting: SettingRow; onSaved: () =>
           {error}
         </div>
       )}
-      <div className="mt-2">
+      <div className="mt-2" role="group" aria-labelledby={`console-title-${setting.key}`}>
         {(setting.kind === "number" || setting.kind === "integer") && (
-          <input type="number" className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm" value={raw} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} step={setting.kind === "integer" ? 1 : 0.01} onChange={(e) => setRaw(e.target.value)} data-testid={`console-input-${setting.key}`} />
+          <input type="number" aria-label={setting.title} className="w-40 rounded-md border border-slate-300 px-2 py-1 text-sm" value={raw} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} step={setting.kind === "integer" ? 1 : 0.01} onChange={(e) => setRaw(e.target.value)} data-testid={`console-input-${setting.key}`} />
         )}
         {setting.kind === "boolean" && (
           <label className="text-sm text-slate-700">
@@ -147,9 +147,9 @@ function SettingCard({ setting, onSaved }: { setting: SettingRow; onSaved: () =>
             ))}
           </div>
         )}
-        {setting.kind === "list" && setting.options.length === 0 && <input className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="comma-separated" />}
+        {setting.kind === "list" && setting.options.length === 0 && <input aria-label={setting.title} className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm" value={raw} onChange={(e) => setRaw(e.target.value)} placeholder="comma-separated" />}
         {(setting.kind === "mapping" || setting.kind === "rules") && (
-          <textarea className="w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-xs" rows={setting.kind === "rules" ? 6 : 4} value={raw} onChange={(e) => setRaw(e.target.value)} data-testid={`console-input-${setting.key}`} />
+          <textarea aria-label={setting.title} className="w-full rounded-md border border-slate-300 px-2 py-1 font-mono text-xs" rows={setting.kind === "rules" ? 6 : 4} value={raw} onChange={(e) => setRaw(e.target.value)} data-testid={`console-input-${setting.key}`} />
         )}
         {setting.kind === "mapping" && setting.options.length > 0 && <p className="mt-1 text-xs text-slate-500">Keys: {setting.options.join(", ")}</p>}
         {setting.kind === "rules" && <p className="mt-1 text-xs text-slate-500">Each rule: kind (any, approval, document, draft, case), field, op (&gt;=, &lt;=, ==, contains), value, priority (critical, high, normal, low).</p>}

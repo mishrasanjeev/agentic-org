@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Workbenches: search across cases, documents, customers and accounts; accessibility suite
+- `GET /workbench/search` searches cases, documents, customers and accounts
+  in one query: words and quoted phrases that must all match, a leading
+  minus to exclude, facet filters as repeated parameters, and the facet
+  values present with counts in the answer; every read tenant scoped and
+  bounded, each kind searched only where a held workbench shows it
+  (`core/workbench/search.py`, `ui/src/components/WorkbenchSearch.tsx`,
+  a Search tab in the review officer's and investigator's workbenches).
+  `ui/src/__tests__/workbench_accessibility.test.tsx` runs axe-core over
+  every workbench page and panel; a violation fails the suite.
+
 ### Added - Workbenches: the business console for rules, thresholds and routing
 - `GET /workbench/console` lists the settings a tenant may change without a
   release, with bounds, options, the tenant's value and the default;

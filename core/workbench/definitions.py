@@ -17,6 +17,8 @@ from typing import Any
 
 ADMIN = "admin"
 ALL_ROLES: tuple[str, ...] = ("admin", "cfo", "chro", "cmo", "coo", "auditor", "domain_lead", "analyst", "developer")
+# The roles with something to search: the approval pages admit the first seven, the companies page the auditor too.
+SEARCH_ROLES: tuple[str, ...] = ("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer", "auditor")
 
 
 @dataclass(frozen=True)
@@ -98,6 +100,14 @@ CATALOGUE: tuple[Workbench, ...] = (
                 roles=("admin", "cfo", "chro", "cmo", "coo", "domain_lead", "developer"),
                 actions=("review",),
             ),
+            Tab(
+                "search",
+                "Search",
+                "/dashboard/workbench/review_officer/search",
+                "search",
+                roles=SEARCH_ROLES,
+                actions=("search",),
+            ),
         ),
         default_roles=("admin", "cfo", "coo", "domain_lead"),
     ),
@@ -175,6 +185,14 @@ CATALOGUE: tuple[Workbench, ...] = (
                 "observability",
                 roles=("admin",),
                 sensitive=True,
+            ),
+            Tab(
+                "search",
+                "Search",
+                "/dashboard/workbench/investigator/search",
+                "search",
+                roles=SEARCH_ROLES,
+                actions=("search",),
             ),
         ),
         default_roles=("admin", "auditor", "domain_lead"),
