@@ -18,18 +18,24 @@ Every entry carries the kind, id, name, enabled, priority, scope (use case, agen
 business unit, language, stage, risk tier, workflow, provider, model), effect, enforcement point,
 reason and who last wrote it.
 
-- `GET /governance/policies?kind=` lists them, with the enforcement points and kinds.
+- `GET /governance/policies?kind=` lists them, disabled ones included, with the enforcement points
+  and kinds.
 - `POST /governance/policies` with `{"kind": ..., "policy": {...}}` writes one; the policy is
   validated by the same input schema its own API uses, written through the same writer, and
   attributed to the same actor, so the gateway's cache, the guardrails' cache and the audit rows
   behave as they do for a write through the kind's own API.
 - `DELETE /governance/policies/{kind}/{id}` removes one the same way.
 - `POST /governance/policies/evaluate` is a dry run across the enforcement points for a described
-  call: the gateway's decision for the use case, sensitivity, agent and requested model (routed,
-  allowed or refused, with the policy that decided); the guardrail outcomes for a text at a stage
-  (flagged, transformed or blocked, with the rules that fired); the approval policies that would
-  apply to the workflow or agent; and the risk class of a tool. The verdict is `blocked`, `flagged`,
-  `routed` or `allowed`, with the reasons, and nothing is metered, logged or audited.
+  call: the gateway's decision for the use case, sensitivity, agent, application, principal and
+  requested model (routed, allowed or refused, with the policy that decided); the guardrail outcomes
+  for a text at a stage (flagged, transformed or blocked, with the rules that fired); the approval
+  policy live execution would pick for the workflow or agent (workflow-scoped, then agent-scoped,
+  then the tenant-global `default`); and the risk class of a tool in a domain, blocked as at runtime
+  when the domain is missing or unknown, the tool is unknown or the tool is outside the domain. The
+  verdict is `blocked`, `flagged`, `routed` or `allowed`, with the reasons, and nothing is metered,
+  logged or audited.
+- An approval policy written here is checked as the approval policies API checks it: every step
+  names a valid approver role and a quorum it can reach.
 
 Everything is tenant-admin only, under the `governance.policies.sensitive.read` and `.write`
 scopes, and audited. Off, the endpoints are not found and nothing here reads or writes. The

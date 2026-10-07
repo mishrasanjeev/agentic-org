@@ -107,6 +107,26 @@ async def test_history_reads_daily_rows_per_key_and_the_forecast_assembles_them(
     )
 
 
+@pytest.mark.asyncio
+async def test_more_labels_than_the_limit_keep_the_highest_spend_and_complete_totals():
+    tid = uuid.uuid4()
+    today = datetime.now(UTC).date()
+    labels = [f"agent-{i:03d}" for i in range(forecast.MAX_KEYS + 20)]
+    rows = [(label, today, 100, 1.0) for label in labels]
+    rows.append(("zz-high-spend", today, 100_000, 500.0))
+    series = await forecast.history(_Session(rows), tid, days=30, group_by="agent_id")
+    assert len(series) == forecast.MAX_KEYS + 21 and "zz-high-spend" in series
+    answer = await forecast.forecast(_Session(rows), tid, days=30, horizon_days=30, group_by="agent_id")
+    assert len(answer["rows"]) == forecast.MAX_KEYS
+    assert answer["total_rows"] == forecast.MAX_KEYS + 21 and answer["truncated"] is True
+    assert answer["rows"][0]["agent_id"] == "zz-high-spend"
+    assert answer["totals"]["history_cost_usd"] == float(len(labels)) + 500.0
+    listed = round(sum(r["projected_cost_usd"] for r in answer["rows"]), 2)
+    assert answer["totals"]["projected_cost_usd"] > listed
+    small = await forecast.forecast(_Session(rows[:3]), tid, days=30, horizon_days=30, group_by="agent_id")
+    assert small["truncated"] is False and small["total_rows"] == 3 and len(small["rows"]) == 3
+
+
 class TestComparison:
     def test_alternatives_are_priced_from_the_catalogue_cheapest_first(self):
         priced = forecast.alternatives(1_000_000, 750_000, 250_000, current_cost=10.0)
@@ -114,6 +134,43 @@ class TestComparison:
         assert priced == sorted(priced, key=lambda r: (r["cost_usd"], r["provider"], r["model"]))
         assert all(set(r) == {"provider", "model", "cost_usd", "saving_usd", "price_source"} for r in priced)
         assert all(round(10.0 - r["cost_usd"], 6) == r["saving_usd"] for r in priced)
+
+    def test_unsplit_tokens_are_priced_at_the_blended_rate_alongside_the_split(self):
+        from core.governance.model_pricing import price_for
+
+        split_only = {(r["provider"], r["model"]): r for r in forecast.alternatives(1_000_000, 750_000, 250_000, 0.0)}
+        mixed = forecast.alternatives(2_000_000, 750_000, 250_000, 0.0, unsplit_tokens=1_000_000)
+        assert mixed
+        for item in mixed:
+            price = price_for(item["provider"], item["model"])
+            blended = price.cost_usd(input_tokens=None, output_tokens=None, tokens=1_000_000)
+            split = price.cost_usd(input_tokens=750_000, output_tokens=250_000, tokens=1_000_000)
+            assert item["cost_usd"] == round(split + blended, 6)
+            if (item["provider"], item["model"]) in split_only and blended > 0:
+                assert item["cost_usd"] > split_only[(item["provider"], item["model"])]["cost_usd"]
+        unknown = forecast.alternatives(1_000_000, None, None, 0.0, unsplit_tokens=1_000_000)
+        for item in unknown:
+            price = price_for(item["provider"], item["model"])
+            assert item["cost_usd"] == price.cost_usd(input_tokens=None, output_tokens=None, tokens=1_000_000)
+
+    @pytest.mark.asyncio
+    async def test_a_use_case_with_split_and_unsplit_calls_prices_both(self):
+        tid = uuid.uuid4()
+        rows = [("kyc", "openai", "gpt-4o", 1_500_000, 750_000, 250_000, 8.0, 50, 500_000)]
+        session = _Session(rows)
+        answer = await forecast.comparison(session, tid, days=30)
+        kyc = answer["use_cases"][0]
+        assert kyc["input_tokens"] == 750_000 and kyc["output_tokens"] == 250_000 and kyc["unsplit_tokens"] == 500_000
+        expected = forecast.alternatives(1_500_000, 750_000, 250_000, 8.0, unsplit_tokens=500_000)
+        assert kyc["alternatives"] == expected
+        understated = forecast.alternatives(1_500_000, 750_000, 250_000, 8.0)
+        assert sum(a["cost_usd"] for a in kyc["alternatives"]) > sum(a["cost_usd"] for a in understated)
+        sql, _params = session.calls[0]
+        assert "input_tokens IS NULL OR output_tokens IS NULL THEN tokens" in sql
+        all_unsplit = await forecast.comparison(
+            _Session([("kyc", "openai", "gpt-4o", 1_000_000, 0, 0, 5.0, 10, 1_000_000)]), tid, days=30
+        )
+        assert all_unsplit["use_cases"][0]["alternatives"] == forecast.alternatives(1_000_000, None, None, 5.0)
 
     @pytest.mark.asyncio
     async def test_the_comparison_folds_each_use_case_with_its_mix_and_alternatives(self):

@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 import structlog
@@ -13,11 +15,24 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant, get_user_domains, require_tenant_admin
 from api.route_metadata import route_meta
-from api.v1.agents import _effective_caller, require_agent_mutable, require_agent_visible
+from api.v1.agents import (
+    _assert_connectors_ready_for_dispatch,
+    _effective_caller,
+    _monthly_budget_refusal,
+    _parse_company_id,
+    _record_cost_ledger,
+    _resolve_connector_configs,
+    require_agent_mutable,
+    require_agent_visible,
+)
+from core.billing.metering import gate_agent_run
 from core.database import get_tenant_session
+from core.finops import attribution as cost_attribution
+from core.finops import thresholds as finops_thresholds
 from core.langgraph import debugger
 from core.models.agent import Agent
-from core.ownership import Caller, caller_from_request
+from core.models.hitl import HITLQueue
+from core.ownership import AGENT_VISIBILITY_TENANT, Caller, caller_from_request
 
 logger = structlog.get_logger()
 router = APIRouter(prefix="/agents/{agent_id}/debug", dependencies=[require_tenant_admin])
@@ -214,22 +229,162 @@ async def thread_steps(
         raise _refused(exc) from None
 
 
+def _step_refused(error: str, message: str) -> HTTPException:
+    return HTTPException(409, detail={"error": error, "message": message})
+
+
+async def _step_gate(tid: uuid.UUID, tenant_id: str, agent: Any) -> None:
+    """The billing gates a run passes before it runs, applied to a debug step before it is claimed."""
+    blocked = await gate_agent_run(tenant_id)
+    if blocked is not None:
+        raise _step_refused("limit_exceeded", str(blocked.get("error") or "The monthly agent-run limit is reached."))
+    budget = await _monthly_budget_refusal(tid, agent.id, getattr(agent, "cost_controls", None) or {})
+    if budget is not None:
+        raise _step_refused("budget_exceeded", str(budget["error"]["message"]))
+    if finops_thresholds.enabled():
+        async with get_tenant_session(tid) as session:
+            decision = await finops_thresholds.check_run(session, tid, cost_attribution.current())
+        if decision.action == "suspend":
+            refusal = finops_thresholds.refusal(decision, agent_id=str(agent.id))
+            raise _step_refused("threshold_suspended", str(refusal["error"]["message"]))
+        if decision.action == "throttle":
+            await asyncio.sleep(decision.delay_seconds)
+
+
+async def _step_connectors(
+    tid: uuid.UUID, tenant_id: str, agent: Any, spec: dict[str, Any]
+) -> tuple[dict[str, Any], list[str] | None]:
+    """The run's connector credentials, resolved again for this step from the connector ids the run used.
+
+    The session keeps only the ids; decrypted credentials live for the step.
+    """
+    connector_ids = [str(cid) for cid in (spec.get("connector_ids") or [])]
+    if not connector_ids:
+        return {}, spec.get("connector_names")
+    company_uuid = _parse_company_id(spec.get("company_id"))
+    async with get_tenant_session(tid, company_uuid) as session:
+        # A personal connector stays usable only by its owner's personal agent.
+        await _assert_connectors_ready_for_dispatch(
+            session,
+            tid,
+            [],
+            company_uuid,
+            agent_visibility=str(getattr(agent, "visibility", None) or AGENT_VISIBILITY_TENANT),
+            agent_owner_user_id=getattr(agent, "owner_user_id", None),
+            linked_connector_ids=connector_ids,
+        )
+    config, names = await _resolve_connector_configs(
+        tenant_id=tenant_id,
+        connector_ids=connector_ids,
+        agent_level_config=getattr(agent, "config", None),
+        company_id=spec.get("company_id"),
+    )
+    # The resolved names are the allow-list: a connector that no longer resolves offers no tools.
+    return config, names
+
+
+async def _open_approval(
+    tid: uuid.UUID, agent: Any, thread_id: str, spec: dict[str, Any], result: dict[str, Any], caller: Caller
+) -> str:
+    """Open the approval a debug step reached, as a run reaching it does; a decision resumes the thread."""
+    from core.approvals.agent_run_resume import RESUME_SPEC_KEY
+    from core.push.sender import notify_approval_created
+
+    trigger = str(result.get("hitl_trigger") or "approval required")
+    confidence = float(result.get("confidence") or 0.0)
+    agent_type = str(getattr(agent, "agent_type", "") or "")
+    item_id = uuid.uuid4()
+    async with get_tenant_session(tid) as session:
+        session.add(
+            HITLQueue(
+                id=item_id,
+                tenant_id=tid,
+                agent_id=agent.id,
+                workflow_run_id=None,
+                requested_by_user_id=caller.user_id,
+                title=f"HITL: {agent_type} — {trigger}",
+                trigger_type="confidence_below_floor" if trigger.startswith("confidence ") else "policy_condition",
+                priority="high" if confidence < 0.7 else "normal",
+                assignee_role=str(getattr(agent, "domain", None) or "admin"),
+                decision_options={"options": ["approve", "reject", "override"]},
+                context={
+                    "agent_type": agent_type,
+                    "agent_status": getattr(agent, "status", None),
+                    "confidence": confidence,
+                    "reasoning_trace": list(result.get("reasoning_trace") or []),
+                    "trigger": trigger,
+                    "output": result.get("output", {}),
+                    "debug_session": True,
+                    **(
+                        {"output_schema_errors": result["output_schema_errors"]}
+                        if result.get("output_schema_errors")
+                        else {}
+                    ),
+                    # Server-only, as for a run: the graph parameters the approval resume re-enters with.
+                    RESUME_SPEC_KEY: dict(spec),
+                },
+                expires_at=datetime.now(UTC) + timedelta(hours=4),
+                checkpoint_thread_id=thread_id,
+            )
+        )
+    owner = getattr(agent, "owner_user_id", None)
+    await notify_approval_created(
+        str(tid),
+        item_id=str(item_id),
+        agent_name=str(getattr(agent, "name", "") or agent_type),
+        action=trigger,
+        agent_visibility=getattr(agent, "visibility", None),
+        agent_owner_user_id=str(owner) if owner else None,
+    )
+    return str(item_id)
+
+
 async def _advance(agent_id: uuid.UUID, thread_id: str, tenant_id: str, caller: Caller | None, mode: str) -> dict:
-    """Re-enter a paused run: one node (``step``) or up to the next breakpoint (``continue``)."""
+    """Re-enter a paused run: one node (``step``) or up to the next breakpoint (``continue``).
+
+    A step passes the billing gates a run passes, its usage (what the step
+    spent, not the thread's total) is added to the agent's cost ledger, the
+    run's connector credentials are resolved again, and an approval the step
+    reaches opens the normal approval flow.
+    """
+    if not debugger.enabled():
+        raise _off()
+    tid = uuid.UUID(tenant_id)
+    effective = _effective_caller(caller)
+    async with get_tenant_session(tid) as session:
+        agent = await _agent(session, tid, agent_id)
+        require_agent_mutable(agent, effective)
+        attribution = (
+            await cost_attribution.resolve_for_agent(session, agent, application="agents")
+            if cost_attribution.enabled()
+            else None
+        )
+    attribution_token = cost_attribution.bind(attribution) if attribution is not None else None
+    try:
+        return await _advance_claimed(agent, thread_id, tenant_id, effective, mode)
+    finally:
+        if attribution_token is not None:
+            cost_attribution.reset(attribution_token)
+
+
+async def _advance_claimed(agent: Any, thread_id: str, tenant_id: str, caller: Caller, mode: str) -> dict:
     from auth.run_grants import CALLER_GRANT_KEY, caller_grant_for_run, resolve_run_grant
     from core.langgraph import runner
     from core.langgraph.checkpointer import CheckpointerUnavailableError
 
-    if not debugger.enabled():
-        raise _off()
     tid = uuid.UUID(tenant_id)
-    async with get_tenant_session(tid) as session:
-        agent = await _agent(session, tid, agent_id)
-        require_agent_mutable(agent, _effective_caller(caller))
+    agent_id = agent.id
+    # Refused before the session is claimed, so a refused step leaves it paused.
+    await _step_gate(tid, tenant_id, agent)
     claim = await debugger.claim_session(tid, agent_id, thread_id)
     if claim.refusal:
         raise HTTPException(claim.status, detail={"error": claim.refusal, "message": "The session cannot be stepped"})
     spec = claim.spec
+    try:
+        connector_config, connector_names = await _step_connectors(tid, tenant_id, agent, spec)
+    except HTTPException:
+        await debugger.release_session(tid, agent_id, thread_id)
+        raise
     bound_grant: dict[str, Any] = {}
     if isinstance(spec.get(CALLER_GRANT_KEY), dict):
         bound_grant["run_grant"] = await resolve_run_grant(
@@ -248,14 +403,17 @@ async def _advance(agent_id: uuid.UUID, thread_id: str, tenant_id: str, caller: 
             llm_model=str(spec.get("llm_model") or ""),
             confidence_floor=float(spec.get("confidence_floor") or 0.88),
             hitl_condition=str(spec.get("hitl_condition") or ""),
-            connector_config={},
-            connector_names=spec.get("connector_names"),
+            connector_config=connector_config,
+            connector_names=connector_names,
             tenant_id=tenant_id,
             company_id=spec.get("company_id"),
             domain=spec.get("domain"),
             llm_provider=spec.get("llm_provider"),
             require_paused=True,
             debug={"mode": mode, "breakpoints": claim.breakpoints},
+            output_schema=spec.get("output_schema"),
+            output_schema_json=spec.get("output_schema_json"),
+            limits=spec.get("limits"),
             **bound_grant,
         )
     except CheckpointerUnavailableError as exc:
@@ -264,6 +422,11 @@ async def _advance(agent_id: uuid.UUID, thread_id: str, tenant_id: str, caller: 
     except Exception as exc:
         logger.error("agent_debug_step_error", agent_id=str(agent_id), error_type=type(exc).__name__)
         result = {"status": "failed", "error": type(exc).__name__, "reason": "step_failed"}
+    # What the step spent joins the run's usage: no new task, the run was counted when it started.
+    usage_recorded = await _record_cost_ledger(tid, agent_id, result.get("performance") or {}, count_task=False)
+    approval_id = None
+    if result.get("status") == "hitl_triggered":
+        approval_id = await _open_approval(tid, agent, thread_id, spec, result, caller)
     state = await debugger.finish_session(tid, agent_id, thread_id, result)
     return {
         "thread_id": thread_id,
@@ -276,6 +439,9 @@ async def _advance(agent_id: uuid.UUID, thread_id: str, tenant_id: str, caller: 
         "reasoning_trace": result.get("reasoning_trace", []),
         "error": result.get("error") or None,
         "reason": result.get("reason") or None,
+        "hitl_trigger": result.get("hitl_trigger") or None,
+        "approval_id": approval_id,
+        "usage_recorded": usage_recorded,
         "performance": result.get("performance", {}),
     }
 
