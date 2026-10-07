@@ -237,6 +237,23 @@ async def list_records(
     return [record_dict(row) for row in rows]
 
 
+async def list_by_refs(tenant_id: uuid.UUID, refs: list[str]) -> list[dict[str, Any]]:
+    """The kept records with the given references, oldest first."""
+    from core.database import get_tenant_session
+    from core.models.txn_record import TxnRecord
+
+    if not refs:
+        return []
+    statement = (
+        select(TxnRecord)
+        .where(TxnRecord.tenant_id == tenant_id, TxnRecord.record_ref.in_(refs[:MAX_LIST]))
+        .order_by(TxnRecord.booked_at.asc(), TxnRecord.record_ref)
+    )
+    async with get_tenant_session(tenant_id) as session:
+        rows = (await session.execute(statement)).scalars().all()
+    return [record_dict(row) for row in rows]
+
+
 def records_from_statement(document: dict[str, Any], *, source: str) -> list[dict[str, Any]]:
     """A kept bank statement's line items as records on its account."""
     from core.idp import statements

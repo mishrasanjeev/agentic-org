@@ -16,13 +16,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.ownership import caller_from_request
-from core.txn import aggregate, detectors, findings, records
+from core.txn import aggregate, detectors, findings, graph, records
 from core.txn.records import TxnError
 
 router = APIRouter(prefix="/txn", tags=["Transactions"])
@@ -314,3 +314,70 @@ async def disposition(
         )
     except TxnError as exc:
         raise _refused(exc) from None
+
+
+@router.get("/graph/{kind}/{ref}")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="txn.records.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="txn.graph.read",
+)
+async def fund_flow(
+    kind: str,
+    ref: str,
+    hops: Annotated[int, Query(ge=1, le=graph.MAX_HOPS)] = 2,
+    min_amount: Annotated[float, Query(ge=0)] = 0.0,
+    since_days: Annotated[int, Query(ge=1, le=730)] = 365,
+    tenant_id: str = Depends(get_current_tenant),
+) -> dict[str, Any]:
+    """The fund-flow graph around an entity: nodes by hop, edges with totals, the heaviest paths, findings on nodes."""
+    if not records.enabled():
+        raise _off()
+    tenant = uuid.UUID(tenant_id)
+    try:
+        found = await findings.list_findings(tenant, limit=findings.MAX_LIST)
+        return await graph.expand(
+            tenant, kind, ref[:64], hops=hops, min_amount=min_amount, since_days=since_days, findings=found
+        )
+    except TxnError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/graph/{kind}/{ref}/export")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="txn.records.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="txn.graph.export",
+)
+async def export_fund_flow(
+    kind: str,
+    ref: str,
+    hops: Annotated[int, Query(ge=1, le=graph.MAX_HOPS)] = 2,
+    since_days: Annotated[int, Query(ge=1, le=730)] = 365,
+    output: Annotated[str, Query(alias="format", max_length=8)] = "json",
+    tenant_id: str = Depends(get_current_tenant),
+) -> Any:
+    """The graph with the records behind every edge and the findings, as JSON or CSV rows for the case file."""
+    if not records.enabled():
+        raise _off()
+    if output not in ("json", "csv"):
+        raise HTTPException(422, detail={"error": "format_unknown", "message": "format is json or csv"})
+    tenant = uuid.UUID(tenant_id)
+    try:
+        found = await findings.list_findings(tenant, limit=findings.MAX_LIST)
+        exported = await graph.export(tenant, kind, ref[:64], hops=hops, since_days=since_days, findings=found)
+    except TxnError as exc:
+        raise _refused(exc) from None
+    if output == "csv":
+        return Response(
+            content=exported["csv"],
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="fund-flow-{ref[:32]}.csv"'},
+        )
+    return {k: v for k, v in exported.items() if k != "csv"}

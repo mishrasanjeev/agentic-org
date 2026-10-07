@@ -27,6 +27,7 @@
     "documents": "Documents",
     "workbenches": "Workbenches",
     "calls": "Calls",
+    "transactions": "Transactions",
     "connectors": "Connectors",
     "commerceRuntime": "Commerce Runtime",
     "promptTemplates": "Prompt Templates",

@@ -10098,6 +10098,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "txn.graph.read",
+    "auth_required": true,
+    "function": "fund_flow",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/graph/{kind}/{ref} api/v1/txn.py:fund_flow",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/graph/{kind}/{ref}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.read",
+    "source_line": 328,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "txn.graph.export",
+    "auth_required": true,
+    "function": "export_fund_flow",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/txn/graph/{kind}/{ref}/export api/v1/txn.py:export_fund_flow",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/txn.py",
+    "path": "/api/v1/txn/graph/{kind}/{ref}/export",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "txn.records.sensitive.read",
+    "source_line": 358,
+    "tenant_required": true
+  },
+  {
     "audit_event": "txn.records.import",
     "auth_required": true,
     "function": "import_document",

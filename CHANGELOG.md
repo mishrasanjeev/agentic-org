@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Transaction intelligence: fund-flow graphs across hops
+- `GET /txn/graph/{kind}/{ref}` builds the fund-flow graph around an
+  account, customer or counterparty: counterparties as nodes expanded hop
+  by hop from their own records (up to four hops, two hundred nodes),
+  edges with totals, counts, first and last movement and channels, the
+  heaviest outward paths, and the findings on every node;
+  `GET /txn/graph/{kind}/{ref}/export` carries the graph, the records
+  behind every edge and the findings as JSON or CSV for the case file
+  (`core/txn/graph.py`). The Transactions page draws it, expands a node on
+  click, lists the paths and the findings with their disposition, and
+  downloads the export (`ui/src/pages/Transactions.tsx`).
+
 ### Added - Transaction intelligence: records, entity aggregation and detectors
 - `POST /txn/records` keeps movements on accounts in batches, idempotent
   under each record's reference, and `POST /txn/import/document/{id}`

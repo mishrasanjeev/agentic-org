@@ -39,6 +39,19 @@ The thresholds come from the business console (`txn.structuring_threshold`,
 `txn.passthrough_ratio`, `txn.passthrough_min_amount`), shown only while transaction intelligence is
 on, with the catalogue's defaults where unset.
 
+## Fund-flow graphs
+
+`GET /txn/graph/{kind}/{ref}?hops=&min_amount=&since_days=` builds the graph around an entity
+(`core/txn/graph.py`): every record booked against it makes its counterparty a node and each
+direction of flow between two nodes an edge carrying the total, the count, the first and last
+movement and the channels; a node found at one hop is expanded at the next from its own records, up
+to four hops and two hundred nodes, so the graph never runs away. The answer lists the nodes by hop
+with what came in and went out and the findings on each, the edges by amount, and the heaviest
+outward paths of money from the root. `GET /txn/graph/{kind}/{ref}/export?format=json|csv`
+carries the graph, the records behind every edge and the findings, as JSON or as CSV rows, for the
+case file. The Transactions page draws the graph by hop, expands a node on click, lists the paths
+and the findings on the entity, and downloads the export.
+
 ## Findings and disposition
 
 `POST /txn/detect` runs the detectors over the recent records (one account or all, `since_days`)
