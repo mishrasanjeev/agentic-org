@@ -15,6 +15,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_debug_sessions`, migration `v6z59_agent_debug_sessions`) the
   console steps one node at a time or continues to the next breakpoint.
   The console opens a run's thread from its timeline (`agent.thread_id`).
+  A step passes the plan, budget and cost-threshold gates a run passes, adds
+  what it spent to the agent's cost ledger, resolves the run's connector
+  credentials again, keeps the run's output schema and limits, and an
+  approval it reaches opens the normal approval flow.
 
 ### Added - Agent runtime: schema-validated tool registration and the execution envelope
 - With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant

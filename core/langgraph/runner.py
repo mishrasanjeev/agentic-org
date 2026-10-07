@@ -118,6 +118,18 @@ def _sum_usage(messages: Any) -> tuple[int, float]:
     return tokens_used, cost_usd
 
 
+def _usage_since(before_tokens: int, messages: Any) -> tuple[int, float]:
+    """Return ``(llm_tokens_used, llm_cost_usd)`` spent since a checkpoint that had used ``before_tokens``.
+
+    A debug step resumes a thread whose messages carry every earlier model
+    call; only the tokens the step itself spent are its usage.
+    """
+    total, _cost = _sum_usage(messages)
+    tokens_used = max(0, total - max(0, int(before_tokens or 0)))
+    cost_usd = round(tokens_used * _BLENDED_COST_PER_1K_TOKENS_USD / 1000, 6) if tokens_used else 0
+    return tokens_used, cost_usd
+
+
 def _run_thread_id(tenant_id: str, thread_id: str | None, agent_id: str) -> str:
     """Checkpoint thread for a run, always under the run's tenant prefix.
 
@@ -879,6 +891,9 @@ async def resume_agent(
     run_grant: RunGrant | None = None,
     require_paused: bool = False,
     debug: dict[str, Any] | None = None,
+    output_schema: str | None = None,
+    output_schema_json: dict[str, Any] | None = None,
+    limits: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -897,6 +912,12 @@ async def resume_agent(
     PRD F-1: the grant is resolved again for the resumed run (the tenant's
     mode may have changed and the checkpointed token may have expired); in
     ``warn``/``deny`` the fresh token replaces the checkpointed one.
+
+    ``debug`` (the debugging console) re-enters a run paused at a breakpoint.
+    The run's output schema and execution limits are rebuilt into the graph,
+    the step is bounded by the run's duration limit, its usage is what the
+    step spent (not the thread's total), and an approval the step reaches is
+    reported as ``hitl_triggered`` so the caller opens the approval.
     """
     from langgraph.types import Command
 
@@ -984,6 +1005,9 @@ async def resume_agent(
             llm_provider=llm_provider,
             pseudonymiser=pseudonymiser,
             run_grant=run_grant,
+            output_schema=output_schema,
+            output_schema_json=output_schema_json,
+            limits=limits,
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
@@ -1016,8 +1040,13 @@ async def resume_agent(
     )
     t0 = time.perf_counter()
     try:
-        if require_paused:
+        # A debug step reports what it spent: the thread's usage at the pause is subtracted.
+        tokens_before = 0
+        if require_paused or debug_mode:
             snapshot = await compiled.aget_state(config)  # type: ignore[arg-type]
+            if debug_mode and snapshot is not None and isinstance(snapshot.values, dict):
+                tokens_before, _ = _sum_usage(snapshot.values.get("messages", []))
+        if require_paused:
             refusal = ""
             if snapshot is None or not snapshot.values:
                 refusal = "checkpoint_not_found"
@@ -1028,15 +1057,76 @@ async def resume_agent(
             if refusal:
                 logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
                 return _traced_result(run_span, {"status": "failed", "error": refusal, "reason": refusal})
-        result = await compiled.ainvoke(  # type: ignore[call-overload]
-            resume_command,
-            config=config,
-        )
+        if debug_mode:
+            # The run's own limits hold for every step: its duration and the platform's step ceiling.
+            step_limits = execution_limits.effective(limits)
+            try:
+                result = await asyncio.wait_for(
+                    compiled.ainvoke(  # type: ignore[call-overload]
+                        resume_command,
+                        config={**config, "recursion_limit": MAX_AGENT_STEPS},
+                    ),
+                    timeout=step_limits.max_duration_seconds,
+                )
+            except TimeoutError:
+                execution_limits.meter("duration_limit")
+                detail = f"the step exceeded the run limit of {step_limits.max_duration_seconds} seconds"
+                logger.warning("langgraph_debug_step_timeout", agent_id=agent_id)
+                return _traced_result(
+                    run_span,
+                    {
+                        "status": "failed",
+                        "error": f"timeout: {detail}",
+                        "reason": "duration_limit",
+                        "limit": {"reason": "duration_limit", "detail": detail},
+                    },
+                )
+        else:
+            result = await compiled.ainvoke(  # type: ignore[call-overload]
+                resume_command,
+                config=config,
+            )
         latency_ms = int((time.perf_counter() - t0) * 1000)
         if debug_mode:
+            step_tokens, step_cost = _usage_since(tokens_before, result.get("messages", []))
+            interrupts = result.get("__interrupt__") or []
+            if interrupts:
+                # The step reached an approval the gate requires: the normal approval flow takes over.
+                trigger = _hitl_trigger_from_interrupts(interrupts)
+                if pseudonymiser is not None:
+                    trigger = pseudonymiser.restore_text(trigger)
+                log = list(result.get("tool_calls_log") or [])
+                logger.info("langgraph_debug_step_hitl_interrupted", agent_id=agent_id)
+                return _traced_result(
+                    run_span,
+                    {
+                        "status": "hitl_triggered",
+                        "thread_id": thread_id,
+                        "hitl_trigger": result.get("hitl_trigger", "") or trigger,
+                        "output": (
+                            pseudonymiser.restore_value(result.get("output", {}))
+                            if pseudonymiser is not None
+                            else result.get("output", {})
+                        ),
+                        "confidence": result.get("confidence", 0.0),
+                        "reasoning_trace": (
+                            pseudonymiser.restore_value(result.get("reasoning_trace", []))
+                            if pseudonymiser is not None
+                            else result.get("reasoning_trace", [])
+                        ),
+                        "tool_calls_log": log,
+                        "tool_calls": log,
+                        "output_schema_errors": _output_schema_errors(result, pseudonymiser),
+                        "paused_before": [],
+                        "performance": {
+                            "total_latency_ms": latency_ms,
+                            "llm_tokens_used": step_tokens,
+                            "llm_cost_usd": step_cost,
+                        },
+                    },
+                )
             waiting = await debugger.waiting_nodes(compiled, config)
             if waiting:
-                step_tokens, step_cost = _sum_usage(result.get("messages", []))
                 values = dict(result)
                 if pseudonymiser is not None:
                     values["output"] = pseudonymiser.restore_value(values.get("output", {}))
@@ -1054,8 +1144,11 @@ async def resume_agent(
                 )
         # Bug sheet #36: the resumed state carries every AI message on the
         # thread, so this is the whole-thread usage (pre-interrupt reasoning
-        # included), not just the post-resume delta.
-        tokens_used, cost_usd = _sum_usage(result.get("messages", []))
+        # included), not just the post-resume delta. A debug step reports its own.
+        if debug_mode:
+            tokens_used, cost_usd = _usage_since(tokens_before, result.get("messages", []))
+        else:
+            tokens_used, cost_usd = _sum_usage(result.get("messages", []))
         if pseudonymiser is not None:
             result["output"] = pseudonymiser.restore_value(result.get("output", {}))
             result["reasoning_trace"] = pseudonymiser.restore_value(result.get("reasoning_trace", []))

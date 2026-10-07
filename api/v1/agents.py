@@ -726,6 +726,22 @@ def _run_resume_spec(
     }
 
 
+def _debug_resume_spec(agent_config: dict[str, Any], connector_ids: Any) -> dict[str, Any]:
+    """What a debug step needs beyond the approval resume spec to re-enter the run under its own policies.
+
+    The output schema, inline schema and execution limits are rebuilt into
+    the graph on every step. Connectors are kept as server-side ids and their
+    credentials are resolved again at step time; nothing decrypted is stored.
+    """
+    config = agent_config.get("config") or {}
+    return {
+        "output_schema": agent_config.get("output_schema"),
+        "output_schema_json": config.get(prompt_output_schema.INLINE_KEY),
+        "limits": config.get(execution_limits.LIMITS_KEY),
+        "connector_ids": [str(cid) for cid in (connector_ids or [])],
+    }
+
+
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
     """Extract a user UUID from JWT claims for audit-log ``edited_by``.
 
@@ -1051,6 +1067,7 @@ async def _record_cost_ledger(
     perf: dict,
     *,
     count_zero_usage_task: bool = False,
+    count_task: bool = True,
 ) -> bool:
     """Upsert today's ``AgentCostLedger`` row (unique on tenant+agent+date).
 
@@ -1062,6 +1079,8 @@ async def _record_cost_ledger(
     to surface that (run flags ``budget_tracking_failed``, chat continues).
     With ``count_zero_usage_task`` a turn that reported no tokens still
     counts as a task; otherwise zero-usage runs write nothing (legacy).
+    ``count_task=False`` adds usage to a task already counted (a debug step
+    of a run paused at a breakpoint).
     """
     try:
         perf = perf if isinstance(perf, dict) else {}
@@ -1087,7 +1106,7 @@ async def _record_cost_ledger(
             if ledger:
                 ledger.token_count = (ledger.token_count or 0) + tokens_used
                 ledger.cost_usd = float(ledger.cost_usd or 0) + cost_usd
-                ledger.task_count = (ledger.task_count or 0) + 1
+                ledger.task_count = (ledger.task_count or 0) + (1 if count_task else 0)
             else:
                 session.add(
                     AgentCostLedger(
@@ -1095,7 +1114,7 @@ async def _record_cost_ledger(
                         tenant_id=tid,
                         cost_usd=cost_usd,
                         token_count=tokens_used,
-                        task_count=1,
+                        task_count=1 if count_task else 0,
                         period_date=today,
                     )
                 )
@@ -1119,6 +1138,51 @@ async def _record_cost_ledger(
 # MCP, and A2A which previously called langgraph_run with no
 # connector_config and reproduced the same shadow-accuracy 40%.
 # ──────────────────────────────────────────────────────────────────
+
+
+async def _monthly_budget_refusal(tid: _uuid.UUID, agent_id: _uuid.UUID, cost_controls: Any) -> dict | None:
+    """The ``budget_exceeded`` result when the agent's monthly cost cap is spent, else ``None``.
+
+    The debugging console's steps check the cap a run checks (the run route
+    keeps its own copy of this check, with the same lock and window).
+    """
+    monthly_cap = cost_controls.get("monthly_cost_cap_usd", 0) if isinstance(cost_controls, dict) else 0
+    if not monthly_cap or monthly_cap <= 0:
+        return None
+    # P3.1: Use a Postgres advisory lock keyed on agent_id to serialize
+    # concurrent budget checks. Without this, two requests could both see
+    # spend < cap and both proceed, causing overspend.
+    async with get_tenant_session(tid) as session:
+        from sqlalchemy import func as sqlfunc
+        from sqlalchemy import text as sqltext
+
+        # Acquire advisory lock for this agent (auto-released at txn end)
+        # pg_advisory_xact_lock(int8) — use hash of UUID as the key
+        lock_key = abs(hash(str(agent_id))) % (2**31)
+        await session.execute(sqltext("SELECT pg_advisory_xact_lock(:k)"), {"k": lock_key})
+
+        month_start = datetime.now(UTC).replace(day=1, hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        spent_result = await session.execute(
+            select(sqlfunc.coalesce(sqlfunc.sum(AgentCostLedger.cost_usd), 0)).where(
+                AgentCostLedger.agent_id == agent_id,
+                AgentCostLedger.period_date >= month_start,
+            )
+        )
+        monthly_spent = float(spent_result.scalar() or 0)
+        if monthly_spent >= monthly_cap:
+            return {
+                "task_id": f"msg_{_uuid.uuid4().hex[:12]}",
+                "agent_id": str(agent_id),
+                "status": "budget_exceeded",
+                "error": {
+                    "code": "E1008",
+                    "message": f"Monthly budget exceeded: ${monthly_spent:.2f} / ${monthly_cap:.2f}",
+                },
+                "output": {},
+                "confidence": 0,
+                "reasoning_trace": [f"Budget check: ${monthly_spent:.2f} >= cap ${monthly_cap:.2f}"],
+            }
+    return None
 
 
 async def _resolve_agent_connector_ids_for_type(
@@ -4017,6 +4081,8 @@ async def run_agent(
                 breakpoints=run_debugger.declared({"config": agent_config.get("config") or {}}),
                 spec={
                     **_run_resume_spec(agent_config, review_learning, authorized_tools, connector_names_for_tools),
+                    # Output schema, limits and connector ids (credentials are resolved again per step).
+                    **_debug_resume_spec(agent_config, raw_connector_ids),
                     # A run bound to a caller token stays bound when stepped (PRD F-1).
                     **({CALLER_GRANT_KEY: run_caller.marker()} if run_caller.marker() is not None else {}),
                 },
