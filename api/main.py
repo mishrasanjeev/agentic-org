@@ -52,6 +52,7 @@ from api.v1 import (
     governance,
     governance_inventory,
     governance_model_cards,
+    governance_risk_tiers,
     governed_cases,
     guardrails,
     health,
@@ -287,6 +288,7 @@ app.include_router(eval_datasets.router, prefix="/api/v1", tags=["Evals"])
 app.include_router(agent_registry.router, prefix="/api/v1", tags=["Agent Registry"])
 app.include_router(governance_inventory.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(governance_model_cards.router, prefix="/api/v1", tags=["Governance"])
+app.include_router(governance_risk_tiers.router, prefix="/api/v1", tags=["Governance"])
 app.include_router(kpis.router, prefix="/api/v1", tags=["KPIs"])
 app.include_router(chat.router, prefix="/api/v1", tags=["Chat"])
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])

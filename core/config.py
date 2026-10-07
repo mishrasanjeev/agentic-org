@@ -315,6 +315,10 @@ class Settings(BaseSettings):
     # the tenant uses, with the administrator's part written and approved by a
     # second person. Off by default: off, the endpoints are not found.
     governance_model_cards_enabled: bool = False
+    # Regulatory risk tiers (core/governance/risk_tiers.py): the controls a
+    # tier forces at promotion, resume, tier change, update and gate removal,
+    # and GET /governance/risk-tiers. Off by default: off, nothing runs.
+    governance_risk_tiers_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""
