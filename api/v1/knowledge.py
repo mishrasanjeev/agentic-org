@@ -1305,10 +1305,16 @@ async def _native_vector_or_keyword_search(
             rows = (
                 await session.execute(
                     _sqtext(
+<<<<<<< HEAD
                         f"SELECT d.title, d.content, d.id, d.source, {PROVENANCE_COLUMNS} "
                         f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                         "WHERE d.tenant_id = :tid AND d.status = 'ready' AND "
                         f"(d.title ILIKE :like OR d.content ILIKE :like){where_filters} "
+=======
+                        "SELECT title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        "WHERE tenant_id = :tid AND status = 'ready' AND "
+                        f"(title ILIKE :like OR content ILIKE :like){where_filters} "
+>>>>>>> feat/retrieval-search
                         "LIMIT :k"
                     ),
                     {"tid": str(tid), "like": f"%{query}%", "k": top_k, **filter_params},
@@ -1388,10 +1394,16 @@ async def _native_hybrid_search(
             rows = (
                 await session.execute(
                     _sqtext(
+<<<<<<< HEAD
                         f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
                         f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                         f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
                         "AND to_tsvector('english', d.title || ' ' || d.content) "
+=======
+                        "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                        f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
+                        "AND to_tsvector('english', title || ' ' || content) "
+>>>>>>> feat/retrieval-search
                         "@@ websearch_to_tsquery('english', :query) "
                         "ORDER BY ts_rank_cd(to_tsvector('english', d.title || ' ' || d.content), "
                         "websearch_to_tsquery('english', :query)) DESC, d.id ASC "
@@ -1410,6 +1422,7 @@ async def _native_hybrid_search(
                 rows = (
                     await session.execute(
                         _sqtext(
+<<<<<<< HEAD
                             f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
                             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
                             f"WHERE d.tenant_id = :tid AND d.status = 'ready'{where_filters} "
@@ -1417,6 +1430,14 @@ async def _native_hybrid_search(
                             "OR strpos(lower(d.content), lower(:query)) > 0) "
                             "ORDER BY CASE WHEN strpos(lower(d.title), lower(:query)) > 0 "
                             "THEN 0 ELSE 1 END, d.id ASC LIMIT :limit"
+=======
+                            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+                            f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
+                            "AND (strpos(lower(title), lower(:query)) > 0 "
+                            "OR strpos(lower(content), lower(:query)) > 0) "
+                            "ORDER BY CASE WHEN strpos(lower(title), lower(:query)) > 0 "
+                            "THEN 0 ELSE 1 END, id ASC LIMIT :limit"
+>>>>>>> feat/retrieval-search
                         ),
                         params,
                     )
@@ -1433,6 +1454,7 @@ async def _native_hybrid_search(
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
         vector_sql = (
+<<<<<<< HEAD
             f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
             f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding IS NOT NULL{where_filters} "
@@ -1442,6 +1464,15 @@ async def _native_hybrid_search(
             f"FROM knowledge_documents d{PROVENANCE_JOIN} "
             f"WHERE d.tenant_id = :tid AND d.status = 'ready' AND d.embedding_bge_m3 IS NOT NULL{where_filters} "
             "ORDER BY d.embedding_bge_m3 <=> CAST(:vector AS vector), d.id ASC LIMIT :limit"
+=======
+            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL{where_filters} "
+            "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+            if col == "embedding"
+            else "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
+            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL{where_filters} "
+            "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
+>>>>>>> feat/retrieval-search
         )
         qvec = await embed_one_async(query)
         vector_literal = "[" + ",".join(f"{x:.6f}" for x in qvec) + "]"
