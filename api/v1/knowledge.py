@@ -21,6 +21,7 @@ from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.config import settings
 from core.rag import access as knowledge_access
+from core.rag import entities as knowledge_entities
 from core.rag import query as query_transform
 from core.rag import rerank
 from core.rag.citations import (
@@ -1539,6 +1540,64 @@ def _hit_row(r: Any) -> tuple[Any, ...]:
     return (str(r[0]), r[1] or "", r[2] or "", _citation_of(r, 0, 3) if len(r) > 3 else None)
 
 
+class GraphEntity(BaseModel):
+    entity: str
+    kind: str
+    chunks: int
+    mentions: int
+    matched: bool
+
+
+class GraphEdge(BaseModel):
+    source: str
+    target: str
+    weight: int
+
+
+class GraphResponse(BaseModel):
+    query: str
+    entities: list[GraphEntity]
+    edges: list[GraphEdge]
+
+
+@router.get("/knowledge/graph", response_model=GraphResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.graph",
+)
+async def knowledge_graph(
+    q: str = Query(..., min_length=1, max_length=500),
+    limit: int = Query(20, ge=1, le=50),
+    tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+) -> GraphResponse:
+    """The entities a query names or touches, the entities that share a chunk with them, and the links between."""
+    if not knowledge_entities.enabled():
+        raise HTTPException(
+            404,
+            detail={
+                "error": "knowledge_graph_disabled",
+                "message": "Graph retrieval is off for this deployment (AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED).",
+            },
+        )
+    tid = uuid.UUID(tenant_id)
+    domains = knowledge_access.normalise_domains(user_domains)
+    async with _graph_session(tid) as session:
+        matched = await knowledge_entities.matched_entities(session, tid, q, domains, limit=limit)
+        related, edges = await knowledge_entities.neighbours(
+            session, tid, [m["entity"] for m in matched], domains, limit=limit
+        )
+    return GraphResponse(
+        query=q,
+        entities=[GraphEntity(**m) for m in matched + related],
+        edges=[GraphEdge(**e) for e in edges],
+    )
+
+
 class ExcerptResponse(BaseModel):
     document_id: str
     document_name: str
@@ -1699,6 +1758,60 @@ async def _agentic_search(
     return results, trace
 
 
+def _graph_session(tid: uuid.UUID) -> Any:
+    """The tenant session graph lookups run in (the seam the tests replace)."""
+    from core.database import get_tenant_session
+
+    return get_tenant_session(tid)
+
+
+async def _graph_results(
+    req: SearchRequest, tenant_id: str, domains: list[str] | None
+) -> tuple[list[SearchResult], dict[str, Any]]:
+    """The chunks the entity graph reaches from the query, scored by how many matched entities they link."""
+    tid = uuid.UUID(tenant_id)
+    async with _graph_session(tid) as session:
+        rows, detail = await knowledge_entities.expand(session, tid, req.query, domains, limit=req.top_k * 2)
+    top = max((int(r[-1] or 0) for r in rows), default=0) or 1
+    hits = [
+        SearchResult(
+            chunk_text=(r[2] or "")[:300],
+            score=round(int(r[-1] or 0) / top, 4),
+            document_name=r[1] or "",
+            citation=_citation_of(r, 0, 3),
+        )
+        for r in rows
+    ]
+    return hits, detail
+
+
+async def _with_graph(
+    req: SearchRequest,
+    tenant_id: str,
+    domains: list[str] | None,
+    results: list[SearchResult],
+    trace: query_transform.Trace | None,
+) -> list[SearchResult]:
+    """Fuse the graph's chunks into the search results; a graph that fails leaves the results as they were."""
+    try:
+        hits, detail = await _graph_results(req, tenant_id, domains)
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.warning("knowledge_graph_expand_failed", error=type(exc).__name__)
+        if trace is not None:
+            trace.add("graph", error=type(exc).__name__)
+        return results
+    if trace is not None:
+        trace.add("graph", **detail)
+    if not hits:
+        return results
+    return query_transform.fuse(
+        [results, hits],
+        req.top_k,
+        key=lambda hit: (hit.document_name, hit.chunk_text),
+        rescore=lambda hit, score: hit.model_copy(update={"score": score}),
+    )
+
+
 def _trace_out(trace: query_transform.Trace) -> RetrievalTrace:
     return RetrievalTrace(
         steps=[
@@ -1722,13 +1835,17 @@ async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[st
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
+        trace: query_transform.Trace | None = None
         if query_transform.enabled():
             results, trace = await _agentic_search(req, tenant_id, domains)
-            return SearchResponse(
-                results=await _guard_results(tenant_id, results), trace=_trace_out(trace) if req.trace else None
-            )
-        results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
-        return SearchResponse(results=await _guard_results(tenant_id, results))
+        else:
+            results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
+        if knowledge_entities.enabled():
+            results = await _with_graph(req, tenant_id, domains, results, trace)
+        return SearchResponse(
+            results=await _guard_results(tenant_id, results),
+            trace=_trace_out(trace) if req.trace and trace is not None else None,
+        )
     except HTTPException:
         raise
     except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:

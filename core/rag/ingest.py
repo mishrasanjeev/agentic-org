@@ -30,7 +30,7 @@ from typing import Any
 import structlog
 from sqlalchemy import text as sqltext
 
-from core.rag import chunking
+from core.rag import chunking, entities
 from core.rag.extractors import (
     ExtractedContent,
     ExtractedSpan,
@@ -386,6 +386,9 @@ async def ingest_document(
                         "heading": (span.heading or "")[:200] or None,
                     },
                 )
+            # Graph retrieval: the entities this chunk mentions (core/rag/entities.py).
+            if entities.enabled():
+                await entities.index_chunk(session, tid, canonical_source, chunk_text)
             indexed += 1
         # Codex PR #304 review P1: the AsyncSession from
         # async_session_factory does NOT auto-commit on context exit.

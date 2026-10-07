@@ -132,6 +132,11 @@ export function traceLine(step: KnowledgeTraceStep): string {
       return `decision: ${str("action")}${str("reason") ? ` (${str("reason")})` : ""}`;
     case "fuse":
       return `fuse: ${num("lists") ?? 0} lists · ${num("candidates") ?? 0} candidates · ${num("returned") ?? 0} returned`;
+    case "graph": {
+      if (str("error")) return `graph: not consulted (${str("error")})`;
+      const matched = Array.isArray(d.matched) ? (d.matched as unknown[]).join(", ") : "";
+      return `graph: ${matched || "nothing matched"} · ${num("neighbours") ?? 0} neighbours · ${num("chunks") ?? 0} chunks`;
+    }
     default:
       return step.stage;
   }

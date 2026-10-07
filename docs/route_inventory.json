@@ -5468,7 +5468,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 1009,
+    "source_line": 1010,
     "tenant_required": true
   },
   {
@@ -5486,7 +5486,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1122,
+    "source_line": 1123,
     "tenant_required": true
   },
   {
@@ -5504,7 +5504,25 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1562,
+    "source_line": 1621,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.graph",
+    "auth_required": true,
+    "function": "knowledge_graph",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/graph api/v1/knowledge.py:knowledge_graph",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/graph",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1572,
     "tenant_required": true
   },
   {
@@ -5522,7 +5540,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1766,
+    "source_line": 1883,
     "tenant_required": false
   },
   {
@@ -5540,7 +5558,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1650,
+    "source_line": 1709,
     "tenant_required": true
   },
   {
@@ -5558,7 +5576,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1879,
+    "source_line": 1996,
     "tenant_required": true
   },
   {
@@ -5576,7 +5594,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 582,
+    "source_line": 583,
     "tenant_required": true
   },
   {
@@ -5594,7 +5612,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 608,
+    "source_line": 609,
     "tenant_required": true
   },
   {

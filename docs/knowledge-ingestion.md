@@ -94,6 +94,26 @@ and counts, never tenant or user identifiers.
 Off, a search runs exactly as before and the response carries no trace. An external RAG
 service, when configured, answers before any of this runs.
 
+## Graph retrieval
+
+With `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` on, ingestion records the entities each chunk
+mentions (`core/rag/entities.py`, table `knowledge_entities`): names (capitalised phrases such as
+`Reserve Bank of India` or `Form 16`), codes (`KYC-2024`, `ISO 27001`), amounts (`INR 5,000`) and
+dates. The rule is a fixed set of patterns, not a model, and any code with six or more digits in a
+row (an account, card or identity number) is never recorded. An entity row belongs to its chunk
+and goes with it. Chunks ingested before the switch was turned on have no entities until they are
+re-indexed.
+
+At search time the entities the query names, and the entities whose names contain a query term,
+are matched; the entities that share a chunk with them are their neighbours; and the ready chunks
+that mention any of those are fused into the search results by reciprocal rank, so a question about
+`Form 16` also reaches the chunk that names the `Income Tax Department` and the filing date beside
+it. Every lookup is tenant scoped, honours document-level access and reads ready chunks only, with
+every value bound. A graph lookup that fails leaves the search answer as it was and the trace says
+so. `GET /knowledge/graph?q=` returns the matched entities, their neighbours and the links between
+them (the weight is the number of shared chunks); with the switch off it answers 404
+(`knowledge_graph_disabled`).
+
 ## Citations and excerpts
 
 Every search hit carries a `citation` (`core/rag/citations.py`): the chunk row's id, its source,

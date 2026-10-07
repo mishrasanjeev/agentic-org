@@ -38,6 +38,10 @@ describe("traceLine", () => {
     expect(traceLine({ stage: "rewrite", detail: { model: "openai/x", added: 0, reason: "model_failed" } })).toBe(
       "rewrite: model openai/x added 0 (model_failed)",
     );
+    expect(traceLine({ stage: "graph", detail: { matched: ["form 16"], neighbours: 2, edges: 2, chunks: 3 } })).toBe(
+      "graph: form 16 · 2 neighbours · 3 chunks",
+    );
+    expect(traceLine({ stage: "graph", detail: { error: "RuntimeError" } })).toBe("graph: not consulted (RuntimeError)");
     expect(traceLine({ stage: "other" })).toBe("other");
   });
 });

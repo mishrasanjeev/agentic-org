@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: graph retrieval over extracted entities
+- With `AGENTICORG_KNOWLEDGE_GRAPH_RETRIEVAL_ENABLED` on (off by default),
+  ingestion records the names, codes, amounts and dates each chunk mentions
+  (`core/rag/entities.py`, table `knowledge_entities`, migration
+  `v6z52_knowledge_entities`; identity numbers are never recorded), a search
+  fuses in the chunks the graph reaches from the query (matched entities,
+  their neighbours, the chunks that mention them) with a `graph` step in the
+  trace, and `GET /knowledge/graph?q=` shows the matched entities, their
+  neighbours and the links between them.
+
 ### Added - Knowledge retrieval: query transformation and retrieval traces
 - With `AGENTICORG_KNOWLEDGE_QUERY_TRANSFORM_ENABLED` on (off by default),
   a knowledge search is planned before it runs (`core/rag/query.py`): the
