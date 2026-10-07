@@ -6624,6 +6624,60 @@
     "tenant_required": true
   },
   {
+    "audit_event": "idp.documents.reconcile",
+    "auth_required": true,
+    "function": "reconcile_document",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/documents/{document_id}/reconcile api/v1/idp_analysis.py:reconcile_document",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp_analysis.py",
+    "path": "/api/v1/idp/documents/{document_id}/reconcile",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.review.sensitive.read",
+    "source_line": 76,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "idp.documents.report",
+    "auth_required": true,
+    "function": "report_of_document",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/documents/{document_id}/report api/v1/idp_analysis.py:report_of_document",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp_analysis.py",
+    "path": "/api/v1/idp/documents/{document_id}/report",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.review.sensitive.read",
+    "source_line": 106,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "idp.documents.stamps",
+    "auth_required": true,
+    "function": "stamps_of_document",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/documents/{document_id}/stamps api/v1/idp_analysis.py:stamps_of_document",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp_analysis.py",
+    "path": "/api/v1/idp/documents/{document_id}/stamps",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.review.sensitive.read",
+    "source_line": 91,
+    "tenant_required": true
+  },
+  {
     "audit_event": "integrations.status.read",
     "auth_required": true,
     "function": "integrations_status",
