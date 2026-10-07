@@ -43,6 +43,8 @@ NUMBER_WORDS = {
     "nine": "9",
 }
 MULTIPLIERS = {"double": 2, "triple": 3}
+# Spoken or transcribed separators that may sit between the digits of one number.
+SEPARATORS = frozenset({"dash", "hyphen", "space", "slash", "dot", "-", "–", "—", "/", ".", ",", ":"})
 OTP_CUES = (
     "otp",
     "one time password",
@@ -111,6 +113,15 @@ def spoken_digits(token: str, *, multiplier: int = 1) -> str | None:
     return None
 
 
+def _separator_before_digit(words: list[dict[str, Any]], index: int) -> bool:
+    """A bounded separator token with a spoken digit right after it, so the run continues through it."""
+    token = str(words[index].get("text") or "").strip().lower()
+    if token not in SEPARATORS or index + 1 >= len(words):
+        return False
+    following = str(words[index + 1].get("text") or "")
+    return spoken_digits(following) is not None or following.strip().lower() in MULTIPLIERS
+
+
 def digit_runs(words: list[dict[str, Any]]) -> list[tuple[int, int, str]]:
     """Runs of consecutive spoken digits: (first index, last index, digits)."""
     runs: list[tuple[int, int, str]] = []
@@ -126,6 +137,9 @@ def digit_runs(words: list[dict[str, Any]]) -> list[tuple[int, int, str]]:
                 digits = following
                 index += 2
                 while index < len(words):
+                    if _separator_before_digit(words, index):
+                        index += 1
+                        continue
                     more_multiplier = MULTIPLIERS.get(str(words[index].get("text") or "").strip().lower())
                     if more_multiplier and index + 1 < len(words):
                         extra = spoken_digits(str(words[index + 1].get("text") or ""), multiplier=more_multiplier)
@@ -148,6 +162,9 @@ def digit_runs(words: list[dict[str, Any]]) -> list[tuple[int, int, str]]:
         digits = piece
         index += 1
         while index < len(words):
+            if _separator_before_digit(words, index):
+                index += 1
+                continue
             more_multiplier = MULTIPLIERS.get(str(words[index].get("text") or "").strip().lower())
             if more_multiplier and index + 1 < len(words):
                 extra = spoken_digits(str(words[index + 1].get("text") or ""), multiplier=more_multiplier)

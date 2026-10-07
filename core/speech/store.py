@@ -403,7 +403,8 @@ async def redact(
     """
     from core.database import get_tenant_session
 
-    wanted = tuple(kinds) if kinds else await _redaction_kinds(tenant_id)
+    # None asks for the tenant's kinds; an empty list is an explicit request to cut nothing.
+    wanted = tuple(kinds) if kinds is not None else await _redaction_kinds(tenant_id)
     unknown = [k for k in wanted if k not in redaction.KINDS]
     if unknown:
         raise SpeechError(422, "kind_unknown", f"kinds are among {', '.join(redaction.KINDS)}")
@@ -414,8 +415,11 @@ async def redact(
         transcript = transcript_of_row(row)
         content = bytes(row.content)
         mime = row.mime_type
+        version = len(row.redactions or [])
     if not transcript or not transcript.get("words"):
         raise SpeechError(409, "not_transcribed", "The recording has no transcript to redact from")
+    if not wanted:
+        return {"id": str(recording_id), "kinds": [], "spans": [], "dry_run": dry_run, "changed": False}
     cleaned, spans = redaction.redact_transcript(transcript, kinds=wanted)
     report = {"id": str(recording_id), "kinds": list(wanted), "spans": [s.to_dict() for s in spans], "dry_run": dry_run}
     if dry_run or not spans:
@@ -427,6 +431,11 @@ async def redact(
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
+        if len(row.redactions or []) != version:
+            # Another redaction landed since this one read the audio: writing now would restore what it cut.
+            raise SpeechError(
+                409, "redaction_conflict", "The recording was redacted meanwhile; run the redaction again"
+            )
         row.content = data
         row.size_bytes = len(data)
         row.transcript_encrypted = envelope
