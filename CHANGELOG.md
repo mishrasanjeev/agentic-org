@@ -11,6 +11,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the platform's maxima (`core/langgraph/limits.py`): a run over a limit, or
   repeating a tool call pattern, is stopped with the reason in its error and
   a `limit` block that the run's audit entry and a Prometheus counter carry.
+- The step limit is checked before every model call, chat runs carry the
+  agent's limits too, `POST /agents/{id}/run` returns the `limit` block, a
+  run may make exactly `max_tool_calls` tool calls, and with the switch off
+  a run that reaches the platform ceiling fails as it did before.
 
 ### Added - FinOps: cost comparison and forecasting
 - With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (off by default),

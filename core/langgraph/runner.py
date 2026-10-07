@@ -66,6 +66,15 @@ install_trace_redaction()
 MAX_AGENT_DURATION_SEC = int(os.getenv("AGENTICORG_MAX_AGENT_DURATION_SEC", "1800"))  # 30 min
 MAX_AGENT_STEPS = int(os.getenv("AGENTICORG_MAX_AGENT_STEPS", "200"))
 
+
+def _limit_stop_errors() -> tuple[type[BaseException], ...]:
+    """The exceptions the runner reports as a limit stop: the step ceiling, only while execution limits are on.
+
+    Off, the tuple is empty, so the platform ceiling fails through the generic handler as it always has.
+    """
+    return (GraphRecursionError,) if execution_limits.enabled() else ()
+
+
 # Blended per-token estimate (Gemini 2.5 Flash list price, $0.15/1M input +
 # $0.60/1M output averaged). Not per-provider pricing — an estimate only.
 _BLENDED_COST_PER_1K_TOKENS_USD = 0.000375
@@ -466,6 +475,8 @@ async def run_agent(
         # A reused thread (voice ``voice:{call_sid}``) must not inherit a
         # denial from an earlier turn.
         "grant_denial": {},
+        # Nor an earlier turn's limit stop.
+        "limit_stop": {},
         # Nor an earlier turn's output-schema corrections.
         "output_repairs": 0,
         "output_repair": False,
@@ -712,8 +723,9 @@ async def run_agent(
     except GuardrailBlocked as exc:
         logger.warning("agent_run_blocked_guardrail", agent_id=agent_id, rule=exc.rule_name, stage=exc.stage)
         return _traced_result(run_span, guardrail_blocked_result(exc))
-    except GraphRecursionError:
-        # The platform's step ceiling: the graph ran MAX_AGENT_STEPS nodes without finishing.
+    except _limit_stop_errors():
+        # The platform's step ceiling while execution limits are on: the graph ran
+        # MAX_AGENT_STEPS nodes without finishing. Off, it fails as any other error.
         run_span.set(**{"agent.run.status": "stopped"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
         execution_limits.meter("step_limit")
@@ -736,7 +748,9 @@ async def run_agent(
     except TimeoutError:
         run_span.set(**{"agent.run.status": "timeout"})
         latency_ms = int((time.perf_counter() - t0) * 1000)
-        execution_limits.meter("duration_limit")
+        limits_on = execution_limits.enabled()
+        if limits_on:
+            execution_limits.meter("duration_limit")
         logger.warning(
             "langgraph_agent_timeout",
             agent_id=agent_id,
@@ -751,10 +765,16 @@ async def run_agent(
             "tool_calls": [],  # BUG-11 dual-emit
             "hitl_trigger": "",
             "error": f"timeout: agent exceeded {run_limits.max_duration_seconds}s",
-            "limit": {
-                "reason": "duration_limit",
-                "detail": f"the run exceeded its limit of {run_limits.max_duration_seconds} seconds",
-            },
+            **(
+                {
+                    "limit": {
+                        "reason": "duration_limit",
+                        "detail": f"the run exceeded its limit of {run_limits.max_duration_seconds} seconds",
+                    }
+                }
+                if limits_on
+                else {}
+            ),
             "explanation": {},
             "performance": {
                 "total_latency_ms": latency_ms,

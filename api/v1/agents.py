@@ -4160,6 +4160,9 @@ async def run_agent(
     if lg_result.get("grant_denial"):
         # PRD F-1 deny: the reason code for the refused tool call.
         response["grant_denial"] = lg_result["grant_denial"]
+    if lg_result.get("limit"):
+        # An execution limit or the loop rule stopped the run: the reason and the detail.
+        response["limit"] = lg_result["limit"]
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response
