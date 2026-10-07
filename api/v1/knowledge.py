@@ -1294,7 +1294,7 @@ async def _native_vector_or_keyword_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT title, content FROM knowledge_documents "
+                        "SELECT title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                         "WHERE tenant_id = :tid AND status = 'ready' AND "
                         f"(title ILIKE :like OR content ILIKE :like){where_filters} "
                         "LIMIT :k"
@@ -1359,7 +1359,7 @@ async def _native_hybrid_search(
             rows = (
                 await session.execute(
                     _sqtext(
-                        "SELECT id, title, content FROM knowledge_documents "
+                        "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                         f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
                         "AND to_tsvector('english', title || ' ' || content) "
                         "@@ websearch_to_tsquery('english', :query) "
@@ -1380,7 +1380,7 @@ async def _native_hybrid_search(
                 rows = (
                     await session.execute(
                         _sqtext(
-                            "SELECT id, title, content FROM knowledge_documents "
+                            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                             f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
                             "AND (strpos(lower(title), lower(:query)) > 0 "
                             "OR strpos(lower(content), lower(:query)) > 0) "
@@ -1402,11 +1402,11 @@ async def _native_hybrid_search(
         if col not in {"embedding", "embedding_bge_m3"}:
             raise ValueError("unsupported embedding column")
         vector_sql = (
-            "SELECT id, title, content FROM knowledge_documents "
+            "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL{where_filters} "
             "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
             if col == "embedding"
-            else "SELECT id, title, content FROM knowledge_documents "
+            else "SELECT id, title, content FROM knowledge_documents "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL{where_filters} "
             "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
         )
