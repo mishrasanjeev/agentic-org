@@ -12,6 +12,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z56_finops_thresholds`, `/finops/thresholds`): a breached threshold
   alerts the owner once per period, throttles the run with a short delay,
   or suspends runs until the period resets or an administrator lifts it.
+  Thresholds need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` (settings refuse
+  to load without it), match runs on the agent's own use case and business
+  unit rather than the caller's labels, notify once per period under
+  concurrent runs, cap a tenant at 200 thresholds and answer a duplicate
+  name with 409.
 
 ### Added - FinOps: use-case attribution
 - With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run

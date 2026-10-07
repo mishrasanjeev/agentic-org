@@ -38,14 +38,20 @@ and an action. Every run through the agents API is checked before it executes: t
 ledger's spend for the period is compared with each threshold that matches the run's attribution,
 and the strongest breached action wins.
 
+Thresholds read the attributed ledger, so they need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on as
+well; with thresholds on and attribution off the settings refuse to load. While thresholds are on,
+a run's use case and business unit come from the agent (its configuration, type and domain), not
+from the request, so a caller cannot move a run out of a scoped threshold. A tenant holds at most
+200 thresholds and every enabled one is evaluated; a second threshold with the same name is a 409.
+
 | Action | What happens to the run |
 |---|---|
 | `alert` | proceeds; the owner is notified once per period |
 | `throttle` | proceeds after a short delay (`throttle_seconds`, at most 30) and says so (`finops_action`) |
 | `suspend` | refused (`threshold_suspended`, `E1009`) until the period resets, the threshold is disabled, or an administrator lifts it until a time (`lifted_until`) |
 
-A breach is recorded on the threshold (period, time, spend) and the owner notified once per period
-through the threshold's channels: `email` to the tenant's earliest active administrator, `log`. A
+A breach is claimed on the threshold (period, time, spend) by one conditional update, committed
+before anyone is told, so concurrent runs notify the owner once per period through the threshold's channels: `email` to the tenant's earliest active administrator, `log`. A
 notification that fails never touches the run. `GET /finops/thresholds` shows every threshold with
 its spend, share and breach state. Off, no run is checked, delayed or refused. Cost comparison and
 forecasting are the last part of this package.

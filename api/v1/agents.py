@@ -3404,15 +3404,19 @@ async def run_agent(
         run_agent_visibility = str(getattr(agent_row, "visibility", None) or AGENT_VISIBILITY_TENANT)
         run_agent_owner_user_id = getattr(agent_row, "owner_user_id", None)
         # FinOps: the run's attribution (use case, application, business unit, department, cost centre).
+        # While thresholds are enforced the labels are server-owned (the agent's configuration, type and
+        # domain): a caller's use_case or business_unit would let it relabel the run, and its ledger row,
+        # out of a scoped throttle or suspension.
         attribution_token = None
         if cost_attribution.enabled():
+            caller_labels = not finops_thresholds.enabled()
             attribution_token = cost_attribution.bind(
                 await cost_attribution.resolve_for_agent(
                     session,
                     agent_row,
-                    use_case=payload.get("use_case"),
+                    use_case=payload.get("use_case") if caller_labels else None,
                     application="agents",
-                    business_unit=payload.get("business_unit"),
+                    business_unit=payload.get("business_unit") if caller_labels else None,
                 )
             )
 
