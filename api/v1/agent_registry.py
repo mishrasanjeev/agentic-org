@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from api.deps import get_current_tenant, get_current_user, get_user_domains
 from api.route_metadata import route_meta
-from api.v1.agents import _effective_caller, _user_uuid_from_claims
+from api.v1.agents import _effective_caller
 from core.agent_registry import lifecycle
 from core.database import get_tenant_session
 from core.models.agent import Agent
@@ -95,7 +95,7 @@ async def set_agent_card(
     except lifecycle.RegistryError as exc:
         raise _refused(exc) from None
     async with get_tenant_session(tid) as session:
-        agent = await _agent(session, tid, agent_id)
+        agent = await _agent(session, tid, agent_id, lock=True)
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
         await lifecycle.set_card_fields(session, tid, agent_id, fields)
         return await lifecycle.card(session, tid, agent)
@@ -123,10 +123,13 @@ async def transition_agent_lifecycle(
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         agent = await _agent(session, tid, agent_id, lock=True)
-        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        effective = _effective_caller(caller, user_domains)
+        require_agent_mutable(agent, effective)
+        if not effective.is_human:
+            raise HTTPException(403, "Registry lifecycle decisions require an authenticated human user")
         try:
             entry, event = await lifecycle.transition(
-                session, tid, agent, body.to, actor=_user_uuid_from_claims(user), note=body.note
+                session, tid, agent, body.to, actor=effective.user_id, note=body.note
             )
         except lifecycle.RegistryError as exc:
             raise _refused(exc) from None

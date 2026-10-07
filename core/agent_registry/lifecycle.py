@@ -23,8 +23,8 @@ submitted the agent for review.
 
 Every transition is recorded with who made it and a note. Behind
 ``AGENTICORG_AGENT_REGISTRY_ENABLED`` (off by default): off, the endpoints
-answer 409 and nothing is written; the runtime is not affected by the
-registry either way in this release.
+answer 409 and nothing is written. The separate, default-off promotion
+gate in ``approval.py`` links registry approval to runtime activation.
 """
 
 from __future__ import annotations
@@ -178,13 +178,18 @@ async def transition(
     """Move the agent to ``to_state`` under the transition table; the entry row is locked."""
     if to_state not in STATES:
         raise RegistryError(422, "invalid", f"state must be one of {', '.join(STATES)}")
+    if to_state in ("review", "approved") and actor is None:
+        raise RegistryError(403, "human_required", "Review and approval require an authenticated human user")
     clean_note = _text(note, "note", MAX_NOTE)
     entry = await ensure_entry(session, tenant_id, agent.id, lock=True)
     if to_state not in TRANSITIONS[entry.state]:
         allowed = ", ".join(TRANSITIONS[entry.state]) or "none"
         raise RegistryError(409, "transition", f"An agent in {entry.state} can move to: {allowed}")
-    if to_state == "approved" and actor is not None and entry.submitted_by == actor:
-        raise RegistryError(409, "same_person", "The person who submitted the agent for review cannot approve it")
+    if to_state == "approved":
+        if entry.submitted_by is None:
+            raise RegistryError(409, "submitter_required", "Resubmit the agent for review with an identified human")
+        if entry.submitted_by == actor:
+            raise RegistryError(409, "same_person", "The person who submitted the agent for review cannot approve it")
     if to_state == "published" and str(getattr(agent, "status", "")) != "active":
         raise RegistryError(409, "not_active", "Only an active agent can be published; promote it first")
     event = AgentRegistryEvent(

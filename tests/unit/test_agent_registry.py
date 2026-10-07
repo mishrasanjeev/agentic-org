@@ -20,6 +20,7 @@ from core.agent_registry import lifecycle
 from core.config import settings
 from core.evals import gates, runs
 from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+from core.ownership import Caller
 from core.schemas.api import AgentCardIn, AgentLifecycleIn
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -149,6 +150,21 @@ class TestCardFields:
 
 
 class TestTransitions:
+    @pytest.mark.parametrize(
+        "state,to,actor,submitter",
+        [
+            ("draft", "review", None, None),
+            ("review", "approved", None, MAKER),
+            ("review", "approved", CHECKER, None),
+        ],
+    )
+    def test_missing_human_or_submitter_cannot_bypass_review(self, state, to, actor, submitter):
+        agent = _agent()
+        entry = _entry(agent, state, submitted_by=submitter)
+        with pytest.raises(lifecycle.RegistryError):
+            self._move(agent, entry, to, actor=actor)
+        assert entry.state == state
+
     def _move(self, agent, entry, to, actor=CHECKER, note=None):
         session = _Session(entry)
         result = asyncio.run(lifecycle.transition(session, TENANT, agent, to, actor=actor, note=note))
@@ -248,6 +264,24 @@ class TestCard:
 
 
 class TestEndpoints:
+    @pytest.mark.parametrize("caller", [None, Caller(MAKER, "admin", None, True, True)])
+    def test_machine_or_missing_caller_cannot_supply_a_human_claim(self, on, store, caller):
+        agent = _agent()
+        session = store(agent, _entry(agent))
+        with pytest.raises(HTTPException) as refused:
+            asyncio.run(
+                api.transition_agent_lifecycle(
+                    agent.id,
+                    AgentLifecycleIn(to="review"),
+                    tenant_id=str(TENANT),
+                    user={"agenticorg:user_id": str(MAKER)},
+                    user_domains=None,
+                    caller=caller,
+                )
+            )
+        assert refused.value.status_code == 403
+        assert not session.added
+
     @pytest.fixture
     def store(self, monkeypatch):
         holder: dict[str, _Session] = {}
@@ -305,6 +339,7 @@ class TestEndpoints:
         )
         [entry] = session.added
         assert entry.purpose == "Decide simple claims." and entry.risk_tier == "high"
+        assert "FOR UPDATE" in session.statements[0]
         store(agent)
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
@@ -324,7 +359,7 @@ class TestEndpoints:
                 tenant_id=str(TENANT),
                 user={"agenticorg:user_id": str(MAKER)},
                 user_domains=None,
-                caller=None,
+                caller=Caller(MAKER, "admin", None, True, False),
             )
         )
         assert "FOR UPDATE" in session.statements[0] and "agents.tenant_id" in session.statements[0]
@@ -340,7 +375,7 @@ class TestEndpoints:
                     tenant_id=str(TENANT),
                     user={"agenticorg:user_id": str(MAKER)},
                     user_domains=None,
-                    caller=None,
+                    caller=Caller(MAKER, "admin", None, True, False),
                 )
             )
         assert refused.value.status_code == 409 and refused.value.detail["error"] == "same_person"

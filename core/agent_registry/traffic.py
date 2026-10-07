@@ -12,7 +12,7 @@ same agent and the share is reproducible; without one it is random.
 The other agent must be active and in the same tenant when the split is set;
 at run time an inactive target is skipped and the run stays on the agent
 asked for, with the reason logged, so a split never sends work to an agent
-that is not in production. Removing the split (``DELETE``) is the rollback:
+that is not in production. Removing the split (``PUT`` with ``split: null``) is the rollback:
 one action, and every run returns to the agent asked for.
 
 Off, a stored split is kept and reported and no run is redirected.
@@ -63,7 +63,13 @@ def parse_split(raw: Any, *, own_id: uuid.UUID) -> dict[str, Any]:
 
 def declared(agent: Any) -> dict[str, Any] | None:
     split = (getattr(agent, "config", None) or {}).get(SPLIT_KEY)
-    return dict(split) if isinstance(split, dict) and split else None
+    if split is None:
+        return None
+    try:
+        return parse_split(split, own_id=agent.id)
+    except TrafficError:
+        logger.warning("agent_traffic_split_invalid", agent_id=str(agent.id))
+        return None
 
 
 def bucket(correlation_id: str | None) -> int:
@@ -78,17 +84,23 @@ def chooses_target(split: dict[str, Any], correlation_id: str | None) -> bool:
     return bucket(correlation_id) < int(split["percent"])
 
 
-def choose(agent: Any, correlation_id: str | None, load_target: Any) -> tuple[Any, str | None]:
+def choose(
+    agent: Any, correlation_id: str | None, load_target: Any, *, selected: bool | None = None
+) -> tuple[Any, str | None]:
     """The agent that serves the run and, when it is not the one asked for, why it was chosen.
 
     ``load_target`` returns the target agent row for an id, or None. A target
     that is missing or not active is skipped and the run stays on ``agent``.
     Nothing here is awaited: callers load the target before choosing.
     """
-    if not enabled():
+    if not enabled() or str(getattr(agent, "status", "")) != "active":
         return agent, None
     split = declared(agent)
-    if split is None or not chooses_target(split, correlation_id):
+    if split is None:
+        return agent, None
+    if selected is None:
+        selected = chooses_target(split, correlation_id)
+    if not selected:
         return agent, None
     target = load_target(uuid.UUID(split["to_agent_id"]))
     if target is None or str(getattr(target, "status", "")) != "active":

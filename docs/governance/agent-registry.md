@@ -28,6 +28,8 @@ The fields an administrator writes come from `PUT /agents/{id}/card`: `purpose` 
 characters), `risk_tier` (`low`, `medium`, `high`, `critical`, the guardrail tiers), `use_case`
 and `channels` (`api`, `chat`, `voice`, `email`, `workflow`, `a2a`). Only the fields sent are
 changed; the registry entry is created as `draft` on first use. The agent's edit rules apply.
+Unknown card, lifecycle and traffic-split fields are rejected, rather than ignored. Card writes
+lock the parent agent so two first-time updates cannot race to create the same registry entry.
 
 ## Lifecycle
 
@@ -45,6 +47,9 @@ and records who moved it. Two rules hold at the transition:
 
 - **The submitter cannot approve.** The person who moved the agent into `review` is recorded, and
   `approved` is refused to that person (`same_person`).
+  The lifecycle API requires an authenticated human identity, not an API key or agent token.
+  A review with no recorded human submitter must be resubmitted before approval. Supplying a
+  user-id claim on a machine credential does not turn it into a human approval.
 - **Only an active agent is published.** `published` says the agent is in production; it is
   refused while the agent's runtime status is not `active` (`not_active`). Promotion to active has
   its own checks (shadow evidence, maker-checker on the prompt, the evaluation gate).
@@ -66,6 +71,8 @@ follow each other (`core/agent_registry/approval.py`):
   after the shadow evidence, the maker-checker check on the prompt and the evaluation gate, so a
   refusal (`409`, `agent_registry`, `not_approved`) names the first thing that is missing. An
   agent with no entry is a draft and is refused.
+- **Creation and cloning cannot start active.** With the registry gate on, create in shadow,
+  review the new agent independently, then promote. Clones do not inherit the source approval.
 - **Promotion publishes.** When an `approved` agent becomes active, its entry moves to
   `published` with a recorded transition.
 - **Retirement retires.** When a `published` or `deprecated` agent is retired at runtime, its
@@ -82,17 +89,24 @@ has none. The card, the lifecycle and the list carry `environment`.
 
 An agent may send a share of its runs to another agent of the tenant
 (`core/agent_registry/traffic.py`): `PUT /agents/{id}/traffic-split` with
-`{"split": {"to_agent_id": ..., "percent": 1-100}}`, which requires the target to be active;
+`{"split": {"to_agent_id": ..., "percent": 1-100}}`, which requires both agents to be active
+and the target to be visible to the caller;
 `{"split": null}` removes it. `GET /agents/{id}/traffic-split` reads it.
 
 With `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` on, that share of the runs asked of the agent
 through `POST /agents/{id}/run` are served by the target instead. The choice is made from the
 run's `thread_id` or `correlation_id` when the request carries one, so a retry lands on the same
-agent and the share is reproducible; otherwise it is random. The target must be active and
+agent and the share is reproducible; otherwise one random draw is made per request. The target must be active and
 visible to the caller at run time; otherwise the run stays on the agent asked for and the skip is
 logged. The response carries `requested_agent_id`, the `agent_id` that served the run, and
 `served_by` (`traffic_split:<percent>` or null). Removing the split is the rollback: one action,
 and every run returns to the agent asked for.
+
+The requested agent's status, production accuracy floor and operator override are checked
+before allocation. A selected target gets the same controls before execution. A shadow source
+never redirects to a live target; a malformed stored split is ignored with a warning. Paused
+agent refusal still follows `AGENTICORG_PAUSED_AGENTS_REFUSED`; splitting does not override it.
+Use explicit `{"split": null}` to remove a split; an empty or misspelled request is rejected.
 
 The split applies to runs through the agents API only; chat, voice, workflows and A2A pick their
 agent as before. It splits between two agents, not between two stored versions of one agent.

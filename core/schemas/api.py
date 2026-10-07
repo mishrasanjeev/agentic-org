@@ -351,6 +351,8 @@ class FleetLimits(BaseModel):
 class AgentCardIn(BaseModel):
     """The card fields an administrator writes; only the fields sent are changed."""
 
+    model_config = {"extra": "forbid"}
+
     purpose: str | None = Field(None, max_length=2000)
     risk_tier: str | None = Field(None, max_length=16)
     use_case: str | None = Field(None, max_length=120)
@@ -360,10 +362,14 @@ class AgentCardIn(BaseModel):
 class AgentTrafficSplitIn(BaseModel):
     """A share of an agent's runs served by another agent, or null to remove the split."""
 
-    split: dict[str, Any] | None = None
+    model_config = {"extra": "forbid"}
+
+    split: dict[str, Any] | None
 
 
 class AgentLifecycleIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
     to: str = Field(..., min_length=1, max_length=16)
     note: str | None = Field(None, max_length=500)
 
