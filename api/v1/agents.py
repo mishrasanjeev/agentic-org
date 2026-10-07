@@ -705,13 +705,13 @@ def _run_resume_spec(
     review_learning: dict[str, Any],
     authorized_tools: Any,
     connector_names_for_tools: Any,
-    run_caller: Any,
 ) -> dict[str, Any]:
     """The graph parameters of a run, so a resume (after approval, or a debug step) re-enters it as it ran.
 
-    Server-only: stripped from every approval API response and never returned by the console.
+    Server-only: stripped from every approval API response and never returned
+    by the console. The caller's grant marker is added by the caller (PRD F-1).
     """
-    spec: dict[str, Any] = {
+    return {
         # Same expressions as the langgraph_run call in run_agent_task.
         "confidence_floor": float(review_learning["effective_confidence_floor"]),
         "hitl_condition": (
@@ -724,12 +724,6 @@ def _run_resume_spec(
         "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
         "domain": agent_config.get("domain", "ops"),
     }
-    # A run bound to a caller token stays bound after approval: the
-    # resume has no token, so its tool calls are refused (PRD F-1).
-    caller_marker = run_caller.marker()
-    if caller_marker is not None:
-        spec[CALLER_GRANT_KEY] = caller_marker
-    return spec
 
 
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
@@ -4021,9 +4015,11 @@ async def run_agent(
                 thread_id=run_thread_id,
                 paused_before=list(lg_result.get("paused_before") or []),
                 breakpoints=run_debugger.declared({"config": agent_config.get("config") or {}}),
-                spec=_run_resume_spec(
-                    agent_config, review_learning, authorized_tools, connector_names_for_tools, run_caller
-                ),
+                spec={
+                    **_run_resume_spec(agent_config, review_learning, authorized_tools, connector_names_for_tools),
+                    # A run bound to a caller token stays bound when stepped (PRD F-1).
+                    **({CALLER_GRANT_KEY: run_caller.marker()} if run_caller.marker() is not None else {}),
+                },
                 created_by=effective_caller.user_id,
             )
         except (RuntimeError, TypeError, ValueError, OSError) as exc:
@@ -4042,8 +4038,13 @@ async def run_agent(
             from core.approvals.agent_run_resume import RESUME_SPEC_KEY
 
             resume_spec[RESUME_SPEC_KEY] = _run_resume_spec(
-                agent_config, review_learning, authorized_tools, connector_names_for_tools, run_caller
+                agent_config, review_learning, authorized_tools, connector_names_for_tools
             )
+            # A run bound to a caller token stays bound after approval: the
+            # resume has no token, so its tool calls are refused (PRD F-1).
+            caller_marker = run_caller.marker()
+            if caller_marker is not None:
+                resume_spec[RESUME_SPEC_KEY][CALLER_GRANT_KEY] = caller_marker
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
