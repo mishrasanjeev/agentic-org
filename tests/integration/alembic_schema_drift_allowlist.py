@@ -28,6 +28,8 @@ MIGRATION_OWNED_TABLES: dict[str, str] = {
     "health_check_history": "v4_9_8: health check history",
     "knowledge_chunk_sources": "v4_9_4 / v6_z16: multimodal RAG chunk sources",
     "knowledge_documents": "v4_0_0 / v6_z13: knowledge base documents (pgvector columns)",
+    "knowledge_entities": "v6_z52: graph retrieval entities per chunk, keyed to the raw-SQL knowledge_documents",
+    "knowledge_retrieval_metrics": "v6_z53: figures-only retrieval quality samples written by raw SQL",
 }
 
 # Indexes the migrations create on ORM tables that the models do not declare:
