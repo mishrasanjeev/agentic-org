@@ -17,7 +17,8 @@ class FinopsCostLedger(BaseModel):
     """One row per day, agent and attribution: tokens, cost and calls.
 
     Row-level security: tenant-scoped (``v6z55_finops_attribution``). The unique
-    key is an expression index (the agent id coalesced), created by the migration.
+    key is an expression index over every attribution dimension (agent, department
+    and cost centre coalesced), created by the migration.
     """
 
     __tablename__ = "finops_cost_ledger"

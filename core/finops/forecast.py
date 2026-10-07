@@ -7,6 +7,9 @@ trend; the next horizon (a quarter by default) is the trend carried forward,
 compounded by an optional monthly growth assumption, never below zero, with a
 band from the day-to-day scatter of the history. Missing days count as zero
 spend, so a use case that went quiet trends down rather than vanishing.
+Every label is projected and counted in the totals; the listed rows are the
+highest projected spend first, at most ``MAX_KEYS``, and the answer says how
+many labels there were and whether the list was cut.
 
 **Comparison** (``comparison``): what each use case spent on each model over
 a window, from the model call records, and what the same tokens would cost at
@@ -71,8 +74,6 @@ async def history(
     series: dict[str, list[tuple[date, int, float]]] = {}
     for key, day, tokens, cost in rows:
         label = str(key) if key is not None else ""
-        if label not in series and len(series) >= MAX_KEYS:
-            continue
         series.setdefault(label, []).append((day, int(tokens or 0), float(cost or 0.0)))
     return series
 
@@ -165,7 +166,16 @@ async def forecast(
                 **project(points, history_days=window, horizon_days=horizon, growth_monthly_pct=growth, end=end),
             }
         )
-    rows.sort(key=lambda r: (-r["projected_cost_usd"], str(r[group_by])))
+    # Every label is projected so the totals are complete; only the listed rows are limited, highest spend first.
+    rows.sort(key=lambda r: (-r["projected_cost_usd"], -r["history_cost_usd"], str(r[group_by])))
+    totals = {
+        "history_cost_usd": round(sum(r["history_cost_usd"] for r in rows), 6),
+        "projected_cost_usd": round(sum(r["projected_cost_usd"] for r in rows), 2),
+        "projected_cost_low_usd": round(sum(r["projected_cost_low_usd"] for r in rows), 2),
+        "projected_cost_high_usd": round(sum(r["projected_cost_high_usd"] for r in rows), 2),
+        "projected_tokens": sum(r["projected_tokens"] for r in rows),
+    }
+    total_rows = len(rows)
     return {
         "group_by": group_by,
         "assumptions": {
@@ -174,21 +184,22 @@ async def forecast(
             "growth_monthly_pct": growth,
             "method": "linear trend on daily cost, compounded monthly by the growth assumption, floored at zero",
         },
-        "rows": rows,
-        "totals": {
-            "history_cost_usd": round(sum(r["history_cost_usd"] for r in rows), 6),
-            "projected_cost_usd": round(sum(r["projected_cost_usd"] for r in rows), 2),
-            "projected_cost_low_usd": round(sum(r["projected_cost_low_usd"] for r in rows), 2),
-            "projected_cost_high_usd": round(sum(r["projected_cost_high_usd"] for r in rows), 2),
-            "projected_tokens": sum(r["projected_tokens"] for r in rows),
-        },
+        "rows": rows[:MAX_KEYS],
+        "total_rows": total_rows,
+        "truncated": total_rows > MAX_KEYS,
+        "totals": totals,
     }
 
 
 async def usage_by_model(
     session: Any, tenant_id: uuid.UUID, *, days: int, since: date | None = None, until: date | None = None
 ) -> list[tuple[Any, ...]]:
-    """Completed model calls over the window from the records: use case, provider, model, tokens, cost, calls."""
+    """Completed model calls over the window from the records, per use case, provider and model.
+
+    Each row is: use case, provider, model, tokens, input tokens, output tokens, cost, calls, unsplit tokens.
+    The input and output sums cover only the calls that recorded both counts; the tokens of every other call
+    are summed separately as the unsplit tokens, so they can be priced at the blended rate.
+    """
     from sqlalchemy import text as sqltext
 
     window = max(1, min(int(days), MAX_HISTORY_DAYS))
@@ -202,8 +213,14 @@ async def usage_by_model(
         (
             await session.execute(
                 sqltext(
-                    "SELECT use_case, provider, model, SUM(tokens), SUM(input_tokens), SUM(output_tokens), "  # noqa: S608  # nosec B608 — until_sql is a fixed fragment, the dates are bound
-                    "SUM(cost_usd), COUNT(*) FROM model_gateway_records "
+                    "SELECT use_case, provider, model, SUM(tokens), "  # noqa: S608  # nosec B608 — until_sql is a fixed fragment, the dates are bound
+                    "SUM(CASE WHEN input_tokens IS NOT NULL AND output_tokens IS NOT NULL "
+                    "THEN input_tokens ELSE 0 END), "
+                    "SUM(CASE WHEN input_tokens IS NOT NULL AND output_tokens IS NOT NULL "
+                    "THEN output_tokens ELSE 0 END), "
+                    "SUM(cost_usd), COUNT(*), "
+                    "SUM(CASE WHEN input_tokens IS NULL OR output_tokens IS NULL THEN tokens ELSE 0 END) "
+                    "FROM model_gateway_records "
                     f"WHERE tenant_id = :tid AND outcome = 'completed' AND created_at >= :since{until_sql} "  # noqa: S608  # nosec B608 — until_sql is a fixed fragment, the dates are bound
                     "GROUP BY use_case, provider, model ORDER BY use_case, provider, model"
                 ),
@@ -213,10 +230,27 @@ async def usage_by_model(
     )
 
 
+def _unsplit_tokens(row: tuple[Any, ...]) -> int:
+    """The tokens of the calls in a usage row that did not record both input and output counts."""
+    if len(row) > 8:
+        return int(row[8] or 0)
+    _use_case, _provider, _model, tokens, input_tokens, output_tokens = row[:6]
+    return int(tokens or 0) if input_tokens is None or output_tokens is None else 0
+
+
 def alternatives(
-    tokens: int, input_tokens: int | None, output_tokens: int | None, current_cost: float
+    tokens: int,
+    input_tokens: int | None,
+    output_tokens: int | None,
+    current_cost: float,
+    *,
+    unsplit_tokens: int = 0,
 ) -> list[dict[str, Any]]:
-    """What the same tokens would cost at every priced catalogue model, cheapest first."""
+    """What the same tokens would cost at every priced catalogue model, cheapest first.
+
+    With a known split, the split tokens are priced by input and output rate and the unsplit tokens (calls
+    that did not record both counts) at the blended rate; without one, every token is priced at the blended rate.
+    """
     from core.ai_providers.catalog import LLM_CATALOG
     from core.governance.model_pricing import price_for
 
@@ -229,7 +263,12 @@ def alternatives(
         price = price_for(entry.provider, entry.model)
         if price is None:
             continue
-        cost = price.cost_usd(input_tokens=input_tokens, output_tokens=output_tokens, tokens=tokens)
+        if input_tokens is not None and output_tokens is not None:
+            cost = price.cost_usd(input_tokens=input_tokens, output_tokens=output_tokens, tokens=tokens)
+            if unsplit_tokens > 0:
+                cost += price.cost_usd(input_tokens=None, output_tokens=None, tokens=unsplit_tokens)
+        else:
+            cost = price.cost_usd(input_tokens=None, output_tokens=None, tokens=tokens)
         priced.append(
             {
                 "provider": entry.provider,
@@ -249,7 +288,9 @@ async def comparison(
     """Per use case: the current model mix and cost, the cheapest alternatives; with a change date, before and after."""
     rows = await usage_by_model(session, tenant_id, days=days)
     by_use_case: dict[str, dict[str, Any]] = {}
-    for use_case, provider, model, tokens, input_tokens, output_tokens, cost, calls in rows:
+    for row in rows:
+        use_case, provider, model, tokens, input_tokens, output_tokens, cost, calls = row[:8]
+        unsplit = _unsplit_tokens(row)
         key = str(use_case or attribution.UNATTRIBUTED)
         bucket = by_use_case.setdefault(
             key,
@@ -259,6 +300,7 @@ async def comparison(
                 "tokens": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
+                "unsplit_tokens": 0,
                 "cost_usd": 0.0,
                 "calls": 0,
             },
@@ -275,6 +317,7 @@ async def comparison(
         bucket["tokens"] += int(tokens or 0)
         bucket["input_tokens"] += int(input_tokens or 0)
         bucket["output_tokens"] += int(output_tokens or 0)
+        bucket["unsplit_tokens"] += unsplit
         bucket["cost_usd"] = round(bucket["cost_usd"] + float(cost or 0.0), 6)
         bucket["calls"] += int(calls or 0)
     use_cases = []
@@ -283,11 +326,15 @@ async def comparison(
         for item in bucket["models"]:
             item["share"] = round(item["cost_usd"] / total, 4) if total else 0.0
         bucket["models"].sort(key=lambda m: (-m["cost_usd"], m["provider"], m["model"]))
+        split_known = bucket["unsplit_tokens"] < bucket["tokens"] and bool(
+            bucket["input_tokens"] or bucket["output_tokens"]
+        )
         bucket["alternatives"] = alternatives(
             bucket["tokens"],
-            bucket["input_tokens"] or None,
-            bucket["output_tokens"] or None,
+            bucket["input_tokens"] if split_known else None,
+            bucket["output_tokens"] if split_known else None,
             bucket["cost_usd"],
+            unsplit_tokens=bucket["unsplit_tokens"] if split_known else 0,
         )
         use_cases.append(bucket)
     use_cases.sort(key=lambda b: (-b["cost_usd"], b["use_case"]))
@@ -316,7 +363,8 @@ async def before_after(session: Any, tenant_id: uuid.UUID, *, days: int, changed
 
     def fold(rows: list[tuple[Any, ...]], span: int) -> dict[str, dict[str, Any]]:
         out: dict[str, dict[str, Any]] = {}
-        for _use_case, provider, model, tokens, _i, _o, cost, calls in rows:
+        for row in rows:
+            _use_case, provider, model, tokens, _i, _o, cost, calls = row[:8]
             key = f"{provider}/{model}"
             item = out.setdefault(key, {"cost_usd": 0.0, "calls": 0, "tokens": 0})
             item["cost_usd"] = round(item["cost_usd"] + float(cost or 0.0), 6)
