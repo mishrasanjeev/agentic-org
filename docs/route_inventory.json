@@ -6638,7 +6638,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 76,
+    "source_line": 79,
     "tenant_required": true
   },
   {
@@ -6656,7 +6656,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 106,
+    "source_line": 109,
     "tenant_required": true
   },
   {
@@ -6674,7 +6674,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
-    "source_line": 91,
+    "source_line": 94,
     "tenant_required": true
   },
   {

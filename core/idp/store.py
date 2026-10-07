@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import uuid
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -150,41 +151,64 @@ async def get_document(tenant_id: uuid.UUID, document_id: uuid.UUID) -> dict[str
         return detail_dict(row) if row is not None else None
 
 
-def render_page(data: bytes, mime_type: str, page_number: int, *, dpi: int = IMAGE_DPI) -> bytes:
-    """The page as a PNG, from the PDF at ``dpi`` or the image itself, bounded in size."""
-    from PIL import Image
-
-    mime = (mime_type or "").split(";")[0].strip().lower()
-    if mime == "application/pdf" or data[:5] == b"%PDF-":
-        document = open_pdf(data)
-        try:
-            if page_number < 1 or page_number > len(document):
-                raise DocumentError(404, "page_not_found", f"No page {page_number}")
-            rendered = render_pdf_page(document[page_number - 1], dpi=dpi)
-        finally:
-            document.close()
-        out = io.BytesIO()
-        rendered.save(out, format="PNG")
-        return out.getvalue()
-    if page_number != 1:
-        raise DocumentError(404, "page_not_found", f"No page {page_number}")
-    image = Image.open(io.BytesIO(data)).convert("RGB")
-    if max(image.size) > MAX_IMAGE_SIDE:
-        ratio = MAX_IMAGE_SIDE / max(image.size)
-        image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))))
+def _png(image: Any) -> bytes:
     out = io.BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()
 
 
-async def page_image(tenant_id: uuid.UUID, document_id: uuid.UUID, page_number: int) -> bytes:
+def render_pages(
+    data: bytes, mime_type: str, page_numbers: Iterable[int], *, dpi: int = IMAGE_DPI
+) -> Iterator[tuple[int, bytes]]:
+    """Each requested page that exists, as ``(number, PNG)``, from one open of the file; others are left out.
+
+    The PDF is parsed once for all the pages and each image is produced only
+    when the caller asks for the next one, so a long file is never held as a
+    list of images.
+    """
+    from PIL import Image
+
+    wanted = sorted({int(n) for n in page_numbers})
+    mime = (mime_type or "").split(";")[0].strip().lower()
+    if mime == "application/pdf" or data[:5] == b"%PDF-":
+        document = open_pdf(data)
+        try:
+            for number in wanted:
+                if 1 <= number <= len(document):
+                    yield number, _png(render_pdf_page(document[number - 1], dpi=dpi))
+        finally:
+            document.close()
+        return
+    if 1 not in wanted:
+        return
+    image = Image.open(io.BytesIO(data)).convert("RGB")
+    if max(image.size) > MAX_IMAGE_SIDE:
+        ratio = MAX_IMAGE_SIDE / max(image.size)
+        image = image.resize((max(1, int(image.width * ratio)), max(1, int(image.height * ratio))))
+    yield 1, _png(image)
+
+
+def render_page(data: bytes, mime_type: str, page_number: int, *, dpi: int = IMAGE_DPI) -> bytes:
+    """The page as a PNG, from the PDF at ``dpi`` or the image itself, bounded in size."""
+    for number, png in render_pages(data, mime_type, [page_number], dpi=dpi):
+        if number == page_number:
+            return png
+    raise DocumentError(404, "page_not_found", f"No page {page_number}")
+
+
+async def document_content(tenant_id: uuid.UUID, document_id: uuid.UUID) -> tuple[bytes, str]:
+    """The kept file and its media type, read once from the tenant's store."""
     from core.database import get_tenant_session
 
     async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, document_id)
         if row is None:
             raise DocumentError(404, "not_found", "No such document")
-        data, mime = bytes(row.content), row.mime_type
+        return bytes(row.content), str(row.mime_type or "")
+
+
+async def page_image(tenant_id: uuid.UUID, document_id: uuid.UUID, page_number: int) -> bytes:
+    data, mime = await document_content(tenant_id, document_id)
     return render_page(data, mime, page_number)
 
 
