@@ -83,7 +83,9 @@ async def follow_promotion(session: Any, tenant_id: uuid.UUID, agent: Any, *, ac
         return
     entry = await lifecycle.get_entry(session, tenant_id, agent.id)
     if entry is not None and entry.state == "approved":
-        await lifecycle.transition(session, tenant_id, agent, "published", actor=actor, note="Promoted to active")
+        await lifecycle.transition(
+            session, tenant_id, agent, "published", actor=actor, note="Promoted to active", require_actor=False
+        )
 
 
 async def follow_retirement(session: Any, tenant_id: uuid.UUID, agent: Any, *, actor: uuid.UUID | None) -> None:
@@ -94,5 +96,9 @@ async def follow_retirement(session: Any, tenant_id: uuid.UUID, agent: Any, *, a
     if entry is None or entry.state not in ("published", "deprecated"):
         return
     if entry.state == "published":
-        await lifecycle.transition(session, tenant_id, agent, "deprecated", actor=actor, note="Agent retired")
-    await lifecycle.transition(session, tenant_id, agent, "retired", actor=actor, note="Agent retired")
+        await lifecycle.transition(
+            session, tenant_id, agent, "deprecated", actor=actor, note="Agent retired", require_actor=False
+        )
+    await lifecycle.transition(
+        session, tenant_id, agent, "retired", actor=actor, note="Agent retired", require_actor=False
+    )
