@@ -98,6 +98,38 @@ describe("Documents page", () => {
     await screen.findByTestId("documents-notice");
   });
 
+  it("saving an untouched field sends the displayed value", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByTestId(`document-row-${ID}`));
+    await screen.findByTestId("field-save-0:branch");
+    fireEvent.click(screen.getByTestId("field-save-0:branch"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith(`/idp/documents/${ID}/fields`, { document_index: 0, field: "branch", value: "Pune" }));
+    expect(mockPost).not.toHaveBeenCalledWith(`/idp/documents/${ID}/fields`, expect.objectContaining({ value: "" }));
+  });
+
+  it("drops a document detail that arrives after another document was selected", async () => {
+    const OTHER = "22222222-2222-4222-8222-222222222222";
+    const otherSummary = { ...SUMMARY, id: OTHER, filename: "statement.pdf" };
+    const otherDetail = { ...DETAIL, ...otherSummary };
+    let releaseFirst: (value: { data: unknown }) => void = () => undefined;
+    mockGet.mockImplementation((url: string) => {
+      if (url.endsWith(".png")) return Promise.resolve({ data: new Blob(["png"]) });
+      if (url === "/idp/documents") return Promise.resolve({ data: { documents: [SUMMARY, otherSummary], total: 2 } });
+      if (url === `/idp/documents/${ID}`) return new Promise((resolve) => { releaseFirst = resolve; });
+      return Promise.resolve({ data: otherDetail });
+    });
+    renderPage();
+    fireEvent.click(await screen.findByTestId(`document-row-${ID}`));
+    fireEvent.click(screen.getByTestId(`document-row-${OTHER}`));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(`/idp/documents/${OTHER}/pages/1.png`, { responseType: "blob" }));
+    releaseFirst({ data: DETAIL });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    fireEvent.click(screen.getByTestId("document-approve"));
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith(`/idp/documents/${OTHER}/decide`, { decision: "approve", notes: "" }));
+    expect(mockPost).not.toHaveBeenCalledWith(`/idp/documents/${ID}/decide`, expect.anything());
+    expect(mockGet).not.toHaveBeenCalledWith(`/idp/documents/${ID}/pages/1.png`, { responseType: "blob" });
+  });
+
   it("says when nothing is in the chosen status", async () => {
     mockGet.mockImplementation((url: string) => (url === "/idp/documents" ? Promise.resolve({ data: { documents: [], total: 0 } }) : Promise.resolve({ data: DETAIL })));
     renderPage();

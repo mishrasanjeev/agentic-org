@@ -18,7 +18,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
-from core.idp.pages import MAX_BYTES, DocumentError, open_pdf, render_pdf_page
+from core.idp.pages import MAX_BYTES, DocumentError, open_pdf
 
 logger = structlog.get_logger()
 
@@ -46,24 +46,32 @@ def summary_dict(row: Any) -> dict[str, Any]:
     }
 
 
+def _apply_fixes(rows: list[dict[str, Any]], fixes: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            **f,
+            "original_value": f.get("value"),
+            "value": fixes[f["name"]]["value"],
+            "corrected": True,
+            "corrected_by": fixes[f["name"]].get("by"),
+        }
+        if f.get("name") in fixes
+        else {**f, "corrected": False}
+        for f in rows
+    ]
+
+
 def effective_documents(result: dict[str, Any], corrections: dict[str, Any]) -> list[dict[str, Any]]:
-    """The result's documents with corrections applied to their fields; the original value stays beside."""
+    """The result's documents with corrections applied to fields and extra fields; the original value stays beside.
+
+    ``correct`` accepts a name from either list, so both lists carry the reviewer's value.
+    """
     out = []
     for document in result.get("documents", []):
         fixes = corrections.get(str(document.get("index"))) or {}
         merged = dict(document)
-        merged["fields"] = [
-            {
-                **f,
-                "original_value": f.get("value"),
-                "value": fixes[f["name"]]["value"],
-                "corrected": True,
-                "corrected_by": fixes[f["name"]].get("by"),
-            }
-            if f.get("name") in fixes
-            else {**f, "corrected": False}
-            for f in document.get("fields", [])
-        ]
+        merged["fields"] = _apply_fixes(document.get("fields", []), fixes)
+        merged["extra_fields"] = _apply_fixes(document.get("extra_fields", []), fixes)
         out.append(merged)
     return out
 
@@ -151,6 +159,18 @@ async def get_document(tenant_id: uuid.UUID, document_id: uuid.UUID) -> dict[str
         return detail_dict(row) if row is not None else None
 
 
+def pdf_render_scale(width: float, height: float, *, dpi: int = IMAGE_DPI, max_side: int = MAX_IMAGE_SIDE) -> float:
+    """The PDFium scale for a ``width`` x ``height`` page: ``dpi``, lowered so neither side exceeds ``max_side``.
+
+    The page size comes from the file, so it is bounded before any raster is
+    allocated; a page with no usable size is refused.
+    """
+    longest = max(float(width), float(height))
+    if not longest > 0 or longest == float("inf"):
+        raise DocumentError(422, "page_size_invalid", "The page has no usable size")
+    return min(dpi / 72.0, max_side / longest)
+
+
 def _png(image: Any) -> bytes:
     out = io.BytesIO()
     image.save(out, format="PNG")
@@ -175,7 +195,11 @@ def render_pages(
         try:
             for number in wanted:
                 if 1 <= number <= len(document):
-                    yield number, _png(render_pdf_page(document[number - 1], dpi=dpi))
+                    # The raster size comes from the file: bound the scale before anything is allocated.
+                    raw_page = document[number - 1]
+                    width, height = raw_page.get_size()
+                    scale = pdf_render_scale(width, height, dpi=dpi)
+                    yield number, _png(raw_page.render(scale=scale).to_pil())
         finally:
             document.close()
         return
