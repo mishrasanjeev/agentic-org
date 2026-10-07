@@ -50,6 +50,7 @@ from core.langgraph.thread_ids import (
     scoped_thread_id,
     thread_belongs_to_tenant,
 )
+from core.memory import long_term as long_term_memory
 from core.pii import pseudonymiser as pseudonymisation
 from core.pii.redactor import PIIRedactor
 from observability import timeline, tracing
@@ -336,6 +337,19 @@ async def run_agent(
         amended_prompt = amendments_block + system_prompt
         logger.info("prompt_amendments_applied", agent_id=agent_id, count=len(prompt_amendments))
     amended_prompt = _with_reference_resolution_guidance(amended_prompt)
+    # Long-term memory: what is remembered about the subject the run names, as context.
+    memory_subject = long_term_memory.subject_of(task_input) if long_term_memory.enabled() else ""
+    if memory_subject:
+        try:
+            from core.database import get_tenant_session as _memory_session
+
+            async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
+                remembered = await long_term_memory.recall(
+                    memory_db, uuid.UUID(str(tenant_id)), subject=memory_subject, agent_id=agent_id
+                )
+                amended_prompt = long_term_memory.prompt_block(remembered) + amended_prompt
+        except (RuntimeError, TypeError, ValueError, OSError) as exc:
+            logger.warning("memory_recall_failed", error=type(exc).__name__)
 
     # P1.2: PII redaction MUST happen before any LLM input. Raise loud error
     # if production has redaction disabled — never silently send PII to LLMs.
@@ -650,6 +664,22 @@ async def run_agent(
             response["grant_denial"] = result["grant_denial"]
         if result.get("limit_stop"):
             response["limit"] = result["limit_stop"]
+        # Long-term memory: what the run asked to keep about its subject.
+        if memory_subject and isinstance(response.get("output"), dict) and response["output"].get("remember"):
+            try:
+                from core.database import get_tenant_session as _memory_session
+
+                async with _memory_session(uuid.UUID(str(tenant_id))) as memory_db:
+                    response["remembered"] = await long_term_memory.remember_from_output(
+                        memory_db,
+                        uuid.UUID(str(tenant_id)),
+                        subject=memory_subject,
+                        agent_id=agent_id,
+                        output=response["output"],
+                        run_id=str(response.get("correlation_id") or response.get("task_id") or "") or None,
+                    )
+            except (RuntimeError, TypeError, ValueError, OSError) as exc:
+                logger.warning("memory_store_failed", error=type(exc).__name__)
         return _traced_result(run_span, response)
 
     except GraphInterrupt as gi:

@@ -17,6 +17,7 @@ from core.models.agent import AgentTeam as AgentTeam
 from core.models.agent import AgentTeamMember as AgentTeamMember
 from core.models.agent import AgentVersion as AgentVersion
 from core.models.agent import ShadowComparison as ShadowComparison
+from core.models.agent_memory import AgentMemory as AgentMemory
 from core.models.agent_rating import AgentRating as AgentRating
 from core.models.agent_registry import AgentRegistryEntry as AgentRegistryEntry
 from core.models.agent_registry import AgentRegistryEvent as AgentRegistryEvent

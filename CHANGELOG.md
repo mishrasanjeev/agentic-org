@@ -4,6 +4,14 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent runtime: long-term memory with retention and erasure
+- With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on (off by default), a run that
+  names a subject recalls what is remembered about it into its prompt and
+  stores what it asks to keep (`core/memory/long_term.py`, table
+  `agent_memories`, migration `v6z57_agent_memories`); entries expire by
+  their kind's retention and are pruned nightly; `/memory` recalls,
+  remembers and erases every entry about a subject, with the count.
+
 ### Added - Agent runtime: visual workflow builder with branching and fallback
 - The console's Build visually tab draws a workflow as a graph of steps,
   dependencies, condition paths and fallbacks, adds and connects agent

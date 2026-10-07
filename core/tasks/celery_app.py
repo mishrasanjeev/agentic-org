@@ -50,6 +50,7 @@ app = Celery(
         "core.tasks.gateway_tasks",
         "core.tasks.health_snapshot",
         "core.tasks.invoice_tasks",
+        "core.tasks.memory_tasks",
         "core.tasks.report_tasks",
         "core.tasks.rpa_tasks",
         "core.tasks.synthetic_tasks",
@@ -156,6 +157,13 @@ app.conf.beat_schedule = {
         # Results past AGENTICORG_SYNTHETIC_CHECKS_RETENTION_DAYS (core/tasks/synthetic_tasks.py).
         "task": "core.tasks.synthetic_tasks.prune_synthetic_results",
         "schedule": crontab(hour=3, minute=40),  # daily at 3:40 AM IST
+        "options": {"queue": "maintenance"},
+    },
+    "prune-expired-memories": {
+        # Long-term memory entries past their retention (core/tasks/memory_tasks.py).
+        # A no-op unless AGENTICORG_RUNTIME_MEMORY_ENABLED is true.
+        "task": "core.tasks.memory_tasks.prune_expired_memories",
+        "schedule": crontab(hour=3, minute=50),  # daily at 3:50 AM IST
         "options": {"queue": "maintenance"},
     },
     "run-budget-evaluator": {
