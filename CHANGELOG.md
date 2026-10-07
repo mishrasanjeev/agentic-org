@@ -32,9 +32,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   references (`core/conversation/context.py`); in the banking dialogue
   "the same amount", "that account" and "again" resolve from the last
   action, a message naming two amounts or two payees is asked about
-  instead of acted on, and a failed or empty answer is a graceful
-  fallback that says what happened, that nothing changed, and offers a
-  person after two in a row (`core/conversation/fallbacks.py`).
+  instead of acted on, and a failed, empty or low-confidence answer is a
+  graceful fallback that says what happened and what is known about the
+  outcome (a timeout says the outcome is unknown and asks the user to
+  check before retrying), and offers a person after two in a row, counted
+  across chat queries from the session history
+  (`core/conversation/fallbacks.py`). An amount marked with a currency and
+  a bare alternative ("₹500 or 600") are both offered as choices.
 
 ### Added - Conversational services: banking intents, slot filling and confirmed execution
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on (off by default), a chat
