@@ -10,11 +10,12 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.deps import get_current_tenant, get_current_user, require_tenant_admin
+from api.deps import get_current_tenant, get_current_user, get_user_domains, require_tenant_admin
 from api.route_metadata import route_meta
-from api.v1.agents import _user_uuid_from_claims
+from api.v1.agents import _effective_caller, _user_uuid_from_claims
 from core.database import get_tenant_session
 from core.memory import long_term
+from core.ownership import Caller, caller_from_request, require_agent_visible
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -54,6 +55,22 @@ def _agent_uuid(value: str | None) -> uuid.UUID | None:
         raise HTTPException(422, detail={"error": "agent_id", "message": "agent_id is an agent id"}) from None
 
 
+async def _authorised_agent(session: Any, tenant_id: uuid.UUID, agent_id: uuid.UUID | None, caller: Caller) -> None:
+    """The named agent is the tenant's and the caller may see it; 404 otherwise, as for the agent itself."""
+    if agent_id is None:
+        return
+    from sqlalchemy import select
+
+    from core.models.agent import Agent
+
+    agent = (
+        await session.execute(select(Agent).where(Agent.id == agent_id, Agent.tenant_id == tenant_id))
+    ).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(404, "Agent not found")
+    require_agent_visible(agent, caller)
+
+
 @router.get("/memory/policy")
 @route_meta(
     auth_required=True,
@@ -83,15 +100,17 @@ async def recall_memory(
     q: str | None = Query(None, max_length=200),
     limit: int = Query(long_term.DEFAULT_RECALL, ge=1, le=long_term.MAX_RECALL),
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ) -> dict[str, Any]:
     """What is remembered about a subject: the agent's own and the shared entries, unexpired, most important first."""
     if not long_term.enabled():
         raise _off()
     tid = uuid.UUID(tenant_id)
+    agent_uuid = _agent_uuid(agent_id)
     async with get_tenant_session(tid) as session:
-        rows = await long_term.recall(
-            session, tid, subject=subject, agent_id=_agent_uuid(agent_id), query=q, limit=limit
-        )
+        await _authorised_agent(session, tid, agent_uuid, _effective_caller(caller, user_domains))
+        rows = await long_term.recall(session, tid, subject=subject, agent_id=agent_uuid, query=q, limit=limit)
         entries = [long_term.entry_dict(r) for r in rows]
     return {"subject": long_term.normalise_subject(subject), "entries": entries, "total": len(entries)}
 
@@ -109,20 +128,24 @@ async def remember_memory(
     body: MemoryIn,
     tenant_id: str = Depends(get_current_tenant),
     user: dict = Depends(get_current_user),
+    user_domains: list[str] | None = Depends(get_user_domains),
+    caller: Caller | None = Depends(caller_from_request),
 ) -> dict[str, Any]:
     """Store one memory about a subject; the same content refreshes its expiry instead of duplicating."""
     if not long_term.enabled():
         raise _off()
     tid = uuid.UUID(tenant_id)
+    agent_uuid = _agent_uuid(body.agent_id)
     try:
         async with get_tenant_session(tid) as session:
+            await _authorised_agent(session, tid, agent_uuid, _effective_caller(caller, user_domains))
             row = await long_term.remember(
                 session,
                 tid,
                 subject=body.subject,
                 content=body.content,
                 kind=body.kind,
-                agent_id=_agent_uuid(body.agent_id),
+                agent_id=agent_uuid,
                 importance=body.importance,
                 retention_days=body.retention_days,
                 source="api",

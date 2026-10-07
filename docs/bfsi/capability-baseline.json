@@ -1214,16 +1214,15 @@
       "domain": "AIINF",
       "title": "Model evaluation framework",
       "expectation": "Benchmark foundation models against custom test datasets for accuracy, hallucination and relevance.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "evals/runner.py",
-          "evals/scorer.py",
-          "core/rag/eval.py",
-          "scaling/shadow_comparator.py"
+          "core/evals/runs.py",
+          "core/evals/scoring.py",
+          "docs/governance/evaluation-datasets.md"
         ],
-        "note": "Golden datasets with deterministic scorer, retrieval eval gate, shadow comparator; no model-vs-model benchmarking."
+        "note": "Tenant evaluation datasets run against any catalogue model, with deterministic checks, labels and model-graded judges, and a comparison that ranks the models that ran a version from their stored runs by pass rate, accuracy, latency, tokens and cost. Behind AGENTICORG_EVALS_V2_ENABLED and the prompt-evaluation switch, both off by default; a judge model rates and does not decide."
       },
       "grantex": {
         "status": "none",
@@ -4126,15 +4125,15 @@
       "domain": "EVAL",
       "title": "Evaluation datasets",
       "expectation": "Creation, management and execution of curated datasets with reference inputs, expected outputs and criteria.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "evals/golden_datasets",
-          "evals/runner.py",
-          "core/rag/eval.py"
+          "core/evals/datasets.py",
+          "api/v1/eval_datasets.py",
+          "ui/src/components/evals/EvalDatasets.tsx"
         ],
-        "note": "Datasets are files; no management API or UI."
+        "note": "Named datasets kept as immutable, hashed versions with an API and a console panel: create, version, read any version, archive, and run a version against a prompt and model in 25-case slices. Cases carry an input, deterministic expectations, a label, a reference answer and context. Off by default (AGENTICORG_EVALS_V2_ENABLED)."
       },
       "grantex": {
         "status": "none",
@@ -4149,13 +4148,15 @@
       "domain": "EVAL",
       "title": "Model-graded evaluation",
       "expectation": "Automated scoring of faithfulness, relevance, instruction adherence and context recall.",
-      "status": "none",
+      "status": "covered",
       "agenticorg": {
-        "status": "none",
+        "status": "covered",
         "evidence": [
-          "evals/scorer.py"
+          "core/evals/scoring.py",
+          "core/evals/runs.py",
+          "docs/governance/evaluation-datasets.md"
         ],
-        "note": "Deterministic scorers only."
+        "note": "Four model-graded judges (faithfulness against the case context, relevance, instruction adherence against the prompt, context recall against a reference answer) rate each answer on a five-point rubric through the same governed path as the answers, with failures kept apart from scores and reasons returned once and never stored. A judge model has a model's limits; its scores sit beside the deterministic checks."
       },
       "grantex": {
         "status": "none",
@@ -4174,10 +4175,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          "evals/scorer.py",
-          "core/rag/eval.py"
+          "core/evals/metrics.py",
+          "core/evals/runs.py",
+          "docs/governance/evaluation-datasets.md"
         ],
-        "note": "Field match with tolerance; no precision, recall or F1."
+        "note": "Pass rate, exact match and classification accuracy with macro precision, recall and F1 over a dataset's labels, computed per run and stored. No retrieval metrics: a run takes a prompt and a model, so nothing in it knows what was retrieved."
       },
       "grantex": {
         "status": "none",
@@ -4197,10 +4199,10 @@
         "status": "partial",
         "evidence": [
           "core/governance/guardrails/adversarial.py",
-          "tests/unit/governance/test_guardrails_adversarial.py",
-          "tests/security/test_untrusted_content_adversarial.py"
+          "observability/synthetic.py",
+          "docs/governance/guardrails.md"
         ],
-        "note": "A fixed adversarial set of synthetic injection, sensitive-data, grounding and output-policy cases runs in product against a tenant's guardrail rules or a recommended baseline and reports what was detected, missed and wrongly caught; further adversarial suites run in CI. It runs on demand, results are not stored over time and there is no model-graded judging."
+        "note": "A fixed adversarial set of synthetic injection, sensitive-data, grounding and output-policy cases runs in product against a tenant's guardrail rules, by hand or on a schedule as a synthetic check with a minimum recall, and its results show on the Guardrails page. The set is pattern-aware and deliberately holds attacks the detectors miss; it has no toxicity cases and nothing generates new attacks."
       },
       "grantex": {
         "status": "none",
@@ -4241,11 +4243,11 @@
       "agenticorg": {
         "status": "partial",
         "evidence": [
-          ".github/workflows/rag-eval.yml",
-          "scripts/release_acceptance.py",
-          "docs/release_acceptance_gate.md"
+          "core/evals/gates.py",
+          "api/v1/agents.py",
+          "docs/governance/evaluation-datasets.md"
         ],
-        "note": "CI and release gates; shadow gate on promotion."
+        "note": "An agent may declare an evaluation gate: promotion and resume to active refuse a prompt whose newest stored run on the gate dataset version is missing, below the minimum pass rate or regressed beyond an allowance against the prompt it replaces, beside the shadow evidence and maker-checker. Behind AGENTICORG_EVAL_PROMOTION_GATE_ENABLED, off by default. The gate reads the prompt text and one dataset; models and workflows are not gated."
       },
       "grantex": {
         "status": "none",
@@ -4260,14 +4262,15 @@
       "domain": "EVAL",
       "title": "Comparative dashboards",
       "expectation": "Dashboards ranking candidate models by accuracy, latency, throughput and token cost.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
-          "ui/src/pages/Evals.tsx",
-          "scaling/shadow_comparator.py"
+          "core/evals/runs.py",
+          "api/v1/eval_datasets.py",
+          "ui/src/components/evals/EvalDatasets.tsx"
         ],
-        "note": "Scorecards only; no model ranking."
+        "note": "The models that ran a dataset version are ranked from their newest stored runs by pass rate, then latency, then cost per case, with accuracy, answers a minute at the measured latency (an estimate, not a load test), tokens per case and the judges' means, in the API and the console."
       },
       "grantex": {
         "status": "none",
@@ -4688,15 +4691,15 @@
       "domain": "OBS",
       "title": "Scheduled synthetic checks",
       "expectation": "Scheduled automated runs verifying availability, response quality and guardrail integrity.",
-      "status": "partial",
+      "status": "covered",
       "agenticorg": {
-        "status": "partial",
+        "status": "covered",
         "evidence": [
           "observability/synthetic.py",
           "core/tasks/synthetic_tasks.py",
           "docs/operations/synthetic-checks.md"
         ],
-        "note": "Tenant administrators define scheduled probes of the model, knowledge, guardrail and audit-chain paths with a stored result per run and a console tab, behind a default-off flag. There is no agent-run probe and no built-in alert routing, and the adversarial set is not scheduled."
+        "note": "Tenant administrators schedule probes of the model, knowledge, guardrail and audit-chain paths, the adversarial set against their guardrail rules and a dataset version against a prompt and model, each with a stored result per run, a console tab and the adversarial results on the Guardrails page. Behind AGENTICORG_SYNTHETIC_CHECKS_ENABLED, off by default."
       },
       "grantex": {
         "status": "none",
