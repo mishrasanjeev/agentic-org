@@ -349,7 +349,9 @@ class FleetLimits(BaseModel):
 
 
 class AgentCardIn(BaseModel):
-    """The card fields an administrator writes; only the fields sent are changed."""
+    """The card fields an administrator writes; only the fields sent are changed, and unknown fields are refused."""
+
+    model_config = {"extra": "forbid"}
 
     purpose: str | None = Field(None, max_length=2000)
     risk_tier: str | None = Field(None, max_length=16)
@@ -358,6 +360,8 @@ class AgentCardIn(BaseModel):
 
 
 class AgentLifecycleIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
     to: str = Field(..., min_length=1, max_length=16)
     note: str | None = Field(None, max_length=500)
 

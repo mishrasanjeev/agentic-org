@@ -188,6 +188,26 @@ class TestTransitions:
         with pytest.raises(lifecycle.RegistryError, match="cannot approve") as refused:
             self._move(agent, _entry(agent, "review", submitted_by=MAKER), "approved", actor=MAKER)
         assert refused.value.code == "same_person"
+
+    def test_a_transition_without_a_signed_in_user_is_refused(self):
+        agent = _agent()
+        with pytest.raises(lifecycle.RegistryError, match="signed-in user") as refused:
+            self._move(agent, _entry(agent), "review", actor=None)
+        assert (refused.value.status, refused.value.code) == (403, "no_actor")
+        # The runtime may record a consequence of its own change without a person; approval never.
+        active = _agent(status="active")
+        entry, event = asyncio.run(
+            lifecycle.transition(
+                _Session(_entry(active, "approved")), TENANT, active, "published", actor=None, require_actor=False
+            )
+        )
+        assert entry.state == "published" and event.actor_user_id is None
+        with pytest.raises(lifecycle.RegistryError, match="cannot approve"):
+            asyncio.run(
+                lifecycle.transition(
+                    _Session(_entry(agent, "review")), TENANT, agent, "approved", actor=None, require_actor=False
+                )
+            )
         (entry, _), _ = self._move(agent, _entry(agent, "review", submitted_by=MAKER), "approved", actor=CHECKER)
         assert entry.state == "approved"
 
@@ -288,6 +308,14 @@ class TestEndpoints:
                 asyncio.run(call)
             assert refused.value.status_code == 409 and "off in this deployment" in refused.value.detail
 
+    def test_unknown_card_fields_are_refused_at_the_boundary(self):
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            AgentCardIn(owner="someone")
+        with pytest.raises(ValidationError):
+            AgentLifecycleIn(to="review", force=True)
+
     def test_the_card_is_read_and_its_fields_written(self, on, store):
         agent = _agent()
         store(agent, None)
@@ -305,6 +333,8 @@ class TestEndpoints:
         )
         [entry] = session.added
         assert entry.purpose == "Decide simple claims." and entry.risk_tier == "high"
+        # The agent row is locked before the entry is created.
+        assert "FOR UPDATE" in session.statements[0] and "agents.tenant_id" in session.statements[0]
         store(agent)
         with pytest.raises(HTTPException) as refused:
             asyncio.run(
@@ -351,12 +381,27 @@ class TestEndpoints:
                     uuid.uuid4(),
                     AgentLifecycleIn(to="review"),
                     tenant_id=str(TENANT),
-                    user={},
+                    user={"agenticorg:user_id": str(MAKER)},
                     user_domains=None,
                     caller=None,
                 )
             )
         assert missing.value.status_code == 404
+        # An API key, a delegated credential or a malformed claim cannot move an agent.
+        for claims in ({}, {"sub": "someone@example.com"}, {"agenticorg:user_id": "not-a-uuid"}):
+            session = store(agent)
+            with pytest.raises(HTTPException) as refused:
+                asyncio.run(
+                    api.transition_agent_lifecycle(
+                        agent.id,
+                        AgentLifecycleIn(to="review"),
+                        tenant_id=str(TENANT),
+                        user=claims,
+                        user_domains=None,
+                        caller=None,
+                    )
+                )
+            assert refused.value.status_code == 403 and session.statements == []
 
     def test_the_lifecycle_and_the_registry_list_are_read(self, on, store):
         agent = _agent()
@@ -398,3 +443,11 @@ class TestMigration:
         assert "ON agent_registry_events(agent_id, created_at)" in src
         for state in lifecycle.STATES:
             assert f"'{state}'" in src
+        # The checks are declared on the models and added outside the table creation too.
+        from core.models.agent_registry import AgentRegistryEntry, AgentRegistryEvent
+
+        names = {c.name for table in (AgentRegistryEntry, AgentRegistryEvent) for c in table.__table__.constraints}
+        assert {"ck_agent_registry_state", "ck_agent_registry_risk_tier", "ck_agent_registry_events_to"} <= names
+        for name in ("ck_agent_registry_state", "ck_agent_registry_risk_tier", "ck_agent_registry_events_to"):
+            assert src.count(name) >= 2, name
+        assert "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname" in src
