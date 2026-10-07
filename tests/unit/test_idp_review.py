@@ -15,22 +15,13 @@ from fastapi import HTTPException
 from core.config import settings
 from core.idp import store
 from core.idp.pages import DocumentError
+from tests.unit.idp_pdf_fixture import make_pdf
 
 TENANT = uuid.uuid4()
 
 
 def _pdf(lines: list[str]) -> bytes:
-    import pymupdf
-
-    doc = pymupdf.open()
-    page = doc.new_page(width=595, height=842)
-    y = 80
-    for line in lines:
-        page.insert_text((60, y), line, fontsize=11)
-        y += 22
-    data = doc.tobytes()
-    doc.close()
-    return data
+    return make_pdf(lines, table_columns=False)
 
 
 def _result(needs_review: bool = True) -> dict:

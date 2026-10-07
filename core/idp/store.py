@@ -17,7 +17,7 @@ from typing import Any
 import structlog
 from sqlalchemy import select
 
-from core.idp.pages import MAX_BYTES, DocumentError
+from core.idp.pages import MAX_BYTES, DocumentError, open_pdf, render_pdf_page
 
 logger = structlog.get_logger()
 
@@ -156,18 +156,16 @@ def render_page(data: bytes, mime_type: str, page_number: int, *, dpi: int = IMA
 
     mime = (mime_type or "").split(";")[0].strip().lower()
     if mime == "application/pdf" or data[:5] == b"%PDF-":
+        document = open_pdf(data)
         try:
-            import pymupdf  # type: ignore[import-untyped]
-        except ImportError:  # pragma: no cover
-            import fitz as pymupdf  # type: ignore[import-untyped, no-redef]
-        document = pymupdf.open(stream=data, filetype="pdf")
-        try:
-            if page_number < 1 or page_number > document.page_count:
+            if page_number < 1 or page_number > len(document):
                 raise DocumentError(404, "page_not_found", f"No page {page_number}")
-            pixmap = document[page_number - 1].get_pixmap(dpi=dpi)
-            return pixmap.tobytes("png")
+            rendered = render_pdf_page(document[page_number - 1], dpi=dpi)
         finally:
             document.close()
+        out = io.BytesIO()
+        rendered.save(out, format="PNG")
+        return out.getvalue()
     if page_number != 1:
         raise DocumentError(404, "page_not_found", f"No page {page_number}")
     image = Image.open(io.BytesIO(data)).convert("RGB")
