@@ -139,6 +139,13 @@ async def _resolve_embedding_profile(
     )
 
 
+def _document_domain(metadata: dict[str, Any] | None) -> str | None:
+    value = (metadata or {}).get("domain")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().lower()[:50]
+
+
 async def _resolve_chunk_plan(tenant_id: _uuid.UUID | str | None) -> chunking.ChunkPlan:
     """The tenant's chunking strategy and size band; an unreadable setting chunks as before."""
     from core.ai_providers import get_effective_ai_setting
@@ -249,6 +256,8 @@ async def ingest_document(
 
     # 2. Chunk with provenance
     plan = await _resolve_chunk_plan(tenant_id)
+    # The domain the upload named, or None for a document shared with the tenant (core/rag/access.py).
+    document_domain = _document_domain(metadata)
     chunks = chunking.chunk(content.spans, plan)
     if not chunks:
         return IngestResult(
@@ -322,17 +331,18 @@ async def ingest_document(
                     "   file_type, mime_type, embedding_model, "
                     "   embedding_dimensions, token_count, "
                     "   source_object_id, source_object_type, "
-                    f"   status, {target_column}, created_at) "
+                    f"   status, {target_column}, domain, created_at) "
                     "VALUES "
                     "  (gen_random_uuid(), :tid, :title, :content, "
                     "   :category, :source, 'rag', :mime_type, "
                     "   :embedding_model, :embedding_dims, :token_count, "
                     "   :src_obj_id, :src_obj_type, 'ready', "
-                    "   CAST(:vector AS vector), now()) "
+                    "   CAST(:vector AS vector), :domain, now()) "
                     "ON CONFLICT DO NOTHING"
                 ),
                 {
                     "tid": str(tid),
+                    "domain": document_domain,
                     "title": chunk_title[:480],
                     "content": chunk_text[:4000],
                     "category": object_type,

@@ -17,9 +17,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.deps import get_current_tenant
+from api.deps import get_current_tenant, get_user_domains
 from api.route_metadata import route_meta
 from core.config import settings
+from core.rag import access as knowledge_access
 from core.rag import rerank
 from core.rag.citations import (
     PROVENANCE_COLUMNS,
@@ -592,6 +593,15 @@ async def supported_document_types() -> dict[str, Any]:
 async def upload_document(
     file: UploadFile,
     tenant_id: str = Depends(get_current_tenant),
+    domain: str | None = Query(
+        default=None,
+        max_length=50,
+        pattern=r"^[a-z][a-z0-9_-]*$",
+        description=(
+            "The domain the document belongs to (finance, hr, ops and so on). Omitted, the document is shared "
+            "with the tenant. A caller limited to some domains may upload into those only."
+        ),
+    ),
     allow_duplicate: bool = Query(
         default=False,
         description=(
@@ -820,6 +830,8 @@ async def upload_document(
             "extraction_details": extracted_content.extra,
         }
     )
+    if domain:
+        doc_metadata["domain"] = domain
 
     doc: dict[str, Any] = {
         "document_id": doc_id,
@@ -891,6 +903,7 @@ async def upload_document(
             source_object_id=doc["document_id"],
             source_object_type="upload",
             extracted_content=extracted_content,
+            metadata={"domain": domain} if domain else None,
         )
         logger.info(
             "kb_ingest_multimodal",
@@ -980,6 +993,7 @@ async def list_documents(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """List documents in the knowledge base."""
     # Session 5 TC-013: merge the RAGFlow list with the DB mirror so a
@@ -999,6 +1013,19 @@ async def list_documents(
         db_docs = await _db_list_docs(tenant_id)
     except _DB_READ_ERRORS as exc:
         logger.debug("knowledge_db_list_failed", error=str(exc))
+    # Document-level access: a limited caller sees shared documents and those of its domains.
+    domains = knowledge_access.normalise_domains(user_domains)
+    if domains is not None:
+        db_docs = [
+            record
+            for record in db_docs
+            if knowledge_access.may_see((record.get("metadata") or {}).get("domain"), domains)
+        ]
+        rf_docs = [
+            record
+            for record in rf_docs
+            if knowledge_access.may_see((record.get("metadata") or {}).get("domain"), domains)
+        ]
 
     # Merge on document_id — prefer the RAGFlow record when both have it,
     # since RAGFlow carries the current chunk/index status.
@@ -1141,6 +1168,7 @@ async def _native_semantic_search(
     query: str,
     top_k: int,
     filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
 ) -> list[SearchResult]:
     """Search tenant knowledge, then fall back to uploaded document metadata.
 
@@ -1160,9 +1188,9 @@ async def _native_semantic_search(
     if hybrid_enabled:
         if not query.strip():
             return []
-        results = await _native_hybrid_search(tid, query, top_k, filters)
+        results = await _native_hybrid_search(tid, query, top_k, filters, domains)
     else:
-        results = await _native_vector_or_keyword_search(tid, query, top_k, filters)
+        results = await _native_vector_or_keyword_search(tid, query, top_k, filters, domains)
     if results:
         return results
     if filters is not None and not filters.is_empty():
@@ -1174,14 +1202,15 @@ async def _native_semantic_search(
     # text/markdown uploads. Keyword-match that layer before the pure
     # filename last-resort so text files actually retrieve on content.
     try:
+        acl_sql, acl_params = knowledge_access.metadata_clause(domains)
         content_sql = (
             "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
-            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
             if hybrid_enabled
             else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
-            "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
+            f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND metadata->>'content_text' ILIKE :like LIMIT :k"
         )
@@ -1189,7 +1218,7 @@ async def _native_semantic_search(
             rows = (
                 await session.execute(
                     _sqtext(content_sql),
-                    {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k},
+                    {"tid": str(tid), "query": query, "like": f"%{query}%", "k": top_k, **acl_params},
                 )
             ).fetchall()
         results = [
@@ -1213,6 +1242,7 @@ async def _native_semantic_search(
     # an empty chunk gives the UI enough signal to say "we found
     # alpha.pdf but haven't indexed it yet".
     try:
+        from sqlalchemy import or_ as _or
         from sqlalchemy import select as _select
 
         from core.models.document import Document
@@ -1222,22 +1252,17 @@ async def _native_semantic_search(
             if hybrid_enabled
             else Document.filename.ilike(f"%{query}%")
         )
-        async with get_tenant_session(tid) as session:
-            match_rows = (
-                (
-                    await session.execute(
-                        _select(Document)
-                        .where(
-                            Document.tenant_id == tid,
-                            Document.status != "deleted",
-                            filename_match,
-                        )
-                        .limit(top_k)
-                    )
-                )
-                .scalars()
-                .all()
+        clauses = [Document.tenant_id == tid, Document.status != "deleted", filename_match]
+        if domains is not None:
+            # Document-level access: shared uploads and those of the caller's domains.
+            document_domain = Document.metadata_["domain"].astext
+            clauses.append(
+                document_domain.is_(None)
+                if not domains
+                else _or(document_domain.is_(None), document_domain.in_(domains))
             )
+        async with get_tenant_session(tid) as session:
+            match_rows = (await session.execute(_select(Document).where(*clauses).limit(top_k))).scalars().all()
             return [
                 SearchResult(
                     chunk_text=(
@@ -1255,7 +1280,11 @@ async def _native_semantic_search(
 
 
 async def _native_vector_or_keyword_search(
-    tid: uuid.UUID, query: str, top_k: int, filters: SearchFilters | None = None
+    tid: uuid.UUID,
+    query: str,
+    top_k: int,
+    filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
 ) -> list[SearchResult]:
     """Preserve the default native retrieval behavior during hybrid rollout."""
     from sqlalchemy import text as _sqtext
@@ -1263,6 +1292,9 @@ async def _native_vector_or_keyword_search(
     from core.database import get_tenant_session
 
     where_filters, filter_params = sql_clauses(filters)
+    acl_sql, acl_params = knowledge_access.sql_clause(domains)
+    where_filters += acl_sql
+    filter_params = {**filter_params, **acl_params}
     # Try the vector path first. Column + model swap honour the
     # RAG_USE_BGE_M3 flag — both sides flip atomically.
     try:
@@ -1370,7 +1402,11 @@ def _fuse_native_hits(
 
 
 async def _native_hybrid_search(
-    tid: uuid.UUID, query: str, top_k: int, filters: SearchFilters | None = None
+    tid: uuid.UUID,
+    query: str,
+    top_k: int,
+    filters: SearchFilters | None = None,
+    domains: list[str] | None = None,
 ) -> list[SearchResult]:
     """Rank tenant-ready rows through PostgreSQL text and pgvector independently, then fuse and re-rank."""
     from sqlalchemy import text as _sqtext
@@ -1381,6 +1417,9 @@ async def _native_hybrid_search(
         return []
     limit = min(top_k * 4, 200)
     where_filters, filter_params = sql_clauses(filters)
+    acl_sql, acl_params = knowledge_access.sql_clause(domains)
+    where_filters += acl_sql
+    filter_params = {**filter_params, **acl_params}
     params = {"tid": str(tid), "query": query, "limit": limit, **filter_params}
     lexical_rows: list[tuple[str, str, str]] = []
     try:
@@ -1507,6 +1546,7 @@ async def knowledge_excerpt(
     doc_id: uuid.UUID,
     q: str | None = None,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ) -> ExcerptResponse:
     """The chunk a search cited, whole, with the query's terms located and the chunks either side.
 
@@ -1518,15 +1558,16 @@ async def knowledge_excerpt(
     from core.database import get_tenant_session
 
     tid = uuid.UUID(tenant_id)
+    acl_sql, acl_params = knowledge_access.sql_clause(knowledge_access.normalise_domains(user_domains))
     async with get_tenant_session(tid) as session:
         row = (
             await session.execute(
                 _sqtext(
                     f"SELECT d.id, d.title, d.content, d.source, {PROVENANCE_COLUMNS} "
                     f"FROM knowledge_documents d{PROVENANCE_JOIN} "
-                    "WHERE d.id = :id AND d.tenant_id = :tid AND d.status = 'ready' LIMIT 1"
+                    f"WHERE d.id = :id AND d.tenant_id = :tid AND d.status = 'ready'{acl_sql} LIMIT 1"
                 ),
-                {"id": str(doc_id), "tid": str(tid)},
+                {"id": str(doc_id), "tid": str(tid), **acl_params},
             )
         ).fetchone()
         if row is None:
@@ -1539,10 +1580,10 @@ async def knowledge_excerpt(
                 neighbour = (
                     await session.execute(
                         _sqtext(
-                            "SELECT id FROM knowledge_documents WHERE tenant_id = :tid AND status = 'ready' "
-                            "AND source LIKE :pattern LIMIT 1"
+                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "
+                            f"AND d.source LIKE :pattern{acl_sql} LIMIT 1"
                         ),
-                        {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%"},
+                        {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%", **acl_params},
                     )
                 ).fetchone()
                 if neighbour is not None:
@@ -1592,6 +1633,7 @@ async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[Se
 async def search_knowledge(
     req: SearchRequest,
     tenant_id: str = Depends(get_current_tenant),
+    user_domains: list[str] | None = Depends(get_user_domains),
 ):
     """Search the knowledge base using vector similarity.
 
@@ -1604,10 +1646,10 @@ async def search_knowledge(
     knows how to render as "Something went wrong".
     """
     with tracing.span("agenticorg.knowledge.search", tenant=tenant_id, **{"search.top_k": req.top_k}):
-        return await _search_knowledge(req, tenant_id)
+        return await _search_knowledge(req, tenant_id, knowledge_access.normalise_domains(user_domains))
 
 
-async def _search_knowledge(req: SearchRequest, tenant_id: str) -> SearchResponse:
+async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[str] | None = None) -> SearchResponse:
     """The search itself: RAGFlow when configured, else native semantic search; both pass the retrieval guardrails."""
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
@@ -1617,7 +1659,7 @@ async def _search_knowledge(req: SearchRequest, tenant_id: str) -> SearchRespons
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
-        results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters)
+        results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
         return SearchResponse(results=await _guard_results(tenant_id, results))
     except HTTPException:
         raise

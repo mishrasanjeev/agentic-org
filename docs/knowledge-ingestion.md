@@ -58,8 +58,8 @@ and `file_type` (lists; a document matches any value), and a `created_from` / `c
 window. Every filter is an `AND` condition on the knowledge documents, applied inside the dense
 and the sparse rankings alike, so the fused result only ever holds documents that pass.
 `category` is the source object type ingestion records for a chunk (`document`, `invoice` and so
-on) and `source` the upload it came from; a document's branch, product line or business segment
-is not yet a field of its own, which the access-control part of this package adds. A narrowed
+on) and `source` the upload it came from; the domain a document belongs to is a field of its own
+(the access-control section below) and is applied to every search, not chosen per request. A narrowed
 search answers from the knowledge base only: the upload-metadata fallback carries nothing to
 filter on and is not consulted.
 
@@ -90,6 +90,23 @@ previous/next links.
 An excerpt is the chunk as it was ingested, not the original file: a page image, a table's
 formatting or a figure are not shown. Access to a document is the tenant's as a whole; document
 access control is the next part of this package.
+
+## Document access control
+
+A knowledge document belongs to a domain (`finance`, `hr`, `ops` and so on, the domains that
+scope agents and users) or to the tenant as a whole. The upload names it (`?domain=`); omitted,
+the document is shared, and a caller limited to some domains may upload into those only. A
+caller whose session is limited to some domains (`agenticorg:domains`) is shown chunks of
+documents in those domains and of shared documents, and nothing else: not in search results, not
+in citations, not in an excerpt, not in the document list (`core/rag/access.py`). A caller with
+no limit (an administrator, or a machine credential bounded by scopes) sees the tenant's documents
+as before. The rule is one SQL clause the search, excerpt and list paths share; a document that
+is withheld is absent from the result, never marked.
+
+Existing documents carry no domain and stay shared, so nothing a caller could see before is
+withheld by the upgrade. Documents indexed by an external RAG service are not filtered by domain.
+An agent run reads the knowledge base through its retrieval context, which is scoped by the
+agent's own domain; the domain on a document is what that scope will read next.
 
 ## OCR flow
 

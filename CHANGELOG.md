@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: document access control
+- A knowledge document belongs to a domain or to the tenant as a whole
+  (`knowledge_documents.domain`, migration
+  `v6z51_knowledge_document_domain`; the upload names it with `?domain=`).
+  A caller limited to some domains is shown chunks of documents in those
+  domains and of shared documents only, in search results, citations,
+  excerpts and the document list (`core/rag/access.py`); an unrestricted
+  caller sees the tenant's documents as before, and existing documents stay
+  shared.
+
 ### Added - Knowledge retrieval: citations and excerpt navigation
 - Every knowledge search hit carries a `citation` (chunk id, source,
   chunk number, page, paragraph, heading, sheet, cell range;

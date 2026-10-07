@@ -169,7 +169,7 @@ async def test_filters_reach_the_vector_and_keyword_paths(sessions, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_a_narrowed_search_does_not_fall_back_to_upload_metadata(monkeypatch):
-    async def _nothing(_tid, _query, _top_k, _filters=None):
+    async def _nothing(_tid, _query, _top_k, _filters=None, _domains=None):
         return []
 
     monkeypatch.setattr(knowledge, "_native_vector_or_keyword_search", _nothing)
@@ -218,4 +218,4 @@ def test_the_request_carries_filters_and_the_response_shape_is_unchanged():
     assert request.filters is not None and request.filters.category == ["retail"]
     assert set(knowledge.SearchResult.model_fields) == {"chunk_text", "score", "document_name", "citation"}
     src = (ROOT / "api" / "v1" / "knowledge.py").read_text(encoding="utf-8")
-    assert "await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters)" in src
+    assert "await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)" in src
