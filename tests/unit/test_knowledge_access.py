@@ -190,6 +190,13 @@ async def test_the_document_list_hides_what_the_caller_may_not_see(monkeypatch):
         ]
 
     monkeypatch.setattr(knowledge, "_db_list_docs", _rows)
+    # The listing's second read (seeded knowledge rows) is not for this test: no database here.
+    import core.database
+
+    def _no_database(_tid):
+        raise RuntimeError("no database in this test")
+
+    monkeypatch.setattr(core.database, "get_tenant_session", _no_database)
     limited = await knowledge.list_documents(page=1, per_page=20, tenant_id=str(uuid.uuid4()), user_domains=["hr"])
     assert [d.filename for d in limited.items] == ["shared.pdf", "hr.pdf"] and limited.total == 2
     everything = await knowledge.list_documents(page=1, per_page=20, tenant_id=str(uuid.uuid4()), user_domains=None)
