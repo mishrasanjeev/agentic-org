@@ -10022,7 +10022,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.read",
-    "source_line": 63,
+    "source_line": 64,
     "tenant_required": true
   },
   {
@@ -10040,7 +10040,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.assignments.sensitive.read",
-    "source_line": 98,
+    "source_line": 99,
     "tenant_required": true
   },
   {
@@ -10058,7 +10058,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.assignments.sensitive.write",
-    "source_line": 115,
+    "source_line": 116,
     "tenant_required": true
   },
   {
@@ -10076,7 +10076,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.catalogue.read",
-    "source_line": 82,
+    "source_line": 83,
     "tenant_required": true
   },
   {
@@ -10094,7 +10094,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "workbench.read",
-    "source_line": 141,
+    "source_line": 142,
     "tenant_required": true
   },
   {
