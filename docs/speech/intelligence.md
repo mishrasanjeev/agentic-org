@@ -96,7 +96,10 @@ consecutive spoken digits is read first and then judged: 13 to 19 digits that pa
 the spans from the transcript (a marker in place of the words, a card keeping its last four) and
 silences them in the audio with a little padding either side; the original audio is not kept, the
 summary made from the old transcript is dropped, and what was cut is recorded as kinds and times
-only (`redactions`, `GET .../redactions`). `dry_run` reports the spans without changing anything.
+only (`redactions`, `GET .../redactions`). `dry_run` reports the spans without changing anything; an empty `kinds` list cuts nothing; a
+redaction that finds the recording redacted meanwhile is refused and run again, so two never
+restore what the other cut. Spelled separators (dash, hyphen, slash, punctuation) between the
+digits of one number do not break the run.
 The business console's `speech.redaction_kinds` says what is cut and `speech.redact_on_transcription`
 cuts it as soon as a recording is transcribed, by an engine or by an attached transcript. A live
 session masks each turn the same way before keeping it.

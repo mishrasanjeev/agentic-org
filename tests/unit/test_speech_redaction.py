@@ -64,6 +64,19 @@ class TestFinder:
         assert redaction.luhn("4111111111111111") is True and redaction.luhn("4111111111111112") is False
         assert redaction.digit_runs(_words(("triple", 0), ("seven", 0.5))) == [(0, 1, "777")]
         assert redaction.digit_runs(_words(("double", 0), ("trouble", 0.5))) == []
+        spelled = _words(
+            ("4111", 0),
+            ("dash", 0.5),
+            ("1111", 1),
+            ("-", 1.5),
+            ("1111", 2),
+            ("hyphen", 2.5),
+            ("1111", 3),
+            ("dash", 3.5),
+            ("ok", 4),
+        )
+        assert redaction.digit_runs(spelled) == [(0, 6, "4111111111111111")]  # separators inside a run, not after it
+        assert [s.kind for s in redaction.find_spans(spelled)] == ["card"]
 
     def test_each_kind_is_judged_by_length_cue_and_check(self):
         words = _words(
@@ -281,6 +294,28 @@ class TestStore:
         with pytest.raises(SpeechError) as info:
             await store.redact(TENANT, uuid.uuid4())
         assert info.value.status == 404
+
+    @pytest.mark.asyncio
+    async def test_an_empty_kinds_list_cuts_nothing_and_a_concurrent_redaction_is_refused(self, monkeypatch):
+        row = _row()
+        session = _Session([row])
+        _use(monkeypatch, session)
+        nothing = await store.redact(TENANT, row.id, kinds=[])
+        assert nothing["changed"] is False and nothing["kinds"] == [] and row.redactions == []
+        real_execute = session.execute
+        bumped = {"done": False}
+
+        async def racing_execute(statement):
+            result = await real_execute(statement)
+            if "FOR UPDATE" in str(statement) and not bumped["done"]:
+                bumped["done"] = True
+                row.redactions = [{"kind": "otp"}]  # another redaction landed between the read and the lock
+            return result
+
+        session.execute = racing_execute
+        with pytest.raises(SpeechError) as info:
+            await store.redact(TENANT, row.id)
+        assert info.value.code == "redaction_conflict" and "4111" in row.transcript_encrypted["_encrypted"]
 
     @pytest.mark.asyncio
     async def test_redaction_at_transcription_follows_the_console(self, monkeypatch):
