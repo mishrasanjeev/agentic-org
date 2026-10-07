@@ -13,6 +13,7 @@ The catalogue is synthetic and generic: no institution's products or names.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -378,6 +379,11 @@ _NOT_AMOUNT_BEFORE_RE = re.compile(
 )
 
 
+_NOT_AMOUNT_AFTER_RE = re.compile(
+    r"\s*(?:(?:days?|weeks?|months?|years?|hours?|minutes?|transactions?|times|am|pm)\b|%)", re.I
+)
+
+
 def _bare_amount(text: str) -> float | None:
     """A number with no currency marker, unless what precedes it says it is not an amount."""
     for match in _BARE_IN_TEXT_RE.finditer(text):
@@ -388,7 +394,7 @@ def _bare_amount(text: str) -> float | None:
             value = float(match.group(1).replace(",", ""))
         except ValueError:
             continue
-        if value > 0:
+        if math.isfinite(value) and value > 0:
             return value
     return None
 
@@ -407,7 +413,7 @@ def parse_amount(text: str) -> float | None:
         return None
     unit = unit.rstrip("s") if unit not in _MULTIPLIERS else unit
     value *= _MULTIPLIERS.get(unit, _MULTIPLIERS.get(unit + "s", 1))
-    return value if value > 0 else None
+    return value if math.isfinite(value) and value > 0 else None
 
 
 def parse_date(text: str, *, today: date | None = None) -> str | None:
@@ -528,24 +534,37 @@ def parse_tenure(text: str) -> int | None:
 
 
 def parse_amounts(text: str) -> list[float]:
-    """Every distinct amount in ``text``, in order ("500 or 600" names two)."""
-    amounts: list[float] = []
+    """Every distinct amount in ``text``, in order ("500 or 600" and "₹500 or 600" both name two).
+
+    Currency-marked amounts and bare numbers are merged by position: a bare
+    number counts unless it lies inside a marked amount, what precedes it says
+    it is not an amount (an account ending, a reference), or what follows it
+    is a unit of time or count ("in 2 days").
+    """
+    found: list[tuple[int, float]] = []
+    marked_spans: list[tuple[int, int]] = []
     for match in _AMOUNT_RE.finditer(text):
-        groups = [g for g in match.groups() if g is not None]
         value = parse_amount(match.group(0))
-        if value is not None and value not in amounts and groups:
+        if value is not None:
+            found.append((match.start(), value))
+            marked_spans.append(match.span())
+    for match in _BARE_IN_TEXT_RE.finditer(text):
+        start, end = match.span()
+        if any(start < span_end and end > span_start for span_start, span_end in marked_spans):
+            continue
+        before = text[max(0, start - 24) : start]
+        if _NOT_AMOUNT_BEFORE_RE.search(before) or _NOT_AMOUNT_AFTER_RE.match(text, end):
+            continue
+        try:
+            value = float(match.group(1).replace(",", ""))
+        except ValueError:
+            continue
+        if math.isfinite(value) and value > 0:
+            found.append((start, value))
+    amounts: list[float] = []
+    for _, value in sorted(found, key=lambda item: item[0]):
+        if value not in amounts:
             amounts.append(value)
-    if not amounts:
-        for match in _BARE_IN_TEXT_RE.finditer(text):
-            before = text[max(0, match.start() - 24) : match.start()]
-            if _NOT_AMOUNT_BEFORE_RE.search(before):
-                continue
-            try:
-                value = float(match.group(1).replace(",", ""))
-            except ValueError:
-                continue
-            if value > 0 and value not in amounts:
-                amounts.append(value)
     return amounts
 
 

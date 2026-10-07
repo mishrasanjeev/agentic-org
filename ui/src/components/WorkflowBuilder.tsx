@@ -109,6 +109,42 @@ export function stepsToEdges(steps: WorkflowStep[]): GraphEdge[] {
   return edges;
 }
 
+export interface GraphNode {
+  id: string;
+  type?: string;
+  name?: string;
+  summary?: string;
+  on_failure?: string;
+}
+
+/**
+ * Steps rebuilt from the graph `GET /workflows/{id}/graph` answers, enough to draw a stored workflow
+ * read-only: dependencies, condition paths, rule paths and the failure directive come back from the edges.
+ */
+export function graphToSteps(graph: { nodes?: unknown; edges?: unknown } | null | undefined): WorkflowStep[] {
+  const nodes = Array.isArray(graph?.nodes) ? (graph!.nodes as GraphNode[]) : [];
+  const edges = Array.isArray(graph?.edges) ? (graph!.edges as GraphEdge[]) : [];
+  return nodes
+    .filter((node) => node && typeof node.id === "string")
+    .map((node) => {
+      const step: WorkflowStep = {
+        id: node.id,
+        type: node.type ?? "agent",
+        name: node.name ?? node.id,
+        depends_on: edges.filter((e) => e.kind === "then" && e.target === node.id).map((e) => e.source),
+        on_failure: node.on_failure ?? "halt",
+      };
+      const outgoing = edges.filter((e) => e.source === node.id);
+      const truePath = outgoing.find((e) => e.kind === "true");
+      const falsePath = outgoing.find((e) => e.kind === "false");
+      const rules = outgoing.filter((e) => e.kind === "rule").map((e) => ({ path: e.target, label: e.label }));
+      if (truePath) step.true_path = truePath.target;
+      if (falsePath) step.false_path = falsePath.target;
+      if (rules.length) step.rules = rules;
+      return step;
+    });
+}
+
 /** A layered layout: each step sits one column right of the steps it follows. */
 export function layoutPositions(steps: WorkflowStep[], edges: GraphEdge[]): Record<string, { x: number; y: number }> {
   const ids = steps.map(stepId);

@@ -331,7 +331,9 @@ class Settings(BaseSettings):
     # FinOps thresholds (core/finops/thresholds.py): a breached organisation,
     # application, use-case or business-unit threshold alerts, throttles or
     # suspends runs through the agents API. Off by default: off, no run is
-    # checked, delayed or refused.
+    # checked, delayed or refused. Thresholds read the attributed ledger, so
+    # this needs finops_attribution_enabled; on without it, settings refuse
+    # to load (validate_finops_flags).
     finops_thresholds_enabled: bool = False
     # FinOps forecast and comparison (core/finops/forecast.py): a projection
     # per use case from the attributed ledger and a model cost comparison from
@@ -576,6 +578,21 @@ class Settings(BaseSettings):
     # incidents when staging has production-like integrations.
     _STRICT_ENVS = STRICT_ENVS
     _RELAXED_ENVS = RELAXED_ENVS
+
+    @model_validator(mode="after")
+    def validate_finops_flags(self) -> Settings:
+        """Refuse thresholds without attribution: the ledger they read would never be written.
+
+        With only ``AGENTICORG_FINOPS_THRESHOLDS_ENABLED`` on, every spend
+        query reads zero and a suspend threshold would never refuse a run;
+        the deployment fails closed at start instead, in every environment.
+        """
+        if self.finops_thresholds_enabled and not self.finops_attribution_enabled:
+            raise ValueError(
+                "AGENTICORG_FINOPS_THRESHOLDS_ENABLED needs AGENTICORG_FINOPS_ATTRIBUTION_ENABLED: "
+                "thresholds compare the attributed cost ledger, which is written only while attribution is on"
+            )
+        return self
 
     @model_validator(mode="after")
     def validate_production_secret(self) -> Settings:

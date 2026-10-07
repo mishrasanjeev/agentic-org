@@ -205,23 +205,40 @@ def _action_entries() -> list[dict[str, Any]]:
     ]
 
 
-async def list_policies(session: Any, tenant_id: uuid.UUID, *, kind: str | None = None) -> list[dict[str, Any]]:
-    """Every policy of the tenant in one shape, by kind then priority then name."""
+async def _store_rows(session: Any, tenant_id: uuid.UUID, kind: str) -> list[Any]:
+    """Every row of a store, enabled or not, in the store's own value type.
+
+    The enforcement points read only enabled rows (``active_policy_set``,
+    ``active_rules``); the console lists the disabled ones too, as the kinds'
+    own list endpoints do, so an administrator can see and manage them.
+    """
+    from sqlalchemy import select
+
     from core.governance import model_gateway
     from core.governance.guardrails import engine as guardrail_engine
+    from core.models.guardrail_rule import GuardrailRule
+    from core.models.model_access_policy import ModelAccessPolicy
+    from core.models.model_limit import ModelLimit
+    from core.models.model_routing_policy import ModelRoutingPolicy
 
+    stores: dict[str, tuple[Any, Any, tuple[Any, ...]]] = {
+        "model_routing": (ModelRoutingPolicy, model_gateway._policy, ("priority", "name")),
+        "model_access": (ModelAccessPolicy, model_gateway._access_policy, ("priority", "name")),
+        "model_limit": (ModelLimit, model_gateway._limit, ("provider", "model")),
+        "guardrail": (GuardrailRule, guardrail_engine._rule, ("priority", "name")),
+    }
+    table, convert, order = stores[kind]
+    query = select(table).where(table.tenant_id == tenant_id).order_by(*(getattr(table, c) for c in order))
+    return [convert(row) for row in (await session.execute(query)).scalars().all()]
+
+
+async def list_policies(session: Any, tenant_id: uuid.UUID, *, kind: str | None = None) -> list[dict[str, Any]]:
+    """Every policy of the tenant, enabled or not, in one shape, by kind then priority then name."""
     entries: list[dict[str, Any]] = []
     wanted = (kind,) if kind else KINDS
-    if any(k in wanted for k in ("model_routing", "model_access", "model_limit")):
-        policy_set = await model_gateway.active_policy_set(tenant_id)
-        if "model_routing" in wanted:
-            entries.extend(entry_of("model_routing", p) for p in policy_set.routing)
-        if "model_access" in wanted:
-            entries.extend(entry_of("model_access", p) for p in policy_set.access)
-        if "model_limit" in wanted:
-            entries.extend(entry_of("model_limit", limit) for limit in policy_set.limits)
-    if "guardrail" in wanted:
-        entries.extend(entry_of("guardrail", rule) for rule in await guardrail_engine.active_rules(tenant_id))
+    for store in ("model_routing", "model_access", "model_limit", "guardrail"):
+        if store in wanted:
+            entries.extend(entry_of(store, row) for row in await _store_rows(session, tenant_id, store))
     if "approval" in wanted:
         entries.extend(entry_of("approval", row) for row in await _approval_rows(session, tenant_id))
     if "action" in wanted:
@@ -257,12 +274,25 @@ async def write_policy(
     return entry_of(kind, await _write_approval(session, tenant_id, fields))
 
 
+def _validate_approval_steps(steps: list[dict[str, Any]]) -> None:
+    """The checks of the approval policies API: a step names an approver role and a quorum it can reach."""
+    from core.rbac import is_approval_policy_role
+
+    for raw in steps:
+        sequence = raw.get("sequence")
+        if not is_approval_policy_role(str(raw.get("approver_role") or "")):
+            raise PolicyConsoleError(422, "invalid_policy", f"step {sequence}: invalid approver_role")
+        if int(raw.get("quorum_required", 1)) > int(raw.get("quorum_total", 1)):
+            raise PolicyConsoleError(422, "invalid_policy", f"step {sequence}: quorum_required > quorum_total")
+
+
 async def _write_approval(session: Any, tenant_id: uuid.UUID, fields: dict[str, Any]) -> Any:
     from sqlalchemy import select
 
     from core.models.approval_policy import ApprovalPolicy, ApprovalStep
 
     name = str(fields.get("name") or "").strip()
+    _validate_approval_steps(list(fields.get("steps") or []))
     existing = (
         await session.execute(
             select(ApprovalPolicy).where(ApprovalPolicy.tenant_id == tenant_id, ApprovalPolicy.name == name)
@@ -355,9 +385,78 @@ def _model_section(evaluation: Any) -> dict[str, Any]:
     }
 
 
+def _resolve_approval(rows: list[Any], workflow_id: Any, agent_id: Any) -> tuple[str, Any] | None:
+    """The policy live execution picks, with ``core.approvals.policy_engine.resolve_policy``'s precedence.
+
+    Workflow-scoped first, then agent-scoped, then the tenant-global policy
+    named ``default`` (no workflow, no agent). Like the live resolver, the
+    active flag is not consulted.
+    """
+
+    def scoped(field: str, wanted: Any) -> Any:
+        if not wanted:
+            return None
+        return next((row for row in rows if str(getattr(row, field, None) or "") == str(wanted)), None)
+
+    by_workflow = scoped("workflow_id", workflow_id)
+    if by_workflow is not None:
+        return "workflow", by_workflow
+    by_agent = scoped("agent_id", agent_id)
+    if by_agent is not None:
+        return "agent", by_agent
+    fallback = next(
+        (
+            row
+            for row in rows
+            if row.name == "default"
+            and getattr(row, "workflow_id", None) is None
+            and getattr(row, "agent_id", None) is None
+        ),
+        None,
+    )
+    return ("default", fallback) if fallback is not None else None
+
+
+def _action_section(tool: str, domain: Any) -> dict[str, Any]:
+    """The tool against the action taxonomy, failing closed as ``action_policy.evaluate_action`` does.
+
+    A missing or unknown domain, a tool the taxonomy does not know and a tool
+    outside its domain are blocked at runtime, so the dry run blocks them too.
+    """
+    from core.governance import action_policy
+
+    canonical_domain = action_policy._domain(domain) if domain else None
+    risk = action_policy.classify_action(tool)
+    reason = None
+    if not str(domain or "").strip():
+        reason = "context_domain_missing"
+    elif canonical_domain is None:
+        reason = "context_domain_unknown"
+    elif risk is None:
+        reason = "action_unknown"
+    elif action_policy.classify_action(tool, domain=canonical_domain) is None:
+        reason = "action_domain_mismatch"
+    unsafe = reason is None and risk in action_policy.UNSAFE_ACTION_RISKS
+    if reason is not None:
+        containment = "blocked"
+    elif unsafe:
+        containment = "read-only, draft or shadow unless a capability flag allows live"
+    else:
+        containment = "none"
+    return {
+        "tool": tool,
+        "domain": canonical_domain.value if canonical_domain is not None else None,
+        "risk": risk.value if risk is not None else None,
+        "blocked": reason is not None,
+        "reason": reason,
+        "unsafe": unsafe,
+        "containment": containment,
+    }
+
+
 async def evaluate(session: Any, tenant_id: uuid.UUID, subject: dict[str, Any]) -> dict[str, Any]:
     """A dry run across the enforcement points; the verdict is blocked, flagged, routed or allowed."""
-    from core.governance import action_policy, model_gateway
+    from core.governance import model_gateway
     from core.governance.guardrails import engine as guardrail_engine
 
     sections: dict[str, Any] = {}
@@ -379,6 +478,8 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, subject: dict[str, Any]) 
             agent_id=subject.get("agent_id"),
             business_unit=subject.get("business_unit"),
             language=subject.get("language"),
+            application=subject.get("application"),
+            principal=subject.get("principal"),
         )
         section = _model_section(await model_gateway.evaluate(request))
         sections["model"] = section
@@ -426,32 +527,22 @@ async def evaluate(session: Any, tenant_id: uuid.UUID, subject: dict[str, Any]) 
             reasons.append("guardrail findings: " + ", ".join(o["rule_name"] for o in outcomes))
 
     if subject.get("workflow_id") or subject.get("agent_id"):
-        matches = []
-        for row in await _approval_rows(session, tenant_id):
-            if not getattr(row, "is_active", True):
-                continue
-            by_workflow = subject.get("workflow_id") and str(getattr(row, "workflow_id", "")) == str(
-                subject["workflow_id"]
-            )
-            by_agent = subject.get("agent_id") and str(getattr(row, "agent_id", "")) == str(subject["agent_id"])
-            if by_workflow or by_agent:
-                matches.append(entry_of("approval", row))
-        sections["approval"] = {"policies": matches}
+        resolved = _resolve_approval(
+            await _approval_rows(session, tenant_id), subject.get("workflow_id"), subject.get("agent_id")
+        )
+        matches = [entry_of("approval", resolved[1])] if resolved else []
+        sections["approval"] = {"policies": matches, "resolved_by": resolved[0] if resolved else None}
         if matches:
             raise_to("routed")
             reasons.append("approval required: " + ", ".join(m["name"] for m in matches))
 
     if subject.get("tool"):
-        risk = action_policy.classify_action(subject["tool"], domain=subject.get("domain"))
-        unsafe = risk is not None and risk in action_policy.UNSAFE_ACTION_RISKS
-        sections["action"] = {
-            "tool": subject["tool"],
-            "risk": risk.value if risk is not None else None,
-            "unsafe": unsafe,
-            "containment": "read-only, draft or shadow unless a capability flag allows live" if unsafe else "none",
-        }
-        if unsafe:
+        sections["action"] = _action_section(str(subject["tool"]), subject.get("domain"))
+        if sections["action"]["blocked"]:
+            raise_to("blocked")
+            reasons.append(f"tool {subject['tool']} is blocked: {sections['action']['reason']}")
+        elif sections["action"]["unsafe"]:
             raise_to("routed")
-            reasons.append(f"tool {subject['tool']} is a {risk.value} action and is contained")
+            reasons.append(f"tool {subject['tool']} is a {sections['action']['risk']} action and is contained")
 
     return {"verdict": verdict, "reasons": reasons, "sections": sections}
