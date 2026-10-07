@@ -17,6 +17,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   report: documents and key fields with corrections, reconciliation,
   stamps, review reasons and a narrative built from them, never from a
   model (`core/idp/report.py`).
+- Reconciliation requires every pair of values to agree, resolves
+  two-digit birth years to the latest century not in the future, and
+  keeps the sign of amounts; the report no longer lists corrected fields
+  as missing or weak; the stamp check reads the kept file once and
+  renders every page from that copy.
 
 ### Added - Document processing: review with overlays and corrections
 - `POST /idp/analyse?store=true` keeps the file and the result
