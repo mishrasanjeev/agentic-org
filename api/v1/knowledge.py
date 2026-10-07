@@ -830,6 +830,8 @@ async def upload_document(
             "extraction_details": extracted_content.extra,
         }
     )
+    # A domain reaches here as a validated string from the query; anything else is no domain.
+    domain = domain if isinstance(domain, str) and domain else None
     if domain:
         doc_metadata["domain"] = domain
 
@@ -1204,12 +1206,12 @@ async def _native_semantic_search(
     try:
         acl_sql, acl_params = knowledge_access.metadata_clause(domains)
         content_sql = (
-            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
             if hybrid_enabled
-            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
             f"FROM documents WHERE tenant_id = :tid AND status = 'indexed'{acl_sql} "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND metadata->>'content_text' ILIKE :like LIMIT :k"
@@ -1580,7 +1582,7 @@ async def knowledge_excerpt(
                 neighbour = (
                     await session.execute(
                         _sqtext(
-                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "
+                            "SELECT d.id FROM knowledge_documents d WHERE d.tenant_id = :tid AND d.status = 'ready' "  # nosec B608 — clauses from core/rag (fixed column names, bound parameters), nothing from the request
                             f"AND d.source LIKE :pattern{acl_sql} LIMIT 1"
                         ),
                         {"tid": str(tid), "pattern": f"{prefix}#chunk{citation.chunk_index + offset}-%", **acl_params},
