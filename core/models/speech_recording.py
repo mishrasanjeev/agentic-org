@@ -41,6 +41,8 @@ class SpeechRecording(BaseModel):
     transcript_encrypted: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     summary_encrypted: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
     analytics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict)
+    redactions: Mapped[list[Any]] = mapped_column(JSONB, nullable=False, default=list)
+    redacted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=True), server_default=func.now(), nullable=False)

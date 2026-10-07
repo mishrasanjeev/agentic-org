@@ -22,10 +22,11 @@ from sqlalchemy import select
 from core.config import settings
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
 from core.speech import analytics as call_analytics
+from core.speech import redaction
 from core.speech import segments as diarisation
 from core.speech import summary as summaries
 from core.speech import transcribe as engines
-from core.speech.audio import Recording, SpeechError, load
+from core.speech.audio import Recording, SpeechError, encode_wav, load
 
 logger = structlog.get_logger()
 
@@ -53,6 +54,8 @@ def summary_dict(row: Any) -> dict[str, Any]:
         "speakers": dict(row.speakers or {}),
         "segments": len(row.segments or []),
         "summarised": bool(row.summary_encrypted),
+        "redactions": list(getattr(row, "redactions", None) or []),
+        "redacted_at": row.redacted_at.isoformat() if getattr(row, "redacted_at", None) else None,
         "scores": dict((row.analytics or {}).get("scores") or {}),
         "last_error": row.last_error,
         "created_by": row.created_by,
@@ -144,7 +147,15 @@ async def save(
     if engine and engine != "supplied":
         try:
             words = await engines.transcribe(tenant_id, recording, engine=engine, language=language)
-            row.transcript_encrypted = await _encrypt(tenant_id, engines.transcript_of(words, found))
+            transcript = engines.transcript_of(words, found)
+            transcript, spans, recording = await _auto_redact(tenant_id, transcript, recording)
+            if spans:
+                data = encode_wav(recording)
+                row.content = data
+                row.size_bytes = len(data)
+                row.redactions = [span.to_dict() for span in spans]
+                row.redacted_at = datetime.now(UTC)
+            row.transcript_encrypted = await _encrypt(tenant_id, transcript)
             row.status = "transcribed"
         except SpeechError as exc:
             row.status = "failed"
@@ -212,12 +223,24 @@ async def attach_transcript(tenant_id: uuid.UUID, recording_id: uuid.UUID, raw_w
         )
         for s in kept_segments
     ]
-    envelope = await _encrypt(tenant_id, engines.transcript_of(words, found))
+    transcript = engines.transcript_of(words, found)
+    spans = []
+    if await _redact_on_transcription(tenant_id):
+        transcript, spans = redaction.redact_transcript(transcript, kinds=await _redaction_kinds(tenant_id))
+    envelope = await _encrypt(tenant_id, transcript)
     async with get_tenant_session(tenant_id) as session:
         row = await _row(session, tenant_id, recording_id, lock=True)
         if row is None:
             raise SpeechError(404, "not_found", "No such recording")
         row.transcript_encrypted = envelope
+        if spans:
+            # The words are cut from the audio too, so the recording and the transcript agree.
+            silenced = redaction.silence(load(bytes(row.content), row.mime_type), spans)
+            data = encode_wav(silenced)
+            row.content = data
+            row.size_bytes = len(data)
+            row.redactions = list(row.redactions or []) + [span.to_dict() for span in spans]
+            row.redacted_at = datetime.now(UTC)
         row.status = "transcribed"
         row.engine = "supplied"
         row.last_error = None
@@ -339,3 +362,77 @@ async def overview(tenant_id: uuid.UUID, *, limit: int = 200) -> dict[str, Any]:
         "escalation_risk": risk,
         "signals": signals,
     }
+
+
+async def _redaction_kinds(tenant_id: uuid.UUID) -> tuple[str, ...]:
+    from core.workbench import console
+
+    found = await console.value(tenant_id, "speech.redaction_kinds")
+    return tuple(str(k) for k in (found or redaction.DEFAULT_KINDS))
+
+
+async def _redact_on_transcription(tenant_id: uuid.UUID) -> bool:
+    from core.workbench import console
+
+    return bool(await console.value(tenant_id, "speech.redact_on_transcription"))
+
+
+async def _auto_redact(
+    tenant_id: uuid.UUID, transcript: dict[str, Any], recording: Recording
+) -> tuple[dict[str, Any], list[redaction.Span], Recording]:
+    """Redact at transcription when the console asks for it: the transcript and the audio together."""
+    if not await _redact_on_transcription(tenant_id):
+        return transcript, [], recording
+    cleaned, spans = redaction.redact_transcript(transcript, kinds=await _redaction_kinds(tenant_id))
+    if not spans:
+        return transcript, [], recording
+    return cleaned, spans, await asyncio.to_thread(redaction.silence, recording, spans)
+
+
+async def redact(
+    tenant_id: uuid.UUID,
+    recording_id: uuid.UUID,
+    *,
+    kinds: tuple[str, ...] | list[str] | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Cut the spoken card numbers, codes, CVVs and PINs from a kept recording and its transcript.
+
+    A dry run reports the spans without changing anything. The audio is rewritten with the spans
+    silenced and the original is not kept; the summary made from the old transcript is dropped.
+    """
+    from core.database import get_tenant_session
+
+    wanted = tuple(kinds) if kinds else await _redaction_kinds(tenant_id)
+    unknown = [k for k in wanted if k not in redaction.KINDS]
+    if unknown:
+        raise SpeechError(422, "kind_unknown", f"kinds are among {', '.join(redaction.KINDS)}")
+    async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, recording_id)
+        if row is None:
+            raise SpeechError(404, "not_found", "No such recording")
+        transcript = transcript_of_row(row)
+        content = bytes(row.content)
+        mime = row.mime_type
+    if not transcript or not transcript.get("words"):
+        raise SpeechError(409, "not_transcribed", "The recording has no transcript to redact from")
+    cleaned, spans = redaction.redact_transcript(transcript, kinds=wanted)
+    report = {"id": str(recording_id), "kinds": list(wanted), "spans": [s.to_dict() for s in spans], "dry_run": dry_run}
+    if dry_run or not spans:
+        return {**report, "changed": False}
+    silenced = await asyncio.to_thread(redaction.silence, load(content, mime), spans)
+    data = await asyncio.to_thread(encode_wav, silenced)
+    envelope = await _encrypt(tenant_id, cleaned)
+    async with get_tenant_session(tenant_id) as session:
+        row = await _row(session, tenant_id, recording_id, lock=True)
+        if row is None:
+            raise SpeechError(404, "not_found", "No such recording")
+        row.content = data
+        row.size_bytes = len(data)
+        row.transcript_encrypted = envelope
+        row.summary_encrypted = {}
+        row.redactions = list(row.redactions or []) + [s.to_dict() for s in spans]
+        row.redacted_at = datetime.now(UTC)
+        row.updated_at = row.redacted_at
+    logger.info("speech_recording_redacted", spans=len(spans), kinds=sorted({s.kind for s in spans}))
+    return {**report, "changed": True}

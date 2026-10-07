@@ -88,7 +88,7 @@ class TestCatalogue:
     def test_keys_are_unique_grouped_and_defaults_pass_their_own_checks(self):
         items = console.catalogue()
         keys = [item.key for item in items]
-        assert len(keys) == len(set(keys)) and len(keys) == 9
+        assert len(keys) == len(set(keys)) and len(keys) == 11
         groups = {key for key, _ in console.GROUPS}
         for item in items:
             assert item.group in groups
@@ -314,7 +314,7 @@ class TestRoutes:
             "conversations",
             "queue",
             "speech",
-        ] and listed["total"] == 9
+        ] and listed["total"] == 11
         out = await api.set_setting("conversations.slot_retries", api.ValueIn(value=4), request, tenant_id=str(TENANT))
         assert out["value"] == 4 and out["updated_by"] == "u1"
         with pytest.raises(HTTPException) as info:

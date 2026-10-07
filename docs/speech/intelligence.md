@@ -83,6 +83,21 @@ row, a request for a person or a complaint. `POST .../close` gives the complianc
 turns are kept encrypted like a transcript; the flags and the report hold no words
 (`core/speech/assist.py`, `speech_live_sessions`).
 
+## Spoken sensitive data
+
+`core/speech/redaction.py` finds card numbers, one-time codes, CVVs and PINs in the timed words of
+a transcript. Speech comes as digits, number words, "double" and "triple", so every run of
+consecutive spoken digits is read first and then judged: 13 to 19 digits that pass the Luhn check
+(or follow a card cue) are a card number; 4 to 8 digits after a one-time-code cue are a code; 3 or
+4 after a CVV cue a CVV; 4 to 6 after a PIN cue a PIN. `POST /speech/recordings/{id}/redact` cuts
+the spans from the transcript (a marker in place of the words, a card keeping its last four) and
+silences them in the audio with a little padding either side; the original audio is not kept, the
+summary made from the old transcript is dropped, and what was cut is recorded as kinds and times
+only (`redactions`, `GET .../redactions`). `dry_run` reports the spans without changing anything.
+The business console's `speech.redaction_kinds` says what is cut and `speech.redact_on_transcription`
+cuts it as soon as a recording is transcribed, by an engine or by an attached transcript. A live
+session masks each turn the same way before keeping it.
+
 ## Storage
 
 `speech_recordings` keeps the audio, the segments and speakers in clear (they hold no words), and

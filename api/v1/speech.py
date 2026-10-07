@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
-from core.speech import store, transcribe
+from core.speech import redaction, store, transcribe
 from core.speech.audio import MAX_BYTES, MAX_SECONDS, SpeechError
 
 router = APIRouter(prefix="/speech", tags=["Speech"])
@@ -263,3 +263,59 @@ async def analytics_overview(
     if not store.enabled():
         raise _off()
     return await store.overview(uuid.UUID(tenant_id), limit=limit)
+
+
+class RedactIn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    kinds: list[str] | None = Field(None, max_length=8)
+    dry_run: bool = False
+
+
+@router.post("/recordings/{recording_id}/redact")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="speech.recordings.sensitive.write",
+    rate_limit="chat-query",
+    idempotency="idempotent-lifecycle-state",
+    audit_event="speech.recordings.redact",
+)
+async def redact_recording(
+    recording_id: uuid.UUID, body: RedactIn | None = None, tenant_id: str = Depends(get_current_tenant)
+) -> dict[str, Any]:
+    """Cut spoken card numbers, one-time codes, CVVs and PINs from the recording and its transcript.
+
+    ``dry_run`` reports the spans without changing anything; ``kinds`` narrows what is cut.
+    """
+    if not store.enabled():
+        raise _off()
+    body = body or RedactIn()
+    try:
+        return await store.redact(uuid.UUID(tenant_id), recording_id, kinds=body.kinds, dry_run=body.dry_run)
+    except SpeechError as exc:
+        raise _refused(exc) from None
+
+
+@router.get("/recordings/{recording_id}/redactions")
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="speech.recordings.sensitive.read",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="speech.recordings.redactions",
+)
+async def get_redactions(recording_id: uuid.UUID, tenant_id: str = Depends(get_current_tenant)) -> dict[str, Any]:
+    """What was cut from a recording, as kinds and times."""
+    if not store.enabled():
+        raise _off()
+    found = await store.get_recording(uuid.UUID(tenant_id), recording_id)
+    if found is None:
+        raise HTTPException(404, detail={"error": "not_found", "message": "No such recording"})
+    return {
+        "id": found["id"],
+        "redactions": found.get("redactions") or [],
+        "redacted_at": found.get("redacted_at"),
+        "kinds": list(redaction.KINDS),
+    }

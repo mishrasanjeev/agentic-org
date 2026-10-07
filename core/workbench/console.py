@@ -87,6 +87,12 @@ def _draft_kinds() -> tuple[str, ...]:
     return tuple(KINDS)
 
 
+def _redaction_kinds() -> tuple[str, ...]:
+    from core.speech.redaction import KINDS
+
+    return tuple(KINDS)
+
+
 def _disclosure_keys() -> tuple[str, ...]:
     from core.speech.disclosures import CATALOGUE
 
@@ -210,6 +216,25 @@ def catalogue() -> tuple[Setting, ...]:
             ["recorded_line", "identity_verification"],
             "core/speech/disclosures.py required_for",
             options=_disclosure_keys(),
+        ),
+        Setting(
+            "speech.redaction_kinds",
+            "Spoken data redacted",
+            "The kinds of spoken sensitive data cut from recordings and transcripts.",
+            "speech",
+            "list",
+            ["card", "otp", "cvv", "pin"],
+            "core/speech/redaction.py find_spans",
+            options=_redaction_kinds(),
+        ),
+        Setting(
+            "speech.redact_on_transcription",
+            "Redact at transcription",
+            "Cut spoken sensitive data from a recording and its transcript as soon as it is transcribed.",
+            "speech",
+            "boolean",
+            False,
+            "core/speech/store.py save and attach_transcript",
         ),
     )
 

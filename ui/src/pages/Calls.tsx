@@ -20,6 +20,8 @@ interface RecordingRow {
   speakers: Record<string, { talk_seconds: number; turns: number; share: number }>;
   segments: number;
   summarised: boolean;
+  redactions: Array<{ kind: string; start: number; end: number; digits: number }>;
+  redacted_at: string | null;
   scores: Record<string, number | string | null>;
   last_error: string | null;
   created_at: string | null;
@@ -103,6 +105,22 @@ export default function Calls() {
     void load();
   }, [load]);
 
+  const redact = async () => {
+    if (!selected) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { data } = await api.post(`/speech/recordings/${selected}/redact`, { dry_run: false });
+      const result = data as { changed: boolean; spans: unknown[] };
+      await Promise.all([open(selected), load()]);
+      setNotice(result.changed ? `${result.spans.length} spoken item(s) redacted from the recording and the transcript.` : "Nothing to redact.");
+    } catch (err) {
+      setError(extractApiError(err, "The recording could not be redacted."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const summarise = async (method: "auto" | "extractive") => {
     if (!selected) return;
     setBusy(true);
@@ -176,9 +194,18 @@ export default function Calls() {
                   <button type="button" className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 disabled:opacity-50" disabled={busy || detail.status !== "transcribed"} onClick={() => void summarise("extractive")} data-testid="calls-summarise-words">
                     From the words only
                   </button>
+                  <button type="button" className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 disabled:opacity-50" disabled={busy || detail.status !== "transcribed"} onClick={() => void redact()} data-testid="calls-redact">
+                    Redact spoken data
+                  </button>
                 </div>
               </div>
               {detail.last_error && <p className="text-sm text-red-700">{detail.last_error}</p>}
+              {detail.redactions && detail.redactions.length > 0 && (
+                <p className="text-sm text-slate-600" data-testid="calls-redactions">
+                  Redacted: {detail.redactions.map((r) => `${r.kind} at ${clock(r.start)}`).join(", ")}
+                  {detail.redacted_at ? ` (${new Date(detail.redacted_at).toLocaleString()})` : ""}
+                </p>
+              )}
               <section aria-label="Speakers" className="text-sm text-slate-700">
                 {Object.entries(detail.speakers).map(([name, s]) => (
                   <span key={name} className="mr-4">

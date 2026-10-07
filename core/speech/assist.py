@@ -24,7 +24,7 @@ from sqlalchemy import select
 from core.conversation import feedback
 from core.conversation import intents as catalogue
 from core.crypto.tenant_secrets import decrypt_for_tenant, encrypt_for_tenant
-from core.speech import analytics, disclosures
+from core.speech import analytics, disclosures, redaction
 from core.speech.audio import SpeechError
 
 logger = structlog.get_logger()
@@ -264,7 +264,8 @@ async def append_turn(
         previous_flags = list(row.flags or [])
     now = datetime.now(UTC)
     elapsed = float(at) if at is not None else (now - started).total_seconds() if started else 0.0
-    turns.append({"speaker": who, "text": clean, "start": round(max(0.0, elapsed), 3)})
+    kept_text, cut = redaction.redact_text(clean)
+    turns.append({"speaker": who, "text": kept_text, "start": round(max(0.0, elapsed), 3)})
     agent_name = (
         analytics.roles_of(sorted({t["speaker"] for t in turns}))[0]
         if "agent" not in {t["speaker"] for t in turns}
@@ -296,7 +297,7 @@ async def append_turn(
         **answer,
         **view,
         "suggestions": suggestions,
-        "turn": {"speaker": who, "start": round(max(0.0, elapsed), 3)},
+        "turn": {"speaker": who, "start": round(max(0.0, elapsed), 3), "redacted": cut},
     }
 
 

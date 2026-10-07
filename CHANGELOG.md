@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Speech intelligence: spoken sensitive data redacted from the recording and the transcript
+- `POST /speech/recordings/{id}/redact` finds spoken card numbers (Luhn
+  over runs of spoken digits, number words, double and triple), one-time
+  codes, CVVs and PINs after their cues, cuts them from the transcript
+  with a marker (a card keeps its last four) and silences them in the
+  audio, drops the summary made from the old transcript and records what
+  was cut as kinds and times only; `dry_run` reports without changing.
+  The business console chooses the kinds and can cut them at
+  transcription; a live session masks each turn before keeping it
+  (`core/speech/redaction.py`, `speech_recordings.redactions`).
+
 ### Added - Speech intelligence: agent assist and disclosure tracking
 - A catalogue of disclosure scripts (recorded line, identity verified,
   rate and fees, cooling-off, how to complain, consent, collections
