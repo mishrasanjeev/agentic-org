@@ -31,6 +31,10 @@ def _title(document_type: str) -> str:
     return TYPES[document_type].title if document_type in TYPES else "Untyped document"
 
 
+def _resolved(item: dict[str, Any]) -> bool:
+    return bool(item.get("corrected")) and item.get("value") not in (None, "")
+
+
 def document_section(document: dict[str, Any]) -> dict[str, Any]:
     fields = {f.get("name"): f for f in document.get("fields", [])}
     keys = KEY_FIELDS.get(str(document.get("document_type")), tuple(fields))
@@ -49,8 +53,11 @@ def document_section(document: dict[str, Any]) -> dict[str, Any]:
                 "page": item.get("page"),
             }
         )
-    missing = [f.get("name") for f in document.get("fields", []) if f.get("required") and f.get("status") == "missing"]
-    weak = [f.get("name") for f in document.get("fields", []) if f.get("status") == "weak"]
+    # A reviewer's correction resolves the field: the extraction status stays on the field for the record,
+    # but a corrected value is no longer missing or weak.
+    open_fields = [f for f in document.get("fields", []) if not _resolved(f)]
+    missing = [f.get("name") for f in open_fields if f.get("required") and f.get("status") == "missing"]
+    weak = [f.get("name") for f in open_fields if f.get("status") == "weak"]
     return {
         "index": document.get("index"),
         "document_type": document.get("document_type"),
