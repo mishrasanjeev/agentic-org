@@ -42,21 +42,24 @@ async def stamp_check(tenant_id: str, document_id: uuid.UUID, detail: dict[str, 
     for document in detail.get("documents", []):
         for number in document.get("pages", []):
             types_by_page[int(number)] = str(document.get("document_type") or "")
-    for page in detail.get("pages_detail", []):
-        number = int(page.get("number", 0))
-        try:
-            png = await store.page_image(uuid.UUID(tenant_id), document_id, number)
-        except DocumentError:
-            continue
-        boxes = [tuple(line["bbox"]) for line in page.get("lines", []) if line.get("bbox")]
-        candidates = stamps.detect_from_png(
-            png,
-            page_number=number,
-            page_size=(float(page.get("width", 1)), float(page.get("height", 1))),
-            text_boxes=boxes,
-        )
-        verdict = stamps.verify(types_by_page.get(number, ""), candidates)
-        pages_out.append({"page": number, "document_type": types_by_page.get(number), **verdict})
+    pages_by_number = {int(page.get("number", 0)): page for page in detail.get("pages_detail", [])}
+    try:
+        # The kept file is read once and every page is rendered from that one copy, parsed once.
+        data, mime = await store.document_content(uuid.UUID(tenant_id), document_id)
+        for number, png in store.render_pages(data, mime, pages_by_number):
+            page = pages_by_number[number]
+            boxes = [tuple(line["bbox"]) for line in page.get("lines", []) if line.get("bbox")]
+            candidates = stamps.detect_from_png(
+                png,
+                page_number=number,
+                page_size=(float(page.get("width", 1)), float(page.get("height", 1))),
+                text_boxes=boxes,
+            )
+            verdict = stamps.verify(types_by_page.get(number, ""), candidates)
+            pages_out.append({"page": number, "document_type": types_by_page.get(number), **verdict})
+    except DocumentError:
+        # A missing or unreadable file leaves its pages unchecked, as a page that cannot be rendered always has.
+        pass
     return {
         "pages": pages_out,
         "present_on": [p["page"] for p in pages_out if p["status"] == "present"],
