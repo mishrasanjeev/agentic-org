@@ -67,6 +67,7 @@ from api.v1 import (
     idp,
     idp_analysis,
     idp_review,
+    idp_statements,
     integrations_status,
     invoices,
     knowledge,
@@ -317,6 +318,7 @@ app.include_router(content_translation.router, prefix="/api/v1")
 app.include_router(idp.router, prefix="/api/v1")
 app.include_router(idp_review.router, prefix="/api/v1")
 app.include_router(idp_analysis.router, prefix="/api/v1")
+app.include_router(idp_statements.router, prefix="/api/v1")
 app.include_router(companies.router, prefix="/api/v1", tags=["Companies"])
 app.include_router(ca_operations.router, prefix="/api/v1", tags=["CA Operations"])
 app.include_router(

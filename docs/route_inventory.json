@@ -6570,6 +6570,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "idp.documents.compare",
+    "auth_required": true,
+    "function": "compare_documents",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/documents/{document_id}/compare/{other_id} api/v1/idp_statements.py:compare_documents",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp_statements.py",
+    "path": "/api/v1/idp/documents/{document_id}/compare/{other_id}",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.review.sensitive.read",
+    "source_line": 76,
+    "tenant_required": true
+  },
+  {
     "audit_event": "idp.documents.decide",
     "auth_required": true,
     "function": "decide_document",
@@ -6675,6 +6693,24 @@
     "rate_limit": "standard",
     "scope": "documents.review.sensitive.read",
     "source_line": 91,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "idp.documents.statement",
+    "auth_required": true,
+    "function": "statement_lines",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/idp/documents/{document_id}/statement api/v1/idp_statements.py:statement_lines",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/idp_statements.py",
+    "path": "/api/v1/idp/documents/{document_id}/statement",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "documents.review.sensitive.read",
+    "source_line": 46,
     "tenant_required": true
   },
   {
