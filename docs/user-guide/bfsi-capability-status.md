@@ -2,8 +2,8 @@
 
 AgenticOrg can be configured for evidence-led BFSI workflows, but a process map
 is not proof that a bank's systems, providers, controls or staff are connected.
-The current repository assessment has **150 functional capabilities**: **20
-covered, 100 partial and 30 gaps**. A covered component may still need a
+The current repository assessment has **150 functional capabilities**: **24
+covered, 97 partial and 29 gaps**. A covered component may still need a
 tenant setting, approved provider, external system or human reviewer. No full
 BFSI journey has end-to-end acceptance on the strength of these counts alone.
 
