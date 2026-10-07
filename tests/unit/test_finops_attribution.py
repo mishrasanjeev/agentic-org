@@ -116,8 +116,8 @@ async def test_ledger_add_upserts_the_days_row_for_the_attribution():
     sql, params = session.calls[0]
     assert "INSERT INTO finops_cost_ledger" in sql
     assert (
-        "ON CONFLICT (tenant_id, period_date, COALESCE(agent_id::text, ''), use_case, application, business_unit)"
-        in sql
+        "ON CONFLICT (tenant_id, period_date, COALESCE(agent_id::text, ''), use_case, application, business_unit, "
+        " COALESCE(department_id::text, ''), COALESCE(cost_center_id::text, ''))" in sql
     )
     assert "tokens = finops_cost_ledger.tokens + EXCLUDED.tokens" in sql
     assert params == {
@@ -200,9 +200,69 @@ class TestHooks:
         assert "finops," in main and "app.include_router(finops.router" in main
         migration = (ROOT / "migrations" / "versions" / "v6_z55_finops_attribution.py").read_text(encoding="utf-8")
         assert 'down_revision = "v6z54_model_cards"' in migration
-        assert "ux_finops_cost_ledger_key" in migration and "finops_cost_ledger_tenant_isolation" in migration
-        assert "model_gateway_records ADD COLUMN IF NOT EXISTS business_unit" in migration
-        assert "tool_calls ADD COLUMN IF NOT EXISTS use_case" in migration
+        assert "ux_finops_cost_ledger_attribution_key" in migration
+        assert "finops_cost_ledger_tenant_isolation" in migration
         from core.models.finops_ledger import FinopsCostLedger
 
         assert FinopsCostLedger.__tablename__ == "finops_cost_ledger"
+
+
+def _migration_statements():
+    import importlib.util
+    from unittest.mock import patch
+
+    path = ROOT / "migrations" / "versions" / "v6_z55_finops_attribution.py"
+    spec = importlib.util.spec_from_file_location("v6z55_finops_attribution", path)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+    up: list[str] = []
+    with patch.object(mig.op, "execute", side_effect=up.append):
+        mig.upgrade()
+    down: list[str] = []
+    with patch.object(mig.op, "execute", side_effect=down.append):
+        mig.downgrade()
+    return mig, up, down
+
+
+class TestMigration:
+    def test_the_ledger_policy_is_forced_so_the_owning_role_is_bound(self):
+        mig, up, _ = _migration_statements()
+        assert len(mig.revision) <= 32
+        enable = up.index("ALTER TABLE finops_cost_ledger ENABLE ROW LEVEL SECURITY;")
+        force = up.index("ALTER TABLE finops_cost_ledger FORCE ROW LEVEL SECURITY;")
+        policy = next(i for i, sql in enumerate(up) if "CREATE POLICY finops_cost_ledger_tenant_isolation" in sql)
+        assert enable < force < policy
+
+    def test_the_unique_key_covers_department_and_cost_centre_and_matches_the_upsert(self):
+        _, up, _ = _migration_statements()
+        key = next(sql for sql in up if "ux_finops_cost_ledger_attribution_key" in sql)
+        assert key.startswith("CREATE UNIQUE INDEX IF NOT EXISTS")
+        expressions = key[key.index("(") + 1 : key.rindex(")")]
+        assert "COALESCE(department_id::text, '')" in expressions
+        assert "COALESCE(cost_center_id::text, '')" in expressions
+        # The upsert's conflict target names the same expressions, in the same order.
+        source = (ROOT / "core" / "finops" / "attribution.py").read_text(encoding="utf-8")
+        target = "".join(
+            line.strip().strip('"') for line in source.splitlines() if "ON CONFLICT" in line or "COALESCE(dep" in line
+        )
+        assert " ".join(expressions.split()) in " ".join(target.split())
+        # A database that ran the narrower draft key loses it, after the new key exists.
+        drop = up.index("DROP INDEX IF EXISTS ux_finops_cost_ledger_key;")
+        assert up.index(key) < drop
+
+    def test_legacy_table_alters_are_guarded_on_the_table_existing_both_ways(self):
+        _, up, down = _migration_statements()
+        for statements, verb in ((up, "ADD COLUMN IF NOT EXISTS"), (down, "DROP COLUMN IF EXISTS")):
+            legacy = [sql for sql in statements if "model_gateway_records" in sql or "tool_calls" in sql]
+            assert len(legacy) == 4
+            for sql in legacy:
+                table = "model_gateway_records" if "model_gateway_records" in sql else "tool_calls"
+                assert sql.startswith(f"DO $$ BEGIN IF to_regclass('public.{table}') IS NOT NULL THEN ALTER TABLE")
+                assert verb in sql and sql.endswith("END IF; END $$;")
+        joined = " ".join(up)
+        assert "model_gateway_records ADD COLUMN IF NOT EXISTS business_unit VARCHAR(64) NULL" in joined
+        assert "model_gateway_records ADD COLUMN IF NOT EXISTS application VARCHAR(64) NULL" in joined
+        assert "tool_calls ADD COLUMN IF NOT EXISTS use_case VARCHAR(64) NULL" in joined
+        assert "tool_calls ADD COLUMN IF NOT EXISTS application VARCHAR(64) NULL" in joined
+        # The ledger table is dropped last on the way down; nothing else is unguarded.
+        assert down[-1] == "DROP TABLE IF EXISTS finops_cost_ledger;"

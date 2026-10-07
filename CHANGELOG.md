@@ -255,6 +255,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`POST /conversation/feedback`) and kept with the agent's feedback;
   sentiment is read on every user turn and two negative turns in a row
   offer a person (`core/conversation/feedback.py`).
+- Feedback for an agent is accepted only when the agent belongs to the
+  caller's tenant and company and is visible to the caller, a retried
+  rating stores one feedback row, and `stored_with_agent` is true only when
+  the row was stored. Ratings and sentiment match whole words, prefer the
+  longest phrase and read negation ("not helpful" is a 2), and an amount
+  too large to be a number is asked for again.
 
 ### Added - Conversational services: escalation hand-off and the supervisor console
 - A hand-off leaves a review-queue item (`conversation_escalation`) with
@@ -264,10 +270,23 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   (`core/conversation/escalation.py`). A supervisor lists live and
   escalated conversations, reads a transcript, takes a conversation over
   (the assistant stops answering and the user's messages reach the
-  supervisor), replies through the live feed into the user's chat, and
+  supervisor), replies into the user's chat, and
   releases it (`core/conversation/supervisor.py`,
   `/conversation/supervisor/sessions`, the Conversations page; migration
   `v6z61_conversation_supervision`).
+- The tenant-wide live feed announces conversation turns and messages
+  without their text; the console reads the transcript through its
+  tenant-admin route and the user's chat reads supervisor replies from the
+  user's own session (`GET /conversation/session` returns `messages`), so
+  replies sent while the chat was closed appear when it reopens. A reply
+  from a supervisor who does not hold the conversation is refused before
+  anything is written, and a hand-off keeps the intent and slots collected
+  before the dialogue gave up; accepting the offer of a person after
+  repeated fallbacks is recorded as a fallback hand-off with high priority.
+- The hand-off is the one path for every escalation: the review item is
+  written only for an agent of the tenant and notifies its approvers, and
+  when neither the item nor a ticket could be raised the user is told that
+  nothing has been handed over instead of being promised a person.
 
 ### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat
@@ -275,9 +294,13 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   references (`core/conversation/context.py`); in the banking dialogue
   "the same amount", "that account" and "again" resolve from the last
   action, a message naming two amounts or two payees is asked about
-  instead of acted on, and a failed or empty answer is a graceful
-  fallback that says what happened, that nothing changed, and offers a
-  person after two in a row (`core/conversation/fallbacks.py`).
+  instead of acted on, and a failed, empty or low-confidence answer is a
+  graceful fallback that says what happened and what is known about the
+  outcome (a timeout says the outcome is unknown and asks the user to
+  check before retrying), and offers a person after two in a row, counted
+  across chat queries from the session history
+  (`core/conversation/fallbacks.py`). An amount marked with a currency and
+  a bare alternative ("₹500 or 600") are both offered as choices.
 
 ### Added - Conversational services: banking intents, slot filling and confirmed execution
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on (off by default), a chat
@@ -290,6 +313,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   table `conversation_sessions`, migration `v6z60_conversation_sessions`).
   `POST /chat/query` returns the outcome in `conversation`; other messages
   reach the agent as before.
+- A confirmed action is claimed with the session state under a row lock,
+  with an idempotency key, before its tool is called, so it runs once; the
+  agent's operator halts and throttles apply to it; a request for a person
+  raises a hand-off item in the approvals queue, or says honestly that none
+  was raised; bindings prefer the exact connector-qualified tool.
 
 ### Added - Agent runtime: debugging console with breakpoints and step-through
 - With `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` on (off by default), a
@@ -302,6 +330,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_debug_sessions`, migration `v6z59_agent_debug_sessions`) the
   console steps one node at a time or continues to the next breakpoint.
   The console opens a run's thread from its timeline (`agent.thread_id`).
+  A step passes the plan, budget and cost-threshold gates a run passes, adds
+  what it spent to the agent's cost ledger, resolves the run's connector
+  credentials again, keeps the run's output schema and limits, and an
+  approval it reaches opens the normal approval flow.
 
 ### Added - Agent runtime: schema-validated tool registration and the execution envelope
 - With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant
@@ -311,6 +343,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `/tools/registry`); the gateway refuses inputs that fail the schema
   before any call leaves it, audits the refusal, and holds a call to its
   timeout, output cap and output schema, marking the output untrusted.
+- The check and the envelope also hold at the shared connector dispatch
+  that LangGraph agents, workflow connector steps and remote MCP tools use;
+  a registry that cannot be read refuses the call
+  (`tool_registry_unavailable`); untrusted output passes the guardrails'
+  retrieval stage and is withheld when a rule blocks it; the table's
+  row-level policy is forced for the table owner.
 
 ### Added - Agent runtime: long-term memory with retention and erasure
 - With `AGENTICORG_RUNTIME_MEMORY_ENABLED` on (off by default), a run that
@@ -319,6 +357,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `agent_memories`, migration `v6z57_agent_memories`); entries expire by
   their kind's retention and are pruned nightly; `/memory` recalls,
   remembers and erases every entry about a subject, with the count.
+- Recall needs `audit:read` and writes need `approvals:write`; an `agent_id`
+  must name an agent of the tenant the caller can see (404 otherwise).
+  Recalled entries are redacted with the task before the model sees them,
+  a memory database error never fails a run, and the same content is one
+  entry under a unique index written by an atomic upsert.
 
 ### Added - Agent runtime: visual workflow builder with branching and fallback
 - The console's Build visually tab draws a workflow as a graph of steps,
@@ -329,6 +372,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   one. The engine gains `on_failure: fallback(step)`. With
   `AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED` on (off by default),
   `POST /workflows` refuses a definition with problems.
+- The Build visually tab and the workflow page graph show only while
+  `GET /workflows/builder` reports the flag on. A fallback step runs only
+  when its source failed, with or without a declared dependency; validation
+  refuses entries without a text id and conditions with `rules`, which the
+  engine does not branch on yet.
 
 ### Added - Agent runtime: execution limits and loop detection
 - With `AGENTICORG_RUNTIME_LIMITS_ENABLED` on (off by default), an agent's
@@ -337,6 +385,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the platform's maxima (`core/langgraph/limits.py`): a run over a limit, or
   repeating a tool call pattern, is stopped with the reason in its error and
   a `limit` block that the run's audit entry and a Prometheus counter carry.
+- The step limit is checked before every model call, chat runs carry the
+  agent's limits too, `POST /agents/{id}/run` returns the `limit` block, a
+  run may make exactly `max_tool_calls` tool calls, and with the switch off
+  a run that reaches the platform ceiling fails as it did before.
 
 ### Added - FinOps: cost comparison and forecasting
 - With `AGENTICORG_FINOPS_FORECAST_ENABLED` on (off by default),
@@ -345,6 +397,10 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `GET /finops/comparison` folds the model calls per use case with the
   cheapest catalogue alternatives and a before-and-after around a change
   date (`core/finops/forecast.py`).
+  The forecast totals cover every label; the listed rows are the highest
+  projected spend first, with `total_rows` and `truncated` when the list is
+  cut. Calls without an input and output split are priced at the blended rate
+  alongside the split calls in the comparison.
 
 ### Added - FinOps: thresholds and actions
 - With `AGENTICORG_FINOPS_THRESHOLDS_ENABLED` on (off by default), a
@@ -354,6 +410,11 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z56_finops_thresholds`, `/finops/thresholds`): a breached threshold
   alerts the owner once per period, throttles the run with a short delay,
   or suspends runs until the period resets or an administrator lifts it.
+  Thresholds need `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` (settings refuse
+  to load without it), match runs on the agent's own use case and business
+  unit rather than the caller's labels, notify once per period under
+  concurrent runs, cap a tenant at 200 thresholds and answer a duplicate
+  name with 409.
 
 ### Added - FinOps: use-case attribution
 - With `AGENTICORG_FINOPS_ATTRIBUTION_ENABLED` on (off by default), a run
@@ -363,6 +424,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   `v6z55_finops_attribution`), each model call record carries the business
   unit and application, and `GET /finops/attribution` folds the ledger by
   any dimension with the unattributed share.
+- The ledger's row-level policy is forced, its unique key includes the
+  department and cost centre (a mid-day change starts a new row), and the
+  legacy-table column additions skip a table that is missing.
 
 ### Added - AI governance: policy console
 - With `AGENTICORG_GOVERNANCE_POLICY_CONSOLE_ENABLED` on (off by default),
@@ -371,6 +435,9 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   shape, writes and removes one through its own store's writer, and dry-runs
   a described call, text, tool or workflow across the enforcement points
   (`core/governance/policy_console.py`, `/governance/policies`).
+- The console lists disabled policies too, checks approval steps as the
+  approval policies API does, and its dry run resolves approvals, model
+  access by application and principal, and tool actions as runtime does.
 
 ### Added - AI governance: regulatory risk tiers
 - With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
@@ -508,15 +575,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 - With `AGENTICORG_AGENT_REGISTRY_GATES_PROMOTION` on (off by default),
   promotion and resume to active need an approved or published registry
   entry (`core/agent_registry/approval.py`), checked after the shadow
-  evidence, the maker-checker check and the evaluation gate; promotion
+  evidence, the maker-checker check and the evaluation gate, and a new or
+  cloned agent cannot start active; promotion
   publishes an approved entry and retirement retires a published one, each
   a recorded transition. Environments (development, staging, production)
   are read from the state. `PUT /agents/{id}/traffic-split` sends a share
   of an agent's runs through the agents API to another active agent while
   `AGENTICORG_AGENT_TRAFFIC_SPLIT_ENABLED` is on (`core/agent_registry/
   traffic.py`), chosen from the run's thread or correlation id so a retry
-  lands on the same agent; the response names the agent that served the
-  run, and removing the split is the one-action rollback.
+  lands on the same agent (one draw per run otherwise); the agent asked for
+  passes its own status, floor and override controls before any redirection
+  and the target is held to the same; the response names the agent that
+  served the run, and removing the split is the one-action rollback.
 
 ### Added - Agent registry: cards and lifecycle states
 - Behind `AGENTICORG_AGENT_REGISTRY_ENABLED` (off by default), each agent
