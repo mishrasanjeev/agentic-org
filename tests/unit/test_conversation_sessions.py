@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
@@ -149,6 +150,266 @@ class TestSessionStore:
         big = runtime._bounded({"blob": "x" * 5000})
         assert isinstance(big, str) and big.endswith("…")
         assert runtime.dialogue_view(Dialogue(intent="fund_transfer", slots={"amount": 1.0}))["missing"] == ["payee"]
+
+
+class _LockedStore:
+    """One stored session row behind a row lock held for the whole transaction, as ``FOR UPDATE`` holds it."""
+
+    def __init__(self, row=None):
+        self.row = row
+        self.lock = asyncio.Lock()
+        self.added: list = []
+
+    def session(self, *_a, **_k):
+        store = self
+
+        class _Tx:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                if store.lock.locked():
+                    store.lock.release()
+                return False
+
+            async def execute(self, *_args, **_kw):
+                await store.lock.acquire()
+                await asyncio.sleep(0)
+                return _Result(store.row)
+
+            def add(self, row):
+                store.added.append(row)
+                store.row = row
+
+        return _Tx()
+
+
+def _wire_transfer_tool(monkeypatch, calls: list[dict]):
+    from core.governance import operator_override
+    from core.langgraph import tool_adapter
+
+    class _Tool:
+        async def ainvoke(self, params):
+            await asyncio.sleep(0)
+            calls.append(params)
+            return {"status": "ok", "reference": "TXN-1"}
+
+    monkeypatch.setattr(tool_adapter, "_build_tool_index", lambda *_a, **_k: {"transfer_funds": ("core_bank", "d")})
+    monkeypatch.setattr(tool_adapter, "build_tools_for_agent", lambda *_a, **_k: [_Tool()])
+    import auth.run_grants as run_grants
+
+    monkeypatch.setattr(run_grants, "direct_tool_call_permitted", AsyncMock(return_value=True))
+    monkeypatch.setattr(operator_override, "check", AsyncMock(return_value=operator_override.ALLOWED))
+    return runtime.ExecutionContext(
+        tenant_id=str(TENANT), agent_id="a1", authorized_tools=["transfer_funds"], run_grant=object()
+    )
+
+
+def _confirming_row():
+    dialogue = Dialogue()
+    engine.advance(dialogue, "transfer 500 to Ravi")
+    assert dialogue.stage == engine.STAGE_CONFIRMING
+    return _row(state=dialogue.to_dict(), turns=dialogue.turns)
+
+
+class TestConfirmedExecutionIsClaimedOnce:
+    @pytest.mark.asyncio
+    async def test_the_claim_needs_the_state_the_turn_started_from(self, monkeypatch):
+        import core.database as database
+
+        row = _confirming_row()
+        store = _LockedStore(row)
+        monkeypatch.setattr(database, "get_tenant_session", store.session)
+        expected = Dialogue.from_dict(row.state).to_dict()
+        advanced = Dialogue.from_dict(row.state)
+        engine.advance(advanced, "yes")
+
+        key = await runtime.claim_dialogue(TENANT, "k", expected, advanced, user_id="u1", agent_id=None, channel="web")
+
+        assert key and row.state["execution_key"] == key and row.state["stage"] == engine.STAGE_IDLE
+        assert row.status == "idle"
+        # The same confirmation again no longer matches what is stored.
+        again = Dialogue.from_dict(expected)
+        engine.advance(again, "yes")
+        assert (
+            await runtime.claim_dialogue(TENANT, "k", expected, again, user_id="u1", agent_id=None, channel="web")
+            is None
+        )
+        assert row.state["execution_key"] == key
+
+    @pytest.mark.asyncio
+    async def test_a_missing_or_idle_expired_session_claims_as_a_fresh_one(self, monkeypatch):
+        import core.database as database
+
+        store = _LockedStore(None)
+        monkeypatch.setattr(database, "get_tenant_session", store.session)
+        fresh = Dialogue()
+        expected = fresh.to_dict()
+        engine.advance(fresh, "what is the status of application APP123456")
+        assert await runtime.claim_dialogue(TENANT, "k", expected, fresh, user_id="u1", agent_id=None, channel="web")
+        assert len(store.added) == 1
+
+        stale = _row(updated_at=datetime.now(UTC) - timedelta(hours=2))
+        store = _LockedStore(stale)
+        monkeypatch.setattr(database, "get_tenant_session", store.session)
+        assert await runtime.claim_dialogue(
+            TENANT, "k", Dialogue().to_dict(), Dialogue(), user_id="u1", agent_id=None, channel="web"
+        )
+
+    @pytest.mark.asyncio
+    async def test_two_overlapping_confirmations_run_the_transfer_once(self, monkeypatch):
+        import core.database as database
+
+        calls: list[dict] = []
+        context = _wire_transfer_tool(monkeypatch, calls)
+        row = _confirming_row()
+        store = _LockedStore(row)
+        monkeypatch.setattr(database, "get_tenant_session", store.session)
+        save = AsyncMock()
+        monkeypatch.setattr(runtime, "save_dialogue", save)
+
+        async def confirm():
+            return await runtime.run_turn(
+                TENANT,
+                "k",
+                Dialogue.from_dict(row.state),
+                "yes",
+                context,
+                user_id="u1",
+                agent_id="a1",
+                channel="web",
+                no_agent_message="-",
+            )
+
+        first, second = await asyncio.gather(confirm(), confirm())
+
+        statuses = sorted(execution["status"] for _, execution in (first, second))
+        assert statuses == ["executed", "superseded"] and len(calls) == 1
+        assert calls[0]["idempotency_key"] == row.state["execution_key"]
+        # A claimed turn has already stored the session; it is not written again.
+        assert save.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_a_failure_after_the_claim_leaves_nothing_to_confirm_again(self, monkeypatch):
+        import core.database as database
+
+        calls: list[dict] = []
+        context = _wire_transfer_tool(monkeypatch, calls)
+        row = _confirming_row()
+        monkeypatch.setattr(database, "get_tenant_session", _LockedStore(row).session)
+        broken_save = AsyncMock(side_effect=RuntimeError("database went away"))
+        monkeypatch.setattr(runtime, "save_dialogue", broken_save)
+        common = {"user_id": "u1", "agent_id": "a1", "channel": "web", "no_agent_message": "-"}
+
+        outcome, execution = await runtime.run_turn(
+            TENANT, "k", Dialogue.from_dict(row.state), "yes", context, **common
+        )
+        assert outcome.kind == "execute" and execution["status"] == "executed" and broken_save.await_count == 0
+
+        # A retried "yes" reads the stored session, which confirms nothing any more.
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
+        retry, _ = await runtime.run_turn(TENANT, "k", Dialogue.from_dict(row.state), "yes", context, **common)
+        assert retry.kind != "execute" and len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_turn_refused_before_the_claim_is_saved_as_before(self, monkeypatch):
+        calls: list[dict] = []
+        context = _wire_transfer_tool(monkeypatch, calls)
+        context.authorized_tools = []
+        claim = AsyncMock()
+        monkeypatch.setattr(runtime, "claim_dialogue", claim)
+        save = AsyncMock()
+        monkeypatch.setattr(runtime, "save_dialogue", save)
+        dialogue = Dialogue.from_dict(_confirming_row().state)
+
+        _, execution = await runtime.run_turn(
+            TENANT, "k", dialogue, "yes", context, user_id="u1", agent_id="a1", channel="web", no_agent_message="-"
+        )
+
+        assert execution["status"] == "unbound" and claim.await_count == 0 and save.await_count == 1
+
+
+class _HandoffSession(_Session):
+    def __init__(self, row=None, *, fail: bool = False):
+        super().__init__(row)
+        self.fail = fail
+
+    async def flush(self):
+        if self.fail:
+            raise RuntimeError("write refused")
+
+
+class TestHandoff:
+    @staticmethod
+    def _escalation():
+        dialogue = Dialogue()
+        engine.advance(dialogue, "send money to Ravi")
+        return engine.advance(dialogue, "connect me with a human agent")
+
+    @pytest.mark.asyncio
+    async def test_asking_for_a_person_queues_a_handoff_with_the_context_and_notifies(self, monkeypatch):
+        import core.database as database
+        import core.push.sender as sender
+
+        agent = SimpleNamespace(name="Branch assistant", visibility="tenant", owner_user_id=None)
+        session = _HandoffSession(agent)
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: session)
+        notify = AsyncMock(return_value={})
+        monkeypatch.setattr(sender, "notify_approval_created", notify)
+        user = uuid.uuid4()
+        context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id=str(uuid.uuid4()), domain="ops")
+        outcome = self._escalation()
+
+        handoff = await runtime.request_handoff(outcome, context, user_id=str(user), channel="web")
+
+        assert handoff["status"] == "handed_off" and len(session.added) == 1
+        item = session.added[0]
+        assert item.trigger_type == runtime.HANDOFF_TRIGGER and item.assignee_role == "ops"
+        assert item.requested_by_user_id == user and str(item.agent_id) == context.agent_id
+        assert item.context["handoff"]["intent"] == "fund_transfer"
+        assert item.context["handoff"]["slots"] == {"payee": "Ravi"}
+        assert notify.call_args.kwargs["item_id"] == str(item.id) == handoff["item_id"]
+        answer = runtime.answer_for(outcome, handoff)
+        assert handoff["reference"] in answer and "queue" in answer
+        assert "item_id" not in runtime.outcome_payload(outcome, handoff)["execution"]
+        assert "handoff" not in runtime.outcome_payload(outcome, handoff)
+
+    @pytest.mark.asyncio
+    async def test_without_an_agent_or_a_written_item_nothing_is_promised(self, monkeypatch):
+        import core.database as database
+
+        outcome = self._escalation()
+        none = await runtime.request_handoff(outcome, None, user_id="u1", channel="web")
+        assert none["status"] == "handoff_unavailable"
+        answer = runtime.answer_for(outcome, none)
+        assert "nothing has been handed over" in answer and "connect you" not in answer
+
+        context = runtime.ExecutionContext(tenant_id=str(TENANT), agent_id=str(uuid.uuid4()))
+        failing = _HandoffSession(SimpleNamespace(name="x"), fail=True)
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: failing)
+        assert (await runtime.request_handoff(outcome, context, user_id="u1", channel="web"))[
+            "status"
+        ] == "handoff_unavailable"
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _HandoffSession(None))
+        assert (await runtime.request_handoff(outcome, context, user_id="u1", channel="web"))[
+            "status"
+        ] == "handoff_unavailable"
+
+    @pytest.mark.asyncio
+    async def test_the_turn_route_raises_the_handoff_for_an_escalation(self, monkeypatch):
+        from api.v1 import conversation as api
+
+        monkeypatch.setattr(settings, "conversation_v2_enabled", True)
+        monkeypatch.setattr(runtime, "load_dialogue", AsyncMock(return_value=Dialogue()))
+        monkeypatch.setattr(runtime, "save_dialogue", AsyncMock())
+        raised = AsyncMock(return_value={"status": "handed_off", "reference": "AB12CD34", "item_id": "x"})
+        monkeypatch.setattr(runtime, "request_handoff", raised)
+        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+
+        answer = await api.post_turn(api.TurnIn(text="I want to talk to a human"), request, tenant_id=str(TENANT))
+
+        assert raised.await_count == 1 and answer["outcome"]["kind"] == "escalate"
+        assert "AB12CD34" in answer["answer"] and answer["outcome"]["execution"]["status"] == "handed_off"
 
 
 class TestAgentContext:

@@ -144,24 +144,22 @@ async def post_turn(body: TurnIn, request: Request, tenant_id: str = Depends(get
     tid = uuid.UUID(tenant_id)
     key = runtime.session_key(channel, body.company_id, body.agent_id, user_id)
     dialogue = await runtime.load_dialogue(tid, key)
-    from core.conversation import dialogue as engine
-
-    outcome = engine.advance(dialogue, body.text)
-    execution: dict[str, Any] | None = None
-    if outcome.kind == "execute":
-        if context is None:
-            execution = {"status": "unbound", "intent": outcome.intent, "message": "Choose an agent to run this."}
-        else:
-            execution = await runtime.execute(outcome, context)
-    await runtime.save_dialogue(tid, key, dialogue, user_id=user_id, agent_id=body.agent_id or None, channel=channel)
-    payload = outcome.to_dict()
-    if execution is not None:
-        payload["execution"] = {k: v for k, v in execution.items() if k != "result"}
+    outcome, execution = await runtime.run_turn(
+        tid,
+        key,
+        dialogue,
+        body.text,
+        context,
+        user_id=user_id,
+        agent_id=body.agent_id or None,
+        channel=channel,
+        no_agent_message="Choose an agent to run this.",
+    )
     tool_call = (execution or {}).get("tool_call")
     return {
         "session_key": key,
         "answer": runtime.answer_for(outcome, execution),
-        "outcome": payload,
+        "outcome": runtime.outcome_payload(outcome, execution),
         "dialogue": runtime.dialogue_view(dialogue),
         "tool_calls": [tool_call] if tool_call else None,
     }

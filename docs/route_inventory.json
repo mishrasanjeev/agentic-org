@@ -4370,7 +4370,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 179,
+    "source_line": 177,
     "tenant_required": true
   },
   {
@@ -4388,7 +4388,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.write",
-    "source_line": 222,
+    "source_line": 220,
     "tenant_required": true
   },
   {
@@ -4406,7 +4406,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "chat.read",
-    "source_line": 198,
+    "source_line": 196,
     "tenant_required": true
   },
   {
