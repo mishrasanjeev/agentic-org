@@ -171,6 +171,134 @@ class TestEngineFallback:
         assert src.count('state["step_results"][step_id]["fallback_target"] = fallback_target') == 2
 
 
+class TestRuntimeCompatibleValidation:
+    @pytest.mark.parametrize(
+        ("steps", "needle"),
+        [
+            ([{"agent_type": "x"}], "step 1 needs an id"),
+            ([{"id": "", "agent_type": "x"}], "step 1 needs an id"),
+            ([{"id": 7, "agent_type": "x"}], "step 1 needs an id"),
+            ([{"id": "a", "agent_type": "x"}, "b"], "step 2 is not an object"),
+            ([{"id": "a", "agent_type": "x", "depends_on": "b"}], "depends_on is a list"),
+            ([{"id": "a", "agent_type": "x", "depends_on": [1]}], "which is not a step"),
+        ],
+    )
+    def test_entries_the_runtime_parser_rejects_are_refused(self, steps, needle):
+        problems = graph.validate({"steps": steps})
+        assert any(needle in p for p in problems), problems
+
+    def test_a_definition_validate_accepts_is_one_the_runtime_parser_accepts(self):
+        from workflows.parser import WorkflowParser
+
+        for steps in ([{"agent_type": "x"}], [{"id": "a", "agent_type": "x"}, "b"]):
+            assert graph.validate({"steps": steps}) != []
+            with pytest.raises((ValueError, TypeError)):
+                WorkflowParser().parse({"steps": steps})
+        assert graph.validate(_definition()) == []
+        WorkflowParser().parse(_definition())
+
+    def test_conditions_with_rules_are_refused_until_the_runtime_branches_on_them(self):
+        rules_only = [
+            {"id": "score", "type": "condition", "rules": [{"expression": "x > 1", "path": "a"}]},
+            {"id": "a", "agent_type": "x", "depends_on": ["score"]},
+        ]
+        problems = graph.validate({"steps": rules_only})
+        assert any("rules are not supported at run time" in p for p in problems), problems
+        assert any("needs an expression" in p for p in problems), problems
+        assert any("needs a true_path and false_path" in p for p in problems), problems
+        mixed = [
+            {
+                "id": "c",
+                "type": "condition",
+                "expression": "x",
+                "true_path": "a",
+                "false_path": "b",
+                "rules": [{"path": "b"}],
+            },
+            {"id": "a", "agent_type": "x", "depends_on": ["c"]},
+            {"id": "b", "agent_type": "y", "depends_on": ["c"]},
+        ]
+        assert any("rules are not supported" in p for p in graph.validate({"steps": mixed}))
+
+    def test_a_condition_may_carry_its_expression_under_condition(self):
+        steps = [
+            {"id": "c", "type": "condition", "condition": "x > 1", "true_path": "a", "false_path": "b"},
+            {"id": "a", "agent_type": "x", "depends_on": ["c"]},
+            {"id": "b", "agent_type": "y", "depends_on": ["c"]},
+        ]
+        assert graph.validate({"steps": steps}) == []
+
+    def test_a_fallback_back_to_an_ancestor_is_a_cycle(self):
+        steps = [
+            {"id": "a", "agent_type": "x"},
+            {"id": "b", "agent_type": "y", "depends_on": ["a"], "on_failure": "fallback(a)"},
+        ]
+        assert any("form a cycle" in p for p in graph.validate({"steps": steps}))
+        with pytest.raises(ValueError):
+            WorkflowEngine._topological_sort(steps)
+
+
+class TestFallbackWithoutADeclaredDependency:
+    def _steps(self):
+        return [
+            {"id": "manual", "type": "agent", "agent_type": "ops", "action": "handle"},
+            {"id": "post", "type": "agent", "agent_type": "ap", "action": "post", "on_failure": "fallback(manual)"},
+        ]
+
+    def test_the_fallback_is_ordered_after_its_source(self):
+        assert WorkflowEngine._topological_sort(self._steps()) == ["post", "manual"]
+        assert graph.validate({"steps": self._steps()}) == []
+
+    def test_the_fallback_is_gated_on_its_source_from_the_definition(self):
+        state = {"definition": {"steps": self._steps()}, "step_results": {}}
+        manual = self._steps()[0]
+        assert WorkflowEngine._check_dependencies(manual, state) == "Fallback source 'post' has not been executed"
+        state["step_results"]["post"] = {"status": "completed"}
+        assert WorkflowEngine._check_dependencies(manual, state) == "fallback_not_needed"
+        state["step_results"]["post"] = {"status": "skipped", "reason": "branch_not_taken"}
+        assert WorkflowEngine._check_dependencies(manual, state) == "fallback_not_needed"
+        state["step_results"]["post"] = {"status": "failed"}
+        assert WorkflowEngine._check_dependencies(manual, state) is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("post_status", "manual_runs"), [("completed", False), ("failed", True)])
+    async def test_the_engine_runs_the_fallback_only_when_its_source_failed(self, post_status, manual_runs):
+        from unittest.mock import AsyncMock, patch
+
+        from workflows.state_store import WorkflowStateStore
+
+        store = AsyncMock(spec=WorkflowStateStore)
+        engine = WorkflowEngine(state_store=store)
+        state = {
+            "id": "wfr_fallback",
+            "status": "running",
+            "definition": engine.parser.parse({"steps": self._steps()}),
+            "trigger_payload": {},
+            "steps_total": 2,
+            "steps_completed": 0,
+            "step_results": {},
+            "started_at": "2026-10-07T00:00:00+00:00",
+        }
+        store.load.return_value = state
+        ran: list[str] = []
+
+        async def _step(step, _state):
+            ran.append(step["id"])
+            if step["id"] == "post":
+                return {"status": post_status, "output": {}}
+            return {"status": "completed", "output": {}}
+
+        with (
+            patch("workflows.engine.execute_step", side_effect=_step),
+            patch.object(WorkflowEngine, "_operator_halt", AsyncMock(return_value=None)),
+        ):
+            result = await engine.execute("wfr_fallback")
+        assert ran == (["post", "manual"] if manual_runs else ["post"])
+        assert result["status"] == "completed"
+        if not manual_runs:
+            assert result["step_results"]["manual"]["reason"] == "fallback_not_needed"
+
+
 class _Result:
     def __init__(self, row):
         self.row = row
@@ -213,10 +341,21 @@ class TestEndpoints:
         monkeypatch.setattr(api, "get_tenant_session", lambda _tid: _Session(row))
         drawn = await api.workflow_graph_view(row.id, tenant_id=str(uuid.uuid4()))
         assert len(drawn["graph"]["edges"]) == 7 and drawn["errors"] == [] and drawn["workflow_id"] == str(row.id)
+        assert drawn["enabled"] is False
         monkeypatch.setattr(api, "get_tenant_session", lambda _tid: _Session(None))
         with pytest.raises(HTTPException) as refused:
             await api.workflow_graph_view(uuid.uuid4(), tenant_id=str(uuid.uuid4()))
         assert refused.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_the_builder_status_reports_the_flag(self, monkeypatch):
+        assert await api.workflow_builder_status(tenant_id=str(uuid.uuid4())) == {"enabled": False}
+        monkeypatch.setattr(settings, "workflow_builder_v2_enabled", True)
+        assert await api.workflow_builder_status(tenant_id=str(uuid.uuid4())) == {"enabled": True}
+
+    def test_the_builder_status_route_is_registered_before_the_workflow_id_route(self):
+        paths = [getattr(r, "path", "") for r in api.router.routes]
+        assert paths.index("/workflows/builder") < paths.index("/workflows/{wf_id}")
 
     def test_creation_refuses_a_broken_definition_only_while_on(self):
         src = (ROOT / "api" / "v1" / "workflows.py").read_text(encoding="utf-8")

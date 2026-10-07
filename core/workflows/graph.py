@@ -8,10 +8,15 @@ a failure directive (``on_failure``: ``halt``, ``continue``, ``retry(N)``,
 ``retry(N) then continue``, or ``fallback(step)``). ``to_graph`` draws it:
 one node per step and one edge per dependency, condition path and fallback,
 each edge labelled with its kind, so the console shows branching and
-fallback as drawn. ``validate`` names every problem in plain words: a
-dependency, path or fallback that points nowhere, a condition without paths,
-a human checkpoint without decision options, a failure directive outside the
-grammar, a cycle.
+fallback as drawn. ``validate`` names every problem in plain words: an entry
+that is not a step with a text id (the runtime parser needs both), a
+dependency, path or fallback that points nowhere, a condition without an
+expression and paths, a condition with rules (the runtime does not branch on
+rules), a human checkpoint without decision options, a failure directive
+outside the grammar, a cycle (a fallback counts as following its source).
+
+``GET /workflows/builder`` tells the console whether the flag is on; the
+console shows the builder and the stored-workflow graph only then.
 
 While ``AGENTICORG_WORKFLOW_BUILDER_V2_ENABLED`` is on, ``POST /workflows``
 refuses a definition with problems (``422``); ``POST /workflows/validate``
@@ -117,7 +122,7 @@ def _summary(step: dict[str, Any], kind: str) -> str:
     if kind in ("agent", "case_agent"):
         return f"{step.get('agent_type') or step.get('agent') or 'agent'}: {step.get('action') or 'run'}"
     if kind == "condition":
-        return str(step.get("expression") or f"{len(step.get('rules') or [])} rules")[:80]
+        return str(step.get("expression") or step.get("condition") or f"{len(step.get('rules') or [])} rules")[:80]
     if kind == "human_in_loop":
         options = step.get("decision_options") or []
         who = step.get("assignee_role") or step.get("assignee") or step.get("role_required") or "a person"
@@ -134,12 +139,23 @@ def validate(definition: Any) -> list[str]:
     problems: list[str] = []
     if not isinstance(definition, dict) or not isinstance(definition.get("steps"), list):
         return ["the definition must hold a list of steps"]
-    steps = [s for s in definition["steps"] if isinstance(s, dict)]
-    if not steps:
+    raw_steps = definition["steps"]
+    if not raw_steps:
         return ["the workflow needs at least one step"]
-    if len(steps) > MAX_STEPS:
+    if len(raw_steps) > MAX_STEPS:
         return [f"a workflow has at most {MAX_STEPS} steps"]
-    ids = [step_id(s, i) for i, s in enumerate(steps)]
+    # The runtime parser needs every entry to be a mapping with an explicit text id; nothing is invented here.
+    steps: list[dict[str, Any]] = []
+    for position, raw in enumerate(raw_steps, start=1):
+        if not isinstance(raw, dict):
+            problems.append(f"step {position} is not an object with an id and a type")
+            continue
+        raw_id = raw.get("id")
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            problems.append(f"step {position} needs an id (text)")
+            continue
+        steps.append(raw)
+    ids = [str(s["id"]) for s in steps]
     known = set(ids)
     seen: set[str] = set()
     for sid in ids:
@@ -151,17 +167,28 @@ def validate(definition: Any) -> list[str]:
         kind = str(step.get("type") or "agent")
         if kind not in STEP_TYPES:
             problems.append(f"step {sid!r}: unknown type {kind!r}")
-        for dep in step.get("depends_on") or []:
-            if str(dep) not in known:
+        depends_on = step.get("depends_on") or []
+        if not isinstance(depends_on, list):
+            problems.append(f"step {sid!r}: depends_on is a list of step ids")
+            depends_on = []
+        for dep in depends_on:
+            if not isinstance(dep, str) or dep not in known:
                 problems.append(f"step {sid!r}: depends on {dep!r}, which is not a step")
-            elif str(dep) == sid:
+            elif dep == sid:
                 problems.append(f"step {sid!r}: depends on itself")
         if kind == "condition":
             paths = _paths(step)
-            if not paths:
-                problems.append(f"step {sid!r}: a condition needs a true_path and false_path, or rules with paths")
-            if not step.get("expression") and not step.get("rules"):
-                problems.append(f"step {sid!r}: a condition needs an expression or rules")
+            if step.get("rules"):
+                # The runtime branches on an expression's true_path and false_path only; rule paths
+                # would not be selected, so every rule target would run.
+                problems.append(
+                    f"step {sid!r}: rules are not supported at run time; "
+                    "use an expression with true_path and false_path"
+                )
+            if not (step.get("true_path") or step.get("false_path")):
+                problems.append(f"step {sid!r}: a condition needs a true_path and false_path")
+            if not (step.get("expression") or step.get("condition")):
+                problems.append(f"step {sid!r}: a condition needs an expression")
             for _kind, target in paths:
                 if target not in known:
                     problems.append(f"step {sid!r}: path {target!r} is not a step")
@@ -191,7 +218,15 @@ def validate(definition: Any) -> list[str]:
 
 
 def _cycle(steps: list[dict[str, Any]], ids: list[str]) -> str | None:
-    graph = {ids[i]: [str(d) for d in (s.get("depends_on") or [])] for i, s in enumerate(steps)}
+    graph: dict[str, list[str]] = {}
+    for i, s in enumerate(steps):
+        deps = s.get("depends_on") or []
+        graph.setdefault(ids[i], []).extend(str(d) for d in (deps if isinstance(deps, list) else []))
+    # The runtime orders a fallback after the step it falls back from, so that edge counts too.
+    for i, s in enumerate(steps):
+        target = fallback_target(s)
+        if target and target != ids[i]:
+            graph.setdefault(target, []).append(ids[i])
     visited: set[str] = set()
     stack: set[str] = set()
 
