@@ -20,6 +20,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.deps import get_current_tenant
 from api.route_metadata import route_meta
 from core.config import settings
+from core.rag import rerank
+from core.rag.filters import SearchFilters, sql_clauses
 from core.runtime_capacity import AsyncCapacityGate, CapacityLimitError
 from observability import tracing
 
@@ -131,6 +133,8 @@ async def _ragflow_ensure_dataset(dataset_id: str) -> None:
 class SearchRequest(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=100)
+    # Narrow the documents a query may match (core/rag/filters.py); every field is an AND condition.
+    filters: SearchFilters | None = None
 
 
 class SearchResult(BaseModel):
@@ -1126,6 +1130,7 @@ async def _native_semantic_search(
     tenant_id: str,
     query: str,
     top_k: int,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Search tenant knowledge, then fall back to uploaded document metadata.
 
@@ -1145,11 +1150,15 @@ async def _native_semantic_search(
     if hybrid_enabled:
         if not query.strip():
             return []
-        results = await _native_hybrid_search(tid, query, top_k)
+        results = await _native_hybrid_search(tid, query, top_k, filters)
     else:
-        results = await _native_vector_or_keyword_search(tid, query, top_k)
+        results = await _native_vector_or_keyword_search(tid, query, top_k, filters)
     if results:
         return results
+    if filters is not None and not filters.is_empty():
+        # A narrowed search answers from the knowledge base only: the upload-metadata fallback carries no
+        # category, source or type to filter on and would widen the answer past what was asked.
+        return []
 
     # The `documents` upload path stores extracted plain-text in metadata for
     # text/markdown uploads. Keyword-match that layer before the pure
@@ -1160,8 +1169,8 @@ async def _native_semantic_search(
             "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND strpos(lower(metadata->>'content_text'), lower(:query)) > 0 LIMIT :k"
-            if hybrid_enabled else
-            "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
+            if hybrid_enabled
+            else "SELECT filename, COALESCE(metadata->>'content_text', '') AS content_text "
             "FROM documents WHERE tenant_id = :tid AND status = 'indexed' "
             "AND metadata->>'content_text' IS NOT NULL "
             "AND metadata->>'content_text' ILIKE :like LIMIT :k"
@@ -1200,7 +1209,8 @@ async def _native_semantic_search(
 
         filename_match = (
             _func.strpos(_func.lower(Document.filename), _func.lower(query)) > 0
-            if hybrid_enabled else Document.filename.ilike(f"%{query}%")
+            if hybrid_enabled
+            else Document.filename.ilike(f"%{query}%")
         )
         async with get_tenant_session(tid) as session:
             match_rows = (
@@ -1234,12 +1244,15 @@ async def _native_semantic_search(
         raise RuntimeError("knowledge filename fallback failed") from exc
 
 
-async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
+async def _native_vector_or_keyword_search(
+    tid: uuid.UUID, query: str, top_k: int, filters: SearchFilters | None = None
+) -> list[SearchResult]:
     """Preserve the default native retrieval behavior during hybrid rollout."""
     from sqlalchemy import text as _sqtext
 
     from core.database import get_tenant_session
 
+    where_filters, filter_params = sql_clauses(filters)
     # Try the vector path first. Column + model swap honour the
     # RAG_USE_BGE_M3 flag — both sides flip atomically.
     try:
@@ -1255,11 +1268,11 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
                         "SELECT title, content, "  # nosec B608 — `col` is a module-level constant name, not user input
                         f"1 - ({col} <=> CAST(:q AS vector)) AS score "
                         "FROM knowledge_documents "
-                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL "
+                        f"WHERE tenant_id = :tid AND status = 'ready' AND {col} IS NOT NULL{where_filters} "
                         f"ORDER BY {col} <=> CAST(:q AS vector) "
                         "LIMIT :k"
                     ),
-                    {"q": vector_literal, "tid": str(tid), "k": top_k},
+                    {"q": vector_literal, "tid": str(tid), "k": top_k, **filter_params},
                 )
             ).fetchall()
         if rows:
@@ -1283,10 +1296,10 @@ async def _native_vector_or_keyword_search(tid: uuid.UUID, query: str, top_k: in
                     _sqtext(
                         "SELECT title, content FROM knowledge_documents "
                         "WHERE tenant_id = :tid AND status = 'ready' AND "
-                        "(title ILIKE :like OR content ILIKE :like) "
+                        f"(title ILIKE :like OR content ILIKE :like){where_filters} "
                         "LIMIT :k"
                     ),
-                    {"tid": str(tid), "like": f"%{query}%", "k": top_k},
+                    {"tid": str(tid), "like": f"%{query}%", "k": top_k, **filter_params},
                 )
             ).fetchall()
         results = [
@@ -1327,8 +1340,10 @@ def _fuse_native_hits(
     ]
 
 
-async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[SearchResult]:
-    """Rank tenant-ready rows through PostgreSQL text and pgvector independently."""
+async def _native_hybrid_search(
+    tid: uuid.UUID, query: str, top_k: int, filters: SearchFilters | None = None
+) -> list[SearchResult]:
+    """Rank tenant-ready rows through PostgreSQL text and pgvector independently, then fuse and re-rank."""
     from sqlalchemy import text as _sqtext
 
     from core.database import get_tenant_session
@@ -1336,7 +1351,8 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
     if not query.strip():
         return []
     limit = min(top_k * 4, 200)
-    params = {"tid": str(tid), "query": query, "limit": limit}
+    where_filters, filter_params = sql_clauses(filters)
+    params = {"tid": str(tid), "query": query, "limit": limit, **filter_params}
     lexical_rows: list[tuple[str, str, str]] = []
     try:
         async with get_tenant_session(tid) as session:
@@ -1344,7 +1360,7 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
                 await session.execute(
                     _sqtext(
                         "SELECT id, title, content FROM knowledge_documents "
-                        "WHERE tenant_id = :tid AND status = 'ready' "
+                        f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
                         "AND to_tsvector('english', title || ' ' || content) "
                         "@@ websearch_to_tsquery('english', :query) "
                         "ORDER BY ts_rank_cd(to_tsvector('english', title || ' ' || content), "
@@ -1365,7 +1381,7 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
                     await session.execute(
                         _sqtext(
                             "SELECT id, title, content FROM knowledge_documents "
-                            "WHERE tenant_id = :tid AND status = 'ready' "
+                            f"WHERE tenant_id = :tid AND status = 'ready'{where_filters} "
                             "AND (strpos(lower(title), lower(:query)) > 0 "
                             "OR strpos(lower(content), lower(:query)) > 0) "
                             "ORDER BY CASE WHEN strpos(lower(title), lower(:query)) > 0 "
@@ -1387,11 +1403,11 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
             raise ValueError("unsupported embedding column")
         vector_sql = (
             "SELECT id, title, content FROM knowledge_documents "
-            "WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL "
+            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding IS NOT NULL{where_filters} "
             "ORDER BY embedding <=> CAST(:vector AS vector), id ASC LIMIT :limit"
-            if col == "embedding" else
-            "SELECT id, title, content FROM knowledge_documents "
-            "WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL "
+            if col == "embedding"
+            else "SELECT id, title, content FROM knowledge_documents "
+            f"WHERE tenant_id = :tid AND status = 'ready' AND embedding_bge_m3 IS NOT NULL{where_filters} "
             "ORDER BY embedding_bge_m3 <=> CAST(:vector AS vector), id ASC LIMIT :limit"
         )
         qvec = await embed_one_async(query)
@@ -1400,14 +1416,27 @@ async def _native_hybrid_search(tid: uuid.UUID, query: str, top_k: int) -> list[
             rows = (
                 await session.execute(
                     _sqtext(vector_sql),
-                    {"tid": str(tid), "vector": vector_literal, "limit": limit},
+                    {"tid": str(tid), "vector": vector_literal, "limit": limit, **filter_params},
                 )
             ).fetchall()
         vector_rows = [(str(r[0]), r[1] or "", r[2] or "") for r in rows]
     except _NATIVE_VECTOR_ERRORS as exc:
         logger.debug("native_vector_search_skipped", error_type=type(exc).__name__)
 
-    return _fuse_native_hits(vector_rows, lexical_rows, top_k)
+    if not rerank.enabled():
+        return _fuse_native_hits(vector_rows, lexical_rows, top_k)
+    # Re-ranking stage: the fused pool, re-scored on the query's own terms, cut to top_k.
+    fused = _fuse_native_hits(vector_rows, lexical_rows, limit)
+    candidates = [
+        rerank.Candidate(key=str(index), title=hit.document_name, text=hit.chunk_text, fused=hit.score)
+        for index, hit in enumerate(fused)
+    ]
+    ordered = rerank.rerank(query, candidates, top_k)
+    tracing.set_attributes(**{"search.reranked": len(candidates)})
+    return [
+        SearchResult(chunk_text=candidate.text, score=new_score, document_name=candidate.title)
+        for candidate, new_score in ordered
+    ]
 
 
 async def _guard_results(tenant_id: str, results: list[SearchResult]) -> list[SearchResult]:
@@ -1461,7 +1490,7 @@ async def _search_knowledge(req: SearchRequest, tenant_id: str) -> SearchRespons
             logger.warning("ragflow_search_failed", error=str(exc))
 
     try:
-        results = await _native_semantic_search(tenant_id, req.query, req.top_k)
+        results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters)
         return SearchResponse(results=await _guard_results(tenant_id, results))
     except HTTPException:
         raise
