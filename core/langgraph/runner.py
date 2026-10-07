@@ -34,6 +34,7 @@ from core.governance.model_gateway import (
     reset_route,
     route_for_agent,
 )
+from core.langgraph import debugger
 from core.langgraph import limits as execution_limits
 from core.langgraph.agent_graph import build_agent_graph
 from core.langgraph.checkpointer import (
@@ -238,6 +239,7 @@ async def run_agent(
     output_schema: str | None = None,
     output_schema_json: dict[str, Any] | None = None,
     limits: dict[str, Any] | None = None,
+    breakpoints: list[str] | None = None,
 ) -> dict[str, Any]:
     """Run a LangGraph agent and return the result.
 
@@ -465,7 +467,12 @@ async def run_agent(
     # Compile with checkpointer
     # The configured store (core/langgraph/checkpointer.py); raises rather
     # than falling back to memory when a Postgres store is unavailable.
-    compiled = graph.compile(checkpointer=await get_checkpointer())
+    checkpointer = await get_checkpointer()
+    if breakpoints:
+        # Breakpoints (core/langgraph/debugger.py): the run pauses before these nodes.
+        compiled = graph.compile(checkpointer=checkpointer, interrupt_before=list(breakpoints))
+    else:
+        compiled = graph.compile(checkpointer=checkpointer)
 
     initial_state: AgentState = {
         "messages": [
@@ -515,6 +522,9 @@ async def run_agent(
         root=True,
         **_run_span_attributes(route, agent_id, agent_type, domain),
     )
+    if debugger.enabled():
+        # The console links a recorded run to its checkpoint thread.
+        run_span.set(**{"agent.thread_id": run_thread_id})
     t0 = time.perf_counter()
     try:
         invoke_config = {**config, "recursion_limit": MAX_AGENT_STEPS}
@@ -536,6 +546,26 @@ async def run_agent(
         interrupts = result.get("__interrupt__") or []
         if interrupts:
             logger.info("langgraph_hitl_interrupted", agent_id=agent_id)
+        if breakpoints and not interrupts:
+            # Paused before a breakpoint: the state so far goes back; the console steps the thread.
+            waiting = await debugger.waiting_nodes(compiled, config)
+            if waiting:
+                logger.info("langgraph_run_paused_at_breakpoint", agent_id=agent_id, before=waiting)
+                values = dict(result)
+                if pseudonymiser is not None:
+                    values["output"] = pseudonymiser.restore_value(values.get("output", {}))
+                    values["reasoning_trace"] = pseudonymiser.restore_value(values.get("reasoning_trace", []))
+                return _traced_result(
+                    run_span,
+                    debugger.paused_result(
+                        values,
+                        waiting,
+                        thread_id=config["configurable"]["thread_id"],
+                        latency_ms=latency_ms,
+                        tokens_used=tokens_used,
+                        cost_usd=cost_usd,
+                    ),
+                )
 
         # --- Step 6: PII de-anonymization (after LLM) ---
         # The explanation below is written by a model, so it gets the
@@ -848,6 +878,7 @@ async def resume_agent(
     grant_token: str = "",
     run_grant: RunGrant | None = None,
     require_paused: bool = False,
+    debug: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Resume a paused agent after HITL decision.
 
@@ -956,13 +987,28 @@ async def resume_agent(
         )
     finally:
         reset_prefetched_llm_credential(credential_token)
-    compiled = graph.compile(checkpointer=checkpointer)
+    debug_mode = str((debug or {}).get("mode") or "")
+    if debug_mode:
+        # The console re-enters a run paused at a breakpoint: one node (step) or on to the next breakpoint.
+        pause_before = list(debugger.NODES) if debug_mode == "step" else list((debug or {}).get("breakpoints") or [])
+        compiled = graph.compile(checkpointer=checkpointer, interrupt_before=pause_before)
+    else:
+        compiled = graph.compile(checkpointer=checkpointer)
 
-    resume_command: Command[Any] = (
-        Command(resume=decision)
-        if run_grant.mode is EnforcementMode.OFF
-        else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
-    )
+    resume_command: Command[Any] | None
+    if debug_mode:
+        # A static breakpoint continues on a bare invoke; the fresh grant still replaces the checkpointed one.
+        resume_command = (
+            None
+            if run_grant.mode is EnforcementMode.OFF
+            else Command(update={"grant_token": run_grant.token, "grant_denial": {}})
+        )
+    else:
+        resume_command = (
+            Command(resume=decision)
+            if run_grant.mode is EnforcementMode.OFF
+            else Command(resume=decision, update={"grant_token": run_grant.token, "grant_denial": {}})
+        )
 
     route_token = bind_route(route, use_case="agent_resume", agent_id=agent_id)
     run_span = tracing.start(
@@ -975,7 +1021,9 @@ async def resume_agent(
             refusal = ""
             if snapshot is None or not snapshot.values:
                 refusal = "checkpoint_not_found"
-            elif "hitl_gate" not in (snapshot.next or ()):
+            elif debug_mode and not (snapshot.next or ()):
+                refusal = "checkpoint_not_paused"
+            elif not debug_mode and "hitl_gate" not in (snapshot.next or ()):
                 refusal = "checkpoint_not_paused"
             if refusal:
                 logger.warning("langgraph_resume_refused", agent_id=agent_id, reason=refusal)
@@ -985,6 +1033,25 @@ async def resume_agent(
             config=config,
         )
         latency_ms = int((time.perf_counter() - t0) * 1000)
+        if debug_mode:
+            waiting = await debugger.waiting_nodes(compiled, config)
+            if waiting:
+                step_tokens, step_cost = _sum_usage(result.get("messages", []))
+                values = dict(result)
+                if pseudonymiser is not None:
+                    values["output"] = pseudonymiser.restore_value(values.get("output", {}))
+                    values["reasoning_trace"] = pseudonymiser.restore_value(values.get("reasoning_trace", []))
+                return _traced_result(
+                    run_span,
+                    debugger.paused_result(
+                        values,
+                        waiting,
+                        thread_id=thread_id,
+                        latency_ms=latency_ms,
+                        tokens_used=step_tokens,
+                        cost_usd=step_cost,
+                    ),
+                )
         # Bug sheet #36: the resumed state carries every AI message on the
         # thread, so this is the whole-thread usage (pre-interrupt reasoning
         # included), not just the post-resume delta.

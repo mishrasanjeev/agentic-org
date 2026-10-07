@@ -75,6 +75,33 @@ worker (`core/extraction/sandbox.py`) remains the out-of-process sandbox for unt
 envelope bounds and screens a connector call and marks its output untrusted. Off, no call is
 checked or enveloped and the endpoints are not found.
 
+## Debugging console
+
+With `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` on, a tenant administrator can read a run back
+step by step and pause a run before a node (`core/langgraph/debugger.py`, `/agents/{id}/debug`).
+
+**Step-through.** Every node of the agent graph writes a checkpoint. `GET
+/agents/{id}/debug/threads/{thread_id}` lists them oldest first as steps: the node that ran, the
+state keys it changed, the state as it stood (secrets hidden, keys that look like secrets
+redacted, long values bounded, messages summarised) and the node that runs next. `GET
+.../steps/{checkpoint_id}?path=output.summary` returns one value of one step in full, by its dotted
+path (`messages.2.content`, `tool_calls_log.0`), up to 64 KB. The grant token is never shown. A
+pseudonymised run shows the pseudonyms the model saw. While the console is on, a run's recorded
+span (`/observability/runs`) carries `agent.thread_id`, so the console opens a run's thread from
+its timeline.
+
+**Breakpoints.** `PUT /agents/{id}/debug` names the nodes an agent's runs pause before
+(`reason`, `validate_scopes`, `execute_tools`, `evaluate`, `hitl_gate`). A run that reaches one
+returns `status: paused` with `paused_before` and its `thread_id`, and is recorded as a debug
+session (`agent_debug_sessions`, migration `v6z59_agent_debug_sessions`; `GET
+/agents/{id}/debug/sessions`). `POST .../threads/{thread_id}/step` runs the next node and pauses
+again; `.../continue` runs on to the next breakpoint, or to the end. A step re-enters the graph
+exactly as an approval resume does, with the run's recorded parameters and a fresh grant; a
+second step while one runs is refused until the first reports back (or is ten minutes stale).
+
+Off, no run pauses, `agent.thread_id` is not recorded, and the console endpoints are not found;
+the breakpoints an agent declares are kept and shown with `enforced: false`.
+
 ## Execution limits and loop detection
 
 Every run is held to the platform's maxima: `AGENTICORG_MAX_AGENT_STEPS` graph steps (200 by

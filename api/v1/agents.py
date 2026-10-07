@@ -44,6 +44,7 @@ from core.finops import thresholds as finops_thresholds
 from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
+from core.langgraph import debugger as run_debugger
 from core.langgraph import limits as execution_limits
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
 from core.models.approval_policy import ApprovalPolicy
@@ -697,6 +698,38 @@ def _shadow_metric_update_decision(
         "sample_count_delta": 0,
         "reason": reason,
     }
+
+
+def _run_resume_spec(
+    agent_config: dict[str, Any],
+    review_learning: dict[str, Any],
+    authorized_tools: Any,
+    connector_names_for_tools: Any,
+    run_caller: Any,
+) -> dict[str, Any]:
+    """The graph parameters of a run, so a resume (after approval, or a debug step) re-enters it as it ran.
+
+    Server-only: stripped from every approval API response and never returned by the console.
+    """
+    spec: dict[str, Any] = {
+        # Same expressions as the langgraph_run call in run_agent_task.
+        "confidence_floor": float(review_learning["effective_confidence_floor"]),
+        "hitl_condition": (
+            "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
+        ),
+        "authorized_tools": list(authorized_tools or []),
+        "connector_names": connector_names_for_tools,
+        "llm_model": agent_config.get("llm_model", ""),
+        "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
+        "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
+        "domain": agent_config.get("domain", "ops"),
+    }
+    # A run bound to a caller token stays bound after approval: the
+    # resume has no token, so its tool calls are refused (PRD F-1).
+    caller_marker = run_caller.marker()
+    if caller_marker is not None:
+        spec[CALLER_GRANT_KEY] = caller_marker
+    return spec
 
 
 def _user_uuid_from_claims(user: dict | None) -> _uuid.UUID | None:
@@ -3888,6 +3921,8 @@ async def run_agent(
                 output_schema_json=(agent_config.get("config") or {}).get(prompt_output_schema.INLINE_KEY),
                 # Execution limits and the loop rule the agent declares (core/langgraph/limits.py).
                 limits=(agent_config.get("config") or {}).get(execution_limits.LIMITS_KEY),
+                # Breakpoints (core/langgraph/debugger.py): nodes the run pauses before, while the console is on.
+                breakpoints=run_debugger.breakpoints_for_run(agent_config.get("config") or {}),
             )
     except CheckpointerUnavailableError as exc:
         # Postgres checkpoint store configured but unusable: refuse the run
@@ -3977,6 +4012,22 @@ async def run_agent(
         )
         session.add(audit_entry)
 
+    # 6a. A run paused at a breakpoint: record the debug session the console steps (api/v1/agent_debug.py).
+    if task_status == run_debugger.STATUS_PAUSED and lg_result.get("thread_id") == run_thread_id:
+        try:
+            await run_debugger.open_session(
+                tid,
+                agent_id,
+                thread_id=run_thread_id,
+                paused_before=list(lg_result.get("paused_before") or []),
+                breakpoints=run_debugger.declared({"config": agent_config.get("config") or {}}),
+                spec=_run_resume_spec(
+                    agent_config, review_learning, authorized_tools, connector_names_for_tools, run_caller
+                ),
+                created_by=effective_caller.user_id,
+            )
+        except (RuntimeError, TypeError, ValueError, OSError) as exc:
+            logger.warning("agent_debug_session_record_failed", agent_id=str(agent_id), error_type=type(exc).__name__)
     # 6b. Create HITL queue entry if HITL was triggered
     if hitl_trigger:
         # The runner echoes the thread only when the graph is paused on it.
@@ -3990,24 +4041,9 @@ async def run_agent(
         if paused_thread_id is not None:
             from core.approvals.agent_run_resume import RESUME_SPEC_KEY
 
-            resume_spec[RESUME_SPEC_KEY] = {
-                # Same expressions as the langgraph_run call above.
-                "confidence_floor": float(review_learning["effective_confidence_floor"]),
-                "hitl_condition": (
-                    "" if review_learning["confidence_condition_suppressed"] else agent_config.get("hitl_condition", "")
-                ),
-                "authorized_tools": list(authorized_tools or []),
-                "connector_names": connector_names_for_tools,
-                "llm_model": agent_config.get("llm_model", ""),
-                "llm_provider": _pinned_llm_provider(agent_config.get("llm_provider"), agent_config.get("llm_config")),
-                "company_id": str(agent_config["company_id"]) if agent_config.get("company_id") else None,
-                "domain": agent_config.get("domain", "ops"),
-            }
-            # A run bound to a caller token stays bound after approval: the
-            # resume has no token, so its tool calls are refused (PRD F-1).
-            caller_marker = run_caller.marker()
-            if caller_marker is not None:
-                resume_spec[RESUME_SPEC_KEY][CALLER_GRANT_KEY] = caller_marker
+            resume_spec[RESUME_SPEC_KEY] = _run_resume_spec(
+                agent_config, review_learning, authorized_tools, connector_names_for_tools, run_caller
+            )
         async with get_tenant_session(tid) as session:
             hitl_entry = HITLQueue(
                 tenant_id=tid,
@@ -4160,6 +4196,10 @@ async def run_agent(
     if lg_result.get("grant_denial"):
         # PRD F-1 deny: the reason code for the refused tool call.
         response["grant_denial"] = lg_result["grant_denial"]
+    if task_status == run_debugger.STATUS_PAUSED:
+        # Paused at a breakpoint: the console steps the thread (api/v1/agent_debug.py).
+        response["thread_id"] = lg_result.get("thread_id")
+        response["paused_before"] = list(lg_result.get("paused_before") or [])
     if incoming_action == "shadow_sample":
         response["shadow_metrics"] = shadow_metrics
     return response

@@ -4,6 +4,18 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Agent runtime: debugging console with breakpoints and step-through
+- With `AGENTICORG_RUNTIME_DEBUG_CONSOLE_ENABLED` on (off by default), a
+  tenant administrator reads a run's checkpoints back as steps (the node
+  that ran, what it changed, the bounded and redacted state, what is next)
+  and inspects one value of one step by its path
+  (`core/langgraph/debugger.py`, `/agents/{id}/debug/threads/{thread_id}`).
+  An agent's breakpoints pause its runs before a node (`PUT
+  /agents/{id}/debug`); a paused run is a debug session (table
+  `agent_debug_sessions`, migration `v6z59_agent_debug_sessions`) the
+  console steps one node at a time or continues to the next breakpoint.
+  The console opens a run's thread from its timeline (`agent.thread_id`).
+
 ### Added - Agent runtime: schema-validated tool registration and the execution envelope
 - With `AGENTICORG_TOOL_REGISTRY_ENABLED` on (off by default), a tenant
   registers tools with JSON Schemas for their inputs and outputs, a risk
