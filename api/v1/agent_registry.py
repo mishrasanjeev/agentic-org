@@ -95,6 +95,7 @@ async def set_agent_card(
     except lifecycle.RegistryError as exc:
         raise _refused(exc) from None
     async with get_tenant_session(tid) as session:
+        # The agent row is locked: two first writes of the card create one entry, not two.
         agent = await _agent(session, tid, agent_id, lock=True)
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
         await lifecycle.set_card_fields(session, tid, agent_id, fields)
@@ -118,15 +119,20 @@ async def transition_agent_lifecycle(
     user_domains: list[str] | None = Depends(get_user_domains),
     caller: Caller | None = Depends(caller_from_request),
 ) -> dict:
-    """Move the agent to the next lifecycle state under the transition table, with a note."""
+    """Move the agent to the next lifecycle state under the transition table, with a note.
+
+    A signed-in person makes the move; a request without a local user (an API
+    key, a delegated credential) is refused, so every transition is attributed
+    and the same-person rule holds.
+    """
     _require_enabled()
+    effective = _effective_caller(caller, user_domains)
+    if not effective.is_human:
+        raise HTTPException(403, "A lifecycle transition needs a signed-in user")
     tid = _uuid.UUID(tenant_id)
     async with get_tenant_session(tid) as session:
         agent = await _agent(session, tid, agent_id, lock=True)
-        effective = _effective_caller(caller, user_domains)
         require_agent_mutable(agent, effective)
-        if not effective.is_human:
-            raise HTTPException(403, "Registry lifecycle decisions require an authenticated human user")
         try:
             entry, event = await lifecycle.transition(
                 session, tid, agent, body.to, actor=effective.user_id, note=body.note

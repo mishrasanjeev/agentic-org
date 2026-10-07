@@ -349,7 +349,9 @@ class FleetLimits(BaseModel):
 
 
 class AgentCardIn(BaseModel):
-    """The card fields an administrator writes; only the fields sent are changed."""
+    """The card fields an administrator writes; only the fields sent are changed, and unknown fields are refused."""
+
+    model_config = {"extra": "forbid"}
 
     model_config = {"extra": "forbid"}
 

@@ -27,15 +27,17 @@ class AgentRegistryEntry(BaseModel):
 
     __tablename__ = "agent_registry"
     __table_args__ = (
+        CheckConstraint(
+            "state IN ('draft','review','approved','published','deprecated','retired')",
+            name="ck_agent_registry_state",
+        ),
+        CheckConstraint(
+            "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')",
+            name="ck_agent_registry_risk_tier",
+        ),
         # Leads with the foreign key: one entry per agent.
         Index("ux_agent_registry_agent", "agent_id", unique=True),
         Index("ix_agent_registry_tenant_state", "tenant_id", "state", "risk_tier"),
-        CheckConstraint(
-            "state IN ('draft','review','approved','published','deprecated','retired')", name="ck_agent_registry_state"
-        ),
-        CheckConstraint(
-            "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')", name="ck_agent_registry_risk_tier"
-        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -66,13 +68,13 @@ class AgentRegistryEvent(BaseModel):
 
     __tablename__ = "agent_registry_events"
     __table_args__ = (
-        # Leads with the foreign key: the transitions of one agent, in order.
-        Index("ix_agent_registry_events_agent_created", "agent_id", "created_at"),
-        Index("ix_agent_registry_events_tenant_created", "tenant_id", "created_at"),
         CheckConstraint(
             "to_state IN ('draft','review','approved','published','deprecated','retired')",
             name="ck_agent_registry_events_to",
         ),
+        # Leads with the foreign key: the transitions of one agent, in order.
+        Index("ix_agent_registry_events_agent_created", "agent_id", "created_at"),
+        Index("ix_agent_registry_events_tenant_created", "tenant_id", "created_at"),
         CheckConstraint(
             "from_state IN ('draft','review','approved','published','deprecated','retired')",
             name="ck_agent_registry_events_from",

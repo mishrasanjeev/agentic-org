@@ -8,6 +8,11 @@ Create Date: 2026-10-07
 An agent's card fields and governance lifecycle state (``agent_registry``,
 one row per agent) and its lifecycle transitions (``agent_registry_events``),
 both tenant-scoped under row-level security (``core/agent_registry``).
+
+The check constraints are declared on the models too and added here outside
+the table creation, so a database bootstrapped from the model metadata (where
+``CREATE TABLE IF NOT EXISTS`` is skipped) ends with the same constraints as
+an upgraded one.
 """
 
 from alembic import op
@@ -19,6 +24,26 @@ depends_on = None
 
 _TABLES = ("agent_registry", "agent_registry_events")
 _STATES = "'draft','review','approved','published','deprecated','retired'"
+_CHECKS = (
+    ("agent_registry", "ck_agent_registry_state", f"state IN ({_STATES})"),
+    (
+        "agent_registry",
+        "ck_agent_registry_risk_tier",
+        "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')",
+    ),
+    ("agent_registry_events", "ck_agent_registry_events_to", f"to_state IN ({_STATES})"),
+    ("agent_registry_events", "ck_agent_registry_events_from", f"from_state IN ({_STATES})"),
+)
+
+
+def _ensure_check(table: str, name: str, expression: str) -> None:
+    # The table, name and expression are the module constants above, never request data.
+    statement = (
+        "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = "  # noqa: S608
+        f"'{name}' AND conrelid = '{table}'::regclass) "
+        f"THEN ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expression}); END IF; END $$;"  # noqa: S608
+    )
+    op.execute(statement)
 
 
 def upgrade() -> None:
@@ -67,27 +92,8 @@ def upgrade() -> None:
         "CREATE INDEX IF NOT EXISTS ix_agent_registry_events_tenant_created "
         "ON agent_registry_events(tenant_id, created_at);"
     )
-    # Bootstrap-created tables must receive the same constraints as fresh DDL.
-    for table, name, expression in (
-        ("agent_registry", "ck_agent_registry_state", f"state IN ({_STATES})"),
-        (
-            "agent_registry",
-            "ck_agent_registry_risk_tier",
-            "risk_tier IS NULL OR risk_tier IN ('low','medium','high','critical')",
-        ),
-        ("agent_registry_events", "ck_agent_registry_events_to", f"to_state IN ({_STATES})"),
-        ("agent_registry_events", "ck_agent_registry_events_from", f"from_state IN ({_STATES})"),
-    ):
-        op.execute(f"""  -- Static migration identifiers and expressions only.
-            DO $$ BEGIN
-                IF NOT EXISTS (
-                    SELECT 1 FROM pg_constraint
-                    WHERE conname = '{name}' AND conrelid = '{table}'::regclass
-                ) THEN
-                    ALTER TABLE {table} ADD CONSTRAINT {name} CHECK ({expression});
-                END IF;
-            END $$;
-        """)  # noqa: S608 - identifiers and expressions are fixed migration constants
+    for table, name, expression in _CHECKS:
+        _ensure_check(table, name, expression)
     for table in _TABLES:
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
         op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY;")
