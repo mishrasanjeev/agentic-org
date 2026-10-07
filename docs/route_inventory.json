@@ -4572,6 +4572,24 @@
     "tenant_required": true
   },
   {
+    "audit_event": "content.languages.list",
+    "auth_required": true,
+    "function": "list_languages",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/content/languages api/v1/content_translation.py:list_languages",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/content_translation.py",
+    "path": "/api/v1/content/languages",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "content.read",
+    "source_line": 61,
+    "tenant_required": true
+  },
+  {
     "audit_event": "content.respond",
     "auth_required": true,
     "function": "post_respond",
@@ -4659,6 +4677,42 @@
     "rate_limit": "chat-query",
     "scope": "content.summarise.sensitive.write",
     "source_line": 169,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.translate",
+    "auth_required": true,
+    "function": "post_translate",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/translate api/v1/content_translation.py:post_translate",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_translation.py",
+    "path": "/api/v1/content/translate",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.translate.sensitive.write",
+    "source_line": 82,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "content.translate.batch",
+    "auth_required": true,
+    "function": "post_translate_batch",
+    "idempotency": "idempotent-pure",
+    "key": "POST /api/v1/content/translate/batch api/v1/content_translation.py:post_translate_batch",
+    "metadata_present": true,
+    "methods": [
+      "POST"
+    ],
+    "module": "api/v1/content_translation.py",
+    "path": "/api/v1/content/translate/batch",
+    "public_exempt_reason": null,
+    "rate_limit": "chat-query",
+    "scope": "content.translate.sensitive.write",
+    "source_line": 105,
     "tenant_required": true
   },
   {

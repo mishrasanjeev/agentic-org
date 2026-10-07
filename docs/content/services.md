@@ -73,6 +73,18 @@ The result names the clauses and versions used, the clauses skipped, the facts m
 visible as `[PLACEHOLDER]`), the required clauses whose conditions failed, and whether the
 document is complete.
 
+**Document translation** (`POST /content/translate`, `POST /content/translate/batch`,
+`core/content/translation.py`): a translation into any of the supported Indian languages or
+English (`GET /content/languages`), formal or neutral register, plain text or Markdown, with a
+glossary (term to translation) and terms to keep verbatim (product names, identifiers). The model
+translates; the service checks deterministically that every number, amount, date and percentage of
+the source is still there, that each glossary term present in the source has its translation in the
+output, that the verbatim terms were kept, and that at least half the letters are in the target
+script; `trusted` is true only when all four hold, and the `checks` say which did not. `verify`
+adds a second model call that translates back to the source language and the word overlap with
+the source, so a reviewer sees how much came through. A batch of up to twenty texts is translated
+one by one with the same settings; an item's failure is reported in place.
+
 ## Evaluation datasets
 
 Each service ships synthetic evaluation cases (an input and what the answer must contain or avoid).
