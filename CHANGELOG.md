@@ -4,6 +4,17 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Knowledge retrieval: citations and excerpt navigation
+- Every knowledge search hit carries a `citation` (chunk id, source,
+  chunk number, page, paragraph, heading, sheet, cell range;
+  `core/rag/citations.py`) read through a join on the chunk provenance;
+  older chunks carry `null` and the original fields are unchanged.
+  `GET /knowledge/documents/{id}/excerpt?q=` returns the cited chunk
+  whole with the query terms located and the neighbouring chunks, under
+  the retrieval guardrails. The Knowledge Base page shows the citation
+  beside each hit and opens the excerpt with the terms marked and
+  previous/next links.
+
 ### Added - Knowledge retrieval: search filters and a re-ranking stage
 - `POST /knowledge/search` takes `filters` (`category`, `source`,
   `file_type`, a `created_from`/`created_to` window; `core/rag/filters.py`)

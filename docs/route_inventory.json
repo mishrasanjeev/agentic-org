@@ -5468,7 +5468,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.documents.list",
-    "source_line": 969,
+    "source_line": 979,
     "tenant_required": true
   },
   {
@@ -5486,7 +5486,25 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-write",
     "scope": "knowledge.documents.delete",
-    "source_line": 1068,
+    "source_line": 1078,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "knowledge.excerpt",
+    "auth_required": true,
+    "function": "knowledge_excerpt",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/knowledge/documents/{doc_id}/excerpt api/v1/knowledge.py:knowledge_excerpt",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/knowledge.py",
+    "path": "/api/v1/knowledge/documents/{doc_id}/excerpt",
+    "public_exempt_reason": null,
+    "rate_limit": "knowledge-search",
+    "scope": "knowledge.sensitive.search",
+    "source_line": 1506,
     "tenant_required": true
   },
   {
@@ -5504,7 +5522,7 @@
     "public_exempt_reason": "deployment-smoke-test-no-tenant-data",
     "rate_limit": "healthcheck",
     "scope": "knowledge.health.public",
-    "source_line": 1529,
+    "source_line": 1656,
     "tenant_required": false
   },
   {
@@ -5522,7 +5540,7 @@
     "public_exempt_reason": null,
     "rate_limit": "knowledge-search",
     "scope": "knowledge.sensitive.search",
-    "source_line": 1465,
+    "source_line": 1592,
     "tenant_required": true
   },
   {
@@ -5540,7 +5558,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.sensitive.stats",
-    "source_line": 1642,
+    "source_line": 1769,
     "tenant_required": true
   },
   {
@@ -5558,7 +5576,7 @@
     "public_exempt_reason": null,
     "rate_limit": "standard",
     "scope": "knowledge.upload.types.read",
-    "source_line": 556,
+    "source_line": 566,
     "tenant_required": true
   },
   {
@@ -5576,7 +5594,7 @@
     "public_exempt_reason": null,
     "rate_limit": "file-upload",
     "scope": "knowledge.upload",
-    "source_line": 582,
+    "source_line": 592,
     "tenant_required": true
   },
   {

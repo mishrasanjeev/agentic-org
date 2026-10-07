@@ -70,6 +70,25 @@ The re-ranker reads the texts only and calls no model; it knows no synonyms and 
 is why it sits behind a switch and why its scores are explainable. Off, the fused order is
 returned as it was.
 
+## Citations and excerpts
+
+Every search hit carries a `citation` (`core/rag/citations.py`): the chunk row's id, its source,
+its chunk number, and the place in the source that ingestion recorded for it (page, paragraph
+number, nearest heading, sheet, cell range). The search paths read it through a join on
+`knowledge_chunk_sources`, so a hit from a chunk that keeps no provenance (an older upload, a
+RAGFlow document) carries `null`; the three original fields of a hit are unchanged.
+
+`GET /knowledge/documents/{id}/excerpt?q=` returns the cited chunk whole, with the query's terms
+located in it as character spans, its citation, and the ids of the chunks either side in the same
+upload, so the console can open the place in the source and move through it. The text passes the
+retrieval guardrails as a search result does; a chunk they withhold is not found. The Knowledge
+Base page shows the citation beside each hit and opens the excerpt with the terms marked and
+previous/next links.
+
+An excerpt is the chunk as it was ingested, not the original file: a page image, a table's
+formatting or a figure are not shown. Access to a document is the tenant's as a whole; document
+access control is the next part of this package.
+
 ## OCR flow
 
 ```mermaid
