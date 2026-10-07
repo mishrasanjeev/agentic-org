@@ -425,7 +425,7 @@ def _tenant(tenant_id: uuid.UUID | str) -> uuid.UUID | None:
 
 
 async def value(tenant_id: uuid.UUID | str, key: str) -> Any:
-    """The effective value of one setting; None for a key the catalogue does not hold now (a gated group that is off)."""
+    """The effective value of one setting; None for a key the catalogue does not hold now (a gated group off)."""
     return (await effective(tenant_id, [key])).get(key)
 
 
