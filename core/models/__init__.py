@@ -128,6 +128,7 @@ from core.models.tenant import Tenant as Tenant
 from core.models.tenant_ai_credential import TenantAICredential as TenantAICredential
 from core.models.tenant_ai_setting import TenantAISetting as TenantAISetting
 from core.models.tool_call import ToolCall as ToolCall
+from core.models.tool_registration import ToolRegistration as ToolRegistration
 from core.models.user import User as User
 from core.models.voice_call import VoiceCall as VoiceCall
 from core.models.weekly_report_pilot_proof import (

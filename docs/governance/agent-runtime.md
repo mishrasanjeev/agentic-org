@@ -51,6 +51,30 @@ remembers (the same content about the same subject refreshes its expiry), and
 with the count, so a request to be forgotten is one audited call. `GET /memory/policy` states the
 kinds, retentions and bounds. Off, no run reads or writes memory and the endpoints are not found.
 
+## Tool registration and the execution envelope
+
+With `AGENTICORG_TOOL_REGISTRY_ENABLED` on, a tenant administrator registers tools
+(`core/tool_gateway/registry.py`, `/tools/registry`): a name (`connector:tool`, or a plain tool
+name), a JSON Schema for the tool's inputs, optionally one for its outputs, a risk class, and an
+execution envelope: the longest a call may take (1 to 300 seconds), the most output it may return,
+and whether its output is treated as untrusted content. Schemas are checked at registration (a
+valid draft 2020-12 schema, bounded, without `$ref`), so a bad schema never reaches a call.
+
+The gateway checks every call to a registered tool against its input schema **before the call
+leaves the gateway**: inputs that fail are refused (`E1012`, `tool_input_invalid`, the errors
+named by path), audited as `input_rejected`, and never dispatched. A call that runs is held to
+its envelope: a timeout (`tool_timeout`), an output cap (`tool_output_too_large`), the output
+checked against its schema when one is declared (`tool_output_invalid`), and the result marked
+`_untrusted` so the model's guardrails treat it as retrieved content. With
+`AGENTICORG_TOOL_REGISTRY_REQUIRE_REGISTRATION` on, a call to a tool no registration covers is
+refused too (`tool_unregistered`). `POST /tools/registry/check?name=` is a dry run of the
+gateway's check for a tool and a set of inputs.
+
+What the envelope is not: in-process connector code is not process-isolated by it. The extraction
+worker (`core/extraction/sandbox.py`) remains the out-of-process sandbox for untrusted content; the
+envelope bounds and screens a connector call and marks its output untrusted. Off, no call is
+checked or enveloped and the endpoints are not found.
+
 ## Execution limits and loop detection
 
 Every run is held to the platform's maxima: `AGENTICORG_MAX_AGENT_STEPS` graph steps (200 by
