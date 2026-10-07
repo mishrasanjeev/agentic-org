@@ -307,6 +307,10 @@ class Settings(BaseSettings):
     # re-embeds stale chunks and records missing entities, bounded per call.
     # Off by default: off, the endpoint is not found.
     knowledge_reindex_enabled: bool = False
+    # AI asset inventory (core/governance/inventory.py): GET /governance/inventory
+    # and its bill-of-materials export, tenant-admin only. Off by default: off,
+    # the endpoints are not found and nothing is read.
+    governance_inventory_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

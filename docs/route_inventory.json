@@ -4896,6 +4896,42 @@
     "tenant_required": true
   },
   {
+    "audit_event": "governance.inventory.read",
+    "auth_required": true,
+    "function": "list_inventory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/inventory api/v1/governance_inventory.py:list_inventory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_inventory.py",
+    "path": "/api/v1/governance/inventory",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 46,
+    "tenant_required": true
+  },
+  {
+    "audit_event": "governance.inventory.export",
+    "auth_required": true,
+    "function": "export_inventory",
+    "idempotency": "read-only",
+    "key": "GET /api/v1/governance/inventory/export api/v1/governance_inventory.py:export_inventory",
+    "metadata_present": true,
+    "methods": [
+      "GET"
+    ],
+    "module": "api/v1/governance_inventory.py",
+    "path": "/api/v1/governance/inventory/export",
+    "public_exempt_reason": null,
+    "rate_limit": "standard",
+    "scope": "governance.inventory.sensitive.read",
+    "source_line": 80,
+    "tenant_required": true
+  },
+  {
     "audit_event": null,
     "auth_required": true,
     "function": "list_governed_cases",
