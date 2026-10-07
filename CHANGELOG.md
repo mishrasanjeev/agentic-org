@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - Conversational services: multi-turn context, clarification and graceful fallbacks
+- With `AGENTICORG_CONVERSATION_V2_ENABLED` on, the recent turns of a chat
+  reach the agent as the run's context so follow-ups resolve earlier
+  references (`core/conversation/context.py`); in the banking dialogue
+  "the same amount", "that account" and "again" resolve from the last
+  action, a message naming two amounts or two payees is asked about
+  instead of acted on, and a failed or empty answer is a graceful
+  fallback that says what happened, that nothing changed, and offers a
+  person after two in a row (`core/conversation/fallbacks.py`).
+
 ### Added - Conversational services: banking intents, slot filling and confirmed execution
 - With `AGENTICORG_CONVERSATION_V2_ENABLED` on (off by default), a chat
   message that names a banking intent (balance, statement, card block,

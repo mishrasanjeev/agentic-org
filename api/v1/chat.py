@@ -19,6 +19,8 @@ from api.route_metadata import route_meta
 from api.v1.agents import _pinned_llm_provider, _record_cost_ledger
 from auth.run_grants import direct_tool_call_permitted, resolve_run_grant
 from core.config import is_strict_runtime_env, redis_socket_timeout_kwargs, redis_url_from_env, settings
+from core.conversation import context as conversation_context
+from core.conversation import fallbacks as conversation_fallbacks
 from core.conversation import runtime as conversation_runtime
 from core.database import get_tenant_session
 from core.governance.agent_status import refusal_for as agent_status_refusal
@@ -1089,6 +1091,16 @@ async def chat_query(
                 conversation=handled["outcome"],
             )
 
+    # Conversational services: the recent turns reach the agent as the run's
+    # context, so a follow-up is answered against what was said (CONV-02).
+    run_context: dict[str, Any] = {}
+    context_note: str = ""
+    if conversation_runtime.enabled():
+        history_entries = await _load_session(
+            _session_key(tenant_id, str(company_uuid), body.agent_id, _session_user_id(request))
+        )
+        run_context = conversation_context.context_block(history_entries)
+        context_note = conversation_context.with_context_note("", history_entries).strip()
     # Try to execute via LangGraph if an agent was found in DB
     answer: str | None = None
     if agent_id:
@@ -1110,9 +1122,10 @@ async def chat_query(
                         "and filing details already present before asking "
                         "for clarification."
                     )
-                ),
+                )
+                + (f"\n\n{context_note}" if context_note else ""),
                 authorized_tools=resolved_tools,
-                task_input={"action": "query", "inputs": {"query": body.query}, "context": {}},
+                task_input={"action": "query", "inputs": {"query": body.query}, "context": run_context},
                 llm_model="",
                 llm_provider=agent_llm_provider,
                 confidence_floor=0.88,
@@ -1214,6 +1227,13 @@ async def chat_query(
     # this data source" state instead of a phantom response. The
     # confidence drops to the minimum because the system genuinely
     # has no grounded answer.
+    if not answer and conversation_runtime.enabled():
+        # A graceful fallback: what happened, that nothing changed, and the next step (CONV-06).
+        kind = conversation_fallbacks.classify(lg_result if agent_id else None, answer=answer) or (
+            conversation_fallbacks.KIND_NO_ANSWER
+        )
+        answer = conversation_fallbacks.message(kind, consecutive=1)
+        confidence = 0.0
     if not answer:
         answer = (
             "No agent was able to answer that query. "

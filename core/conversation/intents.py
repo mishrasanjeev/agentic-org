@@ -120,7 +120,7 @@ CATALOGUE: tuple[Intent, ...] = (
         "Fund transfer",
         "transact",
         (
-            (r"\b(transfer|send|remit|move)\b.*\b(money|funds|rs\.?|rupees|inr|₹|\d)", 0.6),
+            (r"\b(transfer|send|remit|move)\b.*\b(money|funds|amount|sum|rs\.?|rupees|inr|₹|\d)", 0.6),
             (r"\bpay\b.*\bto\b", 0.4),
             (r"\b(neft|imps|rtgs|upi)\b", 0.3),
         ),
@@ -308,6 +308,7 @@ _PERIOD_RE = re.compile(
     r"|\b(\d{1,3})\s+(days?|transactions?)\b",
     re.I,
 )
+_PAYEE_OR_RE = re.compile(r"\bto\s+([A-Z][\w.'-]*)\s+or\s+([A-Z][\w.'-]*)\b")
 _MERCHANT_RE = re.compile(r"\b(?:at|from|by)\s+((?:[A-Z][\w&.'-]*)(?:\s+[A-Z][\w&.'-]*){0,2})")
 _LOAN_TYPE_RE = re.compile(r"\b(personal|home|housing|car|vehicle|auto|education|student|business|gold)\b", re.I)
 _LOAN_TYPES = {"housing": "home", "vehicle": "car", "auto": "car", "student": "education"}
@@ -435,6 +436,9 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     amount = parse_amount(text)
     if amount is not None:
         found["amount"] = amount
+        amounts = parse_amounts(text)
+        if len(amounts) > 1:
+            found["amount_options"] = amounts  # "500 or 600": ambiguous, the dialogue asks which
     account = _ACCOUNT_RE.search(text)
     card = _CARD_RE.search(text)
     if account:
@@ -464,7 +468,32 @@ def extract_entities(text: str, *, today: date | None = None) -> dict[str, Any]:
     merchant = _MERCHANT_RE.search(text)
     if merchant and merchant.group(1).lower() not in _PAYEE_STOP:
         found["merchant"] = merchant.group(1).strip(" .,")[:80]
+    either = _PAYEE_OR_RE.search(text)
+    if either and not {either.group(1).lower(), either.group(2).lower()} & _PAYEE_STOP:
+        found["payee_options"] = [either.group(1), either.group(2)]
     return found
+
+
+def parse_amounts(text: str) -> list[float]:
+    """Every distinct amount in ``text``, in order ("500 or 600" names two)."""
+    amounts: list[float] = []
+    for match in _AMOUNT_RE.finditer(text):
+        groups = [g for g in match.groups() if g is not None]
+        value = parse_amount(match.group(0))
+        if value is not None and value not in amounts and groups:
+            amounts.append(value)
+    if not amounts:
+        for match in _BARE_IN_TEXT_RE.finditer(text):
+            before = text[max(0, match.start() - 24) : match.start()]
+            if _NOT_AMOUNT_BEFORE_RE.search(before):
+                continue
+            try:
+                value = float(match.group(1).replace(",", ""))
+            except ValueError:
+                continue
+            if value > 0 and value not in amounts:
+                amounts.append(value)
+    return amounts
 
 
 # ── Recognition ───────────────────────────────────────────────────────────────
