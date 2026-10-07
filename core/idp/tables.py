@@ -44,28 +44,6 @@ class Table:
         }
 
 
-def _layout_tables(raw_page: Any, number: int) -> list[Table]:
-    try:
-        found = raw_page.find_tables()
-    # enterprise-gate: broad-except-ok reason=layout-engine-boundary-degrades-to-word-alignment-logging-the-failure
-    except Exception:  # noqa: BLE001 - the layout engine is optional
-        return []
-    out: list[Table] = []
-    for table in getattr(found, "tables", []) or []:
-        try:
-            rows = [[str(c or "").strip() for c in row] for row in table.extract()]
-            box = tuple(float(v) for v in table.bbox)
-        # enterprise-gate: broad-except-ok reason=layout-engine-boundary-degrades-to-word-alignment-logging-the-failure
-        except Exception as exc:  # noqa: BLE001 - one unreadable table must not lose the page
-            logger.warning("idp_table_unreadable", page=number, error_type=type(exc).__name__)
-            continue
-        rows = [row for row in rows if any(row)]
-        if len(rows) < 2:
-            continue
-        out.append(Table(page=number, bbox=box, rows=rows[1:], method="layout", header=rows[0]))
-    return out
-
-
 def _columns_of(line: Any) -> list[tuple[float, float, str]]:
     """A line's words grouped into cells by horizontal gaps: (x0, x1, text)."""
     cells: list[list[Any]] = []
@@ -112,16 +90,11 @@ def word_tables(page: Page) -> list[Table]:
     return tables[:MAX_TABLES]
 
 
-def extract(pages: list[Page], raw_pages: list[Any] | None = None) -> list[Table]:
-    """The tables of every page: the layout engine's where it finds any, word alignment otherwise."""
+def extract(pages: list[Page]) -> list[Table]:
+    """The tables of every page, from the alignment of its words."""
     out: list[Table] = []
-    for index, page in enumerate(pages):
-        found: list[Table] = []
-        if raw_pages is not None and index < len(raw_pages) and page.source == "text":
-            found = _layout_tables(raw_pages[index], page.number)
-        if not found:
-            found = word_tables(page)
-        out.extend(found)
+    for page in pages:
+        out.extend(word_tables(page))
         if len(out) >= MAX_TABLES:
             break
     return out[:MAX_TABLES]

@@ -74,7 +74,6 @@ from core.models.connector import Connector as Connector
 from core.models.connector_config import ConnectorConfig as ConnectorConfig
 from core.models.content_clause import ContentClause as ContentClause
 from core.models.content_draft import ContentDraft as ContentDraft
-from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.conversation_session import ConversationSession as ConversationSession
 from core.models.delegation import UserDelegation as UserDelegation
 from core.models.document import Document as Document
@@ -95,6 +94,7 @@ from core.models.gstn_credential import GSTNCredential as GSTNCredential
 from core.models.gstn_upload import GSTNUpload as GSTNUpload
 from core.models.guardrail_rule import GuardrailRule as GuardrailRule
 from core.models.hitl import HITLQueue as HITLQueue
+from core.models.idp_document import IdpDocument as IdpDocument
 from core.models.industry_pack_install import IndustryPackInstall as IndustryPackInstall
 from core.models.invoice import Invoice as Invoice
 from core.models.kpi_cache import KPICache as KPICache
