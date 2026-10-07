@@ -299,6 +299,14 @@ class Settings(BaseSettings):
     # from the query. Off by default: off, ingestion writes no entity rows
     # and a search runs exactly as before.
     knowledge_graph_retrieval_enabled: bool = False
+    # Retrieval quality metrics (core/rag/metrics.py): one figures-only row
+    # and the Prometheus series per knowledge search, GET /knowledge/metrics
+    # and the grounding indicator. Off by default: off, nothing is recorded.
+    knowledge_metrics_enabled: bool = False
+    # Incremental re-indexing (core/rag/reindex.py): POST /knowledge/reindex
+    # re-embeds stale chunks and records missing entities, bounded per call.
+    # Off by default: off, the endpoint is not found.
+    knowledge_reindex_enabled: bool = False
     # JSON object keyed provider/model with input and output USD per million
     # tokens; a negotiated rate replaces the list price.
     model_price_overrides_json: str = ""

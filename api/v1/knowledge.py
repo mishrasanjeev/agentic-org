@@ -8,8 +8,9 @@ with basic keyword search (no vector embeddings).
 from __future__ import annotations
 
 import os
+import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -22,7 +23,9 @@ from api.route_metadata import route_meta
 from core.config import settings
 from core.rag import access as knowledge_access
 from core.rag import entities as knowledge_entities
+from core.rag import metrics as rag_metrics
 from core.rag import query as query_transform
+from core.rag import reindex as rag_reindex
 from core.rag import rerank
 from core.rag.citations import (
     PROVENANCE_COLUMNS,
@@ -1540,6 +1543,154 @@ def _hit_row(r: Any) -> tuple[Any, ...]:
     return (str(r[0]), r[1] or "", r[2] or "", _citation_of(r, 0, 3) if len(r) > 3 else None)
 
 
+class MetricsResponse(BaseModel):
+    window_hours: int
+    searches: int
+    empty_share: float | None = None
+    mean_relevance: float | None = None
+    mean_covered_share: float | None = None
+    p50_latency_ms: float | None = None
+    p95_latency_ms: float | None = None
+    expanded_share: float | None = None
+    graph_share: float | None = None
+    withheld: int = 0
+    paths: dict[str, int] = Field(default_factory=dict)
+
+
+class GroundingRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    answer: str = Field(..., min_length=1, max_length=20000)
+    chunks: list[str] = Field(default_factory=list, max_length=50)
+
+
+class GroundingResponse(BaseModel):
+    sentences: int
+    supported: int
+    score: float | None = None
+    unsupported: list[str] = Field(default_factory=list)
+    hallucination_risk: str
+
+
+class ReindexRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    dry_run: bool = True
+    limit: int = Field(100, ge=1, le=rag_reindex.MAX_LIMIT)
+    since: date | None = None
+
+
+class ReindexResponse(BaseModel):
+    dry_run: bool
+    model: str
+    candidates: int
+    stale_embeddings: int
+    missing_entities: int
+    re_embedded: int = 0
+    entities_indexed: int = 0
+
+
+def _metrics_off() -> HTTPException:
+    return HTTPException(
+        404,
+        detail={
+            "error": "knowledge_metrics_disabled",
+            "message": "Retrieval quality metrics are off for this deployment (AGENTICORG_KNOWLEDGE_METRICS_ENABLED).",
+        },
+    )
+
+
+@router.get("/knowledge/metrics", response_model=MetricsResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.stats",
+    rate_limit="standard",
+    idempotency="read-only",
+    audit_event="knowledge.metrics",
+)
+async def knowledge_metrics(
+    hours: int = Query(24, ge=1, le=rag_metrics.MAX_WINDOW_HOURS),
+    tenant_id: str = Depends(get_current_tenant),
+) -> MetricsResponse:
+    """The tenant's retrieval quality over the window: searches, relevance, latency percentiles and the path mix."""
+    if not rag_metrics.enabled():
+        raise _metrics_off()
+    tid = uuid.UUID(tenant_id)
+    async with _graph_session(tid) as session:
+        folded = await rag_metrics.summary(session, tid, hours)
+    return MetricsResponse(**folded)
+
+
+@router.post("/knowledge/metrics/grounding", response_model=GroundingResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.sensitive.search",
+    rate_limit="knowledge-search",
+    idempotency="read-only",
+    audit_event="knowledge.grounding",
+)
+async def knowledge_grounding(
+    body: GroundingRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> GroundingResponse:
+    """How much of an answer the given chunks support: the hallucination indicator, computed without a model."""
+    if not rag_metrics.enabled():
+        raise _metrics_off()
+    if any(len(chunk) > 8000 for chunk in body.chunks):
+        raise HTTPException(422, detail={"error": "chunk_too_long", "message": "A chunk is at most 8000 characters."})
+    return GroundingResponse(**rag_metrics.grounding(body.answer, body.chunks))
+
+
+@router.post("/knowledge/reindex", response_model=ReindexResponse)
+@route_meta(
+    auth_required=True,
+    tenant_required=True,
+    scope="knowledge.upload",
+    rate_limit="standard",
+    idempotency="bounded-batch-repeat-until-zero-candidates",
+    audit_event="knowledge.reindex",
+)
+async def knowledge_reindex(
+    body: ReindexRequest,
+    tenant_id: str = Depends(get_current_tenant),
+) -> ReindexResponse:
+    """List the tenant's stale chunks and, unless a dry run, re-embed them and record their missing entities."""
+    if not rag_reindex.enabled():
+        raise HTTPException(
+            404,
+            detail={
+                "error": "knowledge_reindex_disabled",
+                "message": "Re-indexing is off for this deployment (AGENTICORG_KNOWLEDGE_REINDEX_ENABLED).",
+            },
+        )
+    from core.embeddings import rag_embedding_column
+    from core.rag import ingest as knowledge_ingest
+
+    tid = uuid.UUID(tenant_id)
+    provider, model, _dimensions = await knowledge_ingest._resolve_embedding_profile(tid)
+    model_name = f"{provider}/{model}"[:128]
+    want_entities = knowledge_entities.enabled()
+    async with _graph_session(tid) as session:
+        rows = await rag_reindex.stale_chunks(
+            session, tid, model_name=model_name, since=body.since, limit=body.limit, want_entities=want_entities
+        )
+        counted = rag_reindex.counts(rows, model_name=model_name, want_entities=want_entities)
+        done = {"re_embedded": 0, "entities_indexed": 0}
+        if not body.dry_run and rows:
+            done = await rag_reindex.reindex(
+                session,
+                tid,
+                rows,
+                model_name=model_name,
+                column=rag_embedding_column(),
+                embed=knowledge_ingest._embed_chunks,
+                want_entities=want_entities,
+            )
+    return ReindexResponse(dry_run=body.dry_run, model=model_name, **counted, **done)
+
+
 class GraphEntity(BaseModel):
     entity: str
     kind: str
@@ -1825,12 +1976,48 @@ def _trace_out(trace: query_transform.Trace) -> RetrievalTrace:
     )
 
 
+async def _record_quality(
+    req: SearchRequest,
+    tenant_id: str,
+    results: list[SearchResult],
+    kept: list[SearchResult],
+    *,
+    path: str,
+    started: float,
+    trace: query_transform.Trace | None,
+) -> None:
+    """One figures-only sample per search while the metrics switch is on; a failure never touches the answer."""
+    if not rag_metrics.enabled():
+        return
+    try:
+        s = rag_metrics.sample(
+            req.query,
+            [r.chunk_text for r in kept],
+            [r.score for r in kept],
+            path=path,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            expanded=any(step.get("action") == "expand" for step in trace.steps) if trace is not None else False,
+            graph=knowledge_entities.enabled(),
+            withheld=len(results) - len(kept),
+        )
+        rag_metrics.observe(s)
+        tid = uuid.UUID(tenant_id)
+        async with _graph_session(tid) as session:
+            await rag_metrics.record(session, tid, s)
+    except (RuntimeError, SQLAlchemyError, TypeError, ValueError) as exc:
+        logger.warning("knowledge_metrics_record_failed", error=type(exc).__name__)
+
+
 async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[str] | None = None) -> SearchResponse:
     """The search itself: RAGFlow when configured, else native semantic search; both pass the retrieval guardrails."""
+    started = time.monotonic()
     if _ragflow_available() and await _ragflow_allowed(tenant_id):
         try:
             chunks = await _ragflow_search(tenant_id, req.query, req.top_k)
-            return SearchResponse(results=await _guard_results(tenant_id, [SearchResult(**c) for c in chunks]))
+            hits = [SearchResult(**c) for c in chunks]
+            kept = await _guard_results(tenant_id, hits)
+            await _record_quality(req, tenant_id, hits, kept, path="ragflow", started=started, trace=None)
+            return SearchResponse(results=kept)
         except _RAGFLOW_ERRORS as exc:
             logger.warning("ragflow_search_failed", error=str(exc))
 
@@ -1842,8 +2029,18 @@ async def _search_knowledge(req: SearchRequest, tenant_id: str, domains: list[st
             results = await _native_semantic_search(tenant_id, req.query, req.top_k, req.filters, domains)
         if knowledge_entities.enabled():
             results = await _with_graph(req, tenant_id, domains, results, trace)
+        kept = await _guard_results(tenant_id, results)
+        await _record_quality(
+            req,
+            tenant_id,
+            results,
+            kept,
+            path="hybrid" if settings.knowledge_hybrid_search else "vector_keyword",
+            started=started,
+            trace=trace,
+        )
         return SearchResponse(
-            results=await _guard_results(tenant_id, results),
+            results=kept,
             trace=_trace_out(trace) if req.trace and trace is not None else None,
         )
     except HTTPException:

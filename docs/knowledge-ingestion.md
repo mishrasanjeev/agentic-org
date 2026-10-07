@@ -114,6 +114,33 @@ so. `GET /knowledge/graph?q=` returns the matched entities, their neighbours and
 them (the weight is the number of shared chunks); with the switch off it answers 404
 (`knowledge_graph_disabled`).
 
+## Retrieval quality metrics and re-indexing
+
+With `AGENTICORG_KNOWLEDGE_METRICS_ENABLED` on, every knowledge search leaves one figures-only
+sample (`core/rag/metrics.py`, table `knowledge_retrieval_metrics`): the retrieval path, how many
+chunks came back and how many the guardrails withheld, the best score, the context relevance (the
+mean share of the query's terms each returned chunk carries, and the share of chunks carrying at
+least one), the latency, and whether the query was expanded or the graph consulted. No query text,
+chunk or user is stored. The same figures feed the Prometheus series
+`agenticorg_knowledge_searches_total`, `agenticorg_knowledge_search_relevance` and
+`agenticorg_knowledge_search_latency_seconds` by path. `GET /knowledge/metrics?hours=` folds the
+tenant's samples over the window (counts, empty share, mean relevance, latency percentiles,
+expanded and graph shares, the path mix). `POST /knowledge/metrics/grounding` with an answer and
+the chunks it was written from returns the hallucination indicator: the share of the answer's
+sentences that at least one chunk supports, the sentences none does, and the risk that follows
+(low, medium, high). It is deterministic and calls no model; a model-graded judgement is what the
+evaluation framework's faithfulness judge is for.
+
+With `AGENTICORG_KNOWLEDGE_REINDEX_ENABLED` on, `POST /knowledge/reindex` (`core/rag/reindex.py`)
+lists the tenant's stale chunks, oldest first and bounded per call (`limit`, at most 500,
+optionally only those created `since` a date): chunks whose embedding was made by a model other
+than the tenant embeds with now and, while graph retrieval is on, chunks with no entity rows. A dry
+run (the default) only counts; otherwise the stale ones are re-embedded in place and the missing
+entities recorded. Nothing is deleted or re-chunked, so citations, provenance, domains and access
+stay valid; repeat the call until the candidate count is zero.
+
+Both switches are off by default; off, nothing is recorded and the endpoints are not found.
+
 ## Citations and excerpts
 
 Every search hit carries a `citation` (`core/rag/citations.py`): the chunk row's id, its source,
