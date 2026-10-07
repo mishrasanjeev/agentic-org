@@ -33,6 +33,7 @@ class StructureIn(BaseModel):
 
     text: str = Field(..., min_length=1, max_length=40_000)
     schema_name: str | None = Field(None, max_length=100)
+    schema_version: str | None = Field(None, min_length=1, max_length=20)
     schema_: dict[str, Any] | None = Field(None, alias="schema")
     format: Literal["json", "xml", "both"] = "json"
     root_element: str = Field("document", min_length=1, max_length=64)
@@ -43,6 +44,8 @@ class StructureIn(BaseModel):
     def _one_schema(self) -> StructureIn:
         if (self.schema_name is None) == (self.schema_ is None):
             raise ValueError("give exactly one of schema_name or schema")
+        if self.schema_version is not None and self.schema_name is None:
+            raise ValueError("schema_version applies to a named schema only")
         if self.schema_ is not None and len(json.dumps(self.schema_)) > MAX_SCHEMA_BYTES:
             raise ValueError("schema is too large")
         return self
@@ -60,29 +63,42 @@ OUTPUT_SCHEMA: dict[str, Any] = {
 }
 
 
-async def resolve_schema(tenant_id: uuid.UUID, name: str) -> dict[str, Any]:
-    """The tenant's registered schema by name (the tenant's own row first, then a global one), else a built-in."""
+def _newest_first(row: Any) -> tuple[bool, float, str, str]:
+    """Sort key: the tenant's own rows before global ones, then the newest by created_at, ties broken by id."""
+    created = getattr(row, "created_at", None)
+    stamp = created.timestamp() if created is not None else float("-inf")
+    return (row.tenant_id is None, -stamp, str(getattr(row, "version", "")), str(getattr(row, "id", "")))
+
+
+async def resolve_schema(tenant_id: uuid.UUID, name: str, version: str | None = None) -> dict[str, Any]:
+    """The tenant's registered schema by name, else a built-in.
+
+    With ``version`` that exact registered version is used (the tenant's own row first, then a global one) and
+    nothing else; without it the latest registered version by ``created_at`` is used, the same choice the schema
+    registry routes make, so the result never depends on the order the database happens to return rows in.
+    """
     from sqlalchemy import select
 
     from core.database import get_tenant_session
     from core.models.schema_registry import SchemaRegistry
 
+    query = select(SchemaRegistry).where(
+        SchemaRegistry.name == name,
+        (SchemaRegistry.tenant_id == tenant_id) | (SchemaRegistry.tenant_id.is_(None)),
+    )
+    if version is not None:
+        query = query.where(SchemaRegistry.version == version)
+    query = query.order_by(
+        SchemaRegistry.tenant_id.is_(None), SchemaRegistry.created_at.desc(), SchemaRegistry.id.desc()
+    )
     async with get_tenant_session(tenant_id) as session:
-        rows = (
-            (
-                await session.execute(
-                    select(SchemaRegistry).where(
-                        SchemaRegistry.name == name,
-                        (SchemaRegistry.tenant_id == tenant_id) | (SchemaRegistry.tenant_id.is_(None)),
-                    )
-                )
-            )
-            .scalars()
-            .all()
-        )
-    chosen = next((r for r in rows if r.tenant_id == tenant_id), None) or next(iter(rows), None)
+        rows = (await session.execute(query)).scalars().all()
+    candidates = [r for r in rows if version is None or str(getattr(r, "version", "")) == version]
+    chosen = min(candidates, key=_newest_first) if candidates else None
     if chosen is not None and isinstance(chosen.json_schema, dict):
         return dict(chosen.json_schema)
+    if version is not None:
+        raise services.ContentError(404, "schema_unknown", f"No schema named {name!r} at version {version!r}")
     from core import domain_schemas
 
     if name in getattr(domain_schemas, "DOMAIN_SCHEMAS", ()):
@@ -102,7 +118,9 @@ def schema_of(sources: list[Source]) -> dict[str, Any]:
 
 async def resolve_sources(tenant_id: uuid.UUID, payload: StructureIn, domains: list[str] | None) -> list[Source]:
     schema = (
-        payload.schema_ if payload.schema_ is not None else await resolve_schema(tenant_id, str(payload.schema_name))
+        payload.schema_
+        if payload.schema_ is not None
+        else await resolve_schema(tenant_id, str(payload.schema_name), payload.schema_version)
     )
     from jsonschema import Draft202012Validator
     from jsonschema.exceptions import SchemaError
@@ -181,13 +199,18 @@ def finish(payload: StructureIn, sources: list[Source], answer: dict[str, Any]) 
         raise services.ContentError(422, "payload_invalid", "The payload does not match the schema", errors)
     out: dict[str, Any] = {
         "schema": sources[0].title if sources else None,
+        # The schema the payload is checked against travels with the output, so a payload changed later by an
+        # output guardrail is checked again against the same schema (see apply_text).
+        "target_schema": schema,
         "payload": data,
         "validation": {"valid": not errors, "errors": errors},
         "unplaced": [str(u) for u in (answer.get("unplaced") or [])],
         "assumptions": [str(a) for a in (answer.get("assumptions") or [])],
         "format": payload.format,
+        "strict": payload.strict,
     }
     if payload.format in ("xml", "both"):
+        out["root_element"] = payload.root_element
         out["xml"] = to_xml(data, payload.root_element)
     return out
 
@@ -197,13 +220,28 @@ def rendered(output: dict[str, Any]) -> str:
 
 
 def apply_text(output: dict[str, Any], text: str) -> dict[str, Any]:
+    """A payload changed by an output guardrail: checked against the schema again and re-rendered.
+
+    The validation result always describes the payload returned. Under ``strict`` a payload the guardrail
+    left invalid is refused like any other invalid payload; without a schema to check against it is
+    reported invalid rather than assumed valid.
+    """
     try:
         data = json.loads(text)
     except ValueError:
         return output
     if not isinstance(data, dict):
         return output
-    updated = {**output, "payload": data}
+    schema = output.get("target_schema")
+    if isinstance(schema, dict):
+        errors = services.schema_errors(data, schema)
+    else:
+        errors = ["$: the schema could not be checked again after the output guardrails"]
+    if output.get("strict") and errors:
+        raise services.ContentError(
+            422, "payload_invalid", "The payload does not match the schema after the output guardrails", errors
+        )
+    updated = {**output, "payload": data, "validation": {"valid": not errors, "errors": errors}}
     if "xml" in output:
         updated["xml"] = to_xml(data, str(output.get("root_element") or "document"))
     return updated

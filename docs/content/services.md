@@ -46,29 +46,38 @@ document gives; items are sorted by deadline.
 
 **Narrative to payload** (`POST /content/structure`, `core/content/structuring.py`): a schema-shaped
 JSON object from free text. The schema is given inline (`schema`), named from the tenant's schema
-registry (`schema_name`, the tenant's own row first, then a global one) or named from the built-in
-domain schemas. The payload is validated against it and the result says what failed; with `strict`
-an invalid payload is refused. `format: xml` or `both` adds a deterministic XML rendering (keys
+registry (`schema_name`, the tenant's own row first, then a global one; the version given in
+`schema_version`, else the latest by creation time) or named from the built-in domain schemas. The
+payload is validated against it and the result says what failed; with `strict` an invalid payload
+is refused. A payload changed by an output guardrail (masked or redacted) is validated again, so the
+validation result always describes the payload returned, and its XML keeps the requested root. `format: xml` or `both` adds a deterministic XML rendering (keys
 become elements, list items the singular of their key, nulls left out) that is parsed back to prove
 it is well formed. What the text says but the schema cannot hold is listed as `unplaced`.
 
 **Policy-grounded response** (`POST /content/respond`, `core/content/responding.py`): an answer to
 a question written only from an approved source set (inline or knowledge-base documents). Every
-claim carries a citation whose quote must be in its source; with no valid citation the response is
-withheld and the service says the approved sources do not cover the question, naming the gaps.
+claim carries a citation whose quote must be in its source. Each claim (each sentence that states
+something) must be covered by one cited passage: every figure in it and most of its words appear in
+the source sentences holding a verified quote. With no valid citation, or with any claim left
+uncovered, the response is withheld and the service says the approved sources do not cover the
+question, naming the gaps and the `unsupported_claims`.
 
 **Audience-adaptive tone** (`POST /content/adapt`, `core/content/tone.py`): the same facts
 rewritten for an audience (customer, relationship manager, internal, regulator, vulnerable
 customer, partner), a tone and a reading level. Every number, amount, date and percentage of the
 original, and every term in `keep`, must still be there: `facts_preserved` and `missing_facts`
-say so.
+say so. A figure keeps its currency (the rupee sign, Rs and INR are one currency; the dollar sign is
+another), its magnitude (10 lakh is 10,00,000, not 10) and its percent sign (10 percent is not 10).
 
 **Clause assembly** (`POST /content/assemble`, `core/content/clauses.py`): a document built from
 the approved clause library by rules, with no model. A clause (`/content/clauses`, tenant
 administrator) belongs to document types, sits in a category with an order, applies when every
 one of its conditions holds for the facts given (`equals`, `in`, `gte`, `exists`, ... on dotted
 fields), and carries `{placeholders}` filled from the facts. A change makes a new version that
-waits for approval again; approval is by a second person; a retired clause no longer assembles.
+waits for approval again; an update that changes nothing keeps the version and the approval.
+Approval is by a second person: writes need a signed-in, active administrator of the tenant (API
+keys and agent tokens are refused), and author and approver are compared by their user ids; a
+retired clause no longer assembles.
 The result names the clauses and versions used, the clauses skipped, the facts missing (left
 visible as `[PLACEHOLDER]`), the required clauses whose conditions failed, and whether the
 document is complete.

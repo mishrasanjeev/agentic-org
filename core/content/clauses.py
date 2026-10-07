@@ -239,6 +239,21 @@ def parse_clause_fields(raw: dict[str, Any], *, partial: bool = False) -> dict[s
     return fields
 
 
+def human_identity(user_id: Any) -> str:
+    """The acting person's stable user id, or a refusal.
+
+    Authorship and approval compare this id, so it must be the server-derived id of a person (a user UUID),
+    never a credential label such as an API key prefix, and never empty. Anything else fails closed.
+    """
+    raw = str(user_id or "").strip()
+    try:
+        return str(uuid.UUID(raw))
+    except ValueError:
+        raise ContentError(
+            403, "human_identity_required", "Clause changes and approvals need a signed-in administrator"
+        ) from None
+
+
 async def list_clauses(
     tenant_id: uuid.UUID, *, document_type: str | None = None, status: str | None = None
 ) -> list[dict]:
@@ -270,6 +285,7 @@ async def create_clause(tenant_id: uuid.UUID, fields: dict[str, Any], *, user_id
     from core.database import get_tenant_session
     from core.models.content_clause import ContentClause
 
+    author = human_identity(user_id)
     async with get_tenant_session(tenant_id) as session:
         taken = (
             await session.execute(
@@ -278,19 +294,22 @@ async def create_clause(tenant_id: uuid.UUID, fields: dict[str, Any], *, user_id
         ).scalar_one_or_none()
         if taken is not None:
             raise ContentError(409, "name_taken", f"A clause named {fields['name']!r} exists")
-        row = ContentClause(
-            tenant_id=tenant_id, status="draft", version=1, created_by=str(user_id)[:128] or None, **fields
-        )
+        row = ContentClause(tenant_id=tenant_id, status="draft", version=1, created_by=author, **fields)
         session.add(row)
         await session.flush()
         return clause_dict(row)
 
 
 async def update_clause(tenant_id: uuid.UUID, clause_id: uuid.UUID, fields: dict[str, Any], *, user_id: str) -> dict:
-    """A change makes a new version that waits for approval again."""
+    """A change makes a new version that waits for approval again.
+
+    A request that changes nothing (a retry of an update already applied, or fields equal to the stored
+    ones) is a no-op: the version, the status and the approval stay as they are.
+    """
     from core.database import get_tenant_session
     from core.models.content_clause import ContentClause
 
+    editor = human_identity(user_id)
     async with get_tenant_session(tenant_id) as session:
         row = (
             await session.execute(
@@ -301,21 +320,29 @@ async def update_clause(tenant_id: uuid.UUID, clause_id: uuid.UUID, fields: dict
         ).scalar_one_or_none()
         if row is None:
             raise ContentError(404, "not_found", "No such clause")
-        for key, value in fields.items():
+        changed = {key: value for key, value in fields.items() if getattr(row, key, None) != value}
+        if not changed:
+            return clause_dict(row)
+        for key, value in changed.items():
             setattr(row, key, value)
         row.version = int(row.version or 1) + 1
         row.status = "draft"
         row.approved_by = None
-        row.created_by = str(user_id)[:128] or row.created_by
+        row.created_by = editor
         row.updated_at = datetime.now(UTC)
         return clause_dict(row)
 
 
 async def approve_clause(tenant_id: uuid.UUID, clause_id: uuid.UUID, *, user_id: str, approve: bool = True) -> dict:
-    """Approval by a second person; the author of the version may not approve it."""
+    """Approval by a second person; the author of the version may not approve it.
+
+    Both sides are stable user ids: a version whose author is not a known person (no author, or a credential
+    label from before identities were checked) cannot be approved until a person edits it, which fails closed.
+    """
     from core.database import get_tenant_session
     from core.models.content_clause import ContentClause
 
+    actor = human_identity(user_id)
     async with get_tenant_session(tenant_id) as session:
         row = (
             await session.execute(
@@ -326,10 +353,17 @@ async def approve_clause(tenant_id: uuid.UUID, clause_id: uuid.UUID, *, user_id:
         ).scalar_one_or_none()
         if row is None:
             raise ContentError(404, "not_found", "No such clause")
-        if approve and row.created_by and str(row.created_by) == str(user_id)[:128]:
-            raise ContentError(409, "same_person", "A clause is approved by a second person, not its author")
+        if approve:
+            try:
+                author = human_identity(row.created_by)
+            except ContentError:
+                raise ContentError(
+                    409, "author_unknown", "This version has no known author; edit it as a signed-in person first"
+                ) from None
+            if author == actor:
+                raise ContentError(409, "same_person", "A clause is approved by a second person, not its author")
         row.status = "approved" if approve else "retired"
-        row.approved_by = str(user_id)[:128] if approve else row.approved_by
+        row.approved_by = actor if approve else row.approved_by
         row.updated_at = datetime.now(UTC)
         return clause_dict(row)
 

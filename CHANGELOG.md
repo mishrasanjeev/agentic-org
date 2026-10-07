@@ -18,6 +18,12 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
   the facts, placeholders filled and the gaps named, no model involved;
   clause library with versions and second-person approval, table
   `content_clauses`, migration `v6z63_content_clauses`).
+- A grounded response is withheld when any of its claims is not covered by a
+  verified citation; tone fact checks keep currency, lakh and crore, and
+  percent; a payload changed by output guardrails is validated again; a named
+  schema resolves to the requested or latest version; clause writes need a
+  signed-in tenant administrator, and an update that changes nothing keeps the
+  version and approval.
 
 ### Added - Content services: governed drafting, structured summarisation and obligation extraction
 - With `AGENTICORG_CONTENT_SERVICES_ENABLED` on (off by default), three

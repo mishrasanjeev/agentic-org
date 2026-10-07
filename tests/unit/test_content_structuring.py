@@ -14,10 +14,12 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from api.deps import ActiveHumanAdmin
 from core.config import settings
 from core.content import clauses, responding, services, structuring, tone
 
 TENANT = uuid.uuid4()
+AUTHOR, CHECKER, EDITOR = (str(uuid.uuid4()) for _ in range(3))
 INVOICE_SCHEMA = {
     "type": "object",
     "required": ["invoice_id", "total"],
@@ -162,6 +164,85 @@ class TestStructuring:
         assert structuring.apply_text({"payload": {}, "xml": "x"}, "not json") == {"payload": {}, "xml": "x"}
         assert structuring.apply_text({"payload": {}, "xml": "x"}, '{"a": 1}')["xml"].endswith("<a>1</a></document>")
 
+    @pytest.mark.asyncio
+    async def test_a_payload_changed_by_the_output_guardrails_is_validated_again_under_its_root(self, on, monkeypatch):
+        import core.governance.guardrails.hooks as hooks
+
+        async def redact(stage, text, **_kwargs):
+            if stage != "output":
+                return None
+            masked = json.loads(text)
+            masked.pop("invoice_id", None)
+            masked["note"] = "[REDACTED]"
+            return SimpleNamespace(text=json.dumps(masked), findings=1, flagged=True, correlation_id="c1")
+
+        monkeypatch.setattr(hooks, "guard_text", redact)
+        answer = {"payload": {"invoice_id": "EX-1042", "total": 2832}, "unplaced": [], "assumptions": []}
+        payload = structuring.StructureIn(text="x", schema=INVOICE_SCHEMA, format="both", root_element="invoice")
+        run = await services.run(structuring.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
+        out = run.output
+        assert out["payload"] == {"total": 2832, "note": "[REDACTED]"}
+        assert out["validation"]["valid"] is False and any("invoice_id" in e for e in out["validation"]["errors"])
+        root = ET.fromstring(out["xml"].split("?>", 1)[1])  # noqa: S314  # nosec B314
+        assert root.tag == "invoice" and root.find("invoice_id") is None and root.find("note").text == "[REDACTED]"
+        strict = structuring.StructureIn(text="x", schema=INVOICE_SCHEMA, strict=True)
+        with pytest.raises(services.ContentError) as info:
+            await services.run(structuring.SERVICE, TENANT, strict, complete=_completer(_Reply(answer)))
+        assert info.value.code == "payload_invalid" and info.value.status == 422
+        # Without a schema to check against, a changed payload is never reported valid.
+        unchecked = structuring.apply_text({"payload": {}, "validation": {"valid": True, "errors": []}}, '{"a": 1}')
+        assert unchecked["validation"]["valid"] is False
+
+    @pytest.mark.asyncio
+    async def test_a_named_schema_is_the_requested_version_or_the_latest(self, on, monkeypatch):
+        import core.database as database
+
+        older = SimpleNamespace(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            version="1",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            json_schema={"type": "object", "title": "v1"},
+        )
+        newer = SimpleNamespace(
+            id=uuid.uuid4(),
+            tenant_id=TENANT,
+            version="2",
+            created_at=datetime(2026, 6, 1, tzinfo=UTC),
+            json_schema={"type": "object", "title": "v2"},
+        )
+        glob = SimpleNamespace(
+            id=uuid.uuid4(),
+            tenant_id=None,
+            version="3",
+            created_at=datetime(2026, 9, 1, tzinfo=UTC),
+            json_schema={"type": "object", "title": "global"},
+        )
+        statements = []
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def execute(self, statement, *_a, **_k):
+                statements.append(str(statement))
+                return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [older, glob, newer]))
+
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session())
+        for _ in range(3):
+            assert (await structuring.resolve_schema(TENANT, "custom"))["title"] == "v2"
+        assert "ORDER BY" in statements[0] and "created_at DESC" in statements[0]
+        assert (await structuring.resolve_schema(TENANT, "custom", "1"))["title"] == "v1"
+        assert "version" in statements[-1]
+        with pytest.raises(services.ContentError) as info:
+            await structuring.resolve_schema(TENANT, "custom", "9")
+        assert info.value.status == 404
+        with pytest.raises(ValidationError):
+            structuring.StructureIn(text="x", schema=INVOICE_SCHEMA, schema_version="1")
+
 
 # ── Responding ────────────────────────────────────────────────────────────────
 
@@ -207,6 +288,49 @@ class TestResponding:
             await services.run(responding.SERVICE, TENANT, responding.RespondIn(message="q"), complete=_completer())
         assert info.value.code == "no_sources"
 
+    @pytest.mark.asyncio
+    async def test_one_uncited_claim_withholds_the_whole_response(self, on):
+        payload = responding.RespondIn(
+            message="What is the daily transfer limit for a new account?",
+            sources=[{"id": "pol", "text": "New accounts may transfer up to 2 lakh a day for the first 90 days."}],
+        )
+        answer = {
+            "answerable": True,
+            "response": "New accounts can transfer up to 2 lakh a day in their first 90 days. "
+            "A fee of 50 applies to each transfer.",
+            "citations": [{"source_id": "pol", "quote": "up to 2 lakh a day"}],
+            "gaps": [],
+        }
+        run = await services.run(responding.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
+        out = run.output
+        assert out["answerable"] is False and out["response"] == responding.NOT_COVERED and out["citations"] == []
+        assert out["unsupported_claims"] == ["A fee of 50 applies to each transfer."]
+        assert any("A fee of 50" in gap for gap in out["gaps"])
+
+    def test_claims_need_their_figures_and_most_of_their_words_in_a_cited_passage(self):
+        known = {
+            "pol": responding.Source(
+                id="pol",
+                title="pol",
+                text="Charges. New accounts may transfer up to 2 lakh a day for the first 90 days. Cards are free.",
+            )
+        }
+        cited = [{"source_id": "pol", "quote": "up to 2 lakh a day"}]
+        assert responding.unsupported_claims("New accounts can transfer 2 lakh a day for 90 days.", cited, known) == []
+        # A changed figure is not covered even when the words match.
+        assert responding.unsupported_claims("New accounts can transfer 5 lakh a day for 90 days.", cited, known)
+        # A true statement from an uncited sentence of the source is not covered by this citation.
+        assert responding.unsupported_claims("Debit cards are free of charge.", cited, known) == [
+            "Debit cards are free of charge."
+        ]
+        # Courtesy without a statement is not a claim.
+        assert responding.claims_of("Thank you. New accounts may transfer 2 lakh a day.") == [
+            "New accounts may transfer 2 lakh a day."
+        ]
+        assert responding.unsupported_claims("Joint accounts open online.", [], known) == [
+            "Joint accounts open online."
+        ]
+
 
 # ── Tone ──────────────────────────────────────────────────────────────────────
 
@@ -216,7 +340,30 @@ class TestTone:
         facts = tone.facts_in(
             "Balance ₹10,000 from 1 January 2026; a charge of Rs. 150 per quarter (1.5%) applies; see 12/03/2026."
         )
-        assert "10000" in facts and "150" in facts and "1.5%" in facts and "12/03/2026" in facts
+        assert "₹10000" in facts and "₹150" in facts and "1.5%" in facts and "12/03/2026" in facts
+
+    def test_currency_magnitude_and_percent_are_part_of_a_figure(self):
+        assert tone.facts_in("₹10 lakh") != tone.facts_in("₹10")
+        assert tone.facts_in("₹500") != tone.facts_in("$500")
+        assert tone.facts_in("10 percent") != tone.facts_in("10")
+        assert tone.facts_in("2 crore") != tone.facts_in("2 lakh")
+        # The same amount spelled another way is the same figure.
+        assert tone.facts_in("₹10 lakh") == tone.facts_in("Rs. 10,00,000") == tone.facts_in("INR 1,000,000")
+        assert tone.facts_in("10 percent") == tone.facts_in("10%") == tone.facts_in("10 per cent")
+        assert tone.facts_in("USD 500") == tone.facts_in("$500") == tone.facts_in("500 dollars")
+        # A word ending in rs is not a currency.
+        assert tone.facts_in("within 48 hours 5 days") == ["48", "5"]
+
+    @pytest.mark.asyncio
+    async def test_a_rewrite_that_changes_currency_scale_or_percent_is_reported(self, on):
+        payload = tone.AdaptIn(text="The limit is ₹10 lakh, the fee is ₹500 and the rate is 10 percent.")
+        changed = {"text": "The limit is ₹10, the fee is $500 and the rate is 10.", "changes": []}
+        run = await services.run(tone.SERVICE, TENANT, payload, complete=_completer(_Reply(changed)))
+        assert run.output["facts_preserved"] is False
+        assert run.output["missing_facts"] == ["₹10 lakh", "₹500", "10 percent"]
+        same = {"text": "You can send up to Rs. 10,00,000; the fee is INR 500 and the rate is 10%.", "changes": []}
+        run = await services.run(tone.SERVICE, TENANT, payload, complete=_completer(_Reply(same)))
+        assert run.output["facts_preserved"] is True and run.output["missing_facts"] == []
 
     @pytest.mark.asyncio
     async def test_a_rewrite_that_loses_a_figure_is_reported(self, on):
@@ -230,7 +377,7 @@ class TestTone:
         answer = {"text": "Keep an average of ₹10,000 each quarter in the account.", "changes": ["shorter"]}
         run = await services.run(tone.SERVICE, TENANT, payload, complete=_completer(_Reply(answer)))
         assert run.output["facts_preserved"] is False and run.output["missing_facts"] == [
-            "150",
+            "₹150",
             "quarterly average balance",
         ]
         good = {
@@ -380,7 +527,7 @@ class TestClauses:
             text="Interest at {rate}%.",
             version=1,
             status="draft",
-            created_by="author",
+            created_by=AUTHOR,
             approved_by=None,
             updated_at=datetime.now(UTC),
         )
@@ -415,29 +562,127 @@ class TestClauses:
             await clauses.create_clause(
                 TENANT,
                 clauses.parse_clause_fields({"name": "interest", "document_types": ["x"], "text": "t"}),
-                user_id="u",
+                user_id=EDITOR,
             )
         assert info.value.code == "name_taken"
         with pytest.raises(services.ContentError) as info:
-            await clauses.approve_clause(TENANT, row.id, user_id="author")
+            await clauses.approve_clause(TENANT, row.id, user_id=AUTHOR)
         assert info.value.code == "same_person"
-        approved = await clauses.approve_clause(TENANT, row.id, user_id="checker")
-        assert approved["status"] == "approved" and approved["approved_by"] == "checker"
-        changed = await clauses.update_clause(TENANT, row.id, {"text": "Interest at {rate}% p.a."}, user_id="editor")
+        approved = await clauses.approve_clause(TENANT, row.id, user_id=CHECKER)
+        assert approved["status"] == "approved" and approved["approved_by"] == CHECKER
+        changed = await clauses.update_clause(TENANT, row.id, {"text": "Interest at {rate}% p.a."}, user_id=EDITOR)
         assert changed["version"] == 2 and changed["status"] == "draft" and changed["approved_by"] is None
-        retired = await clauses.approve_clause(TENANT, row.id, user_id="checker", approve=False)
+        assert changed["created_by"] == EDITOR
+        retired = await clauses.approve_clause(TENANT, row.id, user_id=CHECKER, approve=False)
         assert retired["status"] == "retired"
         listed = await clauses.list_clauses(TENANT, document_type="loan_agreement")
         assert listed[0]["placeholders"] == ["rate"] and await clauses.list_clauses(TENANT, document_type="other") == []
         monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session(None))
         created = await clauses.create_clause(
-            TENANT, clauses.parse_clause_fields({"name": "new_one", "document_types": ["x"], "text": "t"}), user_id="u"
+            TENANT,
+            clauses.parse_clause_fields({"name": "new_one", "document_types": ["x"], "text": "t"}),
+            user_id=AUTHOR,
         )
-        assert created["status"] == "draft" and created["version"] == 1
+        assert created["status"] == "draft" and created["version"] == 1 and created["created_by"] == AUTHOR
         with pytest.raises(services.ContentError):
-            await clauses.update_clause(TENANT, uuid.uuid4(), {"text": "t"}, user_id="u")
+            await clauses.update_clause(TENANT, uuid.uuid4(), {"text": "t"}, user_id=AUTHOR)
         assembled = await clauses.assemble_document(TENANT, "loan_agreement", {})
         assert assembled["note"] == "No approved clauses for this document type." and assembled["complete"] is False
+
+    @staticmethod
+    def _library(monkeypatch, row):
+        import core.database as database
+
+        class _Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+            async def execute(self, *_a, **_k):
+                return SimpleNamespace(scalar_one_or_none=lambda: row)
+
+            def add(self, item):
+                item.id = uuid.uuid4()
+
+            async def flush(self):
+                return None
+
+        monkeypatch.setattr(database, "get_tenant_session", lambda *_a, **_k: _Session())
+
+    @staticmethod
+    def _row(**overrides):
+        values = {
+            "id": uuid.uuid4(),
+            "name": "interest",
+            "title": "Interest",
+            "category": "terms",
+            "document_types": ["loan_agreement"],
+            "order_index": 1,
+            "required": False,
+            "conditions": [{"field": "product", "op": "equals", "value": "loan"}],
+            "text": "Interest at {rate}%.",
+            "version": 3,
+            "status": "approved",
+            "created_by": AUTHOR,
+            "approved_by": CHECKER,
+            "updated_at": datetime(2026, 1, 1, tzinfo=UTC),
+        }
+        values.update(overrides)
+        return SimpleNamespace(**values)
+
+    @pytest.mark.asyncio
+    async def test_a_repeated_identical_update_keeps_the_version_and_the_approval(self, monkeypatch):
+        row = self._row()
+        self._library(monkeypatch, row)
+        same = clauses.parse_clause_fields(
+            {
+                "text": "Interest at {rate}%.",
+                "document_types": ["loan_agreement"],
+                "conditions": [{"field": "product", "op": "equals", "value": "loan"}],
+                "order": 1,
+            },
+            partial=True,
+        )
+        for _ in range(2):
+            kept = await clauses.update_clause(TENANT, row.id, same, user_id=EDITOR)
+            assert kept["version"] == 3 and kept["status"] == "approved" and kept["approved_by"] == CHECKER
+            assert kept["created_by"] == AUTHOR and row.updated_at == datetime(2026, 1, 1, tzinfo=UTC)
+        new_text = {"text": "Interest at {rate}% a year."}
+        first = await clauses.update_clause(TENANT, row.id, new_text, user_id=EDITOR)
+        retry = await clauses.update_clause(TENANT, row.id, new_text, user_id=EDITOR)
+        assert first["version"] == retry["version"] == 4 and retry["status"] == "draft" and retry["approved_by"] is None
+
+    @pytest.mark.asyncio
+    async def test_authorship_and_approval_need_a_stable_human_identity(self, monkeypatch):
+        row = self._row(status="draft", approved_by=None)
+        self._library(monkeypatch, row)
+        for bad in ("", None, "apikey:ak_live1", "author", "agent:a1"):
+            with pytest.raises(services.ContentError) as info:
+                await clauses.approve_clause(TENANT, row.id, user_id=bad)
+            assert info.value.code == "human_identity_required" and info.value.status == 403
+            with pytest.raises(services.ContentError) as info:
+                await clauses.update_clause(TENANT, row.id, {"text": "changed"}, user_id=bad)
+            assert info.value.code == "human_identity_required"
+            with pytest.raises(services.ContentError) as info:
+                await clauses.create_clause(
+                    TENANT,
+                    clauses.parse_clause_fields({"name": "other", "document_types": ["x"], "text": "t"}),
+                    user_id=bad,
+                )
+            assert info.value.code == "human_identity_required"
+        assert row.status == "draft" and row.version == 3
+        # The same person in another spelling of the same id is still the author.
+        with pytest.raises(services.ContentError) as info:
+            await clauses.approve_clause(TENANT, row.id, user_id=AUTHOR.upper())
+        assert info.value.code == "same_person"
+        # A version whose author is a credential label, or unknown, is never approved: it fails closed.
+        for legacy in ("apikey:ak_live1", None):
+            row.created_by = legacy
+            with pytest.raises(services.ContentError) as info:
+                await clauses.approve_clause(TENANT, row.id, user_id=CHECKER)
+            assert info.value.code == "author_unknown" and row.status == "draft"
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -449,14 +694,14 @@ class TestRoutes:
         from api.v1 import content_structuring as api
 
         monkeypatch.setattr(settings, "content_services_enabled", False)
-        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        admin = ActiveHumanAdmin(user_id=uuid.UUID(AUTHOR), tenant_id=TENANT, email="a@example.com", role="admin")
         for call in (
             api.post_structure(
                 structuring.StructureIn(text="x", schema=INVOICE_SCHEMA), tenant_id=str(TENANT), domains=None
             ),
             api.post_assemble(api.AssembleIn(document_type="loan_agreement"), tenant_id=str(TENANT)),
             api.list_clauses(document_type=None, status=None, tenant_id=str(TENANT)),
-            api.create_clause(api.ClauseIn(name="x_y", document_types=["a"], text="t"), request, tenant_id=str(TENANT)),
+            api.create_clause(api.ClauseIn(name="x_y", document_types=["a"], text="t"), admin, tenant_id=str(TENANT)),
         ):
             with pytest.raises(HTTPException) as info:
                 await call
@@ -471,15 +716,20 @@ class TestRoutes:
         monkeypatch.setattr(clauses, "approve_clause", AsyncMock(return_value={"id": "c1", "status": "approved"}))
         monkeypatch.setattr(clauses, "list_clauses", AsyncMock(return_value=[{"id": "c1"}]))
         monkeypatch.setattr(clauses, "assemble_document", AsyncMock(return_value={"body": "b", "complete": True}))
-        request = SimpleNamespace(state=SimpleNamespace(claims={"agenticorg:user_id": "u1"}))
+        admin = ActiveHumanAdmin(user_id=uuid.UUID(AUTHOR), tenant_id=TENANT, email="a@example.com", role="admin")
         created = await api.create_clause(
-            api.ClauseIn(name="interest_rate", document_types=["Loan"], text="t {rate}"), request, tenant_id=str(TENANT)
+            api.ClauseIn(name="interest_rate", document_types=["Loan"], text="t {rate}"), admin, tenant_id=str(TENANT)
         )
         assert created["status"] == "draft" and clauses.create_clause.call_args.args[1]["document_types"] == ["loan"]
-        assert (await api.update_clause(uuid.uuid4(), api.ClausePatch(text="x"), request, tenant_id=str(TENANT)))[
+        assert clauses.create_clause.call_args.kwargs["user_id"] == AUTHOR
+        assert (await api.update_clause(uuid.uuid4(), api.ClausePatch(text="x"), admin, tenant_id=str(TENANT)))[
             "version"
         ] == 2
-        assert (await api.approve_clause(uuid.uuid4(), request, tenant_id=str(TENANT)))["status"] == "approved"
+        assert clauses.update_clause.call_args.kwargs["user_id"] == AUTHOR
+        assert (await api.approve_clause(uuid.uuid4(), admin, tenant_id=str(TENANT)))["status"] == "approved"
+        assert clauses.approve_clause.call_args.kwargs["user_id"] == AUTHOR
+        await api.retire_clause(uuid.uuid4(), admin, tenant_id=str(TENANT))
+        assert clauses.approve_clause.call_args.kwargs == {"user_id": AUTHOR, "approve": False}
         assert (await api.list_clauses(document_type="loan", status=None, tenant_id=str(TENANT)))["total"] == 1
         assert (
             await api.post_assemble(
@@ -489,7 +739,7 @@ class TestRoutes:
         assert clauses.assemble_document.call_args.args[1] == "loan_agreement"
         with pytest.raises(HTTPException) as info:
             await api.create_clause(
-                api.ClauseIn(name="bad name!", document_types=["a"], text="t"), request, tenant_id=str(TENANT)
+                api.ClauseIn(name="bad name!", document_types=["a"], text="t"), admin, tenant_id=str(TENANT)
             )
         assert info.value.status_code == 422
 
@@ -512,3 +762,27 @@ class TestRoutes:
             domains=["ops"],
         )
         assert services.run.call_args.kwargs["domains"] == ["ops"]
+
+    @pytest.mark.asyncio
+    async def test_clause_writes_resolve_an_active_human_administrator(self):
+        from api.deps import get_active_human_admin
+        from api.v1 import content_structuring as api
+
+        for path, method in (
+            ("/content/clauses", "POST"),
+            ("/content/clauses/{clause_id}", "PUT"),
+            ("/content/clauses/{clause_id}/approve", "POST"),
+            ("/content/clauses/{clause_id}/retire", "POST"),
+        ):
+            route = next(r for r in api.router.routes if r.path == path and method in r.methods)
+            assert any(dep.call is get_active_human_admin for dep in route.dependant.dependencies)
+        api_key_session = SimpleNamespace(
+            state=SimpleNamespace(
+                claims={"sub": "apikey:ak_test", "agenticorg:tenant_id": str(TENANT)},
+                auth_mode="api_key",
+                tenant_id=str(TENANT),
+            )
+        )
+        with pytest.raises(HTTPException) as info:
+            await get_active_human_admin(api_key_session)
+        assert info.value.status_code == 403
