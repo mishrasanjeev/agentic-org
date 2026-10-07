@@ -4,14 +4,18 @@
 A service turns a validated input into a JSON output that matches its output
 schema. The input text passes the tenant's input guardrails, the model answers
 in JSON (one retry when the answer is not valid JSON or does not match the
-schema), the service checks the answer against its sources, and the rendered
-output passes the output guardrails with the sources as context, so a
-grounding detector can judge it. A blocked stage is a refusal, never a
-silently changed answer. Behind ``AGENTICORG_CONTENT_SERVICES_ENABLED``.
+schema), the service checks the answer against its sources, and the whole
+structured output passes the output guardrails with the sources as context, so
+a grounding detector can judge it. Knowledge-base sources pass the retrieval
+stage before they enter the prompt, and with pre-model pseudonymisation on the
+prompt is pseudonymised before it leaves. A transformed input or output
+travels transformed; a blocked stage, or a transform that cannot be mapped
+back onto the fields, is a refusal. Behind ``AGENTICORG_CONTENT_SERVICES_ENABLED``.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 import uuid
@@ -21,7 +25,7 @@ from typing import Any
 
 import structlog
 from jsonschema import Draft202012Validator
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from core.config import settings
 from core.content.sources import Source
@@ -72,9 +76,15 @@ class Service:
     dataset_cases: list[dict[str, Any]]
     messages: Callable[[BaseModel, list[Source]], list[dict[str, str]]]
     finish: Callable[[BaseModel, list[Source], dict[str, Any]], dict[str, Any]]
+    # A human-readable rendering and its inverse, for callers that show one text. The runner does not use
+    # them for guardrails: it screens and transforms every field of the output (guard_structure).
     rendered: Callable[[dict[str, Any]], str]
     apply_text: Callable[[dict[str, Any], str], dict[str, Any]]
     resolve_sources: Callable[[uuid.UUID, BaseModel, list[str] | None], Awaitable[list[Source]]]
+    max_tokens: int = MAX_TOKENS  # the completion budget; a service whose output scales with its input sets its own
+    # Called with the output when the output guardrails changed it, so a service whose output carries
+    # derived parts (a validation result, a rendering) recomputes them from what will be returned.
+    after_output_guard: Callable[[dict[str, Any]], dict[str, Any]] | None = None
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -111,13 +121,55 @@ def catalogue() -> list[dict[str, Any]]:
 # ── The model ─────────────────────────────────────────────────────────────────
 
 
-async def _complete(tenant_id: uuid.UUID, model: str | None, messages: list[dict[str, str]], max_tokens: int) -> Any:
+async def _complete(
+    tenant_id: uuid.UUID,
+    model: str | None,
+    messages: list[dict[str, str]],
+    max_tokens: int,
+    pseudonymiser: Any = None,
+) -> Any:
     """One model call through the direct router as the tenant (the seam the tests replace)."""
     from core.llm.router import llm_router
 
+    extra = {"pseudonymiser": pseudonymiser} if pseudonymiser is not None else {}
     return await llm_router.complete(
-        messages, model_override=model or None, max_tokens=max_tokens, tenant_id=str(tenant_id)
+        messages, model_override=model or None, max_tokens=max_tokens, tenant_id=str(tenant_id), **extra
     )
+
+
+async def open_pseudonymiser(tenant_id: uuid.UUID, service: str) -> Any:
+    """The tenant's pseudonym session for this call, or None when pre-model pseudonymisation is off.
+
+    A setting or map that cannot be read is a refusal, never a raw prompt.
+    """
+    from core.pii import pseudonymiser as pseudonymisation
+
+    try:
+        if not await pseudonymisation.pseudonymisation_enabled(tenant_id):
+            return None
+        # A server-generated case for this one call; nothing a client names.
+        return await pseudonymisation.open_session(
+            str(tenant_id), pseudonymisation.case_key(f"content-{service}-{uuid.uuid4()}")
+        )
+    except pseudonymisation.PseudonymisationError as exc:
+        logger.warning("content_pseudonymisation_unavailable", service=service, reason=exc.reason)
+        raise ContentError(
+            503, "pseudonymisation_unavailable", "Pseudonymisation is on and could not be applied"
+        ) from None
+
+
+def with_pseudonym_guidance(messages: list[dict[str, str]], pseudonymiser: Any) -> list[dict[str, str]]:
+    """The messages with the pseudonym guidance added to the system prompt when a session is open."""
+    if pseudonymiser is None:
+        return messages
+    from core.pii.pseudonymiser import with_model_guidance
+
+    out = [dict(message) for message in messages]
+    for message in out:
+        if message.get("role") == "system":
+            message["content"] = with_model_guidance(str(message.get("content") or ""))
+            return out
+    return [{"role": "system", "content": with_model_guidance("")}, *out]
 
 
 def parse_json(text: str) -> dict[str, Any] | None:
@@ -161,9 +213,17 @@ async def ask_model(
     *,
     complete: Any = None,
     max_tokens: int = MAX_TOKENS,
+    pseudonymiser: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """The model's JSON answer matching ``schema``, after at most one retry; the usage beside it."""
+    """The model's JSON answer matching ``schema``, after at most one retry; the usage beside it.
+
+    With ``pseudonymiser`` the router pseudonymises every message before it
+    leaves and the answer is restored before it is parsed.
+    """
+    from core.pii.pseudonymiser import PseudonymisationError
+
     complete = complete or _complete
+    extra = {"pseudonymiser": pseudonymiser} if pseudonymiser is not None else {}
     model = str(getattr(settings, "content_services_model", "") or "") or None
     tokens = 0
     used_model = model or ""
@@ -171,12 +231,19 @@ async def ask_model(
     last_errors: list[str] = []
     for round_index in range(RETRIES + 1):
         try:
-            response = await complete(tenant_id, model, attempt, max_tokens)
+            response = await complete(tenant_id, model, attempt, max_tokens, **extra)
+        except PseudonymisationError as exc:
+            logger.warning("content_pseudonymisation_unavailable", reason=exc.reason)
+            raise ContentError(
+                503, "pseudonymisation_unavailable", "Pseudonymisation is on and could not be applied"
+            ) from None
         # enterprise-gate: broad-except-ok reason=model-provider-boundary-returns-an-explicit-refusal
         except Exception as exc:  # noqa: BLE001 - the provider boundary; the reason is the type only
             logger.warning("content_model_failed", error_type=type(exc).__name__)
             raise ContentError(502, "model_failed", "The model did not answer") from None
         content = getattr(response, "content", response if isinstance(response, str) else "")
+        if pseudonymiser is not None:
+            content = pseudonymiser.restore_text(str(content or ""))
         tokens += int(getattr(response, "tokens_used", 0) or 0)
         used_model = str(getattr(response, "model", used_model) or used_model)
         parsed = parse_json(str(content))
@@ -210,7 +277,8 @@ async def guard(stage: str, text: str, *, tenant_id: uuid.UUID, service: str, co
     if result is None:
         return {"text": text, "findings": 0, "flagged": False, "applied": False}
     return {
-        "text": result.text if result.text else text,
+        # A rule may redact a text to nothing: only a missing text means unchanged.
+        "text": result.text if isinstance(result.text, str) else text,
         "findings": int(result.findings),
         "flagged": bool(result.flagged),
         "applied": True,
@@ -228,6 +296,8 @@ class Run:
     sources: list[dict[str, Any]] = field(default_factory=dict)
     guardrails: dict[str, Any] = field(default_factory=dict)
     model: dict[str, Any] = field(default_factory=dict)
+    # The input as it reached the model (after the input guardrails); kept out of to_dict.
+    input: BaseModel | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -239,22 +309,131 @@ class Run:
         }
 
 
-def input_text(payload: BaseModel) -> str:
-    """What the input guardrails screen: every text field of the input, joined."""
+def _texts(value: Any) -> list[str]:
+    """Every non-empty string in a JSON-like value, in order (keys are not text)."""
     parts: list[str] = []
 
-    def walk(value: Any) -> None:
-        if isinstance(value, str):
-            parts.append(value)
-        elif isinstance(value, dict):
-            for item in value.values():
-                walk(item)
-        elif isinstance(value, list | tuple):
-            for item in value:
-                walk(item)
+    def walk(item: Any) -> None:
+        if isinstance(item, str):
+            if item:
+                parts.append(item)
+        elif isinstance(item, dict):
+            for child in item.values():
+                walk(child)
+        elif isinstance(item, list | tuple):
+            for child in item:
+                walk(child)
 
-    walk(payload.model_dump())
-    return "\n".join(part for part in parts if part)
+    walk(value)
+    return parts
+
+
+def _replace_texts(value: Any, mapping: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        return mapping.get(value, value)
+    if isinstance(value, dict):
+        return {key: _replace_texts(child, mapping) for key, child in value.items()}
+    if isinstance(value, list):
+        return [_replace_texts(child, mapping) for child in value]
+    if isinstance(value, tuple):
+        return tuple(_replace_texts(child, mapping) for child in value)
+    return value
+
+
+def input_text(payload: BaseModel) -> str:
+    """What the input guardrails screen: every text field of the input, joined."""
+    return structured_text(payload.model_dump())
+
+
+def structured_text(value: Any) -> str:
+    """What a guardrail stage screens for a structured value: every string in it, joined."""
+    return "\n".join(_texts(value))
+
+
+async def guard_structure(
+    stage: str, value: Any, *, tenant_id: uuid.UUID, service: str, context: list[str] | None = None
+) -> tuple[Any, dict[str, Any]]:
+    """Screen every string of ``value`` as one text; a transform is applied field by field.
+
+    The whole text is screened once, so a rule sees every field together. When
+    the stage changes the text, each distinct string is screened on its own and
+    replaced by what the stage made of it, and the rebuilt value is screened
+    again: if that still changes, the transform could not be mapped back onto
+    the fields and the call is refused rather than sending or returning the
+    original text.
+    """
+    text = structured_text(value)
+    screened = await guard(stage, text, tenant_id=tenant_id, service=service, context=context)
+    if not screened.get("applied") or screened["text"] == text:
+        return value, screened
+    mapping: dict[str, str] = {}
+    for part in dict.fromkeys(_texts(value)):
+        mapping[part] = (await guard(stage, part, tenant_id=tenant_id, service=service, context=context))["text"]
+    updated = _replace_texts(value, mapping)
+    again = structured_text(updated)
+    recheck = await guard(stage, again, tenant_id=tenant_id, service=service, context=context)
+    if recheck.get("applied") and recheck["text"] != again:
+        logger.warning("content_guardrail_transform_unmappable", stage=stage, service=service)
+        raise ContentError(
+            422,
+            "guardrail_transform_unmappable",
+            f"The {stage} guardrail changed text in a way that cannot be mapped back onto its fields",
+        )
+    return updated, screened
+
+
+async def guard_input(service: Service, tenant_id: uuid.UUID, payload: BaseModel) -> tuple[BaseModel, dict[str, Any]]:
+    """The input after the input guardrails, rebuilt from the transformed text when a rule changed it."""
+    value = payload.model_dump()
+    updated, screened = await guard_structure("input", value, tenant_id=tenant_id, service=service.name)
+    if updated is value:
+        return payload, screened
+    try:
+        return service.input_model.model_validate(updated), screened
+    except ValidationError:
+        logger.warning("content_guardrail_transform_unmappable", stage="input", service=service.name)
+        raise ContentError(
+            422,
+            "guardrail_transform_unmappable",
+            "The input guardrail changed the input so that it no longer fits the service's input schema",
+        ) from None
+
+
+async def guard_sources(
+    tenant_id: uuid.UUID, service: str, sources: list[Source]
+) -> tuple[list[Source], dict[str, Any] | None]:
+    """Knowledge-base sources pass the retrieval stage: a withheld one is dropped, a transformed one replaced.
+
+    Inline sources are part of the request and pass the input stage instead.
+    Returns the sources that may reach the model and what the stage did (None
+    when there was no knowledge source). Refused when every source is withheld.
+    """
+    from core.governance.guardrails.hooks import guard_retrieval_texts
+
+    knowledge = [index for index, source in enumerate(sources) if source.origin == "knowledge"]
+    if not knowledge:
+        return sources, None
+    texts = await guard_retrieval_texts(
+        [sources[index].text for index in knowledge], tenant_id=str(tenant_id), use_case=f"content.{service}"
+    )
+    guarded: dict[int, str | None] = dict(zip(knowledge, texts, strict=True))
+    out: list[Source] = []
+    withheld = transformed = 0
+    for index, source in enumerate(sources):
+        if index not in guarded:
+            out.append(source)
+            continue
+        text = guarded[index]
+        if text is None:
+            withheld += 1
+            continue
+        if text != source.text:
+            transformed += 1
+            source = dataclasses.replace(source, text=text)
+        out.append(source)
+    if not out:
+        raise ContentError(422, "sources_withheld", "The retrieval guardrails withheld every source")
+    return out, {"sources": len(knowledge), "withheld": withheld, "transformed": transformed}
 
 
 async def run(
@@ -265,27 +444,37 @@ async def run(
     domains: list[str] | None = None,
     complete: Any = None,
 ) -> Run:
-    """Input guardrails, the model, the service's own checks, then output guardrails with the sources as context."""
+    """Input guardrails, the sources (knowledge ones through the retrieval stage), the model, the service's own
+    checks, then output guardrails over the whole output with the sources as context."""
     if not enabled():
         raise ContentError(404, "content_services_disabled", "Content services are off for this deployment")
-    sources = await service.resolve_sources(tenant_id, payload, domains)
     guardrails: dict[str, Any] = {}
     if service.guardrails.input:
-        guardrails["input"] = {
-            k: v
-            for k, v in (await guard("input", input_text(payload), tenant_id=tenant_id, service=service.name)).items()
-            if k != "text"
-        }
-    messages = service.messages(payload, sources)
-    answer, usage = await ask_model(tenant_id, messages, service.output_schema, complete=complete)
+        payload, screened_input = await guard_input(service, tenant_id, payload)
+        guardrails["input"] = {k: v for k, v in screened_input.items() if k != "text"}
+    sources = await service.resolve_sources(tenant_id, payload, domains)
+    sources, retrieval = await guard_sources(tenant_id, service.name, sources)
+    if retrieval is not None:
+        guardrails["retrieval"] = retrieval
+    pseudonymiser = await open_pseudonymiser(tenant_id, service.name)
+    messages = with_pseudonym_guidance(service.messages(payload, sources), pseudonymiser)
+    answer, usage = await ask_model(
+        tenant_id,
+        messages,
+        service.output_schema,
+        complete=complete,
+        max_tokens=service.max_tokens,
+        pseudonymiser=pseudonymiser,
+    )
     output = service.finish(payload, sources, answer)
     if service.guardrails.output:
         context = [source.text for source in sources] if service.guardrails.grounded and sources else None
-        screened = await guard(
-            "output", service.rendered(output), tenant_id=tenant_id, service=service.name, context=context
+        guarded, screened = await guard_structure(
+            "output", output, tenant_id=tenant_id, service=service.name, context=context
         )
-        if screened.get("applied") and screened["text"] != service.rendered(output):
-            output = service.apply_text(output, screened["text"])
+        if guarded is not output and service.after_output_guard is not None:
+            guarded = service.after_output_guard(guarded)
+        output = guarded
         guardrails["output"] = {k: v for k, v in screened.items() if k != "text"}
     return Run(
         service=service.name,
@@ -293,6 +482,7 @@ async def run(
         sources=[source.describe() for source in sources],
         guardrails=guardrails,
         model=usage,
+        input=payload,
     )
 
 

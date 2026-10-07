@@ -23,7 +23,7 @@ class BatchItem(BaseModel):
     model_config = {"extra": "forbid"}
 
     id: str = Field(..., min_length=1, max_length=64)
-    text: str = Field(..., min_length=1, max_length=20_000)
+    text: str = Field(..., min_length=1, max_length=translation.TEXT_LIMIT)
 
 
 class BatchIn(BaseModel):
@@ -34,8 +34,8 @@ class BatchIn(BaseModel):
     source_language: str = Field("auto", min_length=2, max_length=5)
     glossary: list[translation.GlossaryEntry] = Field(default_factory=list, max_length=50)
     preserve: list[str] = Field(default_factory=list, max_length=50)
-    register: str = "formal"
-    format: str = "plain"
+    register: translation.Register = "formal"
+    format: translation.TextFormat = "plain"
 
 
 async def _translate_one(payload: translation.TranslateIn, tenant_id: str, domains: list[str] | None) -> dict[str, Any]:
@@ -66,6 +66,7 @@ async def list_languages(tenant_id: str = Depends(get_current_tenant)) -> dict[s
             for code, info in translation.LANGUAGES.items()
         ],
         "max_batch": translation.MAX_BATCH,
+        "max_text_chars": translation.TEXT_LIMIT,
         "enabled": services.enabled(),
     }
 
@@ -123,8 +124,8 @@ async def post_translate_batch(
             source_language=body.source_language,
             glossary=body.glossary,
             preserve=body.preserve,
-            register=body.register if body.register in ("formal", "neutral") else "formal",
-            format=body.format if body.format in ("plain", "markdown") else "plain",
+            register=body.register,
+            format=body.format,
         )
         try:
             answer = await _translate_one(payload, tenant_id, domains)
