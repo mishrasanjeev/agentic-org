@@ -15,6 +15,7 @@ from api.route_metadata import route_meta
 from api.v1.agents import _effective_caller, _user_uuid_from_claims
 from core.agent_registry import dependencies, lifecycle, reliability
 from core.database import get_tenant_session
+from core.governance import risk_tiers
 from core.models.agent import Agent
 from core.ownership import Caller, caller_from_request, can_view_agent, require_agent_mutable, require_agent_visible
 from core.schemas.api import AgentCardIn, AgentLifecycleIn, AgentRatingIn
@@ -83,6 +84,7 @@ async def set_agent_card(
     tenant_id: str = Depends(get_current_tenant),
     user_domains: list[str] | None = Depends(get_user_domains),
     caller: Caller | None = Depends(caller_from_request),
+    user: dict = Depends(get_current_user),
 ) -> dict:
     """Set the card fields an administrator writes: purpose, risk tier, use case and channels.
 
@@ -97,7 +99,23 @@ async def set_agent_card(
     async with get_tenant_session(tid) as session:
         # The agent row is locked: two first writes of the card create one entry, not two.
         agent = await _agent(session, tid, agent_id, lock=True)
-        require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        effective = _effective_caller(caller, user_domains)
+        require_agent_mutable(agent, effective)
+        if "risk_tier" in fields and risk_tiers.enabled():
+            # Risk tier: an administrator's change; lowering a regulated tier needs a second person.
+            entry = await lifecycle.get_entry(session, tid, agent_id)
+            try:
+                risk_tiers.check_tier_change(
+                    current=risk_tiers.tier_of(entry),
+                    new=fields.get("risk_tier"),
+                    is_admin=bool(getattr(effective, "is_admin", False)),
+                    actor=_user_uuid_from_claims(user),
+                    owner_user_id=getattr(agent, "owner_user_id", None),
+                )
+            except risk_tiers.TierError as exc:
+                raise HTTPException(
+                    exc.status, detail={"error": risk_tiers.TRIGGER, "code": exc.code, "message": exc.message}
+                ) from None
         await lifecycle.set_card_fields(session, tid, agent_id, fields)
         return await lifecycle.card(session, tid, agent)
 

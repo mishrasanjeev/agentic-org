@@ -4,6 +4,16 @@ All notable changes to AgenticOrg are documented here. Format follows [Keep a Ch
 
 ## [Unreleased] - 2026-08-29
 
+### Added - AI governance: regulatory risk tiers
+- With `AGENTICORG_GOVERNANCE_RISK_TIERS_ENABLED` on (off by default), an
+  agent's risk tier forces controls whatever the separate switches say
+  (`core/governance/risk_tiers.py`): medium needs registry approval; high
+  adds a passed evaluation gate, a human oversight condition and 50 scored
+  shadow samples; critical adds 200 samples and maker-checker. Promotion and
+  resume refuse an unmet requirement; a tier is changed by an administrator
+  and lowered by a second person; a regulated agent keeps its oversight and
+  its gate. `GET /governance/risk-tiers` shows the policy and compliance.
+
 ### Added - AI governance: model cards
 - With `AGENTICORG_GOVERNANCE_MODEL_CARDS_ENABLED` on (off by default),
   every model a tenant uses has one standard card

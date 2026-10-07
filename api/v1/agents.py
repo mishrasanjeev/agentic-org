@@ -39,6 +39,7 @@ from core.commerce.sales_guardrails import GRANTEX_COMMERCE_DEFAULT_TOOLS
 from core.database import get_tenant_session
 from core.evals import gates as eval_gates
 from core.file_ingestion.limits import cleanup_tempfile, stream_to_tempfile
+from core.governance import risk_tiers
 from core.governance.agent_status import refusal_for as agent_status_refusal
 from core.governance.operator_override import check as check_operator_override
 from core.models.agent import Agent, AgentCostLedger, AgentLifecycleEvent, AgentVersion
@@ -2992,6 +2993,13 @@ async def update_agent(
                 )
         if isinstance(update_data.get("hitl_policy"), dict):
             _enforce_hitl_condition_on_save(update_data["hitl_policy"].get("condition"), surface="agents_update")
+        if risk_tiers.enabled():
+            from core.agent_registry import lifecycle as registry_lifecycle
+
+            try:
+                risk_tiers.check_update(await registry_lifecycle.get_entry(session, tid, agent.id), update_data)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         if "domain" in update_data:
             check_agent_domain_change(agent, update_data["domain"], effective_caller)
         # Rows 19/22: only an admin may change visibility; 'tenant' clears the
@@ -4281,6 +4289,11 @@ async def resume_agent(
                 await registry_approval.check_promotion(session, tid, agent)
             except registry_approval.ApprovalError as exc:
                 raise _approval_refused(exc) from None
+            # Risk tier: the controls the tier forces, whatever the switches above say.
+            try:
+                await risk_tiers.check_promotion(session, tid, agent)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
             async with get_tenant_session(tid, agent.company_id) as connector_session:
                 await _assert_connectors_ready_for_activation(
                     connector_session,
@@ -4358,6 +4371,19 @@ async def set_agent_output_schema(
         "output_schema": schema,
         "enforced": prompt_output_schema.enabled(),
     }
+
+
+def _tier_refused(exc: risk_tiers.TierError) -> HTTPException:
+    return HTTPException(
+        exc.status,
+        detail={
+            "error": risk_tiers.TRIGGER,
+            "code": exc.code,
+            "message": exc.message,
+            "tier": exc.tier,
+            "requirement": exc.requirement,
+        },
+    )
 
 
 def _approval_refused(exc: registry_approval.ApprovalError) -> HTTPException:
@@ -4496,6 +4522,13 @@ async def set_agent_eval_gate(
         if not agent:
             raise HTTPException(404, "Agent not found")
         require_agent_mutable(agent, _effective_caller(caller, user_domains))
+        if risk_tiers.enabled():
+            from core.agent_registry import lifecycle as registry_lifecycle
+
+            try:
+                risk_tiers.check_gate_removal(await registry_lifecycle.get_entry(session, tid, agent.id), gate)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         if gate is not None:
             try:
                 await eval_gates.datasets.get_version(session, tid, _uuid.UUID(gate["dataset_id"]), gate["version"])
@@ -4654,6 +4687,11 @@ async def promote_agent(
                 await registry_approval.check_promotion(session, tid, agent)
             except registry_approval.ApprovalError as exc:
                 raise _approval_refused(exc) from None
+            # Risk tier: the controls the tier forces, whatever the switches above say.
+            try:
+                await risk_tiers.check_promotion(session, tid, agent)
+            except risk_tiers.TierError as exc:
+                raise _tier_refused(exc) from None
         old_status = agent.status
         old_version = agent.version or "1.0.0"
         new_version = _next_agent_version(old_version)
