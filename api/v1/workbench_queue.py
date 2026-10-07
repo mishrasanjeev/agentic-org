@@ -199,6 +199,11 @@ async def decide(
         from core.txn import findings as txn_findings
         from core.txn.records import TxnError
 
+        if caller_from_request(request).is_machine or not user_id:
+            # A disposition is a person's decision, here as on the finding's own route (api/v1/txn.py).
+            raise HTTPException(
+                403, detail={"error": "human_required", "message": "A finding is dispositioned by a signed-in person"}
+            )
         try:
             outcome = await txn_findings.disposition(
                 tenant,
